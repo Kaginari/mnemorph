@@ -33,6 +33,7 @@ export default withMermaid(
             { text: 'Communication', link: '/04-communication' },
             { text: 'Architecture', link: '/05-architecture' },
             { text: 'Consumption', link: '/06-consumption' },
+            { text: 'MCP', link: '/07-mcp' },
             { text: 'Roadmap', link: '/roadmap' },
           ],
         },
