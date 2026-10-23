@@ -250,15 +250,17 @@ impl Assembler for Chat {
             model.clone_into(&mut self.model);
         }
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
+            // `prompt_tokens` counts every input token; the cached and the newly cached ones are
+            // split out so the ledger weighs each class at its own rate.
             let prompt = u["prompt_tokens"].as_u64().unwrap_or(0);
-            let cached = u["prompt_tokens_details"]["cached_tokens"]
-                .as_u64()
-                .unwrap_or(0);
+            let details = &u["prompt_tokens_details"];
+            let cached = details["cached_tokens"].as_u64().unwrap_or(0);
+            let written = details["cache_write_tokens"].as_u64().unwrap_or(0);
             self.usage = Usage {
-                input: prompt.saturating_sub(cached),
+                input: prompt.saturating_sub(cached).saturating_sub(written),
                 output: u["completion_tokens"].as_u64().unwrap_or(0),
                 cache_read: cached,
-                cache_write: 0,
+                cache_write: written,
             };
         }
         let Some(choice) = v["choices"].as_array().and_then(|c| c.first()) else {
