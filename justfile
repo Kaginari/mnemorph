@@ -27,6 +27,8 @@ rust:
 
 # The race law is covered whole: every region of tempest-races runs under its tests.
 law:
+    # Old profile data merges into a new run and can read a covered function as missed.
+    cargo llvm-cov clean --workspace
     cargo llvm-cov -p tempest-races --fail-under-regions 100 --summary-only
 
 # TypeScript: Biome, types, tests.
