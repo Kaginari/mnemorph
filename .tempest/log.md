@@ -313,3 +313,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The API moved under the training prior: `anthropic-version: 2026-10-21` rejects
     `temperature`/`top_p`/`top_k` at any value, cache reads are 0.05× on Opus 5.5 and 0.025× on
     Fable 5.1, and thinking blocks are bound to the conversation — the reference, not memory.
+
+---
+
+### [2026-10-23T23:58:48+02:00] rimuru — M3 part 2: the OpenAI-compatible client, one driver for both
+- **Task:** M3 (#5): vLLM, OpenRouter, Ollama — chat completions — sharing the Anthropic client's
+  ladder and waits.
+- **Files:** crates/tempest-provider — drive.rs (one attempt loop: the ladder, the three waits, no
+  retry once content has started; each provider brings an `Assembler`), anthropic.rs (now a thin
+  client over the driver; its 16 tests unchanged and green), openai.rs (encode: system blocks
+  joined, `tool` messages per result, assistant `tool_calls` with JSON-string arguments, opaque
+  blocks and cache marks dropped, `stream_options.include_usage`; assemble: text, tool-call
+  fragments merged by index, `{}` for empty arguments, cached tokens split from input, finish
+  reasons mapped — `content_filter` is a refusal — `[DONE]` required, in-stream errors; a bearer
+  key only when one is given), tests/openai.rs (3), clippy.toml (product names in docs).
+- **Gate:** n/a. Instruments: 19 provider tests, clippy pedantic, `just check`.
+- **Result:** committed; its pull request opens after part 1 (#50) lands.

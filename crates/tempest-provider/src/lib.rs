@@ -1,13 +1,19 @@
 //! Model providers: Anthropic and OpenAI-compatible streaming clients, retries, cache
 //! breakpoints.
 //!
+//! [`Anthropic`] speaks the Messages API; [`OpenAiCompatible`] speaks chat completions to vLLM,
+//! OpenRouter, Ollama and the like. Both share one attempt loop: the ladder, the waits, and no
+//! retry once content has started.
+//!
 //! A provider takes a provider-neutral [`Request`], streams the answer with three timeouts
 //! (connect, first byte, stall), retries what can be retried before any content is shown, and
 //! returns a [`Response`] whose usage the ledger prices ([`usage_row`]).
 
 mod anthropic;
+mod drive;
 mod error;
 mod model;
+mod openai;
 mod retry;
 mod sse;
 mod transport;
@@ -15,6 +21,7 @@ mod transport;
 pub use anthropic::{API_VERSION, Anthropic, MAX_BREAKPOINTS, encode};
 pub use error::{Error, Wait};
 pub use model::{Block, Effort, Event, Message, Request, Response, Role, StopReason, Tool};
+pub use openai::{OpenAiCompatible, encode_chat};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use transport::{Body, HttpRequest, HttpResponse, HttpTransport, Reply, Scripted, Transport};

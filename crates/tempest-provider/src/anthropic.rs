@@ -2,15 +2,14 @@
 
 use std::sync::Arc;
 
-use futures_util::StreamExt;
 use serde_json::{Map, Value, json};
 use tempest_ledger::Usage;
 
-use crate::error::{Error, Wait};
+use crate::drive::{Assembler, drive};
+use crate::error::Error;
 use crate::model::{Block, Event, Message, Request, Response, Role, StopReason};
-use crate::retry::{Policy, retry_after};
-use crate::sse::SseReader;
-use crate::transport::{HttpRequest, Transport};
+use crate::retry::Policy;
+use crate::transport::Transport;
 
 /// The API version every request names.
 pub const API_VERSION: &str = "2026-10-21";
@@ -56,99 +55,21 @@ impl Anthropic {
     ) -> Result<Response, Error> {
         let body =
             serde_json::to_vec(&encode(request)?).map_err(|e| Error::Invalid(e.to_string()))?;
-        let mut attempt = 0;
-        loop {
-            let mut started = false;
-            let outcome = self.attempt(&body, on, &mut started).await;
-            match outcome {
-                Ok(response) => return Ok(response),
-                Err((error, after)) => {
-                    if started || !error.retryable() || attempt >= self.policy.max_retries {
-                        return Err(error);
-                    }
-                    attempt += 1;
-                    tokio::time::sleep(self.policy.wait(attempt, after)).await;
-                }
-            }
-        }
+        let headers = [
+            ("content-type".to_owned(), "application/json".to_owned()),
+            ("x-api-key".to_owned(), self.key.clone()),
+            ("anthropic-version".to_owned(), API_VERSION.to_owned()),
+        ];
+        drive::<Assembly>(
+            self.transport.as_ref(),
+            &self.policy,
+            &self.url,
+            &headers,
+            &body,
+            on,
+        )
+        .await
     }
-
-    async fn attempt(
-        &self,
-        body: &[u8],
-        on: &mut (dyn FnMut(Event) + Send),
-        started: &mut bool,
-    ) -> Result<Response, (Error, Option<std::time::Duration>)> {
-        let request = HttpRequest {
-            url: self.url.clone(),
-            headers: vec![
-                ("content-type".into(), "application/json".into()),
-                ("x-api-key".into(), self.key.clone()),
-                ("anthropic-version".into(), API_VERSION.into()),
-            ],
-            body: body.to_vec(),
-        };
-        let response = self
-            .transport
-            .send(request)
-            .await
-            .map_err(|e| (Error::Transport(e.to_string()), None))?;
-        let after = retry_after(
-            response.header("retry-after-ms"),
-            response.header("retry-after"),
-        );
-        let mut chunks = response.body;
-        if response.status != 200 {
-            let mut text = Vec::new();
-            while let Ok(Some(Ok(chunk))) =
-                tokio::time::timeout(self.policy.stall, chunks.next()).await
-            {
-                text.extend_from_slice(&chunk);
-                if text.len() > 64 * 1024 {
-                    break;
-                }
-            }
-            let (kind, message) = api_error(&text);
-            return Err((
-                Error::Api {
-                    status: response.status,
-                    kind,
-                    message,
-                },
-                after,
-            ));
-        }
-        let mut reader = SseReader::default();
-        let mut assembly = Assembly::default();
-        let mut wait = (self.policy.first_byte, Wait::FirstByte);
-        loop {
-            let next = tokio::time::timeout(wait.0, chunks.next())
-                .await
-                .map_err(|_| (Error::Timeout(wait.1), None))?;
-            let Some(chunk) = next else { break };
-            let chunk = chunk.map_err(|e| (Error::Transport(e.to_string()), None))?;
-            wait = (self.policy.stall, Wait::Stall);
-            for event in reader.feed(&chunk) {
-                if let Some(done) = assembly
-                    .apply(&event.data, on, started)
-                    .map_err(|e| (e, None))?
-                {
-                    return Ok(done);
-                }
-            }
-        }
-        Err((Error::Truncated, None))
-    }
-}
-
-fn api_error(body: &[u8]) -> (String, String) {
-    let v: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-    let kind = v["error"]["type"].as_str().unwrap_or("unknown").to_owned();
-    let message = v["error"]["message"].as_str().map_or_else(
-        || String::from_utf8_lossy(&body[..body.len().min(500)]).into_owned(),
-        str::to_owned,
-    );
-    (kind, message)
 }
 
 /// The request's JSON body. Refused locally when the API would refuse it: more than four cache
@@ -265,8 +186,7 @@ struct Assembly {
     warnings: Vec<String>,
 }
 
-impl Assembly {
-    /// Applies one event's data. `Some` when the message is complete.
+impl Assembler for Assembly {
     fn apply(
         &mut self,
         data: &str,
@@ -371,7 +291,9 @@ impl Assembly {
         }
         Ok(None)
     }
+}
 
+impl Assembly {
     fn read_usage(&mut self, u: &Value) {
         let read = |field: &str| u[field].as_u64();
         if let Some(n) = read("input_tokens") {
