@@ -81,7 +81,8 @@ new privilege cannot be added halfway.
 **Which model rides a body.** One rule, in order: a model configured for the exact creature;
 else for the pair (race, office), where the office comes from the commission's `@ASK`
 (`findings` → read, `verdict` → judge, `draft` → write; the throne has no office); else the model
-configured for the race's `DEFAULT_TIER`.
+configured for the race's `DEFAULT_TIER`. The default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and
+the adversary think hardest), **strong** for Orc, Slime and Kijin.
 
 **Lone-body mode (temporary, M5–M6 only).** Before the world exists, one body runs as Rimuru's
 voice and a single Slime whose zone is the whole repository, under the end gate, with no
@@ -279,7 +280,7 @@ stateDiagram-v2
     Candidate --> Ascended: Rimuru proposes · Veldora confirms
     Candidate --> Base: Veldora declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
-    Ascended --> Base: Oni only — an envelope act rolled back or corrected
+    Ascended --> Base: an event — immediate, no probation
     Probation --> Ascended: recovers within 5 reports
     Probation --> Base: does not recover — falls, record kept
 ```
@@ -300,6 +301,15 @@ window. The two thresholds are apart on purpose (hysteresis), so a creature does
 | 💎 **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
 | 🔥 **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
 | 🌘 **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+
+How a fall is read (`tempest-races`, `falls`):
+
+- **An event ends the ascension at once**: a High Orc's pass overturned on a sealed territory, a
+  Named Slime's *tests intact* failure, an Oni's rolled-back or corrected envelope act.
+- **A rate below its fall bar starts probation**, and only on a full recent record — ten reports,
+  or ten findings for an Arch Dark Elf. The fall bars sit well under the rise bars, so a body
+  that just rose never reads as falling.
+- Fewer than five reports: a meter is shown, never ranked.
 
 Rules that hold for every ascension:
 

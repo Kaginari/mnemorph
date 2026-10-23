@@ -114,12 +114,14 @@ config:
   theme: neutral
 ---
 flowchart TD
-    Q{"may A dispatch B?"} --> C1{"B's race in<br/>A's COMMANDS?"}
+    Q{"may A dispatch B?"} --> C0{"A High Elf, B an Orc<br/>in another lane?"}
+    C0 -- yes --> C0b{"budget slice<br/>fits?"}
+    C0b -- yes --> VIA(["sent as @$ to B's Elf"])
+    C0b -- no --> NO5
+    C0 -- no --> C1{"B's race in<br/>A's COMMANDS?"}
     C1 -- no --> C1b{"A Orc, B Orc?<br/>(sideways)"}
-    C1b -- yes --> OK
-    C1b -- no --> C1c{"A High Elf,<br/>B in another lane?"}
-    C1c -- yes --> VIA(["sent as @$ to B's Elf"])
-    C1c -- no --> NO1(["refused: one hop up"])
+    C1b -- yes --> C5
+    C1b -- no --> NO1(["refused: one hop up"])
     C1 -- yes --> C2{"B's lineage<br/>reaches A?"}
     C2 -- no --> NO2(["refused: names B's commander"])
     C2 -- yes --> C3{"A is Elf:<br/>plan item names B?"}
