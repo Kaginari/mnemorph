@@ -4,8 +4,19 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 default: check
 
-# Everything CI runs: Rust, TypeScript, the layering, and a clean tree after the tests.
-check: rust ts layers tree-clean
+# Everything CI runs: Rust, TypeScript, the layering, the book, the workflows — and the tree
+# must read the same after the check as before it (tests leave nothing behind).
+check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    before=$(git status --porcelain --untracked-files=all)
+    just rust ts layers docs workflows
+    after=$(git status --porcelain --untracked-files=all)
+    if [ "$before" != "$after" ]; then
+        echo "the check changed the tree:"
+        diff <(echo "$before") <(echo "$after") || true
+        exit 1
+    fi
 
 # Rust: format, lints as errors, tests, licences and advisories.
 rust:
@@ -24,9 +35,17 @@ ts:
 layers:
     node tools/check-layers.mjs
 
-# Tests must not leave files behind.
-tree-clean:
-    @test -z "$(git status --porcelain --untracked-files=all)" || { echo "the tree changed during the check:"; git status --short; exit 1; }
+# The GitHub workflows parse and hold together.
+workflows:
+    actionlint
+
+# Build the book as a website (fails on a dead link).
+docs:
+    pnpm --filter @tempest/site build
+
+# Serve the book locally while editing it.
+docs-dev:
+    pnpm --filter @tempest/site dev
 
 # Format everything in place.
 fmt:

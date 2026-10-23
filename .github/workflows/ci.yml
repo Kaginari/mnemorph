@@ -19,11 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+        run: rustup toolchain install && rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-deny,just
+      - name: actionlint (pinned, from its own download script)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12 "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -31,3 +36,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: just check
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the pages' "last updated" reads each file's history
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the book (fails on a dead link)
+        run: pnpm --filter @tempest/site build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: book
+          path: site/.vitepress/dist
