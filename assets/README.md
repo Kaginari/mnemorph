@@ -2,8 +2,9 @@
 
 | Dir | Holds |
 |---|---|
+| `fonts/` | Cinzel and Rajdhani (SIL Open Font License, the texts beside them), for the cards |
 | `portraits/` | one icon per race and ascended form: `<race>.png` (256 px), `<race>@64.png`, `<race>@32.png`, transparent |
-| `cards/` | card art per race, cropped to the frame, transparent corners; `back.png` is the card back |
+| `cards/` | one card per race, ascended form and Veldora, plus the back — drawn by `tools/cards.py` |
 | `brand/` | the project's own marks: `banner.jpg` (the README), `social-preview.jpg` (1280×640, GitHub's link card), `mnemorph-icon.png` and its sizes (the emblem: the dragon and the crowned slime, transparent), `favicon.ico` |
 | `source/` | the generated images the crops were cut from |
 
