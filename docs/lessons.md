@@ -91,6 +91,10 @@ roadmap where that test or rule must exist before the rung counts as done.
 | A nested dispatch's end never reached its card, leaving zombie "thinking" cards with a clock that kept running. | Every dispatch start emits exactly one terminal event, at any nesting depth; a done card's elapsed is frozen. Test: three-deep nesting closes every card. | M6 |
 | A rank with no reportees could still be handed the dispatch tool by its tools list. | Dispatch is granted by the race's compiled powers, not by config. | M1 |
 | Ascension counts must survive restarts and must never count a body's own `@S FAIL` as a pass. | The ascension tally is an append-only ledger replayed at start. Test: FAIL reports never raise the pass rate. | M11 |
+| Mid-turn steering and the human's queued lines shared one inbox, so a queued line rode the running turn and broke its task. | Two lanes in the core: `send` reaches a running body at its next tool step, `queue` only at the turn's end. Test: a queued line never appears in the running turn's context. | M5 |
+| `@$` orders lived in one process's memory: a restart, a second session or the terminal (which never drained them) lost them, and nobody could see what was waiting. | The shared work queue on disk holds every order (relay-hold) until the wake claims it; the status line shows what is held. Test: a restarted session dispatches the orders the last one left. | M7 |
+| Two sessions could claim the same order. | Every move is a revisioned snapshot line; the fold seats only the line that follows the item's last revision, the other reads back as a typed refusal. Test: two concurrent claimants, one claim. | M7 |
+| A move on shared bookkeeping during a body's turn was billed to that body's writes. | The shared shelf is harness soil: no body writes it by hand, the tree watch never stamps it. Test: a queue move mid-turn leaves the body's written set empty. | M7 |
 
 ## Memory & toolbox
 
@@ -130,6 +134,8 @@ roadmap where that test or rule must exist before the rung counts as done.
 | A capital `C` vanished from typed words because it was bound to an action. | No printable character is a binding while the input has focus. | M6 |
 | The UI thread read plan files from disk five times a second and re-rendered the whole transcript per token. | No I/O on the render path; each block renders once per width and theme and is cached. | M6 |
 | A built-in `/review` shadowed the world's own `/review` command. | A world's own commands win over built-ins, as its config wins over defaults. Test. | M6 |
+| A host-side buffer held the queued line, and a turn that died owned it forever; a line queued just as a turn finished was lost. | The queue lives in the core only; the turn-end drain reads it on every exit path, interrupts included. Test: queue a line at every point of a turn's end and after Esc; each runs exactly once. | M6 |
+| A fresh session re-asked, re-discovered and repeated what the last one had learned. | `/handoff` writes a fixed template from gathered facts; a new session is told one waits, and reading it verifies every claim before acting. Offered at the stress zone. | M8 |
 
 ## Board (web)
 
