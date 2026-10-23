@@ -30,6 +30,15 @@ flowchart TD
     D -. ascends .-> AD["🌘 Arch Dark Elf"]
 ```
 
+| <img src="../assets/portraits/rimuru.png" width="72" alt="Rimuru"> | <img src="../assets/portraits/elf.png" width="72" alt="Elf"> | <img src="../assets/portraits/orc.png" width="72" alt="Orc"> | <img src="../assets/portraits/slime.png" width="72" alt="Slime"> | <img src="../assets/portraits/kijin.png" width="72" alt="Kijin"> | <img src="../assets/portraits/dark-elf.png" width="72" alt="Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Rimuru** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
+
+| <img src="../assets/portraits/high-elf.png" width="72" alt="High Elf"> | <img src="../assets/portraits/high-orc.png" width="72" alt="High Orc"> | <img src="../assets/portraits/named-slime.png" width="72" alt="Named Slime"> | <img src="../assets/portraits/oni.png" width="72" alt="Oni"> | <img src="../assets/portraits/arch-dark-elf.png" width="72" alt="Arch Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|
+| **High Elf** | **High Orc** | **Named Slime** | **Oni** | **Arch Dark Elf** |
+
+
 ## In plain words
 
 There are six races. Each one has **one job**, and the harness makes it impossible to do

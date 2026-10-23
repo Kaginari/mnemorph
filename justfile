@@ -28,6 +28,14 @@ layers:
 tree-clean:
     @test -z "$(git status --porcelain --untracked-files=all)" || { echo "the tree changed during the check:"; git status --short; exit 1; }
 
+# Build the book as a website (fails on a dead link).
+docs:
+    pnpm --filter @tempest/site build
+
+# Serve the book locally while editing it.
+docs-dev:
+    pnpm --filter @tempest/site dev
+
 # Format everything in place.
 fmt:
     cargo fmt --all
