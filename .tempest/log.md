@@ -190,3 +190,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The test oracle must not be the code under test: the dispatch table is written out by hand.
   - Accepting the raw form everywhere let prose overwrite a status; a mouth pair's agreement is
     now a parser the world chooses, not a habit of the parser.
+
+---
+
+### [2026-10-23T22:31:17+02:00] rimuru — M2: the usage ledger and the budget
+- **Task:** M2 (#4): the ledger before the first model call — count, carve and stop.
+- **Files:** crates/tempest-ledger (usage: weighted tokens, occupancy and spend; prices: TOML,
+  unpriced is null; clock: UTC timestamps and days without a date crate; journal: append-only
+  JSONL, one synced write per row, tolerant reader; row: the usage row with its prefix tokens;
+  envelope: carve by plan weight under race ceilings, parent and challenge reserves, pre-flight,
+  recorded spend, settle; caps: month, day, session; fold: by body, race, model, day, cache-hit
+  and prefix shares), tests/budget.rs (512 random commission trees; folds by hand), the book
+  (06, roadmap: the value fold moves to M11).
+- **Gate:** n/a. Instruments: 23 ledger tests, 75 in the workspace; clippy pedantic; cargo-deny
+  with the first real dependencies (serde, serde_json, toml); `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Pre-flight and spend are two acts: the guard can refuse a call, nothing can refuse a cost
+    that happened. An envelope that refused to record would lie about the session.
+  - The binary ships no guessed prices: a wrong price is worse than *unpriced*. M3 fills the
+    table from the providers' published pages.
+  - A dollar cap is the wrong limit while unpriced models exist; caps count weighted tokens.
