@@ -1,0 +1,2 @@
+# Product names in doc comments are names, not code.
+doc-valid-idents = ["OpenRouter", "OpenAI", "OpenCode", "GitHub", "VitePress", ".."]
