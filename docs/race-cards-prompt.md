@@ -22,18 +22,21 @@ Generate in this order, so the set stays consistent:
 The designs are original: describe them as written here and never name an anime or its
 characters in the prompt.
 
-## The set so far
+## The set
 
-Cropped to `assets/cards/`. Still to generate: the Oni and Arch Dark Elf cards, and every card at a
-higher resolution for the full-size view.
+`tools/cards.py` draws every card (600 × 840) into `assets/cards/`: the race's hexagon portrait
+from `assets/portraits/`, framed in the race's colour, with its name, tier gems, duty, tool
+classes, soil, its rise or command line and its meter — the words of [the races](02-races.md).
+When the law changes, edit the card's entry and run `python3 tools/cards.py`. A painted art set,
+made with the brief below, would replace the portraits in the art window.
 
-| <img src="../assets/cards/slime.png" width="110" alt="Slime"> | <img src="../assets/cards/veldora.png" width="110" alt="Veldora"> | <img src="../assets/cards/rimuru.png" width="110" alt="Rimuru"> | <img src="../assets/cards/elf.png" width="110" alt="Elf"> | <img src="../assets/cards/orc.png" width="110" alt="Orc"> | <img src="../assets/cards/kijin.png" width="110" alt="Kijin"> |
+| <img src="../assets/cards/veldora.png" width="110" alt="Veldora"> | <img src="../assets/cards/rimuru.png" width="110" alt="Rimuru"> | <img src="../assets/cards/elf.png" width="110" alt="Elf"> | <img src="../assets/cards/orc.png" width="110" alt="Orc"> | <img src="../assets/cards/slime.png" width="110" alt="Slime"> | <img src="../assets/cards/kijin.png" width="110" alt="Kijin"> | <img src="../assets/cards/dark-elf.png" width="110" alt="Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Veldora | Rimuru | Elf | Orc | Slime | Kijin | Dark Elf |
+
+| <img src="../assets/cards/high-elf.png" width="110" alt="High Elf"> | <img src="../assets/cards/high-orc.png" width="110" alt="High Orc"> | <img src="../assets/cards/named-slime.png" width="110" alt="Named Slime"> | <img src="../assets/cards/oni.png" width="110" alt="Oni"> | <img src="../assets/cards/arch-dark-elf.png" width="110" alt="Arch Dark Elf"> | <img src="../assets/cards/back.png" width="110" alt="Card back"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| Slime | Veldora | Rimuru | Elf | Orc | Kijin |
-
-| <img src="../assets/cards/dark-elf.png" width="110" alt="Dark Elf"> | <img src="../assets/cards/high-elf.png" width="110" alt="High Elf"> | <img src="../assets/cards/high-orc.png" width="110" alt="High Orc"> | <img src="../assets/cards/named-slime.png" width="110" alt="Named Slime"> | <img src="../assets/cards/back.png" width="110" alt="Card back"> |
-|:---:|:---:|:---:|:---:|:---:|
-| Dark Elf | High Elf | High Orc | Named Slime | Card back |
+| High Elf | High Orc | Named Slime | Oni | Arch Dark Elf | Card back |
 
 ## The art spec
 
