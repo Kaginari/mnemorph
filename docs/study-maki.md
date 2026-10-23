@@ -117,14 +117,15 @@ touch the law itself and wait for a decision.
 | Research subagents on a cheaper model, never a stronger one than their parent | `plugins/task/init.lua` | a findings commission may ride a lower tier (M7) | [#42](https://github.com/Kaginari/mnemorph/issues/42) |
 | A small, measured prompt | `maki-agent/src/prompts/` | a CI ceiling on each race's prefix tokens (M5), beside the prefix-share meter | [#43](https://github.com/Kaginari/mnemorph/issues/43) |
 
+### Decided
+
+- **A permanent solo path** ([#44](https://github.com/Kaginari/mnemorph/issues/44)): kept, as
+  solo mode — one body under the same law, escalating into the hierarchy on stress, a boundary
+  or an act it does not hold ([the races](02-races.md)); measured against the hierarchy on the
+  same 30 tasks before M7.
+
 ### Waiting for a decision
 
-- **A permanent solo path** ([#44](https://github.com/Kaginari/mnemorph/issues/44)). Keep the
-  lone-body mode instead of removing it at M7: one body with Rimuru's voice and a Slime's hands,
-  still under shelves, soil, the sandbox and the end gate, escalating into the hierarchy only on
-  context stress, a territory boundary, or an outward or adversarial act. The races stay as law;
-  the hierarchy becomes something a run pays for only when the task needs it. Measured on the same
-  30 tasks before M7.
 - **A forgiving edit** ([#45](https://github.com/Kaginari/mnemorph/issues/45)). maki's edit tries
   exact, trimmed, anchored, whitespace-normalised and indentation-flexible matches and re-indents
   the replacement. Mnemorph's lesson is a strict edit that names the closest line. The middle

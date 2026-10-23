@@ -18,7 +18,7 @@ flowchart LR
     M3 --> M4["M4<br/>tools + sandbox + gate"]
     M4 --> M4a["M4a<br/>config"]
     M4a --> M5["M5<br/>one body loops"]
-    M5 --> M6["M6<br/>protocol + CLI<br/>🐕 lone-body dogfood"]
+    M5 --> M6["M6<br/>protocol + CLI<br/>🐕 solo dogfood"]
     M6 --> M7["M7<br/>the world"]
     M7 --> M8["M8<br/>memory + toolbox"]
     M8 --> M9["M9<br/>👹 Kijin"]
@@ -46,7 +46,7 @@ starts by testing the two together for real. So when something breaks, it is alw
 piece.
 
 Consumption comes early on purpose (M2): before Mnemorph makes a single model call, it can already
-count and stop. From M6 Mnemorph is usable in a terminal and, in lone-body mode, starts working
+count and stop. From M6 Mnemorph is usable in a terminal and, in solo mode, starts working
 on itself; from M7 it runs the full chain, and from M9 it opens its own pull requests.
 
 Every milestone ends the same way:
@@ -165,8 +165,8 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
 - The six beats, budgets as readings, checkpoint and resume from the journal, the salvage resume,
   guts and doom checkpoint, escalation after failed acts.
 - Cache-prefix stability test for Rimuru, tool JSON included.
-- Lone-body mode (Rimuru's voice plus one Slime over the whole repository, end gate, no
-  dispatch).
+- Solo mode (Rimuru's voice plus one Slime over the whole repository, end gate, no dispatch),
+  with the stress reading that will trigger its escalation.
 - The session's queue lane and interrupt (Esc pivots to the next queued line), the message-sequence
   validator over random interrupt / queue sequences.
 
@@ -183,14 +183,15 @@ real task against a live model, its spend matching the ledger.
   copy, resize, interrupt with Esc, no flicker.
 
 **Exit:** you use `mnemorph` for a real session and it feels finished. From here Mnemorph helps
-build Mnemorph in lone-body mode.
+build Mnemorph in solo mode.
 
 ### M7 — The world · L
 
 - Creatures as data, territory and ontology (who owns a path), dispatch with every rule of the
   flowchart, Courts with fresh contexts, the return path, the end gate (all six checks), the
-  append-only `log.md` writer, the council and relief; the workspace soil; lone-body mode
-  removed.
+  append-only `log.md` writer, the council and relief; the workspace soil; solo's escalation into a
+  lane on stress, a boundary or an act it does not hold, measured against the hierarchy on the
+  same 30 tasks.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
   revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
 
