@@ -168,6 +168,9 @@ pub struct Response {
     pub content: Vec<Block>,
     /// Why it stopped.
     pub stop: StopReason,
+    /// The provider's details on the stop — on a refusal, its category and any recommended
+    /// model; a fallback chain reads it.
+    pub stop_details: Option<serde_json::Value>,
     /// Tokens, by class.
     pub usage: Usage,
     /// Things the ledger should know that are not errors (e.g. a usage class Tempest does not
