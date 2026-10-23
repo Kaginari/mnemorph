@@ -1,0 +1,21 @@
+# Anthropic's first-party prices, in US dollars per million tokens, from the published pricing
+# (the Claude API reference). Cache writes are the 5-minute TTL: 1.25 × input.
+# A model whose four prices are not all published here stays unpriced — never guessed.
+
+[models."claude-opus-5-5"]
+input = 4.0
+output = 20.0
+cache-read = 0.20
+cache-write = 5.0
+
+[models."claude-sonnet-5-5"]
+input = 2.0
+output = 10.0
+cache-read = 0.20
+cache-write = 2.5
+
+[models."claude-fable-5-1"]
+input = 10.0
+output = 50.0
+cache-read = 0.25
+cache-write = 12.5
