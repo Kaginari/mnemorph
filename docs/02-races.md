@@ -65,7 +65,7 @@ pub trait RaceLaw: sealed::Sealed {
     const SIDEWAYS: bool;
     const AUTHORS: Soil;          // None | Zone | Post | ProvingGround
     const HOLDS_GATE: bool;
-    const SHELF: &'static [ToolClass];   // read | write | outward | destructive | dispatch
+    const SHELF: &'static [ToolClass];   // read | write | outward | destructive | dispatch | seal
     const DEFAULT_TIER: ModelTier;       // frontier | strong | fast — config maps tiers to models
     const BUDGET_SHARE: Share;           // default slice of the parent's envelope
     fn score(s: &Signals) -> Score;      // 0..=100
@@ -78,19 +78,46 @@ An ascended form is its own variant that **inherits** its base's constants and o
 what its privileges change. A `match` over `Race` that forgets a variant does not compile, so a
 new privilege cannot be added halfway.
 
-The six tool classes are the same as isekai's four plus two (`dispatch`, `seal`):
+**Which model rides a body.** One rule, in order: a model configured for the exact creature;
+else for the pair (race, office), where the office comes from the commission's `@ASK`
+(`findings` → read, `verdict` → judge, `draft` → write; the throne has no office); else the model
+configured for the race's `DEFAULT_TIER`.
+
+**Lone-body mode (temporary, M5–M6 only).** Before the world exists, one body runs as Rimuru's
+voice and a single Slime whose zone is the whole repository, under the end gate, with no
+dispatch. It lets Tempest work on itself from M6. It is removed when M7 lands, and the binary
+refuses it in any world that has creatures.
+
+Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
+`seal` are harness tools, never shell commands.
 
 | Class | Meaning | Who holds it |
 |---|---|---|
 | `read` | look inside the world | everyone |
-| `write` | change files inside the world | Slime (zone), Kijin (post), Orc (its slimes' verify lines), Dark Elf (proving ground) |
+| `write` | change files inside the world — including deleting or renaming inside the writer's own soil, which moves the old file to the attic with a ledger line | Slime (zone), Kijin (post), Orc (the verify block of its Slimes' docs), Dark Elf (proving ground) |
 | `outward` | anything that leaves the machine | **Kijin only** |
-| `destructive` | deletes, history rewrites, force pushes | nobody alone — always the human gate, Kijin as the hands |
-| `dispatch` | commission another body | Rimuru, Elf, Orc |
-| `seal` | freeze landings on a territory | Dark Elf (with Rimuru's confirm), Arch Dark Elf |
+| `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
+| `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |
+| `seal` | propose freezing landings on a territory | Dark Elf, Arch Dark Elf — a seal always takes the human's confirm |
 
 A tool call whose class is not on the body's shelf is refused **before it runs**, and the
 refusal names the race that can do it: `outward: route to kijin-forge`.
+
+### Soil — who may write what
+
+| Soil | Owner | Gate over it |
+|---|---|---|
+| a **zone** (directory prefixes) | one Slime | its Orc's verify lines |
+| the **verify block** of a Slime's doc | that Slime's Orc — the rest of the doc is the Slime's; the gate diffs by line range | the Orc's own gate |
+| the **workspace** — root manifests, lockfiles, toolchain pins (`Cargo.toml`, `Cargo.lock`, `package.json`, `pnpm-lock.yaml`, `rust-toolchain.toml`, `justfile`) | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
+| a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
+| the **proving ground** `.tempest/dark-elf/` | the Dark Elf | its own gate (self-gated) |
+| the **plan** and the **dimension manifest** (`.tempest/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |
+
+A self-gated race writes its own verify lines; like every changed line, they run from the next
+turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
+zone covers falls to `slime-workspace` if it sits at the root, else to the nearest zone above it,
+else it is reported as unowned soil and Rimuru must route its birth.
 
 ---
 
@@ -103,8 +130,12 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 - **Reports to** Veldora. **Commands** Elves, Kijin, Dark Elves — never an Orc or a Slime
   directly.
 - **Shelf.** `read`, `dispatch`, plus writes to exactly two files: its plan and the dimension
-  manifest. Every other write is refused with the first rung to dispatch. The law file changes
-  only as a diff the human applies.
+  manifest. Every other write is refused with the first rung to dispatch. The law file — and any
+  rule meant to reach other bodies' prompts — changes only as a diff the human applies.
+- **Challenge duty.** When a landing's written paths match a risk surface (auth, crypto,
+  deserialisation, process execution, path handling, network input, dependency manifests), the
+  gate's verdict reads `PASS (challenge pending)` and the harness opens a Dark Elf commission
+  itself, from a reserved share of the session envelope. Rimuru cannot skip it.
 - **Holds** the session's budget envelope and carves each commission's slice from it.
 - **Turn.** Read the ask → if ambiguous, ask the human → plan deck → dispatch (in parallel when
   the lanes' territories are disjoint) → fold reports → answer in full human language.
@@ -123,7 +154,8 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 - **Hard rule.** A dispatch is refused unless the Elf's plan deck holds an open item naming that
   Orc. No plan, no orders.
 - **Parallelism.** Two Orcs run at once only if their territories are disjoint — computed, not
-  trusted.
+  trusted. An Elf runs its Orcs in the foreground; running them in the background needs
+  Rimuru's leave, asked once per commission.
 - **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80.
 
 ### 🪓 Orc — the domain and its gate
@@ -134,11 +166,14 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
   that will judge the change (TDD precondition, checked by the harness at dispatch). Judge each
   landing. Negotiate contracts with neighbouring domains sideways.
 - **Reports to** its Elf. **Commands** its own Slimes; reaches other Orcs sideways.
-- **Shelf.** `read`, `dispatch`, `write` restricted to the verify lines on its Slimes' docs and
+- **Shelf.** `read`, `dispatch`, `write` restricted to the verify block of its Slimes' docs and
   its own doc.
-- **The gate.** Four checks, run by the harness at the end of every authoring turn: right author,
-  traits hold (verify lines that stood *before* the turn), duties done, doc truthful. Plus tests
-  intact. The verdict is appended to `log.md`.
+- **The gate.** Six checks, run by the harness at the end of every authoring turn — isekai's four
+  (right author, traits hold, duties done, doc truthful) plus tests intact and no seal; see
+  [the loop](03-loop.md#the-end-gate). The verdict is appended to `log.md`.
+- **Answering a Dark Elf.** A finding on its domain reaches the Orc through Rimuru. The Orc
+  either orders the fix, or contests it with `@? contest <finding-id>: <reason>`, which Rimuru
+  puts to the human.
 - **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90.
 
 ### 💧 Slime — the ground truth of a zone
@@ -168,12 +203,12 @@ Kijin hold one of five **posts**, also compiled in:
 | Post | Epithet | Owns (territory) | Outward acts |
 |---|---|---|---|
 | `kijin-ci` | the swordmaster who drills | `.github/workflows/`, CI config | read CI runs and logs, re-run jobs, publish CI as an instrument |
-| `kijin-release` | the smith | changelog, versioning, release config, installers | tag, build artifacts, publish to registries |
+| `kijin-release` | the smith | changelog, versioning, release config, installers | build artifacts; tag pushes and registry publishes (both `destructive`) |
 | `kijin-deploy` | the commander | deploy manifests, environments | deploy, verify health, roll back |
 | `kijin-forge` | the shrine keeper of records | PR templates, issue templates | push branches, open and update PRs, comment, label, read issues |
-| `kijin-scout` | the shadow | `.tempest/intel/` | sync advisory databases (OSV), watch upstream releases and dependency updates |
+| `kijin-scout` | the shadow | `.tempest/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
 
-- **Reports to** Rimuru. **Commands** nobody.
+- **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
@@ -185,8 +220,9 @@ Kijin hold one of five **posts**, also compiled in:
   deployed version per environment, open PRs). Every new body of that post reads it first.
 - **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
   checks the real CI state instead of trusting a doc (Nature 9).
-- **Score** `0.7·verifyGreenRate + 0.3·landRate`, plus `outwardCleanRate` (acts that completed
-  without rollback or human correction). Meter: *Outward clean*, ok ≥ 90.
+- **Score** `0.5·outwardCleanRate + 0.3·verifyGreenRate + 0.2·landRate`, where
+  `outwardCleanRate` = outward acts that completed without rollback or human correction. Meter:
+  *Outward clean*, ok ≥ 90.
 
 ### 🌑 Dark Elf — the adversary
 
@@ -207,17 +243,25 @@ dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru.
      boundaries.
   6. **Law audit** — what isekai's Dark Elf did: gate verdicts and `log.md` integrity.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
-  `.tempest/dark-elf/`, `seal` with Rimuru's confirm.
-- **The witness rule.** A finding is `@F` only with a **witness**: a proof-of-concept test in the
-  proving ground that fails, or a scanner output file. Without a witness it is `@?` — a
-  suspicion, never a finding. This is what keeps an adversarial model from crying wolf.
-- **Seal.** A critical or high finding with a witness can seal its territory: the gate refuses
-  every landing there until the owning Orc lands a fix whose verify lines **include the
-  witness**. The attack becomes the regression test. The seal lifts itself when the witness
-  passes.
-- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = findings that led to a fix and
-  *precision* = 1 − dismissed findings (an Orc's dismissal with a reason that Rimuru accepted).
-  Meter: *Upheld*, ok ≥ 80.
+  `.tempest/dark-elf/` (self-gated), `seal` proposals.
+- **The witness rule.** A finding is `@F` only with an id and a **witness**: a proof-of-concept
+  test in the proving ground that fails *for the stated reason* (it must exercise the code under
+  the cited `file:line`, which the harness checks by coverage), or a scanner output file. Without
+  a witness it is `@?` — a suspicion, never a finding. This is what keeps an adversarial model
+  from crying wolf.
+- **Seal.** A critical or high finding with a witness can propose a seal on its territory.
+  1. The proposal is a gated act: Rimuru puts it to the human with the witness, who confirms.
+  2. At confirmation the witness is **frozen by content hash**; the Dark Elf can no longer change
+     what it is judged by.
+  3. While sealed, the gate refuses landings on that territory except the fix.
+  4. The fix copies the frozen witness into the owning zone's tests — from then on it is the
+     Slime's regression test, and its Orc's verify line runs it. The seal lifts when that test
+     passes with the frozen hash intact.
+  5. A seal can be contested (`@? contest`, through Rimuru to the human) and expires after
+     7 days unless the human renews it.
+- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = findings, linked by id, that a
+  later landing fixed, and *precision* = 1 − dismissed ÷ findings (a dismissal is a contest the
+  human upheld). Meter: *Upheld*, ok ≥ 80.
 
 ---
 
@@ -235,6 +279,7 @@ stateDiagram-v2
     Candidate --> Ascended: Rimuru proposes · Veldora confirms
     Candidate --> Base: Veldora declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
+    Ascended --> Base: Oni only — an envelope act rolled back or corrected
     Probation --> Ascended: recovers within 5 reports
     Probation --> Base: does not recover — falls, record kept
 ```
@@ -250,17 +295,25 @@ window. The two thresholds are apart on purpose (hysteresis), so a creature does
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
-| ✨ **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | dispatch Orcs of **other** lanes sideways through their Elf; background Orcs without asking Rimuru; its rules reach every Elf's prompt | planLandRate < 70% over the last 10 |
+| ✨ **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
 | ⚔️ **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
 | 💎 **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
 | 🔥 **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
-| 🌘 **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | seals without Rimuru's confirm; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+| 🌘 **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
 
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
   advance by the human, scoped, expiring (default 30 days), and listed in `tempest status`.
-  `destructive` acts are never covered by an envelope.
+- **What an envelope can never cover** (compiled, whatever the envelope says):
+  - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites;
+  - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests
+    — a pushed workflow runs with the repository's secrets, so that push is always asked;
+  - deploys to any environment marked `protected` (production by default);
+  - outbound text (PR bodies, comments) that has not passed the secret-redaction pass, or above
+    4 KB.
+- **Nothing skips the human** for a seal, a destructive act, or a rule that reaches other
+  bodies' prompts.
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
 - Ascension, probation and fall are each logged in `log.md` with the readings that caused them.
 - A creature can be named down by the human at any time (`tempest fall <creature>`).

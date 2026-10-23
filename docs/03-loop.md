@@ -84,10 +84,10 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | the commission's envelope (Rimuru 40) | checkpoint |
-| wall clock | the envelope (60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
+| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40) | checkpoint |
+| wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | stress at 90% of the model's window | compaction drain, else checkpoint |
-| tokens / cost | the commission's `@BUDGET` | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
+| cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 A checkpoint is an honest stop: the journal holds every beat, and `tempest resume <run>` picks
 up from it. An outward act cut mid-flight is gated again, never replayed.
@@ -107,14 +107,21 @@ All four are code. None of them asks the body how it feels.
 
 Runs on the body's own writes (minus what its Courts already landed on their own account):
 
-1. **Right author** — every path lies in the writer's own soil.
+1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
+   for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the
+   Slime's. Writes are found by snapshotting the tree, whatever tool made them — a shell
+   redirect counts the same as the write tool.
 2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, 120 s
    each. A line changed this turn is a hole and runs from the next turn (a Named Slime's own
    additions excepted).
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
 5. **Tests intact** — no test deleted or skipped.
-6. **No seal** — the territory is not sealed by a Dark Elf, or the fix includes the witness.
+6. **No seal** — the territory is not sealed, or this landing is the fix: it carries the frozen
+   witness into the zone's tests, unchanged by hash.
+
+A landing on a risk surface passes as `PASS (challenge pending)` and opens a Dark Elf commission
+automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 
 The verdict goes to `log.md` through the append-only writer. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.

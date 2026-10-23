@@ -24,7 +24,8 @@ Two layers, one picture each:
 
 When the code changes a flow, the sketch and the canvas change in the same change (Vitality).
 tldraw offline does not merge external edits to an open file: close a canvas before a pull,
-checkout or rebase touches it.
+checkout or rebase touches it. A `.tldraw` file can carry document scripts that run when it is opened:
+review a canvas change like a code change.
 
 ## Reading order
 

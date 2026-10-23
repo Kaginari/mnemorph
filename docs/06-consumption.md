@@ -56,15 +56,35 @@ Prices come from a versioned table shipped with the binary (`prices.toml`), over
 provider in config; a model with no known price records `usd: null` and the meter says
 *unpriced*, never zero.
 
+### The unit: weighted tokens
+
+A budget counts what a call really costs, not how long its context is. Re-sent context served
+from the cache costs a tenth, so counting raw context would kill a body after a few calls while
+it was spending almost nothing. The unit is the **weighted token** (wt):
+
+```
+wt = uncached_input + 1.25 × cache_write + 0.1 × cache_read + r × output
+```
+
+where `r` is the model's output-to-input price ratio from `prices.toml` (5 when unknown).
+Currency caps convert through the same table; a model with no known price is still bounded in wt.
+
 ### Envelopes
 
-- Caps: `budget.month`, `budget.day`, `budget.session` (tokens and/or currency). A fold over the
-  ledger enforces month and day across sessions.
-- A commission's `@BUDGET` is carved by the parent. Each race has a compiled default share of
-  what its parent has left (Elf 60%, Orc 50%, Slime 50%, Kijin 30%, Dark Elf 40%); the parent's
-  plan may name a smaller one, never a larger one than it holds.
-- **Pre-flight.** Before each model call: `context_tokens + max_output ≤ envelope.left`. If not,
-  the loop checkpoints with `@? budget: need ~N, have M`. The parent can grant from its own
+- **Caps:** `budget.month`, `budget.day`, `budget.session`, in wt and/or currency. A fold over
+  the ledger enforces month and day across sessions.
+- **Only cost is carved.** Steps and the wall clock pass down whole, per race
+  ([the loop](03-loop.md#budgets-are-readings)); splitting them would leave the Slime — the only
+  body that writes code — a handful of steps.
+- **Carving follows the plan.** A parent splits its envelope across its plan's open items by
+  their declared weight (default equal), keeping a 10% reserve for itself. Each race has a
+  compiled **maximum** share (Elf 60%, Orc 60%, Slime 70%, Kijin 30%, Dark Elf 40%) — a ceiling,
+  never a default — so parallel children cannot together exceed what the parent holds.
+- **The challenge reserve.** 10% of the session envelope is reserved for the automatic Dark Elf
+  challenges; it cannot be carved for anything else.
+- **Pre-flight.** Before each model call the core estimates the call in wt (cached prefix at the
+  cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit `envelope.left`,
+  the loop checkpoints with `@? budget: need ~N wt, have M`. The parent can grant from its own
   envelope (`@INSTRUCT` with a new budget), split the work, or escalate to the human.
 - Unspent slices return to the parent when the child reports.
 - At 80% of any cap the human sees a warning; at 100% the session stops new commissions and
@@ -72,17 +92,27 @@ provider in config; a model with no known price records `usd: null` and the mete
 
 ### Cache-first prompt layout
 
+The provider renders tools, then the system prompt, then the messages. Changing any tool
+definition invalidates everything after it, so the tools tier comes first and never varies.
+Anthropic allows at most four cache breakpoints; Tempest uses all four:
+
 ```
-[ crest + nature law        ]  ← identical for every body in every world: cache breakpoint 1
-[ race card (compiled text) ]  ← identical for every body of a race:         breakpoint 2
-[ creature card + Minds manifest ]  ← identical across this creature's turns: breakpoint 3
-[ recall anchors · commission · conversation ]  ← changes
+[ tools: the race's full, stable tool list ]  ← identical for every body of a race:  breakpoint 1
+[ crest + nature law                       ]  ← identical for every body:            breakpoint 2
+[ race card (compiled text)                ]  ← identical for every body of a race:  breakpoint 3
+[ creature card + its rules + Minds        ]  ← identical across its turns:          breakpoint 4
+[ recall anchors · toolbox manifest text · commission · conversation ]  ← changes
 ```
 
-- A test renders two consecutive turns for each race and asserts the first three blocks are
-  byte-identical. Any timestamp, map ordering or counter that leaks into the stable prefix fails
-  CI.
-- `cacheHitRate` is a signal in the value ledger; the board shows it per race.
+- The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
+  offering different tools per turn never breaks the cache.
+- A test renders two consecutive turns for each race and asserts every tier up to breakpoint 4
+  is byte-identical, tool JSON included. Any timestamp, map ordering or counter that leaks into
+  the stable prefix fails CI.
+- Each provider and model has a minimum cacheable prefix; a test asserts each breakpoint's
+  prefix meets the minimum of every configured model, or the breakpoint is merged into the next.
+- Caches are per model: "identical for every body" pays off among bodies on the same model.
+- `cacheHitRate` is a signal in the value ledger, per tier; the board shows it per race.
 
 ### Meters
 
@@ -98,7 +128,10 @@ provider in config; a model with no known price records `usd: null` and the mete
 
 ### Building Tempest within your plan
 
-The roadmap is cut into rungs small enough to finish in one or two focused sessions each. After
-every rung, the session's spend is read with `npx ccusage` (Claude Code's local usage logs) and
-written to the rung's entry in `log.md`. From milestone M6 on, Tempest can run its own work, and
-its own ledger becomes the instrument.
+The roadmap is cut into rungs small enough to finish in one or two focused sessions each. On a
+subscription plan what binds is not money but the usage windows (the 5-hour and weekly limits),
+so after every rung the session's **tokens per model** and the **share of the usage window** it
+took are read with `npx ccusage` (`daily` and `blocks`, from Claude Code's local logs) and
+written to the rung's entry in `log.md`. The dollar figure ccusage prints is the API-equivalent
+price, not what the plan costs: it is recorded only as a comparison. From M6 Tempest runs part of
+its own work in lone-body mode, and its own ledger becomes the second instrument.

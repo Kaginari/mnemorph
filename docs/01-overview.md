@@ -96,7 +96,7 @@ flowchart LR
 
 | Compiled in (code) | Configured (data) |
 |---|---|
-| the nine races, their tree, shelves, powers | which creatures exist and their territories |
+| the six races and five ascended forms, their tree, shelves, powers | which creatures exist and their territories |
 | the gate's checks, the wire envelope | which model rides each race |
 | ascension conditions, privileges and falls | budgets: amounts per session, day, month |
 | score formulas and meters | provider credentials (by reference, never inline) |
@@ -108,7 +108,8 @@ configurable rank table, and the line Tempest keeps.
 
 ### What stays from isekai
 
-The nine natures, the crest, the wire register, the gate's four checks, territories, Minds,
+The nine natures, the crest, the wire register, the gate's four checks (Tempest adds two: tests
+intact and no seal), territories, Minds,
 memory tiers, the value ledger, evolution (split, mutate, rebirth) and ascension. What changes is
 where they live: in typed Rust instead of prose plus configuration, with the docs in this book
 saying exactly what the code does.

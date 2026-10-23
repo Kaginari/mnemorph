@@ -24,11 +24,11 @@ sequenceDiagram
     participant G as 🚪 gate
     V->>R: "the wire should read @W lines into Report.Wrote"
     R->>R: shape the ask · plan
-    R->>E: @ASK draft +unsaid · @BUDGET 200k · the ask
+    R->>E: @ASK draft +unsaid · @BUDGET 200k wt · the ask
     E->>E: plan deck: [wire parses @W → orc-engine]
-    E->>O: @ASK verdict +unsaid · @BUDGET 120k
+    E->>O: @ASK verdict +unsaid · @BUDGET 120k wt
     O->>O: write the verify line on slime-wire's doc
-    O->>S: @ASK draft +unsaid · @BUDGET 60k
+    O->>S: @ASK draft +unsaid · @BUDGET 60k wt
     S->>S: edit wire/, its test, its doc
     S->>G: end of turn
     G-->>S: pass → log.md
@@ -64,7 +64,7 @@ shared notes and ontology facts automatically.
 | `@SCOPE …` | what is in scope |
 | `@ASK findings\|verdict\|draft [+unsaid] [wire:raw]` | what is wanted; picks the office (read → judge → write) |
 | `@CAP <bytes>` | answer ceiling, default 2048 |
-| `@BUDGET tokens=… steps=… usd=…` | the slice of the parent's envelope ([Consumption](06-consumption.md)) |
+| `@BUDGET <cost>` | the carved slice of the parent's cost envelope ([Consumption](06-consumption.md)); steps and clock are not carved |
 | `@DUMP <path>` | where overflow goes |
 
 **Answering (a report):**
@@ -72,18 +72,23 @@ shared notes and ontology facts automatically.
 | Tag | Meaning |
 |---|---|
 | `@S <word>` | opens: `DONE`, `PASS`, `FAIL`, `ESCALATE`, `CHECKPOINT`, … |
-| `@F <file:line> <claim>` | one finding |
+| `@F #<id> <file:line> <claim> [witness:<path>]` | one finding; the id lets a later fix, contest or seal point at it |
 | `@V <claim> <evidence>` | a verdict |
 | `@W <path>` | a path written |
 | `@? <hole>` | something unresolved — never guessed |
 | `@U law\|colony\|territory <fact>` | the unsaid |
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
+| `@T <tool> <cost>` | a tool offered in the level-1 manifest (inside `@TOOLS`) |
+| `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |
 
-Over `@CAP`, the report is trimmed in a fixed order — `@FORGE`, `@F`, `@V` go first; `@S`, `@?`
-and `@U` are never dropped. A report over 600 bytes travels as an envelope: a file under
-`.tempest/instruments/loop/`, its hash, the written paths, an eight-line digest.
+Two limits, two jobs. `@CAP` (2048 bytes) is what the **writer** may send: over it, the report
+is trimmed in a fixed order — `@FORGE`, `@F`, `@V` go first; `@S`, `@?` and `@U` are never
+dropped. The courier threshold (600 bytes) is what the **reader** receives inline: a report
+between 600 and 2048 bytes is complete, but travels as an envelope — `@R` to the file under
+`.tempest/instruments/loop/`, `@H`, one `@W` per written path, an eight-line digest — and the
+parent opens the file only when its verdict needs the flesh.
 
 In code the wire is one crate (`tempest-wire`) with a parser and an encoder that round-trip;
 every tag is an enum variant, and the property test is `parse(encode(r)) == r` for any report.
@@ -99,8 +104,10 @@ config:
 flowchart TD
     Q{"may A dispatch B?"} --> C1{"B's race in<br/>A's COMMANDS?"}
     C1 -- no --> C1b{"A Orc, B Orc?<br/>(sideways)"}
-    C1b -- no --> NO1(["refused: one hop up"])
     C1b -- yes --> OK
+    C1b -- no --> C1c{"A High Elf,<br/>B in another lane?"}
+    C1c -- yes --> VIA(["sent as @$ to B's Elf"])
+    C1c -- no --> NO1(["refused: one hop up"])
     C1 -- yes --> C2{"B's lineage<br/>reaches A?"}
     C2 -- no --> NO2(["refused: names B's commander"])
     C2 -- yes --> C3{"A is Elf:<br/>plan item names B?"}
@@ -139,23 +146,25 @@ sequenceDiagram
     D--)CLI: event/textDelta …
     D--)CLI: event/dispatch {from: rimuru, to: elf-engine}
     D--)CLI: event/usage {tokens, usd, cacheHit}
-    D--)CLI: request/gate {act, class: outward, plan}
-    CLI->>D: gate/answer {allow: true}
+    D->>CLI: gate/ask {act, class: outward, plan}
+    CLI-->>D: {allow: true}
     D--)CLI: event/gateVerdict {pass}
     D--)CLI: event/turnEnded {word: DONE}
 ```
 
 | Kind | Examples |
 |---|---|
-| requests (client → core) | `initialize`, `session/prompt`, `session/interrupt`, `session/resume`, `gate/answer`, `world/status`, `ledger/query`, `config/explain` |
-| requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on |
+| requests (client → core) | `initialize`, `session/prompt`, `session/interrupt`, `session/resume`, `world/status`, `ledger/query`, `config/explain` |
+| requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on; the answer is its JSON-RPC response |
 | events (core → client) | `turnStarted`, `textDelta`, `toolCall`, `toolResult`, `dispatch`, `report`, `usage`, `gateVerdict`, `ascension`, `evolution`, `checkpoint`, `turnEnded` |
 
 Rules:
 
 - Every event carries `{session, run, body, seq}`; `seq` is monotonic so a client that reconnects
   asks for `since: seq` and loses nothing.
-- The gate request times out to *deny*, never to *allow*.
+- An unanswered gate never allows. After 10 minutes the run checkpoints as `SUSPENDED` (a neutral
+  word: no strain, no failure) and resumes at that act when the human answers — an overnight run
+  waits instead of dying.
 - The board's WebSocket accepts only `Host: 127.0.0.1|localhost`, checks `Origin`, and requires
   the per-launch token the CLI prints — reads included, not only acts.
 - Protocol changes are versioned; the generated TypeScript is checked in and CI fails on a diff.

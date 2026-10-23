@@ -92,7 +92,7 @@ tempest/
 | logs | `tracing` → JSON file under the world | the journal is an instrument |
 | tests | nextest, insta snapshots, proptest; vitest + ink-testing-library; Playwright for the board | every rung testable alone |
 | TS tooling | Node 22, pnpm workspaces, tsup, Biome | Node is already the platform Claude Code runs on |
-| distribution | npm package `tempest` with per-platform optional deps carrying `tempestd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers |
+| distribution | an npm package with per-platform optional deps carrying `tempestd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers. The names `tempest` on npm and crates.io are taken: the published names are settled in phase D |
 
 ### Storage: files are the truth
 
@@ -102,7 +102,10 @@ tempest/
 | journal | `.tempest/log.md` — append-only writer | yes |
 | shared notes | `.tempest/memory/shared/notes.jsonl` | yes |
 | Kijin post journals | `.tempest/kijin/<post>/post.jsonl` | yes |
-| Dark Elf proving ground | `.tempest/dark-elf/` | yes (witnesses become tests) |
+| Dark Elf proving ground | `.tempest/dark-elf/` | yes (frozen witnesses are evidence) |
+| dimension manifest | `.tempest/dimension.toml` — the neighbouring worlds and their relations | yes |
+| advisory mirror | `.tempest/intel/` — kept by `kijin-scout` | no — hundreds of MB |
+| attic | `.tempest/attic/` — deleted and replaced files, with a ledger line each | yes |
 | usage + value ledgers | `.tempest/instruments/*.jsonl` | no — machine-local |
 | derived indexes | `.tempest/index/` | no — rebuildable |
 | run journals | `.tempest/instruments/loop/` | no |
@@ -128,11 +131,21 @@ flowchart LR
     P --> ENV["env: secrets by name,<br/>outputs redacted"]
 ```
 
-- Linux: landlock (filesystem), seccomp (syscalls), a fresh network namespace without interfaces
-  for every non-Kijin process; pid/ipc/uts namespaces when unprivileged user namespaces exist.
-- macOS: a generated Seatbelt profile with the same three policies.
-- `--container` runs the whole core in Docker for hosts with neither.
+- Linux: landlock (filesystem) and seccomp (syscalls) always. Network isolation for every
+  non-Kijin process is a fresh network namespace **when unprivileged user namespaces are
+  available** (Ubuntu 23.10+ restricts them through AppArmor by default); otherwise a seccomp
+  filter that denies `socket()` for non-local families. pid/ipc/uts namespaces under the same
+  condition.
+- Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) cannot
+  allow cross-directory renames (`mv a/x b/x` inside the soil fails) and cannot restrict
+  truncate; v4 (6.7+) adds network rules. The core probes the ABI at start, uses what it has,
+  and `tempest status` prints the sandbox actually in force — never more than that.
+- macOS: a generated Seatbelt profile with the same policies.
+- `--container`: the container **is** the sandbox — one container per body, its mounts limited
+  to the body's soil and its network to the policy. It does not nest landlock or namespaces
+  inside Docker's default profile.
 - The sandbox is applied by the core when spawning; a tool cannot opt out.
+- The escape suite runs in CI on both a 5.15 kernel (ABI v1) and the current runner's kernel.
 
 ### Where each piece comes from in isekai
 

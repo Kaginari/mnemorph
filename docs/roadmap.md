@@ -14,8 +14,9 @@ flowchart LR
     M1 --> M2["M2<br/>ledger + meters"]
     M2 --> M3["M3<br/>providers"]
     M3 --> M4["M4<br/>tools + sandbox + gate"]
-    M4 --> M5["M5<br/>one body loops"]
-    M5 --> M6["M6<br/>protocol + CLI<br/>🐕 dogfood"]
+    M4 --> M4a["M4a<br/>config"]
+    M4a --> M5["M5<br/>one body loops"]
+    M5 --> M6["M6<br/>protocol + CLI<br/>🐕 lone-body dogfood"]
     M6 --> M7["M7<br/>the world"]
     M7 --> M8["M8<br/>memory + toolbox"]
     M8 --> M9["M9<br/>👹 Kijin"]
@@ -35,14 +36,16 @@ starts by testing the two together for real. So when something breaks, it is alw
 piece.
 
 Consumption comes early on purpose (M2): before Tempest makes a single model call, it can already
-count and stop. From M6 Tempest is usable in a terminal and starts building itself.
+count and stop. From M6 Tempest is usable in a terminal and, in lone-body mode, starts working
+on itself; from M7 it runs the full chain, and from M9 it opens its own pull requests.
 
 Every milestone ends the same way:
 
 1. all tests green in CI;
 2. the book updated in the same change (Vitality);
 3. a fresh Fable review of the milestone, its findings fixed or recorded;
-4. the spend of the milestone read with `npx ccusage` and written to `log.md`.
+4. the milestone's tokens per model and share of the plan's usage windows, read with
+   `npx ccusage`, written to `log.md`.
 
 ## Technical detail
 
@@ -59,7 +62,14 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 
 - your review of [Races](02-races.md): bars, privileges, falls, Kijin posts, Dark Elf duties;
 - the race cards generated from [the prompt](race-cards-prompt.md) and reviewed;
-- the name decided, the GitHub repository created (`gh repo create`, your call: public or private).
+- the name decided — `tempest` is taken on npm and crates.io, so the published crate and npm
+  names (and an npm scope) are settled here; then the GitHub repository is created
+  (`gh repo create`, your call: public or private);
+- whether Tempest has distributions (isekai's agent-one lineage: one engine, a lexicon file plus
+  defaults) — it shapes the CLI's wording and the card text;
+- one diagram checked in a GitHub preview: if GitHub ignores the hand-drawn look, the look is set
+  in the docs site's config instead and the pages keep plain Mermaid;
+- canvases reviewed like code: a `.tldraw` file can carry document scripts that run when opened.
 
 **Exit:** you say the book is right. No code before this.
 
@@ -89,12 +99,14 @@ Pure crates, no I/O.
 ### M2 — Ledger and meters · S
 
 - Usage and value rows, the append-only JSONL writer (fsync, one line per write, tolerant reader).
-- `prices.toml`, unpriced handling, envelopes and the carve/return arithmetic, caps across
-  sessions, the pre-flight check.
+- `prices.toml` and weighted tokens, unpriced handling, envelopes carved by plan weight with
+  maximum shares and the challenge reserve, the return of unspent slices, caps across sessions,
+  the cache-aware pre-flight check.
 - Folds: per body, race, model, day; signals for the score formulas.
 
-**Exit:** a simulated tree of 50 commissions never exceeds any envelope (proptest), and the folds
-match hand-computed fixtures.
+**Exit:** a simulated tree of 50 commissions, sequential and parallel, never exceeds any
+envelope and never starves a Slime below its step allowance (proptest), and the folds match
+hand-computed fixtures.
 
 ### M3 — Providers · M
 
@@ -111,20 +123,36 @@ match hand-computed fixtures.
 ### M4 — Tools, sandbox, human gate · L
 
 - Tools: read (with unchanged-window withholding), write, edit, glob, grep, bash, git.
-- Classifier: `read | write | outward | destructive`, shell-aware (brace expansion, quotes,
-  pipes, redirects to `/dev/tcp`).
+- Classifier: `read | write | outward | destructive` from a parsed shell AST (wrappers like
+  `env`, `sh -c`, `xargs`, `sudo` unwrapped; brace expansion; redirects to `/dev/tcp`); deletes
+  and renames inside the writer's soil are `write` to the attic; tag pushes and registry
+  publishes are `destructive`.
 - Sandbox: landlock + seccomp + network namespace on Linux; Seatbelt on macOS; secrets by name
   with output redaction.
 - The gate request as an interface (a TTY answer or a test double), with deny on timeout.
 
 **Exit:** an escape suite (writes outside the soil, network from a non-Kijin body, symlink and
-`..` tricks, `/proc` reads of secrets) is fully refused on both OSes.
+`..` tricks, `/proc` reads of secrets, credential paths) is fully refused on macOS and on Linux
+at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sandbox in force.
+
+### M4a — Config · S
+
+- TOML layers (global, project tracked, project local), every value carrying its origin,
+  `config explain`, unknown keys reported as holes, writes through `toml_edit`.
+- The tracked layer may only tighten the human gate; loosening comes only from the local or
+  global file, never from env, flags or text a body wrote.
+- Models per creature, (race, office) and tier; budgets; providers; Oni envelopes with their
+  compiled exclusions.
+
+**Exit:** the config lessons' tests green; `config explain` correct for scalars, lists and maps.
 
 ### M5 — One body loops · M
 
 - The six beats, budgets as readings, checkpoint and resume from the journal, the salvage resume,
   guts and doom checkpoint, escalation after failed acts.
-- Cache-prefix stability test for Rimuru.
+- Cache-prefix stability test for Rimuru, tool JSON included.
+- Lone-body mode (Rimuru's voice plus one Slime over the whole repository, end gate, no
+  dispatch).
 
 **Exit:** Rimuru alone completes scripted tasks end to end against the scripted provider, and one
 real task against a live model, its spend matching the ledger.
@@ -138,13 +166,14 @@ real task against a live model, its spend matching the ledger.
   copy, resize, interrupt with Esc, no flicker.
 
 **Exit:** you use `tempest` for a real session and it feels finished. From here Tempest helps
-build Tempest.
+build Tempest in lone-body mode.
 
 ### M7 — The world · L
 
 - Creatures as data, territory and ontology (who owns a path), dispatch with every rule of the
   flowchart, Courts with fresh contexts, the return path, the end gate (all six checks), the
-  append-only `log.md` writer, the council and relief.
+  append-only `log.md` writer, the council and relief; the workspace soil; lone-body mode
+  removed.
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route.
@@ -169,7 +198,8 @@ mid-act is gated again, not replayed.
 
 - Diff challenge on risk surfaces, offline CVE audit over the scout's mirror, secret scanning,
   rule-pack static analysis, threat models, the law audit.
-- The witness rule and seals in the gate.
+- The witness rule (finding ids, coverage of the cited line), seals as gated acts, frozen
+  witnesses, the contest path, expiry, and the automatic challenge on risk surfaces.
 
 **Exit:** on a seeded vulnerable fixture repo, the Dark Elf finds the planted flaws with
 witnesses, seals, and the seal lifts only when the fix includes the witness.
@@ -177,7 +207,9 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 ### M11 — Value, evolution, ascension · M
 
 - Score folds per race, meters, minimum record, split / mutate / rebirth staged and proven,
-  ascension proposals, your confirmation, probation and falls, Oni envelopes.
+  ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
+  table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
+  protected deploys, unredacted or oversized text).
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 
