@@ -37,7 +37,8 @@ review a canvas change like a code change.
 | 4 | [Communication](04-communication.md) | the wire between bodies, dispatch down and back, the client protocol |
 | 5 | [Architecture](05-architecture.md) | crates, packages, processes, storage, sandbox |
 | 6 | [Consumption](06-consumption.md) | how every token is budgeted, metered and stopped |
-| 7 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
+| 7 | [MCP](07-mcp.md) | the client, agent-mcp and toolbox-mcp: every spec in, only the needed ones out |
+| 8 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
 | — | [Study: maki](study-maki.md) | what Tempest takes from a lean harness, and where it stays stronger |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |

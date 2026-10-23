@@ -269,3 +269,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - A revision per snapshot line gives a race-free claim with no lock and no database.
 - **Then:** Veldora: keep the MCP comparison with maki as part of the first simple MCP benchmarks
   — M13 now carries the MCP client (#48) and a repeatable benchmark against maki in its exit.
+
+---
+
+### [2026-10-23T23:23:27+02:00] rimuru — MCP: every spec in, only the needed ones out
+- **Task:** Veldora drew the MCP path (server → client → agent-mcp → toolbox-mcp → agents of every
+  rank) and asked for code wherever code is efficient.
+- **Files:** docs/07-mcp.md (the drawing as canvas `docs/canvas/mcp-toolbox.png`, its Mermaid
+  sketch, the roles: the client caches and starts lazily, agent-mcp is a Kijin post — a curator
+  that indexes once per server version on the fast tier and a code-only conduit for every call —
+  toolbox-mcp selects per commission, a model only to rerank a close shortlist), docs/README.md,
+  the site's sidebar, 02-races (kijin-scout is agent-mcp), `Post::Scout`'s doc.
+- **Gate:** n/a. Instruments: `just check` (16 diagrams parse).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Veldora's agent-mcp layer keeps the whole catalog on Kijin soil: no rank's context ever holds
+    it. The call path runs no model; models only index (rarely) and rerank (when close).
