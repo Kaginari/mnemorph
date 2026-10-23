@@ -1,0 +1,14 @@
+{
+  "name": "@tempest/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The client for tempestd: transports (stdio, WebSocket), reconnect by sequence, typed calls.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "tempest-memory"
+description = "Memory tiers: short, long and shared; recall; the toolbox manifest."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

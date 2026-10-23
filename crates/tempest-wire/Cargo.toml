@@ -1,0 +1,13 @@
+[package]
+name = "tempest-wire"
+description = "The wire: the envelope bodies speak — tags, parser, encoder, trimming. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true
