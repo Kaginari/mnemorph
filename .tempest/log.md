@@ -358,6 +358,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T00:25:15+02:00] rimuru — colour in every diagram; the MCP drawing keeps one picture
+- **Task:** Veldora: remove the drawing they sent from the MCP page (keep the diagram), and use
+  colours in the diagrams.
+- **Files:** docs/07-mcp.md and docs/canvas/mcp-toolbox.png (removed); all 16 diagrams: a palette
+  shared by every page — each race in its own colour (Rimuru azure, Elf emerald, Orc amber, Slime
+  teal, Kijin crimson, Dark Elf violet, Veldora gold, ascended forms dashed gold), steps blue,
+  gates amber, stores indigo, the outside grey, outcomes green and red, TypeScript pink and Rust
+  orange; subgraphs tinted; sequence diagrams coloured by phase (`rect` bands: orders down, the
+  gate, reports back) — a coloured box per participant widened them past reading. Every diagram's
+  config wraps labels at 360 px: Mermaid sized boxes for fewer lines than it wrapped, and cut the
+  last one (already so on main).
+- **Gate:** n/a. Instruments: 16 diagrams parse; the site built and screenshotted (races,
+  communication, overview, architecture).
+- **Result:** in review as a pull request.
+
+---
+
 ### [2026-10-24T00:29:03+02:00] rimuru — the OpenAI-compatible client meets a real server
 - **Task:** Veldora gave an OpenRouter key for live tests (passed only through the test's
   environment; never written to a file or a commit).

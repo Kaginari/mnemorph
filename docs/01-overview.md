@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart TD
     V(["🐉 Veldora — the human"])
@@ -28,6 +30,22 @@ flowchart TD
     K <-->|every act through the human gate| OUT
     D -.->|witnessed findings| R
     S -.->|report| O -.->|verdict| E -.->|lane verdict| R
+    classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
+    class V human
+    classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
+    class R throne
+    classDef elf fill:#dcf3e6,stroke:#2FA36B,stroke-width:2px,color:#0b2a1a
+    class E elf
+    classDef orc fill:#f8e8d2,stroke:#C9822B,stroke-width:2px,color:#3a2408
+    class O orc
+    classDef slime fill:#d6f5f1,stroke:#19C3B0,stroke-width:2px,color:#06302b
+    class S slime
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class K kijin
+    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:2px,color:#22114a
+    class D dark
+    classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
+    class OUT outside
 ```
 
 | <img src="../assets/portraits/veldora@64.png" width="64" alt="Veldora"> | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
@@ -69,6 +87,8 @@ journal `log.md`, the ledgers. Sessions forget; the world remembers.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     subgraph user["your machine"]
@@ -85,6 +105,17 @@ flowchart LR
     CORE --> SB
     CORE <--> W
     CORE <-->|HTTPS streaming| LLM
+    classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
+    class CLI,BOARD ts
+    classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
+    class CORE rs
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class SB gate
+    classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
+    class W store
+    classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
+    class LLM outside
+    style user fill:#f8fafc,stroke:#94a3b8
 ```
 
 - **`tempestd`** (Rust) owns everything that must be correct: the loop, the races, the gate, the
