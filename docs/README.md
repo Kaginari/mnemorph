@@ -39,6 +39,7 @@ review a canvas change like a code change.
 | 6 | [Consumption](06-consumption.md) | how every token is budgeted, metered and stopped |
 | 7 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
+| — | [Study: maki](study-maki.md) | what Tempest takes from a lean harness, and where it stays stronger |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 
 ## The three words that matter

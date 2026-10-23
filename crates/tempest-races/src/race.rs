@@ -163,8 +163,8 @@ impl Race {
         }
     }
 
-    /// The largest share, in percent, of its parent's envelope a body of this race may be
-    /// carved. A ceiling, never a default; the throne holds the whole session envelope.
+    /// The largest share, in percent, of what its parent has left when it carves, that a body of
+    /// this race may be given. A ceiling, never a default; the throne holds the whole session.
     #[must_use]
     pub fn max_share(self) -> u8 {
         match self.base() {
