@@ -156,6 +156,8 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
 - Cache-prefix stability test for Rimuru, tool JSON included.
 - Lone-body mode (Rimuru's voice plus one Slime over the whole repository, end gate, no
   dispatch).
+- The session's queue lane and interrupt (Esc pivots to the next queued line), the message-sequence
+  validator over random interrupt / queue sequences.
 
 **Exit:** Rimuru alone completes scripted tasks end to end against the scripted provider, and one
 real task against a live model, its spend matching the ledger.
@@ -164,7 +166,8 @@ real task against a live model, its spend matching the ledger.
 
 - `tempest-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
 - `@tempest/protocol` generated, `@tempest/sdk`, `@tempest/cli` with Ink: streaming text, tool
-  call cards, the gate prompt, slash commands, status line with spend / left / cache, themes.
+  call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
+  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`, `tempest q`.
 - The UX bar is Claude Code and OpenCode: input history, multi-line editing, paste, selection and
   copy, resize, interrupt with Esc, no flicker.
 
@@ -177,12 +180,15 @@ build Tempest in lone-body mode.
   flowchart, Courts with fresh contexts, the return path, the end gate (all six checks), the
   append-only `log.md` writer, the council and relief; the workspace soil; lone-body mode
   removed.
+- The send and wake lanes per body (a report wakes its own parent), the shared work queue —
+  revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route.
 
 ### M8 — Memory and toolbox · M
 
+- The handoff's gathered facts and its offer at the stress zone and at checkpoints.
 - Short / long / shared tiers, BM25 recall ranked by relation, notes, `@U` landing, the toolbox's
   two levels with priced manifests, compaction drain.
 

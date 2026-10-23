@@ -106,6 +106,8 @@ tempest/
 | law, creature docs, Minds | `.tempest/law.md`, `.tempest/<race>/<name>/README.md`, `.tempest/minds/` | yes |
 | journal | `.tempest/log.md` — append-only writer | yes |
 | shared notes | `.tempest/memory/shared/notes.jsonl` | yes |
+| shared work queue | `.tempest/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
+| handoffs | `.tempest/handoffs/<time>.md` | yes |
 | Kijin post journals | `.tempest/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.tempest/dark-elf/` | yes (frozen witnesses are evidence) |
 | dimension manifest | `.tempest/dimension.toml` — the neighbouring worlds and their relations | yes |
