@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::tag;
+use crate::{report::one_line, tag};
 
 /// The answer ceiling, in bytes, when a commission names none.
 pub const DEFAULT_CAP: usize = 2048;
@@ -100,7 +100,13 @@ impl Commission {
                     c.read_ask(&rest);
                     true
                 }
-                "CAP" => rest.parse().map(|n| c.cap = Some(n)).is_ok(),
+                // `@CAP 0` would read as "no ceiling": it is refused like any bad value.
+                "CAP" => rest
+                    .parse()
+                    .ok()
+                    .filter(|&n| n > 0)
+                    .map(|n| c.cap = Some(n))
+                    .is_some(),
                 "BUDGET" => parse_budget(&rest).map(|n| c.budget = Some(n)).is_some(),
                 "DUMP" => {
                     c.dump = Some(rest);
@@ -144,10 +150,10 @@ impl Commission {
 impl fmt::Display for Commission {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(root) = &self.root {
-            writeln!(f, "@ROOT {root}")?;
+            writeln!(f, "@ROOT {}", one_line(root))?;
         }
         if let Some(scope) = &self.scope {
-            writeln!(f, "@SCOPE {scope}")?;
+            writeln!(f, "@SCOPE {}", one_line(scope))?;
         }
         let mut ask = match &self.ask {
             Ask::None => String::new(),
@@ -161,7 +167,7 @@ impl fmt::Display for Commission {
             ask.push_str(" wire:raw");
         }
         if !ask.trim().is_empty() {
-            writeln!(f, "@ASK {}", ask.trim())?;
+            writeln!(f, "@ASK {}", one_line(ask.trim()))?;
         }
         if let Some(cap) = self.cap {
             writeln!(f, "@CAP {cap}")?;
@@ -170,13 +176,13 @@ impl fmt::Display for Commission {
             writeln!(f, "@BUDGET {budget} wt")?;
         }
         if let Some(dump) = &self.dump {
-            writeln!(f, "@DUMP {dump}")?;
+            writeln!(f, "@DUMP {}", one_line(dump))?;
         }
         if let Some(size) = self.size {
             writeln!(f, "@SIZE {size}")?;
         }
         for line in &self.body {
-            writeln!(f, "{line}")?;
+            writeln!(f, "{}", one_line(line))?;
         }
         Ok(())
     }
@@ -237,10 +243,15 @@ mod tests {
 
     #[test]
     fn a_bad_value_is_kept_not_lost() {
-        let c = Commission::parse("@CAP lots\n@BUDGET plenty\n@NOPE x");
+        let c = Commission::parse("@CAP lots\n@BUDGET plenty\n@NOPE x\n@CAP 0");
         assert_eq!(c.cap, None);
         assert_eq!(c.budget, None);
-        assert_eq!(c.body, ["@CAP lots", "@BUDGET plenty", "@NOPE x"]);
+        assert_eq!(c.body, ["@CAP lots", "@BUDGET plenty", "@NOPE x", "@CAP 0"]);
+        assert_eq!(
+            c.cap_or_default(),
+            DEFAULT_CAP,
+            "@CAP 0 never means no ceiling"
+        );
     }
 
     #[test]

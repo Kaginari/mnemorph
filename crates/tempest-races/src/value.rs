@@ -56,6 +56,16 @@ const RISE_RECORD: u32 = 20;
 const RISE_OUTWARD: u32 = 30;
 /// The recent record a rate-driven fall reads.
 const FALL_RECORD: u32 = 10;
+/// Reports a body on probation has to recover; past them without recovering, it falls.
+pub const RECOVER_REPORTS: u32 = 5;
+/// Runs a declined candidate waits before it is proposed again.
+pub const DECLINE_COOLDOWN_RUNS: u32 = 10;
+
+/// An ascended body's recent record: its last ten reports (ten findings for a Dark Elf), or,
+/// on probation, the reports since probation began. A distinct type from the window's fold, so
+/// the two are never swapped.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Recent(pub Signals);
 
 /// A race's score, `0.0..=100.0`, by its race's compiled formula.
 #[must_use]
@@ -118,13 +128,10 @@ pub fn meter(race: Race, s: &Signals) -> Meter {
     Meter { label, value, band }
 }
 
-/// Whether a body of `base` race has earned `risen`, its ascended form, over the window.
-/// False for any pair that is not a base and its own ascended form.
+/// Whether a body of `risen`'s base race has earned `risen` over the window (the 28-day
+/// fold). False when `risen` is not an ascended form.
 #[must_use]
-pub fn rises(base: Race, risen: Race, s: &Signals) -> bool {
-    if base.ascends_to() != Some(risen) {
-        return false;
-    }
+pub fn rises(risen: Race, s: &Signals) -> bool {
     match risen {
         Race::HighElf => {
             s.reports >= RISE_RECORD && s.plan_land_rate >= 85.0 && s.reask_rate <= 10.0
@@ -139,7 +146,10 @@ pub fn rises(base: Race, risen: Race, s: &Signals) -> bool {
         Race::Oni => {
             s.outward_acts >= RISE_OUTWARD && s.outward_clean_rate >= 95.0 && s.rollbacks == 0
         }
-        _ => s.findings >= RISE_RECORD && s.upheld_rate >= 80.0 && s.precision >= 85.0,
+        Race::ArchDarkElf => {
+            s.findings >= RISE_RECORD && s.upheld_rate >= 80.0 && s.precision >= 85.0
+        }
+        _ => false,
     }
 }
 
@@ -158,7 +168,8 @@ pub enum FallReading {
 /// Events fall at once; rates fall into probation, and only on a full recent record. The fall
 /// bars sit well under the rise bars, so a body does not flap.
 #[must_use]
-pub fn falls(risen: Race, recent: &Signals) -> FallReading {
+pub fn falls(risen: Race, recent: &Recent) -> FallReading {
+    let recent = &recent.0;
     let event = match risen {
         Race::HighOrc => recent.overturned_on_sealed > 0,
         Race::NamedSlime => recent.tests_intact_failures > 0,
@@ -180,4 +191,21 @@ pub fn falls(risen: Race, recent: &Signals) -> FallReading {
     } else {
         FallReading::Holds
     }
+}
+
+/// Whether a body on probation has recovered: over the reports since probation began (at least
+/// [`RECOVER_REPORTS`] of them, or findings for a Dark Elf), its rate is back at or above the fall
+/// bar and no event fell it. `false` means it has not recovered yet; the caller ends probation
+/// with a fall once [`RECOVER_REPORTS`] have passed.
+#[must_use]
+pub fn recovers(risen: Race, since: &Recent) -> bool {
+    let s = &since.0;
+    let (record, back) = match risen {
+        Race::HighElf => (s.reports, s.plan_land_rate >= 70.0),
+        Race::HighOrc => (s.reports, s.gate_right >= 75.0),
+        Race::NamedSlime => (s.reports, s.land_rate >= 75.0),
+        Race::ArchDarkElf => (s.findings, s.precision >= 70.0),
+        _ => return false,
+    };
+    record >= RECOVER_REPORTS && back && falls(risen, since) != FallReading::Immediate
 }

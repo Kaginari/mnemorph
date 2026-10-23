@@ -8,16 +8,20 @@
 //! - `@E` is the exact byte length of the whole answer, its own line included;
 //! - over `@CAP`, lines are cut in a fixed order and `@S`, `@?`, `@U`, `@R`, `@H` never are —
 //!   the cut itself is named as a hole;
-//! - parsing what was emitted gives back the same report.
+//! - parsing what was emitted gives back the same report, up to the normalisations the book
+//!   lists (line breaks folded, whitespace trimmed, order bodies lower-cased, empty ids dropped);
+//! - no field can open a line of its own: line breaks inside fields are folded to spaces.
 
 mod commission;
 mod fnv;
 mod forge;
+mod hole;
 mod report;
 mod tag;
 
 pub use commission::{Ask, Commission, DEFAULT_CAP, Office, parse_budget};
 pub use forge::{Forge, ForgeKind, forges_of};
+pub use hole::Hole;
 pub use report::{
-    COURIER_BYTES, Courier, Enqueue, Finding, Report, Unsaid, UnsaidKind, enqueues_of,
+    COURIER_BYTES, Courier, Enqueue, Finding, Report, Unsaid, UnsaidKind, Word, enqueues_of,
 };

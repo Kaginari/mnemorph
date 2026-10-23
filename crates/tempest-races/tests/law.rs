@@ -2,8 +2,8 @@
 //! under and just over its threshold.
 
 use tempest_races::{
-    Band, DispatchContext, FallReading, Race, Refusal, Route, Signals, falls, may_dispatch, meter,
-    rises, score,
+    Band, DispatchContext, FallReading, RECOVER_REPORTS, Race, Recent, Refusal, Route, Signals,
+    falls, may_dispatch, meter, recovers, rises, score,
 };
 
 const ALL_TRUE: DispatchContext = DispatchContext {
@@ -390,32 +390,25 @@ fn rise_cases() -> Vec<(Race, Signals, Vec<Signals>)> {
 fn rise_bars_at_under_and_over() {
     for (risen, at_bar, misses) in rise_cases() {
         let base = risen.base();
-        assert!(rises(base, risen, &at_bar), "{risen} at its bars");
+        assert!(rises(risen, &at_bar), "{risen} at its bars");
         for miss in misses {
-            assert!(
-                !rises(base, risen, &miss),
-                "{risen} just past a bar: {miss:?}"
-            );
+            assert!(!rises(risen, &miss), "{risen} just past a bar: {miss:?}");
         }
-        // Only a base and its own form.
-        for other in Race::ALL {
-            if other != base {
-                assert!(
-                    !rises(other, risen, &at_bar),
-                    "{other} cannot rise as {risen}"
-                );
-            }
-        }
+        assert!(!rises(base, &at_bar), "{base} is not an ascended form");
         // Rising at the bar never reads as a fall: the bars sit apart.
         let recent = Signals {
             reports: 10,
             findings: 10,
             ..at_bar
         };
-        assert_eq!(falls(risen, &recent), FallReading::Holds, "{risen} flaps");
+        assert_eq!(
+            falls(risen, &Recent(recent)),
+            FallReading::Holds,
+            "{risen} flaps"
+        );
     }
-    for base in Race::ALL {
-        assert!(!rises(base, base, &Signals::default()));
+    for race in Race::ALL {
+        assert!(!rises(race, &Signals::default()), "{race} rises on nothing");
     }
 }
 
@@ -461,9 +454,13 @@ fn falls_by_rate_need_a_full_recent_record() {
             findings: 9,
             ..low
         };
-        assert_eq!(falls(risen, &full), FallReading::Probation, "{risen}");
         assert_eq!(
-            falls(risen, &short),
+            falls(risen, &Recent(full)),
+            FallReading::Probation,
+            "{risen}"
+        );
+        assert_eq!(
+            falls(risen, &Recent(short)),
             FallReading::Holds,
             "{risen} on a short record"
         );
@@ -510,22 +507,26 @@ fn falls_by_event_are_immediate() {
         ),
     ] {
         assert_eq!(
-            falls(risen, &healthy),
+            falls(risen, &Recent(healthy)),
             FallReading::Holds,
             "{risen} healthy"
         );
-        assert_eq!(falls(risen, &event), FallReading::Immediate, "{risen}");
+        assert_eq!(
+            falls(risen, &Recent(event)),
+            FallReading::Immediate,
+            "{risen}"
+        );
     }
     // An event that is not its own does not fell a body; a base race never falls.
     assert_eq!(
         falls(
             Race::HighElf,
-            &Signals {
+            &Recent(Signals {
                 rollbacks: 3,
                 reports: 10,
                 plan_land_rate: 100.0,
                 ..Signals::default()
-            }
+            })
         ),
         FallReading::Holds
     );
@@ -540,13 +541,149 @@ fn falls_by_event_are_immediate() {
         assert_eq!(
             falls(
                 base,
-                &Signals {
+                &Recent(Signals {
                     reports: 50,
                     rollbacks: 5,
                     ..Signals::default()
-                }
+                })
             ),
             FallReading::Holds
+        );
+    }
+}
+
+#[test]
+fn the_dispatch_table_as_the_book_draws_it() {
+    use Race::{
+        ArchDarkElf as Ad, DarkElf as De, Elf as E, HighElf as He, HighOrc as Ho, Kijin as K,
+        NamedSlime as Ns, Oni as On, Orc as O, Rimuru as R, Slime as S,
+    };
+    // Rows dispatch, columns are dispatched, in Race::ALL order:
+    //            R  E  O  S  K  De He Ho Ns On Ad
+    let table: [(Race, [u8; 11]); 11] = [
+        (R, [0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1]),
+        (E, [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0]),
+        (O, [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0]),
+        (S, [0; 11]),
+        (K, [0; 11]),
+        (De, [0; 11]),
+        (He, [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0]),
+        (Ho, [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0]),
+        (Ns, [0; 11]),
+        (On, [0; 11]),
+        (Ad, [0; 11]),
+    ];
+    for (from, row) in table {
+        for (to, &may) in Race::ALL.iter().zip(row.iter()) {
+            let got = may_dispatch(from, *to, &ALL_TRUE).is_ok();
+            assert_eq!(got, may == 1, "{from} → {to}");
+        }
+    }
+}
+
+#[test]
+fn the_lane_route_still_needs_a_plan_item() {
+    let other = DispatchContext {
+        other_lane: true,
+        plan_names_target: false,
+        ..ALL_TRUE
+    };
+    assert_eq!(
+        may_dispatch(Race::HighElf, Race::Orc, &other),
+        Err(Refusal::NoPlanItem)
+    );
+}
+
+#[test]
+fn probation_recovers_or_not() {
+    assert_eq!(RECOVER_REPORTS, 5);
+    let back = |s: Signals| {
+        Recent(Signals {
+            reports: 5,
+            findings: 5,
+            ..s
+        })
+    };
+    for (risen, ok, low) in [
+        (
+            Race::HighElf,
+            Signals {
+                plan_land_rate: 70.0,
+                ..Signals::default()
+            },
+            Signals {
+                plan_land_rate: 69.9,
+                ..Signals::default()
+            },
+        ),
+        (
+            Race::HighOrc,
+            Signals {
+                gate_right: 75.0,
+                ..Signals::default()
+            },
+            Signals {
+                gate_right: 74.9,
+                ..Signals::default()
+            },
+        ),
+        (
+            Race::NamedSlime,
+            Signals {
+                land_rate: 75.0,
+                ..Signals::default()
+            },
+            Signals {
+                land_rate: 74.9,
+                ..Signals::default()
+            },
+        ),
+        (
+            Race::ArchDarkElf,
+            Signals {
+                precision: 70.0,
+                ..Signals::default()
+            },
+            Signals {
+                precision: 69.9,
+                ..Signals::default()
+            },
+        ),
+    ] {
+        assert!(recovers(risen, &back(ok)), "{risen} back at its bar");
+        assert!(!recovers(risen, &back(low)), "{risen} still under");
+        assert!(
+            !recovers(
+                risen,
+                &Recent(Signals {
+                    reports: 4,
+                    findings: 4,
+                    ..ok
+                })
+            ),
+            "{risen} too soon"
+        );
+    }
+    let event = Recent(Signals {
+        reports: 5,
+        gate_right: 100.0,
+        overturned_on_sealed: 1,
+        ..Signals::default()
+    });
+    assert!(
+        !recovers(Race::HighOrc, &event),
+        "an event fells, it does not recover"
+    );
+    for race in [Race::Oni, Race::Rimuru, Race::Elf, Race::Slime] {
+        assert!(
+            !recovers(
+                race,
+                &back(Signals {
+                    outward_clean_rate: 100.0,
+                    ..Signals::default()
+                })
+            ),
+            "{race} has no probation"
         );
     }
 }

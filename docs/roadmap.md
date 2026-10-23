@@ -91,11 +91,13 @@ Pure crates, no I/O.
 
 - `tempest-wire`: every tag of [Communication](04-communication.md), parser + encoder, trimming
   order, envelope. Fixtures transcribed from isekai's `wire/` tests. Property test round-trip.
-- `tempest-races`: the enum, `RaceLaw`, shelves, `COMMANDS`, dispatch decision table, score
+- `tempest-races`: the enum and its methods, shelves, soil, gates, dispatch decision table, score
   formulas, ascension and fall predicates, budget shares. Table-driven tests: every cell of the
   dispatch flowchart; every bar at, just under and just over its threshold.
 
-**Exit:** 100% branch coverage on `races` (it is the law); `cargo doc` renders the race codex.
+**Exit:** `races` covered whole (it is the law): 100% region coverage, the gate stable Rust can
+measure, with every operand of every rule driven both ways by table tests; `cargo doc` renders the
+race codex.
 
 ### M2 — Ledger and meters · S
 
