@@ -4,6 +4,18 @@ The icons are the small portraits used in the terminal, the board's net and the 
 and ascended form. They are the same characters as the [race cards](race-cards-prompt.md),
 head and shoulders on a round badge, readable at 32 px.
 
+## The set
+
+Generated from these prompts and cropped to `assets/portraits/` (256, 64 and 32 px, transparent).
+
+| <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| Slime | Rimuru | Elf | Orc | Kijin | Dark Elf |
+
+| <img src="../assets/portraits/veldora@64.png" width="64" alt="Veldora"> | <img src="../assets/portraits/high-elf@64.png" width="64" alt="High Elf"> | <img src="../assets/portraits/high-orc@64.png" width="64" alt="High Orc"> | <img src="../assets/portraits/named-slime@64.png" width="64" alt="Named Slime"> | <img src="../assets/portraits/oni@64.png" width="64" alt="Oni"> | <img src="../assets/portraits/arch-dark-elf@64.png" width="64" alt="Arch Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| Veldora | High Elf | High Orc | Named Slime | Oni | Arch Dark Elf |
+
 ## Settings
 
 - **Aspect ratio** 1:1, the largest square the model offers (1024 × 1024 or more).

@@ -46,12 +46,12 @@ anyone else's:
 
 | Race | Its job, in one line | Can write code? | Can reach outside? | Commands |
 |---|---|---|---|---|
-| 👑 Rimuru | understand the human, plan, answer | no | no | Elves, Kijin, Dark Elves |
-| 🌿 Elf | plan one lane of work across domains | no | no | its Orcs |
-| 🪓 Orc | own a domain: write the test first, judge the landing | no (only tests' verify lines on its slimes' docs) | no | its Slimes, other Orcs sideways |
-| 💧 Slime | change the code of its one zone, with its doc | **yes, its zone only** | no | nobody |
-| 👹 Kijin | everything that leaves the machine: CI, release, deploy, PRs, intel | its post's files only | **yes, through the gate** | nobody |
-| 🌑 Dark Elf | attack the code; prove every weakness it claims | no (only proofs in its own ground) | no | nobody |
+| <img src="../assets/portraits/rimuru@64.png" width="28" alt="Rimuru"> Rimuru | understand the human, plan, answer | no | no | Elves, Kijin, Dark Elves |
+| <img src="../assets/portraits/elf@64.png" width="28" alt="Elf"> Elf | plan one lane of work across domains | no | no | its Orcs |
+| <img src="../assets/portraits/orc@64.png" width="28" alt="Orc"> Orc | own a domain: write the test first, judge the landing | no (only tests' verify lines on its slimes' docs) | no | its Slimes, other Orcs sideways |
+| <img src="../assets/portraits/slime@64.png" width="28" alt="Slime"> Slime | change the code of its one zone, with its doc | **yes, its zone only** | no | nobody |
+| <img src="../assets/portraits/kijin@64.png" width="28" alt="Kijin"> Kijin | everything that leaves the machine: CI, release, deploy, PRs, intel | its post's files only | **yes, through the gate** | nobody |
+| <img src="../assets/portraits/dark-elf@64.png" width="28" alt="Dark Elf"> Dark Elf | attack the code; prove every weakness it claims | no (only proofs in its own ground) | no | nobody |
 
 A creature that keeps doing its job well **ascends**: the harness promotes it, with your
 confirmation, and the promotion grants a concrete power — usually less friction. A promoted
@@ -131,6 +131,8 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 
 ### 👑 Rimuru — the throne
 
+<img src="../assets/portraits/rimuru@64.png" width="72" alt="Rimuru">
+
 *The slime who became a sovereign: one body across every world, the only voice the human hears.*
 
 - **Duty.** Shape the human's ask into a coherent order (and ask back when it is ambiguous —
@@ -153,6 +155,8 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 
 ### 🌿 Elf — the lane's planner and voice
 
+<img src="../assets/portraits/elf@64.png" width="72" alt="Elf">
+
 *Long memory, wide sight: it sees across domains and speaks for the lane.*
 
 - **Duty.** Turn one slice of Rimuru's order into a plan across the domains it touches; route
@@ -167,6 +171,8 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 - **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80.
 
 ### 🪓 Orc — the domain and its gate
+
+<img src="../assets/portraits/orc@64.png" width="72" alt="Orc">
 
 *Strong, territorial, fair: nothing lands in its domain without its pass.*
 
@@ -186,6 +192,8 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 
 ### 💧 Slime — the ground truth of a zone
 
+<img src="../assets/portraits/slime@64.png" width="72" alt="Slime">
+
 *Small, exact, everywhere: it is the only one who touches the code.*
 
 - **Duty.** Make the change in its zone, update its zone's doc in the same change, run its own
@@ -199,6 +207,8 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 - **Score** `0.6·landRate + 0.3·gateRate − 0.1·holeRate`. Meter: *Landed*, ok ≥ 80.
 
 ### 👹 Kijin — the hands that reach outside
+
+<img src="../assets/portraits/kijin@64.png" width="72" alt="Kijin">
 
 *Ogres named by the throne, each given a post. Disciplined, loyal, and the only ones who leave
 the village.*
@@ -233,6 +243,8 @@ Kijin hold one of five **posts**, also compiled in:
   *Outward clean*, ok ≥ 90.
 
 ### 🌑 Dark Elf — the adversary
+
+<img src="../assets/portraits/dark-elf@64.png" width="72" alt="Dark Elf">
 
 *It answers only to the throne, trusts nothing the chain built, and never claims what it cannot
 prove.*
@@ -303,11 +315,11 @@ window. The two thresholds are apart on purpose (hysteresis), so a creature does
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
-| ✨ **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
-| ⚔️ **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
-| 💎 **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
-| 🔥 **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
-| 🌘 **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+| <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
+| <img src="../assets/portraits/high-orc@64.png" width="28" alt="High Orc"> **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
+| <img src="../assets/portraits/named-slime@64.png" width="28" alt="Named Slime"> **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
+| <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
+| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
 
 Rules that hold for every ascension:
 
