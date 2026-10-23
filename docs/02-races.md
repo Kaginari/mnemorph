@@ -30,6 +30,15 @@ flowchart TD
     D -. ascends .-> AD["🌘 Arch Dark Elf"]
 ```
 
+| <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Rimuru** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
+
+| <img src="../assets/portraits/high-elf@64.png" width="64" alt="High Elf"> | <img src="../assets/portraits/high-orc@64.png" width="64" alt="High Orc"> | <img src="../assets/portraits/named-slime@64.png" width="64" alt="Named Slime"> | <img src="../assets/portraits/oni@64.png" width="64" alt="Oni"> | <img src="../assets/portraits/arch-dark-elf@64.png" width="64" alt="Arch Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|
+| **High Elf** | **High Orc** | **Named Slime** | **Oni** | **Arch Dark Elf** |
+
+
 ## In plain words
 
 There are six races. Each one has **one job**, and the harness makes it impossible to do
@@ -109,15 +118,14 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 |---|---|---|
 | a **zone** (directory prefixes) | one Slime | its Orc's verify lines |
 | the **verify block** of a Slime's doc | that Slime's Orc — the rest of the doc is the Slime's; the gate diffs by line range | the Orc's own gate |
-| the **workspace** — root manifests, lockfiles, toolchain pins (`Cargo.toml`, `Cargo.lock`, `package.json`, `pnpm-lock.yaml`, `rust-toolchain.toml`, `justfile`) | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
+| the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/` | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
 | a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
 | the **proving ground** `.tempest/dark-elf/` | the Dark Elf | its own gate (self-gated) |
 | the **plan** and the **dimension manifest** (`.tempest/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
-zone covers falls to `slime-workspace` if it sits at the root, else to the nearest zone above it,
-else it is reported as unowned soil and Rimuru must route its birth.
+zone covers falls to the nearest zone above it, else it is reported as unowned soil and Rimuru must route its birth.
 
 ---
 
