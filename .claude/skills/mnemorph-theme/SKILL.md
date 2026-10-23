@@ -45,6 +45,7 @@ sans for prose — long reading stays in a proportional face.
 | What | Where |
 |---|---|
 | the emblem (dragon and crowned slime) | `assets/brand/mnemorph-icon{,@512,@256,@128,@64,@32}.png`, `favicon.ico` |
+| the emblem in a hex, beside the race icons | `assets/brand/mnemorph-hex{,@64,@32}.png` |
 | the banner, the link card | `assets/brand/banner.jpg`, `assets/brand/social-preview.jpg` |
 | race icons, already cut to hexagons | `assets/portraits/<race>{,@64,@32}.png` |
 | race cards | `assets/cards/<race>.png` — drawn by `python3 tools/cards.py` |
