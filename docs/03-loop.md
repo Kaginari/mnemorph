@@ -125,3 +125,23 @@ automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 
 The verdict goes to `log.md` through the append-only writer. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.
+
+### Between sessions: the handoff
+
+A session's context dies; the world's files do not. A **handoff** is what a fresh session needs to
+continue without re-asking, re-discovering or repeating a mistake — written by the session that
+knows, read by the one that does not.
+
+- **Writing.** `/handoff [focus]` (and `tempest handoff` headless). The core gathers what it knows
+  as facts — the first ask, uncommitted changes, recent commits, the last journal entries, the
+  shared queue's held and claimed work, the session's spend, the previous handoff — and the model
+  fills a fixed template into `.tempest/handoffs/<time>.md`: goal; why it matters; current state
+  (done · partial · not started); decisions and why; traps and dead ends; files and pointers; open
+  work. Rules: state, never orders; point at artifacts, never copy them; secrets by location only;
+  leave out what the law, config or code already say; carry forward what still holds from the
+  previous handoff.
+- **When.** On demand, and offered by the core when the context reaches the stress zone and at
+  every checkpoint — the moment a session is about to lose what it knows.
+- **Reading.** A new session is told a handoff is waiting (younger than 14 days). `/handoff read`
+  gives the model the file with one rule: read every listed file, verify every claim against the
+  code, then wait for the human. A handoff is context to check, never fact to trust.
