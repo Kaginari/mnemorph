@@ -64,7 +64,7 @@ the price.
 
 ### The usage row
 
-One JSON line per model call in `.tempest/instruments/usage.jsonl`:
+One JSON line per model call in `.mnemorph/instruments/usage.jsonl`:
 
 ```json
 {"ts":"2026-10-23T19:07:00Z","session":"…","run":"…","body":"slime-wire","race":"slime",
@@ -90,14 +90,14 @@ Prices are `[models."<id>"]` tables in TOML — `input`, `output`, `cache-read` 
 all four required, in dollars per million tokens — layered model by model from the binary's table
 and config (a config row replaces the whole row). The cache prices are never derived from the
 input price: the read multiple differs by model, a tenth on some and a twentieth or less on the
-newest. Tempest marks only 5-minute cache breakpoints; a reply that reports 1-hour cache writes
+newest. Mnemorph marks only 5-minute cache breakpoints; a reply that reports 1-hour cache writes
 (priced at 2× input) carries a warning on its response, since the ledger prices every write at the
 5-minute rate. A missing or misspelt key or a negative price refuses the table. A model with no
 price records `usd: null` and the meter says *unpriced*, never zero; its weighted tokens still
 count, with an output ratio of 5.
 
 The binary ships one table per provider, from the provider's published prices — never guessed.
-Anthropic's (`crates/tempest-provider/prices/anthropic.toml`) prices Claude Opus 5.5, Claude
+Anthropic's (`crates/mnemorph-provider/prices/anthropic.toml`) prices Claude Opus 5.5, Claude
 Sonnet 5.5 and Claude Fable 5.1; a model whose four prices are not all published, such as Claude
 Haiku 5.5's cache prices, stays unpriced until they are.
 
@@ -153,7 +153,7 @@ Currency caps convert through the same table; a model with no known price is sti
 
 The provider renders tools, then the system prompt, then the messages. Changing any tool
 definition invalidates everything after it, so the tools tier comes first and never varies.
-Anthropic allows at most four cache breakpoints; Tempest uses all four:
+Anthropic allows at most four cache breakpoints; Mnemorph uses all four:
 
 ```
 [ tools: the race's full, stable tool list ]  ← identical for every body of a race:  breakpoint 1
@@ -181,16 +181,16 @@ Anthropic allows at most four cache breakpoints; Tempest uses all four:
 | left | envelope left for the active body and the session | status line |
 | cache | cache read ÷ input, rolling | status line, board |
 | burn | tokens per minute over the last 5 minutes | board |
-| per race | spend and pass rate by race over 28 days | board, `tempest ledger` |
+| per race | spend and pass rate by race over 28 days | board, `mnemorph ledger` |
 
-`tempest ledger [--by race|body|model|day]` prints the same folds in the terminal.
+`mnemorph ledger [--by race|body|model|day]` prints the same folds in the terminal.
 
-### Building Tempest within your plan
+### Building Mnemorph within your plan
 
 The roadmap is cut into rungs small enough to finish in one or two focused sessions each. On a
 subscription plan what binds is not money but the usage windows (the 5-hour and weekly limits),
 so after every rung the session's **tokens per model** and the **share of the usage window** it
 took are read with `npx ccusage` (`daily` and `blocks`, from Claude Code's local logs) and
 written to the rung's entry in `log.md`. The dollar figure ccusage prints is the API-equivalent
-price, not what the plan costs: it is recorded only as a comparison. From M6 Tempest runs part of
+price, not what the plan costs: it is recorded only as a comparison. From M6 Mnemorph runs part of
 its own work in lone-body mode, and its own ledger becomes the second instrument.

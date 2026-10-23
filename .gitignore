@@ -1,10 +1,10 @@
 /target/
 node_modules/
 dist/
-.tempest/instruments/
-.tempest/index/
-.tempest/tmp/
-.tempest/intel/
-.tempest/attic/tmp/
+.mnemorph/instruments/
+.mnemorph/index/
+.mnemorph/tmp/
+.mnemorph/intel/
+.mnemorph/attic/tmp/
 site/.vitepress/dist/
 site/.vitepress/cache/

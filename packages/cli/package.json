@@ -1,8 +1,8 @@
 {
-  "name": "@tempest/cli",
+  "name": "@mnemorph/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "tempest \u2014 the terminal client.",
+  "description": "mnemorph \u2014 the terminal client.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -13,6 +13,6 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "tempest": "./dist/cli.js"
+    "mnemorph": "./dist/cli.js"
   }
 }

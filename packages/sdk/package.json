@@ -1,8 +1,8 @@
 {
-  "name": "@tempest/sdk",
+  "name": "@mnemorph/sdk",
   "version": "0.0.0",
   "private": true,
-  "description": "The client for tempestd: transports (stdio, WebSocket), reconnect by sequence, typed calls.",
+  "description": "The client for mnemorphd: transports (stdio, WebSocket), reconnect by sequence, typed calls.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -5,25 +5,25 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const ALLOWED = {
-  'tempest-wire': [],
-  'tempest-races': [],
-  'tempest-sandbox': [],
-  'tempest-memory': [],
-  'tempest-ledger': ['tempest-races'],
-  'tempest-tools': ['tempest-races', 'tempest-sandbox'],
-  'tempest-provider': ['tempest-ledger'],
-  'tempest-world': ['tempest-wire', 'tempest-races', 'tempest-ledger', 'tempest-memory'],
-  'tempest-loop': [
-    'tempest-world',
-    'tempest-provider',
-    'tempest-tools',
-    'tempest-ledger',
-    'tempest-memory',
-    'tempest-races',
-    'tempest-wire',
+  'mnemorph-wire': [],
+  'mnemorph-races': [],
+  'mnemorph-sandbox': [],
+  'mnemorph-memory': [],
+  'mnemorph-ledger': ['mnemorph-races'],
+  'mnemorph-tools': ['mnemorph-races', 'mnemorph-sandbox'],
+  'mnemorph-provider': ['mnemorph-ledger'],
+  'mnemorph-world': ['mnemorph-wire', 'mnemorph-races', 'mnemorph-ledger', 'mnemorph-memory'],
+  'mnemorph-loop': [
+    'mnemorph-world',
+    'mnemorph-provider',
+    'mnemorph-tools',
+    'mnemorph-ledger',
+    'mnemorph-memory',
+    'mnemorph-races',
+    'mnemorph-wire',
   ],
-  'tempest-server': ['tempest-loop'],
-  tempestd: ['tempest-server'],
+  'mnemorph-server': ['mnemorph-loop'],
+  mnemorphd: ['mnemorph-server'],
 };
 
 const meta = JSON.parse(
@@ -60,11 +60,11 @@ const lints = (toml) => {
   return out;
 };
 const ws = lints(readFileSync('Cargo.toml', 'utf8'));
-const sb = lints(readFileSync('crates/tempest-sandbox/Cargo.toml', 'utf8'));
+const sb = lints(readFileSync('crates/mnemorph-sandbox/Cargo.toml', 'utf8'));
 for (const [key, value] of Object.entries(ws)) {
   const want = key === 'lints.rust.unsafe_code' ? '"deny"' : value;
   if (sb[key] !== want)
-    errors.push(`tempest-sandbox: ${key} is ${sb[key] ?? 'missing'}, want ${want}`);
+    errors.push(`mnemorph-sandbox: ${key} is ${sb[key] ?? 'missing'}, want ${want}`);
 }
 
 if (errors.length) {

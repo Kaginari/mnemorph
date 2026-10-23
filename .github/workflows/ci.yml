@@ -52,7 +52,7 @@ jobs:
       - name: Every diagram parses (as GitHub's Mermaid would read it)
         run: node tools/check-diagrams.mjs
       - name: Build the book (fails on a dead link)
-        run: pnpm --filter @tempest/site build
+        run: pnpm --filter @mnemorph/site build
       - uses: actions/upload-artifact@v4
         with:
           name: book

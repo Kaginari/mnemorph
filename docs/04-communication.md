@@ -1,6 +1,6 @@
 # Communication
 
-Two different conversations happen in Tempest, and they speak different languages:
+Two different conversations happen in Mnemorph, and they speak different languages:
 
 - **between bodies** — the wire: terse, tagged, built to save tokens;
 - **between the core and its clients** — the protocol: typed JSON-RPC, built to be exact;
@@ -98,7 +98,7 @@ hole names the cut (`@? @CAP 2048: 12 lines cut — full report at <dump>`). `@S
 `@R`, `@H` and `@$` are never cut: losing a hole, the unsaid, the courier or an order costs more
 than any byte. The courier threshold (600 bytes) is what the **reader** receives inline: a report
 between 600 and 2048 bytes is complete, but travels as an envelope — `@R` to the file under
-`.tempest/instruments/loop/`, `@H`, one `@W` per written path, the orders, and a digest of the
+`.mnemorph/instruments/loop/`, `@H`, one `@W` per written path, the orders, and a digest of the
 first eight verdicts and findings — and the parent opens the file only when its verdict needs the
 flesh.
 
@@ -125,7 +125,7 @@ The grammar's readings, all of them:
 Council answers (`@INSTRUCT`, `@SPLIT`, `@ESCALATE`) are not wire tags yet: the loop that sends
 them (M5) defines them, here, when it lands.
 
-In code the wire is one crate (`tempest-wire`, no dependencies) with a parser and an encoder that
+In code the wire is one crate (`mnemorph-wire`, no dependencies) with a parser and an encoder that
 round-trip; property tests hold `parse(emit(r)) == r` for any report, an exact `@E`, and a cut
 that never loses what must stay.
 
@@ -186,11 +186,11 @@ flowchart LR
     H(["🐉 you"]) -->|"typed while a turn runs"| Q["queue<br/>next turn, in order"]
     H -->|"/send body: text"| S["send<br/>the body's next tool step"]
     BG["background body<br/>reports"] --> W["wake<br/>its own parent's next turn"]
-    R["a report's @$ orders"] --> SQ[("shared work queue<br/>.tempest/shared/queue.jsonl")]
+    R["a report's @$ orders"] --> SQ[("shared work queue<br/>.mnemorph/shared/queue.jsonl")]
     SQ -->|"the wake claims each<br/>for the body it names"| T["the parent's next turn:<br/>dispatch, re-checked"]
     Q --> T
     W --> T
-    TQ["tempest q · the queue tool"] <--> SQ
+    TQ["mnemorph q · the queue tool"] <--> SQ
     classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
     class H human
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
@@ -206,7 +206,7 @@ flowchart LR
 **In plain words.** A session never loses what arrives while it works. What you type during a
 turn waits its turn; what you `/send` reaches a running body at its next tool step; a background
 body's report wakes the body that sent it. Work ordered down the ranks (`@$` lines) is written to a
-shared queue on disk that every session, the terminal, the board and `tempest q` can see — so a
+shared queue on disk that every session, the terminal, the board and `mnemorph q` can see — so a
 restart, a second session or a lost report never drops an order, and nobody has to wonder what is
 waiting.
 
@@ -222,7 +222,7 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 **The shared work queue** is the durable form of the order book.
 
-- One file, `.tempest/shared/queue.jsonl`, on the shared shelf (harness soil: no body writes it by
+- One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf (harness soil: no body writes it by
   hand, and a move made during a body's turn is never billed to that body). Every move appends the
   item's whole snapshot as one line with its revision; the queue is a fold over the lines. A line
   that does not follow its item's last revision is a typed refusal — two sessions claiming one item
@@ -237,7 +237,7 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   report as thread — and the dispatch rules check it again. The body's report settles its oldest
   claim: `DONE` closes it, any other word leaves it claimed with the exit noted. An order a
   commission expected and the report did not book is a hole for the parent.
-- **Doors.** `tempest q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
+- **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
   body never claims (work reaches it claimed in its name). The status line reads "N held".
@@ -246,8 +246,8 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 ### The client protocol
 
-`tempestd` exposes one JSON-RPC 2.0 API. The CLI reaches it over stdio, the board over a loopback
-WebSocket. Types are defined in Rust and generated into TypeScript (`@tempest/protocol`), so the
+`mnemorphd` exposes one JSON-RPC 2.0 API. The CLI reaches it over stdio, the board over a loopback
+WebSocket. Types are defined in Rust and generated into TypeScript (`@mnemorph/protocol`), so the
 clients cannot drift.
 
 ```mermaid
@@ -259,8 +259,8 @@ config:
     wrappingWidth: 360
 ---
 sequenceDiagram
-    participant CLI as tempest CLI
-    participant D as tempestd
+    participant CLI as mnemorph CLI
+    participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo, capabilities}
     D-->>CLI: {world, races, budgets, version}
