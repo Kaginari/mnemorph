@@ -1,0 +1,14 @@
+name: Decision
+description: A choice Veldora makes before the work can go on
+labels: ["type:decision"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and what each changes

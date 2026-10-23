@@ -4,3 +4,5 @@ dist/
 .tempest/instruments/
 .tempest/index/
 .tempest/tmp/
+.tempest/intel/
+.tempest/attic/tmp/

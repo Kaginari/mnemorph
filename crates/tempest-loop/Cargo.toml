@@ -1,0 +1,20 @@
+[package]
+name = "tempest-loop"
+description = "The loop: the six beats of a turn, budgets as readings, the journal and resume."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tempest-world = { path = "../tempest-world" }
+tempest-provider = { path = "../tempest-provider" }
+tempest-tools = { path = "../tempest-tools" }
+tempest-ledger = { path = "../tempest-ledger" }
+tempest-memory = { path = "../tempest-memory" }
+tempest-races = { path = "../tempest-races" }
+tempest-wire = { path = "../tempest-wire" }
+
+[lints]
+workspace = true

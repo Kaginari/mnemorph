@@ -1,0 +1,13 @@
+[package]
+name = "tempest-races"
+description = "The race law: the six races and five ascended forms, their shelves, powers, scores, ascension and falls. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+name: Bug
+description: Something does not do what the book says
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: saw
+    attributes:
+      label: What happened
+      description: Commands, output, versions (`tempestd --version`).
+    validations:
+      required: true
+  - type: textarea
+    id: book
+    attributes:
+      label: What the book says should happen
+      description: Link the page and section.

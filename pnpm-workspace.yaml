@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+
+# Dependencies allowed to run install scripts. esbuild (tsup, vite) fetches its platform binary.
+allowBuilds:
+  esbuild: true
