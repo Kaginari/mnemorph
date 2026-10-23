@@ -1,0 +1,15 @@
+{
+  "name": "@mnemorph/theme",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Mnemorph theme: the colour tokens, type and motion every surface shares.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css"
+  }
+}

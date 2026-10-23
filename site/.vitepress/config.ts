@@ -17,7 +17,17 @@ export default withMermaid(
     head: [
       ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
       ['link', { rel: 'icon', type: 'image/png', href: '/mnemorph-icon@64.png' }],
+      ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+      [
+        'link',
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap',
+        },
+      ],
     ],
+    // Dark first, like the banner; the toggle still offers light.
+    appearance: 'dark',
     lastUpdated: true,
     themeConfig: {
       logo: '/mnemorph-icon@64.png',
