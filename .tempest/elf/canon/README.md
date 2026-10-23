@@ -2,7 +2,7 @@
 
 - **Race:** elf
 - **Reports to:** rimuru
-- **Territory:** docs/ assets/
+- **Territory:** docs/ assets/ site/
 
 ## Traits
 

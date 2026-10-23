@@ -21,12 +21,14 @@ code, not configuration.
 | Rust | pinned in `rust-toolchain.toml` | [rustup](https://rustup.rs) — the pin installs itself |
 | cargo-nextest, cargo-deny | latest | prebuilt: [nexte.st](https://nexte.st), [cargo-deny releases](https://github.com/EmbarkStudios/cargo-deny/releases) |
 | just | latest | [just.systems](https://just.systems) |
+| actionlint | latest | [releases](https://github.com/rhysd/actionlint/releases) |
 | Node | 22 (`.nvmrc`) | your usual Node manager |
 | pnpm | pinned in `package.json` | `corepack enable` |
 
 ```sh
 just setup   # install the TypeScript workspace
-just         # the full check: Rust, TypeScript, the layering, a clean tree
+just         # the full check: Rust, TypeScript, the layering, the book, the workflows
+just docs-dev  # read the book as a website while writing it
 ```
 
 ## Layout
@@ -36,6 +38,7 @@ just         # the full check: Rust, TypeScript, the layering, a clean tree
 | `crates/` | the Rust core — one crate per concern, layered ([architecture](docs/05-architecture.md)) |
 | `packages/` | the TypeScript clients: protocol, sdk, cli, board |
 | `docs/` | the book |
+| `site/` | the book as a website (VitePress) |
 | `assets/` | race portraits and cards |
 | `.tempest/` | Tempest's own world: law, creatures, journal |
 | `tools/` | repository checks |

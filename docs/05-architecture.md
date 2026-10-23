@@ -31,12 +31,16 @@ flowchart TB
       MEM["memory<br/>tiers · recall · toolbox"]
       SERVER --> LOOP
       LOOP --> WORLD --> RACES
-      LOOP --> PROV
+      LOOP --> PROV --> LEDGER
       LOOP --> TOOLS --> SANDBOX
-      LOOP --> LEDGER
+      TOOLS --> RACES
+      LOOP --> LEDGER --> RACES
       LOOP --> MEM
+      LOOP --> RACES
+      LOOP --> WIRE
       WORLD --> WIRE
       WORLD --> LEDGER
+      WORLD --> MEM
     end
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER
@@ -48,7 +52,8 @@ All the decisions live in Rust, in small crates that each do one thing and can b
 The TypeScript side only shows things and asks you questions: the terminal UI and the web board
 are two windows onto the same core. The arrows only point downward — `races` knows nothing about
 networks, `wire` knows nothing about models — so each piece can be proven before the next is
-built on it.
+built on it. `tools/check-layers.mjs` holds the same graph and fails on any edge it does not
+draw.
 
 ## Technical detail
 
