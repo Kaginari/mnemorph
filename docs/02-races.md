@@ -79,7 +79,7 @@ impl Race {
     fn gate(self) -> Gate;                    // ByItsOrc | OverItsSlimes | OwnSoil | DocOnly
     fn default_tier(self) -> ModelTier;       // Frontier | Strong | Fast — config maps tiers to models
     fn steps(self) -> u32;                    // per commission, passed down whole
-    fn max_share(self) -> u8;                 // percent of the parent's envelope, a ceiling
+    fn max_share(self) -> u8;                 // percent of what the parent has left, a ceiling
 }
 
 fn may_dispatch(from: Race, to: Race, ctx: &DispatchContext) -> Result<Route, Refusal>;
