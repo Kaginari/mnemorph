@@ -12,12 +12,15 @@ export default withMermaid(
     srcDir: '../docs',
     rewrites: { 'README.md': 'index.md' },
     cleanUrls: true,
-    // The race portraits are the site's public files: Rimuru is the logo and the favicon.
-    vite: { publicDir: fileURLToPath(new URL('../../assets/portraits', import.meta.url)) },
-    head: [['link', { rel: 'icon', type: 'image/png', href: '/rimuru@32.png' }]],
+    // The brand's files are the site's public files: the emblem is the logo and the favicon.
+    vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
+    head: [
+      ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
+      ['link', { rel: 'icon', type: 'image/png', href: '/tempest-icon@64.png' }],
+    ],
     lastUpdated: true,
     themeConfig: {
-      logo: '/rimuru@64.png',
+      logo: '/tempest-icon@64.png',
       nav: [
         { text: 'Book', link: '/' },
         { text: 'Roadmap', link: '/roadmap' },
