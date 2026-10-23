@@ -285,3 +285,5 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:**
   - Veldora's agent-mcp layer keeps the whole catalog on Kijin soil: no rank's context ever holds
     it. The call path runs no model; models only index (rarely) and rerank (when close).
+- **Then:** `just law` failed at 97% on a doc-comment change — stale profile data, not missing
+  coverage (100% once cleaned). The recipe now cleans the coverage data first; a lessons row.
