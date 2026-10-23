@@ -190,3 +190,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The test oracle must not be the code under test: the dispatch table is written out by hand.
   - Accepting the raw form everywhere let prose overwrite a status; a mouth pair's agreement is
     now a parser the world chooses, not a habit of the parser.
+
+---
+
+### [2026-10-23T22:44:55+02:00] rimuru — a study of maki, written into the book
+- **Task:** Veldora: study the maki harness against Tempest's philosophy, then write
+  `study-maki.md`: where Tempest is stronger, and what it takes.
+- **Files:** docs/study-maki.md (the picture, maki's benchmark and how to read it, a comparison
+  table, what is taken — #38–#43 — what waits for a decision — #44, #45 — and what is not taken),
+  docs/README.md and the site's sidebar.
+- **Gate:** n/a. Instruments: an Opus 5.5 body read maki's code and its v0.5.5 benchmark report;
+  `just docs` (14 diagrams parse).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - maki is Rust, not Go; its edge is token discipline (a 2.4 KB prompt, a prefix that never
+    moves), not architecture — and it has no OS sandbox.
