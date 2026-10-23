@@ -106,3 +106,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `test -z "$(git …)"` passes when git fails; compare snapshots under `set -e` instead.
   - A layer number admits edges a diagram forbids; hold the edges themselves.
   - Branch protection and Pages are paid features on a private repository: decided in #34.
+
+---
+
+### [2026-10-23T21:37:40+02:00] rimuru — M1 part 1: tempest-wire
+- **Task:** the wire crate (M1, #3): the envelope parsed and emitted, isekai's tests carried over.
+- **Files:** crates/tempest-wire (commission, report, forge, tag, fnv; tests/isekai_fixtures.rs,
+  tests/properties.rs), docs/04-communication.md (the cut order, the never-cut set, three readings).
+- **Gate:** n/a. Instruments: 19 tests (four property tests, 256 cases each), clippy pedantic
+  `-D warnings`, `just check` green.
+- **Result:** in review as #33.
+- **Learned:**
+  - `@$` orders join the never-cut set: isekai lost a relay order once and the chain stopped.
+  - An order's body is one word; `@$ note this: …` is prose. An untyped `@U` opening with a
+    kind's word reads as typed — the grammar, stated in the book.
+  - clippy 1.99 flags `assert!(x.is_empty())` in tests and exact float comparison; budgets parse
+    with an integer multiplier.
