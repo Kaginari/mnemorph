@@ -1,0 +1,200 @@
+/*
+ * Mnemorph tokens — the web's half of the theme; src/index.ts holds the same values for the CLI,
+ * and its test keeps the two equal. Dark is the default; an app sets data-theme="light" on <html>.
+ */
+
+:root {
+  /* surfaces */
+  --mn-bg: #060b12;
+  --mn-panel: #0d141f;
+  --mn-panel-raised: #142033;
+  --mn-line: #1f3346;
+  /* text */
+  --mn-text: #e0e6ed;
+  --mn-text-muted: #a1aab5;
+  /* accents: holo for the interface, alarm for errors and the adversary, gold for the throne */
+  --mn-holo: #00f2ff;
+  --mn-alarm: #ff2a7d;
+  --mn-gold: #f7d002;
+  --mn-glow: rgb(0 242 255 / 0.35);
+  --mn-glow-soft: rgb(0 242 255 / 0.12);
+
+  /* the races, one colour each — the cards' frames (tools/cards.py) */
+  --mn-race-rimuru: #3fa9f5;
+  --mn-race-elf: #2fa36b;
+  --mn-race-orc: #c9822b;
+  --mn-race-slime: #19c3b0;
+  --mn-race-kijin: #d7263d;
+  --mn-race-dark-elf: #7b4fd6;
+  --mn-race-high-elf: #f5e6b8;
+  --mn-race-high-orc: #e8a83c;
+  --mn-race-named-slime: #a0e8f0;
+  --mn-race-oni: #e8b04a;
+  --mn-race-arch-dark-elf: #c4cce4;
+  --mn-race-veldora: #d4af37;
+
+  /* type */
+  --mn-font-title: "Cinzel", "Trajan Pro", Georgia, serif;
+  --mn-font-ui: "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  --mn-font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --mn-font-prose: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* shape and motion */
+  --mn-radius: 8px;
+  --mn-hex: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  --mn-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --mn-fast: 160ms;
+  --mn-slow: 1.6s;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --mn-bg: #f3f6fa;
+  --mn-panel: #ffffff;
+  --mn-panel-raised: #e9eff6;
+  --mn-line: #c9d5e2;
+  --mn-text: #0d141f;
+  --mn-text-muted: #46505c;
+  --mn-holo: #00707a;
+  --mn-alarm: #c0004c;
+  --mn-gold: #7a5c00;
+  --mn-glow: rgb(0 112 122 / 0.3);
+  --mn-glow-soft: rgb(0 112 122 / 0.1);
+  color-scheme: light;
+}
+
+/* ── components ─────────────────────────────────────────────────────────── */
+
+/* A panel: the holographic container. */
+.mn-panel {
+  background: var(--mn-panel);
+  border: 1px solid color-mix(in srgb, var(--mn-holo) 55%, transparent);
+  border-radius: var(--mn-radius);
+  box-shadow: inset 0 0 12px var(--mn-glow-soft);
+  color: var(--mn-text);
+}
+
+/* A hex: every race icon sits in one. The image is already cut; the frame only glows. */
+.mn-hex {
+  clip-path: var(--mn-hex);
+  aspect-ratio: 0.866;
+  object-fit: cover;
+  transition:
+    transform var(--mn-fast) var(--mn-ease),
+    filter var(--mn-fast) var(--mn-ease);
+}
+.mn-hex:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 10px var(--mn-glow));
+}
+
+/* The title: the serif, in a gold ramp, as on the banner. */
+.mn-title {
+  font-family: var(--mn-font-title);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: linear-gradient(180deg, #ffecaa 0%, #e6b94c 55%, #b07a1c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .mn-title {
+  background: linear-gradient(180deg, #8a6400 0%, #6b4a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Data: logs, ids, numbers, wire lines. */
+.mn-mono {
+  font-family: var(--mn-font-mono);
+  color: var(--mn-text-muted);
+}
+
+/* Interactive: the border brightens and pulses, a scan line passes once; active flashes gold. */
+.mn-interactive {
+  position: relative;
+  overflow: hidden;
+  transition:
+    box-shadow var(--mn-fast) var(--mn-ease),
+    border-color var(--mn-fast) var(--mn-ease);
+}
+.mn-interactive:hover,
+.mn-interactive:focus-visible {
+  border-color: var(--mn-holo);
+  box-shadow:
+    0 0 0 1px var(--mn-holo),
+    0 0 16px var(--mn-glow);
+  animation: mn-pulse var(--mn-slow) var(--mn-ease) infinite;
+}
+.mn-interactive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--mn-glow-soft) 48%,
+    var(--mn-glow) 50%,
+    var(--mn-glow-soft) 52%,
+    transparent 100%
+  );
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+.mn-interactive:hover::after {
+  animation: mn-scan 700ms var(--mn-ease) 1;
+}
+.mn-interactive:active {
+  box-shadow:
+    0 0 0 1px var(--mn-gold),
+    0 0 22px var(--mn-gold);
+}
+.mn-interactive:focus-visible {
+  outline: 2px solid var(--mn-holo);
+  outline-offset: 2px;
+}
+
+/* The stream: faint scrolling code behind the page. Decorative only. */
+.mn-stream {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image:
+    repeating-linear-gradient(90deg, var(--mn-holo) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(180deg, var(--mn-holo) 0 2px, transparent 2px 9px);
+  mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
+  animation: mn-stream 60s linear infinite;
+}
+
+@keyframes mn-pulse {
+  50% {
+    box-shadow:
+      0 0 0 1px var(--mn-holo),
+      0 0 26px var(--mn-glow);
+  }
+}
+@keyframes mn-scan {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes mn-stream {
+  to {
+    background-position: 0 1000px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-interactive:hover,
+  .mn-interactive:focus-visible,
+  .mn-interactive:hover::after,
+  .mn-stream {
+    animation: none;
+  }
+  .mn-hex {
+    transition: none;
+  }
+}

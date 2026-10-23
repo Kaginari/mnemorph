@@ -1,0 +1,61 @@
+/* The book in the Mnemorph theme: VitePress's variables, mapped onto the tokens. */
+
+:root,
+.dark {
+  --vp-c-bg: var(--mn-bg);
+  --vp-c-bg-alt: var(--mn-panel);
+  --vp-c-bg-elv: var(--mn-panel);
+  --vp-c-bg-soft: var(--mn-panel-raised);
+  --vp-c-divider: var(--mn-line);
+  --vp-c-gutter: var(--mn-line);
+  --vp-c-border: var(--mn-line);
+  --vp-c-text-1: var(--mn-text);
+  --vp-c-text-2: var(--mn-text-muted);
+  --vp-c-brand-1: var(--mn-holo);
+  --vp-c-brand-2: color-mix(in srgb, var(--mn-holo) 80%, var(--mn-text));
+  --vp-c-brand-3: var(--mn-holo);
+  --vp-c-brand-soft: var(--mn-glow-soft);
+  --vp-c-danger-1: var(--mn-alarm);
+  --vp-c-warning-1: var(--mn-gold);
+  --vp-font-family-base: var(--mn-font-prose);
+  --vp-font-family-mono: var(--mn-font-mono);
+  --vp-code-block-bg: var(--mn-panel);
+  --vp-button-brand-bg: var(--mn-holo);
+  --vp-button-brand-text: var(--mn-bg);
+  --vp-home-hero-name-color: transparent;
+}
+
+.vp-doc h1,
+.VPNavBarTitle .title {
+  font-family: var(--mn-font-title);
+  letter-spacing: 0.04em;
+}
+
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: var(--mn-font-ui);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Code blocks and tables as holographic panels. */
+.vp-doc div[class*="language-"],
+.vp-doc table {
+  border: 1px solid color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  box-shadow: inset 0 0 10px var(--mn-glow-soft);
+}
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+/* The diagrams are drawn for paper (neutral theme, coloured hachure): they keep a light sheet in
+   both modes, framed like a panel. */
+.vp-doc .mermaid {
+  background: #f6f8fb;
+  color-scheme: light;
+  border: 1px solid color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  border-radius: var(--mn-radius);
+  box-shadow: 0 0 14px var(--mn-glow-soft);
+  padding: 16px;
+}
