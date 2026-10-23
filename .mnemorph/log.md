@@ -465,3 +465,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     black and white stripes. They keep a light paper sheet in both modes.
   - Kill a server by its port (`fuser -k`), never `pkill -f` on a pattern the killing command's
     own line contains — that killed the shell twice.
+
+---
+
+### [2026-10-24T01:30:01+02:00] rimuru — Oni and the hex emblem; one sheet for every icon
+- **Task:** Veldora regenerated the icon sheet with the two it lacked: Oni and Mnemorph.
+- **Files:** assets/source/race-icons.jpg (the twelve-hexagon sheet, replacing the ten), every race
+  portrait recut from it (256/64/32), assets/brand/mnemorph-hex{,@64,@32}.png, assets/cards/
+  (redrawn: Oni on its new art), assets/README.md, the theme skill's asset table.
+- **Gate:** n/a. Instruments: the twelve previewed together; the Oni card beside Kijin and Rimuru.
+- **Result:** in review as a pull request.
+- **Learned:** measure each sheet's grid — this one is 6 columns, hexagons 186 px wide, and the
+  last column sits 5 px left of an even pitch. Oni's horns break out of its frame on purpose; the
+  hex mask trims them, which reads fine at icon size.
