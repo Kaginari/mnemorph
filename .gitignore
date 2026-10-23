@@ -6,3 +6,5 @@ dist/
 .tempest/tmp/
 .tempest/intel/
 .tempest/attic/tmp/
+site/.vitepress/dist/
+site/.vitepress/cache/

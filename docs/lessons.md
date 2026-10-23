@@ -156,12 +156,12 @@ roadmap where that test or rule must exist before the rung counts as done.
 
 | Lesson | Becomes | Milestone |
 |---|---|---|
-| A commit landed with a red suite because the script ran the tests and then committed regardless. | Commit is chained on success (`test && commit`); main is protected by required CI. | M0 |
+| A commit landed with a red suite because the script ran the tests and then committed regardless. | Commit is chained on success (`test && commit`); main is protected by required CI — pending the decision on the repository plan (#34): branch protection needs a public repository or GitHub Pro. | M0 |
 | Two "flakes" were product bugs, and one test was never green since it was written. | A flake is a bug until root-caused; no quarantine without an issue naming the cause. | M0 |
 | Released binaries run in a plain world found two defects the suite missed, because fixture homes were empty. | Every release candidate is smoke-tested as the built artifact in a fresh HOME with realistic dotfiles. | M14 |
 | A mechanical rename turned vendored names (`--bs-body-*`, HTTP `res.Body`) into broken ones with the tests renamed alongside, and a forked second engine needed every fix ported by hand. | One engine; a distribution is a lexicon file plus defaults, never a fork or a rename. A leak scanner (skipping binary files) checks each distribution's output. | M1 |
 | A subagent's PASS was wrong more than once (claimed missing retries that existed; a bisect verdict that failed re-verification). | A dispatched body's claim is re-run before it is acted on or logged. | M7 |
 | A check whose output went to `/dev/null` failed silently. | Every check prints what failed. | M0 |
 | `git add -A` swept stray files into history, and foreign work-in-progress in the tree tripped the world's own gates. | Add by path; tests and the harness never stage or commit on their own; worktrees isolate parallel work. | M0 |
-| An old system formatter that could not parse the language's newer syntax ran in the release script, and a stale binary was judged as the new one. | The toolchain is pinned in the repo; `status` prints the build's version and commit; checks run against a freshly built binary. | M0 |
+| An old system formatter that could not parse the language's newer syntax ran in the release script, and a stale binary was judged as the new one. | The toolchain is pinned in the repo (M0); `status` prints the build's version and commit, and checks run against a freshly built binary (M6, where `status` is born). | M6 |
 | A gap named once and left was usually named again later. | A gap named twice is fixed, not noted; the log records the first naming so the second is recognizable. | M7 |

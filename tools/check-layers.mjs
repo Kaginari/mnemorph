@@ -1,40 +1,74 @@
-// Enforces the crate layering of docs/05-architecture.md: a crate may depend only on crates in a
-// lower layer. Fails with every offending edge.
+// Enforces the crate graph of docs/05-architecture.md: every dependency edge between workspace
+// crates (normal, dev and build) must be one the architecture draws, and the sandbox's own lint
+// table must mirror the workspace's but for unsafe_code. Fails with every offence.
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
-const LAYERS = {
-  'tempest-wire': 0,
-  'tempest-races': 0,
-  'tempest-sandbox': 0,
-  'tempest-memory': 0,
-  'tempest-ledger': 1,
-  'tempest-tools': 1,
-  'tempest-provider': 2,
-  'tempest-world': 2,
-  'tempest-loop': 3,
-  'tempest-server': 4,
-  tempestd: 5,
+const ALLOWED = {
+  'tempest-wire': [],
+  'tempest-races': [],
+  'tempest-sandbox': [],
+  'tempest-memory': [],
+  'tempest-ledger': ['tempest-races'],
+  'tempest-tools': ['tempest-races', 'tempest-sandbox'],
+  'tempest-provider': ['tempest-ledger'],
+  'tempest-world': ['tempest-wire', 'tempest-races', 'tempest-ledger', 'tempest-memory'],
+  'tempest-loop': [
+    'tempest-world',
+    'tempest-provider',
+    'tempest-tools',
+    'tempest-ledger',
+    'tempest-memory',
+    'tempest-races',
+    'tempest-wire',
+  ],
+  'tempest-server': ['tempest-loop'],
+  tempestd: ['tempest-server'],
 };
 
 const meta = JSON.parse(
   execFileSync('cargo', ['metadata', '--format-version', '1', '--no-deps'], { encoding: 'utf8' }),
 );
+const members = new Set(meta.packages.map((p) => p.name));
 const errors = [];
+for (const name of Object.keys(ALLOWED)) {
+  if (!members.has(name)) errors.push(`${name}: in the graph but not in the workspace`);
+}
 for (const pkg of meta.packages) {
-  const own = LAYERS[pkg.name];
-  if (own === undefined) {
-    errors.push(`${pkg.name}: not placed in a layer — add it to tools/check-layers.mjs`);
+  const allowed = ALLOWED[pkg.name];
+  if (!allowed) {
+    errors.push(`${pkg.name}: not in the graph — add it to tools/check-layers.mjs and the book`);
     continue;
   }
   for (const dep of pkg.dependencies) {
-    const theirs = LAYERS[dep.name];
-    if (theirs !== undefined && theirs >= own) {
-      errors.push(`${pkg.name} (layer ${own}) depends on ${dep.name} (layer ${theirs})`);
+    if (members.has(dep.name) && !allowed.includes(dep.name)) {
+      errors.push(`${pkg.name} → ${dep.name}: an edge the architecture does not draw`);
     }
   }
 }
+
+// The sandbox's lint table: the workspace's, with unsafe_code relaxed to deny.
+const lints = (toml) => {
+  const out = {};
+  let section = '';
+  for (const line of toml.split('\n')) {
+    const head = line.match(/^\[(.+)\]$/);
+    if (head) section = head[1].replace(/^workspace\./, '');
+    const kv = line.match(/^([a-z_]+)\s*=\s*(.+)$/);
+    if (kv && section.startsWith('lints.')) out[`${section}.${kv[1]}`] = kv[2];
+  }
+  return out;
+};
+const ws = lints(readFileSync('Cargo.toml', 'utf8'));
+const sb = lints(readFileSync('crates/tempest-sandbox/Cargo.toml', 'utf8'));
+for (const [key, value] of Object.entries(ws)) {
+  const want = key === 'lints.rust.unsafe_code' ? '"deny"' : value;
+  if (sb[key] !== want)
+    errors.push(`tempest-sandbox: ${key} is ${sb[key] ?? 'missing'}, want ${want}`);
+}
+
 if (errors.length) {
   console.error(`layer check failed:\n  ${errors.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`layer check: ${meta.packages.length} crates, every edge points down`);
+console.log(`layer check: ${members.size} crates, every edge drawn, sandbox lints mirrored`);

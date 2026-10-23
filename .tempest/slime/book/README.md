@@ -2,8 +2,8 @@
 
 - **Race:** slime
 - **Reports to:** orc-book
-- **Territory:** docs/ assets/
-- **Verify:** `test -f docs/README.md`
+- **Territory:** docs/ assets/ site/
+- **Verify:** `just docs`
 
 ## Traits
 
