@@ -121,11 +121,12 @@ fn the_mapping() {
         m[3],
         json!({"role": "tool", "tool_call_id": "c1", "content": "fn main() {}"})
     );
-    assert_eq!(m[4], json!({"role": "user", "content": "and now?"}));
     assert_eq!(
-        m[5],
-        json!({"role": "system", "content": "the date changed"})
+        m[4],
+        json!({"role": "user", "content": "and now?\n\n[operator note] the date changed"}),
+        "a mid-conversation note joins the user's turn"
     );
+    assert_eq!(m.len(), 5);
     assert_eq!(body["tools"][0]["function"]["name"], "read");
     assert_eq!(body["stream_options"], json!({"include_usage": true}));
     assert!(!body.to_string().contains("cache_control"));

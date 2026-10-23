@@ -329,3 +329,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   key only when one is given), tests/openai.rs (3), clippy.toml (product names in docs).
 - **Gate:** n/a. Instruments: 19 provider tests, clippy pedantic, `just check`.
 - **Result:** committed; its pull request opens after part 1 (#50) lands.
+
+---
+
+### [2026-10-24T00:16:48+02:00] rimuru — M3 closed after a fresh Fable review
+- **Task:** close M3: the milestone's Fable review (20 findings) and its fixes.
+- **Files:** drive.rs (a timeout on the response head, the call's deadline `Policy::turn`,
+  `x-should-retry` obeyed, empty chunks are not the first byte, error bodies in every shape),
+  retry.rs (three retries, the lesson's count; a server's `retry-after` honoured whole, the deadline
+  decides), error.rs (`Wait::Turn`, numeric codes retried, `model_not_found`), anthropic.rs
+  (system-message placement checked; `eager_input_streaming` on every tool; "started" only once
+  something is shown — thinking is not; opaque blocks assemble `input` and object deltas, an
+  unknown text delta is a warning; `stop_details` kept; a refusal's partial content discarded; a
+  tool call cut by `max_tokens` dropped; another provider's opaque blocks left out), openai.rs
+  (`finish_reason: error` is a retryable failure; reasoning and tool-call extras kept and replayed
+  as `openai.*` opaque blocks; index-less fragments; one ToolStart per call; a mid-conversation
+  note joins the user's turn), transport.rs (a redacted `Debug`; test doubles hidden from the
+  docs; a silent-head reply), tests/review.rs (19), issues #52 (real cassettes, needing a key) and
+  a note on M4a (#7: the fallback chain).
+- **Gate:** n/a. Instruments: 35 provider tests, clippy pedantic, `just check`.
+- **Result:** in review as #51.
+- **Learned:**
+  - "Started" must mean "shown": a turn that thinks for minutes and then hits an overload lost
+    everything because a thinking block counted as content.
+  - A review export that rebuilds from scratch needs gigabytes: the disk filled. Check `df` first
+    and reuse the checkout's target directory.
+  - A test with `|| true` in an assertion proves nothing; caught before landing, removed.
