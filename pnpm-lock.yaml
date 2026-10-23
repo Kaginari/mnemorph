@@ -260,8 +260,13 @@ importers:
 
   packages/sdk: {}
 
+  packages/theme: {}
+
   site:
     devDependencies:
+      "@mnemorph/theme":
+        specifier: workspace:*
+        version: link:../packages/theme
       mermaid:
         specifier: ^11.17.2
         version: 11.17.2
