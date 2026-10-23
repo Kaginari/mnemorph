@@ -445,3 +445,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** Pillow here is 7.0 — no `rounded_rectangle`, no `getbbox`: rounded shapes are
   masks, text is measured with `getsize`. Oni's art is still the old portrait; a hexagon Oni
   would make the set uniform.
+
+---
+
+### [2026-10-24T01:19:48+02:00] rimuru — the Mnemorph theme, as a package and a skill
+- **Task:** Veldora pasted a design spec (Gemini's, from the banner and the icon sheet) and asked
+  to set it up as a skill for the theme.
+- **Files:** packages/theme/ (`tokens.css` for the web, `index.ts` for the CLI, a test that holds
+  them equal and every text colour at WCAG AA on every surface), site/.vitepress/theme/ (the book
+  in the theme, dark first, the toggle mirrored onto `data-theme`), site/package.json,
+  site/.vitepress/config.ts (fonts, appearance), .claude/skills/mnemorph-theme/SKILL.md.
+- **Gate:** n/a. Instruments: theme tests (33), typecheck, site build, a headless screenshot of
+  the races page in dark.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The spec's pink `#ff0066` fails AA on a raised panel (4.24:1) — the contrast test caught it;
+    `#ff2a7d` passes. Light mode was not in the spec; it has its own darker accents.
+  - Dark first broke the hand-drawn diagrams: neutral-theme hachure on a dark page reads as
+    black and white stripes. They keep a light paper sheet in both modes.
+  - Kill a server by its port (`fuser -k`), never `pkill -f` on a pattern the killing command's
+    own line contains — that killed the shell twice.
