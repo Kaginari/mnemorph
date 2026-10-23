@@ -478,3 +478,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** measure each sheet's grid — this one is 6 columns, hexagons 186 px wide, and the
   last column sits 5 px left of an even pitch. Oni's horns break out of its frame on purpose; the
   hex mask trims them, which reads fine at icon size.
+
+---
+
+### [2026-10-24T01:54:57+02:00] rimuru — the repository goes public; solo mode stays
+- **Task:** Veldora decided #34 (public) and #44 (keep the solo path, escalating on the stress
+  metrics).
+- **Files:** docs/02-races.md (solo mode and its three escalation signals), docs/roadmap.md (M5
+  builds solo with its stress reading, M7 builds the escalation and measures it, nothing removed),
+  docs/06-consumption.md, docs/study-maki.md (#44 under Decided).
+- **Gate:** n/a. Instruments: every commit of the history scanned for credentials before the
+  visibility change — none; `just check`.
+- **Result:** the repository is public; the book change in review as a pull request.
+- **Learned:** escalation reads only code-held signals — occupancy from the ledger, a soil
+  refusal, a shelf refusal — so solo never decides by itself that it is "stressed".

@@ -193,4 +193,4 @@ so after every rung the session's **tokens per model** and the **share of the us
 took are read with `npx ccusage` (`daily` and `blocks`, from Claude Code's local logs) and
 written to the rung's entry in `log.md`. The dollar figure ccusage prints is the API-equivalent
 price, not what the plan costs: it is recorded only as a comparison. From M6 Mnemorph runs part of
-its own work in lone-body mode, and its own ledger becomes the second instrument.
+its own work in solo mode, and its own ledger becomes the second instrument.

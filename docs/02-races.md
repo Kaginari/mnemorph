@@ -123,10 +123,21 @@ else for the pair (race, office), where the office comes from the commission's `
 configured for the race's `DEFAULT_TIER`. The default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and
 the adversary think hardest), **strong** for Orc, Slime and Kijin.
 
-**Lone-body mode (temporary, M5–M6 only).** Before the world exists, one body runs as Rimuru's
-voice and a single Slime whose zone is the whole repository, under the end gate, with no
-dispatch. It lets Mnemorph work on itself from M6. It is removed when M7 lands, and the binary
-refuses it in any world that has creatures.
+**Solo mode.** One body runs as Rimuru's voice and a single Slime's hands, under the shelves,
+the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole repository, or in
+a world with creatures the territory the ask touches. It is the default for small asks and for
+headless and benchmark runs: a hierarchy pays a prefix and a report on every hop, and a short
+task never earns that back. Solo **escalates** into the hierarchy — the throne opens a lane and
+hands the work to an Elf with a handoff — on any of three signals, each read by code, never
+judged by the model:
+
+- **Stress**: the context's occupancy (the ledger's reading, the status line's number) crosses
+  the stress line.
+- **A boundary**: a write the soil refuses, because it falls outside solo's zone.
+- **An act it does not hold**: an outward act (the Kijin's) or a seal (the Dark Elf's) — the
+  shelf refuses it, and the race that holds it takes the act.
+
+Escalation is one-way within a run; the next ask starts solo again.
 
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
 `seal` are harness tools, never shell commands.
