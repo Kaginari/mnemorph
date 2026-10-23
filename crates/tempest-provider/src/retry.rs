@@ -18,17 +18,20 @@ pub struct Policy {
     pub first_byte: Duration,
     /// Between two chunks once the body has started.
     pub stall: Duration,
+    /// The whole call, every attempt and wait included: past it, the call ends.
+    pub turn: Duration,
 }
 
 impl Default for Policy {
     fn default() -> Policy {
         Policy {
-            max_retries: 4,
+            max_retries: 3,
             base: Duration::from_secs(1),
             cap: Duration::from_secs(60),
             connect: Duration::from_secs(15),
             first_byte: Duration::from_secs(600),
             stall: Duration::from_secs(120),
+            turn: Duration::from_mins(30),
         }
     }
 }
@@ -41,12 +44,12 @@ pub fn retryable(status: u16) -> bool {
 
 impl Policy {
     /// The wait before attempt `attempt` (1 for the first retry). The server's `retry-after`
-    /// wins when it gives one; otherwise an exponential backoff with full jitter. Never past
-    /// `cap`.
+    /// wins when it gives one, whole (the call's deadline decides whether it is worth waiting);
+    /// otherwise an exponential backoff with full jitter, never past `cap`.
     #[must_use]
     pub fn wait(&self, attempt: u32, retry_after: Option<Duration>) -> Duration {
         if let Some(after) = retry_after {
-            return after.min(self.cap);
+            return after;
         }
         let ceiling = self
             .base
@@ -97,8 +100,8 @@ mod tests {
         );
         assert_eq!(
             p.wait(1, Some(Duration::from_secs(600))),
-            p.cap,
-            "never past the cap"
+            Duration::from_secs(600),
+            "a server's hint is honoured whole; the deadline decides"
         );
         for attempt in 1..10 {
             let w = p.wait(attempt, None);

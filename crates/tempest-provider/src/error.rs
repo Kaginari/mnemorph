@@ -9,6 +9,8 @@ pub enum Wait {
     FirstByte,
     /// The body stopped mid-stream.
     Stall,
+    /// The call's whole deadline passed.
+    Turn,
 }
 
 /// A failed model call.
@@ -48,12 +50,36 @@ impl Error {
     pub fn retryable(&self) -> bool {
         match self {
             Error::Api { status, .. } => crate::retry::retryable(*status),
-            Error::Transport(_) | Error::Timeout(_) | Error::Truncated => true,
-            Error::Stream { kind, .. } => matches!(
-                kind.as_str(),
-                "overloaded_error" | "api_error" | "rate_limit_error"
-            ),
-            Error::Invalid(_) | Error::Decode(_) => false,
+            Error::Transport(_)
+            | Error::Timeout(Wait::FirstByte | Wait::Stall)
+            | Error::Truncated => true,
+            Error::Stream { kind, .. } => {
+                matches!(
+                    kind.as_str(),
+                    "overloaded_error" | "api_error" | "rate_limit_error" | "finish_reason_error"
+                ) || kind.parse::<u16>().is_ok_and(crate::retry::retryable)
+            }
+            Error::Invalid(_) | Error::Decode(_) | Error::Timeout(Wait::Turn) => false,
+        }
+    }
+}
+
+impl Error {
+    /// Whether the provider says the model does not exist here — the cue for a fallback chain
+    /// to try its next model, never a retry of the same one.
+    #[must_use]
+    pub fn model_not_found(&self) -> bool {
+        match self {
+            Error::Api {
+                status: 404,
+                kind,
+                message,
+            } => {
+                kind == "not_found_error"
+                    || kind == "model_not_found"
+                    || message.to_ascii_lowercase().contains("model")
+            }
+            _ => false,
         }
     }
 }
@@ -70,6 +96,7 @@ impl fmt::Display for Error {
             Error::Transport(why) => write!(f, "connection failed: {why}"),
             Error::Timeout(Wait::FirstByte) => f.write_str("no answer began in time"),
             Error::Timeout(Wait::Stall) => f.write_str("the answer stalled mid-stream"),
+            Error::Timeout(Wait::Turn) => f.write_str("the call's deadline passed"),
             Error::Stream { kind, message } => write!(f, "error in the stream: {kind}: {message}"),
             Error::Truncated => f.write_str("the stream ended before its last event"),
             Error::Decode(why) => write!(f, "the stream could not be read: {why}"),

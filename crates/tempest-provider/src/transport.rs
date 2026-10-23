@@ -14,8 +14,8 @@ use futures_util::{Stream, StreamExt};
 /// A response body, chunk by chunk.
 pub type Body = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
 
-/// A request on the wire.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A request on the wire. Its `Debug` hides the credential headers.
+#[derive(Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     /// Where it goes.
     pub url: String,
@@ -23,6 +23,33 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     /// Its JSON body.
     pub body: Vec<u8>,
+}
+
+/// Headers whose values are secrets.
+const SECRET_HEADERS: [&str; 2] = ["x-api-key", "authorization"];
+
+impl std::fmt::Debug for HttpRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let headers: Vec<(&str, &str)> = self
+            .headers
+            .iter()
+            .map(|(n, v)| {
+                (
+                    n.as_str(),
+                    if SECRET_HEADERS.contains(&n.to_ascii_lowercase().as_str()) {
+                        "[redacted]"
+                    } else {
+                        v.as_str()
+                    },
+                )
+            })
+            .collect();
+        f.debug_struct("HttpRequest")
+            .field("url", &self.url)
+            .field("headers", &headers)
+            .field("body", &format_args!("{} bytes", self.body.len()))
+            .finish()
+    }
 }
 
 /// A response's head and its streaming body.
@@ -110,11 +137,14 @@ impl Transport for HttpTransport {
     }
 }
 
-/// One scripted reply.
+/// One scripted reply (a test double).
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub enum Reply {
     /// The connection fails before any response.
     ConnectError,
+    /// The server accepts and sends nothing — not even the head — for this long, then fails.
+    Silent(Duration),
     /// A response: its status, headers, and body chunks, each sent after its delay.
     Respond {
         /// The status code.
@@ -151,7 +181,8 @@ impl Reply {
     }
 }
 
-/// A transport that answers from a script and keeps every request it was sent.
+/// A transport that answers from a script and keeps every request it was sent (a test double).
+#[doc(hidden)]
 #[derive(Default)]
 pub struct Scripted {
     replies: Mutex<VecDeque<Reply>>,
@@ -189,6 +220,10 @@ impl Transport for Scripted {
         Box::pin(async move {
             match reply {
                 None => Err(io::Error::other("the script has no more replies")),
+                Some(Reply::Silent(wait)) => {
+                    tokio::time::sleep(wait).await;
+                    Err(io::Error::new(io::ErrorKind::TimedOut, "scripted silence"))
+                }
                 Some(Reply::ConnectError) => Err(io::Error::new(
                     io::ErrorKind::ConnectionRefused,
                     "scripted connect error",
