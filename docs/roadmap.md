@@ -80,7 +80,8 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
   (`just check` = fmt, clippy `-D warnings`, nextest, Biome, typecheck, vitest).
 - CI on GitHub Actions: Linux and macOS; `cargo-deny` (licences, advisories) from day one.
 - `.tempest/` seeded by hand: law, the first creatures for Tempest's own crates, `log.md`.
-- Docs site: Astro Starlight over `docs/`, Mermaid hand-drawn rendering, published by CI.
+- Docs site: VitePress over `docs/` as it stands, Mermaid hand-drawn, a dead link fails the
+  build; built by CI as the `book` artifact until the repository can publish Pages.
 
 **Exit:** `just check` green locally and in CI; the docs site builds.
 
