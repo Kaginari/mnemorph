@@ -122,3 +122,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     kind's word reads as typed — the grammar, stated in the book.
   - clippy 1.99 flags `assert!(x.is_empty())` in tests and exact float comparison; budgets parse
     with an integer multiplier.
+
+---
+
+### [2026-10-23T22:00:53+02:00] rimuru — M1 part 2: tempest-races, the law compiled
+- **Task:** the race law (M1, #3): races, shelves, soil, gates, the dispatch decision table, scores,
+  meters, rises and falls, covered whole.
+- **Files:** crates/tempest-races (race, shelf, dispatch, value; tests/law.rs), justfile (`law`:
+  100% region coverage or the check fails), CI (cargo-llvm-cov), rust-toolchain.toml (llvm-tools),
+  docs/02-races.md (how falls are read, default tiers), docs/04-communication.md (the High Elf's
+  lane first; sideways dispatch meets the budget).
+- **Gate:** n/a. Instruments: 18 races tests, `just law` at 100% regions / functions / lines
+  (330 lines), proven to fail at 99.38% with one uncovered function; `just check` green.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The table test caught a real ordering bug: a High Elf commands Orcs by race, so the lineage
+    rule refused its other-lane route before the route was read. Special powers are checked first.
+  - `unreachable!()` arms make 100% coverage impossible; list the ascended forms in the match
+    instead, and give every refusal a method a test can call.
+  - Stable Rust measures regions, not branches: "covered whole" means regions, said plainly.
+  - #33's macOS job was cancelled before reaching a runner (no steps); a re-run, not a fix.
