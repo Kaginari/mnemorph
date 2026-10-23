@@ -12,5 +12,8 @@ mod value;
 
 pub use dispatch::{DispatchContext, Refusal, Route, may_dispatch};
 pub use race::{ModelTier, Race};
-pub use shelf::{Gate, Soil, ToolClass, check_class};
-pub use value::{Band, FallReading, Meter, Signals, falls, meter, rises, score};
+pub use shelf::{Gate, Post, ShelfRefusal, Soil, ToolClass, check_class};
+pub use value::{
+    Band, DECLINE_COOLDOWN_RUNS, FallReading, Meter, RECOVER_REPORTS, Recent, Signals, falls,
+    meter, recovers, rises, score,
+};

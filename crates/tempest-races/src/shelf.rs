@@ -116,14 +116,71 @@ impl Race {
 /// # Errors
 ///
 /// The route to take when `class` is not on `race`'s shelf.
-pub fn check_class(race: Race, class: ToolClass) -> Result<(), String> {
+pub fn check_class(race: Race, class: ToolClass) -> Result<(), ShelfRefusal> {
     if race.shelf().contains(&class) {
-        return Ok(());
+        Ok(())
+    } else {
+        Err(ShelfRefusal { race, class })
     }
-    Err(format!(
-        "{class} is not on the {race} shelf: {}",
-        class.route()
-    ))
+}
+
+/// A tool call refused because its class is not on the race's shelf.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShelfRefusal {
+    /// The race that asked.
+    pub race: Race,
+    /// The class it lacks.
+    pub class: ToolClass,
+}
+
+impl fmt::Display for ShelfRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} is not on the {} shelf: {}",
+            self.class,
+            self.race,
+            self.class.route()
+        )
+    }
+}
+
+/// A Kijin's post: the five ways the world reaches outside, compiled in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Post {
+    /// CI: reads runs and logs, re-runs jobs, publishes CI as an instrument.
+    Ci,
+    /// Release: builds artifacts; tag pushes and registry publishes (both destructive).
+    Release,
+    /// Deploy: deploys, verifies health, rolls back.
+    Deploy,
+    /// Forge: pushes branches, opens and updates pull requests, reads issues.
+    Forge,
+    /// Scout: keeps the advisory mirror and watches upstream releases.
+    Scout,
+}
+
+impl Post {
+    /// Every post.
+    pub const ALL: [Post; 5] = [
+        Post::Ci,
+        Post::Release,
+        Post::Deploy,
+        Post::Forge,
+        Post::Scout,
+    ];
+
+    /// The creature name of the post: `kijin-ci`, …
+    #[must_use]
+    pub fn creature(self) -> &'static str {
+        match self {
+            Post::Ci => "kijin-ci",
+            Post::Release => "kijin-release",
+            Post::Deploy => "kijin-deploy",
+            Post::Forge => "kijin-forge",
+            Post::Scout => "kijin-scout",
+        }
+    }
 }
 
 impl ToolClass {
@@ -133,7 +190,7 @@ impl ToolClass {
         match self {
             ToolClass::Read | ToolClass::Write => "stay inside your own soil",
             ToolClass::Outward => {
-                "route to a kijin post (kijin-forge, kijin-ci, kijin-release, kijin-deploy, kijin-scout)"
+                "route to a kijin post: kijin-ci, kijin-release, kijin-deploy, kijin-forge or kijin-scout"
             }
             ToolClass::Destructive => "route to a kijin; it always passes the human gate",
             ToolClass::Dispatch => "report up with @? — your parent dispatches",
@@ -191,20 +248,27 @@ mod tests {
     fn refusals_name_the_route() {
         assert!(check_class(Race::Slime, ToolClass::Write).is_ok());
         let e = check_class(Race::Slime, ToolClass::Outward).unwrap_err();
-        assert!(e.contains("kijin-forge"), "{e}");
+        assert_eq!((e.race, e.class), (Race::Slime, ToolClass::Outward));
+        let text = e.to_string();
+        for name in Post::ALL.map(Post::creature) {
+            assert!(text.contains(name), "{text} names {name}");
+        }
         assert!(
             check_class(Race::Orc, ToolClass::Destructive)
                 .unwrap_err()
+                .to_string()
                 .contains("human gate")
         );
         assert!(
             check_class(Race::Slime, ToolClass::Dispatch)
                 .unwrap_err()
+                .to_string()
                 .contains("@?")
         );
         assert!(
             check_class(Race::Elf, ToolClass::Seal)
                 .unwrap_err()
+                .to_string()
                 .contains("dark elf")
         );
         for class in [

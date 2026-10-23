@@ -73,6 +73,10 @@ pub fn may_dispatch(from: Race, to: Race, ctx: &DispatchContext) -> Result<Route
     // A High Elf's other lane comes first: the target is an Orc it commands by race, but not by
     // lineage, so the order travels through that lane's Elf.
     if from == Race::HighElf && to.base() == Race::Orc && ctx.other_lane {
+        // Still an Elf: no plan item, no order.
+        if !ctx.plan_names_target {
+            return Err(Refusal::NoPlanItem);
+        }
         return if ctx.budget_fits {
             Ok(Route::ViaItsElf)
         } else {
