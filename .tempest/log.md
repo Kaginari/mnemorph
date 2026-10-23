@@ -287,3 +287,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     it. The call path runs no model; models only index (rarely) and rerank (when close).
 - **Then:** `just law` failed at 97% on a doc-comment change — stale profile data, not missing
   coverage (100% once cleaned). The recipe now cleans the coverage data first; a lessons row.
+
+---
+
+### [2026-10-23T23:55:48+02:00] rimuru — M3 part 1: the Anthropic client
+- **Task:** Veldora: start M3. The Anthropic Messages client, from the Claude API reference (raw
+  HTTP: Rust has no official SDK).
+- **Files:** crates/tempest-provider — model (provider-neutral request and response; thinking
+  blocks carried as opaque JSON, never rebuilt; mid-conversation system messages for append-only
+  updates), sse (an incremental reader), transport (reqwest over rustls with the platform's trust
+  store and the system proxy; a scripted transport that keeps every encoded request), retry (the
+  ladder: 408/409/429/5xx/529, `retry-after-ms`/`retry-after`, full jitter, a cap; three waits:
+  connect, first byte 10 min, stall 2 min), anthropic (encode: API version 2026-10-21, no
+  sampling parameters, at most four breakpoints, no system message first; the assembler: text,
+  tool calls — `{}` for none — opaque blocks by delta, usage from start and delta, a warning on
+  1-hour writes, `message_stop` required; no retry once content has started), prices/anthropic.toml
+  (Opus 5.5, Sonnet 5.5, Fable 5.1), `usage_row` (the junction with the ledger); tests/anthropic.rs
+  (16, on a paused clock), tests/live.rs (gated: TEMPEST_LIVE=1 and a key). deny.toml allows
+  CDLA-Permissive-2.0 (Mozilla's root certificates as data). The book (06).
+- **Gate:** n/a. Instruments: 16 tests; two mutations (the started-guard, the empty-input rule)
+  each turned tests red; clippy pedantic; cargo-deny; `just check`. Not run: the live test — this
+  machine has no API key.
+- **Result:** in review as a pull request; part 2 (OpenAI-compatible) follows.
+- **Learned:**
+  - The API moved under the training prior: `anthropic-version: 2026-10-21` rejects
+    `temperature`/`top_p`/`top_k` at any value, cache reads are 0.05× on Opus 5.5 and 0.025× on
+    Fable 5.1, and thinking blocks are bound to the conversation — the reference, not memory.

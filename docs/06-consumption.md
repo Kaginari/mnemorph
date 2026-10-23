@@ -70,12 +70,16 @@ Prices are `[models."<id>"]` tables in TOML — `input`, `output`, `cache-read` 
 all four required, in dollars per million tokens — layered model by model from the binary's table
 and config (a config row replaces the whole row). The cache prices are never derived from the
 input price: the read multiple differs by model, a tenth on some and a twentieth or less on the
-newest. Tempest uses the 5-minute cache only; the providers (M3) refuse a reply that reports
-1-hour cache writes, whose price is different again. A missing or misspelt key or a negative
-price refuses the table. A model with no price records
-`usd: null` and the meter says *unpriced*, never zero; its weighted tokens still count, with an
-output ratio of 5. The binary's own table is filled with the providers (M3), from each provider's
-published prices — never guessed.
+newest. Tempest marks only 5-minute cache breakpoints; a reply that reports 1-hour cache writes
+(priced at 2× input) carries a warning on its response, since the ledger prices every write at the
+5-minute rate. A missing or misspelt key or a negative price refuses the table. A model with no
+price records `usd: null` and the meter says *unpriced*, never zero; its weighted tokens still
+count, with an output ratio of 5.
+
+The binary ships one table per provider, from the provider's published prices — never guessed.
+Anthropic's (`crates/tempest-provider/prices/anthropic.toml`) prices Claude Opus 5.5, Claude
+Sonnet 5.5 and Claude Fable 5.1; a model whose four prices are not all published, such as Claude
+Haiku 5.5's cache prices, stays unpriced until they are.
 
 ### The unit: weighted tokens
 
