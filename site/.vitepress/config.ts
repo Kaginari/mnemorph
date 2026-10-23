@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
 import { defineConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
 
-const require = createRequire(import.meta.url);
-
 // The book lives in docs/ and stays readable on GitHub as it is; the site only renders it.
+// Its pages sit outside this package, so `vue` is a root devDependency: resolution from docs/
+// reaches the root node_modules under pnpm's isolated layout.
 export default withMermaid(
   defineConfig({
     title: 'Tempest',
@@ -45,9 +43,6 @@ export default withMermaid(
       outline: { level: [2, 3] },
       search: { provider: 'local' },
     },
-    // The pages sit outside this package, where pnpm's strict node_modules has no vue:
-    // resolve it from here.
-    vite: { resolve: { alias: { vue: dirname(require.resolve('vue/package.json')) } } },
     mermaid: { look: 'handDrawn', theme: 'neutral' },
   }),
 );
