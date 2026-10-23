@@ -122,3 +122,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     kind's word reads as typed — the grammar, stated in the book.
   - clippy 1.99 flags `assert!(x.is_empty())` in tests and exact float comparison; budgets parse
     with an integer multiplier.
+
+---
+
+### [2026-10-23T22:11:56+02:00] rimuru — a diagram GitHub could not parse
+- **Task:** Veldora: a Mermaid parse error on GitHub ("Parse error on line 22 … wire/parse.rs").
+- **Files:** docs/04-communication.md (the message text), tools/check-diagrams.mjs (Mermaid parses
+  every diagram of the book under jsdom), justfile (`docs` runs it), CI (the docs job runs it),
+  package.json (jsdom, mermaid at the root).
+- **Gate:** n/a. Instruments: the check passes on the fix (13 diagrams) and fails on the old text
+  at the line GitHub named.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - In a sequence diagram `;` ends the statement, so `…Report.Wrote; the test…` broke the
+    message. VitePress's newer Mermaid rendered it anyway: a page that renders on the site proves
+    nothing about GitHub. The book's diagrams are now parsed, not only rendered.
+- **Then:** Veldora: "you should use the icons we created in the docs". The portraits now stand
+  wherever a race is named — each race's section on its page, the races and ascension tables, a
+  legend under the overview's picture, the README, galleries on both prompt pages — and Rimuru is
+  the site's logo and favicon (`assets/portraits/` is the site's public dir). The Mermaid diagrams
+  keep their emoji: GitHub's Mermaid shows no images inside nodes.
+- **Then:** Veldora: remove the Leonardo.ai prompt page. docs/race-icons-prompt.md is gone (its
+  gallery of the generated icons moved to assets/README.md); the cards brief stays.

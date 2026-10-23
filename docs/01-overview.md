@@ -30,6 +30,10 @@ flowchart TD
     S -.->|report| O -.->|verdict| E -.->|lane verdict| R
 ```
 
+| <img src="../assets/portraits/veldora@64.png" width="64" alt="Veldora"> | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Veldora** | **Rimuru** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
+
 ## In plain words
 
 You talk to **Rimuru**. Rimuru never touches the code; it understands what you want, asks you
