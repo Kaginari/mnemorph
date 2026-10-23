@@ -25,11 +25,11 @@ rust:
     cargo nextest run --workspace --no-tests=pass
     cargo deny check
 
-# The race law is covered whole: every region of tempest-races runs under its tests.
+# The race law is covered whole: every region of mnemorph-races runs under its tests.
 law:
     # Old profile data merges into a new run and can read a covered function as missed.
     cargo llvm-cov clean --workspace
-    cargo llvm-cov -p tempest-races --fail-under-regions 100 --summary-only
+    cargo llvm-cov -p mnemorph-races --fail-under-regions 100 --summary-only
 
 # TypeScript: Biome, types, tests.
 ts:
@@ -48,11 +48,11 @@ workflows:
 # Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
     node tools/check-diagrams.mjs
-    pnpm --filter @tempest/site build
+    pnpm --filter @mnemorph/site build
 
 # Serve the book locally while editing it.
 docs-dev:
-    pnpm --filter @tempest/site dev
+    pnpm --filter @mnemorph/site dev
 
 # Format everything in place.
 fmt:

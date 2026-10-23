@@ -722,6 +722,96 @@ dependencies = [
 ]
 
 [[package]]
+name = "mnemorph-ledger"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-races",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "mnemorph-loop"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-ledger",
+ "mnemorph-memory",
+ "mnemorph-provider",
+ "mnemorph-races",
+ "mnemorph-tools",
+ "mnemorph-wire",
+ "mnemorph-world",
+]
+
+[[package]]
+name = "mnemorph-memory"
+version = "0.0.0"
+
+[[package]]
+name = "mnemorph-provider"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "mnemorph-ledger",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "mnemorph-races"
+version = "0.0.0"
+
+[[package]]
+name = "mnemorph-sandbox"
+version = "0.0.0"
+
+[[package]]
+name = "mnemorph-server"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-loop",
+]
+
+[[package]]
+name = "mnemorph-tools"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-races",
+ "mnemorph-sandbox",
+]
+
+[[package]]
+name = "mnemorph-wire"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
+name = "mnemorph-world"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-ledger",
+ "mnemorph-memory",
+ "mnemorph-races",
+ "mnemorph-wire",
+]
+
+[[package]]
+name = "mnemorphd"
+version = "0.0.0"
+dependencies = [
+ "mnemorph-server",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1316,96 +1406,6 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
-]
-
-[[package]]
-name = "tempest-ledger"
-version = "0.0.0"
-dependencies = [
- "proptest",
- "serde",
- "serde_json",
- "tempest-races",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "tempest-loop"
-version = "0.0.0"
-dependencies = [
- "tempest-ledger",
- "tempest-memory",
- "tempest-provider",
- "tempest-races",
- "tempest-tools",
- "tempest-wire",
- "tempest-world",
-]
-
-[[package]]
-name = "tempest-memory"
-version = "0.0.0"
-
-[[package]]
-name = "tempest-provider"
-version = "0.0.0"
-dependencies = [
- "bytes",
- "futures-util",
- "reqwest",
- "serde",
- "serde_json",
- "tempest-ledger",
- "tokio",
- "toml",
-]
-
-[[package]]
-name = "tempest-races"
-version = "0.0.0"
-
-[[package]]
-name = "tempest-sandbox"
-version = "0.0.0"
-
-[[package]]
-name = "tempest-server"
-version = "0.0.0"
-dependencies = [
- "tempest-loop",
-]
-
-[[package]]
-name = "tempest-tools"
-version = "0.0.0"
-dependencies = [
- "tempest-races",
- "tempest-sandbox",
-]
-
-[[package]]
-name = "tempest-wire"
-version = "0.0.0"
-dependencies = [
- "proptest",
-]
-
-[[package]]
-name = "tempest-world"
-version = "0.0.0"
-dependencies = [
- "tempest-ledger",
- "tempest-memory",
- "tempest-races",
- "tempest-wire",
-]
-
-[[package]]
-name = "tempestd"
-version = "0.0.0"
-dependencies = [
- "tempest-server",
 ]
 
 [[package]]

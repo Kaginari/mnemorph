@@ -45,8 +45,8 @@ A rung is finished only when its own tests pass against fakes of the rung below;
 starts by testing the two together for real. So when something breaks, it is always in the newest
 piece.
 
-Consumption comes early on purpose (M2): before Tempest makes a single model call, it can already
-count and stop. From M6 Tempest is usable in a terminal and, in lone-body mode, starts working
+Consumption comes early on purpose (M2): before Mnemorph makes a single model call, it can already
+count and stop. From M6 Mnemorph is usable in a terminal and, in lone-body mode, starts working
 on itself; from M7 it runs the full chain, and from M9 it opens its own pull requests.
 
 Every milestone ends the same way:
@@ -72,10 +72,10 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 
 - your review of [Races](02-races.md): bars, privileges, falls, Kijin posts, Dark Elf duties;
 - the race cards generated from [the prompt](race-cards-prompt.md) and reviewed;
-- the name decided — `tempest` is taken on npm and crates.io, so the published crate and npm
+- the name decided — `mnemorph` is taken on npm and crates.io, so the published crate and npm
   names (and an npm scope) are settled here; then the GitHub repository is created
   (`gh repo create`, your call: public or private);
-- whether Tempest has distributions (isekai's agent-one lineage: one engine, a lexicon file plus
+- whether Mnemorph has distributions (isekai's agent-one lineage: one engine, a lexicon file plus
   defaults) — it shapes the CLI's wording and the card text;
 - one diagram checked in a GitHub preview: if GitHub ignores the hand-drawn look, the look is set
   in the docs site's config instead and the pages keep plain Mermaid;
@@ -89,7 +89,7 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 - Cargo workspace with empty crates; pnpm workspace with empty packages; `justfile`
   (`just check` = fmt, clippy `-D warnings`, nextest, Biome, typecheck, vitest).
 - CI on GitHub Actions: Linux and macOS; `cargo-deny` (licences, advisories) from day one.
-- `.tempest/` seeded by hand: law, the first creatures for Tempest's own crates, `log.md`.
+- `.mnemorph/` seeded by hand: law, the first creatures for Mnemorph's own crates, `log.md`.
 - Docs site: VitePress over `docs/` as it stands, Mermaid hand-drawn, a dead link fails the
   build; built by CI as the `book` artifact until the repository can publish Pages.
 
@@ -99,9 +99,9 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 
 Pure crates, no I/O.
 
-- `tempest-wire`: every tag of [Communication](04-communication.md), parser + encoder, trimming
+- `mnemorph-wire`: every tag of [Communication](04-communication.md), parser + encoder, trimming
   order, envelope. Fixtures transcribed from isekai's `wire/` tests. Property test round-trip.
-- `tempest-races`: the enum and its methods, shelves, soil, gates, dispatch decision table, score
+- `mnemorph-races`: the enum and its methods, shelves, soil, gates, dispatch decision table, score
   formulas, ascension and fall predicates, budget shares. Table-driven tests: every cell of the
   dispatch flowchart; every bar at, just under and just over its threshold.
 
@@ -175,15 +175,15 @@ real task against a live model, its spend matching the ledger.
 
 ### M6 — Protocol, SDK, CLI · L · 🐕 dogfood
 
-- `tempest-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
-- `@tempest/protocol` generated, `@tempest/sdk`, `@tempest/cli` with Ink: streaming text, tool
+- `mnemorph-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
+- `@mnemorph/protocol` generated, `@mnemorph/sdk`, `@mnemorph/cli` with Ink: streaming text, tool
   call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
-  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`, `tempest q`.
+  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`, `mnemorph q`.
 - The UX bar is Claude Code and OpenCode: input history, multi-line editing, paste, selection and
   copy, resize, interrupt with Esc, no flicker.
 
-**Exit:** you use `tempest` for a real session and it feels finished. From here Tempest helps
-build Tempest in lone-body mode.
+**Exit:** you use `mnemorph` for a real session and it feels finished. From here Mnemorph helps
+build Mnemorph in lone-body mode.
 
 ### M7 — The world · L
 
@@ -243,27 +243,27 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 
 ### M13 — Integrations · M
 
-- `tempest mcp serve` (memory and law as MCP tools), a Claude Code hooks adapter (the law inside
+- `mnemorph mcp serve` (memory and law as MCP tools), a Claude Code hooks adapter (the law inside
   Claude Code: session start, pre-tool gate, stop gate, pre-compact drain), and
-  `tempest import <dir>/.isekai` to bring an isekai world over.
+  `mnemorph import <dir>/.isekai` to bring an isekai world over.
 - The MCP client (#48): race-scoped servers by class, the spec cache with lazy start, the cursor
   followed, slimmed and priced schemas, local argument checks, ranked offers, the ledger's
   learning.
 - The first MCP benchmark, simple and repeatable: the same servers (a large one, such as GitHub,
-  and two small ones) and the same scripted tasks, run through Tempest and through maki. Measured:
+  and two small ones) and the same scripted tasks, run through Mnemorph and through maki. Measured:
   tokens of tool specs shown to the model, tokens loaded on demand, session start time, time to
   the first tool call, calls that picked the wrong tool or failed on arguments, and total
   weighted tokens per task.
 
 **Exit:** this very repository's isekai world imports cleanly; the MCP benchmark's table is in the
-book, and Tempest matches or beats maki on spec tokens shown and on start time — or the page says
+book, and Mnemorph matches or beats maki on spec tokens shown and on start time — or the page says
 plainly where it does not.
 
 ### M14 — 1.0 · S
 
 - Signed release binaries, npm distribution, installer, changelog, the decks.
 
-**Exit:** a fresh machine installs and runs Tempest in under two minutes.
+**Exit:** a fresh machine installs and runs Mnemorph in under two minutes.
 
 ## The rules of the road
 
@@ -271,5 +271,5 @@ plainly where it does not.
 - Nothing is ported without its test: read the isekai source, transcribe its tests as fixtures,
   then write the Rust.
 - Every lesson in [lessons](lessons.md) is enforced in the milestone it names.
-- isekai keeps living; Tempest never edits it. Lessons flow from it as reading, never as code
+- isekai keeps living; Mnemorph never edits it. Lessons flow from it as reading, never as code
   copied blind.

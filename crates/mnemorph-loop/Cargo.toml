@@ -1,0 +1,20 @@
+[package]
+name = "mnemorph-loop"
+description = "The loop: the six beats of a turn, budgets as readings, the journal and resume."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+mnemorph-world = { path = "../mnemorph-world" }
+mnemorph-provider = { path = "../mnemorph-provider" }
+mnemorph-tools = { path = "../mnemorph-tools" }
+mnemorph-ledger = { path = "../mnemorph-ledger" }
+mnemorph-memory = { path = "../mnemorph-memory" }
+mnemorph-races = { path = "../mnemorph-races" }
+mnemorph-wire = { path = "../mnemorph-wire" }
+
+[lints]
+workspace = true

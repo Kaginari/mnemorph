@@ -4,7 +4,8 @@
 |---|---|
 | `portraits/` | one icon per race and ascended form: `<race>.png` (256 px), `<race>@64.png`, `<race>@32.png`, transparent |
 | `cards/` | card art per race, cropped to the frame, transparent corners; `back.png` is the card back |
-| `source/` | the generated grids the crops were cut from |
+| `brand/` | the project's own marks: `banner.jpg` (the README), `social-preview.jpg` (1280×640, GitHub's link card), `mnemorph-icon.png` and its sizes (the emblem: the dragon and the crowned slime, transparent), `favicon.ico` |
+| `source/` | the generated images the crops were cut from |
 
 Generated from image-model briefs; the cards' brief is [race-cards-prompt](../docs/race-cards-prompt.md). Missing: the Oni and Arch Dark Elf cards.
 The source grids are low resolution (cards ≈ 245 × 395, icons ≈ 250 px): enough for the CLI and

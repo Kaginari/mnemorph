@@ -6,7 +6,7 @@ body:
     id: saw
     attributes:
       label: What happened
-      description: Commands, output, versions (`tempestd --version`).
+      description: Commands, output, versions (`mnemorphd --version`).
     validations:
       required: true
   - type: textarea
