@@ -41,7 +41,6 @@ export default withMermaid(
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
-            { text: 'Race icons prompts', link: '/race-icons-prompt' },
           ],
         },
       ],
