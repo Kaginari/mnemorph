@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     P["👁️ perceive<br/>budget · clock · context"] --> RC["📚 recall<br/>memories · tool manifest"]
@@ -19,6 +21,14 @@ flowchart LR
     G -->|pass| DONE(["report up"])
     G -->|fail, retries left| P
     G -->|fail, none left| FAIL(["FAIL up"])
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class P,RC,PL,A,VF,REC step
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class G gate
+    classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
+    class DONE good
+    classDef bad fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#450a0a
+    class FAIL bad
 ```
 
 ## In plain words
@@ -48,6 +58,8 @@ If it fails, the body gets one chance to fix it. Then the report goes up.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 sequenceDiagram
     autonumber
@@ -58,20 +70,28 @@ sequenceDiagram
     participant T as territory
     participant H as human gate
     participant X as sandboxed tool
+    rect rgba(2,132,199,0.10)
     M->>L: tool_use(bash, "git push origin feat/x")
     L->>C: classify
     C-->>L: outward
     L->>R: is outward on this race's shelf?
+    end
     alt not a Kijin
+      rect rgba(220,38,38,0.10)
       R-->>L: refused — "route to kijin-forge"
       L-->>M: tool_result(error, the route)
+      end
     else Kijin
       L->>T: inside its post?
+      rect rgba(212,175,55,0.22)
       L->>H: plan of the act (or a covering Oni envelope)
       H-->>L: yes
+      end
+      rect rgba(22,163,74,0.13)
       L->>X: run, secrets injected, outputs redacted
       X-->>L: result
       L-->>M: tool_result
+      end
     end
 ```
 

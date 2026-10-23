@@ -11,6 +11,8 @@ stronger, and which of its ideas Tempest takes. It describes maki as of v0.5.5.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     subgraph maki["maki — one lean loop"]
@@ -38,6 +40,14 @@ flowchart LR
     M5 -->|#42| T7
     M7 -->|#45| D
     M8 -->|#44 solo path| D
+    classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
+    class M1,M2,M3,M4,M5,M6,M7,M8 outside
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class T4,T5,T7,T8 step
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class D gate
+    style maki fill:#f8fafc,stroke:#94a3b8
+    style tempest fill:#f0f9ff,stroke:#3FA9F5
 ```
 
 ## In plain words

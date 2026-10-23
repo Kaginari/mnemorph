@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart TD
     CAP["💰 your caps<br/>month · day · session"] --> SES["session envelope"]
@@ -21,6 +23,24 @@ flowchart TD
     E -. "spend" .-> L
     R -. "spend" .-> L
     L --> M["📊 meters<br/>status line · board"]
+    classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
+    class CAP human
+    classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
+    class SES,L store
+    classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
+    class R throne
+    classDef elf fill:#dcf3e6,stroke:#2FA36B,stroke-width:2px,color:#0b2a1a
+    class E elf
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class K kijin
+    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:2px,color:#22114a
+    class D dark
+    classDef orc fill:#f8e8d2,stroke:#C9822B,stroke-width:2px,color:#3a2408
+    class O orc
+    classDef slime fill:#d6f5f1,stroke:#19C3B0,stroke-width:2px,color:#06302b
+    class S slime
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class M step
 ```
 
 ## In plain words

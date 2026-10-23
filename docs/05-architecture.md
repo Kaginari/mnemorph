@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart TB
     subgraph ts["TypeScript — packages/"]
@@ -44,6 +46,14 @@ flowchart TB
     end
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER
+    classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
+    class CLI,BOARD,SDK,PROTO ts
+    classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
+    class SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM rs
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class SANDBOX gate
+    style ts fill:#fdf2f8,stroke:#db2777
+    style rs fill:#fff7ed,stroke:#ea580c
 ```
 
 ## In plain words
@@ -127,6 +137,8 @@ never routed around.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     T["tool call"] --> P{"policy for<br/>this race + soil"}
@@ -136,6 +148,14 @@ flowchart LR
     NET -- "anyone else" --> DENY["no network namespace"]
     P --> SC["seccomp: no ptrace, mount,<br/>keyctl, bpf"]
     P --> ENV["env: secrets by name,<br/>outputs redacted"]
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class T,P,NET step
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class FS,SC,ENV gate
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class ALLOW kijin
+    classDef bad fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#450a0a
+    class DENY bad
 ```
 
 - Linux: landlock (filesystem) and seccomp (syscalls) always. Network isolation for every
