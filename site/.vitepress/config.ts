@@ -40,6 +40,7 @@ export default withMermaid(
           text: 'Reference',
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
+            { text: 'Study: maki', link: '/study-maki' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
           ],
         },
