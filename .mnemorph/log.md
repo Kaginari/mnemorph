@@ -428,3 +428,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** the sheet has no Oni — Oni and Veldora keep their portraits from the first grid
   until a matching hexagon exists.
+
+---
+
+### [2026-10-24T01:13:09+02:00] rimuru — the race cards, drawn from the law
+- **Task:** Veldora asked for race cards — a Gemini prompt, or made here from the new icons.
+  Made here: an image model cannot hold the frame's geometry or spell the words, and the brief
+  already said the frame and text come from the race law.
+- **Files:** tools/cards.py (draws 13 cards at 2x, saves 600x840: frame in the race's colour, tier
+  gems, name, epithet, duty, the six tool classes with the held ones lit, soil, the rise or
+  command line, the meter and its ok line), assets/cards/ (Veldora, the six races, the five
+  ascended forms, the back), assets/fonts/ (Cinzel, Rajdhani, OFL), docs/race-cards-prompt.md,
+  assets/README.md.
+- **Gate:** n/a. Instruments: the whole set previewed side by side; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** Pillow here is 7.0 — no `rounded_rectangle`, no `getbbox`: rounded shapes are
+  masks, text is measured with `getsize`. Oni's art is still the old portrait; a hexagon Oni
+  would make the set uniform.
