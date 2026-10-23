@@ -41,7 +41,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
-### [2026-10-24T21:15:00+02:00] rimuru — M0 foundations: the workspaces, the check, the world seeded
+### [2026-10-23T21:07:00+02:00] rimuru — M0 foundations: the workspaces, the check, the world seeded
 - **Task:** Veldora: crop the generated cards and icons, put the project on GitHub under Kaginari
   with milestones, and start building step by step.
 - **Files:** assets/ (portraits 256/64/32 transparent, cards, source grids); GitHub Kaginari/tempest
@@ -60,3 +60,5 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     transcript (or Tempest's own ledger from M6) — record the day total and say what it includes.
   - The cards grid drew its third row larger than the first two; crops keep each card as drawn
     rather than stretch it.
+- **Correction:** the two entries above this one carry guessed clock stamps (21:30 and 23:10);
+  both were written earlier on 2026-10-23, before 21:07. Stamps are read from the clock from here on.
