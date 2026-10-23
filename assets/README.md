@@ -13,7 +13,9 @@ the board's small sizes; the full-size card view waits for higher-resolution ren
 
 ## The race icons
 
-Cropped from `source/icons-grid.png` to `portraits/` (256, 64 and 32 px, transparent).
+Cut to `portraits/` (256, 64 and 32 px, transparent): the races and ascended forms from the
+hexagons of `source/race-icons.jpg`; Oni and Veldora, which that sheet lacks, from
+`source/icons-grid.png`.
 
 | <img src="portraits/slime@64.png" width="64" alt="Slime"> | <img src="portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="portraits/elf@64.png" width="64" alt="Elf"> | <img src="portraits/orc@64.png" width="64" alt="Orc"> | <img src="portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
