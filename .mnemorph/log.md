@@ -415,3 +415,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Replacing text baked into generated art works: inpaint the gold strokes (OpenCV Telea),
     blur the patch, a dark wash, then set the new mark in Cinzel with a gold ramp. Cleaner than
     asking the image model again, and the name can change once more for free.
+
+---
+
+### [2026-10-24T01:06:52+02:00] rimuru — new race icons and a new banner
+- **Task:** Veldora generated a cuter race-icon sheet (ten hexagons) and a new banner (the cast in
+  a digital city, the emblem and MNEMORPH in the corner) and asked to use them.
+- **Files:** assets/portraits/ (ten races and ascended forms, cut with a hexagonal mask, 256/64/32),
+  assets/brand/{banner,social-preview}.jpg, assets/source/{banner,race-icons}.jpg,
+  assets/README.md.
+- **Gate:** n/a. Instruments: every icon previewed on dark and light, at 64 and 32 px.
+- **Result:** in review as a pull request.
+- **Learned:** the sheet has no Oni — Oni and Veldora keep their portraits from the first grid
+  until a matching hexagon exists.
