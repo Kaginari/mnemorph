@@ -47,46 +47,81 @@ the price.
 One JSON line per model call in `.tempest/instruments/usage.jsonl`:
 
 ```json
-{"ts":"…","session":"…","run":"…","body":"slime-wire","race":"slime","commission":"c-17",
- "model":"…","provider":"anthropic","input":5580,"output":112,"cacheRead":4096,
- "cacheWrite":0,"usd":0.0041,"envelope":{"left":54888,"of":60000}}
+{"ts":"2026-10-23T19:07:00Z","session":"…","run":"…","body":"slime-wire","race":"slime",
+ "commission":"c-17","model":"…","provider":"anthropic","input":5580,"output":112,
+ "cacheRead":4096,"cacheWrite":0,"prefix":3900,"wt":6700,"usd":0.0041,
+ "envelope":{"left":54888,"of":60000}}
 ```
 
-Prices come from a versioned table shipped with the binary (`prices.toml`), overridable per
-provider in config; a model with no known price records `usd: null` and the meter says
-*unpriced*, never zero.
+`prefix` is the part of the input that was the fixed per-session prompt (law, race card,
+creature card, manifests): the cost every turn carries before it does any work, folded on its own
+line (`prefixShare`) so a growing law shows up as a number, not a feeling. The journal is
+append-only: one row per line, appended and synced before the call returns (a new journal's
+directory is synced too). A torn last line is closed before the next row is written, and is
+skipped and reported when the journal is read back, never fatal; a byte-order mark is ignored.
+
+Two meters, one implementation each, never confused:
+
+- **occupancy** — how full the window was at the last call: that call's `input + cacheRead +
+  cacheWrite`. A reading, not a sum; the stress zone reads it.
+- **spend** — every class of every call, summed. Budgets and caps read it, in weighted tokens.
+
+Prices are `[models."<id>"]` tables in TOML — `input`, `output`, `cache-read` and `cache-write`,
+all four required, in dollars per million tokens — layered model by model from the binary's table
+and config (a config row replaces the whole row). The cache prices are never derived from the
+input price: the read multiple differs by model, a tenth on some and a twentieth or less on the
+newest. Tempest uses the 5-minute cache only; the providers (M3) refuse a reply that reports
+1-hour cache writes, whose price is different again. A missing or misspelt key or a negative
+price refuses the table. A model with no price records
+`usd: null` and the meter says *unpriced*, never zero; its weighted tokens still count, with an
+output ratio of 5. The binary's own table is filled with the providers (M3), from each provider's
+published prices — never guessed.
 
 ### The unit: weighted tokens
 
 A budget counts what a call really costs, not how long its context is. Re-sent context served
-from the cache costs a tenth, so counting raw context would kill a body after a few calls while
+from the cache costs about a tenth of fresh input (less on the newest models), so counting raw
+context would kill a body after a few calls while
 it was spending almost nothing. The unit is the **weighted token** (wt):
 
 ```
 wt = uncached_input + 1.25 × cache_write + 0.1 × cache_read + r × output
 ```
 
-where `r` is the model's output-to-input price ratio from `prices.toml` (5 when unknown).
+where `r` is the model's output-to-input price ratio from the price table (5 when the model is
+unpriced, or priced with free output — output is never free in weighted tokens). The weights are
+fixed on purpose: wt is a budget unit, the same for every model, and dollars are the exact view.
+It is computed in integers and rounded up.
 Currency caps convert through the same table; a model with no known price is still bounded in wt.
 
 ### Envelopes
 
-- **Caps:** `budget.month`, `budget.day`, `budget.session`, in wt and/or currency. A fold over
-  the ledger enforces month and day across sessions.
+- **Caps:** `budget.month`, `budget.day`, `budget.session`, in weighted tokens. A fold over the
+  journal enforces the UTC month and day across sessions; the dollar view of the same rows is a
+  fold, shown beside it, never the limit (an unpriced model would slip under a dollar cap).
 - **Only cost is carved.** Steps and the wall clock pass down whole, per race
   ([the loop](03-loop.md#budgets-are-readings)); splitting them would leave the Slime — the only
   body that writes code — a handful of steps.
 - **Carving follows the plan.** A parent splits its envelope across its plan's open items by
   their declared weight (default equal), keeping a 10% reserve for itself. Each race has a
-  compiled **maximum** share (Elf 60%, Orc 60%, Slime 70%, Kijin 30%, Dark Elf 40%) — a ceiling,
-  never a default — so parallel children cannot together exceed what the parent holds.
+  compiled **maximum** share of what the parent has left when it carves (Elf 60%, Orc 60%,
+  Slime 70%, Kijin 30%, Dark Elf 40%) — a ceiling, never a default — and the slices together
+  never exceed what the parent holds.
 - **The challenge reserve.** 10% of the session envelope is reserved for the automatic Dark Elf
-  challenges; it cannot be carved for anything else.
-- **Pre-flight.** Before each model call the core estimates the call in wt (cached prefix at the
-  cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit `envelope.left`,
-  the loop checkpoints with `@? budget: need ~N wt, have M wt`. The parent can grant from its own
-  envelope (`@INSTRUCT` with a new budget), split the work, or escalate to the human.
-- Unspent slices return to the parent when the child reports.
+  challenges; it cannot be carved for anything else. Each challenge draws a quarter of the
+  reserve's full size (or what remains), and what it does not spend goes back to the reserve.
+- **Pre-flight.** Before each model call the core estimates the call in wt (`estimate`: cached
+  prefix at the cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit
+  what is left, the loop checkpoints with `@? budget: need ~N wt, have M wt`. The parent can top
+  up the child's slice from its own envelope (`@INSTRUCT` with a new budget), split the work, or
+  escalate to the human.
+- **Spend is recorded, never refused after the fact.** Pre-flight is the guard; when a call
+  costs more than its estimate, the real cost is booked and the envelope reads *overspent*.
+- Unspent slices return to the parent when the child reports; what the child spent counts as the
+  parent's spend. A slice settles once, and only with the envelope that carved it — a replayed or
+  stray report is refused and leaves the books alone. Envelopes and open slices serialise whole, so
+  a checkpointed run resumes with the same books.
+- Caps are read by folding the journal once per turn, not per call.
 - At 80% of any cap the human sees a warning; at 100% the session stops new commissions and
   finishes the current turn's report.
 
