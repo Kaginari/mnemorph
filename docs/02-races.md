@@ -236,7 +236,7 @@ Kijin hold one of five **posts**, also compiled in (`tempest_races::Post`):
 | `kijin-release` | the smith | changelog, versioning, release config, installers | build artifacts; tag pushes and registry publishes (both `destructive`) |
 | `kijin-deploy` | the commander | deploy manifests, environments | deploy, verify health, roll back |
 | `kijin-forge` | the shrine keeper of records | PR templates, issue templates | push branches, open and update PRs, comment, label, read issues |
-| `kijin-scout` | the shadow | `.tempest/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
+| `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.tempest/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
 
 - **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:

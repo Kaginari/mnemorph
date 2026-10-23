@@ -156,7 +156,8 @@ pub enum Post {
     Deploy,
     /// Forge: pushes branches, opens and updates pull requests, reads issues.
     Forge,
-    /// Scout: keeps the advisory mirror and watches upstream releases.
+    /// Scout: keeps the advisory mirror, watches upstream releases, and is agent-mcp — the MCP
+    /// catalog's curator and the conduit of every MCP call.
     Scout,
 }
 
