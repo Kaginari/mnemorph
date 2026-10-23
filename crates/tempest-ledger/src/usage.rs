@@ -32,19 +32,38 @@ impl std::ops::Add for Usage {
 /// Weighted tokens: what a call costs, in input-token equivalents.
 ///
 /// `wt = uncached input + 1.25 × cache write + 0.1 × cache read + ratio × output`, where `ratio`
-/// is the model's output-to-input price ratio. Rounded up, so a call is never free.
+/// is the model's output-to-input price ratio. Computed in integers (the ratio to a thousandth)
+/// and rounded up, so a call is never free and the same call always weighs the same.
 #[must_use]
 pub fn wt(u: Usage, output_ratio: f64) -> u64 {
-    // Hundredths, in integers, for the fixed weights; the ratio is the one float.
-    let fixed =
-        100 * u128::from(u.input) + 125 * u128::from(u.cache_write) + 10 * u128::from(u.cache_read);
-    #[allow(clippy::cast_precision_loss)]
-    let out = (u.output as f64) * output_ratio.max(0.0) * 100.0;
-    #[allow(clippy::cast_precision_loss)]
-    let hundredths = fixed as f64 + out;
+    // Thousandths throughout: 1 000 per input token, 1 250 per cache write, 100 per cache read.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let whole = (hundredths / 100.0).ceil() as u64;
-    whole
+    let ratio = if output_ratio.is_finite() {
+        (output_ratio.max(0.0) * 1000.0).round() as u128
+    } else {
+        0
+    };
+    let thousandths = 1000 * u128::from(u.input)
+        + 1250 * u128::from(u.cache_write)
+        + 100 * u128::from(u.cache_read)
+        + ratio * u128::from(u.output);
+    u64::try_from(thousandths.div_ceil(1000)).unwrap_or(u64::MAX)
+}
+
+/// A call's weight before it is made, for pre-flight: the cached prefix at the cache-read weight,
+/// the rest of the input uncached, the whole `max_output` at the model's ratio. One
+/// implementation, so the loop never re-derives it.
+#[must_use]
+pub fn estimate(cached_prefix: u64, rest: u64, max_output: u64, output_ratio: f64) -> u64 {
+    wt(
+        Usage {
+            input: rest,
+            output: max_output,
+            cache_read: cached_prefix,
+            cache_write: 0,
+        },
+        output_ratio,
+    )
 }
 
 /// Context occupancy: how full the window was at the last call — its whole input, cached or
@@ -86,6 +105,38 @@ mod tests {
             "never free"
         );
         assert_eq!(wt(Usage::default(), 5.0), 0);
+        assert_eq!(
+            wt(
+                Usage {
+                    output: 10,
+                    ..Usage::default()
+                },
+                1.1
+            ),
+            11,
+            "no float round-up"
+        );
+        assert_eq!(
+            wt(
+                Usage {
+                    output: 100,
+                    ..Usage::default()
+                },
+                0.07
+            ),
+            7
+        );
+        assert_eq!(
+            wt(
+                Usage {
+                    output: 1,
+                    ..Usage::default()
+                },
+                f64::NAN
+            ),
+            0
+        );
+        assert_eq!(estimate(10_000, 500, 1_000, 5.0), 1_000 + 500 + 5_000);
         assert_eq!(
             wt(
                 Usage {

@@ -15,9 +15,12 @@ mod usage;
 
 pub use caps::{CapReading, Caps, check_caps};
 pub use clock::{Day, Timestamp};
-pub use envelope::{BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, Slice};
+pub use envelope::{
+    BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Slice,
+    TopUpError,
+};
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};
 pub use prices::{DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};
 pub use row::{EnvelopeReading, UsageRow};
-pub use usage::{Usage, occupancy, spend, wt};
+pub use usage::{Usage, estimate, occupancy, spend, wt};

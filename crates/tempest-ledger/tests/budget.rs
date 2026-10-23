@@ -2,7 +2,7 @@
 //! the folds match numbers computed by hand.
 
 use proptest::prelude::*;
-use tempest_ledger::{Envelope, Item, Key, Timestamp, Usage, UsageRow, fold, wt};
+use tempest_ledger::{Envelope, Item, Key, Slice, Timestamp, Usage, UsageRow, fold, wt};
 use tempest_races::Race;
 
 /// One step of a random commission tree.
@@ -10,101 +10,109 @@ use tempest_races::Race;
 enum Step {
     /// The body spends a call's worth, through pre-flight.
     Spend(u64),
-    /// The body carves a plan of items for children of these races and weights, then runs each
-    /// child's own steps (in parallel: all slices are carved before any child spends).
-    Plan(Vec<(Race, u32, Vec<Step>)>),
-    /// The session draws an automatic challenge and spends in it.
+    /// A call that cost more than its estimate: recorded without pre-flight.
+    Overspend(u64),
+    /// The body carves a plan, then runs each child's own steps — in parallel: every slice is
+    /// carved before any child spends. Each item: (which commanded race, weight, child steps).
+    Plan(Vec<(usize, u32, Vec<Step>)>),
+    /// An automatic challenge (only the session holds a reserve; elsewhere it draws nothing).
     Challenge(u64),
-}
-
-fn child_race(parent: Race) -> Race {
-    match parent {
-        Race::Rimuru => Race::Elf,
-        Race::Elf => Race::Orc,
-        _ => Race::Slime,
-    }
 }
 
 fn steps(depth: u32) -> BoxedStrategy<Vec<Step>> {
     let leaf = prop_oneof![
-        (1u64..20_000).prop_map(Step::Spend),
-        (1u64..5_000).prop_map(Step::Challenge),
+        6 => (1u64..20_000).prop_map(Step::Spend),
+        1 => (1u64..50_000).prop_map(Step::Overspend),
+        2 => (1u64..5_000).prop_map(Step::Challenge),
     ];
     if depth == 0 {
         return prop::collection::vec(leaf, 0..4).boxed();
     }
-    let plan = prop::collection::vec((1u32..5, steps(depth - 1)), 1..4).prop_map(|items| {
-        Step::Plan(
-            items
-                .into_iter()
-                .map(|(w, s)| (Race::Slime, w, s))
-                .collect(),
-        )
-    });
+    let plan =
+        prop::collection::vec((0usize..6, 0u32..5, steps(depth - 1)), 1..4).prop_map(Step::Plan);
     prop::collection::vec(prop_oneof![3 => leaf, 1 => plan], 0..5).boxed()
 }
 
-/// Runs a body's steps; returns how many commissions ran under it. Asserts on the way.
-fn run(
-    env: &mut Envelope,
-    race: Race,
-    steps: &[Step],
-    session: &mut Option<&mut Envelope>,
-    count: &mut u32,
-) {
+/// The books kept beside the envelopes, to check them.
+#[derive(Default)]
+struct Witness {
+    recorded: u64,
+    overspends: u32,
+    commissions: u32,
+    races: std::collections::BTreeSet<Race>,
+}
+
+fn run(env: &mut Envelope, race: Race, steps: &[Step], w: &mut Witness) {
     for step in steps {
         match step {
             Step::Spend(n) => {
                 if env.preflight(*n).is_ok() {
                     env.record(*n);
+                    w.recorded += n;
                 }
             }
+            Step::Overspend(n) => {
+                env.record(*n);
+                w.recorded += n;
+                w.overspends += 1;
+            }
             Step::Challenge(n) => {
-                if let Some(session) = session.as_deref_mut()
-                    && let Some(slice) = session.challenge()
-                {
-                    let mut child = Envelope::child(slice);
+                if let Some(slice) = env.challenge() {
+                    let mut child = Envelope::child(&slice);
                     if child.preflight(*n).is_ok() {
                         child.record(*n);
+                        w.recorded += n;
                     }
-                    assert!(!child.overspent());
-                    session.settle(slice, child.spent());
+                    env.settle(slice, child.spent())
+                        .expect("its own open slice");
                 }
             }
             Step::Plan(items) => {
-                if *count >= 50 {
+                let kids = race.commands();
+                if kids.is_empty() || w.commissions >= 50 {
                     continue;
                 }
-                let kid = child_race(race);
                 let left_before = env.left();
                 let plan: Vec<Item> = items
                     .iter()
-                    .map(|(_, w, _)| Item {
-                        race: kid,
-                        weight: *w,
+                    .map(|(k, weight, _)| Item {
+                        race: kids[k % kids.len()],
+                        weight: *weight,
                     })
                     .collect();
                 let slices = env.carve(&plan);
-                let carved: u64 = slices.iter().map(|s| s.of).sum();
-                assert!(carved <= left_before, "carved {carved} of {left_before}");
-                if left_before >= 1_000 {
+                let carved: u64 = slices.iter().map(Slice::of).sum();
+                assert!(
+                    carved * 100 <= left_before * 90 + 100,
+                    "carved {carved} of {left_before}"
+                );
+                for (slice, item) in slices.iter().zip(&plan) {
                     assert!(
-                        slices.iter().all(|s| s.of > 0),
-                        "a weighted item starved: {slices:?}"
+                        slice.of() * 100 <= left_before * u64::from(item.race.max_share()),
+                        "{item:?} over its ceiling"
+                    );
+                    if item.weight == 0 {
+                        assert_eq!(slice.of(), 0, "weight 0 gets nothing");
+                    } else if left_before >= 10_000 {
+                        assert!(slice.of() > 0, "a weighted item starved: {item:?}");
+                    }
+                    w.races.insert(item.race);
+                }
+                let mut children: Vec<Envelope> = slices.iter().map(Envelope::child).collect();
+                for (child, ((_, _, sub), item)) in children.iter_mut().zip(items.iter().zip(&plan))
+                {
+                    w.commissions += 1;
+                    let before = child.left();
+                    run(child, item.race, sub, w);
+                    assert!(
+                        child.challenge().is_none() || before == 0,
+                        "a child holds no reserve"
                     );
                 }
-                // Parallel: every slice is out before any child spends.
-                let mut children: Vec<Envelope> =
-                    slices.iter().map(|s| Envelope::child(*s)).collect();
-                for (child, (_, _, sub)) in children.iter_mut().zip(items) {
-                    *count += 1;
-                    run(child, kid, sub, &mut None, count);
-                    assert!(!child.overspent(), "a child spent past its slice");
-                }
                 for (slice, child) in slices.into_iter().zip(children) {
-                    env.settle(slice, child.spent());
+                    env.settle(slice, child.spent())
+                        .expect("its own open slice");
                 }
-                assert!(!env.overspent());
             }
         }
     }
@@ -114,16 +122,46 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
     #[test]
-    fn no_envelope_is_ever_exceeded(of in 0u64..2_000_000, tree in steps(3)) {
+    fn the_books_balance_and_hold(of in 0u64..2_000_000, tree in steps(3)) {
         let mut session = Envelope::session(of);
-        let mut count = 0;
-        let mut work = session.clone();
-        // The session's own steps run on the session envelope; challenges draw on its reserve.
-        run(&mut work, Race::Rimuru, &tree, &mut Some(&mut session), &mut count);
-        prop_assert!(!work.overspent());
-        prop_assert!(work.spent() <= of);
-        prop_assert!(!session.overspent());
-        prop_assert!(count <= 52, "{count} commissions");
+        let mut w = Witness::default();
+        run(&mut session, Race::Rimuru, &tree, &mut w);
+        // Every weighted token recorded anywhere reaches the session, once.
+        prop_assert_eq!(session.spent(), w.recorded);
+        if w.overspends == 0 {
+            prop_assert!(session.spent() <= of, "{} of {}", session.spent(), of);
+            prop_assert!(!session.overspent());
+        }
+        prop_assert_eq!(session.left() + session.spent() <= of || w.overspends > 0, true);
+        prop_assert!(w.commissions <= 52, "{} commissions", w.commissions);
+    }
+}
+
+#[test]
+fn the_generator_reaches_every_ceiling() {
+    use proptest::strategy::ValueTree;
+    use proptest::test_runner::TestRunner;
+    let mut runner = TestRunner::deterministic();
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..200 {
+        let tree = steps(3).new_tree(&mut runner).unwrap().current();
+        let mut w = Witness::default();
+        run(
+            &mut Envelope::session(2_000_000),
+            Race::Rimuru,
+            &tree,
+            &mut w,
+        );
+        seen.extend(w.races);
+    }
+    for race in [
+        Race::Elf,
+        Race::Kijin,
+        Race::DarkElf,
+        Race::Orc,
+        Race::Slime,
+    ] {
+        assert!(seen.contains(&race), "{race} is never carved for: {seen:?}");
     }
 }
 

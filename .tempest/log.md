@@ -211,3 +211,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The binary ships no guessed prices: a wrong price is worse than *unpriced*. M3 fills the
     table from the providers' published pages.
   - A dollar cap is the wrong limit while unpriced models exist; caps count weighted tokens.
+
+---
+
+### [2026-10-23T22:43:07+02:00] rimuru — M2 closed after a fresh Fable review
+- **Task:** close M2: the milestone's Fable review (13 findings) and its fixes; Veldora also asked
+  for a study of the maki harness (filed as #38–#45: six ideas on their milestones, two decisions).
+- **Files:** envelope.rs (slices move-only, stamped with their issuer and number, settled once —
+  a replay or a stray slice is refused and the books untouched; `top_up`/`grant`; saturating
+  arithmetic; envelopes and slices serialise for resume), usage.rs (integer weighted tokens,
+  `estimate` for pre-flight), prices.rs (all four prices required; free output still weighs),
+  clock.rs (digits only), journal.rs (one handle, the directory synced on creation, a BOM
+  ignored; concurrent appenders and error paths tested), tests/budget.rs (no cloned envelope:
+  every recorded token is counted beside the books and must reach the session once; overspends;
+  races drawn from what each parent commands; weight 0; a test that the generator reaches every
+  ceiling), the book (06, 02), race.rs doc. M3 issue #5 notes the pricing duties.
+- **Gate:** n/a. Instruments: 30 ledger tests, 82 in the workspace; clippy pedantic; `just check`.
+- **Result:** in review as #37.
+- **Learned:**
+  - A `Copy` handle to something that must come back once is a double-return waiting for a
+    replayed report; make it move-only and stamp it with its issuer.
+  - A test that clones state to please the borrow checker loses every invariant that spans the
+    two copies — the property "spend never passes the session" was never checked.
+  - Cache prices differ by model (a twentieth, a fortieth on the newest); a derived default is a
+    guess, so the table states them.

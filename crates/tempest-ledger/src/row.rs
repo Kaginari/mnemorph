@@ -120,7 +120,10 @@ mod tests {
 
     #[test]
     fn priced_and_unpriced() {
-        let prices = Prices::parse("[models.\"model-a\"]\ninput = 3.0\noutput = 15.0").unwrap();
+        let prices = Prices::parse(
+            "[models.\"model-a\"]\ninput = 3.0\noutput = 15.0\ncache-read = 0.3\ncache-write = 3.75",
+        )
+        .unwrap();
         let r = row().priced(&prices);
         assert_eq!(r.wt, wt(r.usage, 5.0));
         assert!(r.usd.is_some_and(|u| u > 0.0));

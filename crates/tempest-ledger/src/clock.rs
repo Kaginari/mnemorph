@@ -52,6 +52,10 @@ impl Timestamp {
         if bytes.len() != 20 || shape.iter().any(|&(at, sep)| bytes[at] != sep) {
             return None;
         }
+        // Every other position is a digit: no sign, no space, no `+202`.
+        if (0..20).any(|at| !shape.iter().any(|&(s, _)| s == at) && !bytes[at].is_ascii_digit()) {
+            return None;
+        }
         let num = |range: std::ops::Range<usize>| text.get(range)?.parse::<i64>().ok();
         let (year, month, mday) = (num(0..4)?, num(5..7)?, num(8..10)?);
         let (hour, minute, second) = (num(11..13)?, num(14..16)?, num(17..19)?);
@@ -185,6 +189,10 @@ mod tests {
             "2026-10-23T23:60:00Z",
             "2026-10-23T23:59:60Z",
             "2026-1x-23T23:59:59Z",
+            "+202-10-23T19:07:00Z",
+            "2026-10-23T+9:07:00Z",
+            "2026-10-23T 9:07:00Z",
+            "-001-01-01T00:00:00Z",
             "",
         ] {
             assert_eq!(Timestamp::parse(bad), None, "{bad}");
