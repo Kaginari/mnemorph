@@ -10,7 +10,7 @@ check:
     #!/usr/bin/env bash
     set -euo pipefail
     before=$(git status --porcelain --untracked-files=all)
-    just rust ts layers docs workflows
+    just rust law ts layers docs workflows
     after=$(git status --porcelain --untracked-files=all)
     if [ "$before" != "$after" ]; then
         echo "the check changed the tree:"
@@ -24,6 +24,10 @@ rust:
     cargo clippy --workspace --all-targets -- -D warnings
     cargo nextest run --workspace --no-tests=pass
     cargo deny check
+
+# The race law is covered whole: every region of tempest-races runs under its tests.
+law:
+    cargo llvm-cov -p tempest-races --fail-under-regions 100 --summary-only
 
 # TypeScript: Biome, types, tests.
 ts:

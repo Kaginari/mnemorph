@@ -19,7 +19,7 @@ code, not configuration.
 | Tool | Version | Install |
 |---|---|---|
 | Rust | pinned in `rust-toolchain.toml` | [rustup](https://rustup.rs) — the pin installs itself |
-| cargo-nextest, cargo-deny | latest | prebuilt: [nexte.st](https://nexte.st), [cargo-deny releases](https://github.com/EmbarkStudios/cargo-deny/releases) |
+| cargo-nextest, cargo-deny, cargo-llvm-cov | latest | prebuilt: [nexte.st](https://nexte.st), [cargo-deny releases](https://github.com/EmbarkStudios/cargo-deny/releases) |
 | just | latest | [just.systems](https://just.systems) |
 | actionlint | latest | [releases](https://github.com/rhysd/actionlint/releases) |
 | Node | 22 (`.nvmrc`) | your usual Node manager |
