@@ -13,6 +13,8 @@ Two different conversations happen in Tempest, and they speak different language
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 sequenceDiagram
     autonumber
@@ -22,6 +24,7 @@ sequenceDiagram
     participant O as 🪓 orc-engine
     participant S as 💧 slime-wire
     participant G as 🚪 gate
+    rect rgba(63,169,245,0.14)
     V->>R: "the wire should read @W lines into Report.Wrote"
     R->>R: shape the ask · plan
     R->>E: @ASK draft +unsaid · @BUDGET 200k wt · the ask
@@ -30,12 +33,17 @@ sequenceDiagram
     O->>O: write the verify line on slime-wire's doc
     O->>S: @ASK draft +unsaid · @BUDGET 60k wt
     S->>S: edit wire/, its test, its doc
+    end
+    rect rgba(217,119,6,0.16)
     S->>G: end of turn
     G-->>S: pass → log.md
+    end
+    rect rgba(22,163,74,0.13)
     S-->>O: @S DONE · @F wire/parse.rs:88 · @U territory … · @E
     O-->>E: @S DONE · @V landing holds · @E
     E-->>R: @S DONE · lane verdict · @E
     R-->>V: "Done — @W lines now fill Report.Wrote, tested in wire/parse.rs."
+    end
 ```
 
 ## In plain words
@@ -128,6 +136,8 @@ that never loses what must stay.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart TD
     Q{"may A dispatch B?"} --> C0{"A High Elf, B an Orc<br/>in another lane?"}
@@ -149,6 +159,12 @@ flowchart TD
     C4 -- yes --> C5{"budget slice<br/>fits the envelope?"}
     C5 -- no --> NO5(["@? budget to parent"])
     C5 -- yes --> OK(["dispatch"])
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class Q,C0,C0a,C0b,C1,C1b,C2,C3,C4,C5 step
+    classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
+    class OK,VIA good
+    classDef bad fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#450a0a
+    class NO1,NO2,NO3,NO4,NO5 bad
 ```
 
 The return path: the child's report is the parent's tool result, headed by the exit line
@@ -163,6 +179,8 @@ and evolutions ride the report as bracketed notes.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     H(["🐉 you"]) -->|"typed while a turn runs"| Q["queue<br/>next turn, in order"]
@@ -173,6 +191,16 @@ flowchart LR
     Q --> T
     W --> T
     TQ["tempest q · the queue tool"] <--> SQ
+    classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
+    class H human
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class Q,S,W,T step
+    classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
+    class BG,R outside
+    classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
+    class SQ store
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class TQ kijin
 ```
 
 **In plain words.** A session never loses what arrives while it works. What you type during a
@@ -227,21 +255,31 @@ clients cannot drift.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 sequenceDiagram
     participant CLI as tempest CLI
     participant D as tempestd
+    rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo, capabilities}
     D-->>CLI: {world, races, budgets, version}
     CLI->>D: session/prompt {text}
+    end
+    rect rgba(63,169,245,0.14)
     D--)CLI: event/turnStarted
     D--)CLI: event/textDelta …
     D--)CLI: event/dispatch {from: rimuru, to: elf-engine}
     D--)CLI: event/usage {tokens, usd, cacheHit}
+    end
+    rect rgba(212,175,55,0.22)
     D->>CLI: gate/ask {act, class: outward, plan}
     CLI-->>D: {allow: true}
+    end
+    rect rgba(22,163,74,0.13)
     D--)CLI: event/gateVerdict {pass}
     D--)CLI: event/turnEnded {word: DONE}
+    end
 ```
 
 | Kind | Examples |
