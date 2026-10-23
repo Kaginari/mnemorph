@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
 
@@ -11,8 +12,12 @@ export default withMermaid(
     srcDir: '../docs',
     rewrites: { 'README.md': 'index.md' },
     cleanUrls: true,
+    // The race portraits are the site's public files: Rimuru is the logo and the favicon.
+    vite: { publicDir: fileURLToPath(new URL('../../assets/portraits', import.meta.url)) },
+    head: [['link', { rel: 'icon', type: 'image/png', href: '/rimuru@32.png' }]],
     lastUpdated: true,
     themeConfig: {
+      logo: '/rimuru@64.png',
       nav: [
         { text: 'Book', link: '/' },
         { text: 'Roadmap', link: '/roadmap' },
@@ -36,7 +41,6 @@ export default withMermaid(
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
-            { text: 'Race icons prompts', link: '/race-icons-prompt' },
           ],
         },
       ],

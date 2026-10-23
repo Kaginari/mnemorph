@@ -22,6 +22,19 @@ Generate in this order, so the set stays consistent:
 The designs are original: describe them as written here and never name an anime or its
 characters in the prompt.
 
+## The set so far
+
+Cropped to `assets/cards/`. Still to generate: the Oni and Arch Dark Elf cards, and every card at a
+higher resolution for the full-size view.
+
+| <img src="../assets/cards/slime.png" width="110" alt="Slime"> | <img src="../assets/cards/veldora.png" width="110" alt="Veldora"> | <img src="../assets/cards/rimuru.png" width="110" alt="Rimuru"> | <img src="../assets/cards/elf.png" width="110" alt="Elf"> | <img src="../assets/cards/orc.png" width="110" alt="Orc"> | <img src="../assets/cards/kijin.png" width="110" alt="Kijin"> |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| Slime | Veldora | Rimuru | Elf | Orc | Kijin |
+
+| <img src="../assets/cards/dark-elf.png" width="110" alt="Dark Elf"> | <img src="../assets/cards/high-elf.png" width="110" alt="High Elf"> | <img src="../assets/cards/high-orc.png" width="110" alt="High Orc"> | <img src="../assets/cards/named-slime.png" width="110" alt="Named Slime"> | <img src="../assets/cards/back.png" width="110" alt="Card back"> |
+|:---:|:---:|:---:|:---:|:---:|
+| Dark Elf | High Elf | High Orc | Named Slime | Card back |
+
 ## The art spec
 
 - **Portrait 4:5**, at least 1600 × 2000 px, PNG. (Leonardo, Midjourney and Flux all offer 4:5;

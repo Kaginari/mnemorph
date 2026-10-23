@@ -35,7 +35,7 @@ sequenceDiagram
     S-->>O: @S DONE · @F wire/parse.rs:88 · @U territory … · @E
     O-->>E: @S DONE · @V landing holds · @E
     E-->>R: @S DONE · lane verdict · @E
-    R-->>V: "Done — @W lines now fill Report.Wrote; the test is wire/parse.rs."
+    R-->>V: "Done — @W lines now fill Report.Wrote, tested in wire/parse.rs."
 ```
 
 ## In plain words
