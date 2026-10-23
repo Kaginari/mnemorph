@@ -236,8 +236,18 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 - `tempest mcp serve` (memory and law as MCP tools), a Claude Code hooks adapter (the law inside
   Claude Code: session start, pre-tool gate, stop gate, pre-compact drain), and
   `tempest import <dir>/.isekai` to bring an isekai world over.
+- The MCP client (#48): race-scoped servers by class, the spec cache with lazy start, the cursor
+  followed, slimmed and priced schemas, local argument checks, ranked offers, the ledger's
+  learning.
+- The first MCP benchmark, simple and repeatable: the same servers (a large one, such as GitHub,
+  and two small ones) and the same scripted tasks, run through Tempest and through maki. Measured:
+  tokens of tool specs shown to the model, tokens loaded on demand, session start time, time to
+  the first tool call, calls that picked the wrong tool or failed on arguments, and total
+  weighted tokens per task.
 
-**Exit:** this very repository's isekai world imports cleanly.
+**Exit:** this very repository's isekai world imports cleanly; the MCP benchmark's table is in the
+book, and Tempest matches or beats maki on spec tokens shown and on start time — or the page says
+plainly where it does not.
 
 ### M14 — 1.0 · S
 
