@@ -372,3 +372,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Gate:** n/a. Instruments: 16 diagrams parse; the site built and screenshotted (races,
   communication, overview, architecture).
 - **Result:** in review as a pull request.
+
+---
+
+### [2026-10-24T00:29:03+02:00] rimuru — the OpenAI-compatible client meets a real server
+- **Task:** Veldora gave an OpenRouter key for live tests (passed only through the test's
+  environment; never written to a file or a commit).
+- **Files:** crates/tempest-provider/tests/live_openrouter.rs (gated: a text answer and a full tool
+  round trip on a free model; a recording transport, `TEMPEST_RECORD=<dir>`, saves each response
+  body with generation ids blanked), tests/cassettes/openrouter-{text-0,tool-0,tool-1}.sse (real
+  streams), tests/cassettes.rs (replayed every run, no key), openai.rs (`cache_write_tokens` is
+  its own class), tests/review.rs (its test).
+- **Gate:** n/a. Instruments: both live tests green on `nvidia/nemotron-3.5-lightning:free`
+  (30/111 tokens; 299/42 then 375/22); 39 provider tests; clippy; no key in any cassette (a test
+  guards it).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The free model isekai used (`nemotron-3-super-120b-a12b:free`) is gone: OpenRouter answers 404
+    "Provider returned error" — the client read it right, non-retryable. Free models churn: the
+    live default must be easy to change (`TEMPEST_LIVE_OR_MODEL`).
+  - A real stream carries both `reasoning` and `reasoning_details`, `cache_write_tokens`, and the
+    provider's own `cost`; the hand-written fixtures had none of them.
