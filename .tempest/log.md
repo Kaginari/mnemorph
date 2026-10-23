@@ -80,3 +80,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     site aliases it to its own copy.
   - A preview server started before a rebuild serves the deleted dist/: broken images and no
     diagrams. Restart it before judging a page.
+
+---
+
+### [2026-10-23T21:31:59+02:00] rimuru — M0 closed after a fresh Fable review; a stamp guessed twice
+- **Task:** close M0: the milestone's Fable review (18 findings) and its fixes.
+- **Files:** justfile (`check` snapshots the tree before and after — git failing now fails the
+  check; `docs` and `workflows` join it), tools/check-layers.mjs (the architecture's exact edges,
+  stale entries, the sandbox lint mirror), docs/05-architecture.md (the diagram draws the edges the
+  manifests hold), crates/tempest-sandbox/Cargo.toml (`missing_docs`, `module_name_repetitions`
+  restored), .tempest creatures (`site/` owned by slime-book; real verify lines: workspace
+  `just check`, book `just docs`, kijin-ci `actionlint`; the workspace zone defined once — root
+  files and tools/), docs/02-races.md (that definition; 64 px portraits), CI (`rustup toolchain
+  install` first, actionlint, full history for the book), `.nvmrc` 22.23.2, roadmap and README
+  (VitePress, `site/`, `just docs`), lessons (protection pending #34; `status` moves to M6),
+  `vue` at the root instead of an alias, the task template's label. Decision issue #34 opened.
+- **Gate:** n/a. Instruments: `just check` (with docs and workflows), CI on the pull request.
+- **Usage:** ccusage, the whole day on this machine, all sessions: 110,556,427 tokens
+  (108,019,604 cache read, 1,898,976 cache write, 634,863 output); $53.48 API-equivalent.
+- **Correction:** the entry above, "M0 part 2", is stamped 21:25 but its commit is 21:18:20 — a
+  guessed stamp, the same mistake as before the last correction, and it carries no usage line.
+- **Learned:**
+  - A promise to read the clock is not a mechanism; the same mistake came back within an hour
+    (Nature 3). The stamp comes from `date -Iseconds` in the same command that appends the entry.
+  - `test -z "$(git …)"` passes when git fails; compare snapshots under `set -e` instead.
+  - A layer number admits edges a diagram forbids; hold the edges themselves.
+  - Branch protection and Pages are paid features on a private repository: decided in #34.

@@ -1,6 +1,6 @@
 name: Rung task
 description: A piece of a milestone
-labels: []
+labels: ["type:chore"]
 body:
   - type: textarea
     id: what

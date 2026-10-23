@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+        run: rustup toolchain install && rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest,cargo-deny,just
+          tool: cargo-nextest,cargo-deny,just,actionlint
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -36,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the pages' "last updated" reads each file's history
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
