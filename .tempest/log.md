@@ -62,3 +62,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     rather than stretch it.
 - **Correction:** the two entries above this one carry guessed clock stamps (21:30 and 23:10);
   both were written earlier on 2026-10-23, before 21:07. Stamps are read from the clock from here on.
+
+---
+
+### [2026-10-23T21:25:00+02:00] rimuru — M0 part 2: the book as a website
+- **Task:** close M0 with the docs site (#29).
+- **Files:** site/ (VitePress over docs/, Mermaid hand-drawn, local search), docs/02-races.md (the
+  portraits of every race and ascended form), justfile (`docs`, `docs-dev`), CI job `docs`
+  (build, upload the site as an artifact), .gitignore, pnpm-workspace.yaml.
+- **Gate:** n/a. Instruments: `just docs` builds in ~24 s with no dead link; the races and
+  communication pages screenshotted in headless Chromium — diagrams hand-drawn, portraits shown.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - VitePress over Starlight: it reads docs/ as it stands (no `title:` frontmatter, no content dir)
+    and fails the build on a dead link — the book's links become a check.
+  - Pages outside the site package cannot resolve `vue` under pnpm's strict node_modules: the
+    site aliases it to its own copy.
+  - A preview server started before a rebuild serves the deleted dist/: broken images and no
+    diagrams. Restart it before judging a page.
