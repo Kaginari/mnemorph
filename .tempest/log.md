@@ -137,3 +137,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - In a sequence diagram `;` ends the statement, so `…Report.Wrote; the test…` broke the
     message. VitePress's newer Mermaid rendered it anyway: a page that renders on the site proves
     nothing about GitHub. The book's diagrams are now parsed, not only rendered.
+- **Then:** Veldora: "you should use the icons we created in the docs". The portraits now stand
+  wherever a race is named — each race's section on its page, the races and ascension tables, a
+  legend under the overview's picture, the README, galleries on both prompt pages — and Rimuru is
+  the site's logo and favicon (`assets/portraits/` is the site's public dir). The Mermaid diagrams
+  keep their emoji: GitHub's Mermaid shows no images inside nodes.
