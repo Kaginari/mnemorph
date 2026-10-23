@@ -267,3 +267,5 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - isekai's order book lived in one process's memory until the shared queue: a restart, a second
     session or the terminal lost orders. Tempest starts with the durable form.
   - A revision per snapshot line gives a race-free claim with no lock and no database.
+- **Then:** Veldora: keep the MCP comparison with maki as part of the first simple MCP benchmarks
+  — M13 now carries the MCP client (#48) and a repeatable benchmark against maki in its exit.
