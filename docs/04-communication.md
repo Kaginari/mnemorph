@@ -66,6 +66,7 @@ shared notes and ontology facts automatically.
 | `@CAP <bytes>` | answer ceiling, default 2048 |
 | `@BUDGET <cost>` | the carved slice of the parent's cost envelope ([Consumption](06-consumption.md)); steps and clock are not carved |
 | `@DUMP <path>` | where overflow goes |
+| `@SIZE <bytes>` | a draft's payload budget |
 
 **Answering (a report):**
 
@@ -75,11 +76,11 @@ shared notes and ontology facts automatically.
 | `@F #<id> <file:line> <claim> [witness:<path>]` | one finding; the id lets a later fix, contest or seal point at it |
 | `@V <claim> <evidence>` | a verdict |
 | `@W <path>` | a path written |
-| `@? <hole>` | something unresolved — never guessed |
+| `@? <hole>` | something unresolved — never guessed; three grammars are typed: `@CAP <n>: <k> lines cut — full report at <path>`, `contest #<id>: <reason>`, `budget: need ~<n> wt, have <m> wt` |
 | `@U law\|colony\|territory <fact>` | the unsaid |
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
-| `@T <tool> <cost>` | a tool offered in the level-1 manifest (inside `@TOOLS`) |
+| `@T <tool> <cost>` | a tool offered in the level-1 manifest |
 | `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |
 
@@ -94,12 +95,27 @@ first eight verdicts and findings — and the parent opens the file only when it
 flesh.
 
 Every emitted report closes with `@E <n>`, the exact byte length of the whole answer, its own
-line included. Three readings are part of the grammar:
+line included. Re-cutting a report that was already cut folds the earlier `@CAP` hole into one,
+counting every line dropped along the way.
 
-- the raw pipe form (`S|DONE`, `F|a.rs:3|claim`) reads like the tagged one when a mouth pair
-  agreed on `wire:raw`;
-- an order's body is one word (`@$ orc-auth: …`); `@$ note this: …` is prose, not an order;
-- an untyped `@U` whose first word is `law`, `colony` or `territory` reads as typed.
+The grammar's readings, all of them:
+
+- **No field opens a line.** A line break inside any field is folded to a space when emitted, so
+  text cannot forge an `@S`, an order or an `@E`.
+- **The raw pipe form** (`S|DONE`, `F|a.rs:3|claim`, `U|law|text`, `$|body|ask`) is read only
+  when the commission said `wire:raw`; otherwise a line like `S|DONE` is prose.
+- **An order's body is one word** (`@$ orc-auth: …`) and is read lower-cased; `@$ note this: …`
+  is prose, not an order.
+- **An untyped `@U`** whose first word is `law`, `colony` or `territory` reads as typed.
+- **A finding's claim** whose first word would read as an id or a location, or whose last word
+  would read as a witness, is fenced with `—` when emitted and read back as written; its
+  whitespace is folded to single spaces, and an empty id is no id. `Finding::address` gives any
+  finding a stable ten-hex id from its location, claim and witness.
+- **`@CAP 0`** is refused like any bad value: it never means "no ceiling".
+- Fields are trimmed; `@ASK +unsaid` alone is an empty ask with the flag set.
+
+Council answers (`@INSTRUCT`, `@SPLIT`, `@ESCALATE`) are not wire tags yet: the loop that sends
+them (M5) defines them, here, when it lands.
 
 In code the wire is one crate (`tempest-wire`, no dependencies) with a parser and an encoder that
 round-trip; property tests hold `parse(emit(r)) == r` for any report, an exact `@E`, and a cut
@@ -114,12 +130,16 @@ config:
   theme: neutral
 ---
 flowchart TD
-    Q{"may A dispatch B?"} --> C1{"B's race in<br/>A's COMMANDS?"}
+    Q{"may A dispatch B?"} --> C0{"A High Elf, B an Orc<br/>in another lane?"}
+    C0 -- yes --> C0a{"plan item<br/>names B?"}
+    C0a -- no --> NO3
+    C0a -- yes --> C0b{"budget slice<br/>fits?"}
+    C0b -- yes --> VIA(["sent as @$ to B's Elf"])
+    C0b -- no --> NO5
+    C0 -- no --> C1{"B's race in<br/>A's COMMANDS?"}
     C1 -- no --> C1b{"A Orc, B Orc?<br/>(sideways)"}
-    C1b -- yes --> OK
-    C1b -- no --> C1c{"A High Elf,<br/>B in another lane?"}
-    C1c -- yes --> VIA(["sent as @$ to B's Elf"])
-    C1c -- no --> NO1(["refused: one hop up"])
+    C1b -- yes --> C5
+    C1b -- no --> NO1(["refused: one hop up"])
     C1 -- yes --> C2{"B's lineage<br/>reaches A?"}
     C2 -- no --> NO2(["refused: names B's commander"])
     C2 -- yes --> C3{"A is Elf:<br/>plan item names B?"}

@@ -22,7 +22,7 @@ flowchart TB
       SERVER["server<br/>JSON-RPC · stdio · WebSocket"]
       LOOP["loop<br/>six beats"]
       WORLD["world<br/>creatures · territory · dispatch · gate"]
-      RACES["races<br/>the sealed law"]
+      RACES["races<br/>the compiled law"]
       WIRE["wire<br/>envelope"]
       TOOLS["tools<br/>read · write · bash · git · gh"]
       SANDBOX["sandbox<br/>landlock · seccomp · Seatbelt"]
@@ -63,7 +63,7 @@ draw.
 tempest/
 ├─ crates/
 │  ├─ tempest-wire       envelope types, parser, encoder            (no I/O)
-│  ├─ tempest-races      Race enum, RaceLaw, scores, ascension      (no I/O)
+│  ├─ tempest-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ tempest-ledger     usage + value ledgers, budgets, prices      (files)
 │  ├─ tempest-provider   streaming clients, retry ladder, caching    (network)
 │  ├─ tempest-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)

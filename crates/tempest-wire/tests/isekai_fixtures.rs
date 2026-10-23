@@ -2,7 +2,8 @@
 //! fixtures. Where Tempest's wire deliberately differs, the test says so.
 
 use tempest_wire::{
-    Ask, Commission, DEFAULT_CAP, ForgeKind, Office, Report, UnsaidKind, enqueues_of, forges_of,
+    Ask, Commission, DEFAULT_CAP, Finding, ForgeKind, Hole, Office, Report, UnsaidKind, Word,
+    enqueues_of, forges_of,
 };
 
 #[test]
@@ -62,11 +63,11 @@ fn report() {
     )
     .expect("on the wire");
     assert_eq!(r.status, "PASS 3 checks");
-    assert_eq!(r.word(), "PASS");
-    assert_eq!(r.findings.len(), 1);
+    assert_eq!(r.word(), Word::Pass);
     assert_eq!(r.findings[0].at.as_deref(), Some("a.go:12"));
     assert_eq!(r.findings[0].claim, "the fact");
-    assert_eq!((r.verdicts.len(), r.holes.len(), r.tools.len()), (1, 1, 1));
+    assert_eq!((r.verdicts.len(), r.tools.len()), (1, 1));
+    assert_eq!(r.holes, [Hole::Other("what about x".into())]);
     assert_eq!(r.bytes, Some(123));
     assert_eq!(r.other, ["Some preamble."]);
     assert_eq!(r.unsaid[0].kind, Some(UnsaidKind::Colony));
@@ -85,11 +86,13 @@ fn report() {
         "unknown tags are not @S"
     );
 
-    let raw = Report::parse("S|DONE\nF|a.go:3|one fact\n?|a hole\nE|40").expect("raw form");
-    assert_eq!(raw.status, "DONE");
+    // Tempest differs: the raw form is read only when the commission granted `wire:raw`.
+    assert!(Report::parse("S|DONE\nF|a.go:3|one fact").is_none());
+    let raw = Report::parse_raw("S|DONE\nF|a.go:3|one fact\n?|a hole\nE|40").expect("raw form");
+    assert_eq!(raw.word(), Word::Done);
     assert_eq!(raw.findings[0].at.as_deref(), Some("a.go:3"));
     assert_eq!(raw.findings[0].claim, "one fact");
-    assert_eq!(raw.holes, ["a hole"]);
+    assert_eq!(raw.holes, [Hole::Other("a hole".into())]);
     assert_eq!(raw.bytes, Some(40));
 }
 
@@ -102,14 +105,13 @@ fn emit_and_cap() {
         "order: {out:?}"
     );
     assert!(
-        out.ends_with(&out.len().to_string()),
+        Report::is_whole(&out),
         "@E must equal the byte length: {out:?}"
     );
-    assert_eq!(Report::parse(&out).and_then(|b| b.bytes), Some(out.len()));
 
     let mut big = Report::parse("@S PASS\n@U territory kept\n@? kept too").expect("on the wire");
     for i in 0..100 {
-        big.findings.push(tempest_wire::Finding::parse(&format!(
+        big.findings.push(Finding::parse(&format!(
             "f{i}.go:{i} a finding of some length"
         )));
     }
@@ -124,7 +126,7 @@ fn emit_and_cap() {
         ] {
             assert!(out.contains(must), "cap {cap}: {must:?} missing in {out:?}");
         }
-        assert!(out.ends_with(&out.len().to_string()), "cap {cap}: @E wrong");
+        assert!(Report::is_whole(&out), "cap {cap}: @E wrong");
     }
     assert!(big.emit(0, None).len() > 3000, "cap 0 means no ceiling");
     let tiny = Report::parse("@S PASS")
@@ -138,7 +140,7 @@ fn emit_and_cap() {
 
 #[test]
 fn enqueue_tag() {
-    let r = Report::parse(
+    let r = Report::parse_raw(
         "@S DONE\n@$ orc-auth: gate the login flow\n$|slime-db: migrate the users table\n\
          @$ stray line with no body\n@E 96",
     )

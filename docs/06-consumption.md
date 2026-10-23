@@ -84,7 +84,7 @@ Currency caps convert through the same table; a model with no known price is sti
   challenges; it cannot be carved for anything else.
 - **Pre-flight.** Before each model call the core estimates the call in wt (cached prefix at the
   cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit `envelope.left`,
-  the loop checkpoints with `@? budget: need ~N wt, have M`. The parent can grant from its own
+  the loop checkpoints with `@? budget: need ~N wt, have M wt`. The parent can grant from its own
   envelope (`@INSTRUCT` with a new budget), split the work, or escalate to the human.
 - Unspent slices return to the parent when the child reports.
 - At 80% of any cap the human sees a warning; at 100% the session stops new commissions and
