@@ -250,3 +250,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:**
   - maki is Rust, not Go; its edge is token discipline (a 2.4 KB prompt, a prefix that never
     moves), not architecture — and it has no OS sandbox.
+
+---
+
+### [2026-10-23T22:57:19+02:00] rimuru — the lanes, the shared work queue and the handoff, from isekai
+- **Task:** Veldora: isekai's shared queue (`isekai q`) and its handoff are missing from the Rust
+  version. Read isekai's queue (082cd50, 588d847, 4878c4d, 7bfec94, fb26ce8) and app/handoff.go.
+- **Files:** docs/04-communication.md (the session's lanes — queue, send, wake — and the shared
+  work queue: revisioned snapshots, the rank law, relay-hold, `tempest q`, the queue tool,
+  `merge=union`; protocol calls and events), docs/03-loop.md (the handoff: gathered facts, the
+  template, offered at the stress zone and checkpoints, read with verification), 05 (storage),
+  roadmap (M5–M8), lessons (six rows), .gitattributes.
+- **Gate:** n/a. Instruments: `just docs` (15 diagrams parse).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - isekai's order book lived in one process's memory until the shared queue: a restart, a second
+    session or the terminal lost orders. Tempest starts with the durable form.
+  - A revision per snapshot line gives a race-free claim with no lock and no database.
+- **Then:** Veldora: keep the MCP comparison with maki as part of the first simple MCP benchmarks
+  — M13 now carries the MCP client (#48) and a repeatable benchmark against maki in its exit.
