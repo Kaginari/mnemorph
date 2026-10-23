@@ -101,15 +101,16 @@ race codex.
 
 ### M2 — Ledger and meters · S
 
-- Usage and value rows, the append-only JSONL writer (fsync, one line per write, tolerant reader).
-- `prices.toml` and weighted tokens, unpriced handling, envelopes carved by plan weight with
-  maximum shares and the challenge reserve, the return of unspent slices, caps across sessions,
-  the cache-aware pre-flight check.
-- Folds: per body, race, model, day; signals for the score formulas.
+- Usage rows and the append-only JSONL journal (one write per row, synced; a tolerant reader).
+- Prices in TOML and weighted tokens, unpriced handling; occupancy and spend, one function each.
+- Envelopes carved by plan weight with maximum shares and the challenge reserve, pre-flight,
+  recorded spend, the return of unspent slices; caps across sessions.
+- Folds per body, race, model and day, with cache-hit and prefix shares. (The value fold —
+  signals for the score formulas — needs the world's verdicts and lands with M11.)
 
-**Exit:** a simulated tree of 50 commissions, sequential and parallel, never exceeds any
-envelope and never starves a Slime below its step allowance (proptest), and the folds match
-hand-computed fixtures.
+**Exit:** a random tree of up to 50 commissions, sequential and parallel, never exceeds any
+envelope, and every weighted item gets a slice while its parent has budget (proptest); the folds
+match hand-computed fixtures with both providers' cache shapes.
 
 ### M3 — Providers · M
 
@@ -209,7 +210,8 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 
 ### M11 — Value, evolution, ascension · M
 
-- Score folds per race, meters, minimum record, split / mutate / rebirth staged and proven,
+- The value ledger and its fold into each race's signals, score folds per race, meters, minimum
+  record, split / mutate / rebirth staged and proven,
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text).
