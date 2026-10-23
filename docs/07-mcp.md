@@ -2,13 +2,13 @@
 
 ## In one picture
 
-![The MCP path: server, client, agent-mcp, toolbox-mcp, agents](canvas/mcp-toolbox.png)
-
 ```mermaid
 ---
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     S[("MCP server<br/>specs")] <-->|"all specs<br/>(listed once, cached)"| C["MCP client<br/>spec cache · lazy start"]
@@ -22,6 +22,17 @@ flowchart LR
     A -->|"what do I need?"| T
     T -->|"only the needed specs"| A
     A -->|"a call"| T --> K
+    classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
+    class S outside
+    classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
+    class C store
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class K kijin
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class T step
+    classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
+    class A throne
+    style tempest fill:#f0f9ff,stroke:#3FA9F5
 ```
 
 ## In plain words
