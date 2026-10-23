@@ -43,8 +43,9 @@ layers:
 workflows:
     actionlint
 
-# Build the book as a website (fails on a dead link).
+# Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
+    node tools/check-diagrams.mjs
     pnpm --filter @tempest/site build
 
 # Serve the book locally while editing it.
