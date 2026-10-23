@@ -39,6 +39,7 @@ checkout or rebase touches it.
 | 7 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
+| — | [Race icons prompt](race-icons-prompt.md) | Leonardo.ai prompts for the race icons |
 
 ## The three words that matter
 
