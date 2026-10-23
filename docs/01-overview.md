@@ -75,7 +75,7 @@ Two races stand beside the chain, both answering to Rimuru:
 Reports flow back up the same chain, each rank compressing what the rank below said, until
 Rimuru answers you in plain language.
 
-Everything that matters is written to the world directory `.tempest/` — creature documents, the
+Everything that matters is written to the world directory `.mnemorph/` — creature documents, the
 journal `log.md`, the ledgers. Sessions forget; the world remembers.
 
 ## Technical detail
@@ -92,11 +92,11 @@ config:
 ---
 flowchart LR
     subgraph user["your machine"]
-      CLI["tempest CLI<br/>TypeScript · Ink"]
+      CLI["mnemorph CLI<br/>TypeScript · Ink"]
       BOARD["board<br/>TypeScript · React<br/>in the browser"]
-      CORE["tempestd<br/>Rust core"]
+      CORE["mnemorphd<br/>Rust core"]
       SB["sandboxed tools<br/>landlock + seccomp / Seatbelt"]
-      W[(".tempest/<br/>docs · log.md · ledgers")]
+      W[(".mnemorph/<br/>docs · log.md · ledgers")]
     end
     LLM[("model providers<br/>Anthropic · OpenAI-compatible")]
 
@@ -118,11 +118,11 @@ flowchart LR
     style user fill:#f8fafc,stroke:#94a3b8
 ```
 
-- **`tempestd`** (Rust) owns everything that must be correct: the loop, the races, the gate, the
+- **`mnemorphd`** (Rust) owns everything that must be correct: the loop, the races, the gate, the
   sandbox, the ledgers, the provider clients. It has no UI.
-- **`tempest`** (TypeScript, Ink) is the terminal client. It starts `tempestd` as a child process
+- **`mnemorph`** (TypeScript, Ink) is the terminal client. It starts `mnemorphd` as a child process
   and speaks JSON-RPC 2.0 over stdio. It renders; it decides nothing.
-- **The board** (TypeScript, React) is the web cockpit, served by `tempestd` on loopback. It
+- **The board** (TypeScript, React) is the web cockpit, served by `mnemorphd` on loopback. It
   speaks the same protocol over a WebSocket.
 - One protocol, defined once in Rust; the TypeScript types are generated from it. A client can
   never drift from the core.
@@ -139,11 +139,11 @@ flowchart LR
 | what is `read`, `write`, `outward`, `destructive` | Oni envelopes: standing outward permissions you sign |
 
 Races are behaviour; creatures, Minds and models are data. That is the line isekai blurred with a
-configurable rank table, and the line Tempest keeps.
+configurable rank table, and the line Mnemorph keeps.
 
 ### What stays from isekai
 
-The nine natures, the crest, the wire register, the gate's four checks (Tempest adds two: tests
+The nine natures, the crest, the wire register, the gate's four checks (Mnemorph adds two: tests
 intact and no seal), territories, Minds,
 memory tiers, the value ledger, evolution (split, mutate, rebirth) and ascension. What changes is
 where they live: in typed Rust instead of prose plus configuration, with the docs in this book

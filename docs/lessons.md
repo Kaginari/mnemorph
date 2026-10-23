@@ -1,6 +1,6 @@
 # Lessons carried from isekai
 
-Every row below is a failure isekai actually shipped, hit in use, or caught late. Tempest does not
+Every row below is a failure isekai actually shipped, hit in use, or caught late. Mnemorph does not
 carry them as advice: each row becomes either a test that fails if the mistake comes back, or a
 design rule the code makes impossible to break, and the milestone column names the rung of the
 roadmap where that test or rule must exist before the rung counts as done.
@@ -154,7 +154,7 @@ roadmap where that test or rule must exist before the rung counts as done.
 |---|---|---|
 | Under Claude Code each hook is a fresh process, so the Stop gate read the model's own edits as pre-turn state, and a unit test passed for the wrong reason. | Turn-open state (verify set, tree snapshot) is captured at `UserPromptSubmit` and persisted. Test: an end-to-end hook sequence driven by the real binary. | M13 |
 | `CLAUDE.md` (Claude Code) and `AGENTS.md` (OpenCode) are the only files auto-loaded after a clear, and neither was wired. | Init writes `CLAUDE.md` and symlinks `AGENTS.md` to it, one file for both hosts; a `SessionStart` hook injects the law and recent log. | M13 |
-| Claude Code is the loop and the harness is the law: hooks must be deterministic and need no API key. | `tempest hook <event>` for SessionStart, PreToolUse (guard + classifier), Stop (end gate) and PreCompact (drain), all offline. | M13 |
+| Claude Code is the loop and the harness is the law: hooks must be deterministic and need no API key. | `mnemorph hook <event>` for SessionStart, PreToolUse (guard + classifier), Stop (end gate) and PreCompact (drain), all offline. | M13 |
 | Installing the guard into Claude Code must not clobber the user's other hooks. | Hook install merges into `settings.json`, keeps foreign hooks, and is idempotent. Test against a scratch HOME. | M13 |
 | Claude Code's file tools and its bash tool are gated by different mechanisms. | The guard and classifier cover every write surface the host exposes, not only bash. | M13 |
 

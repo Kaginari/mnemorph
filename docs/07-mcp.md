@@ -12,7 +12,7 @@ config:
 ---
 flowchart LR
     S[("MCP server<br/>specs")] <-->|"all specs<br/>(listed once, cached)"| C["MCP client<br/>spec cache · lazy start"]
-    subgraph tempest["Tempest"]
+    subgraph mnemorph["Mnemorph"]
       K["agent-mcp<br/>👹 a Kijin post<br/>curator · conduit"]
       T["toolbox-mcp<br/>selects per commission"]
       A["agents<br/>all ranks"]
@@ -32,12 +32,12 @@ flowchart LR
     class T step
     classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
     class A throne
-    style tempest fill:#f0f9ff,stroke:#3FA9F5
+    style mnemorph fill:#f0f9ff,stroke:#3FA9F5
 ```
 
 ## In plain words
 
-An MCP server always sends every one of its tool definitions. Tempest takes them all in once, at
+An MCP server always sends every one of its tool definitions. Mnemorph takes them all in once, at
 its border, and never shows them all to anyone.
 
 Three parts share the work:
@@ -76,17 +76,17 @@ Every model call above is a ledger row in weighted tokens. The call path — an 
 - **Selection never widens a shelf.** A tool whose class is not on the asking race's shelf is
   never offered; an `outward` tool is called through agent-mcp, under the gate.
 - **The search door stays open.** A wrong selection costs one search, never a dead end.
-- **The request only grows** ([#38](https://github.com/Kaginari/tempest/issues/38)): tools offered
+- **The request only grows** ([#38](https://github.com/Kaginari/mnemorph/issues/38)): tools offered
   mid-session ride the uncached tail; pinning into the prefix happens only at a session's start.
 - **Read-only lookups** (documentation search and the like) are still network acts. The human may
   mark a class `outward-read` in config: sandboxed and journaled, with no prompt. Never a default.
-- **Served outward too.** `tempest mcp serve --toolbox` puts the same selection in front of any MCP
+- **Served outward too.** `mnemorph mcp serve --toolbox` puts the same selection in front of any MCP
   client — Claude Code, OpenCode — for their own servers.
 
 ### Measured
 
-The M13 benchmark runs the same servers and scripted tasks through Tempest and maki: spec tokens
+The M13 benchmark runs the same servers and scripted tasks through Mnemorph and maki: spec tokens
 shown, tokens loaded on demand, session start time, time to the first call, wrong-tool and
 bad-argument calls, weighted tokens per task, and the selection's precision (offered tools that
 were called) and recall (called tools that had to be searched). The design and its history:
-[#48](https://github.com/Kaginari/tempest/issues/48).
+[#48](https://github.com/Kaginari/mnemorph/issues/48).

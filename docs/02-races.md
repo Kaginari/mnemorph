@@ -81,7 +81,7 @@ creature that slips **falls** back. Trust is earned, measured and revocable.
 
 ### The shape of a race in code
 
-Every race is a variant of one Rust enum, `tempest_races::Race`, and the law is its methods and
+Every race is a variant of one Rust enum, `mnemorph_races::Race`, and the law is its methods and
 a few functions over it. No configuration can add a race, change a reporting line or widen a shelf.
 
 ```rust
@@ -125,7 +125,7 @@ the adversary think hardest), **strong** for Orc, Slime and Kijin.
 
 **Lone-body mode (temporary, M5–M6 only).** Before the world exists, one body runs as Rimuru's
 voice and a single Slime whose zone is the whole repository, under the end gate, with no
-dispatch. It lets Tempest work on itself from M6. It is removed when M7 lands, and the binary
+dispatch. It lets Mnemorph work on itself from M6. It is removed when M7 lands, and the binary
 refuses it in any world that has creatures.
 
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
@@ -152,8 +152,8 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 | the **verify block** of a Slime's doc | that Slime's Orc — the rest of the doc is the Slime's; the gate diffs by line range | the Orc's own gate |
 | the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/` | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
 | a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
-| the **proving ground** `.tempest/dark-elf/` | the Dark Elf | its own gate (self-gated) |
-| the **plan** and the **dimension manifest** (`.tempest/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |
+| the **proving ground** `.mnemorph/dark-elf/` | the Dark Elf | its own gate (self-gated) |
+| the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
@@ -248,7 +248,7 @@ the village.*
 The Kijin is the one door between the world and everything beyond it. Nature 7 (Containment)
 stops being a checklist item and becomes a type: **only a Kijin's shelf carries `outward`**.
 
-Kijin hold one of five **posts**, also compiled in (`tempest_races::Post`):
+Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
 
 | Post | Epithet | Owns (territory) | Outward acts |
 |---|---|---|---|
@@ -256,7 +256,7 @@ Kijin hold one of five **posts**, also compiled in (`tempest_races::Post`):
 | `kijin-release` | the smith | changelog, versioning, release config, installers | build artifacts; tag pushes and registry publishes (both `destructive`) |
 | `kijin-deploy` | the commander | deploy manifests, environments | deploy, verify health, roll back |
 | `kijin-forge` | the shrine keeper of records | PR templates, issue templates | push branches, open and update PRs, comment, label, read issues |
-| `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.tempest/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
+| `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.mnemorph/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
 
 - **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
@@ -266,7 +266,7 @@ Kijin hold one of five **posts**, also compiled in (`tempest_races::Post`):
 - **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
-  (`.tempest/kijin/<post>/post.jsonl`): the last known state of the outside (last CI run, the
+  (`.mnemorph/kijin/<post>/post.jsonl`): the last known state of the outside (last CI run, the
   deployed version per environment, open PRs). Every new body of that post reads it first.
 - **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
   checks the real CI state instead of trusting a doc (Nature 9).
@@ -295,7 +295,7 @@ dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru.
      boundaries.
   6. **Law audit** — what isekai's Dark Elf did: gate verdicts and `log.md` integrity.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
-  `.tempest/dark-elf/` (self-gated), `seal` proposals.
+  `.mnemorph/dark-elf/` (self-gated), `seal` proposals.
 - **The witness rule.** A finding is `@F` only with an id and a **witness**: a proof-of-concept
   test in the proving ground that fails *for the stated reason* (it must exercise the code under
   the cited `file:line`, which the harness checks by coverage), or a scanner output file. Without
@@ -361,7 +361,7 @@ window. The two thresholds are apart on purpose (hysteresis), so a creature does
 | <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
 | <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
 
-How a fall is read (`tempest-races`, `falls`):
+How a fall is read (`mnemorph-races`, `falls`):
 
 - **An event ends the ascension at once**: a High Orc's pass overturned on a sealed territory, a
   Named Slime's *tests intact* failure, an Oni's rolled-back or corrected envelope act.
@@ -373,7 +373,7 @@ How a fall is read (`tempest-races`, `falls`):
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
-  advance by the human, scoped, expiring (default 30 days), and listed in `tempest status`.
+  advance by the human, scoped, expiring (default 30 days), and listed in `mnemorph status`.
 - **What an envelope can never cover** (compiled, whatever the envelope says):
   - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites;
   - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests
@@ -385,7 +385,7 @@ Rules that hold for every ascension:
   bodies' prompts.
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
 - Ascension, probation and fall are each logged in `log.md` with the readings that caused them.
-- A creature can be named down by the human at any time (`tempest fall <creature>`).
+- A creature can be named down by the human at any time (`mnemorph fall <creature>`).
 
 ### Evolution — the other way to change
 
@@ -403,7 +403,7 @@ swapped in. The old doc rests in the attic.
 
 ### What changed from isekai, and why
 
-| isekai | Tempest | Why |
+| isekai | Mnemorph | Why |
 |---|---|---|
 | a rank table in config (`ranks.*`) | an enum and its compiled methods | we know what works; a configurable tree produced unknowns and 8k lines of config |
 | Kijin = one standing release lane | Kijin = the only outward race, five posts | Containment as a type, not a rule to remember |

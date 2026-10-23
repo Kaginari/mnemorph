@@ -1,2 +1,2 @@
-/** tempest — the terminal client. */
-export const CLI_NAME = '@tempest/cli';
+/** mnemorph — the terminal client. */
+export const CLI_NAME = '@mnemorph/cli';

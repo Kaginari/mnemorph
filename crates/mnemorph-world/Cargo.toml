@@ -1,0 +1,17 @@
+[package]
+name = "mnemorph-world"
+description = "The world: creatures, territory, dispatch, the end gate, the log writer, evolution."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+mnemorph-wire = { path = "../mnemorph-wire" }
+mnemorph-races = { path = "../mnemorph-races" }
+mnemorph-ledger = { path = "../mnemorph-ledger" }
+mnemorph-memory = { path = "../mnemorph-memory" }
+
+[lints]
+workspace = true

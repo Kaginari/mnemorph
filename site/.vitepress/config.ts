@@ -7,7 +7,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid';
 // reaches the root node_modules under pnpm's isolated layout.
 export default withMermaid(
   defineConfig({
-    title: 'Tempest',
+    title: 'Mnemorph',
     description: 'An agent harness grown from isekai: Rust core, TypeScript CLI and board.',
     srcDir: '../docs',
     rewrites: { 'README.md': 'index.md' },
@@ -16,15 +16,15 @@ export default withMermaid(
     vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
     head: [
       ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
-      ['link', { rel: 'icon', type: 'image/png', href: '/tempest-icon@64.png' }],
+      ['link', { rel: 'icon', type: 'image/png', href: '/mnemorph-icon@64.png' }],
     ],
     lastUpdated: true,
     themeConfig: {
-      logo: '/tempest-icon@64.png',
+      logo: '/mnemorph-icon@64.png',
       nav: [
         { text: 'Book', link: '/' },
         { text: 'Roadmap', link: '/roadmap' },
-        { text: 'GitHub', link: 'https://github.com/Kaginari/tempest' },
+        { text: 'GitHub', link: 'https://github.com/Kaginari/mnemorph' },
       ],
       sidebar: [
         {
