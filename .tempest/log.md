@@ -142,3 +142,5 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   legend under the overview's picture, the README, galleries on both prompt pages — and Rimuru is
   the site's logo and favicon (`assets/portraits/` is the site's public dir). The Mermaid diagrams
   keep their emoji: GitHub's Mermaid shows no images inside nodes.
+- **Then:** Veldora: remove the Leonardo.ai prompt page. docs/race-icons-prompt.md is gone (its
+  gallery of the generated icons moved to assets/README.md); the cards brief stays.
