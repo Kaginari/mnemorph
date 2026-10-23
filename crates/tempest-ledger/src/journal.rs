@@ -47,22 +47,36 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     ///
     /// The row does not serialise, or the file cannot be opened, written or synced.
     pub fn append(&self, row: &T) -> io::Result<()> {
+        use std::io::{Read, Seek, SeekFrom};
         let mut line = serde_json::to_vec(row).map_err(io::Error::other)?;
         line.push(b'\n');
-        if let Some(dir) = self.path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
+        if let Some(dir) = dir {
             std::fs::create_dir_all(dir)?;
         }
+        let created = !self.path.exists();
         let mut file = OpenOptions::new()
             .create(true)
+            .read(true)
             .append(true)
             .open(&self.path)?;
-        // A torn previous write leaves a line without its newline: close it so this row stands
-        // on a line of its own.
-        if file.metadata()?.len() > 0 && !ends_with_newline(&self.path)? {
-            file.write_all(b"\n")?;
+        // A torn previous write leaves a line without its newline: close it first, on the same
+        // handle, so this row stands on a line of its own.
+        if file.metadata()?.len() > 0 {
+            let mut last = [0u8; 1];
+            file.seek(SeekFrom::End(-1))?;
+            file.read_exact(&mut last)?;
+            if last[0] != b'\n' {
+                line.insert(0, b'\n');
+            }
         }
         file.write_all(&line)?;
-        file.sync_data()
+        file.sync_data()?;
+        // A new file's directory entry is durable only once the directory is synced too.
+        if created && let Some(dir) = dir {
+            File::open(dir)?.sync_all()?;
+        }
+        Ok(())
     }
 
     /// Reads every row back. A missing file is an empty journal; a line that does not parse is
@@ -87,7 +101,10 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             skipped: Vec::new(),
         };
         for (n, line) in BufReader::new(file).split(b'\n').enumerate() {
-            let line = line?;
+            let mut line = line?;
+            if n == 0 && line.starts_with(b"\xEF\xBB\xBF") {
+                line.drain(..3);
+            }
             if line.iter().all(u8::is_ascii_whitespace) {
                 continue;
             }
@@ -98,15 +115,6 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         }
         Ok(back)
     }
-}
-
-fn ends_with_newline(path: &Path) -> io::Result<bool> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut f = File::open(path)?;
-    f.seek(SeekFrom::End(-1))?;
-    let mut last = [0u8; 1];
-    f.read_exact(&mut last)?;
-    Ok(last[0] == b'\n')
 }
 
 #[cfg(test)]
@@ -174,6 +182,55 @@ mod tests {
             back.skipped,
             [4],
             "blank lines are skipped silently, the torn one is named"
+        );
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_not_a_torn_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.jsonl");
+        std::fs::write(&path, b"\xEF\xBB\xBF{\"n\":1,\"text\":\"a\"}\r\n").unwrap();
+        let back = Journal::<Row>::new(&path).read().unwrap();
+        assert_eq!(back.rows.len(), 1);
+        assert_eq!(back.skipped, Vec::<usize>::new());
+    }
+
+    #[test]
+    fn concurrent_appenders_lose_no_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.jsonl");
+        std::thread::scope(|scope| {
+            for t in 0..4u32 {
+                let path = path.clone();
+                scope.spawn(move || {
+                    let j: Journal<Row> = Journal::new(path);
+                    for n in 0..25 {
+                        j.append(&Row {
+                            n: t * 100 + n,
+                            text: "x".repeat(200),
+                        })
+                        .unwrap();
+                    }
+                });
+            }
+        });
+        let back = Journal::<Row>::new(&path).read().unwrap();
+        assert_eq!(back.rows.len(), 100);
+        assert_eq!(back.skipped, Vec::<usize>::new());
+    }
+
+    #[test]
+    fn an_unwritable_place_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("plain");
+        std::fs::write(&file, b"x").unwrap();
+        let j: Journal<Row> = Journal::new(file.join("usage.jsonl"));
+        assert!(
+            j.append(&Row {
+                n: 1,
+                text: String::new()
+            })
+            .is_err()
         );
     }
 

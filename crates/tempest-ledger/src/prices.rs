@@ -18,19 +18,21 @@ pub struct Price {
     pub input: f64,
     /// Output.
     pub output: f64,
-    /// Cache reads; defaults to a tenth of input.
-    pub cache_read: Option<f64>,
-    /// Cache writes; defaults to 1.25 × input.
-    pub cache_write: Option<f64>,
+    /// Cache reads. Required: the multiple differs by model (a tenth of input on some, a
+    /// twentieth or a fortieth on the newest), so it is never assumed.
+    pub cache_read: f64,
+    /// Cache writes with the 5-minute lifetime Tempest uses. Required, like reads.
+    pub cache_write: f64,
 }
 
 impl Price {
     /// The output-to-input ratio weighted tokens use.
     #[must_use]
     pub fn output_ratio(&self) -> f64 {
-        if self.input > 0.0 {
+        if self.input > 0.0 && self.output > 0.0 {
             self.output / self.input
         } else {
+            // A free or input-free price must not make output free in weighted tokens.
             DEFAULT_OUTPUT_RATIO
         }
     }
@@ -39,12 +41,10 @@ impl Price {
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
     pub fn usd(&self, u: Usage) -> f64 {
-        let read = self.cache_read.unwrap_or(self.input * 0.1);
-        let write = self.cache_write.unwrap_or(self.input * 1.25);
         (u.input as f64 * self.input
             + u.output as f64 * self.output
-            + u.cache_read as f64 * read
-            + u.cache_write as f64 * write)
+            + u.cache_read as f64 * self.cache_read
+            + u.cache_write as f64 * self.cache_write)
             / 1_000_000.0
     }
 }
@@ -75,17 +75,17 @@ impl Prices {
     ///
     /// # Errors
     ///
-    /// The TOML does not parse, or a price is negative.
+    /// The TOML does not parse, a field is missing or misspelt, or a price is negative.
     pub fn parse(text: &str) -> Result<Prices, PricesError> {
         let p: Prices = toml::from_str(text).map_err(|e| PricesError(e.to_string()))?;
         for (model, price) in &p.models {
             let all = [
-                Some(price.input),
-                Some(price.output),
+                price.input,
+                price.output,
                 price.cache_read,
                 price.cache_write,
             ];
-            if all.into_iter().flatten().any(|v| !v.is_finite() || v < 0.0) {
+            if all.into_iter().any(|v| !v.is_finite() || v < 0.0) {
                 return Err(PricesError(format!(
                     "{model}: prices are finite and not negative"
                 )));
@@ -94,7 +94,8 @@ impl Prices {
         Ok(p)
     }
 
-    /// Layers `over` on top of this table: its entries win, model by model.
+    /// Layers `over` on top of this table: its entries win, model by model — an entry replaces
+    /// the whole row, so a config row states all four prices.
     #[must_use]
     pub fn overlay(mut self, over: Prices) -> Prices {
         self.models.extend(over.models);
@@ -129,6 +130,8 @@ mod tests {
         [models."model-a"]
         input = 3.0
         output = 15.0
+        cache-read = 0.3
+        cache-write = 3.75
 
         [models."model-b"]
         input = 1.0
@@ -168,7 +171,14 @@ mod tests {
             None
         );
         assert!((p.output_ratio("anything") - DEFAULT_OUTPUT_RATIO).abs() < 1e-9);
-        let free = Prices::parse("[models.free]\ninput = 0.0\noutput = 0.0").unwrap();
+        let free = Prices::parse(
+            "[models.free]\ninput = 0.0\noutput = 0.0\ncache-read = 0.0\ncache-write = 0.0\n[models.cheap-out]\ninput = 1.0\noutput = 0.0\ncache-read = 0.1\ncache-write = 1.25",
+        )
+        .unwrap();
+        assert!(
+            (free.output_ratio("cheap-out") - DEFAULT_OUTPUT_RATIO).abs() < 1e-9,
+            "free output is still weighed"
+        );
         assert!(
             (free.output_ratio("free") - DEFAULT_OUTPUT_RATIO).abs() < 1e-9,
             "a free model still weighs output"
@@ -179,9 +189,10 @@ mod tests {
     fn bad_tables_are_refused() {
         for bad in [
             "[models.x]\ninput = 1.0",
-            "[models.x]\ninput = 1.0\noutput = 2.0\ncache_red = 0.1",
-            "[models.x]\ninput = -1.0\noutput = 2.0",
-            "[models.x]\ninput = 1.0\noutput = nan",
+            "[models.x]\ninput = 1.0\noutput = 2.0",
+            "[models.x]\ninput = 1.0\noutput = 2.0\ncache-read = 0.1\ncache-write = 1.0\ncache_red = 0.1",
+            "[models.x]\ninput = -1.0\noutput = 2.0\ncache-read = 0.1\ncache-write = 1.0",
+            "[models.x]\ninput = 1.0\noutput = nan\ncache-read = 0.1\ncache-write = 1.0",
             "price = 3",
         ] {
             let e = Prices::parse(bad).unwrap_err();
@@ -192,7 +203,10 @@ mod tests {
     #[test]
     fn overlay_wins_model_by_model() {
         let base = Prices::parse(TABLE).unwrap();
-        let over = Prices::parse("[models.\"model-a\"]\ninput = 2.0\noutput = 8.0").unwrap();
+        let over = Prices::parse(
+            "[models.\"model-a\"]\ninput = 2.0\noutput = 8.0\ncache-read = 0.2\ncache-write = 2.5",
+        )
+        .unwrap();
         let p = base.overlay(over);
         assert!((p.get("model-a").unwrap().input - 2.0).abs() < 1e-9);
         assert!(p.get("model-b").is_some());
