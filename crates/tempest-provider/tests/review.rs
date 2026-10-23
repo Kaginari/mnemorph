@@ -622,3 +622,25 @@ async fn a_server_without_usage_still_answers() {
         .unwrap();
     assert_eq!(r.usage, Usage::default());
 }
+
+#[tokio::test(start_paused = true)]
+async fn cache_writes_are_their_own_class() {
+    let body = chunks(&[
+        json!({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": 1000, "completion_tokens": 5, "prompt_tokens_details": {"cached_tokens": 600, "cache_write_tokens": 300}}}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+    let r = chat(&openai(&script), &request(vec![user("a")]))
+        .await
+        .0
+        .unwrap();
+    assert_eq!(
+        r.usage,
+        Usage {
+            input: 100,
+            output: 5,
+            cache_read: 600,
+            cache_write: 300
+        }
+    );
+}
