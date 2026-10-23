@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart LR
     D["📖 D<br/>the book"] --> M0["M0<br/>foundations"]
@@ -26,6 +28,14 @@ flowchart LR
     M11 --> M12["M12<br/>board"]
     M12 --> M13["M13<br/>integrations"]
     M13 --> M14["M14<br/>1.0"]
+    classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
+    class D,M0,M1,M2,M3 good
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class M4,M4a,M5,M6,M7,M8,M11,M12,M13,M14 step
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class M9 kijin
+    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:2px,color:#22114a
+    class M10 dark
 ```
 
 ## In plain words

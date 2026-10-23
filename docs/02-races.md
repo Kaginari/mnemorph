@@ -7,6 +7,8 @@
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 flowchart TD
     V(["🐉 Veldora · human"])
@@ -28,6 +30,24 @@ flowchart TD
     S -. ascends .-> NS["💎 Named Slime"]
     K -. ascends .-> ON["🔥 Oni"]
     D -. ascends .-> AD["🌘 Arch Dark Elf"]
+    classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
+    class V human
+    classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
+    class R throne
+    classDef elf fill:#dcf3e6,stroke:#2FA36B,stroke-width:2px,color:#0b2a1a
+    class E elf
+    classDef orc fill:#f8e8d2,stroke:#C9822B,stroke-width:2px,color:#3a2408
+    class O orc
+    classDef slime fill:#d6f5f1,stroke:#19C3B0,stroke-width:2px,color:#06302b
+    class S slime
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class K kijin
+    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:2px,color:#22114a
+    class D dark
+    classDef risen fill:#fff7d6,stroke:#b8860b,stroke-width:2px,stroke-dasharray:5 3,color:#3a2e05
+    class HE,HO,NS,ON,AD risen
+    style chain fill:#f0fdf4,stroke:#2FA36B
+    style standing fill:#faf5ff,stroke:#7B4FD6
 ```
 
 | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
@@ -304,6 +324,8 @@ dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru.
 config:
   look: handDrawn
   theme: neutral
+  flowchart:
+    wrappingWidth: 360
 ---
 stateDiagram-v2
     [*] --> Base
@@ -314,6 +336,12 @@ stateDiagram-v2
     Ascended --> Base: an event — immediate, no probation
     Probation --> Ascended: recovers within 5 reports
     Probation --> Base: does not recover — falls, record kept
+    classDef risen fill:#fff7d6,stroke:#b8860b,stroke-width:2px,stroke-dasharray:5 3,color:#3a2e05
+    class Ascended risen
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class Candidate,Probation gate
+    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
+    class Base step
 ```
 
 **In plain words.** A creature whose record crosses its race's bar becomes a candidate. Rimuru
