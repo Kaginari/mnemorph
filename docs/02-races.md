@@ -61,36 +61,47 @@ creature that slips **falls** back. Trust is earned, measured and revocable.
 
 ### The shape of a race in code
 
-Every race is a variant of one Rust enum and answers one sealed trait. No configuration can add a
-race, change a reporting line or widen a shelf.
+Every race is a variant of one Rust enum, `tempest_races::Race`, and the law is its methods and
+a few functions over it. No configuration can add a race, change a reporting line or widen a shelf.
 
 ```rust
 pub enum Race { Rimuru, Elf, Orc, Slime, Kijin, DarkElf,
                 HighElf, HighOrc, NamedSlime, Oni, ArchDarkElf }
 
-pub trait RaceLaw: sealed::Sealed {
-    const REPORTS_TO: Option<Race>;
-    const COMMANDS: &'static [Race];
-    const SIDEWAYS: bool;
-    const AUTHORS: Soil;          // None | Zone | Post | ProvingGround
-    const HOLDS_GATE: bool;
-    const SHELF: &'static [ToolClass];   // read | write | outward | destructive | dispatch | seal
-    const DEFAULT_TIER: ModelTier;       // frontier | strong | fast — config maps tiers to models
-    const BUDGET_SHARE: Share;           // default slice of the parent's envelope
-    fn score(s: &Signals) -> Score;      // 0..=100
-    fn ascends(s: &Signals) -> bool;
-    fn falls(s: &Signals) -> bool;
+impl Race {
+    fn base(self) -> Race;                    // an ascended form's base; a base is its own
+    fn ascends_to(self) -> Option<Race>;
+    fn reports_to(self) -> Option<Race>;      // by base race; the throne reports to the human
+    fn commands(self) -> &'static [Race];     // base races it commissions
+    fn sideways(self) -> bool;                // Orc ⇄ Orc
+    fn shelf(self) -> &'static [ToolClass];   // read | write | outward | destructive | dispatch | seal
+    fn soil(self) -> &'static [Soil];         // OwnDoc | Zone | VerifyBlock | Post | ProvingGround | Throne
+    fn gate(self) -> Gate;                    // ByItsOrc | OverItsSlimes | OwnSoil | DocOnly
+    fn default_tier(self) -> ModelTier;       // Frontier | Strong | Fast — config maps tiers to models
+    fn steps(self) -> u32;                    // per commission, passed down whole
+    fn max_share(self) -> u8;                 // percent of the parent's envelope, a ceiling
 }
+
+fn may_dispatch(from: Race, to: Race, ctx: &DispatchContext) -> Result<Route, Refusal>;
+fn check_class(race: Race, class: ToolClass) -> Result<(), ShelfRefusal>;
+fn score(race: Race, s: &Signals) -> f64;    // 0..=100
+fn meter(race: Race, s: &Signals) -> Meter;
+fn rises(risen: Race, window: &Signals) -> bool;
+fn falls(risen: Race, recent: &Recent) -> FallReading;   // Holds | Probation | Immediate
+fn recovers(risen: Race, since: &Recent) -> bool;
 ```
 
-An ascended form is its own variant that **inherits** its base's constants and overrides only
-what its privileges change. A `match` over `Race` that forgets a variant does not compile, so a
-new privilege cannot be added halfway.
+An ascended form is its own variant: it takes its base's answers wherever its privileges change
+nothing, and every `match` lists it — a `match` that forgets a variant does not compile, so a new
+privilege cannot be added halfway. Methods rather than a trait of constants, because the world asks
+the law about a race it holds at run time. The crate is covered whole: `just law` fails under
+100% region coverage, and its tests drive every operand of every rule both ways.
 
 **Which model rides a body.** One rule, in order: a model configured for the exact creature;
 else for the pair (race, office), where the office comes from the commission's `@ASK`
 (`findings` → read, `verdict` → judge, `draft` → write; the throne has no office); else the model
-configured for the race's `DEFAULT_TIER`.
+configured for the race's `DEFAULT_TIER`. The default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and
+the adversary think hardest), **strong** for Orc, Slime and Kijin.
 
 **Lone-body mode (temporary, M5–M6 only).** Before the world exists, one body runs as Rimuru's
 voice and a single Slime whose zone is the whole repository, under the end gate, with no
@@ -103,7 +114,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | Class | Meaning | Who holds it |
 |---|---|---|
 | `read` | look inside the world | everyone |
-| `write` | change files inside the world — including deleting or renaming inside the writer's own soil, which moves the old file to the attic with a ledger line | Slime (zone), Kijin (post), Orc (the verify block of its Slimes' docs), Dark Elf (proving ground) |
+| `write` | change files inside the world — including deleting or renaming inside the writer's own soil, which moves the old file to the attic with a ledger line | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
 | `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
 | `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |
@@ -116,6 +127,7 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 
 | Soil | Owner | Gate over it |
 |---|---|---|
+| the creature's **own doc** | every creature but the throne | its gate, or the doc check alone for an Elf |
 | a **zone** (directory prefixes) | one Slime | its Orc's verify lines |
 | the **verify block** of a Slime's doc | that Slime's Orc — the rest of the doc is the Slime's; the gate diffs by line range | the Orc's own gate |
 | the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/` | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
@@ -186,7 +198,7 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
   (right author, traits hold, duties done, doc truthful) plus tests intact and no seal; see
   [the loop](03-loop.md#the-end-gate). The verdict is appended to `log.md`.
 - **Answering a Dark Elf.** A finding on its domain reaches the Orc through Rimuru. The Orc
-  either orders the fix, or contests it with `@? contest <finding-id>: <reason>`, which Rimuru
+  either orders the fix, or contests it with `@? contest #<finding-id>: <reason>`, which Rimuru
   puts to the human.
 - **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90.
 
@@ -216,7 +228,7 @@ the village.*
 The Kijin is the one door between the world and everything beyond it. Nature 7 (Containment)
 stops being a checklist item and becomes a type: **only a Kijin's shelf carries `outward`**.
 
-Kijin hold one of five **posts**, also compiled in:
+Kijin hold one of five **posts**, also compiled in (`tempest_races::Post`):
 
 | Post | Epithet | Owns (territory) | Outward acts |
 |---|---|---|---|
@@ -299,7 +311,7 @@ stateDiagram-v2
     Candidate --> Ascended: Rimuru proposes · Veldora confirms
     Candidate --> Base: Veldora declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
-    Ascended --> Base: Oni only — an envelope act rolled back or corrected
+    Ascended --> Base: an event — immediate, no probation
     Probation --> Ascended: recovers within 5 reports
     Probation --> Base: does not recover — falls, record kept
 ```
@@ -315,11 +327,20 @@ window. The two thresholds are apart on purpose (hysteresis), so a creature does
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
-| <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
+| <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it, and like any Elf's order it needs a plan item naming its target; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
 | <img src="../assets/portraits/high-orc@64.png" width="28" alt="High Orc"> **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
 | <img src="../assets/portraits/named-slime@64.png" width="28" alt="Named Slime"> **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
 | <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
 | <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+
+How a fall is read (`tempest-races`, `falls`):
+
+- **An event ends the ascension at once**: a High Orc's pass overturned on a sealed territory, a
+  Named Slime's *tests intact* failure, an Oni's rolled-back or corrected envelope act.
+- **A rate below its fall bar starts probation**, and only on a full recent record — ten reports,
+  or ten findings for an Arch Dark Elf. The fall bars sit well under the rise bars, so a body
+  that just rose never reads as falling.
+- Fewer than five reports: a meter is shown, never ranked.
 
 Rules that hold for every ascension:
 
@@ -356,7 +377,7 @@ swapped in. The old doc rests in the attic.
 
 | isekai | Tempest | Why |
 |---|---|---|
-| a rank table in config (`ranks.*`) | an enum and a sealed trait | we know what works; a configurable tree produced unknowns and 8k lines of config |
+| a rank table in config (`ranks.*`) | an enum and its compiled methods | we know what works; a configurable tree produced unknowns and 8k lines of config |
 | Kijin = one standing release lane | Kijin = the only outward race, five posts | Containment as a type, not a rule to remember |
 | Dark Elf = auditor of `log.md` | Dark Elf = adversary of the code, witness rule, seals | the most valuable review is the hostile one, and it must be provable |
 | ascension = a rename | ascension = concrete privileges, human-confirmed, with falls | trust that grants nothing is decoration; trust that cannot be lost is a risk |

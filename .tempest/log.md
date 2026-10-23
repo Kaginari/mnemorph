@@ -125,6 +125,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-23T22:00:53+02:00] rimuru — M1 part 2: tempest-races, the law compiled
+- **Task:** the race law (M1, #3): races, shelves, soil, gates, the dispatch decision table, scores,
+  meters, rises and falls, covered whole.
+- **Files:** crates/tempest-races (race, shelf, dispatch, value; tests/law.rs), justfile (`law`:
+  100% region coverage or the check fails), CI (cargo-llvm-cov), rust-toolchain.toml (llvm-tools),
+  docs/02-races.md (how falls are read, default tiers), docs/04-communication.md (the High Elf's
+  lane first; sideways dispatch meets the budget).
+- **Gate:** n/a. Instruments: 18 races tests, `just law` at 100% regions / functions / lines
+  (330 lines), proven to fail at 99.38% with one uncovered function; `just check` green.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The table test caught a real ordering bug: a High Elf commands Orcs by race, so the lineage
+    rule refused its other-lane route before the route was read. Special powers are checked first.
+  - `unreachable!()` arms make 100% coverage impossible; list the ascended forms in the match
+    instead, and give every refusal a method a test can call.
+  - Stable Rust measures regions, not branches: "covered whole" means regions, said plainly.
+  - #33's macOS job was cancelled before reaching a runner (no steps); a re-run, not a fix.
+
+---
+
 ### [2026-10-23T22:11:56+02:00] rimuru — a diagram GitHub could not parse
 - **Task:** Veldora: a Mermaid parse error on GitHub ("Parse error on line 22 … wire/parse.rs").
 - **Files:** docs/04-communication.md (the message text), tools/check-diagrams.mjs (Mermaid parses
@@ -144,3 +164,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   keep their emoji: GitHub's Mermaid shows no images inside nodes.
 - **Then:** Veldora: remove the Leonardo.ai prompt page. docs/race-icons-prompt.md is gone (its
   gallery of the generated icons moved to assets/README.md); the cards brief stays.
+
+---
+
+### [2026-10-23T22:22:40+02:00] rimuru — M1 closed after a fresh Fable review
+- **Task:** close M1: the milestone's Fable review (20 findings) and its fixes.
+- **Files:** tempest-wire — `hole.rs` (typed holes: cut, contest, budget), report.rs (fields folded
+  to one line; a linear cut that folds earlier cuts into one hole; `parse` strict, `parse_raw` only
+  for `wire:raw`; fenced claims and `Finding::address`; `Word`; `envelope(path, filed)`,
+  `Courier::matches`, `Report::is_whole`), tag.rs (each raw tag joins its fields its own way),
+  commission.rs (`@CAP 0` refused, fields folded); tests/regressions.rs pins every confirmed defect,
+  properties reach claims that look like parts and any-string fields. tempest-races —
+  `ShelfRefusal`, `Post`, `RECOVER_REPORTS`, `DECLINE_COOLDOWN_RUNS`, `Recent`, `recovers`,
+  `rises(risen, …)`, the lane route needs its plan item, a literal 11×11 dispatch table. The book:
+  02 (the law's real shape, `write` for every race in its soil, own docs in the soil table,
+  posts compiled), 04 (`@SIZE`, typed holes, every reading of the grammar, the lane route's plan
+  check), 06 (the budget hole), 05, roadmap (coverage in regions, said plainly), lessons (the
+  lexicon row moves to M6).
+- **Gate:** n/a. Instruments: 52 tests (wire 31, races 21), a 20,000-finding cut inside the suite,
+  `just law` 100% regions / functions / lines, clippy pedantic clean, `just check`.
+- **Result:** in review as #35.
+- **Learned:**
+  - A property test guards only its alphabet: every confirmed wire defect lived outside
+    `[a-z0-9 ]`. Generators now carry words that look like the grammar's own parts.
+  - The test oracle must not be the code under test: the dispatch table is written out by hand.
+  - Accepting the raw form everywhere let prose overwrite a status; a mouth pair's agreement is
+    now a parser the world chooses, not a habit of the parser.
