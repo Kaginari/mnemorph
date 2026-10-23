@@ -83,15 +83,27 @@ shared notes and ontology facts automatically.
 | `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |
 
-Two limits, two jobs. `@CAP` (2048 bytes) is what the **writer** may send: over it, the report
-is trimmed in a fixed order — `@FORGE`, `@F`, `@V` go first; `@S`, `@?` and `@U` are never
-dropped. The courier threshold (600 bytes) is what the **reader** receives inline: a report
+Two limits, two jobs. `@CAP` (2048 bytes) is what the **writer** may send: over it, lines are
+cut from the end of each list in a fixed order — prose, `@T`, `@FORGE`, `@W`, `@F`, `@V` — and a
+hole names the cut (`@? @CAP 2048: 12 lines cut — full report at <dump>`). `@S`, `@?`, `@U`,
+`@R`, `@H` and `@$` are never cut: losing a hole, the unsaid, the courier or an order costs more
+than any byte. The courier threshold (600 bytes) is what the **reader** receives inline: a report
 between 600 and 2048 bytes is complete, but travels as an envelope — `@R` to the file under
-`.tempest/instruments/loop/`, `@H`, one `@W` per written path, an eight-line digest — and the
-parent opens the file only when its verdict needs the flesh.
+`.tempest/instruments/loop/`, `@H`, one `@W` per written path, the orders, and a digest of the
+first eight verdicts and findings — and the parent opens the file only when its verdict needs the
+flesh.
 
-In code the wire is one crate (`tempest-wire`) with a parser and an encoder that round-trip;
-every tag is an enum variant, and the property test is `parse(encode(r)) == r` for any report.
+Every emitted report closes with `@E <n>`, the exact byte length of the whole answer, its own
+line included. Three readings are part of the grammar:
+
+- the raw pipe form (`S|DONE`, `F|a.rs:3|claim`) reads like the tagged one when a mouth pair
+  agreed on `wire:raw`;
+- an order's body is one word (`@$ orc-auth: …`); `@$ note this: …` is prose, not an order;
+- an untyped `@U` whose first word is `law`, `colony` or `territory` reads as typed.
+
+In code the wire is one crate (`tempest-wire`, no dependencies) with a parser and an encoder that
+round-trip; property tests hold `parse(emit(r)) == r` for any report, an exact `@E`, and a cut
+that never loses what must stay.
 
 ### Dispatch rules, all compiled in
 
