@@ -21,7 +21,7 @@ mod transport;
 pub use anthropic::{API_VERSION, Anthropic, MAX_BREAKPOINTS, encode};
 pub use error::{Error, Wait};
 pub use model::{Block, Effort, Event, Message, Request, Response, Role, StopReason, Tool};
-pub use openai::{OpenAiCompatible, encode_chat};
+pub use openai::{OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use transport::{Body, HttpRequest, HttpResponse, HttpTransport, Reply, Scripted, Transport};

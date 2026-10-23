@@ -86,15 +86,7 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
             "{breakpoints} cache breakpoints; at most {MAX_BREAKPOINTS}"
         )));
     }
-    if request
-        .messages
-        .first()
-        .is_some_and(|m| m.role == Role::System)
-    {
-        return Err(Error::Invalid(
-            "a system message cannot open the conversation".into(),
-        ));
-    }
+    check_system_messages(&request.messages)?;
     let mut body = Map::new();
     body.insert("model".into(), json!(request.model));
     body.insert("max_tokens".into(), json!(request.max_tokens));
@@ -107,7 +99,9 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
     }
     if !request.tools.is_empty() {
         let tools = request.tools.iter().map(|t| {
-            let mut tool = json!({"name": t.name, "description": t.description, "input_schema": t.input_schema});
+            // Streamed as generated: a long input (a file's contents) arrives in pieces, never as a
+            // silent gap that the stall wait would read as a dead stream.
+            let mut tool = json!({"name": t.name, "description": t.description, "input_schema": t.input_schema, "eager_input_streaming": true});
             if t.cache {
                 tool["cache_control"] = json!({"type": "ephemeral"});
             }
@@ -125,13 +119,48 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
     Ok(Value::Object(body))
 }
 
+/// The API's rules for a mid-conversation system message: never first, after a user message,
+/// last or followed by an assistant turn, text only. Broken, they cost a 400 and the turn.
+fn check_system_messages(messages: &[Message]) -> Result<(), Error> {
+    for (i, m) in messages
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.role == Role::System)
+    {
+        let refuse = |why: &str| Err(Error::Invalid(format!("system message {i}: {why}")));
+        if i == 0 {
+            return refuse("a system message cannot open the conversation");
+        }
+        if messages[i - 1].role != Role::User {
+            return refuse("it must follow a user message");
+        }
+        if messages
+            .get(i + 1)
+            .is_some_and(|next| next.role != Role::Assistant)
+        {
+            return refuse("it must be last, or followed by an assistant turn");
+        }
+        if !m.content.iter().all(|b| matches!(b, Block::Text { .. })) {
+            return refuse("it may hold text only");
+        }
+    }
+    Ok(())
+}
+
 fn message(m: &Message) -> Value {
     let role = match m.role {
         Role::User => "user",
         Role::Assistant => "assistant",
         Role::System => "system",
     };
-    json!({"role": role, "content": m.content.iter().map(block).collect::<Vec<_>>()})
+    // Another provider's opaque blocks are not this API's to read: left out.
+    let content: Vec<Value> = m
+        .content
+        .iter()
+        .filter(|b| !matches!(b, Block::Opaque(v) if v["type"].as_str().is_some_and(|t| t.starts_with(crate::openai::OPAQUE_PREFIX))))
+        .map(block)
+        .collect();
+    json!({"role": role, "content": content})
 }
 
 fn block(b: &Block) -> Value {
@@ -184,6 +213,7 @@ struct Assembly {
     stop: Option<StopReason>,
     usage: Usage,
     warnings: Vec<String>,
+    stop_details: Option<Value>,
 }
 
 impl Assembler for Assembly {
@@ -208,7 +238,6 @@ impl Assembler for Assembly {
                 self.read_usage(&v["message"]["usage"]);
             }
             "content_block_start" => {
-                *started = true;
                 let index = index(&v)?;
                 let cb = &v["content_block"];
                 let partial = match cb["type"].as_str().unwrap_or("") {
@@ -216,6 +245,7 @@ impl Assembler for Assembly {
                     "tool_use" => {
                         let id = cb["id"].as_str().unwrap_or_default().to_owned();
                         let name = cb["name"].as_str().unwrap_or_default().to_owned();
+                        *started = true;
                         on(Event::ToolStart {
                             id: id.clone(),
                             name: name.clone(),
@@ -241,39 +271,32 @@ impl Assembler for Assembly {
                 match (partial, delta["type"].as_str().unwrap_or("")) {
                     (Partial::Text(text), "text_delta") => {
                         let piece = delta["text"].as_str().unwrap_or_default();
-                        text.push_str(piece);
-                        on(Event::Text(piece.to_owned()));
+                        if !piece.is_empty() {
+                            *started = true;
+                            text.push_str(piece);
+                            on(Event::Text(piece.to_owned()));
+                        }
                     }
                     (Partial::Tool { json, .. }, "input_json_delta") => {
                         json.push_str(delta["partial_json"].as_str().unwrap_or_default());
                     }
-                    // Thinking, signatures and anything else: append every string field of the
-                    // delta to the same field of the block, which goes back untouched.
-                    (Partial::Opaque(block), _) => {
-                        if let Some(fields) = delta.as_object() {
-                            for (field, value) in fields.iter().filter(|(f, _)| *f != "type") {
-                                if let (Some(piece), Some(slot)) =
-                                    (value.as_str(), block.as_object_mut())
-                                {
-                                    let entry =
-                                        slot.entry(field.clone()).or_insert_with(|| json!(""));
-                                    let joined =
-                                        format!("{}{piece}", entry.as_str().unwrap_or_default());
-                                    *entry = json!(joined);
-                                }
-                            }
-                        }
-                    }
+                    // Thinking, signatures, server tools and anything newer: assembled into the
+                    // block, which goes back untouched.
+                    (Partial::Opaque(block), kind) => opaque_delta(block, kind, delta),
                     (_, other) => {
-                        return Err(Error::Decode(format!(
-                            "a {other} delta for block {index} of another kind"
-                        )));
+                        let note = format!("a {other} delta on block {index} was not kept");
+                        if !self.warnings.contains(&note) {
+                            self.warnings.push(note);
+                        }
                     }
                 }
             }
             "message_delta" => {
                 if let Some(reason) = v["delta"]["stop_reason"].as_str() {
                     self.stop = Some(stop_reason(reason));
+                }
+                if v["delta"]["stop_details"].is_object() {
+                    self.stop_details = Some(v["delta"]["stop_details"].clone());
                 }
                 self.read_usage(&v["usage"]);
             }
@@ -320,36 +343,88 @@ impl Assembly {
     }
 
     fn finish(&mut self) -> Result<Response, Error> {
+        let stop = self
+            .stop
+            .take()
+            .unwrap_or_else(|| StopReason::Other(String::new()));
         let mut blocks = std::mem::take(&mut self.blocks);
         blocks.sort_by_key(|(i, _)| *i);
-        let content = blocks
-            .into_iter()
-            .map(|(_, p)| match p {
-                Partial::Text(text) => Ok(Block::Text { text, cache: false }),
+        let mut content = Vec::with_capacity(blocks.len());
+        for (_, partial) in blocks {
+            match partial {
+                Partial::Text(text) => content.push(Block::Text { text, cache: false }),
                 Partial::Tool { id, name, json } => {
                     // A call with no arguments streams no input at all: that is `{}`.
                     let input = if json.trim().is_empty() {
-                        json!({})
+                        Ok(json!({}))
                     } else {
                         serde_json::from_str(&json)
-                            .map_err(|e| Error::Decode(format!("tool {name}'s input: {e}")))?
                     };
-                    Ok(Block::ToolUse { id, name, input })
+                    match input {
+                        Ok(input) => content.push(Block::ToolUse { id, name, input }),
+                        // Cut by the output ceiling: the call never finished, so it is dropped.
+                        Err(_) if stop == StopReason::MaxTokens => {
+                            self.warnings.push(format!(
+                                "tool call {name} was cut by max_tokens and dropped"
+                            ));
+                        }
+                        Err(e) => return Err(Error::Decode(format!("tool {name}'s input: {e}"))),
+                    }
                 }
-                Partial::Opaque(v) => Ok(Block::Opaque(v)),
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+                Partial::Opaque(mut v) => {
+                    if let Some(partial) = v.as_object_mut().and_then(|o| o.remove(PARTIAL_JSON)) {
+                        let text = partial.as_str().unwrap_or_default();
+                        v["input"] = serde_json::from_str(text).unwrap_or_else(|_| json!({}));
+                    }
+                    content.push(Block::Opaque(v));
+                }
+            }
+        }
+        if stop == StopReason::Refusal && !content.is_empty() {
+            // A refusal mid-stream: what came before it is not an answer to keep.
+            content.clear();
+            self.warnings
+                .push("refusal: the partial content was discarded".to_owned());
+        }
         Ok(Response {
             id: std::mem::take(&mut self.id),
             model: std::mem::take(&mut self.model),
             content,
-            stop: self
-                .stop
-                .take()
-                .unwrap_or_else(|| StopReason::Other(String::new())),
+            stop,
+            stop_details: self.stop_details.take(),
             usage: self.usage,
             warnings: std::mem::take(&mut self.warnings),
         })
+    }
+}
+
+/// Where an opaque block's streamed JSON input collects until the block is finished.
+const PARTIAL_JSON: &str = "__partial_json";
+
+/// One delta on an opaque block: strings append to their field, `partial_json` collects into the
+/// block's `input`, objects append to an array named after their field (`citation` →
+/// `citations`).
+fn opaque_delta(block: &mut Value, kind: &str, delta: &Value) {
+    let (Some(slot), Some(fields)) = (block.as_object_mut(), delta.as_object()) else {
+        return;
+    };
+    for (field, value) in fields.iter().filter(|(f, _)| *f != "type") {
+        if kind == "input_json_delta" && field == "partial_json" {
+            let entry = slot.entry(PARTIAL_JSON).or_insert_with(|| json!(""));
+            *entry = json!(format!(
+                "{}{}",
+                entry.as_str().unwrap_or_default(),
+                value.as_str().unwrap_or_default()
+            ));
+        } else if let Some(piece) = value.as_str() {
+            let entry = slot.entry(field.clone()).or_insert_with(|| json!(""));
+            *entry = json!(format!("{}{piece}", entry.as_str().unwrap_or_default()));
+        } else if value.is_object() {
+            let list = slot.entry(format!("{field}s")).or_insert_with(|| json!([]));
+            if let Some(list) = list.as_array_mut() {
+                list.push(value.clone());
+            }
+        }
     }
 }
 

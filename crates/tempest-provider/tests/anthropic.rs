@@ -290,7 +290,11 @@ async fn the_ladder_stops() {
     ));
     let (result, _) = run(&client(&script), &request()).await;
     assert!(matches!(result, Err(Error::Api { status: 529, .. })));
-    assert_eq!(script.sent().len(), 5, "the first attempt and four retries");
+    assert_eq!(
+        script.sent().len(),
+        4,
+        "the first attempt and three retries"
+    );
 }
 
 #[tokio::test(start_paused = true)]
