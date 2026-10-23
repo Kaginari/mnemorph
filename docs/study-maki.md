@@ -1,8 +1,8 @@
 # Study: maki
 
 [maki](https://github.com/tontinton/maki) is a terminal coding agent that ranks first among the
-published harnesses on a small benchmark. This page says what it does well, where Tempest is
-stronger, and which of its ideas Tempest takes. It describes maki as of v0.5.5.
+published harnesses on a small benchmark. This page says what it does well, where Mnemorph is
+stronger, and which of its ideas Mnemorph takes. It describes maki as of v0.5.5.
 
 ## In one picture
 
@@ -25,7 +25,7 @@ flowchart LR
       M7["forgiving edit"]
       M8["one flat body"]
     end
-    subgraph tempest["Tempest — races as law"]
+    subgraph mnemorph["Mnemorph — races as law"]
       T5["M5 the loop"]
       T4["M4 tools"]
       T8["M8 memory"]
@@ -47,7 +47,7 @@ flowchart LR
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class D gate
     style maki fill:#f8fafc,stroke:#94a3b8
-    style tempest fill:#f0f9ff,stroke:#3FA9F5
+    style mnemorph fill:#f0f9ff,stroke:#3FA9F5
 ```
 
 ## In plain words
@@ -57,12 +57,12 @@ is about 2.4 KB, it reads files through a skeleton first, and it never rebuilds 
 prompt, so the provider's cache serves almost all of every request. That discipline is why it
 does well.
 
-Tempest is built around a different idea: an agent's powers are law, compiled in. Who may write
+Mnemorph is built around a different idea: an agent's powers are law, compiled in. Who may write
 code, who may reach outside, who judges a landing, how much each body may spend — these are rules
 the binary enforces, not settings or habits. maki has almost none of that: no OS sandbox, a single
 body that may do anything it is permitted to do, and behaviour that plugins can rewrite.
 
-So the two are strong in different places. Tempest takes maki's token discipline where it fits —
+So the two are strong in different places. Mnemorph takes maki's token discipline where it fits —
 six ideas, each now an issue on the milestone that builds it — and keeps its own law. Two ideas
 touch the law itself and wait for a decision.
 
@@ -70,7 +70,7 @@ touch the law itself and wait for a decision.
 
 ### What maki is
 
-- A Rust workspace (the same stack as Tempest's core), with a ratatui terminal UI, a loop on the
+- A Rust workspace (the same stack as Mnemorph's core), with a ratatui terminal UI, a loop on the
   smol runtime, Lua plugins in the manner of neovim (every built-in tool is a plugin), twelve-plus
   providers, MCP, skills, an ACP server and a headless JSON mode.
 - **Its benchmark.** The report attached to its v0.5.5 release: FrontierHarness Eval v1.0, 30
@@ -82,9 +82,9 @@ touch the law itself and wait for a decision.
   unverified, and a margin of two tasks over the next harness — a direction worth following, not a
   proof.
 
-### Where Tempest is stronger
+### Where Mnemorph is stronger
 
-| Concern | maki | Tempest |
+| Concern | maki | Mnemorph |
 |---|---|---|
 | Containment | no OS sandbox: permission prompts over a parsed command, and a `--yolo` switch | landlock, seccomp and a network namespace per body, Seatbelt on macOS, an escape suite in CI ([architecture](05-architecture.md#sandbox)) |
 | Who may do what | one body, configurable by plugins that can replace prompt sections and register tools and permission rules | six races and five ascended forms compiled in: shelves, soil, gates and dispatch are code ([races](02-races.md)) |
@@ -104,37 +104,37 @@ touch the law itself and wait for a decision.
   is refused.
 - **Short tasks.** One body with no hand-offs. A deep hierarchy pays a prefix at every hop and a
   verify-first turn before code; on 30 short tasks that costs.
-- **Breadth.** More providers, MCP and ACP today. Tempest reaches these at M3 and M13.
+- **Breadth.** More providers, MCP and ACP today. Mnemorph reaches these at M3 and M13.
 
-### What Tempest takes
+### What Mnemorph takes
 
-| Idea from maki | Where in maki | In Tempest | Issue |
+| Idea from maki | Where in maki | In Mnemorph | Issue |
 |---|---|---|---|
-| The request only ever grows: mid-session changes (date, model, directory, mode) are appended, never rebuilt into the prefix; thinking blocks are dropped once if the prefix ever moved | `maki-agent/src/agent/frame.rs`, `run.rs` (`assert_append_only`) | the cache-prefix test runs N turns with such changes (M5) | [#38](https://github.com/Kaginari/tempest/issues/38) |
-| An `index` tool returning a file's skeleton with line ranges, and `read` that requires a range | `plugins/index`, `plugins/read/init.lua` | `tempest-tools` (M4), sharing the parser the shell classifier needs | [#39](https://github.com/Kaginari/tempest/issues/39) |
-| Loop resilience rules: nudge, continue, one overflow compaction, an identical-call loop breaker, partial output on cancel | `run.rs`, `tool_dispatch.rs` | beside guts and the doom checkpoint (M5), with nudges capped low | [#40](https://github.com/Kaginari/tempest/issues/40) |
-| Compaction by a byte budget with a fixed summary template | `compaction.rs`, `prompts/compaction_user.md` | the compaction drain (M8): discoveries become `@U` lines, files `@F` lines | [#41](https://github.com/Kaginari/tempest/issues/41) |
-| Research subagents on a cheaper model, never a stronger one than their parent | `plugins/task/init.lua` | a findings commission may ride a lower tier (M7) | [#42](https://github.com/Kaginari/tempest/issues/42) |
-| A small, measured prompt | `maki-agent/src/prompts/` | a CI ceiling on each race's prefix tokens (M5), beside the prefix-share meter | [#43](https://github.com/Kaginari/tempest/issues/43) |
+| The request only ever grows: mid-session changes (date, model, directory, mode) are appended, never rebuilt into the prefix; thinking blocks are dropped once if the prefix ever moved | `maki-agent/src/agent/frame.rs`, `run.rs` (`assert_append_only`) | the cache-prefix test runs N turns with such changes (M5) | [#38](https://github.com/Kaginari/mnemorph/issues/38) |
+| An `index` tool returning a file's skeleton with line ranges, and `read` that requires a range | `plugins/index`, `plugins/read/init.lua` | `mnemorph-tools` (M4), sharing the parser the shell classifier needs | [#39](https://github.com/Kaginari/mnemorph/issues/39) |
+| Loop resilience rules: nudge, continue, one overflow compaction, an identical-call loop breaker, partial output on cancel | `run.rs`, `tool_dispatch.rs` | beside guts and the doom checkpoint (M5), with nudges capped low | [#40](https://github.com/Kaginari/mnemorph/issues/40) |
+| Compaction by a byte budget with a fixed summary template | `compaction.rs`, `prompts/compaction_user.md` | the compaction drain (M8): discoveries become `@U` lines, files `@F` lines | [#41](https://github.com/Kaginari/mnemorph/issues/41) |
+| Research subagents on a cheaper model, never a stronger one than their parent | `plugins/task/init.lua` | a findings commission may ride a lower tier (M7) | [#42](https://github.com/Kaginari/mnemorph/issues/42) |
+| A small, measured prompt | `maki-agent/src/prompts/` | a CI ceiling on each race's prefix tokens (M5), beside the prefix-share meter | [#43](https://github.com/Kaginari/mnemorph/issues/43) |
 
 ### Waiting for a decision
 
-- **A permanent solo path** ([#44](https://github.com/Kaginari/tempest/issues/44)). Keep the
+- **A permanent solo path** ([#44](https://github.com/Kaginari/mnemorph/issues/44)). Keep the
   lone-body mode instead of removing it at M7: one body with Rimuru's voice and a Slime's hands,
   still under shelves, soil, the sandbox and the end gate, escalating into the hierarchy only on
   context stress, a territory boundary, or an outward or adversarial act. The races stay as law;
   the hierarchy becomes something a run pays for only when the task needs it. Measured on the same
   30 tasks before M7.
-- **A forgiving edit** ([#45](https://github.com/Kaginari/tempest/issues/45)). maki's edit tries
+- **A forgiving edit** ([#45](https://github.com/Kaginari/mnemorph/issues/45)). maki's edit tries
   exact, trimmed, anchored, whitespace-normalised and indentation-flexible matches and re-indents
-  the replacement. Tempest's lesson is a strict edit that names the closest line. The middle
+  the replacement. Mnemorph's lesson is a strict edit that names the closest line. The middle
   ground: accept a forgiving match only when exactly one candidate exists, and say in the result
   what was forgiven.
 
-### What Tempest does not take
+### What Mnemorph does not take
 
 - **Permission prompts as the only containment.** The sandbox is not optional.
 - **Plugins that rewrite prompts, tools and permissions.** Races are code, not configuration.
 - **A `batch` meta-tool.** Native parallel tool calls already do it.
 - **Hooks that keep a run going** (`agent.stop` continue, twenty nudges). Envelopes are the limit.
-- **The headline score as proof.** It is a direction; Tempest measures its own runs.
+- **The headline score as proof.** It is a direction; Mnemorph measures its own runs.

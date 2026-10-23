@@ -70,26 +70,26 @@ draw.
 ### The repository
 
 ```
-tempest/
+mnemorph/
 ├─ crates/
-│  ├─ tempest-wire       envelope types, parser, encoder            (no I/O)
-│  ├─ tempest-races      Race enum, shelves, dispatch, scores, falls (no I/O)
-│  ├─ tempest-ledger     usage + value ledgers, budgets, prices      (files)
-│  ├─ tempest-provider   streaming clients, retry ladder, caching    (network)
-│  ├─ tempest-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
-│  ├─ tempest-tools      tool impls, classifier, secret injection    (OS)
-│  ├─ tempest-memory     tiers, BM25 recall, toolbox manifest        (files)
-│  ├─ tempest-world      creatures, onto, dispatch, gate, evolution  (files)
-│  ├─ tempest-loop       the six beats, journal, resume              (all above)
-│  ├─ tempest-server     JSON-RPC, WebSocket, board assets           (network: loopback)
-│  └─ tempestd           the binary
+│  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
+│  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
+│  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
+│  ├─ mnemorph-provider   streaming clients, retry ladder, caching    (network)
+│  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
+│  ├─ mnemorph-tools      tool impls, classifier, secret injection    (OS)
+│  ├─ mnemorph-memory     tiers, BM25 recall, toolbox manifest        (files)
+│  ├─ mnemorph-world      creatures, onto, dispatch, gate, evolution  (files)
+│  ├─ mnemorph-loop       the six beats, journal, resume              (all above)
+│  ├─ mnemorph-server     JSON-RPC, WebSocket, board assets           (network: loopback)
+│  └─ mnemorphd           the binary
 ├─ packages/
 │  ├─ protocol           generated from crates via ts-rs; checked in
 │  ├─ sdk                transport (stdio | ws), reconnect by seq
-│  ├─ cli                `tempest` — Ink + React
-│  └─ board              Vite + React; built into tempestd
+│  ├─ cli                `mnemorph` — Ink + React
+│  └─ board              Vite + React; built into mnemorphd
 ├─ docs/                 this book
-├─ .tempest/             Tempest builds itself as a world
+├─ .mnemorph/             Mnemorph builds itself as a world
 └─ justfile              one entry point for every task
 ```
 
@@ -103,31 +103,31 @@ tempest/
 | types → TS | ts-rs | one source of truth for the protocol |
 | config | TOML via `toml_edit` | edits preserve comments; isekai's YAML-append bug cannot exist |
 | recall | tantivy (BM25) | local, model-free by default (Nature 7) |
-| errors | `thiserror` in crates, `anyhow` only in `tempestd` | typed failures cross crate borders |
+| errors | `thiserror` in crates, `anyhow` only in `mnemorphd` | typed failures cross crate borders |
 | logs | `tracing` → JSON file under the world | the journal is an instrument |
 | tests | nextest, insta snapshots, proptest; vitest + ink-testing-library; Playwright for the board | every rung testable alone |
 | TS tooling | Node 22, pnpm workspaces, tsup, Biome | Node is already the platform Claude Code runs on |
-| distribution | an npm package with per-platform optional deps carrying `tempestd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers. The names `tempest` on npm and crates.io are taken: the published names are settled in phase D |
+| distribution | an npm package with per-platform optional deps carrying `mnemorphd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers. The names `mnemorph` on npm and crates.io are taken: the published names are settled in phase D |
 
 ### Storage: files are the truth
 
 | What | Where | Tracked in git |
 |---|---|---|
-| law, creature docs, Minds | `.tempest/law.md`, `.tempest/<race>/<name>/README.md`, `.tempest/minds/` | yes |
-| journal | `.tempest/log.md` — append-only writer | yes |
-| shared notes | `.tempest/memory/shared/notes.jsonl` | yes |
-| shared work queue | `.tempest/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
-| handoffs | `.tempest/handoffs/<time>.md` | yes |
-| Kijin post journals | `.tempest/kijin/<post>/post.jsonl` | yes |
-| Dark Elf proving ground | `.tempest/dark-elf/` | yes (frozen witnesses are evidence) |
-| dimension manifest | `.tempest/dimension.toml` — the neighbouring worlds and their relations | yes |
-| advisory mirror | `.tempest/intel/` — kept by `kijin-scout` | no — hundreds of MB |
-| attic | `.tempest/attic/` — deleted and replaced files, with a ledger line each | yes |
-| usage + value ledgers | `.tempest/instruments/*.jsonl` | no — machine-local |
-| derived indexes | `.tempest/index/` | no — rebuildable |
-| run journals | `.tempest/instruments/loop/` | no |
+| law, creature docs, Minds | `.mnemorph/law.md`, `.mnemorph/<race>/<name>/README.md`, `.mnemorph/minds/` | yes |
+| journal | `.mnemorph/log.md` — append-only writer | yes |
+| shared notes | `.mnemorph/memory/shared/notes.jsonl` | yes |
+| shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
+| handoffs | `.mnemorph/handoffs/<time>.md` | yes |
+| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
+| Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
+| dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations | yes |
+| advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
+| attic | `.mnemorph/attic/` — deleted and replaced files, with a ledger line each | yes |
+| usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
+| derived indexes | `.mnemorph/index/` | no — rebuildable |
+| run journals | `.mnemorph/instruments/loop/` | no |
 
-Every index is derived and can be deleted; `tempest index` rebuilds it. A stale index is rebuilt,
+Every index is derived and can be deleted; `mnemorph index` rebuilds it. A stale index is rebuilt,
 never routed around.
 
 ### Sandbox
@@ -166,7 +166,7 @@ flowchart LR
 - Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) cannot
   allow cross-directory renames (`mv a/x b/x` inside the soil fails) and cannot restrict
   truncate; v4 (6.7+) adds network rules. The core probes the ABI at start, uses what it has,
-  and `tempest status` prints the sandbox actually in force — never more than that.
+  and `mnemorph status` prints the sandbox actually in force — never more than that.
 - macOS: a generated Seatbelt profile with the same policies.
 - `--container`: the container **is** the sandbox — one container per body, its mounts limited
   to the body's soil and its network to the policy. It does not nest landlock or namespaces
@@ -176,10 +176,10 @@ flowchart LR
 
 ### Where each piece comes from in isekai
 
-Tempest is a port of proven behaviour, not a blank page. Each crate's first rung starts by reading
+Mnemorph is a port of proven behaviour, not a blank page. Each crate's first rung starts by reading
 these isekai sources and turning their tests into fixtures.
 
-| Tempest crate | isekai sources (Go, `~/kaginari/isekai`) | Size (src lines) |
+| Mnemorph crate | isekai sources (Go, `~/kaginari/isekai`) | Size (src lines) |
 |---|---|---|
 | wire | `wire/` | 433 |
 | races | `world/rank.go`, `config/ranks.go`, `rank/`, `value/` formulas | ~1,700 |

@@ -1,3 +1,3 @@
 export function App() {
-  return <main>Tempest</main>;
+  return <main>Mnemorph</main>;
 }

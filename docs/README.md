@@ -1,6 +1,6 @@
-# Tempest — the book
+# Mnemorph — the book
 
-Tempest is the agent harness that grows out of isekai: the same nine natures, the same wire,
+Mnemorph is the agent harness that grows out of isekai: the same nine natures, the same wire,
 rebuilt with a Rust core and a TypeScript CLI and board. The races are **code**, not
 configuration: what each one may do, whom it answers to, how it is scored and how it ascends is
 compiled into the binary.
@@ -31,7 +31,7 @@ review a canvas change like a code change.
 
 | # | Page | Read it to learn |
 |---|---|---|
-| 1 | [Overview](01-overview.md) | what Tempest is, the world, the processes |
+| 1 | [Overview](01-overview.md) | what Mnemorph is, the world, the processes |
 | 2 | [Races](02-races.md) | every race and ascension: duty, powers, limits, score, fall |
 | 3 | [The loop](03-loop.md) | the six beats of one turn, budgets, stress |
 | 4 | [Communication](04-communication.md) | the wire between bodies, dispatch down and back, the client protocol |
@@ -40,7 +40,7 @@ review a canvas change like a code change.
 | 7 | [MCP](07-mcp.md) | the client, agent-mcp and toolbox-mcp: every spec in, only the needed ones out |
 | 8 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
-| — | [Study: maki](study-maki.md) | what Tempest takes from a lean harness, and where it stays stronger |
+| — | [Study: maki](study-maki.md) | what Mnemorph takes from a lean harness, and where it stays stronger |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 
 ## The three words that matter
@@ -48,6 +48,6 @@ review a canvas change like a code change.
 - **Race** — a kind of agent, compiled in: six races and five ascended forms. No config adds
   another.
 - **Creature** — one living instance of a race, with a name and a territory: `slime-wire`,
-  `orc-engine`. Creatures are data in `.tempest/`.
+  `orc-engine`. Creatures are data in `.mnemorph/`.
 - **Body** — one running context that a creature rides for one commission. It dies with the
   task. Only what it wrote to the world survives it.

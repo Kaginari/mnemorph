@@ -1,0 +1,15 @@
+[package]
+name = "mnemorph-tools"
+description = "The tools: read, write, edit, glob, grep, bash, git; the shell classifier; secret injection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+mnemorph-races = { path = "../mnemorph-races" }
+mnemorph-sandbox = { path = "../mnemorph-sandbox" }
+
+[lints]
+workspace = true

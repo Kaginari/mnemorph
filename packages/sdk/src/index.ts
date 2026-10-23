@@ -1,2 +1,2 @@
-/** The client for tempestd: transports (stdio, WebSocket), reconnect by sequence, typed calls. */
-export const SDK_NAME = '@tempest/sdk';
+/** The client for mnemorphd: transports (stdio, WebSocket), reconnect by sequence, typed calls. */
+export const SDK_NAME = '@mnemorph/sdk';

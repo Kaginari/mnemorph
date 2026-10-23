@@ -109,7 +109,7 @@ Before every model call the loop reads four meters from the core, never from the
 | context | stress at 90% of the model's window | compaction drain, else checkpoint |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
-A checkpoint is an honest stop: the journal holds every beat, and `tempest resume <run>` picks
+A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
 up from it. An outward act cut mid-flight is gated again, never replayed.
 
 ### Stress, in four instruments
@@ -152,10 +152,10 @@ A session's context dies; the world's files do not. A **handoff** is what a fres
 continue without re-asking, re-discovering or repeating a mistake — written by the session that
 knows, read by the one that does not.
 
-- **Writing.** `/handoff [focus]` (and `tempest handoff` headless). The core gathers what it knows
+- **Writing.** `/handoff [focus]` (and `mnemorph handoff` headless). The core gathers what it knows
   as facts — the first ask, uncommitted changes, recent commits, the last journal entries, the
   shared queue's held and claimed work, the session's spend, the previous handoff — and the model
-  fills a fixed template into `.tempest/handoffs/<time>.md`: goal; why it matters; current state
+  fills a fixed template into `.mnemorph/handoffs/<time>.md`: goal; why it matters; current state
   (done · partial · not started); decisions and why; traps and dead ends; files and pointers; open
   work. Rules: state, never orders; point at artifacts, never copy them; secrets by location only;
   leave out what the law, config or code already say; carry forward what still holds from the
