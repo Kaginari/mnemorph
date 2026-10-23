@@ -1,0 +1,120 @@
+# The loop
+
+## In one picture
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart LR
+    P["👁️ perceive<br/>budget · clock · context"] --> RC["📚 recall<br/>memories · tool manifest"]
+    RC --> PL["🧠 plan<br/>one model call"]
+    PL --> A["✋ act<br/>one tool call"]
+    A --> VF["✅ verify<br/>did it work?"]
+    VF --> REC["📝 record<br/>journal · ledger"]
+    REC -->|more tool calls| P
+    REC -->|model answered| G{"🚪 end gate<br/>(if files written)"}
+    G -->|pass| DONE(["report up"])
+    G -->|fail, retries left| P
+    G -->|fail, none left| FAIL(["FAIL up"])
+```
+
+## In plain words
+
+Every body — Rimuru, an Elf, a Slime — runs the same six beats, over and over, until it has an
+answer:
+
+1. **Perceive** — check the fuel gauge: how much budget, time and context is left. If it is
+   running out, save what matters and stop cleanly instead of crashing.
+2. **Recall** — pull in the few memories and tools that fit the question, as pointers, not
+   pasted text.
+3. **Plan** — ask the model what to do next.
+4. **Act** — run one tool the model asked for, after checking that this race may use it and,
+   for anything that leaves the machine or destroys something, after asking you.
+5. **Verify** — did the tool work? A failure counts against the body.
+6. **Record** — write what happened to the journal and the ledger.
+
+When the model stops calling tools and answers, the **gate** judges any files the body wrote.
+If it fails, the body gets one chance to fix it. Then the report goes up.
+
+## Technical detail
+
+### One act, in order
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+sequenceDiagram
+    autonumber
+    participant M as model
+    participant L as loop
+    participant C as classifier
+    participant R as race law
+    participant T as territory
+    participant H as human gate
+    participant X as sandboxed tool
+    M->>L: tool_use(bash, "git push origin feat/x")
+    L->>C: classify
+    C-->>L: outward
+    L->>R: is outward on this race's shelf?
+    alt not a Kijin
+      R-->>L: refused — "route to kijin-forge"
+      L-->>M: tool_result(error, the route)
+    else Kijin
+      L->>T: inside its post?
+      L->>H: plan of the act (or a covering Oni envelope)
+      H-->>L: yes
+      L->>X: run, secrets injected, outputs redacted
+      X-->>L: result
+      L-->>M: tool_result
+    end
+```
+
+The order is fixed and cheap-first: classify → shelf → territory → permission rules → human
+gate → run. A refusal never reaches the sandbox, and every refusal names the lawful route.
+
+### Budgets are readings
+
+Before every model call the loop reads four meters from the core, never from the model:
+
+| Meter | Default | Past it |
+|---|---|---|
+| steps | the commission's envelope (Rimuru 40) | checkpoint |
+| wall clock | the envelope (60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
+| context | stress at 90% of the model's window | compaction drain, else checkpoint |
+| tokens / cost | the commission's `@BUDGET` | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
+
+A checkpoint is an honest stop: the journal holds every beat, and `tempest resume <run>` picks
+up from it. An outward act cut mid-flight is gated again, never replayed.
+
+### Stress, in four instruments
+
+| Instrument | Trigger | Response |
+|---|---|---|
+| **guts** | rolling act score over the last 5 acts falls below −2 | one warning inside a tool result |
+| **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
+| **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
+| **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
+
+All four are code. None of them asks the body how it feels.
+
+### The end gate
+
+Runs on the body's own writes (minus what its Courts already landed on their own account):
+
+1. **Right author** — every path lies in the writer's own soil.
+2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, 120 s
+   each. A line changed this turn is a hole and runs from the next turn (a Named Slime's own
+   additions excepted).
+3. **Duties done** — a commissioned body answered with a non-empty `@S`.
+4. **Doc truthful** — the owner's doc moved in the same change.
+5. **Tests intact** — no test deleted or skipped.
+6. **No seal** — the territory is not sealed by a Dark Elf, or the fix includes the witness.
+
+The verdict goes to `log.md` through the append-only writer. Three fails running for the same
+body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.

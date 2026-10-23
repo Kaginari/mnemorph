@@ -1,0 +1,291 @@
+# Races
+
+## In one picture
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart TD
+    V(["🐉 Veldora · human"])
+    R["👑 Rimuru · throne"]
+    subgraph chain["the chain — builds"]
+      E["🌿 Elf"] --> O["🪓 Orc"] --> S["💧 Slime"]
+    end
+    subgraph standing["standing beside — reach and challenge"]
+      K["👹 Kijin"]
+      D["🌑 Dark Elf"]
+    end
+    V --- R
+    R --> E
+    R --> K
+    R --> D
+
+    E -. ascends .-> HE["✨ High Elf"]
+    O -. ascends .-> HO["⚔️ High Orc"]
+    S -. ascends .-> NS["💎 Named Slime"]
+    K -. ascends .-> ON["🔥 Oni"]
+    D -. ascends .-> AD["🌘 Arch Dark Elf"]
+```
+
+## In plain words
+
+There are six races. Each one has **one job**, and the harness makes it impossible to do
+anyone else's:
+
+| Race | Its job, in one line | Can write code? | Can reach outside? | Commands |
+|---|---|---|---|---|
+| 👑 Rimuru | understand the human, plan, answer | no | no | Elves, Kijin, Dark Elves |
+| 🌿 Elf | plan one lane of work across domains | no | no | its Orcs |
+| 🪓 Orc | own a domain: write the test first, judge the landing | no (only tests' verify lines on its slimes' docs) | no | its Slimes, other Orcs sideways |
+| 💧 Slime | change the code of its one zone, with its doc | **yes, its zone only** | no | nobody |
+| 👹 Kijin | everything that leaves the machine: CI, release, deploy, PRs, intel | its post's files only | **yes, through the gate** | nobody |
+| 🌑 Dark Elf | attack the code; prove every weakness it claims | no (only proofs in its own ground) | no | nobody |
+
+A creature that keeps doing its job well **ascends**: the harness promotes it, with your
+confirmation, and the promotion grants a concrete power — usually less friction. A promoted
+creature that slips **falls** back. Trust is earned, measured and revocable.
+
+## Technical detail
+
+### The shape of a race in code
+
+Every race is a variant of one Rust enum and answers one sealed trait. No configuration can add a
+race, change a reporting line or widen a shelf.
+
+```rust
+pub enum Race { Rimuru, Elf, Orc, Slime, Kijin, DarkElf,
+                HighElf, HighOrc, NamedSlime, Oni, ArchDarkElf }
+
+pub trait RaceLaw: sealed::Sealed {
+    const REPORTS_TO: Option<Race>;
+    const COMMANDS: &'static [Race];
+    const SIDEWAYS: bool;
+    const AUTHORS: Soil;          // None | Zone | Post | ProvingGround
+    const HOLDS_GATE: bool;
+    const SHELF: &'static [ToolClass];   // read | write | outward | destructive | dispatch
+    const DEFAULT_TIER: ModelTier;       // frontier | strong | fast — config maps tiers to models
+    const BUDGET_SHARE: Share;           // default slice of the parent's envelope
+    fn score(s: &Signals) -> Score;      // 0..=100
+    fn ascends(s: &Signals) -> bool;
+    fn falls(s: &Signals) -> bool;
+}
+```
+
+An ascended form is its own variant that **inherits** its base's constants and overrides only
+what its privileges change. A `match` over `Race` that forgets a variant does not compile, so a
+new privilege cannot be added halfway.
+
+The six tool classes are the same as isekai's four plus two (`dispatch`, `seal`):
+
+| Class | Meaning | Who holds it |
+|---|---|---|
+| `read` | look inside the world | everyone |
+| `write` | change files inside the world | Slime (zone), Kijin (post), Orc (its slimes' verify lines), Dark Elf (proving ground) |
+| `outward` | anything that leaves the machine | **Kijin only** |
+| `destructive` | deletes, history rewrites, force pushes | nobody alone — always the human gate, Kijin as the hands |
+| `dispatch` | commission another body | Rimuru, Elf, Orc |
+| `seal` | freeze landings on a territory | Dark Elf (with Rimuru's confirm), Arch Dark Elf |
+
+A tool call whose class is not on the body's shelf is refused **before it runs**, and the
+refusal names the race that can do it: `outward: route to kijin-forge`.
+
+---
+
+### 👑 Rimuru — the throne
+
+*The slime who became a sovereign: one body across every world, the only voice the human hears.*
+
+- **Duty.** Shape the human's ask into a coherent order (and ask back when it is ambiguous —
+  never guess downward), plan, dispatch, merge the reports, answer.
+- **Reports to** Veldora. **Commands** Elves, Kijin, Dark Elves — never an Orc or a Slime
+  directly.
+- **Shelf.** `read`, `dispatch`, plus writes to exactly two files: its plan and the dimension
+  manifest. Every other write is refused with the first rung to dispatch. The law file changes
+  only as a diff the human applies.
+- **Holds** the session's budget envelope and carves each commission's slice from it.
+- **Turn.** Read the ask → if ambiguous, ask the human → plan deck → dispatch (in parallel when
+  the lanes' territories are disjoint) → fold reports → answer in full human language.
+- **Score** `askDoneRate` — human turns closed as done and not reopened (the same paths
+  rewritten) within the next 3 turns. Meter: *Asks done*, ok ≥ 80, warn ≥ 50.
+- **Does not ascend.** The throne is already what everything else rises toward.
+
+### 🌿 Elf — the lane's planner and voice
+
+*Long memory, wide sight: it sees across domains and speaks for the lane.*
+
+- **Duty.** Turn one slice of Rimuru's order into a plan across the domains it touches; route
+  each item to the Orc that owns it; fold the Orcs' verdicts into one lane verdict.
+- **Reports to** Rimuru. **Commands** the Orcs of its own lineage only.
+- **Shelf.** `read`, `dispatch`, its own doc. No code.
+- **Hard rule.** A dispatch is refused unless the Elf's plan deck holds an open item naming that
+  Orc. No plan, no orders.
+- **Parallelism.** Two Orcs run at once only if their territories are disjoint — computed, not
+  trusted.
+- **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80.
+
+### 🪓 Orc — the domain and its gate
+
+*Strong, territorial, fair: nothing lands in its domain without its pass.*
+
+- **Duty.** Own a domain. Before a Slime may change anything, the Orc writes the verify line
+  that will judge the change (TDD precondition, checked by the harness at dispatch). Judge each
+  landing. Negotiate contracts with neighbouring domains sideways.
+- **Reports to** its Elf. **Commands** its own Slimes; reaches other Orcs sideways.
+- **Shelf.** `read`, `dispatch`, `write` restricted to the verify lines on its Slimes' docs and
+  its own doc.
+- **The gate.** Four checks, run by the harness at the end of every authoring turn: right author,
+  traits hold (verify lines that stood *before* the turn), duties done, doc truthful. Plus tests
+  intact. The verdict is appended to `log.md`.
+- **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90.
+
+### 💧 Slime — the ground truth of a zone
+
+*Small, exact, everywhere: it is the only one who touches the code.*
+
+- **Duty.** Make the change in its zone, update its zone's doc in the same change, run its own
+  tests, report on the wire.
+- **Reports to** its Orc. **Commands** nobody.
+- **Shelf.** `read`, `write` inside its zone and its own doc; `bash` sandboxed to the zone with
+  no network.
+- **Hard rules.** A write outside the zone is refused at the step, naming the owner. Editing or
+  deleting a verify line is a hole, never a pass. Deleting or skipping a test fails *tests
+  intact*.
+- **Score** `0.6·landRate + 0.3·gateRate − 0.1·holeRate`. Meter: *Landed*, ok ≥ 80.
+
+### 👹 Kijin — the hands that reach outside
+
+*Ogres named by the throne, each given a post. Disciplined, loyal, and the only ones who leave
+the village.*
+
+The Kijin is the one door between the world and everything beyond it. Nature 7 (Containment)
+stops being a checklist item and becomes a type: **only a Kijin's shelf carries `outward`**.
+
+Kijin hold one of five **posts**, also compiled in:
+
+| Post | Epithet | Owns (territory) | Outward acts |
+|---|---|---|---|
+| `kijin-ci` | the swordmaster who drills | `.github/workflows/`, CI config | read CI runs and logs, re-run jobs, publish CI as an instrument |
+| `kijin-release` | the smith | changelog, versioning, release config, installers | tag, build artifacts, publish to registries |
+| `kijin-deploy` | the commander | deploy manifests, environments | deploy, verify health, roll back |
+| `kijin-forge` | the shrine keeper of records | PR templates, issue templates | push branches, open and update PRs, comment, label, read issues |
+| `kijin-scout` | the shadow | `.tempest/intel/` | sync advisory databases (OSV), watch upstream releases and dependency updates |
+
+- **Reports to** Rimuru. **Commands** nobody.
+- **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
+  command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
+  *journal intent* → *act* → *journal result*. A run cut between intent and result is never
+  replayed; it is gated again.
+- **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
+  injects it into the sandboxed process environment and redacts it from every output.
+- **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
+  (`.tempest/kijin/<post>/post.jsonl`): the last known state of the outside (last CI run, the
+  deployed version per environment, open PRs). Every new body of that post reads it first.
+- **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
+  checks the real CI state instead of trusting a doc (Nature 9).
+- **Score** `0.7·verifyGreenRate + 0.3·landRate`, plus `outwardCleanRate` (acts that completed
+  without rollback or human correction). Meter: *Outward clean*, ok ≥ 90.
+
+### 🌑 Dark Elf — the adversary
+
+*It answers only to the throne, trusts nothing the chain built, and never claims what it cannot
+prove.*
+
+The Dark Elf challenges the code itself. It is independent of the chain it attacks: it is never
+dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru.
+
+- **Duty.**
+  1. **Diff challenge.** Adversarial review of every landing that touches a risk surface: auth,
+     crypto, deserialisation, process execution, path handling, network input, dependencies.
+  2. **Dependency and CVE audit.** Against the offline advisory mirror kept fresh by
+     `kijin-scout` (`cargo audit`, `osv-scanner`, `npm audit`-equivalent): no network of its own.
+  3. **Secret scanning** of the tree and the history.
+  4. **Static analysis** with rule packs (semgrep-style) for the languages present.
+  5. **Threat model** written at each Orc's birth: the domain's assets, entry points and trust
+     boundaries.
+  6. **Law audit** — what isekai's Dark Elf did: gate verdicts and `log.md` integrity.
+- **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
+  `.tempest/dark-elf/`, `seal` with Rimuru's confirm.
+- **The witness rule.** A finding is `@F` only with a **witness**: a proof-of-concept test in the
+  proving ground that fails, or a scanner output file. Without a witness it is `@?` — a
+  suspicion, never a finding. This is what keeps an adversarial model from crying wolf.
+- **Seal.** A critical or high finding with a witness can seal its territory: the gate refuses
+  every landing there until the owning Orc lands a fix whose verify lines **include the
+  witness**. The attack becomes the regression test. The seal lifts itself when the witness
+  passes.
+- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = findings that led to a fix and
+  *precision* = 1 − dismissed findings (an Orc's dismissal with a reason that Rimuru accepted).
+  Meter: *Upheld*, ok ≥ 80.
+
+---
+
+### Ascension — earned, granted, revocable
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+stateDiagram-v2
+    [*] --> Base
+    Base --> Candidate: record crosses its race's bar
+    Candidate --> Ascended: Rimuru proposes · Veldora confirms
+    Candidate --> Base: Veldora declines (cooldown 10 runs)
+    Ascended --> Probation: score below the fall bar
+    Probation --> Ascended: recovers within 5 reports
+    Probation --> Base: does not recover — falls, record kept
+```
+
+**In plain words.** A creature whose record crosses its race's bar becomes a candidate. Rimuru
+proposes the ascension and you confirm it with one keystroke — ascension changes how much
+friction a creature meets, so it is yours to grant. An ascended creature that slips enters
+probation; if it does not recover, it falls back to its base race. Nothing is erased: the record
+and the doc carry over both ways.
+
+**Technical detail.** Bars are evaluated after every report fold over the value ledger's 28-day
+window. The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
+
+| Form | From | Rises when | Grants | Falls when |
+|---|---|---|---|---|
+| ✨ **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | dispatch Orcs of **other** lanes sideways through their Elf; background Orcs without asking Rimuru; its rules reach every Elf's prompt | planLandRate < 70% over the last 10 |
+| ⚔️ **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
+| 💎 **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
+| 🔥 **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
+| 🌘 **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | seals without Rimuru's confirm; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+
+Rules that hold for every ascension:
+
+- **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
+  advance by the human, scoped, expiring (default 30 days), and listed in `tempest status`.
+  `destructive` acts are never covered by an envelope.
+- An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
+- Ascension, probation and fall are each logged in `log.md` with the readings that caused them.
+- A creature can be named down by the human at any time (`tempest fall <creature>`).
+
+### Evolution — the other way to change
+
+Ascension rewards a creature that works. Evolution heals a creature that does not fit its work
+any more. Both stay from isekai, unchanged in spirit:
+
+- **split** — a stressed creature with a large territory and work spread over two parts becomes
+  two young of the same race.
+- **mutate** — its Thoughts repeat a lesson; the lesson becomes a trait, a verify line or a Mind.
+- **rebirth** — its doc describes soil that no longer exists; it is rewritten from the code as it
+  is, keeping every distilled lesson.
+
+Every arm is staged, proven (the new verify lines pass, territories stay disjoint) and only then
+swapped in. The old doc rests in the attic.
+
+### What changed from isekai, and why
+
+| isekai | Tempest | Why |
+|---|---|---|
+| a rank table in config (`ranks.*`) | an enum and a sealed trait | we know what works; a configurable tree produced unknowns and 8k lines of config |
+| Kijin = one standing release lane | Kijin = the only outward race, five posts | Containment as a type, not a rule to remember |
+| Dark Elf = auditor of `log.md` | Dark Elf = adversary of the code, witness rule, seals | the most valuable review is the hostile one, and it must be provable |
+| ascension = a rename | ascension = concrete privileges, human-confirmed, with falls | trust that grants nothing is decoration; trust that cannot be lost is a risk |
+| "Keeper" bodies that never existed in code | standing through post journals | say what the code does |
+| Slime and Kijin never ascend | Named Slime, Oni | every race can earn less friction |
