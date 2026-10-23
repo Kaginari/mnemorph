@@ -22,7 +22,9 @@ text, letters, words, numbers, watermark, signature, logo, frame cut off, croppe
 
 ## Prompts
 
-Each one is complete — paste it as it is.
+Each one is complete — paste it as it is, **one prompt per generation**. Leonardo caps the
+prompt at 2,000 characters; every prompt here is 481–634 characters. The heading, the reference
+note and the negative prompt are not part of the prompt — the negative prompt has its own field.
 
 ### 💧 Slime — first, the style reference for all
 
