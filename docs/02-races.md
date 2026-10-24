@@ -385,7 +385,10 @@ How a fall is read (`mnemorph-races`, `falls`):
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
-  advance by the human, scoped, expiring (default 30 days), and listed in `mnemorph status`.
+  advance by the human, scoped, expiring (default 30 days), capped in uses if the human says so,
+  revocable, and listed in `mnemorph status`. Its time and count are checked at the moment of
+  use, not only when the act was planned; a revoked envelope stays on record
+  ([config](05-architecture.md#configuration)).
 - **What an envelope can never cover** (compiled, whatever the envelope says):
   - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites;
   - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests

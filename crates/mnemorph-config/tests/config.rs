@@ -3,7 +3,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mnemorph_config::{Config, Layer, Paths, set};
+use mnemorph_config::{Config, ENVELOPE_DAYS, Envelope, Lapse, Layer, Paths, set};
+use mnemorph_ledger::Day;
 use mnemorph_races::Race;
 use mnemorph_tools::Rule;
 
@@ -151,7 +152,7 @@ fn the_tracked_file_cannot_loosen_the_gate() {
     let c = g.load().unwrap();
     assert!(c.gate_enabled());
     assert_eq!(c.asked_rules(), [] as [mnemorph_tools::Rule; 0]);
-    assert_eq!(c.envelopes(), [] as [mnemorph_config::Envelope; 0]);
+    assert_eq!(c.envelopes(), [] as [Envelope; 0]);
     let refused: Vec<&str> = c
         .holes()
         .iter()
@@ -171,7 +172,7 @@ fn the_tracked_file_cannot_loosen_the_gate() {
     assert!(!c.allow_unguarded());
 
     // The same keys from the human's own files are honoured.
-    g.local("[gate]\nask_rules = [\"secret-store\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n");
+    g.local("[gate]\nask_rules = [\"secret-store\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n");
     let c = g.load().unwrap();
     assert_eq!(c.asked_rules(), vec![Rule::SecretStore]);
     assert_eq!(c.envelopes()[0].name, "ci");
@@ -224,7 +225,7 @@ fn envelopes_never_cover_everything_or_anything_destructive() {
         let e = g.load().unwrap_err();
         assert!(e.contains("admits"), "{pattern}: {e}");
     }
-    g.local("[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\", \"gh run rerun *\"]\n");
+    g.local("[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\", \"gh run rerun *\"]\nsigned = 2026-10-24\n");
     assert_eq!(g.load().unwrap().envelopes()[0].allow.len(), 2);
 }
 
@@ -381,4 +382,158 @@ fn the_context_stress_line_defaults_and_can_be_set() {
     assert_eq!(g.load().unwrap().context_stress_tokens(), 150_000);
     g.local("[stress]\ncontext_tokens = 90000\n");
     assert_eq!(g.load().unwrap().context_stress_tokens(), 90_000);
+}
+
+fn day(y: i64, m: u8, d: u8) -> Day {
+    Day::new(y, m, d).unwrap()
+}
+
+#[test]
+fn an_envelope_is_signed_on_a_day_and_lasts_thirty_days_unless_it_says() {
+    let g = Ground::new("envelope-days");
+    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n");
+    let e = g.load().unwrap_err();
+    assert!(e.contains("needs `signed = YYYY-MM-DD`"), "{e}");
+    assert!(e.contains("config.local.toml"), "{e}");
+
+    g.local(
+        "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n",
+    );
+    let e = &g.load().unwrap().envelopes()[0];
+    assert_eq!(e.signed, day(2026, 10, 24));
+    assert_eq!(e.expires, day(2026, 10, 24).plus(ENVELOPE_DAYS));
+    assert_eq!(e.expires.to_string(), "2026-11-23");
+    assert_eq!((e.uses, e.revoked), (None, None));
+
+    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\nexpires = 2026-10-31\nuses = 5\n");
+    let e = &g.load().unwrap().envelopes()[0];
+    assert_eq!((e.expires, e.uses), (day(2026, 10, 31), Some(5)));
+}
+
+#[test]
+fn envelope_dates_and_caps_are_vetted_and_name_the_file() {
+    let g = Ground::new("envelope-vet");
+    for (extra, wanted) in [
+        ("signed = \"2026-10-24\"", "is a date, written bare"),
+        ("signed = 2026-10-24T10:00:00", "is a date, written bare"),
+        ("signed = 2026-10-24T10:00:00Z", "is a date, written bare"),
+        (
+            "signed = 2026-10-24\nexpires = 2026-10-24",
+            "not after it was signed",
+        ),
+        (
+            "signed = 2026-10-24\nexpires = 2026-10-01",
+            "not after it was signed",
+        ),
+        ("signed = 2026-10-24\nuses = 0", "at least 1"),
+        ("signed = 2026-10-24\nuses = -3", "at least 1"),
+        ("signed = 2026-10-24\nuses = \"many\"", "at least 1"),
+        (
+            "signed = 2026-10-24\nrevoked = 2026-10-23",
+            "before it was signed",
+        ),
+    ] {
+        g.local(&format!(
+            "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n{extra}\n"
+        ));
+        let e = g.load().unwrap_err();
+        assert!(e.contains(wanted), "{extra}: {e}");
+        assert!(e.contains("config.local.toml"), "{extra}: {e}");
+    }
+}
+
+#[test]
+fn an_envelope_admits_only_while_in_force() {
+    let signed = day(2026, 10, 24);
+    let e = Envelope {
+        name: "ci".into(),
+        allow: vec!["gh run rerun *".into()],
+        signed,
+        expires: signed.plus(ENVELOPE_DAYS),
+        uses: Some(3),
+        revoked: None,
+    };
+    assert_eq!(e.admits(signed, 0), Ok(()));
+    assert_eq!(e.admits(signed.plus(-1), 0), Err(Lapse::NotYet(signed)));
+    // The last day it covers, and the first it does not.
+    assert_eq!(e.admits(signed.plus(ENVELOPE_DAYS - 1), 0), Ok(()));
+    assert_eq!(
+        e.admits(signed.plus(ENVELOPE_DAYS), 0),
+        Err(Lapse::Expired(day(2026, 11, 23)))
+    );
+    // Just under, at and over the cap.
+    assert_eq!(e.admits(signed, 2), Ok(()));
+    assert_eq!(e.admits(signed, 3), Err(Lapse::Spent(3)));
+    assert_eq!(e.admits(signed, 4), Err(Lapse::Spent(3)));
+    // No cap: only time bounds it.
+    let free = Envelope {
+        uses: None,
+        ..e.clone()
+    };
+    assert_eq!(free.admits(signed, u64::MAX), Ok(()));
+    // Revoked wins over everything, whatever day it names.
+    let gone = Envelope {
+        revoked: Some(signed.plus(5)),
+        ..e
+    };
+    assert_eq!(gone.admits(signed, 0), Err(Lapse::Revoked(signed.plus(5))));
+    assert_eq!(
+        gone.admits(signed.plus(9), 0).unwrap_err().to_string(),
+        "revoked on 2026-10-29"
+    );
+    assert_eq!(
+        Lapse::Expired(day(2026, 11, 23)).to_string(),
+        "expired on 2026-11-23"
+    );
+    assert_eq!(Lapse::Spent(3).to_string(), "all 3 uses spent");
+}
+
+#[test]
+fn revoking_keeps_the_envelope_and_its_file_readable() {
+    let g = Ground::new("envelope-revoke");
+    g.local("# signed by hand\n[[oni.envelopes]]\nname = \"ci\"  # reruns only\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
+    let c = g.load().unwrap();
+    let file = c.revoke_envelope("feat", day(2026, 10, 26)).unwrap();
+    assert_eq!(file, g.paths().local);
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("# signed by hand") && text.contains("# reruns only"),
+        "{text}"
+    );
+    let c = g.load().unwrap();
+    let by = |n: &str| c.envelopes().into_iter().find(|e| e.name == n).unwrap();
+    assert_eq!(by("feat").revoked, Some(day(2026, 10, 26)));
+    assert_eq!(by("ci").revoked, None);
+    assert_eq!(
+        by("feat").admits(day(2026, 10, 25), 0),
+        Err(Lapse::Revoked(day(2026, 10, 26)))
+    );
+
+    let e = c.revoke_envelope("feat", day(2026, 10, 27)).unwrap_err();
+    assert!(e.contains("already revoked on 2026-10-26"), "{e}");
+    let e = c.revoke_envelope("deploy", day(2026, 10, 27)).unwrap_err();
+    assert!(e.contains("no envelope `deploy`"), "{e}");
+
+    // An envelope written inline is revoked in place too.
+    g.local("[oni]\nenvelopes = [{ name = \"ci\", allow = [\"gh run rerun *\"], signed = 2026-10-24 }]\n");
+    g.load()
+        .unwrap()
+        .revoke_envelope("ci", day(2026, 10, 25))
+        .unwrap();
+    assert_eq!(
+        g.load().unwrap().envelopes()[0].revoked,
+        Some(day(2026, 10, 25))
+    );
+
+    // An envelope in the tracked file is a hole, so there is nothing to revoke from it.
+    let g = Ground::new("envelope-revoke-tracked");
+    g.tracked(
+        "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n",
+    );
+    let e = g
+        .load()
+        .unwrap()
+        .revoke_envelope("ci", day(2026, 10, 25))
+        .unwrap_err();
+    assert!(e.contains("no envelope `ci` is signed"), "{e}");
 }
