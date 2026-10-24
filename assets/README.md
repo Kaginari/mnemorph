@@ -15,7 +15,7 @@ the board's small sizes; the full-size card view waits for higher-resolution ren
 ## The race icons
 
 Cut to `portraits/` (256, 64 and 32 px, transparent) from the hexagons of
-`source/race-icons.jpg`; Veldora, which that sheet lacks, from `source/icons-grid.png`.
+`source/race-icons.jpg`; Veldora wears the emblem's hexagon (`brand/mnemorph-hex.png`).
 
 | <img src="portraits/slime@64.png" width="64" alt="Slime"> | <img src="portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="portraits/elf@64.png" width="64" alt="Elf"> | <img src="portraits/orc@64.png" width="64" alt="Orc"> | <img src="portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|

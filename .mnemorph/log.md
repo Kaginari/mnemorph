@@ -495,6 +495,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T02:03:52+02:00] rimuru — Veldora wears the emblem
+- **Task:** Veldora asked for the hex emblem as their own icon.
+- **Files:** assets/portraits/veldora{,@64,@32}.png (from assets/brand/mnemorph-hex), assets/cards/veldora.png (redrawn), assets/README.md.
+- **Gate:** n/a. Instruments: the redrawn card viewed.
+- **Result:** in review as a pull request.
+- **Learned:** every portrait now comes from one Gemini sheet — the set is uniform.
+
+---
+
 ### [2026-10-24T02:18:38+02:00] rimuru — the maki study stays local
 - **Task:** Veldora asked to keep docs/study-maki.md out of git, local only.
 - **Files:** .gitignore, docs/README.md and site/.vitepress/config.ts (link and sidebar entry gone; `srcExclude` keeps a local build from rendering it); docs/study-maki.md untracked, kept on disk.
