@@ -88,6 +88,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.escalate_at", Kind::Int),
     ("stress.relieve_at", Kind::Int),
     ("stress.max_consults", Kind::Int),
+    ("stress.context_tokens", Kind::Int),
     ("evolution.mode", Kind::Str),
     ("models.tier.*", Kind::Str),
     ("models.office.*.*", Kind::Str),
@@ -465,6 +466,12 @@ impl Config {
     #[must_use]
     pub fn stress(&self, name: &str) -> Option<u64> {
         self.int(&format!("stress.{name}"))
+    }
+
+    /// The context stress line in tokens: absolute, the same whatever the model.
+    #[must_use]
+    pub fn context_stress_tokens(&self) -> u64 {
+        self.int("stress.context_tokens").unwrap_or(150_000)
     }
 
     /// Evolution applies its plans itself, or proposes them.
