@@ -217,6 +217,49 @@ impl Tool for Write {
     }
 }
 
+/// Replace `old` with `new` in `text` under edit's rules: exactly one match, or every match with
+/// `all`. Returns the new text, the count replaced and the first line touched; an error names the
+/// closest line for no match, or the lines of several.
+fn replace(
+    text: &str,
+    old: &str,
+    new: &str,
+    all: bool,
+    shown: &str,
+) -> Result<(String, usize, usize), String> {
+    if old.is_empty() {
+        return Err("`old_string` is empty; to create or replace a whole file, use write".into());
+    }
+    if old == new {
+        return Err("`old_string` and `new_string` are the same; nothing would change".into());
+    }
+    let at: Vec<usize> = text.match_indices(old).map(|(i, _)| i).collect();
+    let line_of = |byte: usize| text[..byte].matches('\n').count() + 1;
+    match at.len() {
+        0 => {
+            let (n, line) = closest_line(text, old);
+            return Err(format!(
+                "`old_string` does not occur in `{shown}`; the closest line is {n}: `{}`. Read the file and copy the text exactly.",
+                line.trim()
+            ));
+        }
+        k if k > 1 && !all => {
+            let lines: Vec<String> = at.iter().map(|&i| line_of(i).to_string()).collect();
+            return Err(format!(
+                "`old_string` occurs {k} times in `{shown}` (lines {}); add context to make it unique, or set replace_all",
+                lines.join(", ")
+            ));
+        }
+        _ => {}
+    }
+    let updated = if all {
+        text.replace(old, new)
+    } else {
+        text.replacen(old, new, 1)
+    };
+    Ok((updated, if all { at.len() } else { 1 }, line_of(at[0])))
+}
+
 // ── edit ────────────────────────────────────────────────────────────────────
 
 /// Replace one exact string in a file inside the body's soil.
@@ -268,16 +311,6 @@ impl Tool for Edit {
             Ok(a) => a,
             Err(o) => return o,
         };
-        if a.old_string.is_empty() {
-            return Outcome::error(
-                "`old_string` is empty; to create or replace a whole file, use write",
-            );
-        }
-        if a.old_string == a.new_string {
-            return Outcome::error(
-                "`old_string` and `new_string` are the same; nothing would change",
-            );
-        }
         let path = match cx.writable(&a.path) {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
@@ -289,37 +322,16 @@ impl Tool for Edit {
             Ok(t) => t,
             Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
         };
-        let at: Vec<usize> = text.match_indices(&a.old_string).map(|(i, _)| i).collect();
-        let line_of = |byte: usize| text[..byte].matches('\n').count() + 1;
-        match at.len() {
-            0 => {
-                let (n, line) = closest_line(&text, &a.old_string);
-                return Outcome::error(format!(
-                    "`old_string` does not occur in `{shown}`; the closest line is {n}: `{}`. Read the file and copy the text exactly.",
-                    line.trim()
-                ));
-            }
-            k if k > 1 && !a.replace_all => {
-                let lines: Vec<String> = at.iter().map(|&i| line_of(i).to_string()).collect();
-                return Outcome::error(format!(
-                    "`old_string` occurs {k} times in `{shown}` (lines {}); add context to make it unique, or set replace_all",
-                    lines.join(", ")
-                ));
-            }
-            _ => {}
-        }
-        let first_line = line_of(at[0]);
-        let updated = if a.replace_all {
-            text.replace(&a.old_string, &a.new_string)
-        } else {
-            text.replacen(&a.old_string, &a.new_string, 1)
-        };
+        let (updated, n, first_line) =
+            match replace(&text, &a.old_string, &a.new_string, a.replace_all, &shown) {
+                Ok(r) => r,
+                Err(e) => return Outcome::error(e),
+            };
         keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, updated.as_bytes()) {
             return Outcome::error(format!("cannot write `{shown}`: {e}"));
         }
         cx.seen.remove(&path);
-        let n = if a.replace_all { at.len() } else { 1 };
         let mut o = Outcome::ok(
             format!("edited `{shown}`: {n} replacement(s), from line {first_line}"),
             ToolClass::Write,
@@ -367,6 +379,310 @@ fn similarity(a: &str, b: &str) -> f64 {
     )]
     let score = 1.0 - row[b.len()] as f64 / longest as f64;
     score
+}
+
+// ── multiedit ───────────────────────────────────────────────────────────────
+
+/// Several exact replacements in one file, in order, all or none.
+pub struct MultiEdit;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OneEdit {
+    old_string: String,
+    new_string: String,
+    #[serde(default)]
+    replace_all: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MultiEditArgs {
+    path: String,
+    edits: Vec<OneEdit>,
+}
+
+impl Tool for MultiEdit {
+    fn name(&self) -> &'static str {
+        "multiedit"
+    }
+
+    fn description(&self) -> &'static str {
+        "Make several edits to one file inside your soil, in order, each under edit's rules (each `old_string` matches exactly once, or set its `replace_all`; a later edit sees the earlier ones' result). If any edit fails, none is written."
+    }
+
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "The file, relative to the world's root."},
+                "edits": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "old_string": {"type": "string"},
+                            "new_string": {"type": "string"},
+                            "replace_all": {"type": "boolean"}
+                        },
+                        "required": ["old_string", "new_string"],
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "required": ["path", "edits"],
+            "additionalProperties": false
+        })
+    }
+
+    fn class(&self) -> ToolClass {
+        ToolClass::Write
+    }
+
+    fn example(&self) -> Value {
+        json!({"path": "src/lib.rs", "edits": [{"old_string": "fn a()", "new_string": "fn b()"}]})
+    }
+
+    fn run(&self, raw: Value, cx: &mut Context) -> Outcome {
+        let a: MultiEditArgs = match args(self.name(), raw) {
+            Ok(a) => a,
+            Err(o) => return o,
+        };
+        if a.edits.is_empty() {
+            return Outcome::error("`edits` is empty; nothing would change");
+        }
+        let path = match cx.writable(&a.path) {
+            Ok(p) => p,
+            Err(e) => return Outcome::error(e),
+        };
+        let shown = cx.shown(&path);
+        let mut text = match crate::beneath::read(cx.world(), &path) {
+            Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+            Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
+        };
+        let mut total = 0;
+        for (i, e) in a.edits.iter().enumerate() {
+            match replace(&text, &e.old_string, &e.new_string, e.replace_all, &shown) {
+                Ok((t, n, _)) => {
+                    text = t;
+                    total += n;
+                }
+                Err(why) => {
+                    return Outcome::error(format!(
+                        "edit {} of {}: {why} Nothing was written.",
+                        i + 1,
+                        a.edits.len()
+                    ));
+                }
+            }
+        }
+        keep(cx);
+        if let Err(e) = crate::beneath::write(cx.world(), &path, text.as_bytes()) {
+            return Outcome::error(format!("cannot write `{shown}`: {e}"));
+        }
+        cx.seen.remove(&path);
+        let mut o = Outcome::ok(
+            format!(
+                "edited `{shown}`: {} edit(s), {total} replacement(s)",
+                a.edits.len()
+            ),
+            ToolClass::Write,
+        );
+        o.meta.wrote.push(path);
+        o
+    }
+}
+
+// ── move ────────────────────────────────────────────────────────────────────
+
+/// Rename a file or a directory inside the body's soil.
+pub struct Move;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MoveArgs {
+    from: String,
+    to: String,
+}
+
+impl Tool for Move {
+    fn name(&self) -> &'static str {
+        "move"
+    }
+
+    fn description(&self) -> &'static str {
+        "Move or rename a file or a directory inside your soil. Both ends must be yours — for a directory, every file in it — and the destination must not exist yet; missing directories on its way are made."
+    }
+
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "from": {"type": "string", "description": "What to move, relative to the world's root."},
+                "to": {"type": "string", "description": "Where it goes, relative to the world's root."}
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+        })
+    }
+
+    fn class(&self) -> ToolClass {
+        ToolClass::Write
+    }
+
+    fn example(&self) -> Value {
+        json!({"from": "src/old.rs", "to": "src/new.rs"})
+    }
+
+    fn run(&self, raw: Value, cx: &mut Context) -> Outcome {
+        let a: MoveArgs = match args(self.name(), raw) {
+            Ok(a) => a,
+            Err(o) => return o,
+        };
+        let (from, to) = match (cx.writable(&a.from), cx.writable(&a.to)) {
+            (Ok(f), Ok(t)) => (f, t),
+            (Err(e), _) | (_, Err(e)) => return Outcome::error(e),
+        };
+        let (shown_from, shown_to) = (cx.shown(&from), cx.shown(&to));
+        let Ok(meta) = from.symlink_metadata() else {
+            return Outcome::error(format!("`{shown_from}` does not exist"));
+        };
+        let mut moved = vec![from.clone()];
+        if meta.is_dir() {
+            // Every file the directory holds must be the body's to move, and land where it may.
+            for entry in walkdir(&from) {
+                let rel = entry.strip_prefix(&from).unwrap_or(&entry);
+                let landing = to.join(rel);
+                for p in [&entry, &landing] {
+                    if let Err(e) = cx.writable(&cx.shown(p)) {
+                        return Outcome::error(format!("cannot move `{shown_from}`: {e}"));
+                    }
+                }
+                moved.push(entry);
+            }
+        }
+        if to.symlink_metadata().is_ok() {
+            return Outcome::error(format!(
+                "`{shown_to}` already exists; move does not overwrite — delete it first, or pick another name"
+            ));
+        }
+        keep(cx);
+        if let Err(e) = crate::beneath::rename(cx.world(), &from, &to) {
+            return Outcome::error(format!("cannot move `{shown_from}` to `{shown_to}`: {e}"));
+        }
+        for p in &moved {
+            cx.seen.remove(p);
+        }
+        let mut o = Outcome::ok(
+            format!("moved `{shown_from}` to `{shown_to}`"),
+            ToolClass::Write,
+        );
+        o.meta.wrote.extend([from, to]);
+        o
+    }
+}
+
+// ── delete ──────────────────────────────────────────────────────────────────
+
+/// Delete a file inside the body's soil, a copy kept in the attic first.
+pub struct Delete;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeleteArgs {
+    path: String,
+}
+
+impl Tool for Delete {
+    fn name(&self) -> &'static str {
+        "delete"
+    }
+
+    fn description(&self) -> &'static str {
+        "Delete a file inside your soil. A copy is kept in the attic first, so it can be restored; a directory is refused — delete its files."
+    }
+
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "The file, relative to the world's root."}
+            },
+            "required": ["path"],
+            "additionalProperties": false
+        })
+    }
+
+    fn class(&self) -> ToolClass {
+        ToolClass::Write
+    }
+
+    fn example(&self) -> Value {
+        json!({"path": "src/unused.rs"})
+    }
+
+    fn run(&self, raw: Value, cx: &mut Context) -> Outcome {
+        let a: DeleteArgs = match args(self.name(), raw) {
+            Ok(a) => a,
+            Err(o) => return o,
+        };
+        let path = match cx.writable(&a.path) {
+            Ok(p) => p,
+            Err(e) => return Outcome::error(e),
+        };
+        let shown = cx.shown(&path);
+        match path.symlink_metadata() {
+            Err(_) => return Outcome::error(format!("`{shown}` does not exist")),
+            Ok(m) if m.is_dir() => {
+                return Outcome::error(format!(
+                    "`{shown}` is a directory; delete its files one by one"
+                ));
+            }
+            Ok(_) => {}
+        }
+        // Nothing is destroyed: without a copy in the attic, nothing is deleted.
+        let Some(attic) = cx.attic() else {
+            return Outcome::error(
+                "delete keeps a copy in the attic first, and this body has no attic; nothing was deleted",
+            );
+        };
+        if let Err(e) = attic.snapshot("before a delete") {
+            return Outcome::error(format!(
+                "the attic could not keep a copy ({e}); nothing was deleted"
+            ));
+        }
+        if let Err(e) = crate::beneath::remove(cx.world(), &path) {
+            return Outcome::error(format!("cannot delete `{shown}`: {e}"));
+        }
+        cx.seen.remove(&path);
+        let mut o = Outcome::ok(
+            format!("deleted `{shown}`; the attic keeps a copy"),
+            ToolClass::Write,
+        );
+        o.meta.wrote.push(path);
+        o
+    }
+}
+
+/// Every file under `dir`, without following links.
+fn walkdir(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in entries.filter_map(Result::ok) {
+            let p = e.path();
+            match e.file_type() {
+                Ok(t) if t.is_dir() => stack.push(p),
+                Ok(_) => out.push(p),
+                Err(_) => {}
+            }
+        }
+    }
+    out
 }
 
 // ── glob and grep ───────────────────────────────────────────────────────────

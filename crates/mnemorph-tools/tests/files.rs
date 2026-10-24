@@ -410,3 +410,124 @@ fn protected_files_are_not_written_by_tools() {
     );
     assert!(!o.is_error, "shared is writable: {o:?}");
 }
+
+fn use_tool(cx: &mut Context, name: &str, args: &serde_json::Value) -> Outcome {
+    call(&registry(), name, &args.to_string(), cx)
+}
+
+/// Several edits, in order, all or none.
+#[test]
+fn multiedit_writes_all_or_nothing() {
+    let w = World::new("multiedit");
+    w.put("src/a.rs", "fn one() {}\nfn two() {}\n");
+    let mut cx = w.cx();
+    let o = use_tool(
+        &mut cx,
+        "multiedit",
+        &serde_json::json!({"path": "src/a.rs", "edits": [
+            {"old_string": "fn one()", "new_string": "fn uno()"},
+            {"old_string": "fn uno() {}\nfn two()", "new_string": "fn uno() {}\nfn dos()"}
+        ]}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/a.rs"), "fn uno() {}\nfn dos() {}\n");
+    let o = use_tool(
+        &mut cx,
+        "multiedit",
+        &serde_json::json!({"path": "src/a.rs", "edits": [
+            {"old_string": "fn uno()", "new_string": "fn first()"},
+            {"old_string": "fn missing()", "new_string": "x"}
+        ]}),
+    );
+    assert!(
+        o.is_error
+            && o.content.starts_with("edit 2 of 2:")
+            && o.content.ends_with("Nothing was written."),
+        "{o:?}"
+    );
+    assert_eq!(w.get("src/a.rs"), "fn uno() {}\nfn dos() {}\n");
+}
+
+/// A move inside the soil, a directory with its files, never over an existing file, never out —
+/// and inside a folder that holds another's spot, where a command's `mv` is refused.
+#[test]
+fn move_stays_inside_the_soil() {
+    let w = World::new("move");
+    w.put("src/a.rs", "a\n");
+    w.put("src/dir/x.rs", "x\n");
+    w.put("src/other/theirs.rs", "theirs\n");
+    w.put("src/b.rs", "b\n");
+    let mut cx =
+        Context::new(Race::Slime, w.world(), &["."]).with_soil(&["src/"], &["src/other/"], false);
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/a.rs", "to": "src/sub/renamed.rs"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/sub/renamed.rs"), "a\n");
+    assert!(!w.world().join("src/a.rs").exists());
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/dir", "to": "src/moved"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/moved/x.rs"), "x\n");
+    for (from, to, why) in [
+        ("src/b.rs", "src/sub/renamed.rs", "already exists"),
+        ("src/b.rs", "src/other/b.rs", "outside your soil"),
+        ("src/other/theirs.rs", "src/stolen.rs", "outside your soil"),
+        ("src/b.rs", "../outside/b.rs", "outside the world"),
+        ("src/nothing.rs", "src/n.rs", "does not exist"),
+    ] {
+        let o = use_tool(
+            &mut cx,
+            "move",
+            &serde_json::json!({"from": from, "to": to}),
+        );
+        assert!(
+            o.is_error && o.content.contains(why),
+            "{from} → {to}: {o:?}"
+        );
+    }
+    assert_eq!(w.get("src/other/theirs.rs"), "theirs\n");
+    assert_eq!(w.get("src/b.rs"), "b\n");
+}
+
+/// A delete keeps a copy in the attic first; a directory, or a body with no attic, is refused.
+#[test]
+fn delete_keeps_a_copy_first() {
+    let w = World::new("delete");
+    w.put("src/gone.rs", "gone\n");
+    w.put("src/dir/x.rs", "x\n");
+    let mut bare = w.cx();
+    let o = use_tool(
+        &mut bare,
+        "delete",
+        &serde_json::json!({"path": "src/gone.rs"}),
+    );
+    assert!(o.is_error && o.content.contains("no attic"), "{o:?}");
+    assert!(w.world().join("src/gone.rs").exists());
+    let attic =
+        mnemorph_tools::Attic::at(&w.root.join("attic"), &w.world()).expect("git is installed");
+    let mut cx = w.cx().with_attic(attic);
+    let o = use_tool(&mut cx, "delete", &serde_json::json!({"path": "src/dir"}));
+    assert!(o.is_error && o.content.contains("is a directory"), "{o:?}");
+    let o = use_tool(
+        &mut cx,
+        "delete",
+        &serde_json::json!({"path": "src/gone.rs"}),
+    );
+    assert!(
+        !o.is_error && o.content.contains("the attic keeps a copy"),
+        "{o:?}"
+    );
+    assert!(!w.world().join("src/gone.rs").exists());
+    let o = use_tool(
+        &mut cx,
+        "delete",
+        &serde_json::json!({"path": "../outside/secret.txt"}),
+    );
+    assert!(o.is_error, "{o:?}");
+}

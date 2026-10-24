@@ -78,6 +78,28 @@ pub(crate) fn write(world: &Path, path: &Path, content: &[u8]) -> io::Result<()>
     Ok(())
 }
 
+/// Remove a file under the world, following no symlink on the way; a directory is refused.
+pub(crate) fn remove(world: &Path, path: &Path) -> io::Result<()> {
+    let (dir, name) = parent(world, path, false)?;
+    rustix::fs::unlinkat(&dir, name.as_str(), rustix::fs::AtFlags::empty())?;
+    Ok(())
+}
+
+/// Rename `from` to `to` under the world, each parent opened without following a symlink, the
+/// destination's directories made on the way; an existing destination is refused.
+pub(crate) fn rename(world: &Path, from: &Path, to: &Path) -> io::Result<()> {
+    let (from_dir, from_name) = parent(world, from, false)?;
+    let (to_dir, to_name) = parent(world, to, true)?;
+    rustix::fs::renameat_with(
+        &from_dir,
+        from_name.as_str(),
+        &to_dir,
+        to_name.as_str(),
+        rustix::fs::RenameFlags::NOREPLACE,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

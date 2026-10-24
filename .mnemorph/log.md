@@ -1914,3 +1914,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Open for the commission rung: a creature's seat is in its soil, but the tripwire reverts any
     write under `.mnemorph/`. "Doc truthful" decides which of the two owns the seat. Commissions
     are not wired yet, so none of this border is reached in production.
+
+---
+
+### [2026-10-24T23:57:53+02:00] rimuru — the file tools isekai had: multiedit, move, delete
+- **Task:** the human asked for isekai's harness-side file tools, so that the work a commissioned
+  creature's commands cannot do in a folder holding another's spot (rename, replace, delete) has a
+  lawful tool.
+- **Files:**
+  - crates/mnemorph-tools:
+    - files.rs — `multiedit`, `move`, `delete`, and `replace` shared with `edit`;
+    - beneath.rs — `remove`, `rename` with no-replace;
+    - tool.rs — the registry;
+    - classify — the in-place refusal names `multiedit`;
+    - tests/files.rs;
+  - crates/mnemorph-loop solo.rs — the prompt names the tools;
+  - docs/05.
+- **Gate:** n/a. Instruments:
+  - multiedit writes all or nothing;
+  - move works in a folder holding another's spot, takes a directory with its files, refuses an
+    overwrite, the other's spot and the outside;
+  - delete refuses without an attic and keeps a copy with one;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - isekai had no move tool; it left moves to `mv`. Under exact grants `mv` in a mixed folder is
+    refused, so the tool is the only lawful road, and it checks every file a directory carries.
+  - isekai's delete renamed into an attic inside the world. Mnemorph's attic lives outside it as
+    a git store, so delete snapshots first and refuses when it cannot.
+  - `patch` (a unified diff across files, for models trained on one) is the next tool: it
+    deserves its own tests and review.
