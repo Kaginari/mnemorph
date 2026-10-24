@@ -1695,3 +1695,57 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** an assumed cost needs a ceiling as much as a floor. The floor keeps unseen spend
   from being skipped; the ceiling keeps it from becoming the wall it replaced.
+
+---
+
+### [2026-10-24T22:02:40+02:00] rimuru — M7: the closed graph, each body's soil, and onto owner
+- **Task:** finish the ontology's rungs 1 and 2:
+  - the graph inferred to its fixed point;
+  - ownership with the rule that decided it;
+  - the soil each body is handed;
+  - `onto owner` for the human.
+- **Files:**
+  - crates/mnemorph-world:
+    - graph.rs — `IsA`, `above` with its truth, verdict and reports sub-bonds, `below`, `owns`,
+      `routes`, `posts`, `wears`, closed;
+    - own.rs — `explain`, `Rule`, `Ownership`;
+    - soil.rs — `Soil`, `soil`, `admits`;
+    - tests/graph.rs and own.rs;
+  - mnemorph-loop and mnemorph-server re-export the world;
+  - mnemorphd — `onto owner`, tests/onto.rs;
+  - packages/cli — args.ts and cli.tsx, `mnemorph onto`;
+  - docs/09 and 04.
+- **Gate:** n/a. Instruments:
+  - every living creature's soil agrees with `own` on every tracked file, and on the greedy
+    fixture;
+  - `onto owner` run from the root and from a crate;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a soil's exclusions are found by asking `own` of every claim inside the body's,
+  never by restating the rules. The two cannot drift: a test walks every tracked file and checks
+  both give the same answer.
+
+---
+
+### [2026-10-24T22:16:47+02:00] rimuru — M7 graph and soil: the review's fixes
+- **Task:** fix what the Fable review of the graph-and-soil rung found (verdict: merge after
+  fixes).
+- **Files:**
+  - mnemorphd main.rs:
+    - an existing directory is read as one, with or without its `/`;
+    - the world's root is named as such;
+    - `--version` answers first;
+  - world:
+    - soil.rs — builds its anchors from own.rs's constants;
+    - own.rs — the empty scratch claim;
+    - graph.rs — the closure joins by range instead of a full scan;
+  - tests: the review's nested fixture, lifted; onto's directory, root and version cases;
+  - docs/09.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The previous entry said this rung finished rungs 1 and 2. It delivers their functions only.
+    The rebuild on the docs' fingerprint, the gate's *right author* and handing `soil` to the
+    tool policy all wait for the dispatch rung that calls them.
+  - The anchor list restated `own`'s soils. Only the filter asked `own`, so a new harness prefix
+    could have been missed. Both now come from one list.
