@@ -112,11 +112,22 @@ Before every model call the loop reads four meters from the core, never from the
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
 up from it. An outward act cut mid-flight is gated again, never replayed.
 
+**The journal** is one append-only JSON line per beat — the ask, each model turn with its blocks
+kept whole (thinking included, so a resume sends them back unchanged), each tool result, each
+note the loop added, the ending. Resume rebuilds the conversation from it and counts the steps
+already taken. A tool call the journal shows no result for may not have run: it is answered
+with an error saying so, and the body asks again if it still needs it. Each answered model call
+also writes a priced row to the usage ledger, and the cost meter reads that sum.
+
+**A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
+a tenth of the clock (2–60 s), to write down what the body did, learned and left. The
+checkpoint carries it.
+
 ### Stress, in four instruments
 
 | Instrument | Trigger | Response |
 |---|---|---|
-| **guts** | rolling act score over the last 5 acts falls below −2 | one warning inside a tool result |
+| **guts** | rolling act score over the last 5 acts falls below −2 (a landed write +2, a failed act or an unchanged re-read −1) | one warning inside the conversation; a new window starts |
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |

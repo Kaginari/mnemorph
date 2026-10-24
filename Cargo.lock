@@ -1096,6 +1096,9 @@ dependencies = [
  "mnemorph-tools",
  "mnemorph-wire",
  "mnemorph-world",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
