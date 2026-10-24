@@ -46,6 +46,7 @@ pub fn registry() -> Vec<Box<dyn Tool>> {
         Box::new(files::MultiEdit),
         Box::new(files::Move),
         Box::new(files::Delete),
+        Box::new(crate::patch::Patch),
         Box::new(files::Glob),
         Box::new(files::Grep),
         Box::new(shell::Bash),

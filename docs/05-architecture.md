@@ -215,7 +215,10 @@ flowchart LR
     entry in it the body's own, never a folder holding another's spot, never into itself, never
     over an existing file) and `delete` (a file, only once the attic's snapshot holds a copy of it
     — so not what the attic leaves out: ignored files, build output, large files — or an empty
-    directory). A link is moved or deleted as itself, never its target; git's own files are never
+    directory), and `patch` (a unified diff across files: every file's result computed first, a
+    hunk landing at its stated line or its one match elsewhere, nothing written when one does not
+    apply; `/dev/null` creates or deletes, a delete under `delete`'s rule; a rename refused, for
+    `move`). A link is moved or deleted as itself, never its target; git's own files are never
     a tool's; a refusal leaves the tree as it was, the directories a failed move made unmade; a
     write of what a file already holds writes nothing; and `edit` and `multiedit` refuse a file
     that is not UTF-8 text rather than replace its bytes.

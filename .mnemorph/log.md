@@ -1974,3 +1974,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     what the world ignores, and a delete trusted it blindly.
   - A tool that acts on a name — move, delete — must not resolve the last component. A tool that
     acts on content — read, write, edit — must. The two need two checks.
+
+---
+
+### [2026-10-25T00:18:42+02:00] rimuru — patch: a unified diff, whole or not at all
+- **Task:** the last of isekai's file tools, for models trained to write unified diffs (the human
+  is away and asked that M7's open work be carried through).
+- **Files:** crates/mnemorph-tools patch.rs (parse, apply with drift and a unique-match fallback,
+  create, delete under the attic's copy, rename refused), the registry, tests/files.rs; the solo
+  prompt; docs/05.
+- **Gate:** n/a. Instruments:
+  - a five-file diff with an off-by-lines hunk, a missing final newline, a create and a delete;
+  - a shifted insertion;
+  - one bad hunk writing nothing anywhere;
+  - a rename, an outside path, prose, and a create over an existing file all refused;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** isekai's patch left earlier files written when a later disk write failed. Here the
+  attic's snapshot comes first, and the error names what already landed.
