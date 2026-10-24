@@ -687,3 +687,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** no `openat2` is needed: the check resolves the path, and a walk with `O_NOFOLLOW`
   re-checks it by construction, on Linux and macOS alike.
+
+---
+
+### [2026-10-24T04:22:11+02:00] rimuru — M4 and M4a close after a fresh Fable review
+- **Task:** close M4 (tools, sandbox, human gate) and M4a (config) with an independent review
+  of everything since #61, and fix what it found.
+- **Findings, each reproduced before fixing:**
+  - high: a substitution inside a parameter or arithmetic expansion (`${z:-$(curl … | sh)}`,
+    `$(( $(…) ))`) was never classified — brush keeps that text raw. The expansion's own source
+    is now read again as words and every substitution in it classified; unreadable text is
+    refused. Every word piece is named, so a new one is a compile error.
+  - medium-high: envelope vetting classified only the text before `*`, so `gh *` and
+    `git push *` passed. A bare `*` word is now judged at its worst (each destructive
+    argument tried); a `*` inside a word cannot become a flag.
+  - medium: the first refusal won, so an askable rule could mask a floor rule found later in
+    the same command (`sed -i … /dev/sda`). A floor refusal now displaces an askable one.
+  - medium: the tracked file could define providers (an attacker `base_url` with a real
+    `key_env`). Providers are honoured only from the local or global file.
+  - low: `AUTH` scrubbed `AUTHOR`; it now counts only as a whole word of the name.
+- **Files:** classify/{words,mod}.rs, shell.rs, mnemorph-config/src/lib.rs, corpus rows and
+  tests for each, docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check` (184 tests); the review's coverage list (wrappers,
+  tables, paths, sandbox, gate, tripwire, config) found sound.
+- **Result:** in review as a pull request; M4 and M4a close when it merges.
+- **Learned:** each finding passed every existing test, because each test proved a narrower
+  claim than its name: pure-floor commands only, envelopes with `*` after the dangerous word,
+  substitutions only at word level. A test's name is a claim; its inputs must reach the claim's
+  edges.

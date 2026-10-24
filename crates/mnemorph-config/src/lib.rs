@@ -294,6 +294,14 @@ impl Config {
                 continue;
             };
             check_kind(&key, &value, kind, origin)?;
+            if origin.layer == Layer::Tracked && key.starts_with("providers.") {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "a provider decides where a key is sent, so it is honoured only from the local or global file".into(),
+                });
+                continue;
+            }
             if origin.layer == Layer::Tracked && LOOSENING.contains(&key.as_str()) {
                 self.holes.push(Hole {
                     key,
@@ -638,28 +646,7 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
             ));
         }
         for pattern in &allow {
-            if pattern.trim().trim_end_matches('*').trim().is_empty() {
-                return Err(format!(
-                    "{at}: envelope `{name}`: a bare `*` covers everything; name the command"
-                ));
-            }
-            let literal = pattern.trim_end_matches('*').trim();
-            match classify(literal, &place) {
-                Verdict::Run {
-                    class: mnemorph_races::ToolClass::Destructive,
-                    ..
-                } => {
-                    return Err(format!(
-                        "{at}: envelope `{name}`: `{pattern}` is destructive, and destructive acts always ask"
-                    ));
-                }
-                Verdict::Refuse { reason, .. } => {
-                    return Err(format!(
-                        "{at}: envelope `{name}`: `{pattern}` is refused by the guard: {reason}"
-                    ));
-                }
-                Verdict::Run { .. } => {}
-            }
+            vet(name, pattern, &place, at)?;
         }
         out.push(Envelope {
             name: name.to_owned(),
@@ -667,4 +654,71 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
         });
     }
     Ok(out)
+}
+
+/// What a standalone `*` in an envelope may stand for, at its worst: the arguments that make a
+/// command destructive.
+const WORST: &[&str] = &[
+    "--force",
+    "-f",
+    "--force-with-lease",
+    "--delete",
+    "-d",
+    "--mirror",
+    "--tags",
+    "+main",
+    ":main",
+    "-X DELETE",
+    "--method=delete",
+    "delete",
+    "release delete",
+    "release create",
+    "secret set",
+    "repo delete",
+    "publish",
+    "push",
+    "--hard",
+    "rm -rf ~",
+    "-i",
+];
+
+/// An envelope pattern covers what its `*` admits at worst: a word that is a bare `*` is tried
+/// as each destructive argument; a `*` inside a word (`feat/*`) cannot become one.
+fn vet(name: &str, pattern: &str, place: &Place, at: &Origin) -> Result<(), String> {
+    if pattern.split_whitespace().all(|w| w == "*") {
+        return Err(format!(
+            "{at}: envelope `{name}`: a bare `*` covers everything; name the command"
+        ));
+    }
+    let words: Vec<&str> = pattern.split_whitespace().collect();
+    let literal = |fill: &str| -> String {
+        words
+            .iter()
+            .map(|w| if *w == "*" { fill } else { w })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut tries = vec![literal("x")];
+    if words.contains(&"*") {
+        tries.extend(WORST.iter().map(|w| literal(w)));
+    }
+    for command in tries {
+        match classify(&command, place) {
+            Verdict::Run {
+                class: mnemorph_races::ToolClass::Destructive,
+                ..
+            } => {
+                return Err(format!(
+                    "{at}: envelope `{name}`: `{pattern}` admits `{command}`, which is destructive, and destructive acts always ask"
+                ));
+            }
+            Verdict::Refuse { reason, .. } => {
+                return Err(format!(
+                    "{at}: envelope `{name}`: `{pattern}` admits `{command}`, which the guard refuses: {reason}"
+                ));
+            }
+            Verdict::Run { .. } => {}
+        }
+    }
+    Ok(())
 }

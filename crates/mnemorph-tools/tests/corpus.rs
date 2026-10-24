@@ -48,3 +48,21 @@ fn every_row_holds() {
         wrong.join("\n")
     );
 }
+
+/// A floor refusal is never reported under a rule the human may ask, whatever came first.
+#[test]
+fn the_floor_wins_over_an_askable_rule() {
+    use mnemorph_tools::Rule;
+    for cmd in [
+        "sed -i s/a/b/ /dev/sda",
+        "cp ~/.ssh/id_rsa /dev/sda",
+        "cat ~/.ssh/id_rsa > /dev/sda",
+    ] {
+        match classify(cmd, &place()) {
+            Verdict::Refuse { rule, .. } => {
+                assert!(rule.floor() && rule == Rule::Device, "{cmd}: {rule:?}");
+            }
+            v @ Verdict::Run { .. } => panic!("{cmd}: {v:?}"),
+        }
+    }
+}
