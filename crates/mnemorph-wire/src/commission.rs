@@ -7,9 +7,9 @@ use crate::{report::one_line, tag};
 /// The answer ceiling, in bytes, when a commission names none.
 pub const DEFAULT_CAP: usize = 2048;
 
-/// The office an `@ASK` word selects. Each has a name in the world — the three first Muses,
-/// daughters of Mnemosyne, memory: **Mneme** reads (memory), **Melete** judges (deliberation),
-/// **Aoede** writes (voice) — and a function a configuration may name instead: read, judge, write.
+/// The office an `@ASK` word selects. Each has a name in the world — the three Muses of Helicon in
+/// Pausanias: **Mneme** reads (memory), **Melete** judges (practice, care), **Aoede** writes
+/// (song) — and a function a configuration may name instead: read, judge, write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Office {
     /// `findings` — gather facts.

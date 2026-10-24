@@ -310,7 +310,10 @@ an empty list or table never overrides a lower layer:
   before it replaces the file; a failed save is returned, and the file stays as it was.
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
   `models.tier.<the race's tier>`; `models.fallback.<model>` names the next model to try when a
-  model is not found. **Providers** name the environment variable holding their key
+  model is not found. The tracked file may name models — a team picks the models its world uses
+  — but it cannot add a provider, so a model it names resolves only through a provider the human
+  defined, at the human's prices; whether a body is routed, and how sure a decision must be, stay
+  the human's. **Providers** name the environment variable holding their key
   (`key_env`), never the key. A provider's `kind` is `anthropic`, `openai` (any
   OpenAI-compatible server) or `systemone` (TypeSafe's Jev, or a jeff server on your own machine).
 - **Decisions** (`decide.*`) ask a System One provider when `decide.via` names one, and the LLM

@@ -180,7 +180,7 @@ greens and muted runs. A run that hides its exit status (`cargo test | tail`,
 `cargo test; echo ok`) is muted, never green. Red runs with fixes landing between them are
 test-driven work; twelve with nothing landed stop the run, and so do eight muted runs in a row,
 however much landed between them: the body that ran one bench 63 times in twenty minutes, every
-run piped, is the reason. A run built with decisions (`decisions()`, `Run::with_decisions`) reads
+run piped, is the reason. A run built with decisions (`decisions()`, `Run::with_decisions`) and `decide.bench` on reads
 a piped run's output instead of muting it — only when the shell saw it finish with a zero exit: a
 non-zero exit or a kill at the deadline is never read, so no printed summary turns a seen failure
 green. That is on when `decide.via` names a System One
