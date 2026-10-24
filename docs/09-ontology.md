@@ -292,7 +292,13 @@ The events are `.mnemorph/ontology/facts.jsonl`, harness soil, folded in the ord
 and the parent's `label`. A fact's id is the first ten hex digits of the FNV-1a hash of its
 normalised path and text, stable across machines and releases. An anchor's digest is the hash of
 the cited lines (`src/a.rs:12` or `:12-20`) or of the directory's sorted listing; a commit or a
-journal entry carries none. BM25 ranks the candidates with $k_1 = 1.2$ and $b = 0.75$. `onto check`
+journal entry carries none. A fact's path is read with no trailing `/`, so `src` and `src/` are one path, and a keyed
+fact's id hashes its normalised `key=value`, so every way of writing it is one fact; a path
+outside the world is no fact. BM25 ranks the candidates with $k_1 = 1.2$ and $b = 0.75$ above
+$\theta_t = 0.1$, and a collision raises `untriaged-fact` only when it showed the parent at least
+one candidate. A fact countered by every voice it had — its own author withdrawing it — reads
+countered, not contested; a support or a counter that reaches a merged fact counts on the fact it
+was merged into; and the projection marks a stale fact `[stale]` and names each counter's reason. `onto check`
 reports `contested-fact`, `stale-fact` and `untriaged-fact` beside the shape findings.
 
 `@U law` and `@U colony` are not ontology facts; they land as [memory notes](08-memory.md).

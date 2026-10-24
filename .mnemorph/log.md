@@ -2039,3 +2039,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   FNV-1a already was, and Rust's own hasher is not.
 - **Open:** filing a child's `@U territory` lines as facts when its report lands (the
   commission, in review) comes as a small follow-up once the commission is merged.
+
+---
+
+### [2026-10-25T01:07:23+02:00] rimuru — facts, after their review
+- **Task:** fix what the review of #150 found (verdict: merge after fixes).
+- **Files:**
+  - crates/mnemorph-world facts.rs:
+    - `fact_path` and `fact_text` in every id; `THETA_T`;
+    - merges resolved for later events;
+    - labels keep a creature on one side;
+    - a settle reopened by a later colliding assertion;
+    - a withdrawn fact countered;
+    - per-token keyed normalisation;
+    - the projection marks stale, gives reasons, counts each cut fact once and leaves no dangle;
+  - findings.rs — untriaged gated on candidates;
+  - tests/facts.rs;
+  - docs/09.
+- **Gate:** n/a. Instruments: a test per finding; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the exit's own case, `build=` on one path, slipped through on a trailing slash.
+  Ownership needs `src/` to mean a directory, and a fact's path needs it to mean the same thing
+  as `src`. Each reads the path for its own purpose.

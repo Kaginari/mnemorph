@@ -256,7 +256,10 @@ pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Ve
                 ),
             );
         }
-        if f.keyed.is_none() && !f.labelled && !facts.collisions(f).is_empty() {
+        if f.keyed.is_none()
+            && !f.labelled
+            && !facts.candidates(f, crate::facts::THETA_T).is_empty()
+        {
             push(
                 "untriaged-fact",
                 Severity::Low,

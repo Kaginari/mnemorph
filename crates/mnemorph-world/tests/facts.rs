@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use mnemorph_world::fact_findings;
 use mnemorph_world::facts::{Anchor, Event, Facts, Label, Status, digest, fact_id, from_unsaid};
+use std::path::Path;
 
 fn say(about: &str, text: &str, by: &str) -> Event {
     Event::Support {
@@ -206,14 +207,19 @@ fn the_wire_form_and_the_projection() {
         counter("src/", "the build is cargo", "b"),
         say("src/", "newest note", "c"),
     ];
-    let lines = Facts::fold(&events).projection(|_| "slime-a".into(), &["src/x.rs"], 2);
+    let lines = Facts::fold(&events).projection(
+        std::path::Path::new("/nonexistent"),
+        |_| "slime-a".into(),
+        &["src/x.rs"],
+        2,
+    );
     assert_eq!(lines.len(), 2, "{lines:?}");
     assert!(
         lines[0].starts_with("@ONTO src/x.rs: slime-a · #"),
         "{lines:?}"
     );
     assert!(
-        lines[0].contains("contested the build is cargo (countered by b)"),
+        lines[0].contains("contested the build is cargo (countered by b: no)"),
         "contested first: {lines:?}"
     );
     assert!(
@@ -221,4 +227,106 @@ fn the_wire_form_and_the_projection() {
         "{lines:?}"
     );
     assert_eq!(lines[1], "@ONTO -1");
+}
+
+/// What the review of facts found, each held.
+#[test]
+fn the_facts_review_held() {
+    let nowhere = Path::new("/nonexistent");
+    // `src` and `src/` are one path: different `build=` values collide, the same words agree.
+    let events = [
+        say("src", "build=make", "a"),
+        say("src/", "build=cargo build", "b"),
+    ];
+    assert_eq!(status(&events, "src", "build=make"), Status::Contested);
+    assert_eq!(fact_id("src", "x y"), fact_id("src/", "x  y"));
+    // A path outside the world is no fact, and two such never share an id.
+    assert_eq!(from_unsaid("../x is here", "a", None), None);
+    assert_ne!(fact_id("/a", "x"), fact_id("/b", "x"));
+    // A support or a counter reaching a merged fact counts on the fact it was merged into.
+    let x = ("src/", "the parser rejects tabs");
+    let y = ("src/p.rs", "the parser refuses tab characters");
+    let merged = Event::Label {
+        new: fact_id(y.0, y.1),
+        label: Label::Support,
+        of: Some(fact_id(x.0, x.1)),
+        by: "orc".into(),
+    };
+    let events = [
+        say(x.0, x.1, "a"),
+        say(y.0, y.1, "b"),
+        merged,
+        say(y.0, y.1, "c"),
+        counter(y.0, y.1, "d"),
+    ];
+    let facts = Facts::fold(&events);
+    let into = &facts.facts[&fact_id(x.0, x.1)];
+    assert_eq!(into.supporters.len(), 3, "{into:?}");
+    assert_eq!(into.counters.len(), 1, "{into:?}");
+    // A `counter` label never puts one creature on both sides.
+    let lab = Event::Label {
+        new: fact_id(y.0, y.1),
+        label: Label::Counter,
+        of: Some(fact_id(x.0, x.1)),
+        by: "orc".into(),
+    };
+    let facts = Facts::fold(&[say(x.0, x.1, "a"), say(y.0, y.1, "a"), lab]);
+    let f = &facts.facts[&fact_id(x.0, x.1)];
+    assert!(f.supporters.is_disjoint(&f.counters), "{f:?}");
+    // Untriaged only when something was shown to the parent.
+    let facts = Facts::fold(&[
+        say("src/", "old note about tabs", "a"),
+        say("src/x.rs", "uses the tokio runtime", "b"),
+    ]);
+    assert_eq!(fact_findings(&facts, nowhere), Vec::new());
+    // A settled keyed fact is reopened by a later colliding assertion.
+    let settle = Event::Settle {
+        id: fact_id("src/", "build=make"),
+        by: "orc".into(),
+        proof: "verdict".into(),
+    };
+    let events = [
+        say("src/", "build=make", "a"),
+        settle,
+        say("src/", "build=just", "b"),
+    ];
+    assert_eq!(status(&events, "src/", "build=make"), Status::Contested);
+    // A creature withdrawing its own only fact: countered, not contested.
+    assert_eq!(
+        status(
+            &[say("src/", "z", "a"), counter("src/", "z", "a")],
+            "src/",
+            "z"
+        ),
+        Status::Countered
+    );
+    // One keyed value however it is written.
+    assert_eq!(
+        fact_id("src/", "build=./build.sh"),
+        fact_id("src/", "build = build.sh")
+    );
+    let events = [
+        say("src/", "deprecated=by ./src/new.rs", "a"),
+        say("src/", "deprecated=by src/new.rs", "b"),
+    ];
+    assert_eq!(
+        status(&events, "src/", "deprecated=by src/new.rs"),
+        Status::Agreed
+    );
+    // The projection names the counter's reason, counts each fact cut once, and leaves no dangle.
+    let events = [
+        say("src/", "one", "a"),
+        say("src/", "two", "a"),
+        say("src/", "three", "a"),
+        Event::Counter {
+            id: fact_id("src/", "three"),
+            by: "b".into(),
+            reason: "it moved".into(),
+        },
+    ];
+    let lines =
+        Facts::fold(&events).projection(nowhere, |_| "o".into(), &["src/", "src/x.rs", "docs/"], 2);
+    assert!(lines[0].contains("countered by b: it moved"), "{lines:?}");
+    assert_eq!(lines[2], "@ONTO docs/: o");
+    assert_eq!(lines[3], "@ONTO -1", "{lines:?}");
 }

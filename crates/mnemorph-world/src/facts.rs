@@ -155,6 +155,12 @@ pub struct Fact {
     pub merged_into: Option<String>,
     /// The parent labelled it against the facts it resembled.
     pub labelled: bool,
+    /// Why each counter countered, by creature.
+    pub reasons: BTreeMap<String, String>,
+    /// The order of its last settle, if settled.
+    pub settled_at: Option<usize>,
+    /// The order of its last support.
+    pub last_support: usize,
 }
 
 impl Fact {
@@ -169,6 +175,8 @@ impl Fact {
         #[allow(clippy::cast_precision_loss, reason = "counts of creatures are small")]
         let share = |part: usize| part as f64 / (p + q) as f64;
         match (p, q) {
+            // Countered by every voice it had, its own included: withdrawn, not contested.
+            (0, _) if q > 0 => Status::Countered,
             (_, 0) if p <= 1 => Status::Single,
             (_, 0) => Status::Agreed,
             _ if p >= 2 && share(q) <= TOLERANCE => Status::Agreed,
@@ -187,11 +195,32 @@ impl Fact {
     }
 }
 
-/// A fact's id: the hash of its path and its normalised text.
+/// The floor a triage candidate's BM25 score must clear to be shown to the parent.
+pub const THETA_T: f64 = 0.1;
+
+/// A path as facts name it: normalised, inside the world, with no trailing `/` — `src` and
+/// `src/` are one path. `None` outside the world.
+#[must_use]
+pub fn fact_path(about: &str) -> Option<String> {
+    normal(about).map(|p| p.trim_end_matches('/').to_owned())
+}
+
+/// A fact's text as its id reads it: whitespace collapsed; a keyed fact as `key=value` with its
+/// value normalised, so every way of writing it is one fact.
+#[must_use]
+pub fn fact_text(text: &str) -> String {
+    keyed(text).map_or_else(
+        || text.split_whitespace().collect::<Vec<_>>().join(" "),
+        |(k, v)| format!("{k}={v}"),
+    )
+}
+
+/// A fact's id: the hash of its path and its normalised text. A path outside the world hashes
+/// as written, never folded into another's.
 #[must_use]
 pub fn fact_id(about: &str, text: &str) -> String {
-    let about = normal(about).unwrap_or_default();
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let about = fact_path(about).unwrap_or_else(|| format!("\u{1}{about}"));
+    let text = fact_text(text);
     format!("{:016x}", fnv64a(format!("{about}\0{text}").as_bytes()))[..10].to_owned()
 }
 
@@ -233,6 +262,7 @@ pub fn from_unsaid(payload: &str, by: &str, source: Option<Anchor>) -> Option<Ev
     if !(about.contains('/') || about.starts_with('.')) {
         return None;
     }
+    let path = fact_path(about)?;
     let rest = rest.trim();
     if let Some(countered) = rest.strip_prefix("!#") {
         let (id, reason) = countered
@@ -244,13 +274,13 @@ pub fn from_unsaid(payload: &str, by: &str, source: Option<Anchor>) -> Option<Ev
             reason: reason.trim().to_owned(),
         });
     }
-    let text = rest.split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = fact_text(rest);
     if text.is_empty() {
         return None;
     }
     Some(Event::Support {
-        id: fact_id(about, &text),
-        about: normal(about).unwrap_or_else(|| about.to_owned()),
+        id: fact_id(&path, &text),
+        about: path,
         text,
         by: by.to_owned(),
         source,
@@ -262,11 +292,19 @@ fn keyed(text: &str) -> Option<(String, String)> {
     let (k, v) = text.split_once('=')?;
     let k = k.trim();
     KEYS.iter().any(|(key, _)| *key == k).then(|| {
-        let v = v.split_whitespace().collect::<Vec<_>>().join(" ");
-        (
-            k.to_owned(),
-            normal(&v).filter(|_| v.contains('/')).unwrap_or(v),
-        )
+        // Commands with whitespace collapsed, each path in them normalised.
+        let v = v
+            .split_whitespace()
+            .map(|w| {
+                if w.contains('/') {
+                    normal(w).unwrap_or_else(|| w.to_owned())
+                } else {
+                    w.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        (k.to_owned(), v)
     })
 }
 
@@ -308,6 +346,17 @@ impl Facts {
     #[must_use]
     pub fn fold(events: &[Event]) -> Facts {
         let mut facts: BTreeMap<String, Fact> = BTreeMap::new();
+        // A fact the parent merged into another answers for it from then on.
+        let resolve = |facts: &BTreeMap<String, Fact>, id: &str| {
+            let mut id = id.to_owned();
+            for _ in 0..16 {
+                match facts.get(&id).and_then(|f| f.merged_into.clone()) {
+                    Some(next) => id = next,
+                    None => break,
+                }
+            }
+            id
+        };
         for (seq, e) in events.iter().enumerate() {
             match e {
                 Event::Support {
@@ -317,9 +366,10 @@ impl Facts {
                     by,
                     source,
                 } => {
-                    let f = facts.entry(id.clone()).or_insert_with(|| Fact {
+                    let into = resolve(&facts, id);
+                    let f = facts.entry(into).or_insert_with(|| Fact {
                         id: id.clone(),
-                        about: about.clone(),
+                        about: fact_path(about).unwrap_or_else(|| about.clone()),
                         text: text.clone(),
                         keyed: keyed(text),
                         seq,
@@ -327,23 +377,32 @@ impl Facts {
                     });
                     f.supporters.insert(by.clone());
                     f.counters.remove(by);
+                    f.reasons.remove(by);
+                    f.last_support = seq;
                     if source.is_some() {
                         f.source.clone_from(source);
                     }
                 }
-                Event::Counter { id, by, .. } => {
-                    if let Some(f) = facts.get_mut(id) {
+                Event::Counter { id, by, reason } => {
+                    let into = resolve(&facts, id);
+                    if let Some(f) = facts.get_mut(&into) {
                         f.counters.insert(by.clone());
                         f.supporters.remove(by);
+                        f.reasons.insert(by.clone(), reason.clone());
                         f.settled = false;
                     }
                 }
                 Event::Settle { id, .. } => {
-                    if let Some(f) = facts.get_mut(id) {
+                    let into = resolve(&facts, id);
+                    if let Some(f) = facts.get_mut(&into) {
                         f.settled = true;
+                        f.settled_at = Some(seq);
                     }
                 }
                 Event::Label { new, label, of, .. } => {
+                    if of.as_deref() == Some(new.as_str()) {
+                        continue;
+                    }
                     let supporters = facts
                         .get(new)
                         .map(|f| f.supporters.clone())
@@ -351,56 +410,34 @@ impl Facts {
                     if let Some(f) = facts.get_mut(new) {
                         f.labelled = true;
                     }
-                    if let Some(of) = of.as_ref().and_then(|of| facts.get_mut(of)) {
+                    let of = of.as_ref().map(|o| resolve(&facts, o));
+                    if let Some(target) = of.as_ref().and_then(|o| facts.get_mut(o)) {
+                        // A creature stands on one side of a fact, never both.
                         match label {
-                            Label::Support => of.supporters.extend(supporters),
-                            Label::Counter => of.counters.extend(supporters),
+                            Label::Support => {
+                                for s in &supporters {
+                                    target.counters.remove(s);
+                                }
+                                target.supporters.extend(supporters);
+                            }
+                            Label::Counter => {
+                                for s in &supporters {
+                                    target.supporters.remove(s);
+                                }
+                                target.counters.extend(supporters);
+                            }
                             Label::Refines | Label::Distinct => {}
                         }
                     }
                     if *label == Label::Support
                         && let Some(f) = facts.get_mut(new)
                     {
-                        f.merged_into.clone_from(of);
+                        f.merged_into = of;
                     }
                 }
             }
         }
-        // Keyed facts, compared by code: one value per key per path, inherited where the key is.
-        let keyed: Vec<(String, String, String, String, BTreeSet<String>)> = facts
-            .values()
-            .filter_map(|f| {
-                f.keyed.as_ref().map(|(k, v)| {
-                    (
-                        f.id.clone(),
-                        f.about.clone(),
-                        k.clone(),
-                        v.clone(),
-                        f.supporters.clone(),
-                    )
-                })
-            })
-            .collect();
-        for (id, about, k, v, _) in &keyed {
-            let inherited = KEYS.iter().any(|(key, inh)| key == k && *inh);
-            for (other, oabout, ok, ov, osupport) in &keyed {
-                let collide = ok == k
-                    && ov != v
-                    && (oabout == about
-                        || (inherited && (under(about, oabout) || under(oabout, about))));
-                if collide
-                    && other != id
-                    && let Some(f) = facts.get_mut(id)
-                {
-                    f.counters.extend(
-                        osupport
-                            .iter()
-                            .filter(|s| !f.supporters.contains(*s))
-                            .cloned(),
-                    );
-                }
-            }
-        }
+        collide(&mut facts);
         Facts { facts }
     }
 
@@ -441,21 +478,25 @@ impl Facts {
     }
 
     /// A body's projection of the paths it touches: each path's owner and at most `k` of its
-    /// facts — contested first, both sides shown, then countered, then the rest by recency —
-    /// and `@ONTO -<n>` counting the facts cut.
+    /// facts — contested first, both sides shown with the counters' reasons, then countered,
+    /// then the rest by recency — a stale fact marked so, and `@ONTO -<n>` counting the distinct
+    /// facts cut.
     #[must_use]
     pub fn projection(
         &self,
+        world: &Path,
         owner_of: impl Fn(&str) -> String,
         paths: &[&str],
         k: usize,
     ) -> Vec<String> {
         let mut out = Vec::new();
-        let mut cut = 0;
+        let mut shown_ids: BTreeSet<&str> = BTreeSet::new();
+        let mut seen_ids: BTreeSet<&str> = BTreeSet::new();
         for path in paths {
+            let here_path = fact_path(path).unwrap_or_else(|| (*path).to_owned());
             let mut here: Vec<&Fact> = self
                 .live()
-                .filter(|f| under(path, &f.about) || under(&f.about, path))
+                .filter(|f| under(&here_path, &f.about) || under(&f.about, &here_path))
                 .collect();
             here.sort_by_key(|f| {
                 let rank = match f.status() {
@@ -465,30 +506,87 @@ impl Facts {
                 };
                 (rank, std::cmp::Reverse(f.seq))
             });
-            cut += here.len().saturating_sub(k);
-            let shown: Vec<String> = here
-                .iter()
-                .take(k)
-                .map(|f| {
-                    let by: Vec<&str> = f.counters.iter().map(String::as_str).collect();
-                    let against = if by.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" (countered by {})", by.join(", "))
-                    };
-                    format!("#{} {} {}{against}", f.id, f.status().word(), f.text)
-                })
-                .collect();
-            out.push(format!(
-                "@ONTO {path}: {} · {}",
-                owner_of(path),
-                shown.join(" · ")
-            ));
+            seen_ids.extend(here.iter().map(|f| f.id.as_str()));
+            let mut shown: Vec<String> = Vec::new();
+            for f in here.iter().take(k) {
+                shown_ids.insert(f.id.as_str());
+                let against: Vec<String> = f
+                    .counters
+                    .iter()
+                    .map(|c| match f.reasons.get(c).filter(|r| !r.is_empty()) {
+                        Some(r) => format!("{c}: {r}"),
+                        None => c.clone(),
+                    })
+                    .collect();
+                let against = if against.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (countered by {})", against.join("; "))
+                };
+                let stale = if f.stale(world) { " [stale]" } else { "" };
+                shown.push(format!(
+                    "#{} {} {}{against}{stale}",
+                    f.id,
+                    f.status().word(),
+                    f.text
+                ));
+            }
+            let owner = owner_of(path);
+            out.push(if shown.is_empty() {
+                format!("@ONTO {path}: {owner}")
+            } else {
+                format!("@ONTO {path}: {owner} · {}", shown.join(" · "))
+            });
         }
+        let cut = seen_ids.difference(&shown_ids).count();
         if cut > 0 {
             out.push(format!("@ONTO -{cut}"));
         }
         out
+    }
+}
+
+/// Keyed facts, compared by code: one value per key per path, inherited where the key is. A
+/// colliding assertion counters, and reopens a settle it came after.
+fn collide(facts: &mut BTreeMap<String, Fact>) {
+    let keyed: Vec<(String, String, String, String, BTreeSet<String>, usize)> = facts
+        .values()
+        .filter(|f| f.merged_into.is_none())
+        .filter_map(|f| {
+            f.keyed.as_ref().map(|(k, v)| {
+                (
+                    f.id.clone(),
+                    f.about.clone(),
+                    k.clone(),
+                    v.clone(),
+                    f.supporters.clone(),
+                    f.last_support,
+                )
+            })
+        })
+        .collect();
+    for (id, about, k, v, _, _) in &keyed {
+        let inherited = KEYS.iter().any(|(key, inh)| key == k && *inh);
+        for (other, oabout, ok, ov, osupport, olast) in &keyed {
+            let collide = ok == k
+                && ov != v
+                && (oabout == about
+                    || (inherited && (under(about, oabout) || under(oabout, about))));
+            if collide
+                && other != id
+                && let Some(f) = facts.get_mut(id)
+            {
+                f.counters.extend(
+                    osupport
+                        .iter()
+                        .filter(|s| !f.supporters.contains(*s))
+                        .cloned(),
+                );
+                if f.settled_at.is_some_and(|at| *olast > at) {
+                    f.settled = false;
+                }
+            }
+        }
     }
 }
 
