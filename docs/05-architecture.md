@@ -217,8 +217,10 @@ flowchart LR
     — so not what the attic leaves out: ignored files, build output, large files — or an empty
     directory), and `patch` (a unified diff across files: every file's result computed first, a
     hunk landing at its stated line or its one match elsewhere, nothing written when one does not
-    apply; `/dev/null` creates or deletes, a delete under `delete`'s rule; a rename refused, for
-    `move`). A link is moved or deleted as itself, never its target; git's own files are never
+    apply, a file named twice taking each part in turn, a failed write putting back every file
+    already changed; `/dev/null` creates or deletes, a delete under `delete`'s rule; line endings
+    kept; a rename refused, for `move`; a binary, mode-only or empty-file `diff --git` block
+    refused by name, never skipped). A link is moved or deleted as itself, never its target; git's own files are never
     a tool's; a refusal leaves the tree as it was, the directories a failed move made unmade; a
     write of what a file already holds writes nothing; and `edit` and `multiedit` refuse a file
     that is not UTF-8 text rather than replace its bytes.

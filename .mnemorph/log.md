@@ -1992,3 +1992,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** isekai's patch left earlier files written when a later disk write failed. Here the
   attic's snapshot comes first, and the error names what already landed.
+
+---
+
+### [2026-10-25T00:36:59+02:00] rimuru — patch, reviewed twice: Opus, then Fable on Opus
+- **Task:** close what the review of #148 found.
+- **Files:** crates/mnemorph-tools/src/patch.rs, rewritten:
+  - a header only with its `+++`;
+  - trailing blank context dropped;
+  - git-only blocks refused;
+  - CRLF kept;
+  - parts of one path chained;
+  - no-ops refused;
+  - every change carries its original, and a failed write unwinds them all;
+  - routes in every refusal.
+
+  Also tests/files.rs and docs/05.
+- **Gate:** n/a. Instruments: a test per finding; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Fable corrected Opus on two counts. Hunk counts are a guide and not a gate: models get them
+    wrong, and strict counts would refuse their diffs. And the rollback is the plan's own
+    originals, not the attic, which may hold nothing for an ignored file.

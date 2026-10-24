@@ -771,3 +771,87 @@ fn patch_applies_whole_or_not_at_all() {
         "secret\n"
     );
 }
+
+/// What the patch review found, each held.
+#[test]
+fn patch_review_held() {
+    let w = World::new("patch-review");
+    w.put("src/a.rs", "1\n2\n3\n4\n5\n6\n7\n8\n");
+    w.put("src/crlf.txt", "one\r\ntwo\r\nthree\r\n");
+    w.put("src/dup.txt", "a\nb\n\nc\na\nb\n");
+    w.put("src/q.sql", "select 1;\n-- old note\nselect 2;\n");
+    w.put("src/file", "a file, not a directory\n");
+    let mut cx = w.cx();
+    let p =
+        |cx: &mut Context, diff: &str| use_tool(cx, "patch", &serde_json::json!({"patch": diff}));
+
+    // A path named twice: the second part applies to the first's result.
+    let o = p(
+        &mut cx,
+        "--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1 +1 @@\n-1\n+one\n--- a/src/a.rs\n+++ b/src/a.rs\n@@ -8 +8 @@\n-8\n+eight\n",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/a.rs"), "one\n2\n3\n4\n5\n6\n7\neight\n");
+    assert_eq!(o.meta.wrote.len(), 1);
+
+    // CRLF stays CRLF.
+    let o = p(
+        &mut cx,
+        "--- a/src/crlf.txt\n+++ b/src/crlf.txt\n@@ -2 +2 @@\n-two\n+TWO\n",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/crlf.txt"), "one\r\nTWO\r\nthree\r\n");
+
+    // A trailing blank line is the writer's separator, not context: the hunk stays where it says.
+    let o = p(
+        &mut cx,
+        "--- a/src/dup.txt\n+++ b/src/dup.txt\n@@ -5,2 +5,2 @@\n a\n-b\n+B\n\n",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/dup.txt"), "a\nb\n\nc\na\nB\n");
+
+    // A removed `-- comment` line is a removed line, not a file header.
+    let o = p(
+        &mut cx,
+        "--- a/src/q.sql\n+++ b/src/q.sql\n@@ -1,3 +1,2 @@\n select 1;\n--- old note\n select 2;\n",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/q.sql"), "select 1;\nselect 2;\n");
+
+    // A patch that changes nothing writes nothing.
+    let o = p(
+        &mut cx,
+        "--- a/src/q.sql\n+++ b/src/q.sql\n@@ -1 +1 @@\n select 1;\n",
+    );
+    assert!(o.is_error && o.content.contains("as it was"), "{o:?}");
+
+    // A failure at the write puts back what landed before it.
+    let o = p(
+        &mut cx,
+        "--- a/src/q.sql\n+++ b/src/q.sql\n@@ -1 +1 @@\n-select 1;\n+select 3;\n--- /dev/null\n+++ b/src/file/new.rs\n@@ -0,0 +1 @@\n+x\n",
+    );
+    assert!(
+        o.is_error && o.content.contains("every file was put back"),
+        "{o:?}"
+    );
+    assert_eq!(w.get("src/q.sql"), "select 1;\nselect 2;\n");
+
+    // What a text patch cannot apply is refused by name, never skipped.
+    for (diff, why) in [
+        (
+            "diff --git a/src/e b/src/e\nnew file mode 100644\nindex 0000000..e69de29\n",
+            "no text hunks",
+        ),
+        (
+            "diff --git a/i.png b/i.png\nBinary files a/i.png and b/i.png differ\n",
+            "binary",
+        ),
+        (
+            "diff --git a/src/a.rs b/src/a.rs\nold mode 100644\nnew mode 100755\n",
+            "mode change",
+        ),
+    ] {
+        let o = p(&mut cx, diff);
+        assert!(o.is_error && o.content.contains(why), "{why}: {o:?}");
+    }
+}

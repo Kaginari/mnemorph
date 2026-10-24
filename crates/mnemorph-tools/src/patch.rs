@@ -1,6 +1,7 @@
 //! `patch`: a unified diff across files, applied whole or not at all — the form many models are
 //! trained to write.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use mnemorph_races::ToolClass;
@@ -50,26 +51,62 @@ fn header_path(rest: &str) -> Option<String> {
     Some(p.to_owned())
 }
 
-/// Read a unified diff into its files.
+/// What a `diff --git` block carries that a text patch cannot apply.
+fn git_only(line: &str) -> Option<&'static str> {
+    if line.starts_with("Binary files ") || line.starts_with("GIT binary patch") {
+        Some("a binary change — write the file whole")
+    } else if line.starts_with("old mode ") || line.starts_with("new mode ") {
+        Some("a mode change — patch changes text, not modes")
+    } else {
+        None
+    }
+}
+
+/// Read a unified diff into its files. A `--- ` line is a header only when a `+++ ` line follows
+/// it, so a removed `-- comment` stays a removed line; blank lines that trail a hunk are the
+/// writer's separators, not context; a `diff --git` block with no text to apply is refused by
+/// name, never skipped.
 fn parse(text: &str) -> Result<Vec<FilePatch>, String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let header = |i: usize| {
+        lines[i].starts_with("--- ") && lines.get(i + 1).is_some_and(|n| n.starts_with("+++ "))
+    };
     let mut files: Vec<FilePatch> = Vec::new();
-    let mut lines = text.lines().peekable();
-    while let Some(line) = lines.next() {
-        if let Some(rest) = line.strip_prefix("--- ") {
-            let Some(plus) = lines.next().and_then(|l| l.strip_prefix("+++ ")) else {
-                return Err(format!("`--- {rest}` is not followed by a `+++` line"));
-            };
+    // The open `diff --git` block: its first line, and whether it brought `---`/`+++`.
+    let mut block: Option<(&str, bool)> = None;
+    let close = |block: Option<(&str, bool)>| match block {
+        Some((first, false)) => Err(format!(
+            "`{first}` carries no text hunks (an empty file, a pure rename or a copy): use write or move"
+        )),
+        _ => Ok(()),
+    };
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        if line.starts_with("diff --git ") {
+            close(block)?;
+            block = Some((line, false));
+        } else if let Some(why) = git_only(line) {
+            return Err(format!("the diff holds {why}"));
+        } else if header(i) {
             files.push(FilePatch {
-                old: header_path(rest),
-                new: header_path(plus),
+                old: header_path(&line[4..]),
+                new: header_path(&lines[i + 1][4..]),
                 hunks: Vec::new(),
             });
+            if let Some(b) = block.as_mut() {
+                b.1 = true;
+            }
+            i += 2;
+            continue;
         } else if let Some(rest) = line.strip_prefix("@@ ") {
             let file = files
                 .last_mut()
                 .ok_or("a hunk before any `---`/`+++` header")?;
-            let old = rest.split_whitespace().next().unwrap_or("");
-            let start = old
+            let start = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
                 .trim_start_matches('-')
                 .split(',')
                 .next()
@@ -79,43 +116,66 @@ fn parse(text: &str) -> Result<Vec<FilePatch>, String> {
                 start,
                 ..Hunk::default()
             };
-            while let Some(next) = lines.peek() {
-                let next = *next;
-                if next.starts_with("@@ ") || next.starts_with("--- ") || next.starts_with("diff ")
-                {
-                    break;
-                }
-                lines.next();
-                if next.starts_with('\\') {
-                    match hunk.lines.last() {
-                        Some(('-', _)) => hunk.no_newline_old = true,
-                        Some(('+', _)) => hunk.no_newline_new = true,
-                        _ => {
-                            hunk.no_newline_old = true;
-                            hunk.no_newline_new = true;
-                        }
-                    }
-                    continue;
-                }
-                let (kind, body) = match next.chars().next() {
-                    Some(c @ (' ' | '-' | '+')) => (c, next[1..].to_owned()),
-                    // An empty line inside a hunk is a blank context line, as many writers emit it.
-                    None => (' ', String::new()),
-                    Some(_) => return Err(format!("`{next}` is no diff line (` `, `-`, `+`)")),
-                };
-                hunk.lines.push((kind, body));
+            i += 1;
+            while i < lines.len()
+                && !lines[i].starts_with("@@ ")
+                && !lines[i].starts_with("diff --git ")
+                && !header(i)
+            {
+                hunk_line(lines[i], &mut hunk)?;
+                i += 1;
+            }
+            while hunk
+                .lines
+                .last()
+                .is_some_and(|(k, l)| *k == ' ' && l.is_empty())
+            {
+                hunk.lines.pop();
             }
             file.hunks.push(hunk);
+            continue;
         }
+        i += 1;
     }
+    close(block)?;
     if files.is_empty() {
         return Err("no `---`/`+++` file header: the patch must be a unified diff".into());
     }
     Ok(files)
 }
 
+/// One line of a hunk's body.
+fn hunk_line(line: &str, hunk: &mut Hunk) -> Result<(), String> {
+    if line.starts_with('\\') {
+        match hunk.lines.last() {
+            Some(('-', _)) => hunk.no_newline_old = true,
+            Some(('+', _)) => hunk.no_newline_new = true,
+            _ => {
+                hunk.no_newline_old = true;
+                hunk.no_newline_new = true;
+            }
+        }
+        return Ok(());
+    }
+    let (kind, body) = match line.chars().next() {
+        Some(c @ (' ' | '-' | '+')) => (c, line[1..].to_owned()),
+        // An empty line inside a hunk is a blank context line, as many writers emit it.
+        None => (' ', String::new()),
+        Some(_) => return Err(format!("`{line}` is no diff line (` `, `-`, `+`)")),
+    };
+    hunk.lines.push((kind, body));
+    Ok(())
+}
+
 /// Apply `hunks` to `text`: each where it says, or at the one other place its old lines match.
+/// A file written with `\r\n` keeps them.
 fn apply(text: &str, hunks: &[Hunk], shown: &str) -> Result<String, String> {
+    let crlf = text.contains("\r\n");
+    let text = if crlf {
+        text.replace("\r\n", "\n")
+    } else {
+        text.to_owned()
+    };
     let had_newline = text.is_empty() || text.ends_with('\n');
     let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
     let mut drift: isize = 0;
@@ -140,15 +200,13 @@ fn apply(text: &str, hunks: &[Hunk], shown: &str) -> Result<String, String> {
                     .zip(&old)
                     .all(|(a, b)| a == b)
         };
-        let stated =
-            usize::try_from(isize::try_from(h.start.max(1) - 1).unwrap_or(0) + drift).unwrap_or(0);
+        let shift =
+            |base: usize| usize::try_from(isize::try_from(base).unwrap_or(0) + drift).unwrap_or(0);
         // A pure insertion (`@@ -5,0 …`) goes after its stated line, shifted like the rest.
         let stated = if old.is_empty() {
-            usize::try_from(isize::try_from(h.start).unwrap_or(0) + drift)
-                .unwrap_or(0)
-                .min(lines.len())
+            shift(h.start).min(lines.len())
         } else {
-            stated
+            shift(h.start.max(1) - 1)
         };
         let at = if fits(stated) {
             stated
@@ -185,13 +243,27 @@ fn apply(text: &str, hunks: &[Hunk], shown: &str) -> Result<String, String> {
     if newline && !lines.is_empty() {
         out.push('\n');
     }
-    Ok(out)
+    Ok(if crlf { out.replace('\n', "\r\n") } else { out })
 }
 
-/// What one file becomes.
-enum Outcome1 {
-    Write(PathBuf, String),
-    Remove(PathBuf),
+/// What one file becomes, and what it was, so a failure can put it back.
+enum Change {
+    /// Write `text`; `before` is the file's content, `None` when the patch creates it.
+    Write {
+        path: PathBuf,
+        text: String,
+        before: Option<String>,
+    },
+    /// Remove the file, whose content was `before`.
+    Remove { path: PathBuf, before: String },
+}
+
+impl Change {
+    fn path(&self) -> &PathBuf {
+        match self {
+            Change::Write { path, .. } | Change::Remove { path, .. } => path,
+        }
+    }
 }
 
 impl Tool for Patch {
@@ -227,15 +299,11 @@ impl Tool for Patch {
             Ok(a) => a,
             Err(o) => return o,
         };
-        let files = match parse(&a.patch) {
-            Ok(f) => f,
-            Err(e) => return Outcome::error(e),
-        };
-        let plan = match plan_of(&files, cx) {
+        let plan = match parse(&a.patch).and_then(|files| plan_of(&files, cx)) {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
-        let wrote = match land(plan, cx) {
+        let wrote = match land(&plan, cx) {
             Ok(w) => w,
             Err(e) => return Outcome::error(e),
         };
@@ -249,9 +317,11 @@ impl Tool for Patch {
     }
 }
 
-/// Every file's result, before anything is written.
-fn plan_of(files: &[FilePatch], cx: &Context) -> Result<Vec<Outcome1>, String> {
-    let mut plan: Vec<Outcome1> = Vec::new();
+/// Every file's result, before anything is written. A path named twice gets its later parts
+/// applied to the earlier ones' result; a file left as it was is no change.
+fn plan_of(files: &[FilePatch], cx: &Context) -> Result<Vec<Change>, String> {
+    let mut plan: Vec<Change> = Vec::new();
+    let mut at: BTreeMap<PathBuf, usize> = BTreeMap::new();
     for f in files {
         let name = f
             .new
@@ -266,67 +336,95 @@ fn plan_of(files: &[FilePatch], cx: &Context) -> Result<Vec<Outcome1>, String> {
                 f.new.as_deref().unwrap_or("")
             ));
         }
-        let check = if f.new.is_none() {
+        let path = if f.new.is_none() {
             cx.writable_entry(&name)
         } else {
             cx.writable(&name)
-        };
-        let path = check?;
+        }?;
         let shown = cx.shown(&path);
+        if let Some(&i) = at.get(&path) {
+            let Change::Write { text, .. } = &mut plan[i] else {
+                return Err(format!(
+                    "`{shown}` is deleted, then named again; nothing was written"
+                ));
+            };
+            if f.old.is_none() || f.new.is_none() {
+                return Err(format!(
+                    "`{shown}` is named twice, once to create or delete it; nothing was written"
+                ));
+            }
+            *text =
+                apply(text, &f.hunks, &shown).map_err(|e| format!("{e} Nothing was written."))?;
+            continue;
+        }
         let exists = path.symlink_metadata().is_ok();
-        let text = if f.old.is_none() {
+        let before = if f.old.is_none() {
             if exists {
                 return Err(format!("`{shown}` already exists; the diff creates it"));
             }
-            String::new()
+            None
         } else {
             match crate::beneath::read(cx.world(), &path).map(String::from_utf8) {
-                Ok(Ok(t)) => t,
+                Ok(Ok(t)) => Some(t),
                 Ok(Err(_)) => {
                     return Err(format!(
-                        "`{shown}` is not UTF-8 text; patch would replace its bytes"
+                        "`{shown}` is not UTF-8 text; patch would replace its bytes — rewrite it whole with write"
                     ));
                 }
-                Err(e) => return Err(format!("cannot read `{shown}`: {e}")),
+                Err(e) => {
+                    return Err(format!(
+                        "cannot read `{shown}`: {e} — to create it, the diff's old side is `/dev/null`"
+                    ));
+                }
             }
         };
-        let result = match apply(&text, &f.hunks, &shown) {
-            Ok(r) => r,
-            Err(e) => return Err(format!("{e} Nothing was written.")),
-        };
+        let result = apply(before.as_deref().unwrap_or(""), &f.hunks, &shown)
+            .map_err(|e| format!("{e} Nothing was written."))?;
+        at.insert(path.clone(), plan.len());
         if f.new.is_none() {
             if !result.is_empty() {
                 return Err(format!(
                     "the diff deletes `{shown}` but leaves lines in it; nothing was written"
                 ));
             }
-            plan.push(Outcome1::Remove(path));
+            plan.push(Change::Remove {
+                path,
+                before: before.unwrap_or_default(),
+            });
         } else {
-            plan.push(Outcome1::Write(path, result));
+            plan.push(Change::Write {
+                path,
+                text: result,
+                before,
+            });
         }
+    }
+    plan.retain(|c| !matches!(c, Change::Write { text, before: Some(b), .. } if text == b));
+    if plan.is_empty() {
+        return Err("the patch leaves every file as it was; nothing was written".into());
     }
     Ok(plan)
 }
 
-/// Write the plan: deletes only once the attic holds their copy; a failed write names what
-/// already landed.
-fn land(plan: Vec<Outcome1>, cx: &mut Context) -> Result<Vec<PathBuf>, String> {
-    // Deletes need the attic's copy, asked of before anything changes.
-    if plan.iter().any(|p| matches!(p, Outcome1::Remove(_))) {
+/// Write the plan: deletes only once the attic holds their copy; on a failed write every file
+/// already changed is put back from the plan's own originals, so a failure leaves the tree as it
+/// was.
+fn land(plan: &[Change], cx: &mut Context) -> Result<Vec<PathBuf>, String> {
+    if plan.iter().any(|c| matches!(c, Change::Remove { .. })) {
         let Some(attic) = cx.attic() else {
             return Err(
-                "the diff deletes a file, and this body has no attic to keep a copy; nothing was written".into(),
+                "the diff deletes a file, and this body has no attic to keep a copy; nothing was written — delete it with a command if it is yours to lose".into(),
             );
         };
         let Ok(snap) = attic.snapshot("before a patch") else {
             return Err("the attic could not keep a copy; nothing was written".into());
         };
-        for p in &plan {
-            if let Outcome1::Remove(path) = p
+        for c in plan {
+            if let Change::Remove { path, .. } = c
                 && !attic.holds(&snap, &cx.shown(path))
             {
                 return Err(format!(
-                    "the attic keeps no copy of `{}`; nothing was written",
+                    "the attic keeps no copy of `{}`; nothing was written — delete it with a command if it is yours to lose",
                     cx.shown(path)
                 ));
             }
@@ -334,32 +432,48 @@ fn land(plan: Vec<Outcome1>, cx: &mut Context) -> Result<Vec<PathBuf>, String> {
     } else {
         keep(cx);
     }
-    let mut wrote: Vec<PathBuf> = Vec::new();
-    for p in plan {
-        let (path, done) = match p {
-            Outcome1::Write(path, text) => {
-                let r = crate::beneath::write(cx.world(), &path, text.as_bytes());
-                (path, r)
+    let mut done: Vec<&Change> = Vec::new();
+    for c in plan {
+        let result = match c {
+            Change::Write { path, text, .. } => {
+                crate::beneath::write(cx.world(), path, text.as_bytes())
             }
-            Outcome1::Remove(path) => {
-                let r = crate::beneath::remove(cx.world(), &path, false);
-                (path, r)
-            }
+            Change::Remove { path, .. } => crate::beneath::remove(cx.world(), path, false),
         };
-        if let Err(e) = done {
-            let landed: Vec<String> = wrote.iter().map(|p| cx.shown(p)).collect();
+        if let Err(e) = result {
+            let unwound = done.iter().rev().all(|d| undo(d, cx));
             return Err(format!(
-                "cannot write `{}`: {e}; already written: {} — the attic holds the state before the patch",
-                cx.shown(&path),
-                if landed.is_empty() {
-                    "nothing".into()
+                "cannot write `{}`: {e}; {}",
+                cx.shown(c.path()),
+                if unwound {
+                    "every file was put back as it was".to_owned()
                 } else {
-                    landed.join(", ")
+                    "some files could not be put back — read them before going on".to_owned()
                 }
             ));
         }
-        cx.seen.remove(&path);
-        wrote.push(path);
+        done.push(c);
+    }
+    let wrote: Vec<PathBuf> = plan.iter().map(|c| c.path().clone()).collect();
+    for p in &wrote {
+        cx.seen.remove(p);
     }
     Ok(wrote)
+}
+
+/// Put one landed change back: the original content, or no file where the patch made one.
+fn undo(c: &Change, cx: &Context) -> bool {
+    match c {
+        Change::Write {
+            path,
+            before: Some(b),
+            ..
+        }
+        | Change::Remove { path, before: b } => {
+            crate::beneath::write(cx.world(), path, b.as_bytes()).is_ok()
+        }
+        Change::Write {
+            path, before: None, ..
+        } => crate::beneath::remove(cx.world(), path, false).is_ok(),
+    }
 }
