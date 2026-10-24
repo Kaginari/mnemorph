@@ -38,8 +38,24 @@ async function main(): Promise<number> {
         process.stderr.write(`mnemorph: ${(e as Error).message}\n`);
         return 1;
       }
-      const ink = render(<App client={client} hello={hello} />, { exitOnCtrlC: false });
+      let lost: string | undefined;
+      const ink = render(
+        <App
+          client={client}
+          hello={hello}
+          onCoreClosed={(why) => {
+            lost = why;
+          }}
+        />,
+        { exitOnCtrlC: false },
+      );
       await ink.waitUntilExit();
+      client.close();
+      // A core that went away by itself is said on the terminal, after the last frame.
+      if (lost !== undefined) {
+        process.stderr.write(`mnemorph: the core closed: ${lost}\n`);
+        return 1;
+      }
       return 0;
     }
   }

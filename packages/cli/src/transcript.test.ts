@@ -76,3 +76,31 @@ test('a call is summed up by what it acts on', () => {
   expect(summary('bash', { command: 'cargo test' })).toBe('cargo test');
   expect(summary('read', { path: 'src/a.rs' })).toBe('src/a.rs');
 });
+
+test('finished paragraphs leave the live text as they stream, and are not said twice', () => {
+  let s = fold(initial(), ev('turnStarted', { text: 'tell me' }));
+  s = fold(s, ev('textDelta', { text: 'First para' }));
+  s = fold(s, ev('textDelta', { text: 'graph.\n\nSecond ' }));
+  expect(s.items.at(-1)).toMatchObject({
+    kind: 'assistant',
+    text: 'First paragraph.',
+    cont: false,
+  });
+  expect(s.streaming).toBe('Second ');
+  s = fold(s, ev('textDelta', { text: 'one.' }));
+  s = fold(s, ev('assistant', { text: 'First paragraph.\n\nSecond one.', stop: 'EndTurn' }));
+  const said = s.items.filter((i) => i.kind === 'assistant').map((i) => i.text);
+  expect(said).toEqual(['First paragraph.', 'Second one.']);
+  expect(s.items.at(-1)).toMatchObject({ cont: true });
+  expect([s.streaming, s.flushed]).toEqual(['', '']);
+});
+
+test('an approval still open when its turn ends is cleared', () => {
+  let s = fold(initial(), ev('turnStarted', { text: 'go' }));
+  s = {
+    ...s,
+    gate: { id: 1, request: { race: 'slime', class: 'write', act: 'x', why: [], outside: [] } },
+  };
+  s = fold(s, ev('turnEnded', { ending: 'interrupted' }));
+  expect(s.gate).toBeUndefined();
+});

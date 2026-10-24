@@ -15,6 +15,30 @@ export interface Editor {
   draft: string;
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** Where each character starts — an emoji, a flag or an accented letter is one character, however
+ * many code units it takes — and the text's end. */
+function boundaries(text: string): number[] {
+  const out = [...graphemes.segment(text)].map((g) => g.index);
+  out.push(text.length);
+  return out;
+}
+
+/** The character boundary before `i`. */
+export function before(text: string, i: number): number {
+  return (
+    boundaries(text)
+      .filter((b) => b < i)
+      .at(-1) ?? 0
+  );
+}
+
+/** The character boundary after `i`. */
+export function after(text: string, i: number): number {
+  return boundaries(text).find((b) => b > i) ?? text.length;
+}
+
 export function empty(history: string[] = []): Editor {
   return { text: '', cursor: 0, history, at: history.length, draft: '' };
 }
@@ -31,24 +55,21 @@ export function insert(e: Editor, chars: string): Editor {
 
 export function backspace(e: Editor): Editor {
   if (e.cursor === 0) return e;
-  return {
-    ...e,
-    text: e.text.slice(0, e.cursor - 1) + e.text.slice(e.cursor),
-    cursor: e.cursor - 1,
-  };
+  const start = before(e.text, e.cursor);
+  return { ...e, text: e.text.slice(0, start) + e.text.slice(e.cursor), cursor: start };
 }
 
 export function del(e: Editor): Editor {
   if (e.cursor >= e.text.length) return e;
-  return { ...e, text: e.text.slice(0, e.cursor) + e.text.slice(e.cursor + 1) };
+  return { ...e, text: e.text.slice(0, e.cursor) + e.text.slice(after(e.text, e.cursor)) };
 }
 
 export function left(e: Editor): Editor {
-  return { ...e, cursor: Math.max(0, e.cursor - 1) };
+  return { ...e, cursor: before(e.text, e.cursor) };
 }
 
 export function right(e: Editor): Editor {
-  return { ...e, cursor: Math.min(e.text.length, e.cursor + 1) };
+  return { ...e, cursor: after(e.text, e.cursor) };
 }
 
 /** The start and end of the line the cursor is on. */

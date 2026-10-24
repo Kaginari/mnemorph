@@ -2,6 +2,7 @@
 import type { Client, GateReply, GateRequest, Hello } from '@mnemorph/sdk';
 import { dark, races } from '@mnemorph/theme';
 import { Box, Static, Text, useApp, useInput, usePaste, useStdout, useWindowSize } from 'ink';
+import type { ReactNode } from 'react';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import * as ed from './editor.js';
 import { fold, type Item, info, initial, type State, status, summary } from './transcript.js';
@@ -29,20 +30,39 @@ export const COMMANDS = '/help  the keys and commands · /status  the session ·
 
 const RESULT_LINES = 4;
 
-function ItemView({ item }: { item: Item }) {
+/** How long quitting waits for the core to say goodbye before it goes anyway. */
+export const QUIT_WAIT_MS = 1000;
+
+/** A prefix in its own column and text that wraps beside it, never under it. */
+function Row({ prefix, color, children }: { prefix: string; color: string; children: ReactNode }) {
+  return (
+    <Box flexDirection="row">
+      <Box width={prefix.length} flexShrink={0}>
+        <Text color={color}>{prefix}</Text>
+      </Box>
+      <Box flexGrow={1} flexShrink={1}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+export function ItemView({ item }: { item: Item }) {
   switch (item.kind) {
     case 'user':
       return (
         <Box marginTop={1}>
-          <Text color={dark.textMuted}>{'❯ '}</Text>
-          <Text bold>{item.text}</Text>
+          <Row prefix="❯ " color={dark.textMuted}>
+            <Text bold>{item.text}</Text>
+          </Row>
         </Box>
       );
     case 'assistant':
       return (
-        <Box marginTop={1}>
-          <Text color={races.rimuru}>{'● '}</Text>
-          <Text>{item.text}</Text>
+        <Box marginTop={item.cont ? 0 : 1}>
+          <Row prefix={item.cont ? '  ' : '● '} color={races.rimuru}>
+            <Text>{item.text}</Text>
+          </Row>
         </Box>
       );
     case 'tool': {
@@ -50,39 +70,54 @@ function ItemView({ item }: { item: Item }) {
       const shown = lines.slice(0, RESULT_LINES);
       const more = lines.length - shown.length;
       const bad = item.result?.isError;
+      const cut = item.result?.cut ?? 0;
       return (
         <Box flexDirection="column" marginTop={1}>
-          <Text>
-            <Text color={bad ? dark.alarm : dark.holo}>{'⏺ '}</Text>
-            <Text bold>{item.name}</Text>
-            <Text color={dark.textMuted}> {summary(item.name, item.input)}</Text>
-          </Text>
-          {shown.map((line, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines of one finished result never move
-            <Text key={i} color={bad ? dark.alarm : dark.textMuted}>
-              {i === 0 ? '  ⎿ ' : '    '}
-              {line}
+          <Row prefix="⏺ " color={bad ? dark.alarm : dark.holo}>
+            <Text>
+              <Text bold>{item.name}</Text>
+              <Text color={dark.textMuted}> {summary(item.name, item.input)}</Text>
             </Text>
-          ))}
-          {more > 0 || (item.result?.cut ?? 0) > 0 ? (
-            <Text color={dark.textMuted}>
-              {'    … '}
-              {more > 0 ? `${more} more lines` : ''}
-              {(item.result?.cut ?? 0) > 0 ? ` (${item.result?.cut} bytes cut)` : ''}
-            </Text>
-          ) : null}
+          </Row>
+          <Row prefix="  ⎿ " color={dark.textMuted}>
+            <Box flexDirection="column">
+              {shown.map((line, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: lines of one finished result never move
+                <Text key={i} color={bad ? dark.alarm : dark.textMuted}>
+                  {line}
+                </Text>
+              ))}
+              {more > 0 || cut > 0 ? (
+                <Text color={dark.textMuted}>
+                  {'… '}
+                  {more > 0 ? `${more} more lines` : ''}
+                  {cut > 0 ? ` (${cut} bytes cut)` : ''}
+                </Text>
+              ) : null}
+            </Box>
+          </Row>
         </Box>
       );
     }
     case 'note':
-      return <Text color={dark.textMuted}>{`  ${item.text}`}</Text>;
+      return (
+        <Row prefix="  " color={dark.textMuted}>
+          <Text color={dark.textMuted}>{item.text}</Text>
+        </Row>
+      );
     case 'warning':
-      return <Text color={dark.gold}>{`  ! ${item.text}`}</Text>;
+      return (
+        <Row prefix="  ! " color={dark.gold}>
+          <Text color={dark.gold}>{item.text}</Text>
+        </Row>
+      );
     case 'verdict':
       return item.passed ? (
         <Text color={races.elf}>{'  ✓ the end gate passed'}</Text>
       ) : (
-        <Text color={dark.alarm}>{`  ✗ the end gate: ${item.failures.join('; ')}`}</Text>
+        <Row prefix="  ✗ " color={dark.alarm}>
+          <Text color={dark.alarm}>{`the end gate: ${item.failures.join('; ')}`}</Text>
+        </Row>
       );
     case 'ending':
       return (
@@ -97,21 +132,23 @@ function ItemView({ item }: { item: Item }) {
   }
 }
 
-/** The input, its cursor drawn as an inverse cell. */
+/** The input, its cursor drawn as an inverse cell over one whole character. */
 function Input({ editor, busy }: { editor: ed.Editor; busy: boolean }) {
+  const end = ed.after(editor.text, editor.cursor);
   const before = editor.text.slice(0, editor.cursor);
-  const at = editor.text[editor.cursor];
-  const after = editor.text.slice(editor.cursor + 1);
-  const cursor = at === undefined || at === '\n' ? ' ' : at;
+  const at = editor.text.slice(editor.cursor, end);
+  const after = editor.text.slice(end);
+  const cursor = at === '' || at === '\n' ? ' ' : at;
   return (
     <Box borderStyle="round" borderColor={busy ? dark.line : dark.holo} paddingX={1}>
-      <Text>
-        <Text color={dark.textMuted}>{'❯ '}</Text>
-        {before}
-        <Text inverse>{cursor}</Text>
-        {at === '\n' ? '\n' : ''}
-        {after}
-      </Text>
+      <Row prefix="❯ " color={dark.textMuted}>
+        <Text>
+          {before}
+          <Text inverse>{cursor}</Text>
+          {at === '\n' ? '\n' : ''}
+          {after}
+        </Text>
+      </Row>
     </Box>
   );
 }
@@ -139,15 +176,23 @@ function Gate({ request }: { request: GateRequest }) {
   );
 }
 
+/** The last `rows` lines of `text`, so the live region never outgrows the terminal. */
+export function tail(text: string, rows: number): string {
+  const lines = text.split('\n');
+  return lines.length <= rows ? text : lines.slice(-rows).join('\n');
+}
+
 export interface AppProps {
   client: Client;
   hello: Hello;
+  /** Told why the core closed, when it closed by itself. */
+  onCoreClosed?: (why: string) => void;
 }
 
-export function App({ client, hello }: AppProps) {
+export function App({ client, hello, onCoreClosed }: AppProps) {
   const { exit } = useApp();
-  const { stdout } = useStdout();
-  const { columns } = useWindowSize();
+  const { write } = useStdout();
+  const { columns, rows } = useWindowSize();
   const [state, dispatch] = useReducer(reduce, undefined, () => {
     let s = initial();
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
@@ -164,16 +209,23 @@ export function App({ client, hello }: AppProps) {
   };
   const editor = editorRef.current;
   const answer = useRef<((r: GateReply) => void) | undefined>(undefined);
-  // Every size change reprints the transcript at the new width, from a cleared screen.
+  const quitting = useRef(false);
+
+  // Every width change reprints the transcript at the new width. Only the screen is cleared —
+  // through Ink's own writer, so nothing races its frames — and the scrollback above is kept.
   const [epoch, setEpoch] = useState(0);
   const width = useRef(columns);
   useEffect(() => {
     if (columns > 0 && columns !== width.current) {
       width.current = columns;
-      stdout.write('\u001b[2J\u001b[3J\u001b[H');
-      setEpoch((n) => n + 1);
+      // After Ink has taken the new width in, so the reprint is laid out at it.
+      const later = setTimeout(() => {
+        write('\u001b[2J\u001b[H');
+        setEpoch((n) => n + 1);
+      }, 50);
+      return () => clearTimeout(later);
     }
-  }, [columns, stdout]);
+  }, [columns, write]);
 
   useEffect(() => {
     const off = client.on((event) => dispatch({ kind: 'event', event }));
@@ -185,14 +237,22 @@ export function App({ client, hello }: AppProps) {
         }),
     );
     const closed = client.onClosed((why) => {
-      dispatch({ kind: 'info', text: `the core closed: ${why}` });
+      if (!quitting.current) onCoreClosed?.(why);
       exit();
     });
     return () => {
       off();
       closed();
     };
-  }, [client, exit]);
+  }, [client, exit, onCoreClosed]);
+
+  // An approval the turn left behind is denied, never left to answer a dead question.
+  useEffect(() => {
+    if (!state.gate && answer.current) {
+      answer.current({ allow: false, reason: 'the turn ended before the human answered' });
+      answer.current = undefined;
+    }
+  }, [state.gate]);
 
   const decide = (reply: GateReply) => {
     answer.current?.(reply);
@@ -200,8 +260,17 @@ export function App({ client, hello }: AppProps) {
     dispatch({ kind: 'gate', gate: undefined });
   };
 
+  /** Leave: ask the core to stop, and go after a second whether it answered or not. A second
+   * quit while waiting goes at once. */
   const quit = () => {
-    void client.shutdown().finally(() => exit());
+    if (quitting.current) return exit();
+    quitting.current = true;
+    const wait = new Promise((r) => setTimeout(r, QUIT_WAIT_MS));
+    void Promise.race([client.shutdown().catch(() => {}), wait]).finally(() => {
+      // Answered or not, the core is let go: one that never said goodbye is stopped.
+      client.close();
+      exit();
+    });
   };
 
   const send = (line: string) => {
@@ -231,14 +300,16 @@ export function App({ client, hello }: AppProps) {
   };
 
   useInput((input, key) => {
+    if (key.ctrl && input === 'c') {
+      // Ctrl+C always does something: it denies an open approval and stops the turn, or quits.
+      if (state.gate) decide({ allow: false, reason: 'the human stopped the turn' });
+      if (state.busy || state.gate) void client.interrupt();
+      else quit();
+      return;
+    }
     if (state.gate) {
       if (input === 'y') decide({ allow: true });
       else if (input === 'n' || key.escape) decide({ allow: false, reason: 'the human said no' });
-      return;
-    }
-    if (key.ctrl && input === 'c') {
-      if (state.busy) void client.interrupt();
-      else quit();
       return;
     }
     if (key.ctrl && input === 'd') {
@@ -275,23 +346,29 @@ export function App({ client, hello }: AppProps) {
   const running = [...state.running.values()];
   const parts = [hello.model, ...status(state.usage)];
   if (state.queued.length > 0) parts.push(`${state.queued.length} queued`);
+  // What streams gets the rows the input, the status line and the calls leave, and no more.
+  const room = Math.max(3, rows - 6 - running.length - state.queued.length - (state.gate ? 6 : 0));
+  // The last column stays free: a line that fills it would wrap its trailing space onto a row
+  // of its own.
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={Math.max(10, columns - 1)}>
       <Static key={epoch} items={state.items}>
         {(item) => <ItemView key={item.id} item={item} />}
       </Static>
-      {state.streaming ? (
-        <Box marginTop={1}>
-          <Text color={races.rimuru}>{'● '}</Text>
-          <Text>{state.streaming}</Text>
+      {state.streaming.trim() ? (
+        <Box marginTop={state.flushed ? 0 : 1}>
+          <Row prefix={state.flushed ? '  ' : '● '} color={races.rimuru}>
+            <Text>{tail(state.streaming, room)}</Text>
+          </Row>
         </Box>
       ) : null}
       {running.map((t) => (
-        <Text key={t.call}>
-          <Text color={dark.holo}>{'⏺ '}</Text>
-          <Text bold>{t.name}</Text>
-          <Text color={dark.textMuted}> {summary(t.name, t.input)} …</Text>
-        </Text>
+        <Row key={t.call} prefix="⏺ " color={dark.holo}>
+          <Text>
+            <Text bold>{t.name}</Text>
+            <Text color={dark.textMuted}> {summary(t.name, t.input)} …</Text>
+          </Text>
+        </Row>
       ))}
       {state.queued.map((q, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: the same line may wait twice

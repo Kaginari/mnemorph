@@ -23,7 +23,8 @@ Usage:
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
-  --core <path>    the mnemorphd to start (default: MNEMORPH_CORE, then PATH)
+  --core <path>    the mnemorphd to start (default: MNEMORPH_CORE, then the one built in
+                   this checkout, then PATH)
   --json           with run: print every event as a JSON line
   -h, --help       this help
   -V, --version    the version

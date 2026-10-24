@@ -34,6 +34,23 @@ function answering(core: FakeCore, ending = 'answered') {
   };
 }
 
+test('an answer that ends its own line gets no second newline', async () => {
+  const core = new FakeCore();
+  const send = core.send.bind(core);
+  core.send = (line: string) => {
+    send(line);
+    if (JSON.parse(line).method === 'session/prompt') {
+      setTimeout(() => {
+        core.event('textDelta', { text: 'a\nb\n' });
+        core.event('turnEnded', { ending: 'answered' });
+      }, 5);
+    }
+  };
+  const streams = io();
+  expect(await runOnce(parse(['run', 'x']) as never, streams, core)).toBe(0);
+  expect(streams.text().stdout).toBe('a\nb\n');
+});
+
 test('one ask prints its answer and exits 0', async () => {
   const core = new FakeCore();
   answering(core);

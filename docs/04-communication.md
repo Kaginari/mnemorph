@@ -324,14 +324,21 @@ exits 0 only when the body answered. `run` reads its ask from stdin only when no
 command line (`run` or `run -`), so an inherited open pipe never holds it, and it asks no one:
 an act that needs the human is denied, and the denial says so. `--help` and `--version` answer
 before any world is looked for; a core that will not start says why on the terminal before
-anything is drawn. In a session the transcript goes to the terminal's own scrollback, printed
-once per item and again whole when the width changes; below it live the text as it streams, the
+anything is drawn, and one that goes away mid-session is said on the terminal, with exit code 1.
+In a session the transcript goes to the terminal's own scrollback, printed once per item and
+again whole when the width changes — the screen is cleared, the scrollback above kept. A
+paragraph leaves the live region as soon as it is finished, and what still streams shows only
+the lines the terminal has room for, so the live region never outgrows it. Below the transcript
+live the text as it streams, the
 calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
 status line — model, spend (`unpriced` when the price tables do not know the model), context
 against the stress line, the cache's share. **Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
-**Esc** stops the turn; **Ctrl+C** stops the turn, or quits when nothing runs; **↑ ↓** walk the
-history. An approval is answered only by **y** or by **n** and Esc — never by Enter alone. Every
+**Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
+nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the
+history. An approval is answered only by **y** or by **n** and Esc — never by Enter alone — and
+one whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an
+emoji as one. Every
 printable character is text while the input has focus, and keys that arrive together are taken
 in order, a carriage return among them as Enter.
 

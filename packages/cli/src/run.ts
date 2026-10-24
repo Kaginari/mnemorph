@@ -36,12 +36,15 @@ export async function runOnce(
       reason: 'mnemorph run has no human to approve it; ask in a session instead',
     };
   });
+  // The answer's last character: a final newline is added only where the answer had none.
+  let last = '\n';
   const ended = new Promise<string>((resolve) => {
     client.on((e) => {
       if (cmd.json) {
         io.stdout.write(`${JSON.stringify(e)}\n`);
       } else if (e.type === 'textDelta') {
         io.stdout.write(e.text);
+        last = e.text.at(-1) ?? last;
       } else if (e.type === 'toolCall') {
         io.stderr.write(`⏺ ${e.name} ${summary(e.name, e.input)}\n`);
       } else if (e.type === 'toolResult' && e.isError) {
@@ -63,7 +66,7 @@ export async function runOnce(
     ended,
     new Promise<string>((resolve) => client.onClosed((why) => resolve(`failed: ${why}`))),
   ]);
-  if (!cmd.json) io.stdout.write('\n');
+  if (!cmd.json && last !== '\n') io.stdout.write('\n');
   if (ending !== 'answered') io.stderr.write(`mnemorph: ${ending}\n`);
   await client.shutdown().catch(() => {});
   return ending === 'answered' ? 0 : 1;

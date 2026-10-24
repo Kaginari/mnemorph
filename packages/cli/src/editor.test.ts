@@ -55,3 +55,17 @@ test('the history walks back and returns to the draft', () => {
   expect(e.text).toBe('draft');
   expect(ed.submit(type(ed.empty(), '   '))[0]).toBe('');
 });
+
+test('an emoji is one character: the cursor never lands inside it', () => {
+  let e = ed.insert(ed.empty(), 'a😀b日本');
+  for (let i = 0; i < 4; i++) e = ed.left(e);
+  expect(e.text.slice(0, e.cursor)).toBe('a');
+  e = ed.right(e);
+  expect(e.text.slice(0, e.cursor)).toBe('a😀');
+  e = ed.backspace(e);
+  expect(e.text).toBe('ab日本');
+  e = ed.insert(ed.empty(), '👍🏽x');
+  e = ed.home(e);
+  e = ed.del(e);
+  expect(e.text).toBe('x');
+});

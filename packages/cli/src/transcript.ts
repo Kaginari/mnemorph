@@ -7,7 +7,7 @@ import type { Arrived, GateRequest } from '@mnemorph/sdk';
 /** One finished thing in the transcript: printed once, never redrawn. */
 export type Item =
   | { kind: 'user'; id: number; text: string }
-  | { kind: 'assistant'; id: number; text: string }
+  | { kind: 'assistant'; id: number; text: string; cont?: boolean }
   | {
       kind: 'tool';
       id: number;
@@ -39,8 +39,10 @@ export interface Usage {
 export interface State {
   /** Finished items, in order. */
   items: Item[];
-  /** The model's text as it streams, not yet whole. */
+  /** The model's text as it streams, not yet whole: its last, unfinished paragraph. */
   streaming: string;
+  /** This model turn's text already moved to the transcript, paragraph by paragraph. */
+  flushed: string;
   /** Tool calls started and not yet answered, by call id. */
   running: Map<string, Extract<Item, { kind: 'tool' }>>;
   /** Whether a turn runs. */
@@ -57,6 +59,7 @@ export function initial(): State {
   return {
     items: [],
     streaming: '',
+    flushed: '',
     running: new Map(),
     busy: false,
     queued: [],
@@ -81,14 +84,30 @@ export function fold(s: State, e: Arrived): State {
     }
     case 'queued':
       return { ...s, queued: [...s.queued, e.text] };
-    case 'textDelta':
-      return { ...s, streaming: s.streaming + e.text };
+    case 'textDelta': {
+      // A finished paragraph leaves the live region for the transcript at once, so the live
+      // region never grows taller than the terminal.
+      const streaming = s.streaming + e.text;
+      const cut = streaming.lastIndexOf('\n\n');
+      if (cut === -1) return { ...s, streaming };
+      const done = streaming.slice(0, cut + 2);
+      const moved = { ...s, streaming: streaming.slice(cut + 2), flushed: s.flushed + done };
+      return done.trim()
+        ? push(moved, { kind: 'assistant', text: done.trim(), cont: s.flushed !== '' })
+        : moved;
+    }
     case 'toolStart':
       return s;
     case 'assistant': {
-      const text = e.text.trim();
-      const cleared = { ...s, streaming: '' };
-      return text ? push(cleared, { kind: 'assistant', text }) : cleared;
+      // The whole turn's text, less what already left paragraph by paragraph.
+      const rest = s.flushed
+        ? e.text.startsWith(s.flushed)
+          ? e.text.slice(s.flushed.length)
+          : s.streaming
+        : e.text;
+      const text = rest.trim();
+      const cleared = { ...s, streaming: '', flushed: '' };
+      return text ? push(cleared, { kind: 'assistant', text, cont: s.flushed !== '' }) : cleared;
     }
     case 'toolCall': {
       const running = new Map(s.running);
@@ -133,9 +152,19 @@ export function fold(s: State, e: Arrived): State {
     case 'turnEnded': {
       // A turn that ends with text still streaming keeps what was said.
       const kept = s.streaming.trim()
-        ? push({ ...s, streaming: '' }, { kind: 'assistant', text: s.streaming.trim() })
+        ? push(
+            { ...s, streaming: '' },
+            { kind: 'assistant', text: s.streaming.trim(), cont: s.flushed !== '' },
+          )
         : s;
-      const ended = { ...kept, busy: kept.queued.length > 0, running: new Map() };
+      // An approval still open when its turn ends is a question no one asks any more.
+      const ended = {
+        ...kept,
+        flushed: '',
+        busy: kept.queued.length > 0,
+        running: new Map(),
+        gate: undefined,
+      };
       return e.ending === 'answered' ? ended : push(ended, { kind: 'ending', ending: e.ending });
     }
   }

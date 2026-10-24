@@ -72,6 +72,10 @@ export function stdio(
     close: () => {
       if (!closed) child.stdin.end();
       close('the client closed the connection');
+      // A core that does not leave when its input ends is stopped.
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+      }, 1000).unref();
     },
   };
 }
@@ -151,6 +155,13 @@ export class Client {
   async shutdown(): Promise<void> {
     await this.request('shutdown', {});
     this.closedWhy ??= 'the session was shut down';
+    this.transport.close();
+  }
+
+  /** Close this end without asking: the core's input ends, and a core that does not leave is
+   * stopped. */
+  close(): void {
+    this.closedWhy ??= 'the client closed the connection';
     this.transport.close();
   }
 

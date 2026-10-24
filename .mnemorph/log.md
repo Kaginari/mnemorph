@@ -1447,3 +1447,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     is now taken key by key, against an editor no render can make stale.
   - The first build crashed before `--version` could answer: the workspace's packages are
     TypeScript sources and were left outside the bundle.
+
+---
+
+### [2026-10-24T18:33:29+02:00] rimuru — the terminal client, after its review
+- **Task:** the review of #134, demonstrated in a pty with a VT emulator: a tall streamed answer
+  copied into scrollback 26 times, long lines wrapping with blank rows, every resize erasing the
+  scrollback (`ESC[3J`), a core's death silent with exit 0, quitting held by a core that never
+  answers, an abandoned approval trapping the input, emoji split by the cursor.
+- **Files:** packages/cli/src/transcript.ts (finished paragraphs leave the live text; the turn's
+  end clears an open approval), app.tsx (a prefix column beside wrapping text; the last column
+  free; the live text cut to the rows left; the reprint after Ink takes the new width, through
+  its writer, `2J` only; an abandoned approval denied; Ctrl+C at an approval denies and stops;
+  quitting within a second; the core's closing reported), editor.ts (graphemes), cli.tsx (the
+  reason on stderr, exit 1), run.ts (no doubled newline), core.ts (the checkout's build only
+  from the checkout), packages/sdk (`Client.close`; a core that will not leave is killed),
+  tests, docs/04-communication.md.
+- **Gate:** n/a. Instruments: the reviewer's own scenarios rerun — one copy of a 40-line answer
+  at 20 rows and no full clears, wrap correct at 80 and after a resize to 50, no `3J`, no broken
+  emoji, exit 1 on a core's death, exit 0 within a second on a silent core; the CLI suite (34)
+  three times; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A line exactly as wide as the terminal wraps its trailing space onto a row of its own;
+    leaving the last column free is cheaper than measuring every line.
+  - A reprint laid out in the same tick as the resize used the old width for its first item;
+    waiting until Ink has taken the new width in fixed it.
+  - Quitting is not done until the child is gone: the UI ended, the process stayed, held by a
+    core that never left.
