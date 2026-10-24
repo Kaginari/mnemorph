@@ -35,6 +35,8 @@ law:
 ts:
     pnpm lint
     pnpm typecheck
+    # The SDK's tests speak to the real core.
+    cargo build -q -p mnemorphd
     pnpm test
 
 # Every crate depends only on lower layers (docs/05-architecture.md).

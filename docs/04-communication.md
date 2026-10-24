@@ -309,6 +309,15 @@ before it looks for any world. Inside, one thread owns the output, so no two lin
 reorder; one thread reads the input and answers the gate's waits itself, so a gate holding a
 turn never blocks the read that would release it; and one task owns the session.
 
+The clients reach it through two packages. `@mnemorph/protocol` is the protocol's types,
+generated from the Rust (`ts-rs`) into `src/generated` and checked in: the check regenerates them
+and fails when they drift, and a test holds the TypeScript `PROTOCOL` to the core's. `@mnemorph/sdk`
+is the client: `stdio()` starts `mnemorphd` and speaks on its pipes; a `Client` sends typed
+requests, refuses a core that speaks another protocol, delivers every event to its listeners in
+order and once each (`resync()` replays from the last `seq` it saw, dropping what it already
+had), answers `gate/ask` with the handler the interface gives it — denying when there is none —
+and fails whatever waits when the core's end closes, with the reason the core gave.
+
 Rules:
 
 - Every event carries `{session, run, body, seq}`; `seq` rises by one, in the order events reach
