@@ -212,7 +212,16 @@ impl Context {
                 }
             }
         }
-        out.extend(ignored(&self.world));
+        // Build output, never the records, git's own files, or anything that holds or sits in
+        // another's spot: an ignored `.mnemorph/instruments/` is the harness's ledger, not output.
+        let records = [self.world.join(".mnemorph"), self.world.join(".git")];
+        out.extend(ignored(&self.world).into_iter().filter(|p| {
+            !records.iter().any(|r| p.starts_with(r) || r.starts_with(p))
+                && !self
+                    .except
+                    .iter()
+                    .any(|e| e.starts_with(p) || p.starts_with(e))
+        }));
         out.sort();
         out.dedup();
         out

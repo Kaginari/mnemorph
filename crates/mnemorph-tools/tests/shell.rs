@@ -565,6 +565,24 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
             .with_home(w.root.join("home"))
             .with_sandbox(Sandbox::Guard(guard.clone()))
     };
+    // What git ignores is build output, granted — but never the records, even when ignored.
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(w.world())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    fs::write(
+        w.world().join(".gitignore"),
+        "target/\n.mnemorph/instruments/\nsrc/other/\n",
+    )
+    .unwrap();
+    fs::create_dir_all(w.world().join("target")).unwrap();
+    fs::create_dir_all(w.world().join(".mnemorph/instruments")).unwrap();
+    fs::write(w.world().join(".mnemorph/instruments/usage.jsonl"), "{}\n").unwrap();
     let grants = cx().grants();
     let world = w.world().canonicalize().unwrap();
     assert!(grants.contains(&world.join("src/mine.rs")), "{grants:?}");
@@ -576,6 +594,13 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
         "{grants:?}"
     );
     assert!(!grants.contains(&world), "{grants:?}");
+    assert!(grants.contains(&world.join("target")), "{grants:?}");
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join(".mnemorph"))),
+        "{grants:?}"
+    );
 
     let o = bash(
         &mut cx(),
@@ -589,6 +614,18 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
     assert!(o.is_error, "{o:?}");
     let o = bash(&mut cx(), "echo stolen > README.md");
     assert!(o.is_error, "{o:?}");
+    let o = bash(&mut cx(), "echo built > target/out");
+    assert!(!o.is_error, "build output is writable: {o:?}");
+    let o = bash(&mut cx(), "echo forged >> .mnemorph/instruments/usage.jsonl");
+    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(w.world().join("target/out")).unwrap(),
+        "built\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join(".mnemorph/instruments/usage.jsonl")).unwrap(),
+        "{}\n"
+    );
     assert_eq!(
         fs::read_to_string(w.world().join("src/other/theirs.rs")).unwrap(),
         "theirs\n"
