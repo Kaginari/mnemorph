@@ -112,6 +112,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("decide.via", Kind::Str),
     ("decide.model", Kind::Str),
     ("decide.llm", Kind::Str),
+    ("decide.bench", Kind::Bool),
     ("decide.cutoff.measured", Kind::Number),
     ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
@@ -265,6 +266,10 @@ pub struct Decide {
     pub model: String,
     /// The LLM that answers when there is no `via`, or it fails.
     pub llm: String,
+    /// Whether a piped test run's output is read by a decision instead of counted muted: as
+    /// `decide.bench` says, else on exactly when a System One provider is named, so no LLM is
+    /// asked unless the human chose it.
+    pub bench: bool,
     /// The least confidence a System One answer needs before a caller acts on it.
     pub cutoff_measured: f64,
     /// The same for an LLM's answer, whose probabilities are its own guess.
@@ -701,12 +706,17 @@ impl Config {
             }
             Ok(v)
         };
+        let bench = self
+            .get("decide.bench")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(via.is_some());
         Ok(Decide {
             via,
             model: text("decide.model").unwrap_or_default(),
             llm: text("decide.llm")
                 .or_else(|| text("models.tier.fast"))
                 .unwrap_or_default(),
+            bench,
             cutoff_measured: cutoff("decide.cutoff.measured")?,
             cutoff_stated: cutoff("decide.cutoff.stated")?,
         })

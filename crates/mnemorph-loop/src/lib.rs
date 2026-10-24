@@ -3,6 +3,7 @@
 
 pub mod beats;
 pub mod compact;
+pub mod decisions;
 pub mod gate;
 pub mod model;
 pub mod run;
@@ -12,10 +13,11 @@ pub mod solo;
 pub mod stress;
 
 pub use beats::{Beat, conversation};
+pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decisions};
 pub use gate::{EndGate, GateVerdict, Tree, snapshot};
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use run::{Body, Ending, Interrupt, Limits, Run, Setup};
 pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};
-pub use stress::{Bench, Signal, Stress, bench_of};
+pub use stress::{Bench, Read, Signal, Stress, bench_of, muted};

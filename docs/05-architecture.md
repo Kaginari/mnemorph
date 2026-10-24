@@ -338,6 +338,7 @@ base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
 via = "jeff"                       # unset: every decision goes to the LLM
 model = "jeff-latest"              # required with via; Jev's is "jev-latest"
 llm = "claude-haiku-5-5"           # the fallback; the fast tier's model by default
+bench = true                       # read a piped test run's output (on with via; set it to ask the LLM)
 
 [decide.cutoff]
 measured = 0.6                     # the least confidence to act on a System One answer
@@ -414,8 +415,15 @@ flowchart LR
 - **Containment.** A System One provider is a provider: only the human's own files define one,
   and only they set `decide.via`. Until the human names one, no decision leaves for anything but
   the LLM the session already uses.
-- **Decision points attach with their milestones.** Each reads `Decision::sure` and journals
-  its decision and outcome rows: the muted test bench, read from its output (the loop, once an act can wait on a decision),
+- **Decision points.** Each reads `Decision::sure` and journals its decision and outcome rows.
+  **`bench.outcome` is attached to the loop:** a run built with
+  `decisions(config, world, model, env)` reads a piped test run's output, so a sure green or red
+  counts in the tally as seen (*the bench tally*, [the loop](03-loop.md)). It is on when
+  `decide.via` is set, or `decide.bench = true` asks the LLM; the fallback asks `decide.llm`
+  through the run's own provider. What leaves for the decider is the command and the last 12 000
+  bytes of its output; test output can print anything, so a provider outside the machine sees
+  what the tests print. It is honoured once a binary builds runs from the configuration (the CLI,
+  M6). The others attach with their milestones:
   dispatch advice (M7), the Dark Elf's pre-screen, judged by its calibration first (#106, M10),
   and a commission's size (M11's value row).
 
