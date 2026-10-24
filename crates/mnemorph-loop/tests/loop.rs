@@ -700,3 +700,96 @@ async fn the_clock_reaches_a_running_command() {
         "{e:?}"
     );
 }
+
+/// The same call with the same input, again and again: warned at three, stopped at five.
+#[tokio::test]
+async fn an_identical_call_loop_is_broken() {
+    let w = World::new("loop-breaker");
+    let model =
+        Arc::new(ScriptedModel::new((0..6).map(|i| {
+            tool(&format!("t{i}"), "glob", json!({"pattern": "*.rs"}))
+        })));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "find it").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: loop"),
+        "{e:?}"
+    );
+    let warned = model.requests()[3]
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .any(|b| matches!(b, Block::Text { text, .. } if text.starts_with("[loop]")));
+    assert!(warned);
+}
+
+/// A bench run again and again without one green stalls the run — a piped run, whose exit
+/// status is hidden, never counts as green, even when work lands between runs.
+#[tokio::test]
+async fn a_bench_that_never_goes_green_stalls() {
+    let w = World::new("bench");
+    let mut script = Vec::new();
+    for i in 0..13 {
+        let command = if i % 2 == 0 {
+            "pytest -q"
+        } else {
+            "pytest -q | tail -1"
+        };
+        script.push(tool(&format!("b{i}"), "bash", json!({"command": command})));
+        script.push(tool(
+            &format!("w{i}"),
+            "write",
+            json!({"path": format!("fix{i}.py"), "content": "x = 1\n"}),
+        ));
+    }
+    let mut run = w.run(
+        Arc::new(ScriptedModel::new(script)),
+        Limits {
+            steps: 60,
+            ..limits()
+        },
+    );
+    let e = ask(&mut run, "make the tests pass").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: bench"),
+        "{e:?}"
+    );
+}
+
+#[test]
+fn benches_are_known_by_their_command() {
+    use mnemorph_loop::bench_of;
+    assert!(bench_of("cargo test -p x").is_some());
+    assert!(bench_of("cd sub && npm test").is_some());
+    assert_eq!(
+        bench_of("pytest -q | tail -3"),
+        bench_of("pytest -q"),
+        "piped or not, the same bench"
+    );
+    assert!(bench_of("cargo build").is_none());
+    assert!(bench_of("echo testing").is_none());
+}
+
+/// #43: the cached prefix — the system prompt and the tool JSON — has a ceiling, checked in CI.
+#[test]
+fn the_solo_prefix_stays_under_its_ceiling() {
+    const CEILING_TOKENS: usize = 4000;
+    let w = World::new("prefix-ceiling");
+    let (body, _) = mnemorph_loop::solo(&w.world(), "m");
+    let tools: Vec<mnemorph_provider::Tool> = registry()
+        .iter()
+        .map(|t| mnemorph_provider::Tool {
+            name: t.name().into(),
+            description: t.description().into(),
+            input_schema: t.schema(),
+            cache: false,
+        })
+        .collect();
+    let bytes = body.system.len() + serde_json::to_string(&tools.iter().map(|t| json!({"name": t.name, "description": t.description, "input_schema": t.input_schema})).collect::<Vec<_>>()).unwrap().len();
+    let tokens = bytes / 4;
+    eprintln!("solo prefix: {bytes} bytes ≈ {tokens} tokens (ceiling {CEILING_TOKENS})");
+    assert!(
+        tokens <= CEILING_TOKENS,
+        "the solo prefix grew to ≈{tokens} tokens"
+    );
+}
