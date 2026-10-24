@@ -214,26 +214,23 @@ build Mnemorph in solo mode.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
   1. the graph derived from the docs' Territory, Domain, chain and Minds fields, and inference to
      its fixed point, rebuilt on the docs' fingerprint;
-  2. ownership as one function, called by the gate, the policy, the dispatch card and
-     `onto owner`;
+  2. ownership as one function, called by the gate, the dispatch card and `onto owner`, with the
+     soil it yields handed to each body's policy as prefixes with exclusions;
   3. the shapes as findings with codes and severities; *right author* failing on critical and
      high ones that touch the landing;
   4. territory facts as events — `by`, source, support, counter, settle — with their status and
      the `contested-fact` finding; `@ONTO` showing both sides; counters derived without anyone
      naming an id: keyed facts compared by code, anchors that drift, the parent's triage on
-     collision;
-  5. relation sightings, the named-twice proposal with its synonym check and expiry, and
-     `onto check --dimension`.
+     collision.
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,
 the queue or scratch; an ontology fixture with an overlap, a loop in the chain, a contested fact
-and one dimension obstruction reports each with its code and severity, and the gate blocks only
-the critical and high ones; two creatures that write different `build=` values for one path,
+reports each with its code and severity, and the gate blocks only the critical and high ones —
+and not a landing that removes the finding; two creatures that write different `build=` values for one path,
 neither naming the other, make the fact contested; a fact whose cited lines change reads stale;
 a free fact resembling an older one reaches the parent, and left unlabeled raises
-`untriaged-fact`; one relation sighted twice by two bodies produces exactly one manifest
-diff proposal and writes nothing.
+`untriaged-fact`.
 
 ### M8 — Memory and toolbox · L
 
@@ -322,6 +319,9 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 - `mnemorph mcp serve` (memory and law as MCP tools), a Claude Code hooks adapter (the law inside
   Claude Code: session start, pre-tool gate, stop gate, pre-compact drain), and
   `mnemorph import <dir>/.isekai` to bring an isekai world over.
+- Relations between worlds, following [the ontology](09-ontology.md#relations-between-worlds): the
+  first milestone where a second world is in reach — relation sightings, the named-twice proposal
+  with its synonym check and expiry, and `onto check --dimension`.
 - The MCP client (#48): race-scoped servers by class, the spec cache with lazy start, the cursor
   followed, slimmed and priced schemas, local argument checks, ranked offers, the ledger's
   learning.
@@ -331,7 +331,9 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
   the first tool call, calls that picked the wrong tool or failed on arguments, and total
   weighted tokens per task.
 
-**Exit:** this very repository's isekai world imports cleanly; the MCP benchmark's table is in the
+**Exit:** this very repository's isekai world imports cleanly; one relation sighted twice by two
+bodies produces exactly one manifest diff proposal and writes nothing, and a fixture with one
+dimension obstruction reports it; the MCP benchmark's table is in the
 book, and Mnemorph matches or beats maki on spec tokens shown and on start time — or the page says
 plainly where it does not.
 

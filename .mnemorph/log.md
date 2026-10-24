@@ -1259,3 +1259,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a floor applied to a sum of priors and a match measures the priors; it has to sit
   on the term it means to bound.
+
+---
+
+### [2026-10-24T15:39:09+02:00] rimuru — page 9, as its review asked
+- **Task:** the review of #89: ownership read as the right to write, a finding that blocked its own
+  fix, an undefined Domain field, a policy that cannot call `own`, a threshold borrowed as evidence,
+  `@ONTO` with no budget or ids, root files that could not be a fact's subject, a rung with no
+  consumer yet.
+- **Files:** docs/09-ontology.md (right author needs the race to author; the policy gets the soil
+  as prefixes with exclusions; findings on the tree the landing leaves; 0.35 as Mnemorph's own,
+  untuned; countered's consequence; `./README.md`; the synonym check from three pairs),
+  docs/02-races.md (the Orc's Domain field), docs/04-communication.md (`@ONTO`'s budget and ids),
+  docs/roadmap.md (relations between worlds move to M13, where a second world is in reach),
+  docs/lessons.md (the ownership row as isekai's code shows it), docs/research/dikwp-mesh.md.
+- **Gate:** n/a. Instruments: `just docs`.
+- **Result:** in review as a pull request.
+- **Learned:** the thresholds do not carry over to creatures as they are: with three voices a
+  ratio is a count, and the number is a choice to tune, not a finding to inherit.

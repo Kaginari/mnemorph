@@ -121,6 +121,11 @@ $\mathrm{own} : \text{Path} \to \text{Creature} \cup \lbrace \bot\rbrace $ takes
    prefixes, and a path inside it that no Slime's zone covers is the Orc's to route.
 7. Otherwise $\bot$: unowned soil, and Rimuru routes its birth.
 
+Owning a path is not the right to write it. The gate's *right author* holds only when
+$\mathrm{own}(\text{path})$ is the writer **and** the writer's race authors there
+([soil](02-races.md#soil--who-may-write-what)): an Orc that owns a path by rule 6 routes it — a
+Slime is born or extended for it — and writes it never, beyond its tests' verify lines.
+
 $\mathrm{own}$ returns one creature per path. A Slime's doc is the Slime's; the gate's line-range
 split, which gives the verify block to its Orc, is a refinement the *right author* check applies
 to that one file ([the end gate](03-loop.md#the-end-gate)). Retired creatures own nothing: their
@@ -129,8 +134,11 @@ finding — the tie breaks by creature name, so the answer stays deterministic w
 blocks.
 
 The order is the rule: a creature that claims `.mnemorph` itself does not swallow every seat, the
-queue and scratch, because rules 1–3 are asked first. The gate's *right author*, the policy, the
-dispatch card and `mnemorph onto owner <path>` all call this one function.
+queue and scratch, because rules 1–3 are asked first. The gate's *right author*, the dispatch card
+and `mnemorph onto owner <path>` call this one function. The tool policy cannot: it sits below the
+world in the crate graph and checks soil as prefixes. The loop hands each body the soil `own`
+yields for it, as prefixes with exclusions (its territory minus the seats, queue and scratch the
+earlier rules give away), so the policy and the gate never disagree.
 
 **Overlap.** Two creatures whose prefixes are equal, or one inside the other, are a critical
 finding — except a seat doc inside a broader claim, which rule 3 settles. Two prefixes of one
@@ -147,8 +155,10 @@ f = (\text{about},\ \text{text},\ \text{by},\ \text{source},\ \text{status})
 where `about` is the path it is about, `by` the creature whose body said it, and `source` the
 evidence anchor (a `file:line`, a journal entry, a commit). A fact's id is the hash of its path
 and its normalised text, so every assertion of the same fact is one more *support* event on the
-same id. `<about>` is always a path — it contains a `/` or starts with `.` — so the first word of
-a fact's text is never mistaken for one. On the wire:
+same id, and a fact said in other words is a new fact until triage (below) links the two.
+`<about>` is always a path — it contains a `/` or starts with `.`, so a file at the world's root
+is written `./README.md` — and the first word of a fact's text is never mistaken for one. On the
+wire:
 
     @U territory <about> <key>=<value>           # a keyed fact
     @U territory <about> <fact>                  # a free fact
@@ -166,9 +176,12 @@ supporters and $q$ counters — and read its status in order:
 | **countered** | $q \ge 2$ and $\frac{p}{p+q} \le 0.35$ — the counters carry it the same way |
 | **contested** | any other case with $q > 0$ — a `contested-fact` finding |
 
-The rows partition every case. The 0.35 tolerance is DIKWP-MESH's gluing threshold, applied to
-creatures instead of tags and measured on the losing side, so more counters move a fact towards
-*countered*, never back towards agreement.
+The rows partition every case. A **countered** fact is shown as countered and recalled to no one
+as true; the projection carries it only with its counters beside it. The 0.35 tolerance is
+Mnemorph's own choice, untuned, measured on the losing side so more counters move a fact towards
+*countered*, never back towards agreement. DIKWP-MESH uses the same number as a default for its
+gluing check, without a derivation; it is not evidence. With the few voices a fact usually has,
+the rule reads as counts: two to one is agreed, one to one contested, one to two countered.
 
 ### Catching what nobody flags
 
@@ -257,10 +270,11 @@ $(\text{from}, \text{to}, \text{type}, \text{anchor}, \text{body})$. The ledger 
 relation to the human, as a manifest diff, only when:
 
 1. **named twice** — two sightings, by different bodies, from different anchors;
-2. **not a synonym** — when most pairs a new type $t$ names already carry an existing type
-   $t'$, by containment
+2. **not a synonym** — once a new type $t$ names at least three pairs, and most of them already
+   carry an existing type $t'$, by containment
    $\frac{|\text{pairs}(t) \cap \text{pairs}(t')|}{|\text{pairs}(t)|} \ge 0.8$, the proposal
-   offers $t'$ first and the human chooses; a type seen on one pair is judged on that pair alone;
+   offers $t'$ first and the human chooses; on fewer pairs the proposal only notes the types the
+   pair already carries, since a pair may lawfully carry several;
 3. **it carries its way back** — every learned relation records the session it was last sighted
    in; unseen for 30 sessions of this world, its removal is proposed the same way.
 
@@ -271,7 +285,9 @@ Only the human's yes writes it, through Rimuru, whose soil the manifest is.
 Every check returns findings, each with a code and a severity. The end gate's *right author*
 check blocks a landing on a critical or high finding that touches it: the finding's path lies
 under a path the landing wrote, or the finding is about a creature that owns a written path (so
-an `above-cycle` blocks landings by the creatures in the loop). Medium and low are reported, never
+an `above-cycle` blocks landings by the creatures in the loop). Findings are computed on the tree
+as the landing leaves it: a finding the landing removes — the Slime narrowing its own Territory
+field to end an `overlap` — does not block it. Medium and low are reported, never
 blocking. Findings are never summed into a score.
 
 | Code | Severity | Read as |

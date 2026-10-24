@@ -64,7 +64,7 @@ new dimension, but only behind tests and a way back.
 Mnemorph's ontology has the opposite core job: every path has **exactly one** owner, decided by
 code, and the gate enforces it. Plural answers there would be a bug. But the ontology also holds
 things that *are* plural by nature: facts creatures assert about their territory, and relations
-between neighbouring worlds. Those have no conflict model today. That is where MESH fits.
+between neighbouring worlds. Those need a conflict model. That is where MESH fits.
 
 ## Technical detail
 

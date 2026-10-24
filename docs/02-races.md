@@ -256,6 +256,10 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
 - **Duty.** Own a domain. Before a Slime may change anything, the Orc writes the verify line
   that will judge the change (TDD precondition, checked by the harness at dispatch). Judge each
   landing. Negotiate contracts with neighbouring domains sideways.
+- **Domain.** Its doc's Domain field names directory prefixes. The domain is what the Orc routes
+  and judges: a path inside it that no Slime's zone covers is the Orc's to have a Slime born or
+  extended for, and its tests' verify lines are the Orc's to write. It grants no write to the code
+  itself ([ownership](09-ontology.md#ownership-one-function)).
 - **Reports to** its Elf. **Commands** its own Slimes; reaches other Orcs sideways.
 - **Shelf.** `read`, `dispatch`, `write` restricted to the verify block of its Slimes' docs and
   its own doc.
