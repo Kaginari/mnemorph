@@ -64,7 +64,9 @@ the price.
 
 ### The usage row
 
-One JSON line per model call in `.mnemorph/instruments/usage.jsonl`:
+One JSON line per model call in `.mnemorph/instruments/usage.jsonl` — decisions included: a
+System One read writes its own row under its provider, with `usd` null for a model the price
+tables do not know, so its `wt` still reaches the meters and the budget:
 
 ```json
 {"ts":"2026-10-23T19:07:00Z","session":"…","run":"…","body":"slime-wire","race":"slime",

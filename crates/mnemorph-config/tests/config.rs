@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mnemorph_config::{Config, ENVELOPE_DAYS, Envelope, Lapse, Layer, Paths, set};
+use mnemorph_config::{
+    Config, ENVELOPE_DAYS, ENVELOPE_DAYS_CEILING, Envelope, Lapse, Layer, Paths, set,
+};
 use mnemorph_ledger::Day;
 use mnemorph_races::Race;
 use mnemorph_tools::Rule;
@@ -575,4 +577,232 @@ fn revoking_keeps_the_envelope_and_its_file_readable() {
         .revoke_envelope("ci", day(2026, 10, 25))
         .unwrap_err();
     assert!(e.contains("no envelope `ci` is signed"), "{e}");
+}
+
+#[test]
+fn an_envelope_lasts_at_most_the_human_s_envelope_days() {
+    let g = Ground::new("envelope-cap");
+    let ci = |extra: &str| {
+        format!(
+            "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n{extra}"
+        )
+    };
+    // 30 days by default, as the longest too.
+    g.local(&ci("expires = 2026-11-23\n"));
+    assert_eq!(g.load().unwrap().envelope_days(), ENVELOPE_DAYS);
+    g.local(&ci("expires = 2026-11-24\n"));
+    let e = g.load().unwrap_err();
+    assert!(e.contains("more than 30 days after it was signed"), "{e}");
+    assert!(e.contains("config.local.toml"), "{e}");
+
+    // The human may raise it in their own file, and it still bounds.
+    g.global("[oni]\nenvelope_days = 90\n");
+    g.local(&ci("expires = 2027-01-22\n"));
+    assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2027, 1, 22));
+    g.local(&ci("expires = 2027-01-23\n"));
+    assert!(g.load().unwrap_err().contains("more than 90 days"));
+
+    // Lower, and an envelope that names no expiry lasts that long.
+    g.global("[oni]\nenvelope_days = 7\n");
+    g.local(&ci(""));
+    assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2026, 10, 31));
+
+    // Lowered over a revoked record, the configuration still loads: the record covers nothing.
+    // Over a live one, the error says how to end it.
+    g.global("[oni]\nenvelope_days = 90\n");
+    g.local(&ci("expires = 2027-01-22\nrevoked = 2026-11-01\n"));
+    g.global("[oni]\nenvelope_days = 30\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.envelopes()[0].revoked, Some(day(2026, 11, 1)));
+    g.local(&ci("expires = 2027-01-22\n"));
+    let e = g.load().unwrap_err();
+    assert!(
+        e.contains("revoke it") && e.contains("delete the record"),
+        "{e}"
+    );
+
+    // The 365-day ceiling itself is the human's to set.
+    g.global(&format!("[oni]\nenvelope_days = {ENVELOPE_DAYS_CEILING}\n"));
+    assert_eq!(g.load().unwrap().envelope_days(), ENVELOPE_DAYS_CEILING);
+
+    // Never zero, never past a year.
+    for days in [0, -1, ENVELOPE_DAYS_CEILING + 1] {
+        g.global(&format!("[oni]\nenvelope_days = {days}\n"));
+        let e = g.load().unwrap_err();
+        assert!(e.contains("oni.envelope_days"), "{days}: {e}");
+    }
+
+    // Raising it loosens the gate, so the tracked file cannot set it.
+    let g = Ground::new("envelope-cap-tracked");
+    g.tracked("[oni]\nenvelope_days = 365\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.envelope_days(), ENVELOPE_DAYS);
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "oni.envelope_days" && h.why.contains("loosens"))
+    );
+}
+
+/// Decisions use the LLM until the human names a System One provider; the fallback is the fast
+/// tier's model, and an LLM's stated probabilities need more confidence than measured ones.
+#[test]
+fn decisions_default_to_the_llm_with_a_stricter_cutoff_for_stated_probabilities() {
+    let g = Ground::new("decide-defaults");
+    let d = g.load().unwrap().decide().unwrap();
+    assert_eq!(d.via, None);
+    assert_eq!(d.model, "", "no model is guessed for a provider not chosen");
+    assert_eq!(d.llm, "claude-haiku-5-5");
+    assert!(d.cutoff_stated > d.cutoff_measured);
+
+    g.global("[models.tier]\nfast = \"qwen3-coder\"\n[decide]\nllm = \"claude-sonnet-5-5\"\n");
+    assert_eq!(g.load().unwrap().decide().unwrap().llm, "claude-sonnet-5-5");
+}
+
+#[test]
+fn decide_via_names_a_system_one_provider_of_the_humans_files() {
+    let g = Ground::new("decide-via");
+    g.global(
+        "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n\
+         [decide]\nvia = \"jeff\"\nmodel = \"jeff\"\n[decide.cutoff]\nmeasured = 0.5\nstated = 1\n",
+    );
+    let d = g.load().unwrap().decide().unwrap();
+    assert_eq!(d.via.as_deref(), Some("jeff"));
+    assert_eq!(d.model, "jeff");
+    assert!((d.cutoff_measured - 0.5).abs() < 1e-9);
+    assert!(
+        (d.cutoff_stated - 1.0).abs() < 1e-9,
+        "an integer cut-off reads as a number"
+    );
+
+    g.global("[decide]\nvia = \"nobody\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(
+        err.contains("no provider") && err.contains("config.toml"),
+        "{err}"
+    );
+
+    g.global("[decide]\nvia = \"anthropic\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(err.contains("kind `anthropic`"), "{err}");
+
+    g.global("[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n[decide]\nvia = \"jeff\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(
+        err.contains("without decide.model"),
+        "jeff refuses Jev's model name: {err}"
+    );
+
+    // A cut-off of −0.5, or −1, would make every answer sure.
+    for bad in ["measured = 1.5", "measured = -0.5", "stated = -1"] {
+        g.global(&format!("[decide.cutoff]\n{bad}\n"));
+        // Refused when the file loads (a negative integer) or when decisions are read.
+        let err = g.load().and_then(|c| c.decide()).unwrap_err();
+        assert!(err.contains("config.toml"), "{bad}: {err}");
+    }
+}
+
+/// Lesson: a provider decides where data goes. A cloned repository's tracked file may name a
+/// System One provider for decisions, but cannot define one: the state of every decision would
+/// leave for a server the human never chose.
+#[test]
+fn a_tracked_file_cannot_send_decisions_to_a_provider_of_its_own() {
+    let g = Ground::new("decide-tracked");
+    g.tracked(
+        "[providers.elsewhere]\nkind = \"systemone\"\nbase_url = \"https://example.invalid\"\n\
+         [decide]\nvia = \"elsewhere\"\n",
+    );
+    let c = g.load().unwrap();
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key.starts_with("providers.elsewhere"))
+    );
+    assert!(c.holes().iter().any(|h| h.key == "decide.via"));
+    assert_eq!(
+        c.decide().unwrap().via,
+        None,
+        "the tracked choice was never taken"
+    );
+}
+
+/// Lesson: choosing among the human's providers still sends the project's state somewhere, and a
+/// lower cut-off acts on guesses. A cloned repository may do neither: `decide.via` and the
+/// cut-offs are the human's alone, like the gate's loosening keys.
+#[test]
+fn a_tracked_file_cannot_turn_decisions_outward_or_lower_their_bar() {
+    let g = Ground::new("decide-tracked-choice");
+    g.global(
+        "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\nkey_env = \"TYPESAFE_API_KEY\"\n",
+    )
+    .tracked("[decide]\nvia = \"jev\"\nmodel = \"jev-latest\"\n[decide.cutoff]\nmeasured = 0\nstated = 0\n");
+    let c = g.load().unwrap();
+    let d = c.decide().unwrap();
+    assert_eq!(d.via, None);
+    assert!(d.cutoff_measured > 0.0 && d.cutoff_stated > 0.0);
+    for key in [
+        "decide.via",
+        "decide.cutoff.measured",
+        "decide.cutoff.stated",
+    ] {
+        assert!(c.holes().iter().any(|h| h.key == key), "{key}");
+    }
+}
+
+/// The offices are named for the three first Muses — Mneme reads, Melete judges, Aoede writes —
+/// and a configuration may name one by its Muse or by what it does. Any other word is refused:
+/// before, a misspelt office was a model nobody ever rode.
+#[test]
+fn offices_are_named_by_their_muse_or_their_function_and_nothing_else() {
+    let g = Ground::new("offices");
+    g.global("[models.office.orc]\nmelete = \"by-name\"\n[models.office.slime]\nread = \"by-function\"\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.model_for("orc-a", Race::Orc, Some("melete")), "by-name");
+    assert_eq!(
+        c.model_for("orc-a", Race::Orc, Some("judge")),
+        "by-name",
+        "one office, two spellings"
+    );
+    assert_eq!(
+        c.model_for("slime-a", Race::Slime, Some("mneme")),
+        "by-function"
+    );
+    assert_eq!(c.model_pinned("orc-a", Race::Orc, Some("aoede")), None);
+
+    g.global("[models.office.orc]\nverdict = \"x\"\n");
+    let err = g.load().unwrap_err();
+    assert!(
+        err.contains("mneme (read), melete (judge) and aoede (write)"),
+        "{err}"
+    );
+}
+
+#[test]
+fn routing_is_off_until_the_human_turns_it_on() {
+    let g = Ground::new("route-off");
+    assert!(!g.load().unwrap().decide().unwrap().route);
+    g.global("[decide]\nroute = true\n");
+    assert!(g.load().unwrap().decide().unwrap().route);
+}
+
+#[test]
+fn one_office_is_named_once() {
+    let g = Ground::new("office-twice");
+    g.global("[models.office.orc]\nmelete = \"a\"\njudge = \"b\"\n");
+    let err = g.load().unwrap_err();
+    assert!(
+        err.contains("names one office twice, as melete and judge"),
+        "{err}"
+    );
+}
+
+/// Routing changes which model does the work, and what it costs: a cloned repository cannot turn
+/// it on.
+#[test]
+fn a_tracked_file_cannot_turn_routing_on() {
+    let g = Ground::new("route-tracked");
+    g.tracked("[decide]\nroute = true\n");
+    let c = g.load().unwrap();
+    assert!(!c.decide().unwrap().route);
+    assert!(c.holes().iter().any(|h| h.key == "decide.route"));
 }

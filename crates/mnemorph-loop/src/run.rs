@@ -13,10 +13,11 @@ use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
 use crate::compact::{fold, fold_point, foldable, mark_cache};
+use crate::decisions::{BENCH_POINT, Decisions, bench_ask, bench_read};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
 use crate::sequence::validate;
-use crate::stress::{Signal, Stress};
+use crate::stress::{Read, Signal, Stress, bench_of, muted};
 
 /// Who runs: the body's name, race, model and system prompt.
 #[derive(Debug, Clone)]
@@ -184,6 +185,7 @@ pub struct Run {
     interrupt: Arc<Interrupt>,
     folded_upto: usize,
     noticed: bool,
+    decisions: Option<Decisions>,
 }
 
 /// What a run needs that is not the body itself.
@@ -231,7 +233,93 @@ impl Run {
             interrupt,
             folded_upto: 0,
             noticed: false,
+            decisions: None,
         }
+    }
+
+    /// The run with its decisions: when `decisions.bench` is on, a piped test run's output is
+    /// read by its decider, and each decision is journaled and priced.
+    #[must_use]
+    pub fn with_decisions(mut self, decisions: Decisions) -> Self {
+        self.decisions = Some(decisions);
+        self
+    }
+
+    /// A piped bench run's output, read: green or red when the decider is sure for its basis,
+    /// nothing when it is unsure, fails, runs out of time, or the human presses Esc while it
+    /// decides. Output the shell cut short is never read: its summary is in the part dropped.
+    /// Every answer is journaled and priced, and a warning for the human says who read it.
+    async fn read_bench(&mut self, command: &str, output: &str) -> Option<Read> {
+        let d = self.decisions.as_ref()?;
+        if output.contains(" more bytes of output dropped")
+            || output.contains(" more bytes of stderr dropped")
+        {
+            self.record(&Beat::Warning {
+                text: format!("[{BENCH_POINT}] `{command}` stays muted: its output was cut short"),
+            });
+            return None;
+        }
+        let (decider, cutoffs) = (Arc::clone(&d.decider), d.cutoffs);
+        let interrupt = Arc::clone(&self.interrupt);
+        // A decision is meant to take milliseconds: it never outlives the run's own clock.
+        let left = (self.started + self.limits.deadline).saturating_duration_since(Instant::now());
+        let budget = left.min(mnemorph_provider::SystemOne::policy().turn);
+        let ask = bench_ask(command, output);
+        let decision = tokio::select! {
+            d = tokio::time::timeout(budget, decider.decide(&ask)) => {
+                d.unwrap_or(Err(mnemorph_provider::Error::Timeout(mnemorph_provider::Wait::Turn)))
+            }
+            () = interrupt.fired() => return None,
+        };
+        let decision = match decision {
+            Ok(d) => d,
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!(
+                        "[{BENCH_POINT}] `{command}` stays muted: the decision failed: {e}"
+                    ),
+                });
+                return None;
+            }
+        };
+        if let Some(d) = &self.decisions
+            && let Err(e) =
+                d.journal
+                    .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()))
+        {
+            eprintln!("mnemorph: the decision journal could not be written: {e}");
+        }
+        // What the decision cost reaches the meter like any call: unpriced (`usd: null`) for a
+        // model the price table does not know.
+        let row = crate::decisions::decision_usage(&decision, &self.caller, &self.prices);
+        self.spent_wt += row.wt;
+        if let Some(ledger) = &self.ledger
+            && let Err(e) = ledger.append(&row)
+        {
+            eprintln!("mnemorph: the usage ledger could not be written: {e}");
+        }
+        let read = bench_read(&decision, cutoffs);
+        let answer = decision.answer("outcome");
+        self.record(&Beat::Warning {
+            text: format!(
+                "[{BENCH_POINT}] `{command}` read {} by {} ({}, {}: {} at {:.2}){}",
+                match read {
+                    Some(Read::Green) => "green",
+                    Some(Read::Red) => "red",
+                    None => "muted",
+                },
+                decision.source.provider,
+                decision.source.model,
+                decision.source.basis.name(),
+                answer.map_or("—", |a| a.choice()),
+                answer.map_or(0.0, mnemorph_provider::Answer::confidence),
+                decision
+                    .fell_back
+                    .as_deref()
+                    .map_or_else(String::new, |why| format!("; fell back: {why}")),
+            ),
+        });
+        read
     }
 
     /// A run continued from its journal: the conversation rebuilt beat by beat, the steps it
@@ -445,7 +533,7 @@ impl Run {
                 }
             }
             // Act, verify, record.
-            if let Some(ending) = self.act(calls) {
+            if let Some(ending) = self.act(calls).await {
                 return self.end(ending);
             }
         }
@@ -609,7 +697,7 @@ impl Run {
 
     /// Run each call in order, give every result back, and read the instruments: a reason to
     /// stop, or none.
-    fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
+    async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
         let mut interrupted = false;
@@ -650,10 +738,29 @@ impl Run {
                         .and_then(serde_json::Value::as_str)
                         .map(str::to_owned)
                 });
-            signals.extend(
-                self.stress
-                    .act(&format!("{name} {input}"), command.as_deref(), &o),
-            );
+            let read = match command.as_deref() {
+                // An Esc that stopped the command is not followed by a decision about it, and a
+                // run the shell saw fail — a non-zero exit, a kill at the deadline — is never
+                // read: no text can turn a seen failure green.
+                Some(c)
+                    if !interrupted
+                        && !o.is_error
+                        && self.decisions.as_ref().is_some_and(|d| d.bench)
+                        && bench_of(c).is_some()
+                        && muted(c) =>
+                {
+                    let read = self.read_bench(c, &o.content).await;
+                    interrupted |= self.interrupt.take();
+                    read
+                }
+                _ => None,
+            };
+            signals.extend(self.stress.act_read(
+                &format!("{name} {input}"),
+                command.as_deref(),
+                &o,
+                read,
+            ));
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,

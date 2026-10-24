@@ -47,6 +47,8 @@ workflows:
 
 # Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
+    # No merge left half-done: a conflict marker anywhere tracked fails the check.
+    ! git grep -nE '^(<<<<<<<|>>>>>>>)( |$)' -- .
     node tools/check-diagrams.mjs
     pnpm --filter @mnemorph/site build
 
