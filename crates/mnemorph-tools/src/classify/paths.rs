@@ -124,7 +124,12 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
     let path = real(&lexical);
     let home = real(&place.home);
     let world = real(&place.world);
-    if is_credential(&path, &home) {
+    // Danger and credentials are judged on the path as written and as resolved, each with the
+    // system's aliases removed: on macOS `/etc` is `/private/etc` and `/home` is
+    // `/System/Volumes/Data/home`, and either spelling must be refused alike.
+    let forms = [unaliased(&lexical), unaliased(&path)];
+    let bare_home = unaliased(&home);
+    if is_credential(&path, &home) || forms.iter().any(|f| is_credential(f, &bare_home)) {
         return Spot::Credential(path);
     }
     if path.starts_with(&world) {
@@ -132,12 +137,29 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
             root: path == world,
         };
     }
-    let top_level = path.components().count() <= 2;
-    let ancestor = world.starts_with(&path) || home.starts_with(&path);
+    let top_level = forms.iter().any(|f| f.components().count() <= 2);
+    let ancestor = [&world, &home].iter().any(|anchor| {
+        anchor.starts_with(&path) || forms.iter().any(|f| unaliased(anchor).starts_with(f))
+    });
     Spot::Outside {
         danger: top_level || ancestor,
         path,
     }
+}
+
+/// The system's own aliases for its directories, longest first.
+const ALIASES: &[&str] = &["/System/Volumes/Data", "/private"];
+
+/// `path` without a leading system alias: `/private/etc/hosts` is `/etc/hosts`.
+fn unaliased(path: &Path) -> PathBuf {
+    for alias in ALIASES {
+        if let Ok(rest) = path.strip_prefix(alias)
+            && !rest.as_os_str().is_empty()
+        {
+            return Path::new("/").join(rest);
+        }
+    }
+    path.to_path_buf()
 }
 
 /// A glob path as the one path it stands for. A bare `*` stands for all of its directory, so it

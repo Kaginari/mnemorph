@@ -229,6 +229,9 @@ refuse    chmod -R 777 /
 refuse    chmod 777 /
 refuse    chown -R someuser /
 refuse    echo x > /etc
+refuse    echo x > /private/etc
+refuse    rm -rf /private/var
+refuse    cat /private/etc/shadow
 refuse    sed -i 's/a/b/' file.txt
 refuse    sed -i.bak 's/a/b/' file.txt
 refuse    sed -Ei 's/a/b/' file.txt

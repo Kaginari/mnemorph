@@ -523,3 +523,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - A glob has two meanings: a bare `*` is all of its directory (`rm -rf ~/*` is the home);
     `*.log` is a child. `find -delete` acts on what it finds, never its start.
   - The disk is at its last few hundred MB: `target/` is 3.6 GB of it.
+
+---
+
+### [2026-10-24T02:32:38+02:00] rimuru — the classifier on macOS: aliases of system directories
+- **Task:** CI on macOS failed four rows of the classifier corpus that pass on Linux.
+- **Files:** crates/mnemorph-tools/src/classify/paths.rs (danger and credentials judged on the written and the resolved path, with `/private` and `/System/Volumes/Data` removed), tests/corpus.txt (three `/private` rows).
+- **Gate:** n/a. Instruments: corpus on Linux; CI on macOS.
+- **Result:** pushed to the classifier PR.
+- **Learned:** resolving symlinks before judging turned `/etc` into `/private/etc` and `/home` into `/System/Volumes/Data/home` on macOS — no longer top-level, no longer a credential path. Containment needs both spellings, and the corpus runs on every OS for exactly this.
