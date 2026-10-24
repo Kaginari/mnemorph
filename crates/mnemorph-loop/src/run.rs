@@ -237,8 +237,8 @@ impl Run {
         }
     }
 
-    /// The run with its decision points on: a piped test run's output is read by `decisions`'
-    /// decider, and each decision is journaled.
+    /// The run with its decisions: when `decisions.bench` is on, a piped test run's output is
+    /// read by its decider, and each decision is journaled and priced.
     #[must_use]
     pub fn with_decisions(mut self, decisions: Decisions) -> Self {
         self.decisions = Some(decisions);
@@ -282,10 +282,12 @@ impl Run {
                 return None;
             }
         };
-        if let Some(d) = &self.decisions {
-            let _ = d
-                .journal
-                .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()));
+        if let Some(d) = &self.decisions
+            && let Err(e) =
+                d.journal
+                    .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()))
+        {
+            eprintln!("mnemorph: the decision journal could not be written: {e}");
         }
         // What the decision cost reaches the meter like any call: unpriced (`usd: null`) for a
         // model the price table does not know.

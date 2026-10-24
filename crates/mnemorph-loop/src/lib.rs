@@ -17,7 +17,7 @@ pub use beats::{Beat, conversation};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
 pub use gate::{EndGate, GateVerdict, Tree, snapshot};
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
-pub use route::{ROUTE_POINT, Reason, Routed, band, pick, route, route_ask};
+pub use route::{Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, pick, route, route_ask};
 pub use run::{Body, Ending, Interrupt, Limits, Run, Setup};
 pub use sequence::validate;
 pub use session::{Queue, Session};

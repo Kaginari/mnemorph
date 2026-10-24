@@ -274,15 +274,17 @@ an empty list or table never overrides a lower layer:
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`
-  and `oni.envelopes` loosen it, and `decide.via` and `decide.cutoff.*` loosen decisions (where
-  their state goes, how sure they must be), so they are honoured only from the local or global file; from
+  and `oni.envelopes` loosen it, and `decide.via`, `decide.cutoff.*` and `decide.route` loosen
+  decisions (where their state goes, how sure they must be, which model does the work and what it
+  costs), so they are honoured only from the local or global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
   envelope that is a bare `*` or admits a destructive or refused act, an envelope without the
-  day it was signed, a fallback cycle: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
+  day it was signed, a fallback cycle, a `models.office` race or office that does not exist or an
+  office named twice, a `models.tier` that is not a tier: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
   any arguments, so it is tried as each destructive one (`--force`, `--delete`, `+ref`,
   `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
 - **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts
@@ -424,11 +426,13 @@ flowchart LR
   through the run's own provider. What leaves for the decider is the command and the last 12 000
   bytes of its output; test output can print anything, so a provider outside the machine sees
   what the tests print. It is honoured once a binary builds runs from the configuration (the CLI,
-  M6). **`model.route` is Metis** (`decide.route = true`, off by default): `route(config,
-  decisions, caller, race, office, commission)` returns the model a body rides, a reason, and the
-  decision to price, moving it within its office's band on a sure answer (*Metis routes within a
-  band*, [the races](02-races.md)). What leaves for the decider is the commission's first 8 000
-  bytes. It is honoured once dispatch builds bodies from commissions (M7). The others attach with
+  M6). **`model.route` is Metis** (`decide.route = true`, off by default, the human's files
+  only): `route(config, decisions, caller, work, stop, meter)` returns the model a body rides
+  and why, moving it within its office's band on a sure answer (*Metis routes within a band*,
+  [the races](02-races.md)). Each route is journaled and priced into the meter's ledger, waits at
+  most the least of 30 s and the caller's time left, and ends on an Esc. What leaves for the
+  decider is the commission's first 8 000 bytes. It is honoured once dispatch builds bodies from
+  commissions (M7). The others attach with
   their milestones:
   dispatch advice (M7), the Dark Elf's pre-screen, judged by its calibration first (#106, M10),
   and a commission's size (M11's value row).

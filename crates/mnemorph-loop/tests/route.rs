@@ -6,11 +6,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use mnemorph_config::{Config, Paths};
-use mnemorph_ledger::{DecisionRow, Journal, Usage};
-use mnemorph_loop::{Decisions, Reason, band, route};
+use mnemorph_ledger::{DecisionRow, Journal, Usage, UsageRow};
+use mnemorph_loop::{Decisions, Interrupt, Meter, Reason, Stop, Work, band, route, route_ask};
 use mnemorph_provider::{
     ANSWER_TOOL, Block, Caller, Complete, Completion, Cutoffs, Decider, Error, Fallback, Primary,
-    Reply, Request, Response, Scripted, StopReason, SystemOne,
+    Reply, Request, Response, Scripted, StopReason, SystemOne, anthropic_prices,
 };
 use mnemorph_races::{ModelTier, Race};
 use mnemorph_wire::Office;
@@ -37,6 +37,10 @@ impl Ground {
 
     fn journal(&self) -> Journal<DecisionRow> {
         Journal::new(self.root.join("decisions.jsonl"))
+    }
+
+    fn usage(&self) -> Journal<UsageRow> {
+        Journal::new(self.root.join("usage.jsonl"))
     }
 }
 
@@ -122,34 +126,99 @@ fn deciders(
     (wire, dec)
 }
 
+fn work(race: Race, office: Option<Office>) -> Work<'static> {
+    Work {
+        race,
+        office,
+        commission: "the commission",
+    }
+}
+
+/// Routes with no stop, the usage ledger of `ground` as the meter.
+async fn routed(
+    config: &Config,
+    dec: Option<&Decisions>,
+    ground: &Ground,
+    w: Work<'_>,
+) -> mnemorph_loop::Routed {
+    let prices = anthropic_prices().unwrap();
+    let ledger = ground.usage();
+    route(
+        config,
+        dec,
+        &caller("body"),
+        w,
+        None,
+        Meter {
+            prices: &prices,
+            ledger: Some(&ledger),
+        },
+    )
+    .await
+}
+
 #[test]
 fn each_office_has_its_band() {
     use ModelTier::{Fast, Frontier, Strong};
-    assert_eq!(
-        band(Race::Slime, Some(Office::Findings)),
-        (Fast, Strong, Frontier),
-        "Mneme may run fast"
-    );
-    assert_eq!(
-        band(Race::Orc, Some(Office::Verdict)),
-        (Strong, Strong, Frontier),
-        "Melete never below strong"
-    );
-    assert_eq!(
-        band(Race::Slime, Some(Office::Draft)),
-        (Strong, Strong, Frontier),
-        "Aoede never below strong"
-    );
-    assert_eq!(
-        band(Race::Elf, None),
-        (Frontier, Frontier, Frontier),
-        "no office: the race's own tier"
-    );
-    assert_eq!(
-        band(Race::DarkElf, Some(Office::Findings)),
-        (Frontier, Frontier, Frontier),
-        "the adversary thinks hardest"
-    );
+    let cases = [
+        (
+            Race::Slime,
+            Some(Office::Findings),
+            (Fast, Strong, Frontier),
+            "Mneme may run fast",
+        ),
+        (
+            Race::Orc,
+            Some(Office::Verdict),
+            (Strong, Strong, Frontier),
+            "Melete never below strong",
+        ),
+        (
+            Race::Slime,
+            Some(Office::Draft),
+            (Strong, Strong, Frontier),
+            "Aoede never below strong",
+        ),
+        (
+            Race::Elf,
+            None,
+            (Frontier, Frontier, Frontier),
+            "no office: the race's own tier",
+        ),
+        (
+            Race::DarkElf,
+            Some(Office::Findings),
+            (Frontier, Frontier, Frontier),
+            "the adversary",
+        ),
+        (
+            Race::ArchDarkElf,
+            Some(Office::Findings),
+            (Frontier, Frontier, Frontier),
+            "ascended too",
+        ),
+        (
+            Race::Rimuru,
+            Some(Office::Findings),
+            (Frontier, Frontier, Frontier),
+            "the throne",
+        ),
+        (
+            Race::HighOrc,
+            Some(Office::Verdict),
+            (Strong, Strong, Frontier),
+            "a High Orc is an Orc",
+        ),
+        (
+            Race::Oni,
+            Some(Office::Findings),
+            (Fast, Strong, Frontier),
+            "an Oni is a Kijin",
+        ),
+    ];
+    for (race, office, want, why) in cases {
+        assert_eq!(band(race, office), want, "{why}");
+    }
 }
 
 #[tokio::test]
@@ -159,63 +228,71 @@ async fn a_model_the_human_chose_is_never_routed() {
         "{TIERS}[models.office.orc]\nmelete = \"chosen\"\n[decide]\nroute = true\n"
     ));
     let (wire, dec) = deciders(&ground, vec![], Llm::default(), true);
-    let routed = route(
+    let r = routed(
         &config,
         Some(&dec),
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
-    assert_eq!(
-        (routed.model.as_str(), routed.reason),
-        ("chosen", Reason::Pinned)
-    );
+    assert_eq!((r.model.as_str(), r.reason), ("chosen", Reason::Pinned));
     assert_eq!(wire.sent(), Vec::new(), "nothing is asked");
 
-    // The function word names the same office.
     let config = ground.config(&format!(
         "{TIERS}[models.office.orc]\njudge = \"by-function\"\n"
     ));
-    let routed = route(
+    let r = routed(
         &config,
         Some(&dec),
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
-    assert_eq!(routed.model, "by-function");
+    assert_eq!(
+        r.model, "by-function",
+        "the function word names the same office"
+    );
 }
 
 #[tokio::test]
-async fn with_routing_off_a_body_rides_its_default_tier() {
+async fn with_routing_off_or_no_room_in_the_band_nothing_is_asked() {
     let ground = Ground::new("off");
     let config = ground.config(TIERS);
     let (wire, dec) = deciders(&ground, vec![], Llm::default(), false);
-    let routed = route(
+    let r = routed(
         &config,
         Some(&dec),
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
-    assert_eq!((routed.model.as_str(), routed.reason), ("mid", Reason::Off));
-    assert_eq!(wire.sent(), Vec::new());
-    let routed = route(
+    assert_eq!((r.model.as_str(), r.reason), ("mid", Reason::Off));
+    let r = routed(
         &config,
         None,
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
-    assert_eq!(routed.reason, Reason::Off);
+    assert_eq!(r.reason, Reason::Off);
+    // The throne and the Dark Elf have nowhere to go: Metis is not asked, nothing is spent.
+    let (wire_on, on) = deciders(&ground, vec![], Llm::default(), true);
+    for race in [Race::Rimuru, Race::DarkElf] {
+        let r = routed(
+            &config,
+            Some(&on),
+            &ground,
+            work(race, Some(Office::Findings)),
+        )
+        .await;
+        assert_eq!(
+            (r.model.as_str(), r.reason),
+            ("big", Reason::Off),
+            "{race:?}"
+        );
+    }
+    assert_eq!(wire.sent(), Vec::new());
+    assert_eq!(wire_on.sent(), Vec::new());
 }
 
 #[tokio::test]
@@ -231,20 +308,20 @@ async fn a_sure_reading_moves_the_body_within_its_band_and_no_further() {
             0.1,
             "big",
         ),
-        // Routine reading for Mneme drops to fast.
+        // Routine, surely safe reading for Mneme drops to fast.
         (
             Race::Slime,
             Some(Office::Findings),
             [0.95, 0.05, 0.0],
-            0.1,
+            0.05,
             "small",
         ),
-        // Routine judging for Melete stops at its floor, strong.
+        // Routine, surely safe judging for Melete stops at its floor, strong.
         (
             Race::Orc,
             Some(Office::Verdict),
             [0.95, 0.05, 0.0],
-            0.1,
+            0.05,
             "mid",
         ),
         // Routine but hard to undo: the ceiling.
@@ -255,13 +332,13 @@ async fn a_sure_reading_moves_the_body_within_its_band_and_no_further() {
             0.95,
             "big",
         ),
-        // The Dark Elf's routine findings stay at frontier.
+        // Surely involved: the default.
         (
-            Race::DarkElf,
+            Race::Slime,
             Some(Office::Findings),
-            [0.95, 0.05, 0.0],
-            0.1,
-            "big",
+            [0.05, 0.95, 0.0],
+            0.05,
+            "mid",
         ),
     ];
     for (race, office, demand, irreversible, want) in cases {
@@ -271,32 +348,89 @@ async fn a_sure_reading_moves_the_body_within_its_band_and_no_further() {
             Llm::default(),
             true,
         );
-        let routed = route(
-            &config,
-            Some(&dec),
-            &caller("body"),
-            race,
-            office,
-            "the commission",
-        )
-        .await;
+        let r = routed(&config, Some(&dec), &ground, work(race, office)).await;
         assert_eq!(
-            routed.model, want,
+            r.model, want,
             "{race:?} {office:?} {demand:?} {irreversible}"
         );
-        assert_eq!(routed.reason, Reason::Decided);
+        assert_eq!(r.reason, Reason::Decided);
         assert_eq!(wire.sent().len(), 1);
     }
     let rows = ground.journal().read().unwrap().rows;
     assert_eq!(rows.len(), 5);
     assert!(
         rows.iter()
-            .all(|routed| routed.point == "model.route" && routed.basis == "measured")
+            .all(|r| r.point == "model.route" && r.basis == "measured")
+    );
+    let spent = ground.usage().read().unwrap().rows;
+    assert_eq!(
+        spent.iter().filter(|r| r.provider == "jev").count(),
+        5,
+        "each route is priced"
     );
 }
 
+/// Lesson: a sure "routine" beside an unresolved risk lowered a body. Lowering needs both: surely
+/// routine, and surely not hard to undo.
 #[tokio::test]
-async fn an_unsure_or_failed_route_keeps_the_default_tier() {
+async fn an_unresolved_risk_never_lowers_a_body() {
+    let ground = Ground::new("risk");
+    let config = ground.config(TIERS);
+    // 74% routine is sure (confidence 0.61); 79% hard-to-undo is not (0.58).
+    let (_, dec) = deciders(
+        &ground,
+        vec![measured([0.74, 0.0, 0.26], 0.79)],
+        Llm::default(),
+        true,
+    );
+    let r = routed(
+        &config,
+        Some(&dec),
+        &ground,
+        work(Race::Slime, Some(Office::Findings)),
+    )
+    .await;
+    assert_eq!((r.model.as_str(), r.reason), ("mid", Reason::Unsure));
+    // Measured, and unsure on both: the default.
+    let (_, dec) = deciders(
+        &ground,
+        vec![measured([0.4, 0.3, 0.3], 0.5)],
+        Llm::default(),
+        true,
+    );
+    let r = routed(
+        &config,
+        Some(&dec),
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
+    )
+    .await;
+    assert_eq!((r.model.as_str(), r.reason), ("mid", Reason::Unsure));
+}
+
+#[tokio::test]
+async fn a_tier_with_no_model_is_never_ridden() {
+    let ground = Ground::new("unset");
+    let config = ground.config("[models.tier]\nfrontier = \"\"\nstrong = \"mid\"\n");
+    let (_, dec) = deciders(
+        &ground,
+        vec![measured([0.0, 0.05, 0.95], 0.1)],
+        Llm::default(),
+        true,
+    );
+    let r = routed(
+        &config,
+        Some(&dec),
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
+    )
+    .await;
+    assert_eq!(r.model, "mid");
+    assert_eq!(r.reason, Reason::Unconfigured(ModelTier::Frontier));
+}
+
+#[tokio::test]
+async fn an_unsure_stated_or_failed_route_keeps_the_default_tier() {
     let ground = Ground::new("unsure");
     let config = ground.config(TIERS);
     // An LLM's stated 80% "hard" is under its cut-off of 0.9 confidence.
@@ -337,21 +471,19 @@ async fn an_unsure_or_failed_route_keeps_the_default_tier() {
         }),
         ..dec
     };
-    let routed = route(
+    let r = routed(
         &config,
         Some(&dec),
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
     assert_eq!(
-        (routed.model.as_str(), routed.reason.clone()),
+        (r.model.as_str(), r.reason.clone()),
         ("mid", Reason::Unsure)
     );
     assert_eq!(
-        routed.decision.unwrap().source.basis,
+        r.decision.unwrap().source.basis,
         mnemorph_provider::Basis::Stated
     );
 
@@ -362,19 +494,59 @@ async fn an_unsure_or_failed_route_keeps_the_default_tier() {
         Llm::default(),
         true,
     );
-    let routed = route(
+    let r = routed(
         &config,
         Some(&dec),
-        &caller("orc-gate"),
-        Race::Orc,
-        Some(Office::Verdict),
-        "x",
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
     )
     .await;
-    assert_eq!(routed.model, "mid");
+    assert_eq!(r.model, "mid");
     assert!(
-        matches!(routed.reason, Reason::Failed(_)),
+        matches!(r.reason, Reason::Failed(Error::Invalid(_))),
         "{:?}",
-        routed.reason
+        r.reason
     );
+}
+
+#[tokio::test]
+async fn an_esc_stops_a_route_and_the_default_stands() {
+    let ground = Ground::new("esc");
+    let config = ground.config(TIERS);
+    let (_, dec) = deciders(
+        &ground,
+        vec![Reply::Silent(std::time::Duration::from_secs(20))],
+        Llm::default(),
+        true,
+    );
+    let interrupt = Interrupt::default();
+    interrupt.fire();
+    let prices = anthropic_prices().unwrap();
+    let started = std::time::Instant::now();
+    let r = route(
+        &config,
+        Some(&dec),
+        &caller("body"),
+        work(Race::Orc, Some(Office::Verdict)),
+        Some(Stop {
+            interrupt: &interrupt,
+            left: std::time::Duration::from_secs(60),
+        }),
+        Meter {
+            prices: &prices,
+            ledger: None,
+        },
+    )
+    .await;
+    assert_eq!((r.model.as_str(), r.reason), ("mid", Reason::Interrupted));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn a_route_reads_the_commissions_head_and_never_splits_a_character() {
+    let long = format!("{}{}", "é".repeat(4_001), "tail");
+    let ask = route_ask(Race::Orc, Some(Office::Verdict), &long);
+    assert!(ask.state.starts_with("For melete (judge), a orc body:\n"));
+    assert!(!ask.state.ends_with("tail"));
+    assert!(ask.state.len() < 8_100);
 }

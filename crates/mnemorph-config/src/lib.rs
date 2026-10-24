@@ -72,6 +72,7 @@ const LOOSENING: &[&str] = &[
     "decide.via",
     "decide.cutoff.measured",
     "decide.cutoff.stated",
+    "decide.route",
 ];
 
 /// The kind of value a known key holds.
@@ -481,6 +482,18 @@ impl Config {
                 let (race, office) = rest.split_once('.').unwrap_or((rest, ""));
                 if Race::from_name(race).is_none() {
                     return Err(format!("{at}: models.office.{race}: no race `{race}`"));
+                }
+                if let Some((name, function)) = office_names(office)
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{name}"))
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{function}"))
+                {
+                    return Err(format!(
+                        "{at}: models.office.{race} names one office twice, as {name} and {function}: keep one"
+                    ));
                 }
                 if office_names(office).is_none() {
                     return Err(format!(

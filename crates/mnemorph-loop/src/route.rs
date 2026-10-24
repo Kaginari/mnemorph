@@ -6,14 +6,15 @@
 //! answer that is sure for its basis. A model the human chose for a creature or an office is
 //! never routed.
 
-use std::time::Instant;
+use std::time::Duration;
 
-use mnemorph_ledger::Timestamp;
+use mnemorph_ledger::{Journal, Prices, Timestamp, UsageRow};
 use mnemorph_provider::{Ask, Caller, Decision, Error, Question, SystemOne, Wait};
 use mnemorph_races::{ModelTier, Race};
 use mnemorph_wire::Office;
 
-use crate::decisions::Decisions;
+use crate::decisions::{Decisions, decision_usage};
+use crate::run::Interrupt;
 
 /// The decision point that routes a commission.
 pub const ROUTE_POINT: &str = "model.route";
@@ -26,17 +27,22 @@ const ROUTE_HEAD: usize = 8_000;
 pub enum Reason {
     /// The human chose the model for this creature or office.
     Pinned,
-    /// Routing is off, or there is no decider: the body's default tier.
+    /// Routing is off, there is no decider, or the body is the throne: the default tier.
     Off,
     /// Metis decided, surely.
     Decided,
-    /// Metis was not sure enough for its basis: the default tier.
+    /// Metis was not sure enough for its basis to move the body: the default tier.
     Unsure,
-    /// The decision failed, or the human's Esc stopped it: the default tier.
-    Failed(String),
+    /// Metis picked a tier no model is configured for: the default tier.
+    Unconfigured(ModelTier),
+    /// The decision failed or ran out of time: the default tier.
+    Failed(Error),
+    /// The human's Esc stopped the decision: the default tier.
+    Interrupted,
 }
 
-/// A route: the model, its tier (none when pinned), why, and the decision when one was made.
+/// A route: the model, its tier (none when pinned), why, and the decision when one was made —
+/// journaled and priced already.
 #[derive(Debug, Clone)]
 pub struct Routed {
     /// The model the body rides.
@@ -45,8 +51,37 @@ pub struct Routed {
     pub tier: Option<ModelTier>,
     /// Why.
     pub reason: Reason,
-    /// The decision, when Metis was asked: journaled already, for the caller to price.
+    /// The decision, when Metis was asked.
     pub decision: Option<Decision>,
+}
+
+/// The work to route: who will do it, in which office, and the commission's text.
+#[derive(Debug, Clone, Copy)]
+pub struct Work<'a> {
+    /// The body's race.
+    pub race: Race,
+    /// Its office, from the commission's `@ASK`.
+    pub office: Option<Office>,
+    /// The commission, as sent.
+    pub commission: &'a str,
+}
+
+/// What can stop a route: the human's Esc, and the time the caller has left.
+#[derive(Clone, Copy)]
+pub struct Stop<'a> {
+    /// The run's interrupt.
+    pub interrupt: &'a Interrupt,
+    /// The time left on the caller's clock.
+    pub left: Duration,
+}
+
+/// Where a route's cost is counted: priced like any call into the usage ledger.
+#[derive(Clone, Copy)]
+pub struct Meter<'a> {
+    /// The price table.
+    pub prices: &'a Prices,
+    /// The usage ledger, when the caller keeps one.
+    pub ledger: Option<&'a Journal<UsageRow>>,
 }
 
 /// A tier's place, fast lowest.
@@ -64,7 +99,8 @@ fn lowest(a: ModelTier, b: ModelTier) -> ModelTier {
 
 /// The band a body may be routed within: `(floor, default, ceiling)`. The default is its race's
 /// tier; the floor its office's (fast to read, strong to judge or write), never above the default;
-/// the ceiling frontier. The Dark Elf, the adversary, never goes below its own tier.
+/// the ceiling frontier. The Dark Elf, the adversary, never goes below its own tier, and the throne
+/// is never routed: it does not choose its own horse.
 #[must_use]
 pub fn band(race: Race, office: Option<Office>) -> (ModelTier, ModelTier, ModelTier) {
     let default = race.default_tier();
@@ -73,7 +109,7 @@ pub fn band(race: Race, office: Option<Office>) -> (ModelTier, ModelTier, ModelT
         Some(Office::Verdict | Office::Draft) => ModelTier::Strong,
         None => default,
     };
-    let floor = if race.base() == Race::DarkElf {
+    let floor = if matches!(race.base(), Race::DarkElf | Race::Rimuru) {
         default
     } else {
         lowest(office_floor, default)
@@ -119,8 +155,10 @@ pub fn route_ask(race: Race, office: Option<Office>, commission: &str) -> Ask {
     }
 }
 
-/// The tier a decision picks within `(floor, default, ceiling)`: the ceiling when the work is
-/// surely hard to undo or surely hard, the floor when surely routine, else the default.
+/// The tier a decision picks within `(floor, default, ceiling)`. It rises to the ceiling when the
+/// work is surely hard to undo, or surely hard. It falls to the floor only when the work is surely
+/// routine *and* surely not hard to undo: an unresolved risk never lowers a body. Surely involved
+/// work, and anything unsure, stays at the default.
 #[must_use]
 pub fn pick(
     decision: &Decision,
@@ -129,33 +167,37 @@ pub fn pick(
 ) -> (ModelTier, Reason) {
     let (floor, default, ceiling) = band;
     let cut = decisions.cutoffs;
-    if decision
+    let risk = decision
         .sure("irreversible", cut)
-        .is_some_and(|a| a.choice() == "true")
-    {
-        return (ceiling, Reason::Decided);
-    }
-    match decision
+        .map(mnemorph_provider::Answer::choice);
+    let demand = decision
         .sure("demand", cut)
-        .map(mnemorph_provider::Answer::choice)
-    {
-        Some("0") => (floor, Reason::Decided),
-        Some("1") => (default, Reason::Decided),
-        Some("2") => (ceiling, Reason::Decided),
+        .map(mnemorph_provider::Answer::choice);
+    match (risk, demand) {
+        (Some("true"), _) | (_, Some("2")) => (ceiling, Reason::Decided),
+        (Some("false"), Some("0")) => (floor, Reason::Decided),
+        (_, Some("1")) => (default, Reason::Decided),
         _ => (default, Reason::Unsure),
     }
 }
 
 /// Routes one body: the model the human pinned, else the tier Metis picks within the band, else
-/// the body's default tier. Each decision is journaled at [`ROUTE_POINT`].
+/// the body's default tier. Each decision is journaled at [`ROUTE_POINT`] and priced into the
+/// meter's ledger. A route waits at most the least of a decision's budget and the time `stop`
+/// leaves, and an Esc ends the wait.
 pub async fn route(
     config: &mnemorph_config::Config,
     decisions: Option<&Decisions>,
     caller: &Caller,
-    race: Race,
-    office: Option<Office>,
-    commission: &str,
+    work: Work<'_>,
+    stop: Option<Stop<'_>>,
+    meter: Meter<'_>,
 ) -> Routed {
+    let Work {
+        race,
+        office,
+        commission,
+    } = work;
     if let Some(model) = config.model_pinned(&caller.body, race, office.map(Office::name)) {
         return Routed {
             model,
@@ -165,33 +207,51 @@ pub async fn route(
         };
     }
     let b = band(race, office);
-    let at = |tier: ModelTier, reason: Reason, decision: Option<Decision>| Routed {
-        model: config.tier_model(tier),
-        tier: Some(tier),
+    let default = |reason: Reason, decision: Option<Decision>| Routed {
+        model: config.tier_model(b.1),
+        tier: Some(b.1),
         reason,
         decision,
     };
-    let Some(d) = decisions.filter(|d| d.route) else {
-        return at(b.1, Reason::Off, None);
+    let Some(d) = decisions.filter(|d| d.route && b.0 != b.2) else {
+        return default(Reason::Off, None);
     };
-    let started = Instant::now();
+    let budget = stop.map_or(SystemOne::policy().turn, |s| {
+        s.left.min(SystemOne::policy().turn)
+    });
     let ask = route_ask(race, office, commission);
-    let answer = tokio::time::timeout(SystemOne::policy().turn, d.decider.decide(&ask))
-        .await
-        .unwrap_or(Err(Error::Timeout(Wait::Turn)));
-    let decision = match answer {
-        Ok(decision) => decision,
-        Err(e) => {
-            return at(
-                b.1,
-                Reason::Failed(format!("{e} after {:?}", started.elapsed())),
-                None,
-            );
-        }
+    let decide = tokio::time::timeout(budget, d.decider.decide(&ask));
+    let answer = match stop {
+        Some(s) => tokio::select! {
+            a = decide => a,
+            () = s.interrupt.fired() => return default(Reason::Interrupted, None),
+        },
+        None => decide.await,
     };
-    let _ = d
+    let decision = match answer.unwrap_or(Err(Error::Timeout(Wait::Turn))) {
+        Ok(decision) => decision,
+        Err(e) => return default(Reason::Failed(e), None),
+    };
+    if let Err(e) = d
         .journal
-        .append(&decision.row(caller, ROUTE_POINT, Timestamp::now()));
+        .append(&decision.row(caller, ROUTE_POINT, Timestamp::now()))
+    {
+        eprintln!("mnemorph: the decision journal could not be written: {e}");
+    }
+    if let Some(ledger) = meter.ledger
+        && let Err(e) = ledger.append(&decision_usage(&decision, caller, meter.prices))
+    {
+        eprintln!("mnemorph: the usage ledger could not be written: {e}");
+    }
     let (tier, reason) = pick(&decision, d, b);
-    at(tier, reason, Some(decision))
+    let model = config.tier_model(tier);
+    if model.is_empty() {
+        return default(Reason::Unconfigured(tier), Some(decision));
+    }
+    Routed {
+        model,
+        tier: Some(tier),
+        reason,
+        decision: Some(decision),
+    }
 }

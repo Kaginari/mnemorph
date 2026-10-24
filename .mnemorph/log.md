@@ -1141,3 +1141,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     measurable, bounded by the floors the canon set.
   - The office key never validated its office word: `models.office.orc.verdict` (the `@ASK` word,
     not the office) configured a model nobody would ever ride.
+  - A fresh Fable review, ten findings, all fixed. The worst: a sure "routine" beside an
+    unresolved risk lowered a body (74% routine and 79% hard-to-undo went to fast); lowering now
+    needs both, surely routine and surely safe. The throne was routable; it is not. A cloned
+    repository could turn routing on, which moves spend; `decide.route` is now the human's alone.
+    A route ignored Esc and was journaled but never priced; it now takes a stop and a meter. One
+    office could be named twice with different models; that is an error. A tier with no model
+    could be picked; the default stands instead.

@@ -766,3 +766,25 @@ fn routing_is_off_until_the_human_turns_it_on() {
     g.global("[decide]\nroute = true\n");
     assert!(g.load().unwrap().decide().unwrap().route);
 }
+
+#[test]
+fn one_office_is_named_once() {
+    let g = Ground::new("office-twice");
+    g.global("[models.office.orc]\nmelete = \"a\"\njudge = \"b\"\n");
+    let err = g.load().unwrap_err();
+    assert!(
+        err.contains("names one office twice, as melete and judge"),
+        "{err}"
+    );
+}
+
+/// Routing changes which model does the work, and what it costs: a cloned repository cannot turn
+/// it on.
+#[test]
+fn a_tracked_file_cannot_turn_routing_on() {
+    let g = Ground::new("route-tracked");
+    g.tracked("[decide]\nroute = true\n");
+    let c = g.load().unwrap();
+    assert!(!c.decide().unwrap().route);
+    assert!(c.holes().iter().any(|h| h.key == "decide.route"));
+}

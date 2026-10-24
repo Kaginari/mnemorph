@@ -127,7 +127,9 @@ Muses, daughters of Mnemosyne, memory:
 | `draft` | **Aoede** | voice | writes: the work, or the world's words |
 
 The throne has no office. A configuration names an office by its Muse or by what it does
-(`melete` or `judge`); any other word is an error.
+(`melete` or `judge`), and one spelling per office: any other word, or both spellings for one
+office, is an error. The key names the race as written, so an ascended form (`high-orc`) is
+configured under its own name.
 
 **Which model rides a body.** One rule, in order: a model configured for the exact creature;
 else for the pair (race, office); else the model configured for the race's `DEFAULT_TIER`. The
@@ -145,10 +147,13 @@ whether a mistake would be hard to undo. On a sure answer the body moves within 
 | Melete, Aoede | strong | the race's tier | frontier |
 | none | the race's tier | the race's tier | frontier |
 
-Routine work goes to the floor, involved work stays at the default, hard work or work that is hard
-to undo goes to the ceiling. The floor is never above the default, and the Dark Elf never goes
-below its own tier. An unsure or failed decision keeps the default, and a model the human
-configured for a creature or an office is never routed.
+Surely hard work, or work surely hard to undo, goes to the ceiling. Work falls to the floor only
+when it is surely routine *and* surely not hard to undo: an unresolved risk never lowers a body.
+Surely involved work, and anything unsure, stays at the default. The floor is never above the
+default; the Dark Elf never goes below its own tier, and the throne is never routed — it does not
+choose its own horse. A band with no room asks nothing. An unsure, failed or interrupted decision,
+or a tier with no model configured, keeps the default, and a model the human configured for a
+creature or an office is never routed.
 
 **Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
 Slime's shelf (`read`, `write`; nothing outward) — under the shelves,
