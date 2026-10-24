@@ -59,7 +59,8 @@ written to a file and the path is sent. This is how a deep chain stays affordabl
 The `@U` line is the most important one: it is something the body learned that is written
 nowhere on disk. When a body's context dies, its `@U` lines are what survives — they are filed in
 the creature's personal memory as proposed notes, and reach shared memory once a check or the
-parent's verdict confirms them; territory facts go to the ontology ([memory](08-memory.md)).
+parent's verdict confirms them ([memory](08-memory.md)); territory facts go to the ontology, with
+who said them and on what evidence ([ontology](09-ontology.md)).
 
 ## Technical detail
 
@@ -83,14 +84,15 @@ parent's verdict confirms them; territory facts go to the ontology ([memory](08-
 |---|---|
 | `@S <word>` | opens: `DONE`, `PASS`, `FAIL`, `ESCALATE`, `CHECKPOINT`, … |
 | `@F #<id> <file:line> <claim> [witness:<path>]` | one finding; the id lets a later fix, contest or seal point at it |
-| `@V <claim> <evidence>` | a verdict |
+| `@V <claim> <evidence>` | a verdict; a parent landing a free territory fact labels it `@V #<new-id> support\|counter\|refines #<id>` or `@V #<new-id> distinct` ([ontology](09-ontology.md#catching-what-nobody-flags)) |
 | `@W <path>` | a path written |
 | `@? <hole>` | something unresolved — never guessed; three grammars are typed: `@CAP <n>: <k> lines cut — full report at <path>`, `contest #<id>: <reason>`, `budget: need ~<n> wt, have <m> wt` |
-| `@U law\|colony\|territory <fact>` | the unsaid |
+| `@U law\|colony <fact>` · `@U territory <about> <key>=<value>` · `@U territory <about> <fact>` · `@U territory <about> !#<fact-id> <reason>` | the unsaid; a territory fact names the path it is about, keyed or free, and may counter another fact by id ([ontology](09-ontology.md#facts-who-said-what)) |
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
 | `@T <tool> <cost>` | a tool offered in the level-1 manifest |
 | `@M <anchor> <scope> <standing> <polarity>` · `@M -<n> <anchors>` | a recalled note, and the count cut above the floor ([memory](08-memory.md)) |
+| `@ONTO <path>: <owner> · <facts>` | the ontology's projection for a body: who owns the paths it touches, and at most $k$ of their facts, each with its `#<fact-id>` so a counter can name it — contested first with both sides, then countered, then the rest by recency; `@ONTO -<n>` counts the facts cut ([ontology](09-ontology.md)) |
 | `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |
 

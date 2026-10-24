@@ -1032,6 +1032,61 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     routes to shared: checked, accepted, corroborated, confirmed.
   - Open (@?): the weights are untuned until the recall fixtures exist; the corroboration
     match (what makes two claims "the same") needs its own fixture.
+
+---
+
+### [2026-10-24T17:10:00+02:00] rimuru — the book: the ontology (page 9) and its research page; M7's ontology rungs
+- **Task:** Veldora: plan the DIKWP-MESH integration into onto; a research doc with the math and
+  graphs; the book page; older pages updated.
+- **Files:** docs/09-ontology.md (new: the decisive core — graph, inference to a fixed point,
+  shapes, ownership as one ordered function; the plural layer — territory facts with `by`,
+  source, counters and settles, gluing across a dimension, relations learned by sightings;
+  coded findings with severities), docs/research/dikwp-mesh.md (new), docs/roadmap.md (M7: five
+  ontology rungs and exit; M8's intro aligned with the promotion routes), docs/02-races.md,
+  docs/04-communication.md (`@U territory <about>` and its counter form), docs/05-architecture.md,
+  docs/08-memory.md, docs/lessons.md (one ownership function), docs/README.md, site sidebar,
+  tools/check-diagrams.mjs (now reads docs/ recursively).
+- **Gate:** n/a. A fresh Fable review: 17 findings, all fixed here (rule 6 was rule 5 again —
+  now the Orc's domain, as guards resolves it; fact statuses rebuilt so more counters never mean
+  less contested; a synonym check that can fire; obstruction defined on inverse-read sets; the
+  ontology rule placed inside *right author*; seat, tie and retirement rules; a false router claim
+  and a misplaced bracket in the research math). Instruments: diagram check 21 parse (18 before
+  the check read research/); site build green; 0 MathJax errors on pages 8, 9 and the research
+  page.
+- **Result:** in review as a pull request, stacked on the memory one.
+- **Learned:**
+  - DIKWP-MESH cannot own ownership: it keeps many answers on purpose, and ownership must have
+    one. Its rules fit the plural layer, which had no conflict model at all.
+  - Its "gluing" is a per-tag counting rule with sheaf vocabulary; the thresholds (one dissenter
+    in three tolerated, two against two never) carry over to creatures as they are.
+  - The diagram check skipped subfolders: a book that grows a folder must widen its checks.
+  - Open (@?): claims from the structured Territory field only (prose never claims) differs from
+    isekai's prose lane — a decision for the human.
+
+---
+
+### [2026-10-24T19:20:00+02:00] rimuru — the book: formulas GitHub can read; facts that contradict without anyone flagging them
+- **Task:** Veldora: "issues on some md files" (a formula pasted back broken from GitHub); a side
+  agent's catch that two facts contradicted only when one body named the other's id.
+- **Files:** docs/08-memory.md, docs/09-ontology.md, docs/research/dikwp-mesh.md (every display
+  formula a ```math fence; inline `\{ \} \, \|` rewritten as `\lbrace \rbrace \ \Vert`),
+  site/.vitepress/config.ts (math fences rendered through MathJax's block renderer);
+  docs/09-ontology.md (*Catching what nobody flags*: keyed facts as functional properties, anchors
+  whose digest drifts, the parent's triage on collision; `stale-fact`, `untriaged-fact`),
+  docs/04-communication.md (`@U territory <about> <key>=<value>`, the `@V` triage labels),
+  docs/research/dikwp-mesh.md, docs/roadmap.md (M7 rung 4 and exit).
+- **Gate:** n/a. Instruments: diagram check 21 parse; site build green; every math span on pages
+  8, 9, the research page and the roadmap converted by MathJax with 0 failures; GitHub's markdown
+  API keeps `\,` and the `+` lines inside the fences.
+- **Result:** in review on both pull requests.
+- **Learned:**
+  - GitHub parses a `$$` block as Markdown before the math renderer sees it: `\,` loses its
+    backslash and a line starting with `+` becomes a list. A ```math fence is left alone.
+  - Edits made through ordinary Python strings turned `\t`, `\b` and `\r` into a tab, a backspace
+    and a line break inside formulas; MathJax read the first two as spaces and rendered nonsense
+    without an error. Raw strings, and a per-span MathJax check, catch it.
+  - DIKWP-MESH could count stances because its demo data had them filled in by hand; agents do
+    not volunteer disagreement, so the ontology derives counters itself.
 ### [2026-10-24T12:40:00+02:00] rimuru — an envelope's longest life is the human's to set (#88)
 - **Task:** Veldora: a cap of 30 days, "i want a cap configurable". After #108 an explicit
   `expires` could be any date after `signed`, so `expires = 2099-01-01` lasted for decades.
@@ -1222,3 +1277,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     crate's path out of its hash, so its artifacts replaced this branch's and looked fresh, and
     tests compiled against the old library. Touching the sources rebuilt them. Worktrees that
     build need their own target dir, or a rebuild after.
+
+---
+
+### [2026-10-24T15:39:09+02:00] rimuru — page 9, as its review asked
+- **Task:** the review of #89: ownership read as the right to write, a finding that blocked its own
+  fix, an undefined Domain field, a policy that cannot call `own`, a threshold borrowed as evidence,
+  `@ONTO` with no budget or ids, root files that could not be a fact's subject, a rung with no
+  consumer yet.
+- **Files:** docs/09-ontology.md (right author needs the race to author; the policy gets the soil
+  as prefixes with exclusions; findings on the tree the landing leaves; 0.35 as Mnemorph's own,
+  untuned; countered's consequence; `./README.md`; the synonym check from three pairs),
+  docs/02-races.md (the Orc's Domain field), docs/04-communication.md (`@ONTO`'s budget and ids),
+  docs/roadmap.md (relations between worlds move to M13, where a second world is in reach),
+  docs/lessons.md (the ownership row as isekai's code shows it), docs/research/dikwp-mesh.md.
+- **Gate:** n/a. Instruments: `just docs`.
+- **Result:** in review as a pull request.
+- **Learned:** the thresholds do not carry over to creatures as they are: with three voices a
+  ratio is a count, and the number is a choice to tune, not a finding to inherit.

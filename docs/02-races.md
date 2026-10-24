@@ -201,7 +201,8 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
-zone covers falls to the nearest zone above it, else it is reported as unowned soil and Rimuru must route its birth.
+Slime's zone covers falls to the Orc whose domain covers it, else it is reported as unowned soil and Rimuru must route its birth.
+The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
 
 ---
 
@@ -255,6 +256,10 @@ zone covers falls to the nearest zone above it, else it is reported as unowned s
 - **Duty.** Own a domain. Before a Slime may change anything, the Orc writes the verify line
   that will judge the change (TDD precondition, checked by the harness at dispatch). Judge each
   landing. Negotiate contracts with neighbouring domains sideways.
+- **Domain.** Its doc's Domain field names directory prefixes. The domain is what the Orc routes
+  and judges: a path inside it that no Slime's zone covers is the Orc's to have a Slime born or
+  extended for, and its tests' verify lines are the Orc's to write. It grants no write to the code
+  itself ([ownership](09-ontology.md#ownership-one-function)).
 - **Reports to** its Elf. **Commands** its own Slimes; reaches other Orcs sideways.
 - **Shelf.** `read`, `dispatch`, `write` restricted to the verify block of its Slimes' docs and
   its own doc.
