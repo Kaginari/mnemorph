@@ -2014,6 +2014,53 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Fable corrected Opus on two counts. Hunk counts are a guide and not a gate: models get them
     wrong, and strict counts would refuse their diffs. And the rollback is the plan's own
     originals, not the attic, which may hold nothing for an ignored file.
+
+---
+
+### [2026-10-25T00:54:38+02:00] rimuru — M7: facts, the ontology's rung 4
+- **Task:** territory facts as events, read by the status table; keyed facts countering by code;
+  anchors that drift; triage candidates; the `@ONTO` projection; the three fact findings.
+- **Files:**
+  - crates/mnemorph-world facts.rs — `Event`, `Fact`, `Facts::fold/load/record`, `Status`,
+    `fact_id`, `digest`, `from_unsaid`, `collisions`, `candidates` (BM25), `projection`;
+  - findings.rs — `fact_findings`;
+  - tests/facts.rs;
+  - mnemorph-wire — `fnv64a` exported;
+  - mnemorphd — `onto check` reads the facts;
+  - docs/09.
+- **Gate:** n/a. Instruments: the exit's fact cases.
+  - different `build=` values with no one naming the other read contested;
+  - a fact whose cited lines change reads stale;
+  - a resembling free fact reaches the parent and, left unlabelled, is `untriaged-fact`;
+  - also the status table, inheritance, labels merging, the projection's order and cut;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a fact's id is written to disk, so its hash must be stable everywhere. The wire's
+  FNV-1a already was, and Rust's own hasher is not.
+- **Open:** filing a child's `@U territory` lines as facts when its report lands (the
+  commission, in review) comes as a small follow-up once the commission is merged.
+
+---
+
+### [2026-10-25T01:07:23+02:00] rimuru — facts, after their review
+- **Task:** fix what the review of #150 found (verdict: merge after fixes).
+- **Files:**
+  - crates/mnemorph-world facts.rs:
+    - `fact_path` and `fact_text` in every id; `THETA_T`;
+    - merges resolved for later events;
+    - labels keep a creature on one side;
+    - a settle reopened by a later colliding assertion;
+    - a withdrawn fact countered;
+    - per-token keyed normalisation;
+    - the projection marks stale, gives reasons, counts each cut fact once and leaves no dangle;
+  - findings.rs — untriaged gated on candidates;
+  - tests/facts.rs;
+  - docs/09.
+- **Gate:** n/a. Instruments: a test per finding; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the exit's own case, `build=` on one path, slipped through on a trailing slash.
+  Ownership needs `src/` to mean a directory, and a fact's path needs it to mean the same thing
+  as `src`. Each reads the path for its own purpose.
 ### [2026-10-25T00:30:41+02:00] rimuru — M7: one order, down and back
 - **Task:** the commission runner, the heart of M7's exit: "the full one-order-down-and-back
   sequence runs with scripted bodies and passes its gate".

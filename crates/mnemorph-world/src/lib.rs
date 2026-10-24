@@ -2,6 +2,7 @@
 
 pub mod dispatch;
 pub mod doc;
+pub mod facts;
 pub mod findings;
 pub mod graph;
 pub mod own;
@@ -10,7 +11,8 @@ pub mod soil;
 
 pub use dispatch::{Ask, Hop, Refused, dispatch};
 pub use doc::{Creature, parse};
-pub use findings::{Finding, Severity, check};
+pub use facts::{Facts, Status as FactStatus};
+pub use findings::{Finding, Severity, check, fact_findings};
 pub use graph::{Bond, Graph};
 pub use own::{Owner, Ownership, Rule, WORKSPACE, explain, own};
 pub use roster::Roster;
