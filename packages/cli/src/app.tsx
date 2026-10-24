@@ -262,6 +262,10 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       (request) =>
         new Promise<GateReply>((resolve) => {
           answer.current = resolve;
+          // Every approval starts unchosen, before it is drawn: a letter typed the instant it
+          // appears is never wiped by a reset that runs later.
+          chosen.current = undefined;
+          setChoiceShown(undefined);
           dispatch({ kind: 'gate', gate: { id: Date.now(), request } });
         }),
     );
@@ -277,9 +281,6 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
 
   // An approval the turn left behind is denied, never left to answer a dead question.
   useEffect(() => {
-    // Every approval starts unchosen: a choice never carries over to the next one.
-    chosen.current = undefined;
-    setChoiceShown(undefined);
     if (!state.gate && answer.current) {
       answer.current({ allow: false, reason: 'the turn ended before the human answered' });
       answer.current = undefined;
