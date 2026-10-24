@@ -62,6 +62,9 @@ pub struct EndGate {
     /// The commissioned creature whose landing this is; `None` in solo, where the whole
     /// repository is the soil and right author holds by construction.
     pub author: Option<Author>,
+    /// Paths the body's own commissions already landed and their gates judged: right author
+    /// does not judge them twice.
+    pub courts: Vec<PathBuf>,
 }
 
 /// Who must have written what a landing changed: the creature, by the world's own answer.
@@ -89,6 +92,35 @@ struct Seen {
 #[derive(Debug, Clone, Default)]
 pub struct Tree {
     files: BTreeMap<PathBuf, Seen>,
+}
+
+impl Tree {
+    /// Whether the tree held `rel` (a path relative to the world).
+    #[must_use]
+    pub fn has(&self, rel: &Path) -> bool {
+        self.files.contains_key(rel)
+    }
+}
+
+/// The paths added, changed or removed between `before` and the world now, relative to it.
+#[must_use]
+pub fn changed(before: &Tree, world: &Path) -> Vec<PathBuf> {
+    let after = snapshot(world);
+    let mut out: Vec<PathBuf> = before
+        .files
+        .iter()
+        .filter(|(p, was)| after.files.get(*p) != Some(*was))
+        .map(|(p, _)| p.clone())
+        .chain(
+            after
+                .files
+                .keys()
+                .filter(|p| !before.files.contains_key(*p))
+                .cloned(),
+        )
+        .collect();
+    out.sort();
+    out
 }
 
 /// Snapshot the world.
@@ -225,7 +257,12 @@ impl EndGate {
             failures.push("duties done: the answer is empty; say what was done".into());
         }
         if let Some(author) = &self.author {
-            failures.extend(right_author(author, &changed, cx.world()));
+            let own: Vec<PathBuf> = changed
+                .iter()
+                .filter(|p| !self.courts.iter().any(|c| c == *p))
+                .cloned()
+                .collect();
+            failures.extend(right_author(author, &own, cx.world()));
         }
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();

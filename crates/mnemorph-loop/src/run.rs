@@ -1,5 +1,6 @@
 //! One body's run: the six beats, until it answers or stops honestly.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -222,6 +223,8 @@ pub struct Run {
     caps: Option<mnemorph_ledger::Caps>,
     cap_warned: bool,
     steer: Steer,
+    /// What runs this body's commissions, when it may commission.
+    commissioner: Option<Arc<crate::commission::Commissioner>>,
 }
 
 /// What a run needs that is not the body itself.
@@ -274,7 +277,30 @@ impl Run {
             caps: None,
             cap_warned: false,
             steer: Steer::default(),
+            commissioner: None,
         }
+    }
+
+    /// The run may commission: its `commission` calls run a child body under `commissioner`.
+    #[must_use]
+    pub fn with_commissioner(mut self, commissioner: Arc<crate::commission::Commissioner>) -> Self {
+        self.commissioner = Some(commissioner);
+        self
+    }
+
+    /// The paths this run's commissions landed under their own gates.
+    #[must_use]
+    pub fn courts(&self) -> Vec<PathBuf> {
+        self.gate
+            .as_ref()
+            .map(|g| g.courts.clone())
+            .unwrap_or_default()
+    }
+
+    /// Weighted tokens the run has spent, its commissions' included.
+    #[must_use]
+    pub fn spent_wt(&self) -> u64 {
+        self.spent_wt
     }
 
     /// The run with an observer: it sees every beat as it is journaled, and every model turn's
@@ -844,6 +870,26 @@ impl Run {
         content
     }
 
+    /// One call: a commission the loop runs, anything else the tool runs.
+    async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
+        match self.commissioner.clone() {
+            // A commission runs a whole child body: the loop runs it, not the tool.
+            Some(c) if name == crate::commission::COMMISSION => {
+                let left = self
+                    .limits
+                    .budget_wt
+                    .map(|b| b.saturating_sub(self.spent_wt));
+                let order = crate::commission::order(&c, &self.body, left, &self.cx, input).await;
+                self.spent_wt = self.spent_wt.saturating_add(order.spent);
+                if let Some(gate) = self.gate.as_mut() {
+                    gate.courts.extend(order.landed);
+                }
+                order.outcome
+            }
+            _ => call(&self.tools, name, input, &mut self.cx),
+        }
+    }
+
     /// Run each call in order, give every result back, and read the instruments: a reason to
     /// stop, or none.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
@@ -871,7 +917,7 @@ impl Run {
             }
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
-            let o = call(&self.tools, &name, &input, &mut self.cx);
+            let o = self.call_one(&name, &input).await;
             // An Esc that stopped this call stops the calls after it too.
             interrupted |= self.interrupt.take();
             self.record(&Beat::Result {

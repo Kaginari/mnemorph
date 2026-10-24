@@ -52,6 +52,7 @@ impl World {
                 name: "slime-a".into(),
                 roster: roster.clone(),
             }),
+            courts: Vec::new(),
         };
         let mut cx = context_for(&self.0, roster, "slime-a")
             .unwrap()

@@ -1974,3 +1974,35 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     what the world ignores, and a delete trusted it blindly.
   - A tool that acts on a name — move, delete — must not resolve the last component. A tool that
     acts on content — read, write, edit — must. The two need two checks.
+
+---
+
+### [2026-10-25T00:30:41+02:00] rimuru — M7: one order, down and back
+- **Task:** the commission runner, the heart of M7's exit: "the full one-order-down-and-back
+  sequence runs with scripted bodies and passes its gate".
+- **Files:**
+  - crates/mnemorph-loop:
+    - commission.rs — `CommissionTool`, `Commissioner`, `order`, `plan_items`, `repair`, the
+      child's prompt;
+    - run.rs — the `commission` call run by the loop, `with_commissioner`, `courts`,
+      `spent_wt`;
+    - gate.rs — `courts`, `changed`, `Tree::has`;
+  - crates/mnemorph-tools — `Context::inherit`, `Outcome::ok`/`error` public;
+  - tests/commission.rs;
+  - the EndGate literals gain `courts`;
+  - docs/04.
+- **Gate:** n/a. Instruments:
+  - Rimuru → elf → orc → slime, the Slime landing under its gate, each report climbing as its
+    dispatcher's tool result;
+  - a reach past a rank refused naming the next rank;
+  - a Slime's command off its ground put back after its gate refused it twice;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A grandchild's landing is the child's court work, or every rank above it "repairs" it away.
+    The first run removed the Slime's file at the Elf's level.
+  - A child that may dispatch needs the commissioner too. Without it, the order stopped at the
+    Orc on the tool's "cannot commission", and the Slime never ran.
+  - Still to come: the queue and wake lanes, Courts with fresh contexts per office, the council
+    and relief, facts (ontology rung 4), and `mnemorph q`. The human's session does not open
+    Rimuru as a dispatcher yet; that wiring comes with the lanes.
