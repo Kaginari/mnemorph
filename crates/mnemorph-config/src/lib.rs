@@ -970,6 +970,9 @@ fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, Str
                  lasts {days} days unless `expires` says sooner"
             )
         })?;
+        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
+        // before it ever takes force, and the record says so.
+        let revoked = date(t, "revoked", name, at)?;
         let longest = signed.plus(days);
         let expires = date(t, "expires", name, at)?.unwrap_or(longest);
         if expires <= signed {
@@ -977,11 +980,13 @@ fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, Str
                 "{at}: envelope `{name}` expires on {expires}, not after it was signed on {signed}"
             ));
         }
-        if expires > longest {
+        // A revoked envelope covers nothing, so a limit lowered after it was signed does not
+        // judge it: the record stays, and the configuration still loads.
+        if expires > longest && revoked.is_none() {
             return Err(format!(
                 "{at}: envelope `{name}` expires on {expires}, more than {days} days after it was \
-                 signed on {signed}; sign it again when it ends, or raise `oni.envelope_days` in \
-                 your own file"
+                 signed on {signed}; sign it again for at most {days} days, revoke it, or delete \
+                 the record if it has ended — or raise `oni.envelope_days` in your own file"
             ));
         }
         let uses = match t.get("uses") {
@@ -995,9 +1000,6 @@ fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, Str
                     })?,
             ),
         };
-        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
-        // before it ever takes force, and the record says so.
-        let revoked = date(t, "revoked", name, at)?;
         if out.iter().any(|e: &Envelope| e.name == name) {
             return Err(format!(
                 "{at}: two envelopes are called `{name}`; a name is how one is revoked, so each is \
