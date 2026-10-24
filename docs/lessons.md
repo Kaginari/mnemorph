@@ -72,6 +72,9 @@ roadmap where that test or rule must exist before the rung counts as done.
 | One body hit the same test bench 63 times in 20 minutes, and every health check stayed silent because piped output hid the exit status. | Per-bench tally (visits, red, green, muted); a piped bench never counts as green; thrash past a threshold speaks into the body's own tool result. Test: the write-between-every-run shape still triggers. | M5 |
 | Tool-output replay dominated long runs (a 12-tool run sent 67 KB of replay). | Replay compaction is a pure function over a copy of the transcript: old tool outputs fold to captions, thinking blocks bound to a `tool_use` are kept. Test: byte counts before and after, and the raw transcript untouched. | M5 |
 | A plan from an earlier session held the end gate open and showed on the rail as live. | Session-scoped state is stamped with the session's birth; a stale plan is memory, never a gate-holder. | M5 |
+| A court that reported `@S FAIL` still finished its loop DONE, so strain read from the loop's status never rose. | Strain and the council read the body's own first `@S` on the wire. Test: a FAIL verdict in a clean loop adds strain. | M7 |
+| A run kept re-reading unchanged windows, or acted for dozens of turns, and landed nothing — busy, not working. | Two stall guards checkpoint it: `repin` (3 re-reads with nothing landed) and `actBudget` (40 turns with nothing landed). Test: each fires at its count and resets on a landing. | M5 |
+| A salvage test timed out under `-race` because its clock grace was too tight. | Clock tests take their grace from the same function the clock uses, never a literal. | M5 |
 
 ## World: territory, gate, dispatch
 
@@ -95,6 +98,8 @@ roadmap where that test or rule must exist before the rung counts as done.
 | `@$` orders lived in one process's memory: a restart, a second session or the terminal (which never drained them) lost them, and nobody could see what was waiting. | The shared work queue on disk holds every order (relay-hold) until the wake claims it; the status line shows what is held. Test: a restarted session dispatches the orders the last one left. | M7 |
 | Two sessions could claim the same order. | Every move is a revisioned snapshot line; the fold seats only the line that follows the item's last revision, the other reads back as a typed refusal. Test: two concurrent claimants, one claim. | M7 |
 | A move on shared bookkeeping during a body's turn was billed to that body's writes. | The shared shelf is harness soil: no body writes it by hand, the tree watch never stamps it. Test: a queue move mid-turn leaves the body's written set empty. | M7 |
+| Another session's relief left the roster stale, and it kept creating courts for retired seats. | The roster is rebuilt when the creature docs' fingerprint moves, before each dispatch; a heal never changes a body's verify lines. Test: a doc edited behind the world's back is seen at the next dispatch. | M7 |
+| Two commissions to one seat ran two courts on the same zone at once. | One live court per seat; a second commission waits in the seat's lane. | M7 |
 
 ## Memory & toolbox
 

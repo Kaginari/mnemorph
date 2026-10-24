@@ -409,8 +409,26 @@ any more. Both stay from isekai, unchanged in spirit:
 - **rebirth** — its doc describes soil that no longer exists; it is rewritten from the code as it
   is, keeping every distilled lesson.
 
-Every arm is staged, proven (the new verify lines pass, territories stay disjoint) and only then
-swapped in. The old doc rests in the attic.
+**When.** A creature evolves when it is stressed — its strain reached the council's line, its last
+3 gate verdicts failed, or its last run was a doom checkpoint — *and* its desk (its doc's Thoughts
+and those of the Minds it wears) holds more than 7 entries: stress says something is wrong, a full
+desk says it has learned enough to change. It is checked after every court and at run start.
+
+**Which arm**, in order: **split** when the zone is large (1500 lines or 24 files) and failures and
+Thoughts cluster in two sub-directories — an Orc's Slimes are divided with it; **rebirth** when the
+gate failed on the creature's own verify lines or its doc names files that are gone — the value
+record restarts; **mutate** otherwise — repeated lessons become traits and verify lines, a
+recurring *how* is minted as a skill on trial.
+
+**Proven before swapped.** A plan is staged under `.mnemorph/tmp/evolution/<id>/` and swapped in
+only when the new verify lines pass in the sandbox, the ontology over an overlay of the plan shows
+no new findings, and every body gets exactly the files the plan meant. Otherwise the old docs stay
+and a hole is logged. The old doc rests in the attic.
+
+**Paced.** A creature evolves at most once every 10 runs (replayed from the ledger), one plan runs
+at a time, and `evolution.mode = "propose"` queues plans for `mnemorph evolve list | show | apply |
+reject` instead — a proposal is refused if the world moved since it was drawn. Each arm writes an
+`evolution` (or `rebirth`) row.
 
 ### What changed from isekai, and why
 

@@ -163,7 +163,8 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
 ### M5 — One body loops · M
 
 - The six beats, budgets as readings, checkpoint and resume from the journal, the salvage resume,
-  guts and doom checkpoint, escalation after failed acts.
+  guts and doom checkpoint, escalation after failed acts, the stall guards (`repin`,
+  `actBudget`) and a clock autopsy when a deadline kills a run.
 - Cache-prefix stability test for Rimuru, tool JSON included.
 - Solo mode (Rimuru's voice plus one Slime over the whole repository, end gate, no dispatch),
   with the stress reading that will trigger its escalation.
@@ -189,7 +190,10 @@ build Mnemorph in solo mode.
 
 - Creatures as data, territory and ontology (who owns a path), dispatch with every rule of the
   flowchart, Courts with fresh contexts, the return path, the end gate (all six checks), the
-  append-only `log.md` writer, the council and relief; the workspace soil; solo's escalation into a
+  append-only `log.md` writer, the council (its keys, forced escalation after three warrants) and
+  relief (split by prefixes or by tree, retire, `relief` rows); self-heal: the roster rebuilt from
+  the docs' fingerprint, the clock-death memo, one live court per seat, `housekeep --heal`; the
+  workspace soil; solo's escalation into a
   lane on stress, a boundary or an act it does not hold, measured against the hierarchy on the
   same 30 tasks.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
@@ -228,7 +232,8 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 ### M11 — Value, evolution, ascension · M
 
 - The value ledger and its fold into each race's signals, score folds per race, meters, minimum
-  record, split / mutate / rebirth staged and proven,
+  record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
+  proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject` —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text).

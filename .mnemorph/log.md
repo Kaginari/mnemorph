@@ -636,3 +636,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Gate:** n/a. Instruments: `just check` (168 tests).
 - **Result:** pushed to the hardening pull request.
 - **Learned:** never widen to a parent to name a child: make the child, then name it. An approved delete outside the world stays refused, since the kernel ties deletion to the folder.
+
+---
+
+### [2026-10-24T03:46:58+02:00] rimuru — isekai's self-heal, carried into the book
+- **Task:** Veldora asked to bring isekai's self-healing work ("wave 4": the council, relief, the
+  doom checkpoint, salvage, evolution; the roster self-heal and stall guards on the
+  `guards-h1-h9` branch) into Mnemorph.
+- **Files:** docs/03-loop.md (the stall instrument; the council's keys and forced escalation;
+  a Self-heal section — relief rows, the clock-death memo, roster self-heal, `housekeep --heal`,
+  one live court per seat), docs/02-races.md (evolution's trigger, arm order, overlay proof,
+  cooldown, propose mode), docs/roadmap.md (M5, M7, M11), docs/lessons.md (five rows).
+- **Gate:** n/a. Instruments: diagrams parse; the site builds.
+- **Result:** in review as a pull request.
+- **Learned:** isekai never named it "wave 4": the group is v0.3.0's "the world measures, answers
+  and heals itself", spec in its races canon. Roster self-heal exists only on an unmerged branch
+  there — it is Mnemorph's from the first world rung (M7).

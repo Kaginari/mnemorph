@@ -120,8 +120,35 @@ up from it. An outward act cut mid-flight is gated again, never replayed.
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
+| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`), or 40 turns with nothing landed (`actBudget`) | checkpoint: the run is busy, not working |
 
-All four are code. None of them asks the body how it feels.
+All are code. None of them asks the body how it feels.
+
+The council's keys are `stress.escalateAt` (5), `stress.relieveAt` (7) and `stress.maxConsults`
+(3): after three warrants the report is forced to `@S ESCALATE` and reaches the human. Strain is
+read from the body's own first `@S`, never from how the loop ended — a court that reports
+`@S FAIL` still finishes its loop cleanly. A clean landing clears it; the human's denials and
+interrupted or dry runs never add to it. Every relief resets its own trigger, or the next run dies
+on its first act.
+
+### Self-heal
+
+The world repairs itself in small, mechanical steps, each one written to the ledger:
+
+- **Relief** splits a strained creature's zone in two young of the same race — by its prefixes,
+  or by the directory tree under a one-prefix zone — or, when the zone cannot split, retires the
+  seat: it keeps its memory, claims no files, and stays visible. A `relief` row records the act.
+  Relief is skipped for a body that just evolved.
+- **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
+  its lane goes into the ledger as a `death` row and the next-fit lane is suggested on the wire —
+  advice to the parent, never a change on its own.
+- **The roster heals from the docs**: the world fingerprints its creature docs, and when the
+  fingerprint moves — another session's relief, a hand edit — the roster is rebuilt before the
+  next dispatch, so no court is created for a retired seat. A heal never moves trust: a body's
+  verify lines change only through its own gate.
+- **`mnemorph housekeep --heal`** fixes what is mechanical — a creature without a doc, a broken
+  *Reports to* link — and reports everything else.
+- **One live court per seat**: a second commission to a busy seat waits in its lane.
 
 ### The end gate
 
