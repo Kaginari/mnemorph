@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ts_rs::TS;
 
 /// The protocol's version: a client that speaks another refuses to start, instead of
 /// misreading.
@@ -35,8 +36,9 @@ pub struct Incoming {
 }
 
 /// What `initialize` answers.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Hello {
     /// [`PROTOCOL`].
     pub protocol: u32,
@@ -58,12 +60,13 @@ pub struct Hello {
 
 /// An event: sent as the notification `event/<type>`, its fields beside `session`, `run`, `body`
 /// and `seq`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
+#[ts(export)]
 pub enum Event {
     /// A turn began on a line the human sent.
     TurnStarted {
@@ -112,27 +115,37 @@ pub enum Event {
         /// Whether it failed.
         is_error: bool,
         /// The bytes cut from `content`.
+        #[ts(type = "number")]
         cut: usize,
     },
     /// One model turn's spend, and the run's totals.
     Usage {
         /// Fresh input tokens.
+        #[ts(type = "number")]
         input: u64,
         /// Output tokens.
+        #[ts(type = "number")]
         output: u64,
         /// Tokens read from the cache.
+        #[ts(type = "number")]
         cache_read: u64,
         /// Tokens written to the cache.
+        #[ts(type = "number")]
         cache_write: u64,
         /// The turn's price, when known.
+        #[ts(type = "number | null")]
         usd: Option<f64>,
         /// The turn's weighted tokens.
+        #[ts(type = "number")]
         wt: u64,
         /// The run's weighted tokens so far.
+        #[ts(type = "number")]
         spent_wt: u64,
         /// How full the context is.
+        #[ts(type = "number")]
         occupancy: u64,
         /// The line the context is measured against.
+        #[ts(type = "number")]
         stress_line: u64,
     },
     /// A note the loop added to the conversation.
@@ -183,8 +196,9 @@ impl Event {
 }
 
 /// The core's request to the human: `gate/ask`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GateRequest {
     /// The body asking.
     pub race: String,
@@ -199,12 +213,81 @@ pub struct GateRequest {
 }
 
 /// The human's answer to `gate/ask`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GateReply {
     /// Run it, this once.
     pub allow: bool,
     /// Why not, for the body.
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub reason: Option<String>,
+}
+
+/// Every event's envelope, beside its own fields.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Envelope {
+    /// The session.
+    pub session: String,
+    /// The run.
+    pub run: String,
+    /// The body.
+    pub body: String,
+    /// The event's number: it rises by one, in the order events reach the wire.
+    #[ts(type = "number")]
+    pub seq: u64,
+}
+
+/// `session/prompt`'s parameters.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export)]
+pub struct PromptParams {
+    /// The line the human sent.
+    pub text: String,
+}
+
+/// `session/prompt`'s answer.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct PromptResult {
+    /// Whether it waits behind a turn that runs.
+    pub queued: bool,
+}
+
+/// `session/events`'s parameters.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export)]
+pub struct EventsParams {
+    /// The last `seq` the client saw.
+    #[ts(type = "number")]
+    pub since: u64,
+}
+
+/// `session/events`'s answer.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct EventsResult {
+    /// Each event as it was sent: `{jsonrpc, method, params}`.
+    pub events: Vec<Value>,
+    /// The oldest `seq` kept, if any.
+    #[ts(type = "number | null")]
+    pub oldest: Option<u64>,
+    /// False when the client asked from further back than is kept.
+    pub complete: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    /// The TypeScript package states the same protocol version as the core.
+    #[test]
+    fn the_typescript_protocol_version_is_the_cores() {
+        let ts = include_str!("../../../packages/protocol/src/index.ts");
+        assert!(
+            ts.contains(&format!("export const PROTOCOL = {};", super::PROTOCOL)),
+            "packages/protocol/src/index.ts states another PROTOCOL"
+        );
+    }
 }

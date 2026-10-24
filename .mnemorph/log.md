@@ -1389,3 +1389,40 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a gate that blocks is a promise to answer it on every way out; the tests never
   left, so the leaving was never tested — every way a client goes is now a test.
+
+---
+
+### [2026-10-24T17:23:12+02:00] rimuru — M6: the protocol generated, the SDK
+- **Task:** M6's second rung: `@mnemorph/protocol` generated from the Rust, `@mnemorph/sdk` over
+  stdio.
+- **Files:** crates/mnemorph-server/src/protocol.rs (`ts-rs` derives; counters as `number`;
+  `Envelope` and the requests' params and results; a test holding the TS `PROTOCOL` to the
+  core's), .cargo/config.toml (`TS_RS_EXPORT_DIR`, `.js` imports), packages/protocol
+  (the generated types, `Arrived`, `eventType`), packages/sdk (`stdio`, `Client`, `RpcError`,
+  tests in memory and against the real `mnemorphd`), justfile (`ts` builds the core first),
+  biome.json (the generated files are not linted), docs/04-communication.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - `ts-rs` writes `u64` as `bigint`, which JSON never delivers to JavaScript: every counter on
+    the wire is typed `number`.
+  - pnpm rewrote 4 975 lockfile lines — its quoting, not its content — to add one workspace
+    link; the link went in by hand, six lines, and the frozen install accepts it.
+  - A test that runs only when the binary exists runs nowhere unless something builds it.
+
+---
+
+### [2026-10-24T17:35:18+02:00] rimuru — the SDK, after its review
+- **Task:** the review of #133: a write on a dead or ended stdin crashed the host; `'exit'`
+  dropped the core's last lines; `reason` required in TS; an event with no `seq` disarmed the
+  dedup; a removed Rust type left its TS behind.
+- **Files:** packages/sdk/src/index.ts (stdin errors close the connection; `'close'` not
+  `'exit'`; nothing written after `close` or `shutdown`; the first close reason kept; `lastSeq`
+  reset for a new session; events with no `seq` ignored), protocol.rs (`reason` optional),
+  justfile (the generated TS removed before it is regenerated), tests (a core that answers and
+  exits, 50 times; a core with no input; a request after shutdown).
+- **Gate:** n/a. Instruments: the SDK suite three times; the last-line test fails with `'exit'`
+  put back; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a child's `'exit'` is when it died, `'close'` is when it finished speaking; a
+  client reads speech.
