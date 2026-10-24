@@ -69,7 +69,8 @@ impl OpenAiCompatible {
     }
 }
 
-/// The chat-completions body. Cache marks are dropped (these servers cache on their own); opaque
+/// The chat-completions body. Cache marks become one automatic breakpoint for Claude, and are
+/// dropped for the rest (those servers cache a stable prefix on their own); opaque
 /// blocks from another provider are left out, this client's own are replayed. A mid-conversation
 /// system note joins the user's turn as an operator note: many chat templates reject a system
 /// role anywhere but first.
@@ -103,6 +104,11 @@ pub fn encode_chat(request: &Request) -> Value {
     body.insert("stream".into(), json!(true));
     body.insert("stream_options".into(), json!({"include_usage": true}));
     body.insert("messages".into(), Value::Array(messages));
+    // Claude behind a gateway caches only what is marked: one automatic breakpoint that moves
+    // with the conversation. The others cache a stable prefix on their own.
+    if request.breakpoints() > 0 && marks_cache(&request.model) {
+        body.insert("cache_control".into(), json!({"type": "ephemeral"}));
+    }
     if !request.tools.is_empty() {
         let tools = request.tools.iter().map(|t| {
             json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}})
@@ -110,6 +116,12 @@ pub fn encode_chat(request: &Request) -> Value {
         body.insert("tools".into(), Value::Array(tools.collect()));
     }
     Value::Object(body)
+}
+
+/// Whether a chat-completions model caches only what is marked: Claude, by any gateway's name.
+fn marks_cache(model: &str) -> bool {
+    let m = model.to_ascii_lowercase();
+    m.starts_with("anthropic/") || m.contains("claude")
 }
 
 fn text_of(b: &Block) -> Option<&str> {

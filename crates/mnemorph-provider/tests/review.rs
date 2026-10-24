@@ -644,3 +644,36 @@ async fn cache_writes_are_their_own_class() {
         }
     );
 }
+
+/// Claude behind a gateway caches only what is marked: the chat body carries one automatic
+/// breakpoint. Other models cache a stable prefix on their own and get no field they may reject.
+#[test]
+fn claude_behind_a_gateway_gets_an_automatic_breakpoint() {
+    let request = |model: &str| Request {
+        model: model.into(),
+        system: vec![Block::Text {
+            text: "crest".into(),
+            cache: true,
+        }],
+        tools: vec![],
+        messages: vec![Message {
+            role: Role::User,
+            content: vec![Block::Text {
+                text: "hi".into(),
+                cache: true,
+            }],
+        }],
+        max_tokens: 100,
+        effort: None,
+    };
+    assert_eq!(
+        encode_chat(&request("anthropic/claude-sonnet-5.5"))["cache_control"],
+        json!({"type": "ephemeral"})
+    );
+    for other in ["openai/gpt-5", "deepseek/deepseek-chat", "qwen3-coder"] {
+        assert!(
+            encode_chat(&request(other)).get("cache_control").is_none(),
+            "{other}"
+        );
+    }
+}

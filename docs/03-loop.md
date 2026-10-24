@@ -122,10 +122,12 @@ also writes a priced row to the usage ledger, and the cost meter reads that sum.
 **Replay compaction** is a pure function over a copy of the conversation: old tool outputs fold
 to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
 it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every
-small result and the last four exchanges stay whole. It folds in one batch when the context
-crosses 60% of the stress line, not a little each turn, so the conversation sent stays the same
-between folds — the shape a cache breakpoint on it will need. The journal is never touched: compaction shapes only what is sent. A 40-step run whose
-history would be 150 KB sends at most about 53 KB a turn.
+small result and the last four exchanges stay whole. A fold rewrites the cached conversation
+from its first folded message on, so it comes in rare, large batches: past 60% of the stress
+line, and only when it takes out a fifth of the line or more. Between folds the conversation
+sent only grows, and each turn reads it from the provider's cache
+([Consumption](06-consumption.md)). The journal is never touched: compaction shapes only what is sent. A 40-step run whose
+history would be 150 KB sends at most about 55 KB a turn, and with the cache it is billed a third of its input.
 
 **A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The
