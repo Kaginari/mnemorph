@@ -625,3 +625,108 @@ fn an_envelope_lasts_at_most_the_human_s_envelope_days() {
             .any(|h| h.key == "oni.envelope_days" && h.why.contains("loosens"))
     );
 }
+
+/// Decisions use the LLM until the human names a System One provider; the fallback is the fast
+/// tier's model, and an LLM's stated probabilities need more confidence than measured ones.
+#[test]
+fn decisions_default_to_the_llm_with_a_stricter_cutoff_for_stated_probabilities() {
+    let g = Ground::new("decide-defaults");
+    let d = g.load().unwrap().decide().unwrap();
+    assert_eq!(d.via, None);
+    assert_eq!(d.model, "", "no model is guessed for a provider not chosen");
+    assert_eq!(d.llm, "claude-haiku-5-5");
+    assert!(d.cutoff_stated > d.cutoff_measured);
+
+    g.global("[models.tier]\nfast = \"qwen3-coder\"\n[decide]\nllm = \"claude-sonnet-5-5\"\n");
+    assert_eq!(g.load().unwrap().decide().unwrap().llm, "claude-sonnet-5-5");
+}
+
+#[test]
+fn decide_via_names_a_system_one_provider_of_the_humans_files() {
+    let g = Ground::new("decide-via");
+    g.global(
+        "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n\
+         [decide]\nvia = \"jeff\"\nmodel = \"jeff\"\n[decide.cutoff]\nmeasured = 0.5\nstated = 1\n",
+    );
+    let d = g.load().unwrap().decide().unwrap();
+    assert_eq!(d.via.as_deref(), Some("jeff"));
+    assert_eq!(d.model, "jeff");
+    assert!((d.cutoff_measured - 0.5).abs() < 1e-9);
+    assert!(
+        (d.cutoff_stated - 1.0).abs() < 1e-9,
+        "an integer cut-off reads as a number"
+    );
+
+    g.global("[decide]\nvia = \"nobody\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(
+        err.contains("no provider") && err.contains("config.toml"),
+        "{err}"
+    );
+
+    g.global("[decide]\nvia = \"anthropic\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(err.contains("kind `anthropic`"), "{err}");
+
+    g.global("[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n[decide]\nvia = \"jeff\"\n");
+    let err = g.load().unwrap().decide().unwrap_err();
+    assert!(
+        err.contains("without decide.model"),
+        "jeff refuses Jev's model name: {err}"
+    );
+
+    // A cut-off of −0.5, or −1, would make every answer sure.
+    for bad in ["measured = 1.5", "measured = -0.5", "stated = -1"] {
+        g.global(&format!("[decide.cutoff]\n{bad}\n"));
+        // Refused when the file loads (a negative integer) or when decisions are read.
+        let err = g.load().and_then(|c| c.decide()).unwrap_err();
+        assert!(err.contains("config.toml"), "{bad}: {err}");
+    }
+}
+
+/// Lesson: a provider decides where data goes. A cloned repository's tracked file may name a
+/// System One provider for decisions, but cannot define one: the state of every decision would
+/// leave for a server the human never chose.
+#[test]
+fn a_tracked_file_cannot_send_decisions_to_a_provider_of_its_own() {
+    let g = Ground::new("decide-tracked");
+    g.tracked(
+        "[providers.elsewhere]\nkind = \"systemone\"\nbase_url = \"https://example.invalid\"\n\
+         [decide]\nvia = \"elsewhere\"\n",
+    );
+    let c = g.load().unwrap();
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key.starts_with("providers.elsewhere"))
+    );
+    assert!(c.holes().iter().any(|h| h.key == "decide.via"));
+    assert_eq!(
+        c.decide().unwrap().via,
+        None,
+        "the tracked choice was never taken"
+    );
+}
+
+/// Lesson: choosing among the human's providers still sends the project's state somewhere, and a
+/// lower cut-off acts on guesses. A cloned repository may do neither: `decide.via` and the
+/// cut-offs are the human's alone, like the gate's loosening keys.
+#[test]
+fn a_tracked_file_cannot_turn_decisions_outward_or_lower_their_bar() {
+    let g = Ground::new("decide-tracked-choice");
+    g.global(
+        "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\nkey_env = \"TYPESAFE_API_KEY\"\n",
+    )
+    .tracked("[decide]\nvia = \"jev\"\nmodel = \"jev-latest\"\n[decide.cutoff]\nmeasured = 0\nstated = 0\n");
+    let c = g.load().unwrap();
+    let d = c.decide().unwrap();
+    assert_eq!(d.via, None);
+    assert!(d.cutoff_measured > 0.0 && d.cutoff_stated > 0.0);
+    for key in [
+        "decide.via",
+        "decide.cutoff.measured",
+        "decide.cutoff.stated",
+    ] {
+        assert!(c.holes().iter().any(|h| h.key == key), "{key}");
+    }
+}

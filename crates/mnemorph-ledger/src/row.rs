@@ -136,3 +136,58 @@ mod tests {
         assert_eq!(unpriced.wt, wt(unpriced.usage, 5.0));
     }
 }
+
+/// One decision: who answered, how sure, and what their probabilities are worth.
+///
+/// A System One provider's probabilities are `measured`; an LLM's are `stated`. The two are
+/// never pooled: calibration is measured per provider, model and basis.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionRow {
+    /// The decision's id, which its outcome row names.
+    pub id: String,
+    /// When the decision was answered.
+    pub ts: Timestamp,
+    /// The session.
+    pub session: String,
+    /// The run.
+    pub run: String,
+    /// The creature the decision was for.
+    pub body: String,
+    /// The decision point (`bench.outcome`, `dispatch.route`, …).
+    pub point: String,
+    /// The provider that answered.
+    pub provider: String,
+    /// The model that answered.
+    pub model: String,
+    /// `measured` (a System One provider) or `stated` (an LLM).
+    pub basis: String,
+    /// When a System One provider was configured and the LLM answered instead: why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fell_back: Option<String>,
+    /// Each question's choice, confidence and probabilities by label.
+    pub answers: serde_json::Value,
+    /// Milliseconds, fallback included.
+    pub ms: u64,
+    /// Tokens, the backend's own count.
+    #[serde(flatten)]
+    pub usage: Usage,
+}
+
+/// What a decision proved to be, once its decision point knows: the label that turned out true.
+/// Joined to its [`DecisionRow`] by `id`, it scores the decision's probabilities, so calibration
+/// is measured from the record per provider, model and basis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutcomeRow {
+    /// When the outcome was known.
+    pub ts: Timestamp,
+    /// The decision it settles.
+    pub id: String,
+    /// The decision point.
+    pub point: String,
+    /// The question it settles.
+    pub question: String,
+    /// The label that proved true.
+    pub actual: String,
+}

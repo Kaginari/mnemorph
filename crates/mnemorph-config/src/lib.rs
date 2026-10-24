@@ -55,6 +55,10 @@ fast = "claude-haiku-5-5"
 kind = "anthropic"
 base_url = "https://api.anthropic.com"
 key_env = "ANTHROPIC_API_KEY"
+
+[decide.cutoff]
+measured = 0.6
+stated = 0.9
 "#;
 
 /// Keys only the local or global file may set: each one loosens the human gate.
@@ -65,6 +69,9 @@ const LOOSENING: &[&str] = &[
     "oni.envelopes",
     "oni.envelope_days",
     "sandbox.allow_unguarded",
+    "decide.via",
+    "decide.cutoff.measured",
+    "decide.cutoff.stated",
 ];
 
 /// The kind of value a known key holds.
@@ -102,6 +109,11 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
+    ("decide.via", Kind::Str),
+    ("decide.model", Kind::Str),
+    ("decide.llm", Kind::Str),
+    ("decide.cutoff.measured", Kind::Number),
+    ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
     ("oni.envelope_days", Kind::Int),
 ];
@@ -234,12 +246,29 @@ pub struct Explained {
 /// Which model rides a body, and which provider serves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provider {
-    /// `anthropic` or `openai` (any OpenAI-compatible server).
+    /// `anthropic`, `openai` (any OpenAI-compatible server), or `systemone` (TypeSafe's API or
+    /// a jeff server: typed decisions, not conversations).
     pub kind: String,
     /// The server's base URL.
     pub base_url: String,
     /// The environment variable holding its key (never the key itself).
     pub key_env: Option<String>,
+}
+
+/// How decisions are made: a System One provider when `via` names one, else the LLM `llm`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decide {
+    /// The System One provider tried first (`kind = "systemone"`), when one is configured.
+    pub via: Option<String>,
+    /// The model to ask at `via` (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server);
+    /// empty when there is no `via`.
+    pub model: String,
+    /// The LLM that answers when there is no `via`, or it fails.
+    pub llm: String,
+    /// The least confidence a System One answer needs before a caller acts on it.
+    pub cutoff_measured: f64,
+    /// The same for an LLM's answer, whose probabilities are its own guess.
+    pub cutoff_stated: f64,
 }
 
 /// How many days an envelope may last, and lasts when it names no `expires`, unless the human's
@@ -605,6 +634,82 @@ impl Config {
             next.clone_into(&mut at);
         }
         Ok(chain)
+    }
+
+    /// How decisions are made. `decide.llm` defaults to the fast tier's model.
+    ///
+    /// # Errors
+    ///
+    /// `decide.via` names no provider, or one that is not `kind = "systemone"`, or comes without
+    /// `decide.model`; a cut-off is not between 0 and 1. Each error names the file the value came
+    /// from.
+    pub fn decide(&self) -> Result<Decide, String> {
+        let text = |key: &str| {
+            self.get(key)
+                .and_then(|l| l.value.as_str())
+                .map(str::to_owned)
+        };
+        let number = |key: &str| {
+            self.get(key).map(|l| {
+                l.value
+                    .as_float()
+                    .or_else(|| {
+                        l.value
+                            .as_integer()
+                            .and_then(|i| i32::try_from(i).ok())
+                            .map(f64::from)
+                    })
+                    .unwrap_or(f64::NAN)
+            })
+        };
+        let origin = |key: &str| {
+            self.get(key)
+                .map_or_else(String::new, |l| l.origin.to_string())
+        };
+        let via = text("decide.via");
+        if let Some(name) = &via {
+            match self.providers().get(name) {
+                None => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}`, and no provider has that name",
+                        origin("decide.via")
+                    ));
+                }
+                Some(p) if p.kind != "systemone" => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}`, a provider of kind `{}`; decisions need `kind = \"systemone\"`",
+                        origin("decide.via"),
+                        p.kind
+                    ));
+                }
+                Some(_) if text("decide.model").is_none() => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}` without decide.model: name the model to ask (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server)",
+                        origin("decide.via")
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
+        let cutoff = |key: &str| -> Result<f64, String> {
+            let v = number(key).unwrap_or_default();
+            if !(0.0..=1.0).contains(&v) {
+                return Err(format!(
+                    "{}: {key} is {v}; a cut-off is a confidence, from 0 to 1",
+                    origin(key)
+                ));
+            }
+            Ok(v)
+        };
+        Ok(Decide {
+            via,
+            model: text("decide.model").unwrap_or_default(),
+            llm: text("decide.llm")
+                .or_else(|| text("models.tier.fast"))
+                .unwrap_or_default(),
+            cutoff_measured: cutoff("decide.cutoff.measured")?,
+            cutoff_stated: cutoff("decide.cutoff.stated")?,
+        })
     }
 
     /// The configured providers, by name.

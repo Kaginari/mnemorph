@@ -22,5 +22,5 @@ pub use envelope::{
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};
 pub use prices::{DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};
-pub use row::{EnvelopeReading, UsageRow};
+pub use row::{DecisionRow, EnvelopeReading, OutcomeRow, UsageRow};
 pub use usage::{Usage, estimate, occupancy, spend, wt};
