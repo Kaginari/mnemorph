@@ -1370,3 +1370,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     everything the protocol lists, with no second account of what happened to drift.
   - `open_with` attached the human's attic through `solo()`; tests reached it only by luck, so the
     attic is now an explicit part of what a test binds.
+
+---
+
+### [2026-10-24T17:14:07+02:00] rimuru — the server, after its review
+- **Task:** the review of #123: a waiting gate held the process after the client left, queued
+  lines ran after `shutdown`, the process outlived `shutdown`, `seq` could reach the wire out of
+  order, the `queued` flag raced the turn's end, notifications were answered and batches
+  swallowed, a failed `initialize` used up the opener, and the diagram disagreed with the text.
+- **Files:** crates/mnemorph-server/src/lib.rs (`close` and `release`: leaving or Esc denies
+  every waiting act; `closed` checked under the lock `close` drains; the driver stops on close;
+  the writer ends on a `None`; `seq`, replay and send under one lock; a count of outstanding
+  lines; no answer without an id; batches and non-objects refused; the opener kept until it
+  succeeds; replay says `oldest` and `complete`), tests/stdio.rs (6: leaving by `shutdown` and
+  by EOF, Esc at the gate, queued replies and order, a retried `initialize`, the server ending
+  with its input open), docs/04-communication.md.
+- **Gate:** n/a. Instruments: the six tests three times in a row; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a gate that blocks is a promise to answer it on every way out; the tests never
+  left, so the leaving was never tested — every way a client goes is now a test.

@@ -11,7 +11,7 @@ pub mod protocol;
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -27,37 +27,67 @@ use crate::protocol::{
 pub const GATE_WAIT: Duration = Duration::from_secs(600);
 
 /// Opens the session once the client says hello, with the gate and observer the server made.
-pub type Opener = Box<dyn FnOnce(Arc<dyn Gate>, Observer) -> Result<Opened, String> + Send>;
+/// It is kept until it succeeds, so a failed `initialize` can be tried again.
+pub type Opener = Box<dyn FnMut(Arc<dyn Gate>, Observer) -> Result<Opened, String> + Send>;
 
 /// The core's side of one connection.
 struct Core {
-    out: mpsc::Sender<String>,
-    seq: AtomicU64,
+    /// The writer's lane; `None` tells it the connection is over.
+    out: mpsc::Sender<Option<String>>,
+    /// The events kept for a reconnect, and the last `seq` given: one lock, so `seq` reaches the
+    /// wire in order.
+    replay: Mutex<(u64, VecDeque<Value>)>,
     ids: Mutex<(String, String, String)>,
-    replay: Mutex<VecDeque<Value>>,
     asks: Mutex<HashMap<u64, mpsc::Sender<GateAnswer>>>,
     next_ask: AtomicU64,
-    busy: AtomicBool,
+    /// Lines sent and not yet taken to the end of their turn.
+    outstanding: AtomicUsize,
+    /// The client left: no gate waits, no queued line runs.
+    closed: AtomicBool,
 }
 
 impl Core {
     fn send(&self, line: &Value) {
-        let _ = self.out.send(line.to_string());
+        let _ = self.out.send(Some(line.to_string()));
     }
 
-    fn reply(&self, id: &Value, result: &Value) {
-        self.send(&json!({"jsonrpc": "2.0", "id": id, "result": result}));
+    /// Answer a request; a notification (no id) gets no answer.
+    fn reply(&self, id: Option<&Value>, result: &Value) {
+        if let Some(id) = id {
+            self.send(&json!({"jsonrpc": "2.0", "id": id, "result": result}));
+        }
     }
 
-    fn fail(&self, id: &Value, code: i64, message: &str) {
-        self.send(
-            &json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}),
-        );
+    fn fail(&self, id: Option<&Value>, code: i64, message: &str) {
+        if let Some(id) = id {
+            self.send(
+                &json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}),
+            );
+        }
     }
 
-    /// Number the event, keep it for a reconnect, and send it.
+    /// Deny every act waiting for the human, with `why`.
+    fn release(&self, why: &str) {
+        let waiting: Vec<_> = self
+            .asks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
+            .collect();
+        for (_, tx) in waiting {
+            let _ = tx.send(GateAnswer::Deny(why.into()));
+        }
+    }
+
+    /// The client left: release the gate and stop taking lines.
+    fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.release("the client left");
+    }
+
+    /// Number the event, keep it for a reconnect, and send it — all under one lock, so `seq`
+    /// reaches the wire in the order it was given.
     fn emit(&self, event: &Event) {
-        let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         let (session, run, body) = self
             .ids
             .lock()
@@ -69,16 +99,17 @@ impl Core {
             o.insert("session".into(), json!(session));
             o.insert("run".into(), json!(run));
             o.insert("body".into(), json!(body));
-            o.insert("seq".into(), json!(seq));
+        }
+        let mut replay = self.replay.lock().unwrap_or_else(PoisonError::into_inner);
+        replay.0 += 1;
+        if let Some(o) = params.as_object_mut() {
+            o.insert("seq".into(), json!(replay.0));
         }
         let line = json!({"jsonrpc": "2.0", "method": format!("event/{}", event.kind()), "params": params});
-        {
-            let mut replay = self.replay.lock().unwrap_or_else(PoisonError::into_inner);
-            if replay.len() == REPLAY {
-                replay.pop_front();
-            }
-            replay.push_back(line.clone());
+        if replay.1.len() == REPLAY {
+            replay.1.pop_front();
         }
+        replay.1.push_back(line.clone());
         self.send(&line);
     }
 
@@ -118,10 +149,14 @@ impl Gate for ClientGate {
         let core = &self.0;
         let id = core.next_ask.fetch_add(1, Ordering::SeqCst) + 1;
         let (tx, rx) = mpsc::channel();
-        core.asks
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(id, tx);
+        {
+            let mut asks = core.asks.lock().unwrap_or_else(PoisonError::into_inner);
+            // Checked under the lock `close` drains, so no ask slips in after it.
+            if core.closed.load(Ordering::SeqCst) {
+                return GateAnswer::Deny("the client left".into());
+            }
+            asks.insert(id, tx);
+        }
         let request = GateRequest {
             race: ask.race.name().to_owned(),
             class: ask.class.to_string(),
@@ -223,7 +258,9 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
 }
 
 /// Serve one connection: read JSON-RPC lines from `input`, write them to `output`, until the
-/// input ends or the client asks to shut down. The session opens on `initialize`.
+/// input ends or the client asks to shut down. The session opens on `initialize`. On the way out
+/// every act waiting at the gate is denied, the turn in flight is stopped, queued lines are
+/// dropped, and the output is flushed before this returns.
 ///
 /// # Errors
 ///
@@ -238,10 +275,10 @@ pub fn serve(
         .enable_all()
         .build()
         .map_err(|e| format!("runtime: {e}"))?;
-    let (out, lines) = mpsc::channel::<String>();
+    let (out, lines) = mpsc::channel::<Option<String>>();
     let writer = std::thread::spawn(move || {
         let mut output = output;
-        for line in lines {
+        while let Ok(Some(line)) = lines.recv() {
             if writeln!(output, "{line}")
                 .and_then(|()| output.flush())
                 .is_err()
@@ -252,12 +289,12 @@ pub fn serve(
     });
     let core = Arc::new(Core {
         out,
-        seq: AtomicU64::new(0),
+        replay: Mutex::new((0, VecDeque::new())),
         ids: Mutex::new((String::new(), String::new(), "rimuru".into())),
-        replay: Mutex::new(VecDeque::new()),
         asks: Mutex::new(HashMap::new()),
         next_ask: AtomicU64::new(0),
-        busy: AtomicBool::new(false),
+        outstanding: AtomicUsize::new(0),
+        closed: AtomicBool::new(false),
     });
     let inbox = read(input, Arc::clone(&core));
     runtime.block_on(main_lane(
@@ -266,12 +303,16 @@ pub fn serve(
         version.to_owned(),
         opener,
     ));
-    drop(core);
+    // Every line is written; the writer ends even while the reader still waits on its input.
+    let _ = core.out.send(None);
     let _ = writer.join();
+    // The reader thread may still be blocked reading; it holds nothing that needs it.
+    runtime.shutdown_background();
     Ok(())
 }
 
 /// The reader: answers the gate itself, and sends everything else, in order, to the main lane.
+/// When the input ends, the client is gone: the gate is released at once.
 fn read(
     input: impl BufRead + Send + 'static,
     core: Arc<Core>,
@@ -283,26 +324,45 @@ fn read(
             if line.trim().is_empty() {
                 continue;
             }
-            match serde_json::from_str::<Incoming>(&line) {
-                Ok(msg) if msg.method.is_none() => {
-                    if let Some(id) = msg
-                        .id
-                        .as_ref()
-                        .and_then(Value::as_str)
-                        .and_then(|s| s.strip_prefix("gate-"))
-                        .and_then(|n| n.parse().ok())
-                    {
-                        core.answered(id, &msg);
-                    }
+            let value = match serde_json::from_str::<Value>(&line) {
+                Ok(v) => v,
+                Err(e) => {
+                    core.send(&json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": format!("not JSON: {e}")}}));
+                    continue;
                 }
-                Ok(msg) => {
-                    if requests.send(msg).is_err() {
-                        break;
-                    }
+            };
+            if !value.is_object() {
+                let why = if value.is_array() {
+                    "batches are not supported: send one message per line"
+                } else {
+                    "a message is a JSON object"
+                };
+                core.send(&json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32600, "message": why}}));
+                continue;
+            }
+            let msg: Incoming = match serde_json::from_value(value) {
+                Ok(m) => m,
+                Err(e) => {
+                    core.send(&json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32600, "message": format!("not a JSON-RPC message: {e}")}}));
+                    continue;
                 }
-                Err(e) => core.send(&json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": format!("not JSON-RPC: {e}")}})),
+            };
+            if msg.method.is_none() {
+                // A response: only the gate's are expected.
+                if let Some(id) = msg
+                    .id
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .and_then(|s| s.strip_prefix("gate-"))
+                    .and_then(|n| n.parse().ok())
+                {
+                    core.answered(id, &msg);
+                }
+            } else if requests.send(msg).is_err() {
+                break;
             }
         }
+        core.close();
     });
     inbox
 }
@@ -312,26 +372,25 @@ async fn main_lane(
     mut inbox: tokio::sync::mpsc::UnboundedReceiver<Incoming>,
     core: Arc<Core>,
     version: String,
-    session_maker: Opener,
+    mut session_maker: Opener,
 ) {
-    let mut pending = Some(session_maker);
     let mut prompts: Option<tokio::sync::mpsc::UnboundedSender<String>> = None;
     let mut interrupt = None;
     let mut driver = None;
     while let Some(msg) = inbox.recv().await {
-        let id = msg.id.clone().unwrap_or(Value::Null);
+        let id = msg.id.as_ref();
         let method = msg.method.clone().unwrap_or_default();
         match method.as_str() {
             "initialize" => {
-                let Some(make) = pending.take() else {
-                    core.fail(&id, -32600, "already initialized");
+                if prompts.is_some() {
+                    core.fail(id, -32600, "already initialized");
                     continue;
-                };
+                }
                 let seeing = Arc::clone(&core);
                 let observer: Observer = Arc::new(move |seen: &Seen| seeing.see(seen));
-                match make(Arc::new(ClientGate(Arc::clone(&core))), observer) {
+                match session_maker(Arc::new(ClientGate(Arc::clone(&core))), observer) {
                     Ok(opened) => {
-                        core.reply(&id, &hello(&opened, &version));
+                        core.reply(id, &hello(&opened, &version));
                         *core.ids.lock().unwrap_or_else(PoisonError::into_inner) = (
                             opened.session_id.clone(),
                             opened.run_id.clone(),
@@ -342,55 +401,64 @@ async fn main_lane(
                         prompts = Some(tx);
                         driver = Some(tokio::spawn(drive(opened, rx, Arc::clone(&core))));
                     }
-                    Err(e) => core.fail(&id, -32001, &e),
+                    Err(e) => core.fail(id, -32001, &e),
                 }
             }
             "session/prompt" => {
                 let Some(tx) = &prompts else {
-                    core.fail(&id, -32002, "initialize first");
+                    core.fail(id, -32002, "initialize first");
                     continue;
                 };
                 let Some(text) = msg.params["text"].as_str().filter(|t| !t.trim().is_empty())
                 else {
-                    core.fail(&id, -32602, "session/prompt needs `text`");
+                    core.fail(id, -32602, "session/prompt needs `text`");
                     continue;
                 };
-                let queued = core.busy.swap(true, Ordering::SeqCst);
+                let queued = core.outstanding.fetch_add(1, Ordering::SeqCst) > 0;
                 if queued {
                     core.emit(&Event::Queued {
                         text: text.to_owned(),
                     });
                 }
                 let _ = tx.send(text.to_owned());
-                core.reply(&id, &json!({"queued": queued}));
+                core.reply(id, &json!({"queued": queued}));
             }
             "session/interrupt" => {
                 if let Some(i) = &interrupt {
                     i.fire();
                 }
-                core.reply(&id, &json!({}));
+                // An act waiting for the human is part of the turn Esc stops.
+                core.release("the human interrupted");
+                core.reply(id, &json!({}));
             }
             "session/events" => {
                 let since = msg.params["since"].as_u64().unwrap_or(0);
-                let events: Vec<Value> = core
-                    .replay
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
+                let replay = core.replay.lock().unwrap_or_else(PoisonError::into_inner);
+                let oldest = replay.1.front().and_then(|e| e["params"]["seq"].as_u64());
+                let events: Vec<Value> = replay
+                    .1
                     .iter()
                     .filter(|e| e["params"]["seq"].as_u64().is_some_and(|s| s > since))
                     .cloned()
                     .collect();
-                core.reply(&id, &json!({"events": events}));
+                // When the client asks from further back than is kept, it is told where the
+                // kept events begin, so a gap is never silent.
+                let complete = oldest.is_none_or(|o| o <= since + 1);
+                core.reply(
+                    id,
+                    &json!({"events": events, "oldest": oldest, "complete": complete}),
+                );
             }
             "shutdown" => {
-                core.reply(&id, &json!({}));
+                core.reply(id, &json!({}));
                 break;
             }
-            _ if msg.id.is_some() => core.fail(&id, -32601, &format!("no method `{method}`")),
-            _ => {}
+            _ => core.fail(id, -32601, &format!("no method `{method}`")),
         }
     }
-    // The input ended or the client said goodbye: stop the turn in flight, let it record.
+    // The input ended or the client said goodbye: nothing more runs. Queued lines are dropped,
+    // the gate is released, the turn in flight is stopped and allowed to record.
+    core.close();
     if let Some(i) = &interrupt {
         i.fire();
     }
@@ -414,7 +482,7 @@ fn hello(opened: &Opened, version: &str) -> Value {
     .unwrap_or(Value::Null)
 }
 
-/// The session's lane: one line at a time, in the order they came.
+/// The session's lane: one line at a time, in the order they came, until the client leaves.
 async fn drive(
     opened: Opened,
     mut prompts: tokio::sync::mpsc::UnboundedReceiver<String>,
@@ -422,15 +490,16 @@ async fn drive(
 ) {
     let mut session = opened.session;
     while let Some(line) = prompts.recv().await {
+        if core.closed.load(Ordering::SeqCst) {
+            break;
+        }
         let streaming = Arc::clone(&core);
         let mut on = move |e: StreamEvent| match e {
             StreamEvent::Text(text) => streaming.emit(&Event::TextDelta { text }),
             StreamEvent::ToolStart { id, name } => streaming.emit(&Event::ToolStart { id, name }),
         };
         session.drive(&line, &mut on).await;
-        if prompts.is_empty() {
-            core.busy.store(false, Ordering::SeqCst);
-        }
+        core.outstanding.fetch_sub(1, Ordering::SeqCst);
     }
 }
 

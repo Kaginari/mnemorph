@@ -267,18 +267,18 @@ sequenceDiagram
     participant CLI as mnemorph CLI
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
-    CLI->>D: initialize {clientInfo, capabilities}
-    D-->>CLI: {world, races, budgets, version}
+    CLI->>D: initialize {clientInfo}
+    D-->>CLI: {protocol, version, world, model, session, run, holes}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
     D--)CLI: event/turnStarted
     D--)CLI: event/textDelta …
     D--)CLI: event/dispatch {from: rimuru, to: elf-engine}
-    D--)CLI: event/usage {tokens, usd, cacheHit}
+    D--)CLI: event/usage {tokens, cacheRead, usd, spentWt}
     end
     rect rgba(212,175,55,0.22)
-    D->>CLI: gate/ask {act, class: outward, plan}
+    D->>CLI: gate/ask {race, class, act, why, outside}
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
@@ -287,7 +287,7 @@ sequenceDiagram
     end
 ```
 
-| Kind | Served by the solo session | With the world (M7) and later |
+| Kind | Served by the solo session | Served once the world is |
 |---|---|---|
 | requests (client → core) | `initialize`, `session/prompt`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/send`, `session/resume`, `session/handoff`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
 | requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on | |
@@ -311,8 +311,15 @@ turn never blocks the read that would release it; and one task owns the session.
 
 Rules:
 
-- Every event carries `{session, run, body, seq}`; `seq` rises by one, so a client that reconnects
-  asks `session/events {since: seq}` and loses nothing (the core keeps the last 10 000).
+- Every event carries `{session, run, body, seq}`; `seq` rises by one, in the order events reach
+  the wire, so a client that reconnects asks `session/events {since: seq}` and loses nothing. The
+  core keeps the last 10 000: the answer says the oldest it kept (`oldest`), and `complete: false`
+  when the client asked from further back, so a gap is never silent.
+- Leaving ends everything at once: on `shutdown`, or when the client's end closes, every act
+  waiting at the gate is denied, the turn in flight stops, lines still queued never run, and the
+  core exits once its output is written. Esc (`session/interrupt`) denies an act waiting at the
+  gate as part of the turn it stops.
+- One message per line; a batch is refused by name, and a notification is never answered.
 - An unanswered gate never allows. After 10 minutes the act is denied and the body is told the
   human did not answer; with resume (M7) the run checkpoints as `SUSPENDED` instead (a neutral
   word: no strain, no failure) and resumes at that act when the human answers — an overnight run
