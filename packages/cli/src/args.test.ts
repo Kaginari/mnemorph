@@ -26,4 +26,8 @@ test('what is not understood is said, by name', () => {
   });
   expect(parse(['go'])).toMatchObject({ kind: 'error', message: expect.stringContaining('go') });
   expect(parse(['--world'])).toMatchObject({ kind: 'error' });
+  expect(parse(['--theme', 'blue'])).toMatchObject({
+    kind: 'error',
+    message: expect.stringContaining('blue'),
+  });
 });

@@ -144,7 +144,7 @@ pub fn open_with(
         attic,
     } = bound;
     let (body, cx) = solo(world, model_id);
-    let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
+    let (mut cx, limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     if let Some(dir) = attic {
         let (keep_days, max_mb) = config.attic_limits();
         let kept = mnemorph_tools::Attic::at(dir, world)
@@ -157,19 +157,32 @@ pub fn open_with(
     let session_id = format!("s{stamp}-{}", std::process::id());
     let run_id = format!("r{stamp}-{}", std::process::id());
     let instruments = world.join(".mnemorph/instruments");
-    // The caps against what this world already spent today and this month.
+    // The caps against what this world already spent. A cap that cannot be read opens no
+    // session: spend it cannot see would be spend it cannot stop.
     let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
-    let spent = usage.read().map(|r| r.rows).unwrap_or_default();
-    let budget = crate::budget::left(
-        crate::budget::Caps {
-            session: config.budget_wt("session"),
-            day: config.budget_wt("day"),
-            month: config.budget_wt("month"),
-        },
-        &spent,
-        mnemorph_ledger::Timestamp::now().day(),
-    );
-    limits.budget_wt = budget.map(|b| b.wt);
+    let caps = crate::budget::Caps {
+        session: config.budget_wt("session"),
+        day: config.budget_wt("day"),
+        month: config.budget_wt("month"),
+    };
+    let capped = caps != crate::budget::Caps::default();
+    let mut unread = Vec::new();
+    let spent = if capped {
+        let back = usage
+            .read()
+            .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
+        if !back.skipped.is_empty() {
+            unread.push(format!(
+                "the usage ledger: {} line(s) unreadable ({:?}); their spend is not counted against the caps",
+                back.skipped.len(),
+                back.skipped
+            ));
+        }
+        back.rows
+    } else {
+        Vec::new()
+    };
+    let budget = crate::budget::left(caps, &spent, &session_id, mnemorph_ledger::Timestamp::now());
     let setup = Setup {
         model: model.clone(),
         tools: registry(),
@@ -187,6 +200,9 @@ pub fn open_with(
         },
     };
     let mut run = Run::new(body, limits, setup).with_observer(observer);
+    if capped {
+        run = run.with_caps(caps);
+    }
     if let Some(d) = decisions(config, world, model.clone(), env)? {
         run = run.with_decisions(d);
     }
@@ -201,6 +217,7 @@ pub fn open_with(
             .holes()
             .iter()
             .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
+            .chain(unread)
             .collect(),
         budget,
     })

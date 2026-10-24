@@ -480,6 +480,17 @@ impl Config {
                 });
                 continue;
             }
+            if origin.layer == Layer::Tracked
+                && key.starts_with("budget.")
+                && !key.ends_with("_usd")
+            {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "a spending cap is the human's: a cloned repository neither raises nor sets one, so it is honoured only from the local or global file".into(),
+                });
+                continue;
+            }
             if origin.layer == Layer::Tracked && LOOSENING.contains(&key.as_str()) {
                 self.holes.push(Hole {
                     key,

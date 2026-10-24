@@ -1,19 +1,10 @@
-//! The human's caps, read against what this world already spent: the budget a session opens
-//! with. Every cap is in weighted tokens, which count every call — priced, unpriced or free — so
-//! no model slips under one.
+//! The human's caps, read against what this world spent: what a session opens with, for the
+//! client to show. The run itself rereads the ledger before every call (`check_caps`), so the
+//! caps hold across the sessions that share a world. Every cap is in weighted tokens, which count
+//! every call — priced, unpriced or free — so no model slips under one.
 
-use mnemorph_ledger::{Day, UsageRow};
-
-/// The caps the human set, in weighted tokens.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Caps {
-    /// The most one session may spend.
-    pub session: Option<u64>,
-    /// The most a UTC day may spend, in this world, across sessions.
-    pub day: Option<u64>,
-    /// The most a UTC month may spend, in this world, across sessions.
-    pub month: Option<u64>,
-}
+pub use mnemorph_ledger::Caps;
+use mnemorph_ledger::{Timestamp, UsageRow};
 
 /// What a session may spend, and the cap that sets it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,34 +15,46 @@ pub struct Left {
     pub cap: &'static str,
 }
 
-/// The budget left under `caps` on `today`, given what `rows` already spent; `None` when the
-/// human set no cap.
+/// The budget left under `caps` at `now` for `session`, given what `rows` already spent; `None`
+/// when the human set no cap.
 #[must_use]
-pub fn left(caps: Caps, rows: &[UsageRow], today: Day) -> Option<Left> {
-    let spent = |same: &dyn Fn(Day) -> bool| -> u64 {
-        rows.iter().filter(|r| same(r.ts.day())).map(|r| r.wt).sum()
+pub fn left(caps: Caps, rows: &[UsageRow], session: &str, now: Timestamp) -> Option<Left> {
+    let today = now.day();
+    let spent = |pick: &dyn Fn(&UsageRow) -> bool| -> u64 {
+        rows.iter()
+            .filter(|r| pick(r))
+            .fold(0, |sum, r| sum.saturating_add(r.wt))
     };
-    let day = caps
-        .day
-        .map(|cap| cap.saturating_sub(spent(&|d| d == today)));
-    let month = caps
-        .month
-        .map(|cap| cap.saturating_sub(spent(&|d| d.year == today.year && d.month == today.month)));
-    [("session", caps.session), ("day", day), ("month", month)]
-        .into_iter()
-        .filter_map(|(cap, wt)| wt.map(|wt| Left { wt, cap }))
-        .min_by_key(|l| l.wt)
+    let month = spent(&|r| {
+        let d = r.ts.day();
+        (d.year, d.month) == (today.year, today.month)
+    });
+    let day = spent(&|r| r.ts.day() == today);
+    let this = spent(&|r| r.session == session);
+    [
+        ("session", caps.session, this),
+        ("day", caps.day, day),
+        ("month", caps.month, month),
+    ]
+    .into_iter()
+    .filter_map(|(cap, limit, used)| {
+        limit.map(|of| Left {
+            wt: of.saturating_sub(used),
+            cap,
+        })
+    })
+    .min_by_key(|l| l.wt)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mnemorph_ledger::{Timestamp, Usage};
+    use mnemorph_ledger::Usage;
 
-    fn row(ts: &str, wt: u64) -> UsageRow {
+    fn row(ts: &str, session: &str, wt: u64) -> UsageRow {
         UsageRow {
             ts: Timestamp::parse(ts).unwrap(),
-            session: "s".into(),
+            session: session.into(),
             run: "r".into(),
             body: "rimuru".into(),
             race: "rimuru".into(),
@@ -68,14 +71,15 @@ mod tests {
 
     #[test]
     fn the_tightest_cap_sets_the_budget_and_counts_every_call() {
-        let today = Day::new(2026, 10, 24).unwrap();
+        let now = Timestamp::parse("2026-10-24T12:00:00Z").unwrap();
         let rows = [
-            row("2026-10-24T08:00:00Z", 30_000),
-            row("2026-10-23T23:59:59Z", 50_000),
-            row("2026-09-30T12:00:00Z", 900_000),
+            row("2026-10-24T08:00:00Z", "other", 30_000),
+            row("2026-10-23T23:59:59Z", "other", 50_000),
+            row("2026-09-30T12:00:00Z", "other", 900_000),
+            row("2026-10-24T09:00:00Z", "this", 10_000),
         ];
         assert_eq!(
-            left(Caps::default(), &rows, today),
+            left(Caps::default(), &rows, "this", now),
             None,
             "no cap, no budget"
         );
@@ -84,11 +88,11 @@ mod tests {
             day: Some(80_000),
             month: Some(1_000_000),
         };
-        // Today spent 30k of 80k; October 80k of 1M; the session may spend 100k: the day binds.
+        // Today spent 40k of 80k; the session 10k of 100k; October 90k of 1M: the day binds.
         assert_eq!(
-            left(caps, &rows, today),
+            left(caps, &rows, "this", now),
             Some(Left {
-                wt: 50_000,
+                wt: 40_000,
                 cap: "day"
             })
         );
@@ -97,12 +101,31 @@ mod tests {
             ..caps
         };
         assert_eq!(
-            left(caps, &rows, today),
+            left(caps, &rows, "this", now),
             Some(Left {
                 wt: 0,
                 cap: "month"
             }),
             "spent is spent"
+        );
+        let huge = [
+            row("2026-10-24T08:00:00Z", "x", u64::MAX),
+            row("2026-10-24T08:00:01Z", "x", 5),
+        ];
+        assert_eq!(
+            left(
+                Caps {
+                    day: Some(10),
+                    ..Caps::default()
+                },
+                &huge,
+                "this",
+                now
+            )
+            .unwrap()
+            .wt,
+            0,
+            "never wraps"
         );
     }
 }

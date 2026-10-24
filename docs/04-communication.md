@@ -268,7 +268,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, session, run, holes}
+    D-->>CLI: {protocol, version, world, model, session, run, holes, budget}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -294,7 +294,7 @@ sequenceDiagram
 | events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
-world, model, provider, session, run, holes}`; a client that speaks another `protocol` stops
+world, model, provider, session, run, holes, budget}`; a client that speaks another `protocol` stops
 rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends

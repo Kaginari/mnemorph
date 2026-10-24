@@ -1024,7 +1024,7 @@ fn budget_caps_are_the_humans_and_in_weighted_tokens() {
     assert!(
         c.holes()
             .iter()
-            .any(|h| h.key == "budget.day" && h.why.contains("loosens"))
+            .any(|h| h.key == "budget.day" && h.why.contains("neither raises nor sets"))
     );
     g.global("[budget]\nmonth = 0\n");
     assert!(g.load().unwrap_err().contains("budget.month"));

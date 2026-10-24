@@ -74,6 +74,9 @@ export function parse(argv: string[]): Command {
       rest.push(a);
     }
   }
+  if (theme !== undefined && !['dark', 'light', 'auto'].includes(theme)) {
+    return { kind: 'error', message: `--theme is dark, light or auto, not ${theme}` };
+  }
   if (rest.length === 0) {
     if (json) return { kind: 'error', message: '--json goes with run' };
     return { kind: 'chat', world, core, theme };
