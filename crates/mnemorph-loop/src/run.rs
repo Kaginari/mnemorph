@@ -251,7 +251,9 @@ impl Run {
     /// Every answer is journaled and priced, and a warning for the human says who read it.
     async fn read_bench(&mut self, command: &str, output: &str) -> Option<Read> {
         let d = self.decisions.as_ref()?;
-        if output.contains(" more bytes of output dropped") {
+        if output.contains(" more bytes of output dropped")
+            || output.contains(" more bytes of stderr dropped")
+        {
             self.record(&Beat::Warning {
                 text: format!("[{BENCH_POINT}] `{command}` stays muted: its output was cut short"),
             });
@@ -750,9 +752,12 @@ impl Run {
                         .map(str::to_owned)
                 });
             let read = match command.as_deref() {
-                // An Esc that stopped the command is not followed by a decision about it.
+                // An Esc that stopped the command is not followed by a decision about it, and a
+                // run the shell saw fail — a non-zero exit, a kill at the deadline — is never
+                // read: no text can turn a seen failure green.
                 Some(c)
                     if !interrupted
+                        && !o.is_error
                         && self.decisions.is_some()
                         && bench_of(c).is_some()
                         && muted(c) =>

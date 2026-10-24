@@ -1101,3 +1101,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a green check is only as wide as what it reads: the site build parses markdown
   and checks links, and a conflict marker is valid markdown.
+
+---
+
+### [2026-10-24T13:44:06+02:00] rimuru — a seen failure is never read green
+- **Task:** the review of #113 (merged): a piped bench run was read by the decider even when the
+  shell saw it fail, so a timed-out or non-zero run could count green; the cut-output check missed
+  stderr's marker.
+- **Files:** crates/mnemorph-loop/src/run.rs (no read when the outcome is an error; both dropped
+  markers), src/decisions.rs (the green label says the run finished), tests/decisions.rs
+  (`a_failed_run_is_never_read_green`), docs/03-loop.md, docs/06-consumption.md (decision rows
+  in the usage ledger), docs/lessons.md (the bench row's guarantee, as it now holds).
+- **Gate:** n/a. Instruments: the new test fails with the fix removed and passes with it;
+  `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the #113 entry's Files line calls `decide.bench` on by default; it is off unless
+  the human names a System One provider or sets it (its own Learned bullet says so).
