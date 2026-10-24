@@ -31,7 +31,10 @@ flowchart TB
       PROV["provider<br/>Anthropic · OpenAI-compatible"]
       LEDGER["ledger<br/>usage · value · budgets"]
       MEM["memory<br/>tiers · recall · toolbox"]
+      CONFIG["config<br/>layers · origins · loosening"]
       SERVER --> LOOP
+      LOOP --> CONFIG --> TOOLS
+      CONFIG --> RACES
       LOOP --> WORLD --> RACES
       LOOP --> PROV --> LEDGER
       LOOP --> TOOLS --> SANDBOX
@@ -49,7 +52,7 @@ flowchart TB
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
     class CLI,BOARD,SDK,PROTO ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM rs
+    class SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SANDBOX gate
     style ts fill:#fdf2f8,stroke:#db2777
@@ -78,6 +81,7 @@ mnemorph/
 │  ├─ mnemorph-provider   streaming clients, retry ladder, caching    (network)
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
 │  ├─ mnemorph-tools      tool impls, classifier, secret injection    (OS)
+│  ├─ mnemorph-config     TOML layers, origins, the gate's loosening  (files)
 │  ├─ mnemorph-memory     tiers, BM25 recall, toolbox manifest        (files)
 │  ├─ mnemorph-world      creatures, onto, dispatch, gate, evolution  (files)
 │  ├─ mnemorph-loop       the six beats, journal, resume              (all above)
@@ -212,6 +216,56 @@ flowchart LR
   inside Docker's default profile.
 - The sandbox is applied by the core when spawning; a tool cannot opt out.
 - The escape suite runs in CI on both a 5.15 kernel (ABI v1) and the current runner's kernel.
+
+### Configuration
+
+Four layers, lowest first; a higher one wins a scalar or a list, tables merge key by key, and
+an empty list or table never overrides a lower layer:
+
+| Layer | File | Who writes it |
+|---|---|---|
+| default | compiled in | the release |
+| global | `$XDG_CONFIG_HOME/mnemorph/config.toml` (else `~/.config/…`, home from the platform) | the human |
+| tracked | `<world>/.mnemorph/config.toml` | the project, for everyone who clones it |
+| local | `<world>/.mnemorph/config.local.toml` | the human, on this machine |
+
+- **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
+  scalar, a list and each leaf of a merged table.
+- **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`
+  and `oni.envelopes` loosen it, so they are honoured only from the local or global file; from
+  the tracked file they become holes saying so. Nothing else feeds them: no environment
+  variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
+- **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
+  on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
+  envelope that is a bare `*` or covers a destructive or refused act, a fallback cycle: errors
+  that name the file.
+- **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
+  before it replaces the file; a failed save is returned, and the file stays as it was.
+- **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
+  `models.tier.<the race's tier>`; `models.fallback.<model>` names the next model to try when a
+  model is not found. **Providers** name the environment variable holding their key
+  (`key_env`), never the key.
+
+```toml
+# ~/.config/mnemorph/config.toml
+[gate]
+ask_rules = ["in-place-edit"]      # sed -i asks instead of refusing
+
+[budget]
+day_usd = 5
+
+[models.fallback]
+"claude-opus-5-5" = "claude-sonnet-5-5"
+
+[providers.openrouter]
+kind = "openai"
+base_url = "https://openrouter.ai/api"
+key_env = "OPENROUTER_API_KEY"
+
+[[oni.envelopes]]
+name = "feature branches"
+allow = ["git push origin feat/*", "gh run rerun *"]
+```
 
 ### Where each piece comes from in isekai
 

@@ -11,3 +11,4 @@ site/.vitepress/cache/
 
 # Local-only notes, kept out of the repository.
 docs/study-maki.md
+.mnemorph/config.local.toml
