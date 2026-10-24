@@ -793,3 +793,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Gate:** n/a. Instruments: the loop tests five times running.
 - **Result:** pushed to the session pull request.
 - **Learned:** `tokio::select!` breaks ties between ready branches at random — the two OSes simply drew differently. A tie needs a rule: an answer already arrived is kept, Esc is honoured before its acts.
+
+---
+
+### [2026-10-24T05:03:49+02:00] rimuru — M5's exit: one real task, solo, on a live model
+- **Task:** the exit criterion — a real task end to end against a live model, its spend
+  matching the ledger.
+- **Files:** crates/mnemorph-loop/tests/live.rs (gated: `MNEMORPH_LIVE=1` and
+  `OPENROUTER_API_KEY`; the key only through the environment).
+- **Gate:** the end gate's verify (`grep -q 'harness for agents' notes.md`) passed.
+- **Instruments:** OpenRouter, `nvidia/nemotron-3.5-lightning:free`, 8.8 s: 5 steps (find,
+  read, edit, answer), 12 beats; usage 7712 input · 2096 cache read · 461 output over 5 calls —
+  the ledger's 5 rows equal the provider's 5 reported usages, call for call. $0 (a free model).
+  `just check` (211).
+- **Result:** in review as a pull request; M5 closes after its review.
+- **Learned:** the scripted model and the real one agree on the shape of a turn: nothing in the
+  loop needed to change for the live run.
