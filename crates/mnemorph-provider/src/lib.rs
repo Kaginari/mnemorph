@@ -35,7 +35,7 @@ pub use openai::{OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use systemone::{
-    Answer, Ask, DEFAULT_MODEL, Question, Reply as SystemOneReply, SystemOne,
+    Answer, Ask, MAX_STATE_BYTES, Question, Reply as SystemOneReply, SystemOne,
     decode as systemone_decode, encode as systemone_encode,
 };
 pub use transport::{Body, HttpRequest, HttpResponse, HttpTransport, Reply, Scripted, Transport};

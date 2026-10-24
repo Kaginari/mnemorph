@@ -19,9 +19,6 @@ use crate::error::{Error, Wait};
 use crate::retry::{Policy, retry_after};
 use crate::transport::{HttpRequest, Transport};
 
-/// The model a System One provider answers with when none is named.
-pub const DEFAULT_MODEL: &str = "jev-latest";
-
 /// The largest answer body read; a decision is a few hundred bytes.
 const MAX_BODY: usize = 1024 * 1024;
 
@@ -100,8 +97,19 @@ pub struct Ask {
     pub questions: Vec<(String, Question)>,
 }
 
+/// The most a decision's state may hold, in bytes. A decision point sends the part it needs (the
+/// tail of a test log, the head of a commission); past this, the System One models refuse it, and
+/// the fallback would pay full price for all of it.
+pub const MAX_STATE_BYTES: usize = 24_000;
+
 impl Ask {
     pub(crate) fn check(&self) -> Result<(), Error> {
+        if self.state.len() > MAX_STATE_BYTES {
+            return Err(Error::Invalid(format!(
+                "a decision's state is {} bytes; at most {MAX_STATE_BYTES} — send the part that decides",
+                self.state.len()
+            )));
+        }
         if self.questions.is_empty() {
             return Err(Error::Invalid(
                 "a decision needs at least one question".into(),
@@ -120,25 +128,34 @@ impl Ask {
 
 /// One answer: a probability for every label of its question, in the question's order, summing
 /// to 1.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Answer {
     /// The labels, as [`Question::labels`] gives them.
     pub labels: Vec<String>,
     /// Their probabilities.
     pub probabilities: Vec<f64>,
+    /// The labels are ordered levels (a score), so a near miss is closer than a far one.
+    pub ordered: bool,
+    /// The confidence the provider measured and sent, when it sent one (choice and score).
+    pub measured: Option<f64>,
 }
 
 impl Answer {
     /// The most likely label (the first, on a tie); empty for an answer with no labels.
     #[must_use]
     pub fn choice(&self) -> &str {
+        self.labels.get(self.top()).map_or("", String::as_str)
+    }
+
+    /// The index of the most likely label, the first on a tie.
+    fn top(&self) -> usize {
         let mut best = 0;
         for (i, p) in self.probabilities.iter().enumerate() {
             if *p > self.probabilities[best] {
                 best = i;
             }
         }
-        self.labels.get(best).map_or("", String::as_str)
+        best
     }
 
     /// The probability of one label; 0 for a label the question did not have.
@@ -150,19 +167,36 @@ impl Answer {
             .map_or(0.0, |i| self.probabilities[i])
     }
 
-    /// How far the answer is from a coin toss over its labels: `(max p − 1/n) / (1 − 1/n)`, 0 for
-    /// a uniform answer, 1 for a certain one. For a yes-or-no it is `|2p − 1|`. For a score it is
-    /// the top level's share, blind to adjacency: an even split between levels 3 and 4 reads 0, so
-    /// an ordered reading uses [`Self::expected_level`]. An answer with no label, or with a
-    /// probability that is not a number, reads 0.
+    /// How far the answer is from a coin toss, 0 for an even spread, 1 for a certain answer — the
+    /// provider's own measure when it sent one, else TypeSafe's definitions: for a choice
+    /// `(max p − 1/n) / (1 − 1/n)` (for a yes-or-no, `|2p − 1|`); for a score, adjacency-aware,
+    /// `max(0, 1 − Σ pᵢ·|i − m| / MAD)`, where `m` is the most likely level and MAD the mean
+    /// distance of an even spread from its middle — so an even split between two neighbouring
+    /// levels is surer than one between the ends. An answer with no label, or with a probability
+    /// that is not a number, reads 0.
     #[must_use]
     pub fn confidence(&self) -> f64 {
+        if let Some(c) = self.measured.filter(|c| (0.0..=1.0).contains(c)) {
+            return c;
+        }
         let n = self.probabilities.len();
         if n == 0 || self.probabilities.iter().any(|p| !p.is_finite()) {
             return 0.0;
         }
         if n == 1 {
             return 1.0;
+        }
+        if self.ordered {
+            let m = self.top();
+            let spread: f64 = self
+                .probabilities
+                .iter()
+                .enumerate()
+                .map(|(i, p)| p * count(i.abs_diff(m)))
+                .sum();
+            let middle = (count(n) - 1.0) / 2.0;
+            let mad = (0..n).map(|i| (count(i) - middle).abs()).sum::<f64>() / count(n);
+            return (1.0 - spread / mad).clamp(0.0, 1.0);
         }
         let max = self.probabilities.iter().copied().fold(0.0, f64::max);
         let floor = 1.0 / count(n);
@@ -232,6 +266,8 @@ impl Answer {
         Answer {
             labels,
             probabilities,
+            ordered: false,
+            measured: None,
         }
     }
 }
@@ -418,7 +454,10 @@ pub fn decode(ask: &Ask, body: &[u8], request_id: Option<String>) -> Result<Repl
                     return Err(wrong());
                 }
                 let map = a["probabilities"].as_object().ok_or_else(wrong)?;
-                Answer::exact(q.labels(), map).ok_or_else(wrong)?
+                let mut answer = Answer::exact(q.labels(), map).ok_or_else(wrong)?;
+                answer.ordered = kind == "score";
+                answer.measured = a["confidence"].as_f64().filter(|c| (0.0..=1.0).contains(c));
+                answer
             }
         };
         out.push((name.clone(), answer));
