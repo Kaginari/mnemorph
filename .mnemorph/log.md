@@ -1295,3 +1295,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** the thresholds do not carry over to creatures as they are: with three voices a
   ratio is a count, and the number is a choice to tune, not a finding to inherit.
+
+---
+
+### [2026-10-24T15:48:56+02:00] rimuru — Metis, after its review
+- **Task:** the review of #117 (merged): sound; its follow-ups.
+- **Files:** docs/02-races.md and mnemorph-wire's `Office` (the Muses as Pausanias names them;
+  Metis, wise counsel), docs/03-loop.md (bench reads need `decide.bench`), docs/05-architecture.md
+  (the tracked file may name models, never providers, and why), docs/roadmap.md (M7 books a
+  route's cost against its commission).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Metis read a split score (0.74 routine, 0.26 hard) as surely routine; the adjacency-aware
+    score confidence of the decisions fix reads it 0.22, under the cut-off, so it stays at the
+    default with no change here.
+  - An Elf may be routed from frontier to fast for a routine, safe `findings` commission; that is
+    the band table as written, left for the human to keep or close.

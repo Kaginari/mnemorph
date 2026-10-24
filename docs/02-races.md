@@ -117,14 +117,14 @@ privilege cannot be added halfway. Methods rather than a trait of constants, bec
 the law about a race it holds at run time. The crate is covered whole: `just law` fails under
 100% region coverage, and its tests drive every operand of every rule both ways.
 
-**The offices.** A commission's `@ASK` selects one of three offices, named for the three first
-Muses, daughters of Mnemosyne, memory:
+**The offices.** A commission's `@ASK` selects one of three offices, named for the three Muses of
+Helicon, the first Muses in Pausanias (9.29.2), before the nine:
 
 | `@ASK` | Office | Muse of | Does |
 |---|---|---|---|
 | `findings` | **Mneme** | memory | reads: wide, thin, `file:line` facts |
-| `verdict` | **Melete** | deliberation | judges: a verdict with its evidence |
-| `draft` | **Aoede** | voice | writes: the work, or the world's words |
+| `verdict` | **Melete** | practice, care | judges: a verdict with its evidence |
+| `draft` | **Aoede** | song | writes: the work, or the world's words |
 
 The throne has no office. A configuration names an office by its Muse or by what it does
 (`melete` or `judge`), and one spelling per office: any other word, or both spellings for one
@@ -136,7 +136,7 @@ else for the pair (race, office); else the model configured for the race's `DEFA
 default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and the
 adversary think hardest), **strong** for Orc, Slime and Kijin.
 
-**Metis routes within a band** (`decide.route`, off by default). Metis, measure and wise counsel,
+**Metis routes within a band** (`decide.route`, off by default). Metis, wise counsel,
 is a decision point (`model.route`, [the architecture](05-architecture.md)): before a body runs,
 the decider reads the commission and answers how demanding it is (routine, involved, hard) and
 whether a mistake would be hard to undo. On a sure answer the body moves within its office's band:

@@ -209,6 +209,8 @@ build Mnemorph in solo mode.
   workspace soil; solo's escalation into a
   lane on stress, a boundary or an act it does not hold, measured against the hierarchy on the
   same 30 tasks.
+- Metis attached to dispatch: a route's priced decision is booked against the commission's slice,
+  as a bench read is against its run, so routing is never free of the budget it routes.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
   revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
