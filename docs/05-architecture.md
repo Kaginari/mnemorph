@@ -186,8 +186,15 @@ flowchart LR
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
     (`.cargo`, `.rustup`, `.local/bin`, …); never a credential path (`.ssh`, `.aws`, `.gnupg`,
     keyrings, …), which no rule names. Writes: the world, the command's temporary directory
-    inside it, and a few devices. The soil is the tools' border; the sandbox's border is the
-    world. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
+    inside it, and a few devices — for solo. A commissioned creature's commands are granted
+    exactly what its soil admits, and the rest of the world is read-only to them: landlock can
+    allow a folder but never except a spot inside it, so a claim that holds another's spot (a
+    seat, the queue, another's scratch) is granted part by part around that spot, existing
+    entries each on its own; a new file directly beside such a spot is the write tool's to make.
+    What git ignores — build output, caches — is granted too, being never a landing, and the
+    temporary directory is the creature's own scratch nest. Three layers hold the border:
+    landlock prevents, the tools refuse by name, and the end gate's *right author* catches
+    whatever a path through neither would leave. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
     domain, so the harness's environment is closed to its commands; the harness additionally
     makes itself non-dumpable.
   - **seccomp** — without network, `socket()` fails for every family, Unix sockets included (a

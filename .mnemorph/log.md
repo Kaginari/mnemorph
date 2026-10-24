@@ -1834,3 +1834,34 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     holds retired creatures, so every named route is checked for life.
   - A string that looks like a wire line must parse as one. The budget hole is built from the
     wire's own type.
+
+---
+
+### [2026-10-24T23:15:19+02:00] rimuru — M7: the right author, and commands granted exactly their soil
+- **Task:** the gate's half of ontology rung 2–3: *right author* and blocking findings. The human
+  asked for "a smart strategy" against shell commands writing past a creature's soil.
+- **Files:**
+  - crates/mnemorph-tools tool.rs — `with_soil` (exclusions, root files), `admits` by the
+    longest claim, `grants` (exactly the soil, part by part around another's spot, plus what git
+    ignores), `scratch`;
+  - shell.rs — the policy narrowed for a commissioned creature;
+  - crates/mnemorph-loop:
+    - gate.rs — `Author`, `right_author`, `touches`;
+    - commission.rs — `context_for`;
+  - tests: shell.rs under the real guard, loop tests/right_author.rs;
+  - docs/03, 05.
+- **Gate:** n/a. Instruments:
+  - under landlock, a command writes its own file and a new one in a granted folder, reads the
+    world, and is refused another's spot and a root file;
+  - the gate names a stray write's owner and route;
+  - an overlap blocks the landing it touches, and not the one that ends it;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Landlock only adds. "A claim minus a spot" is granted by walking the claim and leaving the
+    spot out. The cost: no new file directly beside the spot, only by the write tool.
+  - Granting exactly the soil would have broken every `cargo test`: `target/` is no one's. What
+    git ignores is never a landing, so it is granted.
+  - The third layer, restoring what a failed right-author check names from the commission's
+    attic snapshot, belongs to the commission runner (the next rung), where that snapshot is
+    taken.

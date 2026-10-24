@@ -3,9 +3,11 @@
 //!
 //! Checks here: traits hold (the verify commands pass, run through the same classified and
 //! guarded `bash` as any other command), duties done (a non-empty answer), tests intact (no
-//! test file deleted, no new skip marker). Right author holds by construction in solo (the
-//! whole repository is the soil, and the tripwire keeps `.git` and `.mnemorph` out). Doc
-//! truthful and no seal come with the world's creatures and the Dark Elf.
+//! test file deleted, no new skip marker), and — for a commissioned creature — right author:
+//! every changed path is the creature's by `own`, and no critical or high finding touches the
+//! landing. In solo right author holds by construction (the whole repository is the soil, and
+//! the tripwire keeps `.git` and `.mnemorph` out). Doc truthful and no seal come with the Dark
+//! Elf.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -13,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
 use mnemorph_tools::{Context, Tool, call};
+use mnemorph_world::doc::covers;
+use mnemorph_world::{Finding, Owner, Roster, Rule, check, explain, own};
 use serde_json::json;
 
 /// What marks a test as skipped, across the usual frameworks.
@@ -49,11 +53,24 @@ const TEST_MARKERS: &[&str] = &[
     "@Test",
 ];
 
-/// The gate's configuration: the commands that must pass.
+/// The gate's configuration: the commands that must pass, and who must have written the
+/// landing.
 #[derive(Debug, Clone, Default)]
 pub struct EndGate {
     /// Verify commands, each run through `bash` with a 120 s limit.
     pub verify: Vec<String>,
+    /// The commissioned creature whose landing this is; `None` in solo, where the whole
+    /// repository is the soil and right author holds by construction.
+    pub author: Option<Author>,
+}
+
+/// Who must have written what a landing changed: the creature, by the world's own answer.
+#[derive(Debug, Clone)]
+pub struct Author {
+    /// The creature.
+    pub name: String,
+    /// The roster as the commission found it: what the creature owned when it began.
+    pub roster: Roster,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,6 +213,9 @@ impl EndGate {
         if answer.trim().is_empty() {
             failures.push("duties done: the answer is empty; say what was done".into());
         }
+        if let Some(author) = &self.author {
+            failures.extend(right_author(author, &changed, cx.world()));
+        }
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();
             let o = call(tools, "bash", &args, cx);
@@ -214,4 +234,65 @@ impl EndGate {
         }
         GateVerdict { changed, failures }
     }
+}
+
+/// Right author: every changed path is the creature's by `own` on the roster it began with, by
+/// any rule but a domain; and no critical or high finding, read on the tree as the landing
+/// leaves it, touches the landing — so a landing that removes a finding is not blocked by it.
+fn right_author(author: &Author, changed: &[PathBuf], world: &Path) -> Vec<String> {
+    let mut failures = Vec::new();
+    let me = Owner::Creature(author.name.clone());
+    for path in changed {
+        let rel = path.to_string_lossy();
+        let e = explain(&author.roster, &rel);
+        if e.owner == me && e.rule != Rule::Domain {
+            continue;
+        }
+        let (whose, route) = match &e.owner {
+            Owner::Creature(o) if *o == author.name => (
+                format!("{o}'s to route, not to write"),
+                "a Slime writes it".to_owned(),
+            ),
+            Owner::Creature(o) => (format!("{o}'s"), format!("ask {o}")),
+            Owner::Harness => ("harness soil".into(), "only the harness writes it".into()),
+            Owner::Human => (
+                "the human's".into(),
+                "the human changes it as a diff they apply".into(),
+            ),
+            Owner::Unowned => ("nobody's".into(), "Rimuru routes its birth".into()),
+        };
+        let by = e.claim.map_or_else(
+            || e.rule.words().to_owned(),
+            |c| format!("{} {c}", e.rule.words()),
+        );
+        failures.push(format!(
+            "right author: `{rel}` is {whose} ({by}), not {}'s — {route}",
+            author.name
+        ));
+    }
+    let after = Roster::load(world);
+    for f in check(&after, &[]) {
+        if f.severity.blocks() && touches(&f, changed, &after) {
+            failures.push(format!(
+                "right author: a {} `{}` finding touches this landing ({}): {}",
+                f.severity.word(),
+                f.code,
+                f.at,
+                f.message
+            ));
+        }
+    }
+    failures
+}
+
+/// Whether a finding touches a landing: a written path lies under one of its paths, or a
+/// creature it is about owns a written path.
+fn touches(f: &Finding, changed: &[PathBuf], roster: &Roster) -> bool {
+    changed.iter().any(|path| {
+        let rel = path.to_string_lossy();
+        f.paths.iter().any(|p| covers(p, &rel))
+            || f.creatures
+                .iter()
+                .any(|c| own(roster, &rel) == Owner::Creature(c.clone()))
+    })
 }

@@ -540,3 +540,72 @@ fn the_run_clock_stops_a_running_command() {
         "it says when it was really killed: {o:?}"
     );
 }
+
+/// A commissioned creature's commands are granted exactly its soil: the guard cannot except a spot
+/// inside an allowed folder, so the claim is granted part by part around another's spot, and the
+/// kernel refuses a write there. The write tool refuses it by name.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_creatures_commands_are_granted_around_anothers_spot() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("grants");
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join("src/deep")).unwrap();
+    fs::write(w.world().join("src/mine.rs"), "mine\n").unwrap();
+    fs::write(w.world().join("src/deep/a.rs"), "a\n").unwrap();
+    fs::write(w.world().join("src/other/theirs.rs"), "theirs\n").unwrap();
+    fs::write(w.world().join("README.md"), "root\n").unwrap();
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/"], &["src/other/"], false)
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let grants = cx().grants();
+    let world = w.world().canonicalize().unwrap();
+    assert!(grants.contains(&world.join("src/mine.rs")), "{grants:?}");
+    assert!(grants.contains(&world.join("src/deep")), "{grants:?}");
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join("src/other"))),
+        "{grants:?}"
+    );
+    assert!(!grants.contains(&world), "{grants:?}");
+
+    let o = bash(
+        &mut cx(),
+        "echo changed > src/mine.rs && echo new > src/deep/b.rs && cat README.md",
+    );
+    assert!(
+        !o.is_error,
+        "its own soil is its own, and the world is still read: {o:?}"
+    );
+    let o = bash(&mut cx(), "echo stolen > src/other/theirs.rs");
+    assert!(o.is_error, "{o:?}");
+    let o = bash(&mut cx(), "echo stolen > README.md");
+    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(w.world().join("src/other/theirs.rs")).unwrap(),
+        "theirs\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join("README.md")).unwrap(),
+        "root\n"
+    );
+
+    let o = call(
+        &registry(),
+        "write",
+        r#"{"path": "src/other/theirs.rs", "content": "stolen"}"#,
+        &mut cx(),
+    );
+    assert!(
+        o.is_error && o.content.contains("outside your soil"),
+        "{o:?}"
+    );
+}

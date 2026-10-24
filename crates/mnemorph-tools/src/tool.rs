@@ -100,6 +100,14 @@ pub struct Context {
     race: Race,
     world: PathBuf,
     soil: Vec<PathBuf>,
+    /// Claims inside the soil that are not the body's: the longest claim that covers a path
+    /// decides, and on a tie the exclusion wins.
+    except: Vec<PathBuf>,
+    /// Whether the world's root files are the body's (the workspace).
+    root_files: bool,
+    /// Whether the soil was handed by the world (a commissioned creature): then commands are
+    /// granted exactly what it admits, not the whole world.
+    narrowed: bool,
     home: PathBuf,
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
@@ -117,6 +125,7 @@ impl std::fmt::Debug for Context {
             .field("race", &self.race)
             .field("world", &self.world)
             .field("soil", &self.soil)
+            .field("except", &self.except)
             .field("home", &self.home)
             .field("sandbox", &self.sandbox)
             .finish_non_exhaustive()
@@ -142,6 +151,9 @@ impl Context {
             race,
             world,
             soil,
+            except: Vec::new(),
+            root_files: false,
+            narrowed: false,
             home,
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
@@ -151,6 +163,107 @@ impl Context {
             cancel: None,
             deadline: None,
             seen: HashMap::new(),
+        }
+    }
+
+    /// The body's soil as the world hands it: claims it writes, claims inside them it does not,
+    /// and whether the root files are its own (paths relative to the world).
+    #[must_use]
+    pub fn with_soil(
+        mut self,
+        write: &[impl AsRef<Path>],
+        except: &[impl AsRef<Path>],
+        root_files: bool,
+    ) -> Self {
+        self.soil = write
+            .iter()
+            .map(|s| real(&self.world.join(s.as_ref())))
+            .collect();
+        self.except = except
+            .iter()
+            .map(|s| real(&self.world.join(s.as_ref())))
+            .collect();
+        self.root_files = root_files;
+        self.narrowed = true;
+        self
+    }
+
+    /// What a command may write, for the kernel guard: the whole world for a solo body; for a
+    /// commissioned creature, exactly the existing paths its soil admits, plus what git ignores
+    /// (build output, never a landing). The guard can allow a folder but not except a spot inside
+    /// it, so a claim that holds another's spot is granted part by part around that spot — and a
+    /// new file directly beside such a spot is the write tool's to make.
+    #[must_use]
+    pub fn grants(&self) -> Vec<PathBuf> {
+        if !self.narrowed {
+            return vec![self.world.clone()];
+        }
+        let mut out = Vec::new();
+        for w in &self.soil {
+            self.grant(w, &mut out);
+        }
+        if self.root_files
+            && let Ok(entries) = std::fs::read_dir(&self.world)
+        {
+            for e in entries.filter_map(Result::ok) {
+                let p = e.path();
+                if p.is_file() && self.admits(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out.extend(ignored(&self.world));
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Grant `path` whole when no exclusion lies inside it; else each of its parts around them.
+    fn grant(&self, path: &Path, out: &mut Vec<PathBuf>) {
+        if !path.exists() {
+            return;
+        }
+        if !self.except.iter().any(|e| e.starts_with(path) && e != path) {
+            if self.admits(path) {
+                out.push(path.to_path_buf());
+            }
+            return;
+        }
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for e in entries.filter_map(Result::ok) {
+                self.grant(&e.path(), out);
+            }
+        }
+    }
+
+    /// Where a command keeps its temporary files: the creature's own scratch nest when the
+    /// world handed its soil, else the world's scratch.
+    #[must_use]
+    pub fn scratch(&self) -> PathBuf {
+        let all = self.world.join(".mnemorph/tmp");
+        if self.narrowed
+            && let Some(nest) = self.soil.iter().find(|s| s.starts_with(&all) && *s != &all)
+        {
+            return nest.clone();
+        }
+        all
+    }
+
+    /// Whether the soil admits `path`: the longest covering claim decides, a tie to the
+    /// exclusion; a root file by `root_files`, unless a claim excludes it.
+    fn admits(&self, path: &Path) -> bool {
+        let best = |claims: &[PathBuf]| {
+            claims
+                .iter()
+                .filter(|c| path.starts_with(c))
+                .map(|c| c.components().count())
+                .max()
+        };
+        let root = (self.root_files && path.parent() == Some(self.world.as_path())).then_some(0);
+        match (best(&self.soil).max(root), best(&self.except)) {
+            (Some(w), Some(e)) => w > e,
+            (Some(_), None) => true,
+            (None, _) => false,
         }
     }
 
@@ -295,7 +408,7 @@ impl Context {
                 self.shown(&path)
             ));
         }
-        if self.soil.iter().any(|s| path.starts_with(s)) {
+        if self.admits(&path) {
             Ok(path)
         } else {
             let soil: Vec<String> = self.soil.iter().map(|s| self.shown(s)).collect();
@@ -343,4 +456,31 @@ pub(crate) fn args<T: DeserializeOwned>(name: &str, value: Value) -> Result<T, O
             "the arguments to {name} do not fit its schema: {e}"
         ))
     })
+}
+
+/// What git ignores in `world`, resolved: build output and caches, writable by any body because
+/// they are never a landing (the end gate's snapshot skips them too).
+fn ignored(world: &Path) -> Vec<PathBuf> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(world)
+        .args([
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+        ])
+        .output();
+    let Ok(out) = out else { return Vec::new() };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|p| !p.is_empty())
+        .map(|p| world.join(p.trim_end_matches('/')))
+        .filter(|p| p.exists())
+        .collect()
 }
