@@ -784,3 +784,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     never reaches the model, it ends the run. The property must also say no run ended that way.
   - The step budget belongs to a commission, not to the run: a session of many asks would
     otherwise run out of steps across them.
+
+---
+
+### [2026-10-24T04:58:09+02:00] rimuru — Esc and an answer arriving together
+- **Task:** CI on macOS failed `esc_before_the_acts_runs_none_of_them`; Linux passed.
+- **Files:** crates/mnemorph-loop/src/run.rs (`select!` is `biased`, the call first), docs/03-loop.md.
+- **Gate:** n/a. Instruments: the loop tests five times running.
+- **Result:** pushed to the session pull request.
+- **Learned:** `tokio::select!` breaks ties between ready branches at random — the two OSes simply drew differently. A tie needs a rule: an answer already arrived is kept, Esc is honoured before its acts.

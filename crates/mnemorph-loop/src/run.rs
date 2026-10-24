@@ -344,6 +344,9 @@ impl Run {
             let interrupt = Arc::clone(&self.interrupt);
             let call = tokio::time::timeout(left, self.model.complete(&request, on));
             let answered = tokio::select! {
+                // An answer that has already arrived is kept: Esc is then honoured before any act
+                // runs. Without `biased`, a tie would be broken at random.
+                biased;
                 answered = call => Some(answered),
                 () = interrupt.fired() => None,
             };

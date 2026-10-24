@@ -128,7 +128,8 @@ checkpoint carries it.
 A session is one body's run and the lines the human types while it works. **Enter** during a turn
 queues the line; when the turn ends, the next queued line becomes the next ask. **Esc** interrupts
 the turn wherever it is: during a model call the call is dropped and nothing half-streamed enters
-the conversation; between tool calls the calls not yet run are answered "interrupted by the human
+the conversation (an answer that has already arrived is kept, and Esc is honoured before any of
+its acts runs); between tool calls the calls not yet run are answered "interrupted by the human
 before it ran", and none of them runs. Either way the session pivots to the next queued line.
 
 The step budget is each ask's own; the clock, the context and the cost run for the session.
