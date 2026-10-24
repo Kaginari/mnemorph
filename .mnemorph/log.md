@@ -1151,6 +1151,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T15:27:51+02:00] rimuru — a revoked envelope does not break the load
+- **Task:** #111 (from the review of #110): lowering `oni.envelope_days` failed the whole load
+  over a revoked envelope kept on record, advising "sign it again".
+- **Files:** crates/mnemorph-config/src/lib.rs (`revoked` read before the cap; a revoked record
+  is not judged by it; the error names revoke and delete), tests/config.rs (lowered over a
+  revoked record; 365 accepted from the human's file), docs/05-architecture.md (the loosening
+  keys in full; revoked records; UTC days; a local list replaces the global one),
+  docs/02-races.md (status listing and time-of-use checks are M11's).
+- **Gate:** n/a. Instruments: the new case fails with the fix removed; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** an expired record still fails the load past a lowered limit: config has no clock,
+  and reading one there would make loading depend on the day. The error now says to delete it.
 ### [2026-10-24T15:33:25+02:00] rimuru — decisions bounded, and confident the provider's way
 - **Task:** #115 (from the review of #112): the decider sent any size of state, ignored the
   provider's own confidence, and its score confidence was blind to adjacency; a dead model-id
