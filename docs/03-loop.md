@@ -280,6 +280,11 @@ knows, read by the one that does not.
   previous handoff.
 - **When.** On demand, and offered by the core when the context reaches the stress zone and at
   every checkpoint — the moment a session is about to lose what it knows.
+- **What runs today.** The core gathers the session's first ask, its spend, the journal's last
+  lines and the previous handoff; the body, with its tools, looks at the rest (the changes, the
+  recent commits). Its answer is the file. The shared queue's work joins the facts with the
+  queue (M7), and the offer at the stress zone with the core's notice there; a checkpoint
+  already offers it.
 - **Reading.** A new session is told a handoff is waiting (younger than 14 days). `/handoff read`
   gives the model the file with one rule: read every listed file, verify every claim against the
   code, then wait for the human. A handoff is context to check, never fact to trust.

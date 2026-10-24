@@ -374,7 +374,8 @@ async fn main_lane(
     version: String,
     mut session_maker: Opener,
 ) {
-    let mut prompts: Option<tokio::sync::mpsc::UnboundedSender<String>> = None;
+    let mut prompts: Option<tokio::sync::mpsc::UnboundedSender<Work>> = None;
+    let mut steer = None;
     let mut interrupt = None;
     let mut driver = None;
     while let Some(msg) = inbox.recv().await {
@@ -397,6 +398,7 @@ async fn main_lane(
                             "rimuru".into(),
                         );
                         interrupt = Some(opened.session.interrupt());
+                        steer = Some(opened.session.steer());
                         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
                         prompts = Some(tx);
                         driver = Some(tokio::spawn(drive(opened, rx, Arc::clone(&core))));
@@ -420,7 +422,25 @@ async fn main_lane(
                         text: text.to_owned(),
                     });
                 }
-                let _ = tx.send(text.to_owned());
+                let _ = tx.send(Work::Line(text.to_owned()));
+                core.reply(id, &json!({"queued": queued}));
+            }
+            "session/send" => match &steer {
+                Some(lane) => steer_with(&core, id, lane, &msg.params),
+                None => core.fail(id, -32002, "initialize first"),
+            },
+            "session/handoff" => {
+                let Some(tx) = &prompts else {
+                    core.fail(id, -32002, "initialize first");
+                    continue;
+                };
+                let work = if msg.params["read"].as_bool() == Some(true) {
+                    Work::ReadHandoff
+                } else {
+                    Work::Handoff(msg.params["focus"].as_str().map(str::to_owned))
+                };
+                let queued = core.outstanding.fetch_add(1, Ordering::SeqCst) > 0;
+                let _ = tx.send(work);
                 core.reply(id, &json!({"queued": queued}));
             }
             "session/interrupt" => {
@@ -431,24 +451,7 @@ async fn main_lane(
                 core.release("the human interrupted");
                 core.reply(id, &json!({}));
             }
-            "session/events" => {
-                let since = msg.params["since"].as_u64().unwrap_or(0);
-                let replay = core.replay.lock().unwrap_or_else(PoisonError::into_inner);
-                let oldest = replay.1.front().and_then(|e| e["params"]["seq"].as_u64());
-                let events: Vec<Value> = replay
-                    .1
-                    .iter()
-                    .filter(|e| e["params"]["seq"].as_u64().is_some_and(|s| s > since))
-                    .cloned()
-                    .collect();
-                // When the client asks from further back than is kept, it is told where the
-                // kept events begin, so a gap is never silent.
-                let complete = oldest.is_none_or(|o| o <= since + 1);
-                core.reply(
-                    id,
-                    &json!({"events": events, "oldest": oldest, "complete": complete}),
-                );
-            }
+            "session/events" => replay(&core, id, msg.params["since"].as_u64().unwrap_or(0)),
             "shutdown" => {
                 core.reply(id, &json!({}));
                 break;
@@ -468,6 +471,42 @@ async fn main_lane(
     }
 }
 
+/// `session/send`: a line for the running turn's next tool step; refused when nothing runs.
+fn steer_with(core: &Core, id: Option<&Value>, lane: &mnemorph_loop::Steer, params: &Value) {
+    let Some(text) = params["text"].as_str().filter(|t| !t.trim().is_empty()) else {
+        return core.fail(id, -32602, "session/send needs `text`");
+    };
+    if core.outstanding.load(Ordering::SeqCst) == 0 {
+        return core.fail(
+            id,
+            -32003,
+            "nothing runs: a line sent steers a running turn — send it as a message instead",
+        );
+    }
+    lane.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push_back(text.to_owned());
+    core.reply(id, &json!({}));
+}
+
+/// `session/events`: every kept event after `since`, and where the kept ones begin — so a gap
+/// is never silent.
+fn replay(core: &Core, id: Option<&Value>, since: u64) {
+    let replay = core.replay.lock().unwrap_or_else(PoisonError::into_inner);
+    let oldest = replay.1.front().and_then(|e| e["params"]["seq"].as_u64());
+    let events: Vec<Value> = replay
+        .1
+        .iter()
+        .filter(|e| e["params"]["seq"].as_u64().is_some_and(|s| s > since))
+        .cloned()
+        .collect();
+    let complete = oldest.is_none_or(|o| o <= since + 1);
+    core.reply(
+        id,
+        &json!({"events": events, "oldest": oldest, "complete": complete}),
+    );
+}
+
 fn hello(opened: &Opened, version: &str) -> Value {
     serde_json::to_value(Hello {
         protocol: PROTOCOL,
@@ -482,18 +521,36 @@ fn hello(opened: &Opened, version: &str) -> Value {
             left_wt: b.wt,
             cap: b.cap.to_owned(),
         }),
+        handoff: mnemorph_loop::latest_handoff(&opened.world)
+            .filter(|(_, age)| *age < 14)
+            .map(|(path, age_days)| protocol::Waiting {
+                path: path.display().to_string(),
+                age_days,
+            }),
     })
     .unwrap_or(Value::Null)
 }
 
-/// The session's lane: one line at a time, in the order they came, until the client leaves.
+/// What the session's lane takes, in order.
+enum Work {
+    /// A line the human sent.
+    Line(String),
+    /// Write a handoff, with an optional focus.
+    Handoff(Option<String>),
+    /// Read the newest handoff, and check it against the code.
+    ReadHandoff,
+}
+
+/// The session's lane: one piece of work at a time, in the order it came, until the client
+/// leaves.
 async fn drive(
     opened: Opened,
-    mut prompts: tokio::sync::mpsc::UnboundedReceiver<String>,
+    mut work: tokio::sync::mpsc::UnboundedReceiver<Work>,
     core: Arc<Core>,
 ) {
+    let world = opened.world.clone();
     let mut session = opened.session;
-    while let Some(line) = prompts.recv().await {
+    while let Some(next) = work.recv().await {
         if core.closed.load(Ordering::SeqCst) {
             break;
         }
@@ -502,7 +559,32 @@ async fn drive(
             StreamEvent::Text(text) => streaming.emit(&Event::TextDelta { text }),
             StreamEvent::ToolStart { id, name } => streaming.emit(&Event::ToolStart { id, name }),
         };
-        session.drive(&line, &mut on).await;
+        match next {
+            Work::Line(line) => {
+                session.drive(&line, &mut on).await;
+            }
+            Work::Handoff(focus) => match session.run().handoff(focus.as_deref(), &mut on).await {
+                Ok(path) => core.emit(&Event::Handoff {
+                    path: path.display().to_string(),
+                }),
+                Err(why) => core.emit(&Event::Warning { text: why }),
+            },
+            Work::ReadHandoff => match mnemorph_loop::latest_handoff(&world)
+                .and_then(|(path, _)| Some((std::fs::read_to_string(&path).ok()?, path)))
+            {
+                Some((text, path)) => {
+                    let ask = format!(
+                        "{}\n\nThe handoff, {}:\n\n{text}",
+                        mnemorph_loop::HANDOFF_READ,
+                        path.display()
+                    );
+                    session.drive(&ask, &mut on).await;
+                }
+                None => core.emit(&Event::Warning {
+                    text: "no handoff is waiting in .mnemorph/handoffs".into(),
+                }),
+            },
+        }
         core.outstanding.fetch_sub(1, Ordering::SeqCst);
     }
 }

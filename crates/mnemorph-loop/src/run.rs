@@ -1,5 +1,6 @@
 //! One body's run: the six beats, until it answers or stops honestly.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -92,6 +93,13 @@ pub enum Seen {
         stress_line: u64,
     },
 }
+
+/// The send lane: lines the human sends a running body, delivered at its next tool step —
+/// steering, never a new task.
+pub type Steer = Arc<std::sync::Mutex<std::collections::VecDeque<String>>>;
+
+/// How a sent line reaches the body.
+pub const SENT: &str = "[the human, while you work]";
 
 /// Sees a run live: called on the run's own task, so it must not block.
 pub type Observer = Arc<dyn Fn(&Seen) + Send + Sync>;
@@ -214,6 +222,8 @@ pub struct Run {
     observer: Option<Observer>,
     caps: Option<mnemorph_ledger::Caps>,
     cap_warned: bool,
+    steer: Steer,
+    first_ask: Option<String>,
 }
 
 /// What a run needs that is not the body itself.
@@ -265,6 +275,8 @@ impl Run {
             observer: None,
             caps: None,
             cap_warned: false,
+            steer: Steer::default(),
+            first_ask: None,
         }
     }
 
@@ -274,6 +286,69 @@ impl Run {
     pub fn with_observer(mut self, observer: Observer) -> Self {
         self.observer = Some(observer);
         self
+    }
+
+    /// Hand off: the body fills the handoff template from the facts the core gathers — the
+    /// session's first ask, its spend, the journal's last entries, the previous handoff — and
+    /// its answer is written to `.mnemorph/handoffs/<time>.md`.
+    ///
+    /// # Errors
+    ///
+    /// The turn did not answer, or the file could not be written.
+    pub async fn handoff(
+        &mut self,
+        focus: Option<&str>,
+        on: &mut (dyn FnMut(Event) + Send),
+    ) -> Result<std::path::PathBuf, String> {
+        let world = self.cx.world().to_path_buf();
+        let mut facts = format!("{HANDOFF}\n\n## Facts the core gathered\n");
+        if let Some(first) = &self.first_ask {
+            let _ = write!(facts, "\n- The session's first ask: {first}");
+        }
+        let _ = write!(
+            facts,
+            "\n- Spent this session: {} weighted tokens",
+            self.spent_wt
+        );
+        if let Ok(log) = std::fs::read_to_string(world.join(".mnemorph/log.md")) {
+            let tail: Vec<&str> = log.lines().rev().take(40).collect();
+            let tail: Vec<&str> = tail.into_iter().rev().collect();
+            let _ = write!(
+                facts,
+                "\n- The journal's last lines:\n\n```\n{}\n```",
+                tail.join("\n")
+            );
+        }
+        if let Some((path, _)) = latest_handoff(&world)
+            && let Ok(previous) = std::fs::read_to_string(&path)
+        {
+            let _ = write!(
+                facts,
+                "\n- The previous handoff ({}):\n\n{previous}",
+                path.display()
+            );
+        }
+        if let Some(focus) = focus.filter(|f| !f.trim().is_empty()) {
+            let _ = write!(facts, "\n\nFocus the handoff on: {focus}");
+        }
+        match self.ask(&facts, on).await {
+            Ending::Answered(text) => {
+                let dir = handoffs(&world);
+                std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+                let name = Timestamp::now().to_string().replace(':', "-");
+                let path = dir.join(format!("{name}.md"));
+                std::fs::write(&path, format!("{}\n", text.trim()))
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                Ok(path)
+            }
+            other => Err(format!("the handoff was not written: {}", other.words())),
+        }
+    }
+
+    /// The send lane: push a line, and the body reads it after its next tool step.
+    #[must_use]
+    pub fn steer(&self) -> Steer {
+        Arc::clone(&self.steer)
     }
 
     /// The run under the human's caps: before every call it rereads the usage ledger and stops
@@ -458,6 +533,35 @@ impl Run {
         }
     }
 
+    /// What the human sent while the body worked, given to it now, after its tool step.
+    fn deliver_steering(&mut self) {
+        let sent: Vec<String> = self
+            .steer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+            .collect();
+        for line in sent {
+            self.nudge(&format!("{SENT} {line}"));
+        }
+    }
+
+    /// Lines sent to a turn that ended before a tool step: never smuggled into the next turn,
+    /// and the human is told.
+    fn drop_steering(&mut self) {
+        let left: Vec<String> = self
+            .steer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+            .collect();
+        for line in left {
+            self.record(&Beat::Warning {
+                text: format!("not delivered — the turn ended before a tool step: {line}"),
+            });
+        }
+    }
+
     fn end(&self, ending: Ending) -> Ending {
         self.record(&Beat::End {
             ending: ending.words(),
@@ -518,8 +622,11 @@ impl Run {
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
-        // Only an Esc fired during this ask counts.
+        // Only an Esc fired during this ask counts; a line sent to a turn that ended is not this
+        // ask's to read.
         self.interrupt.take();
+        self.drop_steering();
+        self.first_ask.get_or_insert_with(|| text.to_owned());
         let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
@@ -863,6 +970,7 @@ impl Run {
         if interrupted {
             return Some(Ending::Interrupted);
         }
+        self.deliver_steering();
         for s in signals {
             match s {
                 Signal::Warn(text) => {
@@ -947,3 +1055,39 @@ fn text_of(content: &[Block]) -> String {
         .collect::<Vec<_>>()
         .join("")
 }
+
+/// Where a world keeps its handoffs.
+#[must_use]
+pub fn handoffs(world: &std::path::Path) -> std::path::PathBuf {
+    world.join(".mnemorph/handoffs")
+}
+
+/// The newest handoff in `world`, and its age in days.
+#[must_use]
+pub fn latest_handoff(world: &std::path::Path) -> Option<(std::path::PathBuf, u64)> {
+    let newest = std::fs::read_dir(handoffs(world))
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "md"))
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .max_by_key(|(t, _)| *t)?;
+    let age = newest.0.elapsed().map_or(0, |d| d.as_secs() / 86_400);
+    Some((newest.1, age))
+}
+
+/// What the body is asked to fill when a session hands off.
+pub const HANDOFF: &str = "Write the handoff for the next session: what it needs to continue without re-asking, re-discovering or repeating a mistake. Use your tools to look at what you need (git status, recent commits, the files you changed). Answer with the handoff alone, in Markdown, in exactly these sections:
+
+## Goal
+## Why it matters
+## Current state
+(done · partial · not started)
+## Decisions and why
+## Traps and dead ends
+## Files and pointers
+## Open work
+
+Rules: state, never orders. Point at artifacts (paths, commits, lines), never copy them. Secrets by location only, never their value. Leave out what the law, the config or the code already say. Carry forward what still holds from the previous handoff, if there is one.";
+
+/// What a new session is asked when it reads a handoff.
+pub const HANDOFF_READ: &str = "A previous session left this handoff. It is context to check, never fact to trust: read every file it lists, verify every claim against the code, and say what holds, what does not and what changed. Then wait for the human.";

@@ -970,3 +970,76 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
     );
     assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
 }
+
+/// A line sent while the body works reaches it after its next tool step, marked as the human's.
+#[tokio::test]
+async fn a_sent_line_reaches_the_body_at_its_next_tool_step() {
+    let w = World::new("send");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*.x"})),
+        answer("steered"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let lane = run.steer();
+    let mut on = |e: mnemorph_provider::Event| {
+        // The human sends while the first call is being made.
+        if matches!(e, mnemorph_provider::Event::ToolStart { .. }) {
+            lane.lock()
+                .unwrap()
+                .push_back("use the tests folder".into());
+        }
+    };
+    let e = run.ask("look", &mut on).await;
+    assert!(matches!(e, Ending::Answered(_)), "{e:?}");
+    let second = &model.requests()[1];
+    let said = second.messages.last().unwrap().content.iter().any(|b| {
+        matches!(b, Block::Text { text, .. } if text == &format!("{} use the tests folder", mnemorph_loop::SENT))
+    });
+    assert!(said, "the body read it after its tool step");
+}
+
+/// A line sent to a turn that ends without another tool step is said to the human, and never
+/// carried into the next turn.
+#[tokio::test]
+async fn a_sent_line_the_turn_never_reached_is_reported_not_smuggled() {
+    let w = World::new("send-late");
+    let model = Arc::new(ScriptedModel::new([answer("done"), answer("next")]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "first").await;
+    run.steer().lock().unwrap().push_back("too late".into());
+    ask(&mut run, "second").await;
+    let beats = w.journal().read().unwrap().rows;
+    assert!(beats.iter().any(|b| matches!(b, Beat::Warning { text } if text.contains("not delivered") && text.contains("too late"))));
+    let second = &model.requests()[1];
+    assert!(
+        !format!("{:?}", second.messages).contains("too late"),
+        "never in the next turn"
+    );
+}
+
+/// A handoff is the body's answer to the template, written where the next session looks.
+#[tokio::test]
+async fn a_handoff_is_written_for_the_next_session() {
+    let w = World::new("handoff");
+    let model = Arc::new(ScriptedModel::new([
+        answer("ok"),
+        answer("## Goal\nShip the CLI.\n## Open work\nThe board."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "ship the cli").await;
+    let mut quiet = |_| {};
+    let path = run.handoff(Some("the board"), &mut quiet).await.unwrap();
+    assert!(path.starts_with(mnemorph_loop::handoffs(&w.world())));
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("Ship the CLI.")
+    );
+    let asked = format!("{:?}", model.requests()[1].messages);
+    assert!(
+        asked.contains("first ask: ship the cli")
+            && asked.contains("Focus the handoff on: the board")
+    );
+    let (latest, age) = mnemorph_loop::latest_handoff(&w.world()).unwrap();
+    assert_eq!((latest, age), (path, 0));
+}

@@ -13,6 +13,7 @@ export type { Hello } from './generated/Hello.js';
 export type { PromptParams } from './generated/PromptParams.js';
 export type { PromptResult } from './generated/PromptResult.js';
 export type { JsonValue } from './generated/serde_json/JsonValue.js';
+export type { Waiting } from './generated/Waiting.js';
 
 import type { Envelope } from './generated/Envelope.js';
 import type { Event } from './generated/Event.js';

@@ -15,6 +15,7 @@ const hello = {
   run: 'r',
   holes: [],
   budget: null,
+  handoff: null,
 };
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
@@ -208,5 +209,39 @@ test('a core that goes away by itself is told to the caller, with why', async ()
   core.end('mnemorphd exited with 3');
   await tick();
   expect(lost).toBe('mnemorphd exited with 3');
+  ui.unmount();
+});
+
+test('/send steers a running turn', async () => {
+  const { core, ui } = start();
+  core.answers['session/send'] = {};
+  await tick();
+  core.event('turnStarted', { text: 'work' });
+  await tick();
+  await type(ui, '/send use the tests folder');
+  ui.stdin.write('\r');
+  await tick(40);
+  expect(core.sent.find((m) => m.method === 'session/send')).toMatchObject({
+    params: { text: 'use the tests folder' },
+  });
+  expect(ui.lastFrame()).toContain('sent: use the tests folder');
+  ui.unmount();
+});
+
+test('/handoff and /handoff read ask the core', async () => {
+  const { core, ui } = start();
+  core.answers['session/handoff'] = { queued: false };
+  await tick();
+  await type(ui, '/handoff the board');
+  ui.stdin.write('\r');
+  await tick(40);
+  await type(ui, '/handoff read');
+  ui.stdin.write('\r');
+  await tick(40);
+  const asked = core.sent.filter((m) => m.method === 'session/handoff').map((m) => m.params);
+  expect(asked).toEqual([{ focus: 'the board' }, { read: true }]);
+  core.event('handoff', { path: '/w/.mnemorph/handoffs/x.md' });
+  await tick();
+  expect(ui.lastFrame()).toContain('handoff written: /w/.mnemorph/handoffs/x.md');
   ui.unmount();
 });
