@@ -184,8 +184,9 @@ proposed until a route promotes it.
 never fact to trust ([the loop](03-loop.md#between-sessions-the-handoff)). Its claims rise only
 by corroboration, by the human, or by confidence earned when later runs that recalled them pass.
 
-**`@U territory` is not memory.** A territory fact goes to the ontology, as before: ownership is
-checked by the gate's *right author* rule, not by recall.
+**`@U territory` is not memory.** A territory fact goes to [the ontology](09-ontology.md#facts-who-said-what),
+where it is remembered with who said it and can be countered; ownership is checked by the gate's
+*right author* rule, not by recall.
 
 **The dissent seat.** With a budget of $k \ge 2$ anchors:
 

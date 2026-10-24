@@ -52,6 +52,7 @@ export default withMermaid(
             { text: 'Consumption', link: '/06-consumption' },
             { text: 'MCP', link: '/07-mcp' },
             { text: 'Memory', link: '/08-memory' },
+            { text: 'Ontology', link: '/09-ontology' },
             { text: 'Roadmap', link: '/roadmap' },
           ],
         },
@@ -60,6 +61,7 @@ export default withMermaid(
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
+            { text: 'Research: DIKWP-MESH', link: '/research/dikwp-mesh' },
           ],
         },
       ],

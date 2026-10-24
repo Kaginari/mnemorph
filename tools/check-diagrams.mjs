@@ -12,7 +12,7 @@ mermaid.initialize({ startOnLoad: false });
 const dir = 'docs';
 let count = 0;
 const failures = [];
-for (const file of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+for (const file of readdirSync(dir, { recursive: true }).filter((f) => f.endsWith('.md'))) {
   const text = readFileSync(`${dir}/${file}`, 'utf8');
   for (const match of text.matchAll(/```mermaid\n([\s\S]*?)```/g)) {
     count++;

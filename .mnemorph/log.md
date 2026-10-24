@@ -959,3 +959,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     routes to shared: checked, accepted, corroborated, confirmed.
   - Open (@?): the weights are untuned until the recall fixtures exist; the corroboration
     match (what makes two claims "the same") needs its own fixture.
+
+---
+
+### [2026-10-24T17:10:00+02:00] rimuru — the book: the ontology (page 9) and its research page; M7's ontology rungs
+- **Task:** Veldora: plan the DIKWP-MESH integration into onto; a research doc with the math and
+  graphs; the book page; older pages updated.
+- **Files:** docs/09-ontology.md (new: the decisive core — graph, inference to a fixed point,
+  shapes, ownership as one ordered function; the plural layer — territory facts with `by`,
+  source, counters and settles, gluing across a dimension, relations learned by sightings;
+  coded findings with severities), docs/research/dikwp-mesh.md (new), docs/roadmap.md (M7: five
+  ontology rungs and exit; M8's intro aligned with the promotion routes), docs/02-races.md,
+  docs/04-communication.md (`@U territory <about>` and its counter form), docs/05-architecture.md,
+  docs/08-memory.md, docs/lessons.md (one ownership function), docs/README.md, site sidebar,
+  tools/check-diagrams.mjs (now reads docs/ recursively).
+- **Gate:** n/a. Instruments: diagram check 21 parse (18 before the check read research/); site
+  build green; 0 MathJax errors on pages 8, 9 and the research page.
+- **Result:** in review as a pull request, stacked on the memory one.
+- **Learned:**
+  - DIKWP-MESH cannot own ownership: it keeps many answers on purpose, and ownership must have
+    one. Its rules fit the plural layer, which had no conflict model at all.
+  - Its "gluing" is a per-tag counting rule with sheaf vocabulary; the thresholds (one dissenter
+    in three tolerated, two against two never) carry over to creatures as they are.
+  - The diagram check skipped subfolders: a book that grows a folder must widen its checks.
+  - Open (@?): claims from the structured Territory field only (prose never claims) differs from
+    isekai's prose lane — a decision for the human.

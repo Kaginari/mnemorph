@@ -211,14 +211,27 @@ build Mnemorph in solo mode.
   same 30 tasks.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
   revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
+- The ontology, following [its page](09-ontology.md), rungs lowest first:
+  1. the graph derived from the docs' Territory, chain and Minds fields; inference to its fixed
+     point; the shapes; rebuilt on the docs' fingerprint;
+  2. ownership as one function, called by the gate, the policy, the dispatch card and
+     `onto owner`;
+  3. findings with codes and severities; the gate blocking on critical and high in the landing's
+     territory;
+  4. territory facts as events — `by`, source, counters, settles — and the `contested-fact`
+     finding; `@ONTO` showing both sides;
+  5. relation sightings, the named-twice proposal with its synonym check and expiry, and
+     `onto check --dimension`.
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
-gate; every refusal names its lawful route.
+gate; every refusal names its lawful route; an ontology fixture with an overlap, a loop in the
+chain, a contested fact, one relation sighted twice and one dimension obstruction reports each
+with its code and severity, and the gate blocks only the critical and high ones.
 
 ### M8 — Memory and toolbox · L
 
 Memory follows [its page](08-memory.md): the archive is never rewritten, notes are traces that
-point at it, and only a verify line or the end gate grounds a note. Rungs, lowest first:
+point at it, and only a promotion route grounds a note into shared memory. Rungs, lowest first:
 
 1. **Notes as events.** The trace schema (polarity, salience, confidence, status, source), the
    append-only event log with its fold, a tolerant reader, `merge=union`. Short, personal and

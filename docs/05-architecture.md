@@ -126,7 +126,9 @@ mnemorph/
 | handoffs | `.mnemorph/handoffs/<time>.md` | yes |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
-| dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations | yes |
+| dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
+| ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
+| relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references seen, the ledger relations are learned from | yes |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
