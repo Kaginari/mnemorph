@@ -268,7 +268,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, session, run, holes, budget}
+    D-->>CLI: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -282,8 +282,8 @@ sequenceDiagram
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
-    D--)CLI: event/gateVerdict {pass}
-    D--)CLI: event/turnEnded {word: DONE}
+    D--)CLI: event/gateVerdict {passed, changed, failures}
+    D--)CLI: event/turnEnded {ending: answered}
     end
 ```
 
@@ -333,14 +333,20 @@ live the text as it streams, the
 calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
 status line — model, spend (`unpriced` when the price tables do not know the model), context
 against the stress line, the cache's share, and what the human's caps leave
-([consumption](06-consumption.md)). **Enter** sends, and while a turn runs the line
+([consumption](06-consumption.md)); before the first call it says nothing of spend. A tool call
+shows as soon as it starts, before its input has streamed. **`mnemorph status`** — and `/status`
+in a session — prints the build's version and commit, the core's, where the provider's key comes
+from (its variable and the file that names it, never the value), the sandbox actually in force
+(or `none — <reason>`) and what the caps leave; the hello carries the core's part (`key`,
+`sandbox`). **Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
 **`/send <text>`** steers the turn that runs — `session/send`, refused when nothing runs, the
 text reaching the body after its next tool step as the human's, and said to the human when the
 turn ends first; **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
 nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the
-history. An approval is answered only by **y** or by **n** and Esc — never by Enter alone — and
-one whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an
+history. An approval is chosen with **y** or **n** and confirmed with **Enter**, so a key typed as
+the box appears approves nothing; **Esc** denies it; while it is open the input waits; and one
+whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an
 emoji as one. Every
 printable character is text while the input has focus, and keys that arrive together are taken
 in order, a carriage return among them as Enter.

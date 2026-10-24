@@ -1573,3 +1573,38 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a note meant for the next session, written into a tracked tree, is a note for
   every reader of the repository; what a session must carry over belongs where only the harness
   reads it. `/send` stays: it never touches a file.
+
+---
+
+### [2026-10-24T20:29:24+02:00] rimuru — M6 closed: the review's fixes, and what the milestone cost
+- **Task:** close M6 after its Fable milestone review (verdict: close after fixes).
+- **Files:**
+  - CLI: cli.tsx, run.ts — a core that will not start is let go;
+  - app.tsx — the scrollback keeps the last column free; an approval chosen, then confirmed;
+  - core.ts — the newer build wins;
+  - transcript.ts — a call shows as it starts; no spend before the first call;
+  - status.ts, args.ts, index.ts, tsup.config.ts — `mnemorph status`, the commit stamped.
+  - Core:
+    - mnemorphd build.rs and main.rs — the commit in the version;
+    - loop open.rs and run.rs — a ledger line that cannot be read stops a capped session;
+    - the key's origin and the sandbox in the hello;
+    - protocol.rs, lib.rs.
+  - Docs: 04, 06, roadmap (WebSocket moved to M12; `status` named in M6), lessons (the dispatch
+    card's row to M7, the distributions row to M14), README.
+- **Gate:** n/a. Instruments: each fix has a test that fails without it — the start failure
+  against the real core (one core left running before), the scrollback width (101 cells in 100
+  before), the approval typed into (`xyz` approved nothing), the torn ledger at open and before a
+  call; `just check`.
+- **Result:** in review as a pull request.
+- **Usage** (`npx ccusage`, 2026-10-24, the whole day — M5b's end, M6, M7's first rung):
+  - 1.11 B tokens, $473 at list prices:
+    - opus-5-5: 1.07 B, $368;
+    - fable-5-1: 45.7 M, $103;
+    - opus-4-8: 0.7 M, $2.
+  - The 10:00 and 15:00 windows reached 99.6% and 89.8% of the plan's five-hour limit.
+  - Cache reads are 98% of the tokens.
+- **Learned:**
+  - A test of the width at one terminal size proves nothing: the overflow appears only when a
+    line meets the edge exactly. Lines of every length are the test.
+  - A test with a fake transport cannot see a process left running. Only the real core showed
+    the leak.

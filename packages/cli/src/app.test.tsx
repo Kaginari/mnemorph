@@ -15,6 +15,8 @@ const hello = {
   run: 'r',
   holes: [],
   budget: null,
+  key: 'K, named by providers.p.key_env in human (/h)',
+  sandbox: 'landlock ABI 1 + seccomp, network off',
 };
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
@@ -64,7 +66,7 @@ test('Esc during a turn interrupts it', async () => {
   ui.unmount();
 });
 
-test('an approval needs a y; Enter alone approves nothing', async () => {
+test('an approval is chosen, then confirmed: a stray y or Enter approves nothing', async () => {
   const { core, ui } = start();
   await tick();
   core.say({
@@ -84,7 +86,15 @@ test('an approval needs a y; Enter alone approves nothing', async () => {
   ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toBeUndefined();
+  // Typing a next line as the box appears: its y only chooses, its other keys are dropped.
+  await type(ui, 'xyz');
+  expect(core.sent.find((m) => m.id === 'gate-1')).toBeUndefined();
+  ui.stdin.write('n');
+  await tick();
   ui.stdin.write('y');
+  await tick();
+  expect(core.sent.find((m) => m.id === 'gate-1')).toBeUndefined();
+  ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toMatchObject({ result: { allow: true } });
   expect(ui.lastFrame()).not.toContain('Approve this');
@@ -102,6 +112,8 @@ test('n denies an approval, with a reason for the body', async () => {
   });
   await tick();
   ui.stdin.write('n');
+  await tick();
+  ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-2')).toMatchObject({
     result: { allow: false, reason: 'the human said no' },
@@ -224,5 +236,33 @@ test('/send steers a running turn', async () => {
     params: { text: 'use the tests folder' },
   });
   expect(ui.lastFrame()).toContain('sent: use the tests folder');
+  ui.unmount();
+});
+
+test('the scrollback keeps the last column free, as the live region does', async () => {
+  // ink-testing-library's terminal is 100 columns wide; lines of every length meet its edge.
+  const { core, ui } = start();
+  await tick();
+  for (let n = 1; n < 40; n++) {
+    const text = `${'a'.repeat(n)} ${Array.from({ length: 40 }, (_, i) => `w${i}`).join(' ')}`;
+    core.event('turnStarted', { text });
+  }
+  await tick(50);
+  const lines = ui.frames.join('\n').split('\n');
+  expect(lines.some((l) => l.includes('w39'))).toBe(true);
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(99);
+  ui.unmount();
+});
+
+test('a tool call shows as it starts, before its input has streamed', async () => {
+  const { core, ui } = start();
+  await tick();
+  core.event('turnStarted', { text: 'go' });
+  core.event('toolStart', { id: 't1', name: 'write' });
+  await tick();
+  expect(ui.lastFrame()).toContain('write');
+  core.event('toolCall', { id: 't1', name: 'write', input: { path: 'a.txt' } });
+  await tick();
+  expect(ui.lastFrame()).toContain('a.txt …');
   ui.unmount();
 });

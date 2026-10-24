@@ -39,6 +39,11 @@ pub struct Opened {
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps, when they set any.
     pub budget: Option<crate::budget::Left>,
+    /// Where the provider's key comes from — the variable and the file that names it, never the
+    /// value; `None` when the provider takes no key.
+    pub key: Option<String>,
+    /// The sandbox actually in force for the session's commands, or `none — <reason>`.
+    pub sandbox: String,
 }
 
 /// Open a solo session in `world`: its configuration loaded, its model reached through the
@@ -109,6 +114,13 @@ pub fn open(
         observer,
         env,
     )?;
+    opened.key = backend.provider.key_env.as_ref().map(|var| {
+        let field = format!("providers.{}.key_env", backend.provider_name);
+        match config.get(&field) {
+            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
+            None => var.clone(),
+        }
+    });
     opened.model = named;
     opened.provider = backend.provider_name;
     Ok(opened)
@@ -166,17 +178,12 @@ pub fn open_with(
         month: config.budget_wt("month"),
     };
     let capped = caps != crate::budget::Caps::default();
-    let mut unread = Vec::new();
     let spent = if capped {
         let back = usage
             .read()
             .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
         if !back.skipped.is_empty() {
-            unread.push(format!(
-                "the usage ledger: {} line(s) unreadable ({:?}); their spend is not counted against the caps",
-                back.skipped.len(),
-                back.skipped
-            ));
+            return Err(unreadable_lines(usage.path(), &back.skipped));
         }
         back.rows
     } else {
@@ -217,8 +224,21 @@ pub fn open_with(
             .holes()
             .iter()
             .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
-            .chain(unread)
             .collect(),
         budget,
+        key: None,
+        // The network is opened only for an approved outward act, so the standing state is off.
+        sandbox: mnemorph_tools::Sandbox::detect().status(false),
     })
+}
+
+/// Why a capped session does not open, or a capped run stops, on a ledger with lines it cannot
+/// read: what they spent is unseen, so the caps cannot hold.
+pub(crate) fn unreadable_lines(path: &Path, lines: &[usize]) -> String {
+    format!(
+        "the usage ledger {} has {} unreadable line(s) ({lines:?}): their spend cannot be counted \
+         against the budget caps — repair or remove them",
+        path.display(),
+        lines.len()
+    )
 }

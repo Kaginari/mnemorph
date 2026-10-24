@@ -449,6 +449,21 @@ fn a_session_stops_at_the_humans_cap() {
     assert!(ending.starts_with("checkpoint: budget"), "{ending}");
 }
 
+/// A ledger with a line it cannot read opens no capped session: spend it cannot see is spend
+/// the cap cannot stop. The error names the lines to repair.
+#[test]
+fn a_torn_ledger_opens_no_capped_session() {
+    let config = format!("{UNGUARDED}[budget]\nday = 1000000\n");
+    let mut c = Client::start("torn-ledger", &config, vec![ScriptedModel::text("never")]);
+    let instruments = c.root.join("world/.mnemorph/instruments");
+    std::fs::create_dir_all(&instruments).unwrap();
+    std::fs::write(instruments.join("usage.jsonl"), "{\"torn\n").unwrap();
+    let id = c.request("initialize", &json!({}));
+    let refused = c.response(id);
+    let why = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(why.contains("unreadable line(s) ([1])"), "{refused}");
+}
+
 /// A send with nothing running is refused, by name: a line sent steers a turn that runs.
 #[test]
 fn a_send_with_nothing_running_is_refused() {

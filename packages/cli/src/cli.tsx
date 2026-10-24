@@ -5,8 +5,9 @@ import { render } from 'ink';
 import { App } from './app.js';
 import { HELP, parse } from './args.js';
 import { findCore } from './core.js';
-import { VERSION } from './index.js';
+import { RELEASE } from './index.js';
 import { runOnce } from './run.js';
+import { statusOnce } from './status.js';
 import { chooseTheme } from './theme.js';
 
 async function main(): Promise<number> {
@@ -16,13 +17,15 @@ async function main(): Promise<number> {
       process.stdout.write(HELP);
       return 0;
     case 'version':
-      process.stdout.write(`mnemorph ${VERSION}\n`);
+      process.stdout.write(`mnemorph ${RELEASE}\n`);
       return 0;
     case 'error':
       process.stderr.write(`mnemorph: ${cmd.message}\n`);
       return 2;
     case 'run':
       return runOnce(cmd, process);
+    case 'status':
+      return statusOnce(cmd, process);
     case 'chat': {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
         process.stderr.write(
@@ -33,10 +36,12 @@ async function main(): Promise<number> {
       const client = new Client(stdio({ command: findCore(cmd.core), world: cmd.world }));
       let hello: Awaited<ReturnType<Client['initialize']>>;
       try {
-        hello = await client.initialize({ name: 'mnemorph', version: VERSION });
+        hello = await client.initialize({ name: 'mnemorph', version: RELEASE });
       } catch (e) {
         // Before anything is drawn, so the reason reaches the terminal as written.
         process.stderr.write(`mnemorph: ${(e as Error).message}\n`);
+        // The core waits to be asked again; nothing will ask it, so it is let go.
+        client.close();
         return 1;
       }
       let lost: string | undefined;

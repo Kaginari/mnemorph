@@ -1,4 +1,16 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
+import { stdio } from '@mnemorph/sdk';
 import { expect, test } from 'vitest';
 import { parse } from './args.js';
 import { FakeCore } from './fake.js';
@@ -120,3 +132,51 @@ test('run asks no one: an act that needs approval is denied, and says so', async
   expect(core.sent.find((m) => m.id === 'gate-1')).toMatchObject({ result: { allow: false } });
   expect(streams.text().stderr).toContain('denied destructive act `rm -rf build`');
 });
+
+const daemon = resolve(__dirname, '../../../target/debug/mnemorphd');
+
+/** The processes whose command line names `text`. */
+function alive(text: string): number {
+  return readdirSync('/proc')
+    .filter((p) => /^\d+$/.test(p))
+    .filter((p) => {
+      try {
+        return readFileSync(`/proc/${p}/cmdline`, 'utf8').includes(text);
+      } catch {
+        return false;
+      }
+    }).length;
+}
+
+test.runIf(existsSync(daemon) && existsSync('/proc'))(
+  'a real core that will not start says why, and leaves nothing running',
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mnemorph-cli-'));
+    try {
+      mkdirSync(join(dir, '.mnemorph'));
+      writeFileSync(
+        join(dir, '.mnemorph/config.local.toml'),
+        '[providers.x]\nkind = "anthropic"\nkey_env = "MNEMORPH_TEST_UNSET_KEY"\n[models]\nprovider = "x"\ndefault = "m"\n',
+      );
+      const t = io();
+      const transport = stdio({
+        command: daemon,
+        world: dir,
+        env: { PATH: process.env.PATH, HOME: dir, XDG_STATE_HOME: dir },
+      });
+      const started = Date.now();
+      const code = await runOnce(
+        parse(['run', 'hi']) as Parameters<typeof runOnce>[0],
+        t,
+        transport,
+      );
+      expect(code).toBe(1);
+      expect(t.text().stderr).toContain('MNEMORPH_TEST_UNSET_KEY');
+      await new Promise((r) => setTimeout(r, 1200));
+      expect(alive(dir)).toBe(0);
+      expect(Date.now() - started).toBeLessThan(3000);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

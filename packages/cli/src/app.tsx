@@ -157,7 +157,7 @@ function Input({ editor, busy }: { editor: ed.Editor; busy: boolean }) {
   );
 }
 
-function Gate({ request }: { request: GateRequest }) {
+function Gate({ request, choice }: { request: GateRequest; choice: 'y' | 'n' | undefined }) {
   const p = usePalette();
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={p.gold} paddingX={1}>
@@ -172,10 +172,18 @@ function Gate({ request }: { request: GateRequest }) {
         <Text color={p.alarm}>{`  opens outside the world: ${request.outside.join(', ')}`}</Text>
       ) : null}
       <Text>
-        <Text bold>y</Text>
-        <Text color={p.textMuted}> run it once · </Text>
-        <Text bold>n</Text>
-        <Text color={p.textMuted}> or Esc deny</Text>
+        <Text bold inverse={choice === 'y'}>
+          {' y '}
+        </Text>
+        <Text color={p.textMuted}> run it once </Text>
+        <Text bold inverse={choice === 'n'}>
+          {' n '}
+        </Text>
+        <Text color={p.textMuted}>
+          {choice
+            ? ' deny · Enter confirms · Esc denies'
+            : ' deny · choose, then Enter · Esc denies'}
+        </Text>
       </Text>
     </Box>
   );
@@ -222,6 +230,8 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   const editor = editorRef.current;
   const answer = useRef<((r: GateReply) => void) | undefined>(undefined);
   const quitting = useRef(false);
+  // An approval is chosen, then confirmed: a key typed as the box appears approves nothing.
+  const [choice, setChoice] = useState<'y' | 'n' | undefined>(undefined);
 
   // Every width change reprints the transcript at the new width. Only the screen is cleared —
   // through Ink's own writer, so nothing races its frames — and the scrollback above is kept.
@@ -267,6 +277,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   }, [state.gate]);
 
   const decide = (reply: GateReply) => {
+    setChoice(undefined);
     answer.current?.(reply);
     answer.current = undefined;
     dispatch({ kind: 'gate', gate: undefined });
@@ -293,7 +304,13 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       if (name === 'status') {
         return dispatch({
           kind: 'info',
-          text: `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session} · ${status(state.usage, hello.budget).join(' · ')}`,
+          text: [
+            `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session}`,
+            `core ${hello.version} · key ${hello.key ?? 'none'} · sandbox ${hello.sandbox}`,
+            status(state.usage, hello.budget).join(' · '),
+          ]
+            .filter(Boolean)
+            .join('\n'),
         });
       }
       const rest = line.slice(1 + (name?.length ?? 0)).trim();
@@ -340,8 +357,10 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       return;
     }
     if (state.gate) {
-      if (input === 'y') decide({ allow: true });
-      else if (input === 'n' || key.escape) decide({ allow: false, reason: 'the human said no' });
+      if (input === 'y' || input === 'n') setChoice(input);
+      else if (key.escape || (key.return && choice === 'n')) {
+        decide({ allow: false, reason: 'the human said no' });
+      } else if (key.return && choice === 'y') decide({ allow: true });
       return;
     }
     if (key.ctrl && input === 'd') {
@@ -386,7 +405,12 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
     <ThemeContext.Provider value={p}>
       <Box flexDirection="column" width={Math.max(10, columns - 1)}>
         <Static key={epoch} items={state.items}>
-          {(item) => <ItemView key={item.id} item={item} />}
+          {(item) => (
+            // Ink lays the scrollback out at full width: the last column is kept free here too.
+            <Box key={item.id} width={Math.max(10, columns - 1)}>
+              <ItemView item={item} />
+            </Box>
+          )}
         </Static>
         {state.streaming.trim() ? (
           <Box marginTop={state.flushed ? 0 : 1}>
@@ -407,9 +431,9 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
           // biome-ignore lint/suspicious/noArrayIndexKey: the same line may wait twice
           <Text key={i} color={p.textMuted}>{`  waiting: ${q}`}</Text>
         ))}
-        {state.gate ? <Gate request={state.gate.request} /> : null}
+        {state.gate ? <Gate request={state.gate.request} choice={choice} /> : null}
         <Box marginTop={1} flexDirection="column">
-          <Input editor={editor} busy={state.busy} />
+          <Input editor={editor} busy={state.busy || state.gate !== undefined} />
           <Text color={p.textMuted}>
             {`  ${parts.join(' · ')}`}
             {state.busy ? '  ·  esc to stop' : '  ·  /help'}

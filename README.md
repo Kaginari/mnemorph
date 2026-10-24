@@ -35,6 +35,15 @@ just         # the full check: Rust, TypeScript, the layering, the book, the wor
 just docs-dev  # read the book as a website while writing it
 ```
 
+Run Mnemorph from the checkout once `just` has built it — the CLI starts the core built there:
+
+```sh
+pnpm --filter @mnemorph/cli build
+node packages/cli/dist/cli.js status          # the build, the key's origin, the sandbox in force
+node packages/cli/dist/cli.js                 # a session in this world
+node packages/cli/dist/cli.js run "<ask>"     # one ask, the answer on stdout
+```
+
 ## Layout
 
 | Path | Holds |
