@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-engine
-- **Territory:** crates/mnemorph-sandbox/ crates/mnemorph-tools/
+- **Domain:** crates/mnemorph-sandbox/ crates/mnemorph-tools/
 
 ## Traits
 
