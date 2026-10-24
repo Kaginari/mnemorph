@@ -192,7 +192,7 @@ Esc stops a running command within a second.
 - `mnemorph-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
 - `@mnemorph/protocol` generated, `@mnemorph/sdk`, `@mnemorph/cli` with Ink: streaming text, tool
   call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
-  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`, `mnemorph q`.
+  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`.
 - The UX bar is Claude Code and OpenCode: input history, multi-line editing, paste, selection and
   copy, resize, interrupt with Esc, no flicker.
 
@@ -212,7 +212,8 @@ build Mnemorph in solo mode.
 - Metis attached to dispatch: a route's priced decision is booked against the commission's slice,
   as a bench read is against its run, so routing is never free of the budget it routes.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
-  revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
+  revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union` — and its door
+  in the terminal, `mnemorph q`.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
   1. the graph derived from the docs' Territory, Domain, chain and Minds fields, and inference to
      its fixed point, rebuilt on the docs' fingerprint;

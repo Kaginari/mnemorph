@@ -122,9 +122,18 @@ Currency caps convert through the same table; a model with no known price is sti
 
 ### Envelopes
 
-- **Caps:** `budget.month`, `budget.day`, `budget.session`, in weighted tokens. A fold over the
-  journal enforces the UTC month and day across sessions; the dollar view of the same rows is a
-  fold, shown beside it, never the limit (an unpriced model would slip under a dollar cap).
+- **Caps:** `budget.session`, `budget.day`, `budget.month`, in weighted tokens, from the human's
+  own files only — a cloned repository neither raises nor sets one. They are per world: the
+  day and the month are read from the world's usage ledger, so they hold across the sessions
+  that share it (a ledger across worlds comes with the board, M12). Before every model call the
+  run rereads the ledger and stops at a checkpoint (`budget: the day cap is spent — …`) once the
+  session, the day or the month is spent; at 80% of one the human is warned, once. A call is
+  never cut in half, so a run can pass a cap by the one call that crosses it; every call — the
+  salvage turn after a clock death included — is metered and ledgered. A ledger that cannot be
+  read opens no capped session and stops a capped run: spend it cannot see is spend it cannot
+  stop. Weighted tokens count every call — priced, unpriced or free — so no model slips under a
+  cap; a dollar cap could not promise that, and the dollar keys (`budget.*_usd`) are a view for
+  the board (M12), never a limit.
 - **Only cost is carved.** Steps and the wall clock pass down whole, per race
   ([the loop](03-loop.md#budgets-are-readings)); splitting them would leave the Slime — the only
   body that writes code — a handful of steps.
@@ -136,7 +145,8 @@ Currency caps convert through the same table; a model with no known price is sti
 - **The challenge reserve.** 10% of the session envelope is reserved for the automatic Dark Elf
   challenges; it cannot be carved for anything else. Each challenge draws a quarter of the
   reserve's full size (or what remains), and what it does not spend goes back to the reserve.
-- **Pre-flight.** Before each model call the core estimates the call in wt (`estimate`: cached
+- **Pre-flight**, for a carved slice (dispatch, M7). Before each model call the core estimates
+  the call in wt (`estimate`: cached
   prefix at the cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit
   what is left, the loop checkpoints with `@? budget: need ~N wt, have M wt`. The parent can top
   up the child's slice from its own envelope (`@INSTRUCT` with a new budget), split the work, or
@@ -147,9 +157,8 @@ Currency caps convert through the same table; a model with no known price is sti
   parent's spend. A slice settles once, and only with the envelope that carved it — a replayed or
   stray report is refused and leaves the books alone. Envelopes and open slices serialise whole, so
   a checkpointed run resumes with the same books.
-- Caps are read by folding the journal once per turn, not per call.
-- At 80% of any cap the human sees a warning; at 100% the session stops new commissions and
-  finishes the current turn's report.
+- Once dispatch carves (M7), a spent cap also stops new commissions while the turn in flight
+  finishes its report.
 
 ### Cache-first prompt layout
 

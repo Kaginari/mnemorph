@@ -14,6 +14,7 @@ const hello = {
   session: 's',
   run: 'r',
   holes: [],
+  budget: null,
 };
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 

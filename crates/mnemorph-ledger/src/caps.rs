@@ -46,7 +46,9 @@ pub enum CapReading {
 pub fn check_caps(rows: &[UsageRow], session: &str, now: Timestamp, caps: Caps) -> CapReading {
     let today = now.day();
     let used = |pick: &dyn Fn(&UsageRow) -> bool| {
-        rows.iter().filter(|r| pick(r)).map(|r| r.wt).sum::<u64>()
+        rows.iter()
+            .filter(|r| pick(r))
+            .fold(0_u64, |sum, r| sum.saturating_add(r.wt))
     };
     let readings = [
         (

@@ -46,6 +46,11 @@ export async function runOnce(
         io.stdout.write(e.text);
         last = e.text.at(-1) ?? last;
       } else if (e.type === 'toolCall') {
+        // A call starts on a line of its own, never at the end of the text before it.
+        if (last !== '\n') {
+          io.stdout.write('\n');
+          last = '\n';
+        }
         io.stderr.write(`⏺ ${e.name} ${summary(e.name, e.input)}\n`);
       } else if (e.type === 'toolResult' && e.isError) {
         io.stderr.write(`  ✗ ${e.content.split('\n')[0]}\n`);

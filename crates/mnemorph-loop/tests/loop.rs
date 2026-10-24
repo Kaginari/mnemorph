@@ -884,3 +884,89 @@ fn fire_once_running(interrupt: Arc<mnemorph_loop::Interrupt>, marker: std::path
         interrupt.fire();
     });
 }
+
+/// The day's cap holds across the sessions that share a world: the run rereads the ledger before
+/// every call, so a second session finds the day spent and makes no call at all.
+#[tokio::test]
+async fn the_days_cap_holds_across_sessions() {
+    let w = World::new("caps-across");
+    // What one scripted call weighs, measured.
+    let probe = Arc::new(ScriptedModel::new([answer("x")]));
+    ask(&mut w.run(probe, limits()), "weigh").await;
+    let one = w.ledger().read().unwrap().rows[0].wt;
+    let caps = mnemorph_ledger::Caps {
+        day: Some(3 * one),
+        ..mnemorph_ledger::Caps::default()
+    };
+    let a = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*.x"})),
+        tool("t2", "glob", json!({"pattern": "*.y"})),
+        tool("t3", "glob", json!({"pattern": "*.z"})),
+        answer("never"),
+    ]));
+    let e = ask(&mut w.run(a.clone(), limits()).with_caps(caps), "spend").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("budget: the day cap is spent")),
+        "{e:?}"
+    );
+    assert_eq!(
+        a.requests().len(),
+        2,
+        "the first call's spend, and the second's, fill the day"
+    );
+    let b = Arc::new(ScriptedModel::new([answer("never")]));
+    let e = ask(&mut w.run(b.clone(), limits()).with_caps(caps), "again").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("budget: the day cap is spent")),
+        "{e:?}"
+    );
+    assert!(
+        b.requests().is_empty(),
+        "a second session spends nothing once the day is spent"
+    );
+}
+
+/// At 80% of a cap the human is warned, once; a ledger that cannot be read stops the run.
+#[tokio::test]
+async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
+    let w = World::new("caps-warn");
+    let probe = Arc::new(ScriptedModel::new([answer("x")]));
+    ask(&mut w.run(probe, limits()), "weigh").await;
+    let one = w.ledger().read().unwrap().rows[0].wt;
+    let caps = mnemorph_ledger::Caps {
+        day: Some(one * 5 / 4),
+        ..mnemorph_ledger::Caps::default()
+    };
+    let m = Arc::new(ScriptedModel::new([answer("fine")]));
+    assert!(matches!(
+        ask(&mut w.run(m, limits()).with_caps(caps), "go").await,
+        Ending::Answered(_)
+    ));
+    let warned = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .iter()
+        .filter(|b| matches!(b, Beat::Warning { text } if text.contains("of the day cap")))
+        .count();
+    assert_eq!(warned, 1);
+    // The ledger becomes a directory: unreadable.
+    let path = w.ledger().path().to_path_buf();
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir_all(&path).unwrap();
+    let m = Arc::new(ScriptedModel::new([answer("never")]));
+    let e = ask(
+        &mut w.run(m.clone(), limits()).with_caps(mnemorph_ledger::Caps {
+            day: Some(u64::MAX),
+            ..caps
+        }),
+        "go",
+    )
+    .await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.contains("could not be read")),
+        "{e:?}"
+    );
+    assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
+}

@@ -187,8 +187,15 @@ export function summary(_name: string, input: unknown): string {
   return text.length > 80 ? `${text.slice(0, 77)}…` : text;
 }
 
-/** The status line's reading of the usage. */
-export function status(u: Usage): string[] {
+/** Weighted tokens, short: 950, 12.3k, 4.1M. */
+export function wt(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** The status line's reading of the usage, and of the budget the session opened with. */
+export function status(u: Usage, budget?: { leftWt: number; cap: string } | null): string[] {
   const parts: string[] = [];
   parts.push(
     u.unpriced && u.usd === 0 ? 'unpriced' : `$${u.usd.toFixed(4)}${u.unpriced ? '+' : ''}`,
@@ -197,5 +204,6 @@ export function status(u: Usage): string[] {
     parts.push(`ctx ${Math.round((100 * u.occupancy) / u.stressLine)}%`);
   }
   if (u.occupancy > 0) parts.push(`cache ${Math.round(100 * u.cacheShare)}%`);
+  if (budget) parts.push(`left ${wt(Math.max(0, budget.leftWt - u.spentWt))} wt (${budget.cap})`);
   return parts;
 }

@@ -7,7 +7,8 @@ test('help and the version answer before anything else is read', () => {
 });
 
 test('a session, or one ask; arguments win over stdin', () => {
-  expect(parse([])).toEqual({ kind: 'chat', world: undefined, core: undefined });
+  expect(parse([])).toEqual({ kind: 'chat', world: undefined, core: undefined, theme: undefined });
+  expect(parse(['--theme', 'light'])).toMatchObject({ kind: 'chat', theme: 'light' });
   expect(parse(['run', 'fix', 'the', 'test'])).toMatchObject({
     kind: 'run',
     ask: 'fix the test',
@@ -25,4 +26,8 @@ test('what is not understood is said, by name', () => {
   });
   expect(parse(['go'])).toMatchObject({ kind: 'error', message: expect.stringContaining('go') });
   expect(parse(['--world'])).toMatchObject({ kind: 'error' });
+  expect(parse(['--theme', 'blue'])).toMatchObject({
+    kind: 'error',
+    message: expect.stringContaining('blue'),
+  });
 });

@@ -1475,3 +1475,43 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     waiting until Ink has taken the new width in fixed it.
   - Quitting is not done until the child is gone: the UI ended, the process stayed, held by a
     core that never left.
+
+---
+
+### [2026-10-24T18:41:22+02:00] rimuru — the caps enforced
+- **Task:** checked how spend works rather than supposed: the price table knows only Anthropic's
+  ids, so OpenRouter calls are `usd: null`; `budget.*_usd` were read by nothing; the run's
+  weighted-token budget existed but nothing set it — a session had no limit at all, against
+  06-consumption's caps.
+- **Files:** crates/mnemorph-config (`budget.session|day|month` in wt, the human's files only,
+  at least 1; `budget_wt`), crates/mnemorph-loop/src/budget.rs (`left`: the tightest of the
+  session cap and what the world's usage ledger leaves of the UTC day and month), open.rs (the
+  run opens with it), mnemorph-server (the hello's `budget`), packages/protocol (`Budget`),
+  packages/cli (`left … wt (cap)` in the status line; a spent cap said at the start),
+  docs/06-consumption.md, docs/04-communication.md; tests in config, loop, server and CLI.
+- **Gate:** n/a. Instruments: a session with `budget.session = 1` stops at a checkpoint after
+  its first call; `just check`. Live tests now run on OpenRouter's free models
+  (`poolside/laguna-s-2.1:free` read a file and answered, $0).
+- **Result:** in review as a pull request.
+- **Learned:** the book promised caps, the config parsed dollar keys, and the run had a budget
+  field — three pieces of a limit, none connected. Weighted tokens are the only unit every call
+  reports, so the caps are in it.
+
+---
+
+### [2026-10-24T18:57:44+02:00] rimuru — the caps, after their review
+- **Task:** the review of #135: two sessions on one world spent twice the day cap (the cap was
+  read once, at open); an unreadable ledger read as nothing spent; the salvage call went
+  unmetered; the docs promised a per-turn fold, an estimate and an 80% warning nothing did.
+- **Files:** crates/mnemorph-loop/src/run.rs (`with_caps`; before every call the ledger is
+  reread and `check_caps` — the ledger crate's own, dead until now — stops at a spent cap or
+  warns once at 80%; an unreadable ledger stops; the salvage call metered; spend saturates),
+  budget.rs (`left` per session id, saturating), open.rs (a capped session reads the ledger or
+  does not open; unreadable lines reported), mnemorph-ledger caps.rs (saturating), config
+  (a cloned repository neither raises nor sets a cap), packages/cli (`--theme` refuses words it
+  does not know), docs/06-consumption.md, docs/04-communication.md, tests.
+- **Gate:** n/a. Instruments: a second session on a world whose day is spent makes no call;
+  the warning once; an unreadable ledger stops before any call; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a cap read once is a quota for one session; a cap across sessions is a fold read
+  again before each call. The ledger crate had the right fold all along, with nothing calling it.

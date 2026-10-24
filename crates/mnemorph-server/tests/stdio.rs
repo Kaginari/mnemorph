@@ -422,3 +422,29 @@ fn esc_releases_a_waiting_gate() {
     let ended = c.until(&mut seen, |l| method(l) == "event/turnEnded");
     assert_eq!(ended["params"]["ending"], "interrupted", "{seen:#?}");
 }
+
+/// The human's cap stops a session at a checkpoint once it is spent, and the hello says what is
+/// left, so the status line can.
+#[test]
+fn a_session_stops_at_the_humans_cap() {
+    let config = format!("{UNGUARDED}[budget]\nsession = 1\n");
+    let mut c = Client::start(
+        "budget",
+        &config,
+        vec![
+            ScriptedModel::tool("t1", "read", json!({"path": "notes.txt"})),
+            ScriptedModel::text("never reached"),
+        ],
+    );
+    let id = c.request("initialize", &json!({}));
+    let hello = c.response(id);
+    assert_eq!(
+        hello["result"]["budget"],
+        json!({"leftWt": 1, "cap": "session"}),
+        "{hello}"
+    );
+    c.request("session/prompt", &json!({"text": "read it"}));
+    let ended = c.until(&mut Vec::new(), |l| method(l) == "event/turnEnded");
+    let ending = ended["params"]["ending"].as_str().unwrap();
+    assert!(ending.starts_with("checkpoint: budget"), "{ending}");
+}

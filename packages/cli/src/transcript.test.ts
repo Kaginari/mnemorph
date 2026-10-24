@@ -104,3 +104,22 @@ test('an approval still open when its turn ends is cleared', () => {
   s = fold(s, ev('turnEnded', { ending: 'interrupted' }));
   expect(s.gate).toBeUndefined();
 });
+
+test('the budget left is the cap less what the session spent', () => {
+  const s = fold(
+    initial(),
+    ev('usage', {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      usd: null,
+      wt: 2500,
+      spentWt: 2500,
+      occupancy: 0,
+      stressLine: 0,
+    }),
+  );
+  expect(status(s.usage, { leftWt: 12_000, cap: 'day' }).at(-1)).toBe('left 9.5k wt (day)');
+  expect(status(s.usage, { leftWt: 1000, cap: 'session' }).at(-1)).toBe('left 0 wt (session)');
+});

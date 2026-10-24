@@ -478,6 +478,10 @@ fn hello(opened: &Opened, version: &str) -> Value {
         session: opened.session_id.clone(),
         run: opened.run_id.clone(),
         holes: opened.holes.clone(),
+        budget: opened.budget.map(|b| protocol::Budget {
+            left_wt: b.wt,
+            cap: b.cap.to_owned(),
+        }),
     })
     .unwrap_or(Value::Null)
 }

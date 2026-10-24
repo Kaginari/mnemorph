@@ -37,6 +37,8 @@ pub struct Opened {
     pub run_id: String,
     /// The configuration's holes: keys it did not take, and why.
     pub holes: Vec<String>,
+    /// What the session may spend under the human's caps, when they set any.
+    pub budget: Option<crate::budget::Left>,
 }
 
 /// Open a solo session in `world`: its configuration loaded, its model reached through the
@@ -155,12 +157,38 @@ pub fn open_with(
     let session_id = format!("s{stamp}-{}", std::process::id());
     let run_id = format!("r{stamp}-{}", std::process::id());
     let instruments = world.join(".mnemorph/instruments");
+    // The caps against what this world already spent. A cap that cannot be read opens no
+    // session: spend it cannot see would be spend it cannot stop.
+    let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
+    let caps = crate::budget::Caps {
+        session: config.budget_wt("session"),
+        day: config.budget_wt("day"),
+        month: config.budget_wt("month"),
+    };
+    let capped = caps != crate::budget::Caps::default();
+    let mut unread = Vec::new();
+    let spent = if capped {
+        let back = usage
+            .read()
+            .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
+        if !back.skipped.is_empty() {
+            unread.push(format!(
+                "the usage ledger: {} line(s) unreadable ({:?}); their spend is not counted against the caps",
+                back.skipped.len(),
+                back.skipped
+            ));
+        }
+        back.rows
+    } else {
+        Vec::new()
+    };
+    let budget = crate::budget::left(caps, &spent, &session_id, mnemorph_ledger::Timestamp::now());
     let setup = Setup {
         model: model.clone(),
         tools: registry(),
         cx,
         journal: Journal::new(instruments.join("loop").join(format!("{run_id}.jsonl"))),
-        ledger: Some(Journal::new(instruments.join("usage.jsonl"))),
+        ledger: Some(usage),
         prices: anthropic_prices().map_err(|e| format!("prices: {e}"))?,
         caller: Caller {
             session: session_id.clone(),
@@ -172,6 +200,9 @@ pub fn open_with(
         },
     };
     let mut run = Run::new(body, limits, setup).with_observer(observer);
+    if capped {
+        run = run.with_caps(caps);
+    }
     if let Some(d) = decisions(config, world, model.clone(), env)? {
         run = run.with_decisions(d);
     }
@@ -186,6 +217,8 @@ pub fn open_with(
             .holes()
             .iter()
             .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
+            .chain(unread)
             .collect(),
+        budget,
     })
 }

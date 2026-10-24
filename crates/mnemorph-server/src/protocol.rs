@@ -56,6 +56,20 @@ pub struct Hello {
     pub run: String,
     /// The configuration's holes: keys it did not take, and why.
     pub holes: Vec<String>,
+    /// What the session may spend under the human's caps; `null` when they set none.
+    pub budget: Option<Budget>,
+}
+
+/// A session's budget under the human's caps.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Budget {
+    /// Weighted tokens it may spend; the run stops at a checkpoint when they run out.
+    #[ts(type = "number")]
+    pub left_wt: u64,
+    /// The cap that sets it: `session`, `day` or `month`.
+    pub cap: String,
 }
 
 /// An event: sent as the notification `event/<type>`, its fields beside `session`, `run`, `body`

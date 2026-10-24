@@ -268,7 +268,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, session, run, holes}
+    D-->>CLI: {protocol, version, world, model, session, run, holes, budget}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -294,7 +294,7 @@ sequenceDiagram
 | events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
-world, model, provider, session, run, holes}`; a client that speaks another `protocol` stops
+world, model, provider, session, run, holes, budget}`; a client that speaks another `protocol` stops
 rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
@@ -332,7 +332,8 @@ the lines the terminal has room for, so the live region never outgrows it. Below
 live the text as it streams, the
 calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
 status line — model, spend (`unpriced` when the price tables do not know the model), context
-against the stress line, the cache's share. **Enter** sends, and while a turn runs the line
+against the stress line, the cache's share, and what the human's caps leave
+([consumption](06-consumption.md)). **Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
 **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
 nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the

@@ -1001,3 +1001,31 @@ fn a_tracked_file_cannot_turn_routing_on() {
     assert!(!c.decide().unwrap().route);
     assert!(c.holes().iter().any(|h| h.key == "decide.route"));
 }
+
+/// Caps are weighted tokens, the human's to set: a cloned repository cannot raise one, and a cap
+/// of nothing is refused by name.
+#[test]
+fn budget_caps_are_the_humans_and_in_weighted_tokens() {
+    let g = Ground::new("budget-caps");
+    assert_eq!(g.load().unwrap().budget_wt("day"), None);
+    g.global("[budget]\nday = 200000\nsession = 50000\n");
+    let c = g.load().unwrap();
+    assert_eq!(
+        (c.budget_wt("day"), c.budget_wt("session")),
+        (Some(200_000), Some(50_000))
+    );
+    g.tracked("[budget]\nday = 900000000\n");
+    let c = g.load().unwrap();
+    assert_eq!(
+        c.budget_wt("day"),
+        Some(200_000),
+        "the tracked file cannot raise it"
+    );
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "budget.day" && h.why.contains("neither raises nor sets"))
+    );
+    g.global("[budget]\nmonth = 0\n");
+    assert!(g.load().unwrap_err().contains("budget.month"));
+}

@@ -212,6 +212,8 @@ pub struct Run {
     noticed: bool,
     decisions: Option<Decisions>,
     observer: Option<Observer>,
+    caps: Option<mnemorph_ledger::Caps>,
+    cap_warned: bool,
 }
 
 /// What a run needs that is not the body itself.
@@ -261,6 +263,8 @@ impl Run {
             noticed: false,
             decisions: None,
             observer: None,
+            caps: None,
+            cap_warned: false,
         }
     }
 
@@ -269,6 +273,15 @@ impl Run {
     #[must_use]
     pub fn with_observer(mut self, observer: Observer) -> Self {
         self.observer = Some(observer);
+        self
+    }
+
+    /// The run under the human's caps: before every call it rereads the usage ledger and stops
+    /// at a checkpoint once the session, the day or the month is spent — across every session
+    /// that shares the world — and warns once at 80%. A ledger it cannot read stops it.
+    #[must_use]
+    pub fn with_caps(mut self, caps: mnemorph_ledger::Caps) -> Self {
+        self.caps = Some(caps);
         self
     }
 
@@ -416,7 +429,7 @@ impl Run {
 
     /// Count a call's spend: the run's meter, the observer, the usage ledger.
     fn spend(&mut self, row: &mnemorph_ledger::UsageRow) {
-        self.spent_wt += row.wt;
+        self.spent_wt = self.spent_wt.saturating_add(row.wt);
         if let Some(see) = &self.observer {
             see(&Seen::Usage {
                 usage: row.usage,
@@ -705,10 +718,40 @@ impl Run {
         if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {
             return checkpoint(format!("budget: {} of {budget} spent", self.spent_wt));
         }
+        if let Some(why) = self.over_a_cap() {
+            return checkpoint(why);
+        }
         if let Some(Signal::Stall(which)) = self.stress.turn() {
             return checkpoint(format!("stall: {which}"));
         }
         None
+    }
+
+    /// The human's caps against the ledger as it is now: why the run must stop, if it must.
+    fn over_a_cap(&mut self) -> Option<String> {
+        let caps = self.caps?;
+        let rows = match self.ledger.as_ref().map(Journal::read) {
+            Some(Ok(back)) => back.rows,
+            Some(Err(e)) => {
+                return Some(format!(
+                    "budget: the usage ledger could not be read ({e}), and no call runs on a cap it cannot see"
+                ));
+            }
+            None => Vec::new(),
+        };
+        match mnemorph_ledger::check_caps(&rows, &self.caller.session, Timestamp::now(), caps) {
+            mnemorph_ledger::CapReading::Stop { cap, used, of } => Some(format!(
+                "budget: the {cap} cap is spent — {used} of {of} wt"
+            )),
+            mnemorph_ledger::CapReading::Warn { cap, used, of } if !self.cap_warned => {
+                self.cap_warned = true;
+                self.record(&Beat::Warning {
+                    text: format!("budget: {used} of the {cap} cap's {of} wt spent"),
+                });
+                None
+            }
+            _ => None,
+        }
     }
 
     /// Count the turn, price it into the ledger, journal it, add it to the conversation.
@@ -870,6 +913,15 @@ impl Run {
         let salvage =
             match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
                 Ok(Ok(r)) => {
+                    // The salvage call is a call like any other: metered and ledgered.
+                    let row = usage_row(
+                        &r,
+                        &self.caller,
+                        self.model.provider(),
+                        &self.prices,
+                        Timestamp::now(),
+                    );
+                    self.spend(&row);
                     self.record(&Beat::Model {
                         content: r.content.iter().map(block_json).collect(),
                         stop: "salvage".into(),
