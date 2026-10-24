@@ -70,8 +70,8 @@ struct CommissionArgs {
     budget_wt: Option<u64>,
 }
 
-/// What every commission of one session shares: the world, the model, and where spend and beats
-/// are written.
+/// What every commission of one session shares: the world, the model, where spend and beats are
+/// written, the human's caps and stress line, and the seats that hold a live court.
 pub struct Commissioner {
     /// The world.
     pub world: PathBuf,
@@ -85,17 +85,28 @@ pub struct Commissioner {
     pub journals: PathBuf,
     /// The session.
     pub session: String,
+    /// The human's caps, read before every call of every body.
+    pub caps: Option<mnemorph_ledger::Caps>,
+    /// The human's stress line, when the configuration sets one.
+    pub stress_tokens: Option<u64>,
+    /// Seats with a live court: one court per seat.
+    pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
-/// and the paths it landed, which the dispatcher's gate does not judge again.
+/// what it landed and what was put back — both judged, so the dispatcher's baseline takes them —
+/// and whether the human's Esc stopped it.
 pub struct Order {
     /// The tool result.
     pub outcome: Outcome,
     /// What the child spent.
     pub spent: u64,
-    /// What the child landed on its own soil.
+    /// What the child and its own commissions landed, when it answered.
     pub landed: Vec<PathBuf>,
+    /// What was put back after it.
+    pub put_back: Vec<PathBuf>,
+    /// The human's Esc stopped it.
+    pub interrupted: bool,
 }
 
 /// The creatures an Elf's open plan items name: `- [ ] <creature>: …` lines of the `plan.md`
@@ -143,12 +154,15 @@ pub(crate) async fn order(
     parent: &Body,
     left: Option<u64>,
     cx: &Context,
+    interrupt: &Arc<crate::run::Interrupt>,
     input: &str,
 ) -> Order {
     let refused = |text: String| Order {
         outcome: Outcome::error(text),
         spent: 0,
         landed: Vec::new(),
+        put_back: Vec::new(),
+        interrupted: false,
     };
     let a: CommissionArgs = match serde_json::from_str(input) {
         Ok(a) => a,
@@ -157,6 +171,12 @@ pub(crate) async fn order(
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
     let slice = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
+    if slice == 0 {
+        return refused(format!(
+            "no budget left to carve for {}: @? budget to your commander",
+            a.to
+        ));
+    }
     let ask = Ask {
         plan: &plan,
         slice_wt: slice,
@@ -171,33 +191,69 @@ pub(crate) async fn order(
         }
         Ok(Hop::Direct(_)) => {}
     }
+    // One live court per seat: a body cannot commission itself, nor a seat already at work.
+    if a.to == parent.name || !claim_seat(c, &a.to) {
+        return refused(format!(
+            "{} holds a live court already; one court per seat — ask again when it has reported",
+            a.to
+        ));
+    }
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
+        release_seat(c, &a.to);
         return refused(format!("`{}` is no living creature", a.to));
     };
-    let mut child = child_run(c, &roster, &a.to, parent, slice, child_cx.inherit(cx));
+    let mut child = child_run(c, &roster, &a.to, parent, slice, child_cx.inherit(cx))
+        .with_interrupt(Arc::clone(interrupt));
     // What the world held before the child, to put back what it changes off its ground.
     let held = cx
         .attic()
         .and_then(|attic| attic.snapshot("before a commission").ok());
     let before = snapshot(&c.world);
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
+    release_seat(c, &a.to);
     let spent = child.spent_wt();
-    // What its own commissions landed was judged by their gates: it is the child's court work.
-    let courts = child.courts();
-    let (mut landed, put_back) = repair(c, cx, &roster, &a.to, &before, held.as_ref(), &courts);
+    // Court work counts only when the child answered: a failed landing is put back whole.
+    let answered = matches!(ending, Ending::Answered(_));
+    let courts = if answered { child.courts() } else { Vec::new() };
+    let (mut landed, put_back) = repair(
+        c,
+        cx,
+        &roster,
+        &a.to,
+        &before,
+        held.as_ref(),
+        &courts,
+        answered,
+    );
     landed.extend(courts);
     landed.sort();
     landed.dedup();
-    let report = report_of(&ending, &landed, &put_back, &a.to);
+    let report = report_of(&ending, &landed, &put_back);
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
-        landed: landed.into_iter().collect(),
+        landed,
+        put_back: put_back.into_iter().map(|(p, _)| p).collect(),
+        interrupted: matches!(ending, Ending::Interrupted),
+    }
+}
+
+/// Take `seat` for a court; `false` when it holds one already.
+fn claim_seat(c: &Commissioner, seat: &str) -> bool {
+    c.busy
+        .lock()
+        .map_or(false, |mut busy| busy.insert(seat.to_owned()))
+}
+
+/// Free `seat` when its court reports.
+fn release_seat(c: &Commissioner, seat: &str) {
+    if let Ok(mut busy) = c.busy.lock() {
+        busy.remove(seat);
     }
 }
 
 /// The child body for `to`: its prompt, its tools over its own soil, its slice as its budget,
-/// its gate, and the commission tool when its race dispatches.
+/// the human's caps and stress line, its gate, and the commission tool when its race dispatches.
 fn child_run(
     c: &Arc<Commissioner>,
     roster: &Roster,
@@ -206,16 +262,19 @@ fn child_run(
     slice: u64,
     cx: Context,
 ) -> Run {
-    let a_to = to.to_owned();
-    let creature = &roster.creatures[&a_to];
-    let run_id = format!("{}-{}", a_to, stamp());
+    let name = to.to_owned();
+    let creature = &roster.creatures[&name];
+    let run_id = format!("{name}-{}", stamp());
     let mut limits = Limits::for_race(creature.race);
     limits.budget_wt = (slice != u64::MAX).then_some(slice);
+    if let Some(stress) = c.stress_tokens {
+        limits.stress_tokens = stress;
+    }
     let body = Body {
-        name: a_to.clone(),
+        name: name.clone(),
         race: creature.race,
         model: parent.model.clone(),
-        system: prompt(&c.world, roster, &a_to, &parent.name),
+        system: prompt(&c.world, roster, &name, &parent.name),
     };
     // A creature that may dispatch is handed the same commissioner: the order goes on down.
     let dispatches = creature.race.shelf().contains(&ToolClass::Dispatch);
@@ -233,7 +292,7 @@ fn child_run(
         caller: Caller {
             session: c.session.clone(),
             run: run_id,
-            body: a_to.clone(),
+            body: name.clone(),
             race: creature.race.name().into(),
             commission: Some(parent.name.clone()),
             prefix: 0,
@@ -242,24 +301,27 @@ fn child_run(
     let gate = EndGate {
         verify: creature.verify.clone(),
         author: Some(Author {
-            name: a_to.clone(),
+            name,
             roster: roster.clone(),
         }),
-        courts: Vec::new(),
     };
     let mut child = Run::new(body, limits, setup).with_gate(gate);
+    if let Some(caps) = c.caps {
+        child = child.with_caps(caps);
+    }
     if dispatches {
         child = child.with_commissioner(Arc::clone(c));
     }
     child
 }
 
-/// The child's report as its dispatcher reads it: its own wire answer, or its ending in words;
-/// its written paths as the world shows them; what was put back.
-fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[String], to: &str) -> String {
+/// The child's report as its dispatcher reads it: its own wire answer — an answer off the wire is
+/// a FAIL, never a DONE — or its ending in words; its written paths as the world shows them; what
+/// was put back after it.
+fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[(PathBuf, bool)]) -> String {
     let mut report = match ending {
         Ending::Answered(text) => Report::parse(text).unwrap_or_else(|| Report {
-            status: "DONE".into(),
+            status: "FAIL off the wire: the answer opened with no @S".into(),
             other: text.lines().map(str::to_owned).collect(),
             ..Report::default()
         }),
@@ -268,7 +330,7 @@ fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[String], to: &str)
                 Ending::Checkpoint { why, .. } => format!("CHECKPOINT {why}"),
                 Ending::Escalate(why) => format!("ESCALATE {why}"),
                 Ending::Failed(why) => format!("FAIL {why}"),
-                _ => "FAIL interrupted".into(),
+                _ => "INTERRUPTED by the human".into(),
             },
             ..Report::default()
         },
@@ -279,17 +341,28 @@ fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[String], to: &str)
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
     if !put_back.is_empty() {
+        let shown: Vec<String> = put_back
+            .iter()
+            .map(|(p, ok)| {
+                let p = p.to_string_lossy();
+                if *ok {
+                    p.into_owned()
+                } else {
+                    format!("{p} (could not be put back)")
+                }
+            })
+            .collect();
         report.other.push(format!(
-            "[put back, off {}'s ground: {}]",
-            to,
-            put_back.join(", ")
+            "[put back after the commission: {}]",
+            shown.join(", ")
         ));
     }
     report.emit(DEFAULT_CAP, None)
 }
 
-/// Split what the child changed: its own landing, and what lay off its ground — put back from
-/// the attic, or removed when it was new.
+/// Split what the child changed: its landing (and its commissions'), kept only when it answered;
+/// and everything else, put back from the attic, or removed when it was new.
+#[allow(clippy::too_many_arguments)]
 fn repair(
     c: &Commissioner,
     cx: &Context,
@@ -298,7 +371,8 @@ fn repair(
     before: &crate::gate::Tree,
     held: Option<&mnemorph_tools::Snapshot>,
     courts: &[PathBuf],
-) -> (Vec<PathBuf>, Vec<String>) {
+    answered: bool,
+) -> (Vec<PathBuf>, Vec<(PathBuf, bool)>) {
     let me = Owner::Creature(name.to_owned());
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
@@ -308,7 +382,7 @@ fn repair(
         }
         let shown = rel.to_string_lossy().into_owned();
         let e = explain(roster, &shown);
-        if e.owner == me && e.rule != Rule::Domain {
+        if answered && e.owner == me && e.rule != Rule::Domain {
             landed.push(rel);
             continue;
         }
@@ -324,11 +398,7 @@ fn repair(
             path.symlink_metadata().is_ok_and(|m| !m.is_dir())
                 && std::fs::remove_file(&path).is_ok()
         };
-        put_back.push(if restored {
-            shown
-        } else {
-            format!("{shown} (could not be put back)")
-        });
+        put_back.push((rel, restored));
     }
     (landed, put_back)
 }

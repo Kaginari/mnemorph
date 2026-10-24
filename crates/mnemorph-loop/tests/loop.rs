@@ -838,7 +838,6 @@ async fn esc_during_a_verify_is_not_a_verdict() {
         .with_gate(mnemorph_loop::EndGate {
             verify: vec!["touch running; sleep 30".into()],
             author: None,
-            courts: Vec::new(),
         });
     fire_once_running(run.interrupt(), w.world().join("running"));
     assert_eq!(ask(&mut run, "write a").await, Ending::Interrupted);

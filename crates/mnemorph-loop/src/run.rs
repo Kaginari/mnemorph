@@ -225,6 +225,8 @@ pub struct Run {
     steer: Steer,
     /// What runs this body's commissions, when it may commission.
     commissioner: Option<Arc<crate::commission::Commissioner>>,
+    /// What this body's commissions landed under their own gates, for its own report.
+    landed: Vec<PathBuf>,
 }
 
 /// What a run needs that is not the body itself.
@@ -278,6 +280,7 @@ impl Run {
             cap_warned: false,
             steer: Steer::default(),
             commissioner: None,
+            landed: Vec::new(),
         }
     }
 
@@ -291,10 +294,15 @@ impl Run {
     /// The paths this run's commissions landed under their own gates.
     #[must_use]
     pub fn courts(&self) -> Vec<PathBuf> {
-        self.gate
-            .as_ref()
-            .map(|g| g.courts.clone())
-            .unwrap_or_default()
+        self.landed.clone()
+    }
+
+    /// The run answers to `interrupt`: a dispatcher's Esc stops the body it commissioned.
+    #[must_use]
+    pub fn with_interrupt(mut self, interrupt: Arc<Interrupt>) -> Self {
+        self.cx.set_cancel(interrupt.flag());
+        self.interrupt = interrupt;
+        self
     }
 
     /// Weighted tokens the run has spent, its commissions' included.
@@ -879,10 +887,26 @@ impl Run {
                     .limits
                     .budget_wt
                     .map(|b| b.saturating_sub(self.spent_wt));
-                let order = crate::commission::order(&c, &self.body, left, &self.cx, input).await;
+                let interrupt = Arc::clone(&self.interrupt);
+                let order =
+                    crate::commission::order(&c, &self.body, left, &self.cx, &interrupt, input)
+                        .await;
                 self.spent_wt = self.spent_wt.saturating_add(order.spent);
-                if let Some(gate) = self.gate.as_mut() {
-                    gate.courts.extend(order.landed);
+                // Court work and what was put back are judged already: the baseline takes them,
+                // so the dispatcher's gate sees only what changes after — an edit to them included.
+                let world = self.cx.world().to_path_buf();
+                let judged: Vec<PathBuf> = order
+                    .landed
+                    .iter()
+                    .chain(&order.put_back)
+                    .cloned()
+                    .collect();
+                if let Some(before) = self.before.as_mut() {
+                    before.refresh(&world, &judged);
+                }
+                self.landed.extend(order.landed);
+                if order.interrupted {
+                    self.interrupt.fire();
                 }
                 order.outcome
             }

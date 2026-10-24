@@ -62,9 +62,6 @@ pub struct EndGate {
     /// The commissioned creature whose landing this is; `None` in solo, where the whole
     /// repository is the soil and right author holds by construction.
     pub author: Option<Author>,
-    /// Paths the body's own commissions already landed and their gates judged: right author
-    /// does not judge them twice.
-    pub courts: Vec<PathBuf>,
 }
 
 /// Who must have written what a landing changed: the creature, by the world's own answer.
@@ -95,6 +92,23 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// Take `paths` as they stand now into the baseline: what a commission landed or put back
+    /// is judged by its own gate, so the dispatcher's gate sees only what changes after — an
+    /// edit to court work included.
+    pub fn refresh(&mut self, world: &Path, paths: &[PathBuf]) {
+        let now = snapshot(world);
+        for p in paths {
+            match now.files.get(p) {
+                Some(seen) => {
+                    self.files.insert(p.clone(), seen.clone());
+                }
+                None => {
+                    self.files.remove(p);
+                }
+            }
+        }
+    }
+
     /// Whether the tree held `rel` (a path relative to the world).
     #[must_use]
     pub fn has(&self, rel: &Path) -> bool {
@@ -257,12 +271,7 @@ impl EndGate {
             failures.push("duties done: the answer is empty; say what was done".into());
         }
         if let Some(author) = &self.author {
-            let own: Vec<PathBuf> = changed
-                .iter()
-                .filter(|p| !self.courts.iter().any(|c| c == *p))
-                .cloned()
-                .collect();
-            failures.extend(right_author(author, &own, cx.world()));
+            failures.extend(right_author(author, &changed, cx.world()));
         }
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();

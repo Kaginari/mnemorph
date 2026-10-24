@@ -418,6 +418,11 @@ impl Context {
         self
     }
 
+    /// As [`Self::with_cancel`], in place.
+    pub fn set_cancel(&mut self, flag: Arc<std::sync::atomic::AtomicBool>) {
+        self.cancel = Some(flag);
+    }
+
     /// No command runs past this instant — the run's clock.
     pub fn set_deadline(&mut self, deadline: Option<std::time::Instant>) {
         self.deadline = deadline;
