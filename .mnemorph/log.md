@@ -1883,3 +1883,34 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     resolved and judged by the same `admits` before the kernel sees it.
   - My own grant test checked the grants by their resolved names, while the escape lived in an
     unresolved one. A test of a border must try to cross it, not just read the list.
+
+---
+
+### [2026-10-24T23:48:37+02:00] rimuru — the border, reviewed twice: Opus, then Fable on Opus
+- **Task:** close what the sandbox review of #146 found. Opus 5.5 reviewed the code; Fable
+  reviewed that review, as the human now wants for sandbox work.
+- **Files:**
+  - tools tool.rs:
+    - `with_build` (build output handed by the world);
+    - `linked` (a claim reached through a link is none);
+    - a private per-creature scratch;
+    - `ignored` exported, its `git` told to run no fsmonitor or hooks;
+  - loop commission.rs — build output decided with `own`;
+  - sandbox:
+    - lib.rs — rules by an owner-only file past 256;
+    - mnemorph-guard — `--rules`;
+    - linux.rs — `truncate` refused below ABI 3;
+  - loop gate.rs — the snapshot records mode and ctime;
+  - tests: shell.rs under the guard, right_author.rs;
+  - docs/05 and 03.
+- **Gate:** n/a. Instruments: a crossing test per finding, under the real guard where the kernel
+  is the border; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - "Ignored" is not "build output". `.env` beside another's code is ignored too. Only `own`
+    decides what a creature may write, and git's list merely nominates.
+  - Grants and ownership must judge the same paths. Ownership reads them as written, and the
+    kernel resolves them, so a link anywhere is checked before it is followed.
+  - Open for the commission rung: a creature's seat is in its soil, but the tripwire reverts any
+    write under `.mnemorph/`. "Doc truthful" decides which of the two owns the seat. Commissions
+    are not wired yet, so none of this border is reached in production.

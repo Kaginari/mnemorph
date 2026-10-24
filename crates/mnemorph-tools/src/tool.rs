@@ -523,7 +523,9 @@ pub(crate) fn args<T: DeserializeOwned>(name: &str, value: Value) -> Result<T, O
 /// decides which of them a creature may write ([`Context::with_build`]).
 #[must_use]
 pub fn ignored(world: &Path) -> Vec<PathBuf> {
+    // Outside the sandbox: a clone's own configuration must not run anything (fsmonitor, hooks).
     let out = std::process::Command::new("git")
+        .args(["-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null"])
         .arg("-C")
         .arg(world)
         .args([
