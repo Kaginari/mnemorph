@@ -316,7 +316,11 @@ fn a_configured_rule_asks_the_human() {
     let approve = Arc::new(Scripted::new([Answer::Approve]));
     let o = bash(&mut cx(approve), "sed -i.bak s/a/b/ src/f.txt");
     assert!(!o.is_error, "{o:?}");
-    assert_eq!(o.meta.class, Some(ToolClass::Write), "an in-place edit writes");
+    assert_eq!(
+        o.meta.class,
+        Some(ToolClass::Write),
+        "an in-place edit writes"
+    );
     assert_eq!(
         fs::read_to_string(w.world().join("src/f.txt")).unwrap(),
         "b\n"
