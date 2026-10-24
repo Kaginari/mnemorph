@@ -174,6 +174,19 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
 **Exit:** Rimuru alone completes scripted tasks end to end against the scripted provider, and one
 real task against a live model, its spend matching the ledger.
 
+### M5b — Long runs · S
+
+- Replay compaction: a pure function over a copy of the transcript — old tool outputs fold to
+  captions, thinking stays bound to its call — so a long run stops re-sending its history.
+- Stress as an absolute, configurable token threshold with its three acts: write down what is
+  not durable, push heavy work to a fresh body, tell the human to break.
+- The per-bench tally (visits, red, green, muted) behind the stall guard.
+- Tools off the runtime thread: Esc and the clock reach a long command, a gate's verify lines
+  and the salvage turn.
+
+**Exit:** a 40-step scripted run sends at most a bounded multiple of its live context per turn;
+Esc stops a running command within a second.
+
 ### M6 — Protocol, SDK, CLI · L · 🐕 dogfood
 
 - `mnemorph-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.

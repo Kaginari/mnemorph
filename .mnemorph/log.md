@@ -809,3 +809,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request; M5 closes after its review.
 - **Learned:** the scripted model and the real one agree on the shape of a turn: nothing in the
   loop needed to change for the live run.
+
+---
+
+### [2026-10-24T05:19:59+02:00] rimuru — M5 closes after a fresh Fable review
+- **Task:** close M5 with an independent review of the loop (#74–#77), and fix what it found.
+- **Findings, each reproduced by the reviewer and now a test that fails on the old code:**
+  - high: an empty model reply entered the conversation as an empty turn — every later ask
+    failed as malformed, and the journal carried it into resume. Replies are now cleaned
+    (empty text dropped, repeated ids made unique, an empty reply stated), and an empty, cut or
+    paused reply is a nudge, not an answer.
+  - high: the stress instruments lived for the run: forty questions, or one read asked four
+    times, stalled a healthy session. They now start again with each ask.
+  - medium: resume forgot spend and occupancy (it read them from nowhere), so a budget
+    checkpoint resumed into one more call. It now reads the ledger.
+  - medium: a reply cut by `max_tokens` was taken as the answer; a stale Esc interrupted the
+    next ask; tests intact missed `.only(`, `t.Skipf(`, a padded test file, and a test removed
+    from inside a file.
+  - low: pause_turn could not be continued; duplicate tool ids ended the run; the lessons table
+    promised compaction, the stress threshold and the bench tally to M5 — they are M5b now,
+    with blocking tools (#78).
+- **Files:** crates/mnemorph-loop/src/{beats,run,gate}.rs; tests (11 new); docs/03-loop.md,
+  docs/roadmap.md (M5b), docs/lessons.md.
+- **Gate:** n/a. Instruments: the new tests run against the old `src/` — ten fail, the
+  opaque-journal test passes on both (it guards what held); `just check` (221).
+- **Result:** in review; M5 closes when it merges.
+- **Learned:** every finding survived the 200-case proptest because its generator only ever
+  answered with text. A generator must produce what the world produces — empty replies, cut
+  replies — or it proves the easy path many times.

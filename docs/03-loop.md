@@ -106,7 +106,7 @@ Before every model call the loop reads four meters from the core, never from the
 |---|---|---|
 | steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40) | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
-| context | stress at 90% of the model's window | compaction drain, else checkpoint |
+| context | stress at 90% of the model's window | checkpoint (compaction drain arrives with long runs, M5b) |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
@@ -132,7 +132,16 @@ the conversation (an answer that has already arrived is kept, and Esc is honoure
 its acts runs); between tool calls the calls not yet run are answered "interrupted by the human
 before it ran", and none of them runs. Either way the session pivots to the next queued line.
 
-The step budget is each ask's own; the clock, the context and the cost run for the session.
+The step budget and the stress instruments are each ask's own — a session of questions is not
+thrash; the clock, the context and the cost run for the session, and a resumed run reads what
+it already spent and its last context from the ledger. An Esc that landed after an answer is
+dropped when the next ask starts.
+
+What the model returns is cleaned before it enters the conversation or the journal: empty text
+blocks dropped, a repeated tool call id made unique, an empty reply stated as such. An empty
+reply, a reply cut by the output ceiling or a paused turn is not an answer: the body is told and
+goes on, bounded by the step meter. The provider's warnings are journaled for the human, never
+fed to the model.
 
 Before every request the conversation is **validated**: it starts and ends with the user, roles
 alternate, no turn is empty, every tool call is answered by the very next user turn with its
@@ -198,8 +207,10 @@ Runs on the body's own writes (minus what its Courts already landed on their own
 **In solo mode** the gate judges what the run changed against the tree as it was when the ask
 arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
 verify commands, through the same classified and guarded `bash`, 120 s each), duties done (a
-non-empty answer) and tests intact (no test file deleted; no test file with more skip markers —
-`#[ignore`, `it.skip(`, `t.Skip(`, `@pytest.mark.skip`, … — than before). Right author holds by
+non-empty answer) and tests intact: no test file deleted, and no test file — read whole, whatever
+its size — with more skip markers than before (`#[ignore`, `.skip(`, `.only(`, `.todo(`,
+`t.Skip(`, `t.Skipf(`, `@pytest.mark.skip`, …) or fewer tests (`#[test]`, `func Test`, `def
+test_`, `it(`, `test(`, `@Test`). Right author holds by
 construction: the whole repository is solo's soil, and the tripwire keeps `.git` and
 `.mnemorph` out. An answer that changed nothing passes untouched. A first failure goes back to
 the body as a note; a second ends the run as FAIL, every verdict journaled.

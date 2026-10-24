@@ -26,6 +26,10 @@ enum Act {
     FireInCall,
     /// Answer with two writes and fire Esc: neither may run.
     FireBeforeRunning,
+    /// An empty reply.
+    Empty,
+    /// A reply cut by the output ceiling.
+    Cut,
 }
 
 struct Chaos {
@@ -109,6 +113,16 @@ impl Model for Chaos {
                 self.interrupt.get().unwrap().fire();
                 Box::pin(std::future::pending())
             }
+            Act::Empty => Box::pin(async { Ok(response(vec![], StopReason::EndTurn)) }),
+            Act::Cut => Box::pin(async {
+                Ok(response(
+                    vec![Block::Text {
+                        text: "half".into(),
+                        cache: false,
+                    }],
+                    StopReason::MaxTokens,
+                ))
+            }),
             Act::FireBeforeRunning => {
                 self.interrupt.get().unwrap().fire();
                 let calls = vec![
@@ -300,6 +314,8 @@ fn act() -> impl Strategy<Value = Act> {
         3 => (1usize..3).prop_map(Act::Tools),
         1 => Just(Act::FireInCall),
         1 => Just(Act::FireBeforeRunning),
+        1 => Just(Act::Empty),
+        1 => Just(Act::Cut),
     ]
 }
 
