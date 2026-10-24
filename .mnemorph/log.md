@@ -1350,3 +1350,42 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a protection on one key is only as wide as every other way to say the same thing:
   `models.provider` was the human's, and `models.default = "vllm:…"` said it again from the
   tracked file.
+
+---
+
+### [2026-10-24T16:59:14+02:00] rimuru — M6: the protocol served over stdio
+- **Task:** M6's first rung: `mnemorph-server` speaking the client protocol over stdio, driving
+  one solo session, and `mnemorphd` serving it.
+- **Files:** crates/mnemorph-loop (the run's observer, `Seen`, one `spend` for a turn's and a
+  decision's cost; `open` and `open_with`/`Bound`: a session from the world's configuration
+  through the human's backend; `ScriptedModel::text`/`tool`), crates/mnemorph-server (the
+  protocol's types; `serve`: one writer thread, one reader that answers the gate, one driver
+  task; `gate/ask` with a 10-minute deny; replay since a `seq`), crates/mnemorphd (`--world`,
+  help and version before any world), tests/stdio.rs (4, through real pipes),
+  docs/03-loop.md, docs/04-communication.md.
+- **Gate:** n/a. Instruments: `just check`; the pipe tests three times in a row.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The beats were already the event stream: one observer at the journal's door gives a client
+    everything the protocol lists, with no second account of what happened to drift.
+  - `open_with` attached the human's attic through `solo()`; tests reached it only by luck, so the
+    attic is now an explicit part of what a test binds.
+
+---
+
+### [2026-10-24T17:14:07+02:00] rimuru — the server, after its review
+- **Task:** the review of #123: a waiting gate held the process after the client left, queued
+  lines ran after `shutdown`, the process outlived `shutdown`, `seq` could reach the wire out of
+  order, the `queued` flag raced the turn's end, notifications were answered and batches
+  swallowed, a failed `initialize` used up the opener, and the diagram disagreed with the text.
+- **Files:** crates/mnemorph-server/src/lib.rs (`close` and `release`: leaving or Esc denies
+  every waiting act; `closed` checked under the lock `close` drains; the driver stops on close;
+  the writer ends on a `None`; `seq`, replay and send under one lock; a count of outstanding
+  lines; no answer without an id; batches and non-objects refused; the opener kept until it
+  succeeds; replay says `oldest` and `complete`), tests/stdio.rs (6: leaving by `shutdown` and
+  by EOF, Esc at the gate, queued replies and order, a retried `initialize`, the server ending
+  with its input open), docs/04-communication.md.
+- **Gate:** n/a. Instruments: the six tests three times in a row; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a gate that blocks is a promise to answer it on every way out; the tests never
+  left, so the leaving was never tested — every way a client goes is now a test.

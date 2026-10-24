@@ -150,6 +150,14 @@ thrash; the clock, the context and the cost run for the session, and a resumed r
 it already spent and its last context from the ledger. An Esc that landed after an answer is
 dropped when the next ask starts.
 
+A client watches a run through its **observer**: every beat at the moment it is journaled, and
+every call's spend — a model turn or a decision — with the run's running total and its context
+against the stress line. It is how the CLI and the board show a run live
+([the client protocol](04-communication.md#the-client-protocol)) without reading the journal
+back. `open(world, gate, observer, env)` builds the solo session a client talks to: the
+configuration, the model through the human's backend, the tools under the kernel guard, the
+journal, the ledger and the decisions.
+
 What the model returns is cleaned before it enters the conversation or the journal: empty text
 blocks dropped, a repeated tool call id made unique, an empty reply stated as such. An empty
 reply, a reply cut by the output ceiling or a paused turn is not an answer: the body is told and

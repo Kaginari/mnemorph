@@ -267,18 +267,18 @@ sequenceDiagram
     participant CLI as mnemorph CLI
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
-    CLI->>D: initialize {clientInfo, capabilities}
-    D-->>CLI: {world, races, budgets, version}
+    CLI->>D: initialize {clientInfo}
+    D-->>CLI: {protocol, version, world, model, session, run, holes}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
     D--)CLI: event/turnStarted
     D--)CLI: event/textDelta …
     D--)CLI: event/dispatch {from: rimuru, to: elf-engine}
-    D--)CLI: event/usage {tokens, usd, cacheHit}
+    D--)CLI: event/usage {tokens, cacheRead, usd, spentWt}
     end
     rect rgba(212,175,55,0.22)
-    D->>CLI: gate/ask {act, class: outward, plan}
+    D->>CLI: gate/ask {race, class, act, why, outside}
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
@@ -287,17 +287,41 @@ sequenceDiagram
     end
 ```
 
-| Kind | Examples |
-|---|---|
-| requests (client → core) | `initialize`, `session/prompt`, `session/queue`, `session/send`, `session/interrupt`, `session/resume`, `session/handoff`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
-| requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on; the answer is its JSON-RPC response |
-| events (core → client) | `turnStarted`, `textDelta`, `toolCall`, `toolResult`, `dispatch`, `report`, `usage`, `queued`, `held`, `gateVerdict`, `ascension`, `evolution`, `checkpoint`, `turnEnded` |
+| Kind | Served by the solo session | Served once the world is |
+|---|---|---|
+| requests (client → core) | `initialize`, `session/prompt`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/send`, `session/resume`, `session/handoff`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
+| requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on | |
+| events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
+
+Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
+world, model, provider, session, run, holes}`; a client that speaks another `protocol` stops
+rather than misread. Each event is the notification `event/<type>`, its fields beside the
+envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
+waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
+`{race, class, act, why, outside}`, and the client answers `{allow, reason?}`. A `usage` event
+carries the turn's tokens, cache reads and writes, its price, and the run's spend and context
+against its stress line, for the status line. A `toolResult` carries at most 16 000 bytes and
+says how many it cut; the journal keeps the whole.
+
+`mnemorphd` serves it: `mnemorphd [--world <dir>]` speaks on stdin and stdout, opens the solo
+session from the world's configuration on `initialize`, and answers `--help` and `--version`
+before it looks for any world. Inside, one thread owns the output, so no two lines interleave or
+reorder; one thread reads the input and answers the gate's waits itself, so a gate holding a
+turn never blocks the read that would release it; and one task owns the session.
 
 Rules:
 
-- Every event carries `{session, run, body, seq}`; `seq` is monotonic so a client that reconnects
-  asks for `since: seq` and loses nothing.
-- An unanswered gate never allows. After 10 minutes the run checkpoints as `SUSPENDED` (a neutral
+- Every event carries `{session, run, body, seq}`; `seq` rises by one, in the order events reach
+  the wire, so a client that reconnects asks `session/events {since: seq}` and loses nothing. The
+  core keeps the last 10 000: the answer says the oldest it kept (`oldest`), and `complete: false`
+  when the client asked from further back, so a gap is never silent.
+- Leaving ends everything at once: on `shutdown`, or when the client's end closes, every act
+  waiting at the gate is denied, the turn in flight stops, lines still queued never run, and the
+  core exits once its output is written. Esc (`session/interrupt`) denies an act waiting at the
+  gate as part of the turn it stops.
+- One message per line; a batch is refused by name, and a notification is never answered.
+- An unanswered gate never allows. After 10 minutes the act is denied and the body is told the
+  human did not answer; with resume (M7) the run checkpoints as `SUSPENDED` instead (a neutral
   word: no strain, no failure) and resumes at that act when the human answers — an overnight run
   waits instead of dying.
 - The board's WebSocket accepts only `Host: 127.0.0.1|localhost`, checks `Origin`, and requires

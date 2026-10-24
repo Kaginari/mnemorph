@@ -1142,6 +1142,9 @@ name = "mnemorph-server"
 version = "0.0.0"
 dependencies = [
  "mnemorph-loop",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

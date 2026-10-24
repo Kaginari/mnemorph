@@ -71,6 +71,31 @@ impl Limits {
     }
 }
 
+/// What an observer sees of a run.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Seen {
+    /// A beat, as it is journaled.
+    Beat(Beat),
+    /// One model turn's usage, priced, with the run's running totals.
+    Usage {
+        /// The turn's tokens.
+        usage: mnemorph_ledger::Usage,
+        /// Its price, when the model's prices are known.
+        usd: Option<f64>,
+        /// Its weighted tokens.
+        wt: u64,
+        /// The run's weighted tokens so far.
+        spent_wt: u64,
+        /// How full the context was at this turn.
+        occupancy: u64,
+        /// The stress line the context is measured against.
+        stress_line: u64,
+    },
+}
+
+/// Sees a run live: called on the run's own task, so it must not block.
+pub type Observer = Arc<dyn Fn(&Seen) + Send + Sync>;
+
 /// How a run ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ending {
@@ -186,6 +211,7 @@ pub struct Run {
     folded_upto: usize,
     noticed: bool,
     decisions: Option<Decisions>,
+    observer: Option<Observer>,
 }
 
 /// What a run needs that is not the body itself.
@@ -234,7 +260,16 @@ impl Run {
             folded_upto: 0,
             noticed: false,
             decisions: None,
+            observer: None,
         }
+    }
+
+    /// The run with an observer: it sees every beat as it is journaled, and every model turn's
+    /// usage, so a client can show the run live without reading the journal back.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Observer) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// The run with its decisions: when `decisions.bench` is on, a piped test run's output is
@@ -292,12 +327,7 @@ impl Run {
         // What the decision cost reaches the meter like any call: unpriced (`usd: null`) for a
         // model the price table does not know.
         let row = crate::decisions::decision_usage(&decision, &self.caller, &self.prices);
-        self.spent_wt += row.wt;
-        if let Some(ledger) = &self.ledger
-            && let Err(e) = ledger.append(&row)
-        {
-            eprintln!("mnemorph: the usage ledger could not be written: {e}");
-        }
+        self.spend(&row);
         let read = bench_read(&decision, cutoffs);
         let answer = decision.answer("outcome");
         self.record(&Beat::Warning {
@@ -384,7 +414,30 @@ impl Run {
         &mut self.cx
     }
 
+    /// Count a call's spend: the run's meter, the observer, the usage ledger.
+    fn spend(&mut self, row: &mnemorph_ledger::UsageRow) {
+        self.spent_wt += row.wt;
+        if let Some(see) = &self.observer {
+            see(&Seen::Usage {
+                usage: row.usage,
+                usd: row.usd,
+                wt: row.wt,
+                spent_wt: self.spent_wt,
+                occupancy: self.last_occupancy,
+                stress_line: self.stress_line(),
+            });
+        }
+        if let Some(ledger) = &self.ledger
+            && let Err(e) = ledger.append(row)
+        {
+            eprintln!("mnemorph: the usage ledger could not be written: {e}");
+        }
+    }
+
     fn record(&self, beat: &Beat) {
+        if let Some(see) = &self.observer {
+            see(&Seen::Beat(beat.clone()));
+        }
         // The journal is the run's memory across a crash: a failed append is reported, and the
         // run goes on — losing the journal must not also lose the work in flight.
         if let Err(e) = self.journal.append(beat) {
@@ -670,12 +723,7 @@ impl Run {
             &self.prices,
             Timestamp::now(),
         );
-        self.spent_wt += row.wt;
-        if let Some(ledger) = &self.ledger
-            && let Err(e) = ledger.append(&row)
-        {
-            eprintln!("mnemorph: the usage ledger could not be written: {e}");
-        }
+        self.spend(&row);
         let stop = match &response.stop {
             StopReason::Other(s) => s.clone(),
             other => format!("{other:?}"),
