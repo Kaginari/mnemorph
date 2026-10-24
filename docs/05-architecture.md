@@ -278,8 +278,9 @@ an empty list or table never overrides a lower layer:
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
-  `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it, and `decide.via`, `decide.cutoff.*` and `decide.route` loosen
-  decisions (where their state goes, how sure they must be, which model does the work and what it
+  `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
+  decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
+  `decide.cutoff.*` and `decide.route` loosen decisions (where their state goes, how sure they must be, which model does the work and what it
   costs), so they are honoured only from the local or global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
@@ -309,15 +310,27 @@ an empty list or table never overrides a lower layer:
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
   before it replaces the file; a failed save is returned, and the file stays as it was.
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
-  `models.tier.<the race's tier>`; `models.fallback.<model>` names the next model to try when a
-  model is not found. The tracked file may name models — a team picks the models its world uses
+  `models.race.<race>`, else `models.tier.<the race's tier>` — and `models.default` is one model
+  for everything: every tier the human did not set rides it. `models.fallback.<model>` names the
+  next model to try when a model is not found.
+- **Backends**: every model goes through `models.provider` (`anthropic` unless the human says),
+  any provider that holds conversations: Anthropic's API, or an OpenAI-compatible gateway with
+  its key — OpenRouter, a vLLM gateway, a LiteLLM proxy. A model written `<provider>:<id>`
+  (`vllm:qwen3-coder`) goes to that provider instead; a `:` that names no provider is part of the
+  id (`qwen3:32b`). `Config::backend(model)` returns the provider, its URL and key variable, and
+  the id it knows the model by. The tracked file may name models — a team picks the models its world uses
   — but it cannot add a provider, so a model it names resolves only through a provider the human
   defined, at the human's prices; whether a body is routed, and how sure a decision must be, stay
   the human's. **Providers** name the environment variable holding their key
   (`key_env`), never the key. A provider's `kind` is `anthropic`, `openai` (any
   OpenAI-compatible server) or `systemone` (TypeSafe's Jev, or a jeff server on your own machine).
-- **Decisions** (`decide.*`) ask a System One provider when `decide.via` names one, and the LLM
-  `decide.llm` (the fast tier's model by default) when it does not or when it fails. A decision
+- **Decisions** (`decide.*`) are a feature the human switches on and off (`decide.enabled`, off by
+  default), and only a classifier makes them: `decide.via` names a provider of
+  `kind = "systemone"` — TypeSafe's Jev, a jeff server, or any server that speaks the same
+  protocol. With none named the feature stays off, whatever else the section says, and the load
+  reports why. When the classifier fails, the LLM `decide.llm` (the fast tier's model by default)
+  answers in its place. `decide.bench` (on with decisions) and `decide.route` (off until asked)
+  switch each point. A decision
   is only acted on above its cut-off, and the cut-off depends on who answered:
   `decide.cutoff.measured` for a System One answer, `decide.cutoff.stated`, stricter, for an
   LLM's, each from 0 to 1. `decide.via` must name a provider of `kind = "systemone"` and come
@@ -337,21 +350,37 @@ day_usd = 5
 [models.fallback]
 "claude-opus-5-5" = "claude-sonnet-5-5"
 
-[providers.openrouter]
+[providers.openrouter]              # an OpenAI-compatible gateway with its key
 kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
+
+[providers.vllm]                    # or your own vLLM gateway
+kind = "openai"
+base_url = "https://gateway.example/v1"
+key_env = "GATEWAY_API_KEY"
+
+[models]
+provider = "openrouter"            # every model goes here unless it names its own
+default = "anthropic/claude-sonnet-5.5"   # one model for everything…
+
+[models.race]
+dark-elf = "anthropic/claude-opus-5.5"    # …or one per race
+
+[models.office.orc]
+judge = "vllm:qwen3-coder"         # …or per race and office, through another backend
 
 [providers.jeff]                   # System One on this machine; or TypeSafe's Jev:
 kind = "systemone"                 # base_url = "https://api.typesafe.ai"
 base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
 
 [decide]
-via = "jeff"                       # unset: every decision goes to the LLM
+enabled = true                     # the switch; off by default
+via = "jeff"                       # the classifier; without one, decisions stay off
 model = "jeff-latest"              # required with via; Jev's is "jev-latest"
-llm = "claude-haiku-5-5"           # the fallback; the fast tier's model by default
-bench = true                       # read a piped test run's output (on with via; set it to ask the LLM)
-route = true                       # Metis: route commissions within their office's band (off by default)
+llm = "claude-haiku-5-5"           # answers when the classifier fails; the fast tier's model by default
+bench = true                       # read a piped test run's output (on with decisions)
+route = true                       # Metis: route commissions within their office's band (off until asked)
 
 [decide.cutoff]
 measured = 0.6                     # the least confidence to act on a System One answer
@@ -381,10 +410,10 @@ config:
   theme: neutral
 ---
 flowchart LR
-    Q["a decision point<br/>state + typed questions"] --> V{"decide.via set?"}
-    V -- yes --> S["System One provider<br/>Jev · jeff"]
-    V -- no --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
-    S -- fails --> L
+    Q["a decision point<br/>state + typed questions"] --> V{"decide.enabled<br/>and a classifier?"}
+    V -- yes --> S["the classifier<br/>Jev · jeff · any System One server"]
+    V -- no --> OFF["no decision:<br/>the point keeps its default"]
+    S -- fails --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
     S --> M["basis: measured"]
     L --> T["basis: stated"]
     M & T --> D["Decision<br/>answers · source · basis · fell_back"]
@@ -438,14 +467,14 @@ flowchart LR
   prices, so it stays out of the price tables (never guessed) and its rows count in weighted
   tokens with `usd` null.
 - **Containment.** A System One provider is a provider: only the human's own files define one,
-  and only they set `decide.via`. Until the human names one, no decision leaves for anything but
-  the LLM the session already uses.
+  and only they set `decide.enabled` or `decide.via`. Until the human switches decisions on and
+  names a classifier, no decision is made at all.
 - **Decision points.** Each reads `Decision::sure` and journals its decision and outcome rows.
   **`bench.outcome` is attached to the loop:** a run built with
   `decisions(config, world, model, env)` reads a piped test run's output, so a sure green or red
-  counts in the tally as seen (*the bench tally*, [the loop](03-loop.md)). It is on when
-  `decide.via` is set, or `decide.bench = true` asks the LLM; the fallback asks `decide.llm`
-  through the run's own provider. What leaves for the decider is the command and the last 12 000
+  counts in the tally as seen (*the bench tally*, [the loop](03-loop.md)). It is on with decisions
+  unless `decide.bench = false`; when the classifier fails, the fallback asks `decide.llm` through
+  the run's own provider. What leaves for the decider is the command and the last 12 000
   bytes of its output; test output can print anything, so a provider outside the machine sees
   what the tests print. It is honoured once a binary builds runs from the configuration (the CLI,
   M6). **`model.route` is Metis** (`decide.route = true`, off by default, the human's files

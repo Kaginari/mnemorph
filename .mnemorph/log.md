@@ -1312,3 +1312,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     default with no change here.
   - An Elf may be routed from frontier to fast for a routine, safe `findings` commission; that is
     the band table as written, left for the human to keep or close.
+
+---
+
+### [2026-10-24T16:01:50+02:00] rimuru — backends in config; decisions only with a classifier
+- **Task:** the human: models through OpenRouter or a vLLM gateway with its key, the backend in
+  config; one model for everything, changed by race and office; decisions a feature switched on
+  and off, active only when a classifier such as Jev is configured, disabled otherwise.
+- **Files:** crates/mnemorph-config/src/lib.rs (`models.provider`, `models.default`,
+  `models.race.*`, `Config::backend`, `Backend`; `decide.enabled`, decisions off without a
+  classifier with a hole saying why; both switches the human's files only), tests (the switch and
+  the classifier; backends, one model, race and office, `provider:id`), mnemorph-loop's
+  `decisions()` doc and test, docs/02-races.md, 03-loop.md, 05-architecture.md (backends, the
+  example config, the decisions switch, the diagram).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The config had providers and models but nothing joining them: a model had no backend. A
+    model now names its backend only by a provider's own name before a `:`, so ids that hold
+    a `:` (`qwen3:32b`) stay whole.
+  - `decide.bench = true` used to switch the LLM on as the decider; the LLM now only stands in
+    for a classifier that failed.
