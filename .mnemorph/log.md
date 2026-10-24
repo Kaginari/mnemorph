@@ -526,6 +526,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T02:18:38+02:00] rimuru — the maki study stays local
+- **Task:** Veldora asked to keep docs/study-maki.md out of git, local only.
+- **Files:** .gitignore, docs/README.md and site/.vitepress/config.ts (link and sidebar entry gone; `srcExclude` keeps a local build from rendering it); docs/study-maki.md untracked, kept on disk.
+- **Gate:** n/a. Instruments: a clean site build has no maki page; diagrams parse.
+- **Result:** in review as a pull request.
+- **Learned:** the repository went public before this, so the file remains in history; removing it there would need a history rewrite and a force push — Veldora's call.
+
+---
+
 ### [2026-10-24T02:32:38+02:00] rimuru — the classifier on macOS: aliases of system directories
 - **Task:** CI on macOS failed four rows of the classifier corpus that pass on Linux.
 - **Files:** crates/mnemorph-tools/src/classify/paths.rs (danger and credentials judged on the written and the resolved path, with `/private` and `/System/Volumes/Data` removed), tests/corpus.txt (three `/private` rows).

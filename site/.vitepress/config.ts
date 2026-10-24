@@ -11,6 +11,8 @@ export default withMermaid(
     description: 'An agent harness grown from isekai: Rust core, TypeScript CLI and board.',
     srcDir: '../docs',
     rewrites: { 'README.md': 'index.md' },
+    // Local-only notes (ignored by git) never reach the site.
+    srcExclude: ['study-maki.md'],
     cleanUrls: true,
     // The brand's files are the site's public files: the emblem is the logo and the favicon.
     vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
@@ -54,7 +56,6 @@ export default withMermaid(
           text: 'Reference',
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
-            { text: 'Study: maki', link: '/study-maki' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
           ],
         },

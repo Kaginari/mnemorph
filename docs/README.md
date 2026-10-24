@@ -40,7 +40,6 @@ review a canvas change like a code change.
 | 7 | [MCP](07-mcp.md) | the client, agent-mcp and toolbox-mcp: every spec in, only the needed ones out |
 | 8 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
-| — | [Study: maki](study-maki.md) | what Mnemorph takes from a lean harness, and where it stays stronger |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 
 ## The three words that matter
