@@ -1017,60 +1017,6 @@ async fn a_sent_line_the_turn_never_reached_is_reported_not_smuggled() {
     );
 }
 
-/// A handoff is the body's answer to the template, written where the next session looks.
-#[tokio::test]
-async fn a_handoff_is_written_for_the_next_session() {
-    let w = World::new("handoff");
-    let model = Arc::new(ScriptedModel::new([
-        answer("ok"),
-        answer("## Goal\nShip the CLI.\n## Open work\nThe board."),
-    ]));
-    let mut run = w.run(model.clone(), limits());
-    ask(&mut run, "ship the cli").await;
-    let mut quiet = |_| {};
-    let path = run.handoff(Some("the board"), &mut quiet).await.unwrap();
-    // The run knows its world by its real path (on macOS the temp dir is a symlink).
-    let world = w.world().canonicalize().unwrap();
-    assert!(
-        path.starts_with(mnemorph_loop::handoffs(&world)),
-        "{path:?}"
-    );
-    assert!(
-        std::fs::read_to_string(&path)
-            .unwrap()
-            .contains("Ship the CLI.")
-    );
-    let asked = format!("{:?}", model.requests()[1].messages);
-    assert!(
-        asked.contains("first ask: ship the cli")
-            && asked.contains("Focus the handoff on: the board")
-    );
-    let (latest, age) = mnemorph_loop::latest_handoff(&world).unwrap();
-    assert_eq!((latest, age), (path, 0));
-}
-
-/// A handoff is written right after a context checkpoint — the moment the CLI offers one.
-#[tokio::test]
-async fn a_handoff_is_written_after_a_context_checkpoint() {
-    let w = World::new("handoff-full");
-    let model = Arc::new(ScriptedModel::new([
-        tool_with("t1", "glob", json!({"pattern": "*.x"}), usage(181_000)),
-        answer("## Goal\nSaved."),
-    ]));
-    let mut run = w.run(model.clone(), limits());
-    let e = ask(&mut run, "fill it").await;
-    assert!(
-        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("context")),
-        "{e:?}"
-    );
-    let mut quiet = |_| {};
-    let path = run
-        .handoff(None, &mut quiet)
-        .await
-        .expect("written past the context line");
-    assert!(std::fs::read_to_string(path).unwrap().contains("Saved."));
-}
-
 /// A line sent while the last model call runs is said with that turn's end, not the next's.
 #[tokio::test]
 async fn a_late_line_is_reported_when_its_turn_ends() {
@@ -1092,27 +1038,5 @@ async fn a_late_line_is_reported_when_its_turn_ends() {
     assert!(
         matches!((warned, ended), (Some(a), Some(b)) if a < b),
         "{beats:?}"
-    );
-}
-
-/// Two handoffs in one second keep two files; a handoff's own ask is never the session's first.
-#[tokio::test]
-async fn handoffs_never_overwrite_and_never_quote_themselves() {
-    let w = World::new("handoff-twice");
-    let model = Arc::new(ScriptedModel::new([
-        answer("## Goal\nOne."),
-        answer("## Goal\nTwo."),
-    ]));
-    let mut run = w.run(model.clone(), limits());
-    let mut quiet = |_| {};
-    let a = run.handoff(None, &mut quiet).await.unwrap();
-    let b = run.handoff(None, &mut quiet).await.unwrap();
-    assert_ne!(a, b);
-    assert!(std::fs::read_to_string(&a).unwrap().contains("One."));
-    assert!(std::fs::read_to_string(&b).unwrap().contains("Two."));
-    let second = format!("{:?}", model.requests()[1].messages.last().unwrap());
-    assert!(
-        !second.contains("first ask: Write the handoff"),
-        "the template is not the first ask"
     );
 }

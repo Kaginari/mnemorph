@@ -125,7 +125,6 @@ mnemorph/
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
-| handoffs | `.mnemorph/handoffs/<time>.md` | yes |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |

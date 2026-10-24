@@ -141,7 +141,7 @@ roadmap where that test or rule must exist before the rung counts as done.
 | The UI thread read plan files from disk five times a second and re-rendered the whole transcript per token. | No I/O on the render path; each block renders once per width and theme and is cached. | M6 |
 | A built-in `/review` shadowed the world's own `/review` command. | A world's own commands win over built-ins, as its config wins over defaults. Test. | M6 |
 | A host-side buffer held the queued line, and a turn that died owned it forever; a line queued just as a turn finished was lost. | The queue lives in the core only; the turn-end drain reads it on every exit path, interrupts included. Test: queue a line at every point of a turn's end and after Esc; each runs exactly once. | M6 |
-| A fresh session re-asked, re-discovered and repeated what the last one had learned. | `/handoff` writes a fixed template from gathered facts; a new session is told one waits, and reading it verifies every claim before acting. Offered at the stress zone. | M8 |
+| A fresh session re-asked, re-discovered and repeated what the last one had learned. | Session start gives a fresh session the law and the journal's last entries through the harness itself, never a note written into the repository. | M8 |
 
 ## Board (web)
 

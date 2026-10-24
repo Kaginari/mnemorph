@@ -28,7 +28,7 @@ function reduce(s: State, a: Action): State {
 }
 
 export const COMMANDS =
-  '/send <text>  steer the running turn · /handoff [focus] · /handoff read · /status · /theme dark|light · /quit';
+  '/send <text>  steer the running turn · /status · /theme dark|light · /quit';
 
 const RESULT_LINES = 4;
 
@@ -206,10 +206,6 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
     let s = initial();
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
     for (const h of hello.holes) s = info(s, `  config hole: ${h}`);
-    if (hello.handoff) {
-      const age = hello.handoff.ageDays === 0 ? 'today' : `${hello.handoff.ageDays} days old`;
-      s = info(s, `  a handoff is waiting (${age}): /handoff read`);
-    }
     if (hello.budget && hello.budget.leftWt === 0) {
       s = info(s, `  the ${hello.budget.cap} cap is spent: a turn stops at once until it resets`);
     }
@@ -307,13 +303,6 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
           .send(rest)
           .then(() => dispatch({ kind: 'info', text: `  sent: ${rest}` }))
           .catch((e: Error) => dispatch({ kind: 'info', text: e.message }));
-        return;
-      }
-      if (name === 'handoff') {
-        // Reading may find nothing to read; the turn's own start marks it busy.
-        if (rest !== 'read') dispatch({ kind: 'local-busy' });
-        const asked = rest === 'read' ? client.readHandoff() : client.handoff(rest || undefined);
-        void asked.catch((e: Error) => dispatch({ kind: 'info', text: e.message }));
         return;
       }
       if (name === 'theme') {

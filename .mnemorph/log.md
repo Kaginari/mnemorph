@@ -1555,3 +1555,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** the save operation is used when the meters are full; a save gated by the same
   meters saves nothing. It passes the soft lines and stops at the human's.
+
+---
+
+### [2026-10-24T19:38:43+02:00] rimuru — the handoff removed
+- **Task:** the human: "delete it, don't put handoff". Handoff notes were written into the
+  world's tracked `.mnemorph/handoffs/`, carrying the session's first ask word for word, in a
+  public repository.
+- **Files:** crates/mnemorph-loop (the handoff, its templates, `latest_handoff`, the ask kinds and
+  the first ask gone), mnemorph-server (`session/handoff`, the `handoff` event, the hello's
+  waiting handoff gone), packages/protocol, packages/sdk, packages/cli (`/handoff` gone), the
+  tests that held them, docs/03-loop.md (the section), 04, 05 (the storage row), 08, roadmap
+  (M6 and M8's rung), lessons (the row becomes session start through the harness).
+- **Gate:** n/a. Instruments: no handoff file was ever committed (`git log --all --
+  .mnemorph/handoffs` is empty); `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a note meant for the next session, written into a tracked tree, is a note for
+  every reader of the repository; what a session must carry over belongs where only the harness
+  reads it. `/send` stays: it never touches a file.

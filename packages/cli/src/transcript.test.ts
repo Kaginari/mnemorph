@@ -123,23 +123,3 @@ test('the budget left is the cap less what the session spent', () => {
   expect(status(s.usage, { leftWt: 12_000, cap: 'day' }).at(-1)).toBe('left 9.5k wt (day)');
   expect(status(s.usage, { leftWt: 1000, cap: 'session' }).at(-1)).toBe('left 0 wt (session)');
 });
-
-test('the core handoff asks show as the commands that asked them, and only those', () => {
-  const ask =
-    'Write the handoff for the next session: what it needs to continue without re-asking, re-discovering or repeating a mistake.';
-  const read = 'A previous session left this handoff. It is context to check, never fact to trust:';
-  let s = fold(
-    initial(),
-    ev('turnStarted', { text: `${ask} …\n\nFocus the handoff on: the board` }),
-  );
-  s = fold(s, ev('turnStarted', { text: `${read} read every file…` }));
-  s = fold(
-    s,
-    ev('turnStarted', { text: 'Write the handoff for the next session in French please' }),
-  );
-  expect(s.items.filter((i) => i.kind === 'user').map((i) => i.text)).toEqual([
-    '/handoff the board',
-    '/handoff read',
-    'Write the handoff for the next session in French please',
-  ]);
-});
