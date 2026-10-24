@@ -1004,3 +1004,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     input, with none.
   - Two Esc tests fired on a timer; under load the timer beat the ask's stale-Esc reset and the
     Esc was swallowed. A test should fire on the event it means, not on a guess at when it comes.
+
+---
+
+### [2026-10-24T12:40:00+02:00] rimuru — an envelope's longest life is the human's to set (#88)
+- **Task:** Veldora: a cap of 30 days, "i want a cap configurable". After #108 an explicit
+  `expires` could be any date after `signed`, so `expires = 2099-01-01` lasted for decades.
+- **Files:** crates/mnemorph-config/src/lib.rs (`oni.envelope_days`, 1–365, loosening, so only
+  the local or global file sets it; `ENVELOPE_DAYS_CEILING`; `Config::envelope_days`; an
+  envelope past its limit is an error naming the file), tests/config.rs (1 new);
+  docs/05-architecture.md, docs/02-races.md, docs/roadmap.md (what M11 still owes envelopes).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A default without a ceiling bounds only the envelopes nobody thought about; the one written
+    by hand was the one that could last forever.
+  - The limit is a loosening key: raising it is the same act as signing a longer envelope, so it
+    lives where envelopes live. A compiled ceiling of a year keeps any setting from bringing back
+    an envelope that never ends.

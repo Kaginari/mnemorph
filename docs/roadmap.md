@@ -249,7 +249,10 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject` —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
-  protected deploys, unredacted or oversized text).
+  protected deploys, unredacted or oversized text). Their bounds are already config's (signed,
+  expiring within `oni.envelope_days`, a use cap, revocable, `Envelope::admits`); M11 adds the
+  ledger's use rows and the gate reading `admits` at the moment of use
+  ([#88](https://github.com/Kaginari/mnemorph/issues/88)).
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 

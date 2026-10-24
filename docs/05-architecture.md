@@ -283,9 +283,11 @@ an empty list or table never overrides a lower layer:
   day it was signed, a fallback cycle: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
   any arguments, so it is tried as each destructive one (`--force`, `--delete`, `+ref`,
   `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
-- **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts 30
-  days unless its own `expires` is later or sooner, never on or before the signing; `uses` caps the
-  acts it covers in all, at least one; no two envelopes share a name. `Envelope::admits(today,
+- **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts
+  `oni.envelope_days` — 30 unless the human's own file says, from 1 to 365 — unless its own
+  `expires` is sooner; never on or before the signing, never past that limit. Raising the limit
+  loosens the gate, so the tracked file cannot set it. `uses` caps the acts an envelope covers in
+  all, at least one; no two envelopes share a name. `Envelope::admits(today,
   used)` is the check the gate makes at the moment of use, once it honours envelopes (M11), with
   the ledger's count of acts the envelope already covered; it names the lapse that stops one:
   revoked, not yet in force, expired, or spent. Revoking writes `revoked = <day>` into the
@@ -316,10 +318,13 @@ kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
 
+[oni]
+envelope_days = 30                 # the longest an envelope lasts (1–365); 30 when unset
+
 [[oni.envelopes]]
 name = "feature branches"
 allow = ["git push origin feat/*", "gh run rerun *"]
-signed = 2026-10-24                # expires 2026-11-23, 30 days on, unless `expires` says
+signed = 2026-10-24                # expires 2026-11-23, unless `expires` says sooner
 uses = 50                          # optional: at most 50 acts in all
 ```
 

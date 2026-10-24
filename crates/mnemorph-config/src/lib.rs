@@ -10,8 +10,9 @@
 //! instead of refusing, a gate turned off, standing approvals, Oni envelopes — is honoured only
 //! from the local or global file. Nothing else feeds those keys: not the environment, not a flag,
 //! and not a body, which cannot write `.mnemorph/` at all. An envelope is bounded besides: it is
-//! signed on a day, expires (30 days later unless it says otherwise), may cap its uses, and stays
-//! in the file once revoked, so the record of what was allowed is never lost.
+//! signed on a day, expires at most `oni.envelope_days` later (30 unless the human's own file
+//! says, never more than a year), may cap its uses, and stays in the file once revoked, so the
+//! record of what was allowed is never lost.
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
@@ -62,6 +63,7 @@ const LOOSENING: &[&str] = &[
     "gate.ask_rules",
     "gate.approve",
     "oni.envelopes",
+    "oni.envelope_days",
     "sandbox.allow_unguarded",
 ];
 
@@ -101,6 +103,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
     ("oni.envelopes", Kind::Envelopes),
+    ("oni.envelope_days", Kind::Int),
 ];
 
 /// A configuration layer, lowest first.
@@ -239,8 +242,12 @@ pub struct Provider {
     pub key_env: Option<String>,
 }
 
-/// How many days an envelope lasts when it does not name its own `expires`.
+/// How many days an envelope may last, and lasts when it names no `expires`, unless the human's
+/// own file sets `oni.envelope_days`.
 pub const ENVELOPE_DAYS: i64 = 30;
+
+/// The longest `oni.envelope_days` may be: no setting brings back an envelope that never ends.
+pub const ENVELOPE_DAYS_CEILING: i64 = 365;
 
 /// Standing permissions the human signed for Oni: outward acts that run without a prompt, for a
 /// bounded time and, when the human says so, a bounded number of acts.
@@ -252,7 +259,8 @@ pub struct Envelope {
     pub allow: Vec<String>,
     /// The day the human signed it; it covers nothing before.
     pub signed: Day,
-    /// The first day it covers nothing: its own `expires`, else [`ENVELOPE_DAYS`] after `signed`.
+    /// The first day it covers nothing: its own `expires`, at most `oni.envelope_days` after
+    /// `signed`, and exactly that when it names none.
     pub expires: Day,
     /// How many acts it may cover in all, counted by the ledger; `None` caps only by time.
     pub uses: Option<u64>,
@@ -417,7 +425,17 @@ impl Config {
                     return Err(format!("{at}: evolution.mode is `auto` or `propose`"));
                 }
                 "oni.envelopes" => {
-                    envelopes(&leaf.value, at)?;
+                    envelopes(&leaf.value, at, self.envelope_days())?;
+                }
+                "oni.envelope_days"
+                    if !leaf
+                        .value
+                        .as_integer()
+                        .is_some_and(|d| (1..=ENVELOPE_DAYS_CEILING).contains(&d)) =>
+                {
+                    return Err(format!(
+                        "{at}: oni.envelope_days is a count of days from 1 to {ENVELOPE_DAYS_CEILING}"
+                    ));
                 }
                 _ => {}
             }
@@ -626,7 +644,7 @@ impl Config {
     #[must_use]
     pub fn envelopes(&self) -> Vec<Envelope> {
         self.get("oni.envelopes")
-            .and_then(|l| envelopes(&l.value, &l.origin).ok())
+            .and_then(|l| envelopes(&l.value, &l.origin, self.envelope_days()).ok())
             .unwrap_or_default()
     }
 
@@ -652,6 +670,16 @@ impl Config {
             .ok_or_else(|| format!("envelope `{name}` lives in no file"))?;
         revoke(&file, name, day)?;
         Ok(file)
+    }
+
+    /// The longest an Oni envelope may last, in days, and how long one lasts that names no
+    /// `expires`: `oni.envelope_days` from the human's own file, else [`ENVELOPE_DAYS`].
+    #[must_use]
+    pub fn envelope_days(&self) -> i64 {
+        self.get("oni.envelope_days")
+            .and_then(|l| l.value.as_integer())
+            .filter(|d| (1..=ENVELOPE_DAYS_CEILING).contains(d))
+            .unwrap_or(ENVELOPE_DAYS)
     }
 
     fn int(&self, key: &str) -> Option<u64> {
@@ -733,8 +761,9 @@ fn strings(value: &Value) -> impl Iterator<Item = &str> {
 }
 
 /// Read and vet the envelopes: a name no other envelope has, a list of patterns, none bare and
-/// none destructive; the day it was signed, an expiry after it, a use cap of at least one.
-fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
+/// none destructive; the day it was signed, an expiry after it and at most `days` on, a use cap
+/// of at least one.
+fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, String> {
     let place = Place::new("/world", "/home");
     let mut out = Vec::new();
     for (i, t) in value
@@ -769,13 +798,21 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
         let signed = date(t, "signed", name, at)?.ok_or_else(|| {
             format!(
                 "{at}: envelope `{name}` needs `signed = YYYY-MM-DD`, the day you signed it; it \
-                 lasts {ENVELOPE_DAYS} days unless `expires` says otherwise"
+                 lasts {days} days unless `expires` says sooner"
             )
         })?;
-        let expires = date(t, "expires", name, at)?.unwrap_or(signed.plus(ENVELOPE_DAYS));
+        let longest = signed.plus(days);
+        let expires = date(t, "expires", name, at)?.unwrap_or(longest);
         if expires <= signed {
             return Err(format!(
                 "{at}: envelope `{name}` expires on {expires}, not after it was signed on {signed}"
+            ));
+        }
+        if expires > longest {
+            return Err(format!(
+                "{at}: envelope `{name}` expires on {expires}, more than {days} days after it was \
+                 signed on {signed}; sign it again when it ends, or raise `oni.envelope_days` in \
+                 your own file"
             ));
         }
         let uses = match t.get("uses") {

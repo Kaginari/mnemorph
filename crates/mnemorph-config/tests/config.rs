@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mnemorph_config::{Config, ENVELOPE_DAYS, Envelope, Lapse, Layer, Paths, set};
+use mnemorph_config::{
+    Config, ENVELOPE_DAYS, ENVELOPE_DAYS_CEILING, Envelope, Lapse, Layer, Paths, set,
+};
 use mnemorph_ledger::Day;
 use mnemorph_races::Race;
 use mnemorph_tools::Rule;
@@ -575,4 +577,51 @@ fn revoking_keeps_the_envelope_and_its_file_readable() {
         .revoke_envelope("ci", day(2026, 10, 25))
         .unwrap_err();
     assert!(e.contains("no envelope `ci` is signed"), "{e}");
+}
+
+#[test]
+fn an_envelope_lasts_at_most_the_human_s_envelope_days() {
+    let g = Ground::new("envelope-cap");
+    let ci = |extra: &str| {
+        format!(
+            "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n{extra}"
+        )
+    };
+    // 30 days by default, as the longest too.
+    g.local(&ci("expires = 2026-11-23\n"));
+    assert_eq!(g.load().unwrap().envelope_days(), ENVELOPE_DAYS);
+    g.local(&ci("expires = 2026-11-24\n"));
+    let e = g.load().unwrap_err();
+    assert!(e.contains("more than 30 days after it was signed"), "{e}");
+    assert!(e.contains("config.local.toml"), "{e}");
+
+    // The human may raise it in their own file, and it still bounds.
+    g.global("[oni]\nenvelope_days = 90\n");
+    g.local(&ci("expires = 2027-01-22\n"));
+    assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2027, 1, 22));
+    g.local(&ci("expires = 2027-01-23\n"));
+    assert!(g.load().unwrap_err().contains("more than 90 days"));
+
+    // Lower, and an envelope that names no expiry lasts that long.
+    g.global("[oni]\nenvelope_days = 7\n");
+    g.local(&ci(""));
+    assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2026, 10, 31));
+
+    // Never zero, never past a year.
+    for days in [0, -1, ENVELOPE_DAYS_CEILING + 1] {
+        g.global(&format!("[oni]\nenvelope_days = {days}\n"));
+        let e = g.load().unwrap_err();
+        assert!(e.contains("oni.envelope_days"), "{days}: {e}");
+    }
+
+    // Raising it loosens the gate, so the tracked file cannot set it.
+    let g = Ground::new("envelope-cap-tracked");
+    g.tracked("[oni]\nenvelope_days = 365\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.envelope_days(), ENVELOPE_DAYS);
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "oni.envelope_days" && h.why.contains("loosens"))
+    );
 }
