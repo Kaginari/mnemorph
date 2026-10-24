@@ -242,7 +242,7 @@ pub(crate) async fn order(
 fn claim_seat(c: &Commissioner, seat: &str) -> bool {
     c.busy
         .lock()
-        .map_or(false, |mut busy| busy.insert(seat.to_owned()))
+        .is_ok_and(|mut busy| busy.insert(seat.to_owned()))
 }
 
 /// Free `seat` when its court reports.

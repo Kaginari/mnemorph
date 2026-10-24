@@ -1977,6 +1977,43 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-25T00:18:42+02:00] rimuru — patch: a unified diff, whole or not at all
+- **Task:** the last of isekai's file tools, for models trained to write unified diffs (the human
+  is away and asked that M7's open work be carried through).
+- **Files:** crates/mnemorph-tools patch.rs (parse, apply with drift and a unique-match fallback,
+  create, delete under the attic's copy, rename refused), the registry, tests/files.rs; the solo
+  prompt; docs/05.
+- **Gate:** n/a. Instruments:
+  - a five-file diff with an off-by-lines hunk, a missing final newline, a create and a delete;
+  - a shifted insertion;
+  - one bad hunk writing nothing anywhere;
+  - a rename, an outside path, prose, and a create over an existing file all refused;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** isekai's patch left earlier files written when a later disk write failed. Here the
+  attic's snapshot comes first, and the error names what already landed.
+
+---
+
+### [2026-10-25T00:36:59+02:00] rimuru — patch, reviewed twice: Opus, then Fable on Opus
+- **Task:** close what the review of #148 found.
+- **Files:** crates/mnemorph-tools/src/patch.rs, rewritten:
+  - a header only with its `+++`;
+  - trailing blank context dropped;
+  - git-only blocks refused;
+  - CRLF kept;
+  - parts of one path chained;
+  - no-ops refused;
+  - every change carries its original, and a failed write unwinds them all;
+  - routes in every refusal.
+
+  Also tests/files.rs and docs/05.
+- **Gate:** n/a. Instruments: a test per finding; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Fable corrected Opus on two counts. Hunk counts are a guide and not a gate: models get them
+    wrong, and strict counts would refuse their diffs. And the rollback is the plan's own
+    originals, not the attic, which may hold nothing for an ignored file.
 ### [2026-10-25T00:30:41+02:00] rimuru — M7: one order, down and back
 - **Task:** the commission runner, the heart of M7's exit: "the full one-order-down-and-back
   sequence runs with scripted bodies and passes its gate".
@@ -2006,3 +2043,34 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Still to come: the queue and wake lanes, Courts with fresh contexts per office, the council
     and relief, facts (ontology rung 4), and `mnemorph q`. The human's session does not open
     Rimuru as a dispatcher yet; that wiring comes with the lanes.
+
+---
+
+### [2026-10-25T00:50:02+02:00] rimuru — the commission, reworked after its review
+- **Task:** the review of #149 said rework. Its findings are fixed:
+  - court work was exempt by path, so a dispatcher could rewrite it;
+  - a restored stray failed every gate above;
+  - Esc did not reach a child;
+  - a body could commission itself without end;
+  - a failed child's landing rode up as court work;
+  - prose read as DONE;
+  - children ran outside the caps.
+- **Files:**
+  - loop:
+    - gate.rs — `Tree::refresh`; `courts` gone from the gate;
+    - run.rs — the baseline takes what a commission landed or put back; `with_interrupt`; the
+      run's own `landed`;
+    - commission.rs — seats claimed and freed; a zero slice refused; caps and stress from the
+      commissioner; a failed child put back whole; off-the-wire answers are FAIL; INTERRUPTED;
+      neutral put-back notes;
+  - tools — `set_cancel`;
+  - tests: tampering judged, a modified stray restored and silent above, Esc three ranks down,
+    one court per seat, prose a FAIL;
+  - each test world has its own attic.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review again.
+- **Learned:**
+  - An exemption by name is a hole: "this path is judged" must mean "this path as it stands
+    now". The baseline refresh makes any later edit a change again.
+  - Tests sharing one attic beside their worlds made a correct restore fail at random. Every
+    store a test writes must be its own.
