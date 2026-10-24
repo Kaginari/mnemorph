@@ -11,9 +11,11 @@ const ALLOWED = {
   'mnemorph-memory': [],
   'mnemorph-ledger': ['mnemorph-races'],
   'mnemorph-tools': ['mnemorph-races', 'mnemorph-sandbox'],
+  'mnemorph-config': ['mnemorph-races', 'mnemorph-tools'],
   'mnemorph-provider': ['mnemorph-ledger'],
   'mnemorph-world': ['mnemorph-wire', 'mnemorph-races', 'mnemorph-ledger', 'mnemorph-memory'],
   'mnemorph-loop': [
+    'mnemorph-config',
     'mnemorph-world',
     'mnemorph-provider',
     'mnemorph-tools',

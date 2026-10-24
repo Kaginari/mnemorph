@@ -1,0 +1,17 @@
+[package]
+name = "mnemorph-config"
+description = "Configuration: TOML layers with origins, the gate's loosening rules, models, budgets, providers, Oni envelopes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+mnemorph-races = { path = "../mnemorph-races" }
+mnemorph-tools = { path = "../mnemorph-tools" }
+toml = "1"
+toml_edit = "0.25"
+
+[lints]
+workspace = true

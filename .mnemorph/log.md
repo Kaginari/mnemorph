@@ -652,3 +652,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** isekai never named it "wave 4": the group is v0.3.0's "the world measures, answers
   and heals itself", spec in its races canon. Roster self-heal exists only on an unmerged branch
   there — it is Mnemorph's from the first world rung (M7).
+
+---
+
+### [2026-10-24T03:56:35+02:00] rimuru — M4a: configuration
+- **Task:** the config rung: TOML layers with origins, `explain`, holes, writes that keep
+  comments, the tracked file only tightening the gate, models, budgets, providers, Oni
+  envelopes; and the fallback chain the M3 review left to this rung (#7).
+- **Files:** crates/mnemorph-config/ (lib.rs: `Paths`, `Layer`, `Origin`, `Config::load`,
+  `explain`, holes, the loosening keys, `model_for`, `fallback_chain`, `providers`, `envelopes`
+  vetted by the classifier; write.rs: `set` through toml_edit, parsed before it replaces),
+  tests/config.rs (12), tools/check-layers.mjs (config: races, tools; loop: config),
+  docs/05-architecture.md (crate graph, tree, a Configuration section), .gitignore.
+- **Gate:** n/a. Instruments: `just check` (180 tests); the layer check counts 12 crates.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Refusing loosening keys from the tracked file is only half; the other half is that no body
+    can write `.mnemorph/` (the tripwire), so "never from text a body wrote" holds by
+    construction.
+  - Envelopes are vetted by the same classifier the gate trusts: a pattern the guard calls
+    destructive or refuses can never become a standing permission.
+  - Veldora: a part ships with its docs in the same pull request — now a standing rule.
