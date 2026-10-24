@@ -190,10 +190,6 @@ never the same note recalled twice.
 at once (see *Reconsolidation*). The body's explanation of *why* it failed stays personal and
 proposed until a route promotes it.
 
-**Handoffs stay proposed.** A handoff has no commission of its own, so it is context to check,
-never fact to trust ([the loop](03-loop.md#between-sessions-the-handoff)). Its claims rise only
-by corroboration, by the human, or by confidence earned when later runs that recalled them pass.
-
 **`@U territory` is not memory.** A territory fact goes to [the ontology](09-ontology.md#facts-who-said-what),
 where it is remembered with who said it and can be countered; ownership is checked by the gate's
 *right author* rule, not by recall.
@@ -231,7 +227,7 @@ Writes to the traces are a function of observed outcomes, never of model output 
 
 | Source | Lands in | Standing | $\pi$ | $s$ | $\kappa$ |
 |---|---|---|---|---|---|
-| a `@U` line, a body's claim, a handoff's narrative | personal | proposed | support | 0.6 | 0.5 |
+| a `@U` line, a body's claim | personal | proposed | support | 0.6 | 0.5 |
 | the same, promoted by **checked** or **confirmed** | shared | grounded | support | 0.6 | 0.7 |
 | the same, promoted by **accepted** or **corroborated** | shared | grounded | support | 0.6 | 0.6 |
 | a run-ending failed verify or a failed gate verdict | the scope of the notes it names | grounded | revise | 1.0 | 0.9 · 0.4 |

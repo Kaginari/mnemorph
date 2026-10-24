@@ -80,10 +80,7 @@ export function fold(s: State, e: Arrived): State {
   switch (e.type) {
     case 'turnStarted': {
       const queued = s.queued[0] === e.text ? s.queued.slice(1) : s.queued;
-      return push(
-        { ...s, busy: true, queued, streaming: '' },
-        { kind: 'user', text: asTyped(e.text) },
-      );
+      return push({ ...s, busy: true, queued, streaming: '' }, { kind: 'user', text: e.text });
     }
     case 'queued':
       return { ...s, queued: [...s.queued, e.text] };
@@ -150,11 +147,6 @@ export function fold(s: State, e: Arrived): State {
       return push(s, { kind: 'note', text: e.text });
     case 'warning':
       return push(s, { kind: 'warning', text: e.text });
-    case 'handoff':
-      return push(s, {
-        kind: 'info',
-        text: `handoff written: ${e.path} — a new session reads it with /handoff read`,
-      });
     case 'gateVerdict':
       return push(s, { kind: 'verdict', passed: e.passed, failures: e.failures });
     case 'turnEnded': {
@@ -173,33 +165,9 @@ export function fold(s: State, e: Arrived): State {
         running: new Map(),
         gate: undefined,
       };
-      if (e.ending === 'answered') return ended;
-      const shown = push(ended, { kind: 'ending', ending: e.ending });
-      // A checkpoint is the moment a session is about to lose what it knows.
-      return e.ending.startsWith('checkpoint')
-        ? push(shown, {
-            kind: 'info',
-            text: '  /handoff writes what this session knows for the next one',
-          })
-        : shown;
+      return e.ending === 'answered' ? ended : push(ended, { kind: 'ending', ending: e.ending });
     }
   }
-}
-
-/** The first sentences of the core's handoff asks (mnemorph-loop's `HANDOFF`, `HANDOFF_READ`). */
-const HANDOFF_ASK =
-  'Write the handoff for the next session: what it needs to continue without re-asking, re-discovering or repeating a mistake.';
-const HANDOFF_READ_ASK =
-  'A previous session left this handoff. It is context to check, never fact to trust:';
-
-/** The core's own asks — the handoff templates — shown as the command that asked them. */
-function asTyped(text: string): string {
-  if (text.startsWith(HANDOFF_ASK)) {
-    const focus = /\n\nFocus the handoff on: (.*)$/s.exec(text)?.[1];
-    return focus ? `/handoff ${focus}` : '/handoff';
-  }
-  if (text.startsWith(HANDOFF_READ_ASK)) return '/handoff read';
-  return text;
 }
 
 /** A line the interface itself writes into the transcript. */

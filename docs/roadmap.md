@@ -192,7 +192,7 @@ Esc stops a running command within a second.
 - `mnemorph-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
 - `@mnemorph/protocol` generated, `@mnemorph/sdk`, `@mnemorph/cli` with Ink: streaming text, tool
   call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
-  themes; Enter queues while a turn runs, `/send`, `/handoff` and `/handoff read`.
+  themes; Enter queues while a turn runs, `/send`.
 - The UX bar is Claude Code and OpenCode: input history, multi-line editing, paste, selection and
   copy, resize, interrupt with Esc, no flicker.
 
@@ -255,9 +255,8 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
    `abstract`, and `tombstone` on machine-local tiers only.
 6. **Pathologies.** `mnemorph memory status`: the replay loop, lock-in and the unproven write
    (the fold checks every event's `by` and proof), each with its act.
-7. **Session start, handoff, toolbox, drain.** Session start injects the law and the recent log
-   through the harness itself; the handoff's gathered facts and its offer at the stress zone and
-   at checkpoints; the toolbox's two levels with priced manifests; the compaction drain, whose
+7. **Session start, toolbox, drain.** Session start injects the law and the recent log through
+   the harness itself; the toolbox's two levels with priced manifests; the compaction drain, whose
    `@U` lines land as proposed notes.
 
 **Exit:**

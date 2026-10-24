@@ -28,10 +28,7 @@ pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use open::{Bound, Opened, open, open_with};
 pub use route::{Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, pick, route, route_ask};
-pub use run::{
-    Body, Ending, HANDOFF, HANDOFF_READ, Interrupt, Limits, Observer, Run, SENT, Seen, Setup,
-    Steer, handoffs, latest_handoff,
-};
+pub use run::{Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup, Steer};
 pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};
