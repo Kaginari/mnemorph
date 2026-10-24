@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use mnemorph_races::{Race, ToolClass, check_class};
+use mnemorph_sandbox::Sandbox;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -100,6 +101,7 @@ pub struct Context {
     soil: Vec<PathBuf>,
     home: PathBuf,
     gate: Arc<dyn Gate>,
+    sandbox: Sandbox,
     pub(crate) seen: HashMap<PathBuf, Seen>,
 }
 
@@ -110,6 +112,7 @@ impl std::fmt::Debug for Context {
             .field("world", &self.world)
             .field("soil", &self.soil)
             .field("home", &self.home)
+            .field("sandbox", &self.sandbox)
             .finish_non_exhaustive()
     }
 }
@@ -135,6 +138,7 @@ impl Context {
             soil,
             home,
             gate: Arc::new(NoHuman),
+            sandbox: Sandbox::detect(),
             seen: HashMap::new(),
         }
     }
@@ -153,13 +157,28 @@ impl Context {
         self
     }
 
+    /// Contain commands with this sandbox instead of the one detected for the machine.
+    #[must_use]
+    pub fn with_sandbox(mut self, sandbox: Sandbox) -> Self {
+        self.sandbox = sandbox;
+        self
+    }
+
+    /// The sandbox commands run in.
+    #[must_use]
+    pub fn sandbox(&self) -> &Sandbox {
+        &self.sandbox
+    }
+
     /// The body's race.
     #[must_use]
     pub fn race(&self) -> Race {
         self.race
     }
 
-    pub(crate) fn home(&self) -> &Path {
+    /// The home `~` resolves to.
+    #[must_use]
+    pub fn home(&self) -> &Path {
         &self.home
     }
 

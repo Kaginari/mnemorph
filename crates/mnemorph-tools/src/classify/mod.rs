@@ -61,6 +61,9 @@ pub enum Verdict {
         class: ToolClass,
         /// Why the class is above `read`, one line per reason.
         why: Vec<String>,
+        /// The paths outside the world it writes or deletes, as the classifier located them —
+        /// what an approval may open in the sandbox, and nothing more.
+        outside: Vec<PathBuf>,
     },
     /// The command never runs: the guard refuses it before any gate is asked.
     Refuse {
@@ -113,6 +116,7 @@ pub(crate) struct Tally {
     class: Option<ToolClass>,
     why: Vec<String>,
     refused: Option<String>,
+    pub(crate) outside: Vec<PathBuf>,
 }
 
 impl Tally {
@@ -140,6 +144,11 @@ impl Tally {
         {
             self.class = Some(c);
         }
+        for p in other.outside {
+            if !self.outside.contains(&p) {
+                self.outside.push(p);
+            }
+        }
         for w in other.why {
             if !self.why.contains(&w) {
                 self.why.push(w);
@@ -153,6 +162,7 @@ impl Tally {
             None => Verdict::Run {
                 class: self.class.unwrap_or(ToolClass::Read),
                 why: self.why,
+                outside: self.outside,
             },
         }
     }

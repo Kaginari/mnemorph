@@ -1,1 +1,270 @@
 //! The sandbox: landlock and seccomp on Linux, Seatbelt on macOS, the network policy.
+//!
+//! A command runs inside a [`Policy`]: it may write only the world and its own temporary
+//! directory, read only the system's directories, the world and the toolchains in the home —
+//! never a credential — and reach the network only when the policy says so.
+//!
+//! - **Linux**: the command is started through `mnemorph-jail`, which restricts itself with
+//!   landlock (the file rules) and seccomp (no sockets without network; no `ptrace`, `mount`,
+//!   `unshare`, `bpf`, `io_uring`, … ever), then execs the command. No namespaces are needed, so
+//!   it works where unprivileged user namespaces are restricted.
+//! - **macOS**: the command is started through `sandbox-exec` with a generated Seatbelt profile.
+//!
+//! [`Sandbox::status`] says what is actually in force, or `none — <reason>`: containment is
+//! never claimed.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+#[cfg(target_os = "linux")]
+pub mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+
+/// Credential paths under the home, by their first segment (or first two). The sandbox never
+/// lets a command read them; the shell classifier refuses commands that name them.
+pub const HOME_CREDENTIALS: &[&str] = &[
+    ".ssh",
+    ".aws",
+    ".gnupg",
+    ".password-store",
+    ".netrc",
+    ".git-credentials",
+    ".npmrc",
+    ".pypirc",
+    ".docker",
+    ".kube",
+    ".config/gh",
+    ".config/gcloud",
+    ".azure",
+    ".cargo/credentials",
+    ".cargo/credentials.toml",
+    "Library/Keychains",
+];
+
+/// Credential files anywhere on the system.
+pub const SYSTEM_CREDENTIALS: &[&str] = &["/etc/shadow", "/etc/gshadow", "/etc/sudoers"];
+
+/// Toolchains and caches in the home that builds read (and some write).
+const HOME_TOOLCHAINS: &[&str] = &[
+    // `.local` only in part: `.local/share/keyrings` holds credentials, and Linux cannot carve an
+    // exception out of a readable tree.
+    ".cargo",
+    ".rustup",
+    ".local/bin",
+    ".local/lib",
+    ".local/share/pnpm",
+    ".local/go-current",
+    ".npm",
+    ".nvm",
+    ".pnpm-store",
+    ".cache",
+    ".pyenv",
+    ".bun",
+    ".deno",
+    ".gitconfig",
+    ".config/git",
+    "go",
+    ".gradle",
+    ".m2",
+];
+
+/// The system directories a command may read (and execute from).
+const SYSTEM_READ: &[&str] = &[
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib32",
+    "/lib64",
+    "/libx32",
+    "/etc",
+    "/opt",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/nix",
+    "/snap",
+    "/System",
+    "/Library",
+    "/Applications",
+    "/private/etc",
+    "/private/var/db",
+    "/var/db",
+    "/var/select",
+];
+
+/// Device files a command may write.
+const DEVICES: &[&str] = &[
+    "/dev/null",
+    "/dev/zero",
+    "/dev/full",
+    "/dev/tty",
+    "/dev/random",
+    "/dev/urandom",
+];
+
+/// What a sandboxed command may touch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Policy {
+    /// Read and written: the world and the command's temporary directory.
+    pub write: Vec<PathBuf>,
+    /// Read (and executed from) only.
+    pub read: Vec<PathBuf>,
+    /// Paths never readable even under a readable directory (applied where the platform can
+    /// deny inside an allowed tree, Seatbelt; on Linux they are simply never allowed).
+    pub hidden: Vec<PathBuf>,
+    /// Sockets allowed.
+    pub network: bool,
+}
+
+impl Policy {
+    /// The policy for a command in `world` with `home`, writing temporary files under `tmp`.
+    #[must_use]
+    pub fn new(world: &Path, home: &Path, tmp: &Path, network: bool) -> Self {
+        let mut read: Vec<PathBuf> = SYSTEM_READ.iter().map(PathBuf::from).collect();
+        read.extend(HOME_TOOLCHAINS.iter().map(|t| home.join(t)));
+        let mut write = vec![world.to_path_buf(), tmp.to_path_buf()];
+        write.extend(DEVICES.iter().map(PathBuf::from));
+        let mut hidden: Vec<PathBuf> = HOME_CREDENTIALS.iter().map(|c| home.join(c)).collect();
+        hidden.extend(SYSTEM_CREDENTIALS.iter().map(PathBuf::from));
+        Self {
+            write,
+            read,
+            hidden,
+            network,
+        }
+    }
+
+    /// The paths of `list` that exist, resolved; rules cannot name what is not there.
+    #[must_use]
+    pub fn existing(list: &[PathBuf]) -> Vec<PathBuf> {
+        list.iter().filter_map(|p| p.canonicalize().ok()).collect()
+    }
+}
+
+/// How commands are contained on this machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sandbox {
+    /// Through the `mnemorph-jail` helper at this path (Linux).
+    Jail(PathBuf),
+    /// Through `sandbox-exec` (macOS).
+    Seatbelt(PathBuf),
+    /// Not at all, and why.
+    None(String),
+}
+
+impl Sandbox {
+    /// Find the sandbox for this machine: `MNEMORPH_JAIL`, or `mnemorph-jail` beside the running
+    /// binary, on Linux; `/usr/bin/sandbox-exec` on macOS.
+    #[must_use]
+    pub fn detect() -> Self {
+        if cfg!(target_os = "linux") {
+            let candidate = std::env::var_os("MNEMORPH_JAIL")
+                .map(PathBuf::from)
+                .or_else(|| {
+                    std::env::current_exe()
+                        .ok()
+                        .and_then(|exe| exe.parent().map(|d| d.join("mnemorph-jail")))
+                });
+            match candidate {
+                Some(p) if p.is_file() => Self::Jail(p),
+                Some(p) => Self::None(format!("the jail helper is missing ({})", p.display())),
+                None => Self::None("the jail helper cannot be located".into()),
+            }
+        } else if cfg!(target_os = "macos") {
+            let p = PathBuf::from("/usr/bin/sandbox-exec");
+            if p.is_file() {
+                Self::Seatbelt(p)
+            } else {
+                Self::None("sandbox-exec is missing".into())
+            }
+        } else {
+            Self::None(format!("no sandbox for {}", std::env::consts::OS))
+        }
+    }
+
+    /// A command running `program` with `args` inside `policy`.
+    #[must_use]
+    pub fn command(&self, policy: &Policy, program: &str, args: &[&str]) -> Command {
+        match self {
+            Self::Jail(jail) => {
+                let mut cmd = Command::new(jail);
+                for p in Policy::existing(&policy.read) {
+                    cmd.arg("--read").arg(p);
+                }
+                for p in Policy::existing(&policy.write) {
+                    cmd.arg("--write").arg(p);
+                }
+                if policy.network {
+                    cmd.arg("--network");
+                }
+                cmd.arg("--").arg(program).args(args);
+                cmd
+            }
+            #[cfg(target_os = "macos")]
+            Self::Seatbelt(exec) => {
+                let mut cmd = Command::new(exec);
+                cmd.arg("-p")
+                    .arg(macos::profile(policy))
+                    .arg(program)
+                    .args(args);
+                cmd
+            }
+            #[cfg(not(target_os = "macos"))]
+            Self::Seatbelt(_) => {
+                let mut cmd = Command::new(program);
+                cmd.args(args);
+                cmd
+            }
+            Self::None(_) => {
+                let mut cmd = Command::new(program);
+                cmd.args(args);
+                cmd
+            }
+        }
+    }
+
+    /// What is in force, in one line — `landlock ABI 1 + seccomp, network off`, or
+    /// `none — <reason>`. On Linux the jail restricts a probe and reports what the kernel did.
+    #[must_use]
+    pub fn status(&self, network: bool) -> String {
+        match self {
+            Self::Jail(jail) => {
+                let mut probe = Command::new(jail);
+                probe.arg("--probe");
+                if network {
+                    probe.arg("--network");
+                }
+                match probe.output() {
+                    Ok(out) if out.status.success() => {
+                        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+                    }
+                    Ok(out) => format!(
+                        "none — the jail refused: {}",
+                        String::from_utf8_lossy(&out.stderr).trim()
+                    ),
+                    Err(e) => format!("none — the jail did not start: {e}"),
+                }
+            }
+            Self::Seatbelt(_) => {
+                format!("seatbelt, network {}", if network { "on" } else { "off" })
+            }
+            Self::None(reason) => format!("none — {reason}"),
+        }
+    }
+}
+
+/// Make this process unreadable to the commands it starts: on Linux it becomes non-dumpable,
+/// so `/proc/<pid>/environ` and its memory are closed to every non-root process.
+///
+/// # Errors
+///
+/// When the kernel refuses.
+pub fn harden_self() -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)?;
+    }
+    Ok(())
+}
