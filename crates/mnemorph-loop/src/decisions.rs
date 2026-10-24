@@ -8,10 +8,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mnemorph_ledger::{DecisionRow, Journal};
+use mnemorph_ledger::{DecisionRow, Journal, Prices, Timestamp, UsageRow};
 use mnemorph_provider::{
-    Ask, Complete, Completion, Cutoffs, Decider, Decision, Fallback, HttpTransport, Primary,
-    Question, Request, SystemOne,
+    Ask, Caller, Complete, Completion, Cutoffs, Decider, Decision, Fallback, HttpTransport,
+    Primary, Question, Request, SystemOne,
 };
 
 use crate::model::Model;
@@ -31,6 +31,32 @@ pub struct Decisions {
     pub cutoffs: Cutoffs,
     /// The decision journal, `.mnemorph/instruments/decisions.jsonl`.
     pub journal: Journal<DecisionRow>,
+    /// Whether a piped test run is read (`decide.bench`).
+    pub bench: bool,
+    /// Whether Metis routes commissions to a tier (`decide.route`).
+    pub route: bool,
+}
+
+/// What a decision cost, as a usage row: priced like any call, `usd: null` for a model the price
+/// table does not know.
+#[must_use]
+pub fn decision_usage(decision: &Decision, caller: &Caller, prices: &Prices) -> UsageRow {
+    UsageRow {
+        ts: Timestamp::now(),
+        session: caller.session.clone(),
+        run: caller.run.clone(),
+        body: caller.body.clone(),
+        race: caller.race.clone(),
+        commission: caller.commission.clone(),
+        model: decision.source.model.clone(),
+        provider: decision.source.provider.clone(),
+        usage: decision.usage,
+        prefix: 0,
+        wt: 0,
+        usd: None,
+        envelope: None,
+    }
+    .priced(prices)
 }
 
 /// The run's own model, as a decision's fallback: asked for `decide.llm` through the provider
@@ -48,7 +74,7 @@ impl Complete for Own {
 
 /// The run's decisions from the configuration: `decide.via`'s System One provider first, its key
 /// read from the environment variable it names (`env`); then `decide.llm` through the run's own
-/// `model`. `None` when `decide.bench` is off.
+/// `model`. `None` when no decision point is on (`decide.bench`, `decide.route`).
 ///
 /// # Errors
 ///
@@ -61,7 +87,7 @@ pub fn decisions(
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Option<Decisions>, String> {
     let d = config.decide()?;
-    if !d.bench {
+    if !d.bench && !d.route {
         return Ok(None);
     }
     let primary = match &d.via {
@@ -97,6 +123,8 @@ pub fn decisions(
             stated: d.cutoff_stated,
         },
         journal: Journal::new(world.join(".mnemorph/instruments/decisions.jsonl")),
+        bench: d.bench,
+        route: d.route,
     }))
 }
 

@@ -339,6 +339,7 @@ via = "jeff"                       # unset: every decision goes to the LLM
 model = "jeff-latest"              # required with via; Jev's is "jev-latest"
 llm = "claude-haiku-5-5"           # the fallback; the fast tier's model by default
 bench = true                       # read a piped test run's output (on with via; set it to ask the LLM)
+route = true                       # Metis: route commissions within their office's band (off by default)
 
 [decide.cutoff]
 measured = 0.6                     # the least confidence to act on a System One answer
@@ -423,7 +424,12 @@ flowchart LR
   through the run's own provider. What leaves for the decider is the command and the last 12 000
   bytes of its output; test output can print anything, so a provider outside the machine sees
   what the tests print. It is honoured once a binary builds runs from the configuration (the CLI,
-  M6). The others attach with their milestones:
+  M6). **`model.route` is Metis** (`decide.route = true`, off by default): `route(config,
+  decisions, caller, race, office, commission)` returns the model a body rides, a reason, and the
+  decision to price, moving it within its office's band on a sure answer (*Metis routes within a
+  band*, [the races](02-races.md)). What leaves for the decider is the commission's first 8 000
+  bytes. It is honoured once dispatch builds bodies from commissions (M7). The others attach with
+  their milestones:
   dispatch advice (M7), the Dark Elf's pre-screen, judged by its calibration first (#106, M10),
   and a commission's size (M11's value row).
 

@@ -7,7 +7,9 @@ use crate::{report::one_line, tag};
 /// The answer ceiling, in bytes, when a commission names none.
 pub const DEFAULT_CAP: usize = 2048;
 
-/// The office an `@ASK` word selects: read, judge or write.
+/// The office an `@ASK` word selects. Each has a name in the world — the three first Muses,
+/// daughters of Mnemosyne, memory: **Mneme** reads (memory), **Melete** judges (deliberation),
+/// **Aoede** writes (voice) — and a function a configuration may name instead: read, judge, write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Office {
     /// `findings` — gather facts.
@@ -28,6 +30,29 @@ impl Office {
             Office::Draft => "draft",
         }
     }
+
+    /// The office's name in the world: `mneme`, `melete` or `aoede`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Office::Findings => "mneme",
+            Office::Verdict => "melete",
+            Office::Draft => "aoede",
+        }
+    }
+
+    /// What the office does: `read`, `judge` or `write`.
+    #[must_use]
+    pub fn function(self) -> &'static str {
+        match self {
+            Office::Findings => "read",
+            Office::Verdict => "judge",
+            Office::Draft => "write",
+        }
+    }
+
+    /// Every office, in the order a commission's work flows: read, judge, write.
+    pub const ALL: [Office; 3] = [Office::Findings, Office::Verdict, Office::Draft];
 
     fn from_word(word: &str) -> Option<Self> {
         match word {
@@ -210,6 +235,22 @@ pub fn parse_budget(text: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn each_office_has_a_word_a_name_and_a_function() {
+        let rows: Vec<_> = super::Office::ALL
+            .iter()
+            .map(|o| (o.word(), o.name(), o.function()))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("findings", "mneme", "read"),
+                ("verdict", "melete", "judge"),
+                ("draft", "aoede", "write"),
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

@@ -222,6 +222,8 @@ fn with(w: &World, primary: Option<SystemOne>, llm: &Arc<Llm>) -> Decisions {
         }),
         cutoffs: Cutoffs::default(),
         journal: w.decisions_journal(),
+        bench: true,
+        route: false,
     }
 }
 
@@ -454,6 +456,17 @@ fn decisions_are_built_from_the_humans_configuration() {
             .unwrap()
             .is_none()
     );
+
+    // Routing alone is a reason to build the decider; the bench stays off.
+    let route_only = decisions(
+        &load("[decide]\nroute = true\n"),
+        &world,
+        model.clone(),
+        none,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(route_only.route && !route_only.bench);
 
     // No System One named: nothing is asked unless the human turns the point on.
     assert!(

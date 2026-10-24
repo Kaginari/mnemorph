@@ -117,11 +117,38 @@ privilege cannot be added halfway. Methods rather than a trait of constants, bec
 the law about a race it holds at run time. The crate is covered whole: `just law` fails under
 100% region coverage, and its tests drive every operand of every rule both ways.
 
+**The offices.** A commission's `@ASK` selects one of three offices, named for the three first
+Muses, daughters of Mnemosyne, memory:
+
+| `@ASK` | Office | Muse of | Does |
+|---|---|---|---|
+| `findings` | **Mneme** | memory | reads: wide, thin, `file:line` facts |
+| `verdict` | **Melete** | deliberation | judges: a verdict with its evidence |
+| `draft` | **Aoede** | voice | writes: the work, or the world's words |
+
+The throne has no office. A configuration names an office by its Muse or by what it does
+(`melete` or `judge`); any other word is an error.
+
 **Which model rides a body.** One rule, in order: a model configured for the exact creature;
-else for the pair (race, office), where the office comes from the commission's `@ASK`
-(`findings` → read, `verdict` → judge, `draft` → write; the throne has no office); else the model
-configured for the race's `DEFAULT_TIER`. The default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and
-the adversary think hardest), **strong** for Orc, Slime and Kijin.
+else for the pair (race, office); else the model configured for the race's `DEFAULT_TIER`. The
+default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and the
+adversary think hardest), **strong** for Orc, Slime and Kijin.
+
+**Metis routes within a band** (`decide.route`, off by default). Metis, measure and wise counsel,
+is a decision point (`model.route`, [the architecture](05-architecture.md)): before a body runs,
+the decider reads the commission and answers how demanding it is (routine, involved, hard) and
+whether a mistake would be hard to undo. On a sure answer the body moves within its office's band:
+
+| Office | Floor | Default | Ceiling |
+|---|---|---|---|
+| Mneme | fast | the race's tier | frontier |
+| Melete, Aoede | strong | the race's tier | frontier |
+| none | the race's tier | the race's tier | frontier |
+
+Routine work goes to the floor, involved work stays at the default, hard work or work that is hard
+to undo goes to the ceiling. The floor is never above the default, and the Dark Elf never goes
+below its own tier. An unsure or failed decision keeps the default, and a model the human
+configured for a creature or an office is never routed.
 
 **Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
 Slime's shelf (`read`, `write`; nothing outward) — under the shelves,

@@ -1117,3 +1117,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** the #113 entry's Files line calls `decide.bench` on by default; it is off unless
   the human names a System One provider or sets it (its own Learned bullet says so).
+
+---
+
+### [2026-10-24T14:55:00+02:00] rimuru — the offices named, and Metis routes within their bands
+- **Task:** Veldora: "a jev usecase: which model to choose based on complexity, the courts, the
+  offices (ciel, raphael, great-sage); find other names meaningful for mnemorph", then "go on" to
+  the proposal: the three first Muses for the offices, Metis for the router, routing off by
+  default.
+- **Files:** mnemorph-wire commission.rs (`Office::name` mneme/melete/aoede, `Office::function`
+  read/judge/write, `Office::ALL`), mnemorph-config (an office key names a Muse or a function,
+  anything else is an error; `model_pinned`, `tier_model`; `decide.route`), mnemorph-loop
+  route.rs (`band`, `route_ask`, `pick`, `route`; journaled at `model.route`), decisions.rs
+  (`bench` and `route` switches; `decision_usage`, shared with the bench), tests/route.rs, the
+  live test (`two_real_routes`), docs/02-races.md (*The offices*, *Metis routes within a band*),
+  docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`; live against TypeSafe: a rename read routine at 1.00
+  and hard-to-undo at 0.06; a production payments migration hard at 0.98 and hard-to-undo at 0.97.
+- **Result:** in review as a pull request. Honoured once dispatch builds bodies from commissions.
+- **Learned:**
+  - The canon's model table was already a complexity rule in words — Great Sage fast, Raphael
+    bumped for what is hard to undo, Ciel never below Raphael — so the router is the canon made
+    measurable, bounded by the floors the canon set.
+  - The office key never validated its office word: `models.office.orc.verdict` (the `@ASK` word,
+    not the office) configured a model nobody would ever ride.
