@@ -219,6 +219,12 @@ flowchart LR
   breaks `.git` finds it put back after it ends. Deleting `.git` or the world's records outright
   is `destructive`, so it asks first. The attic's git runs deaf to every configuration but its
   own: no hooks, no filters, no fsmonitor from the world or the human's files.
+  It prunes itself at most once a day: snapshots older than `attic.keep_days` (14) go, then the
+  oldest while the snapshot store is over `attic.max_mb` (2048) — the newest always stays — and
+  `git gc` packs what remains; kept `.git` objects the world itself has dropped age out with the
+  same window. The cap measures the snapshot store only: the kept `.git` objects are hard links
+  and cost no disk beside the world's own. Measured on this repository: the first snapshot
+  takes 1.8 s and about 13 MB (9 MB once packed); an unchanged one, 24 ms and nothing.
 - **The file tools** run in the harness, not the sandbox, so they guard their own opens: a path
   is resolved and checked inside the world (and the soil, for writes), then opened again one
   component at a time from the world's root following no symlink, and written through a

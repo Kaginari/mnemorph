@@ -863,3 +863,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     objects the attic also names.
   - `solo()` attached the real attic in tests and left eight attics in `~/.local/state`; every
     suite now gives its runs a private one, and the leak was removed.
+
+---
+
+### [2026-10-24T10:14:15+02:00] rimuru — the attic prunes itself
+- **Task:** a side review: the attic only ever grew. Checked: true — snapshots were loose,
+  unreferenced trees, and the kept `.git` objects outlived the world's own pruning.
+- **Files:** crates/mnemorph-tools/src/attic.rs (a ref per snapshot; `prune`: the keep window,
+  then the size cap, `git gc`, old `.git` copies forgotten; at most once a day; `with_limits`),
+  mnemorph-config (`attic.keep_days`, `attic.max_mb`, `attic_limits`), tests (4),
+  docs/05-architecture.md.
+- **Gate:** n/a. Instruments: on this repository the first snapshot took 1.8 s and ~13 MB
+  (9 MB packed), an unchanged one 24 ms and nothing; `just check` (230).
+- **Result:** in review as a pull request.
+- **Learned:** the measurement found the cap's own bug — `du` counts hard links, so a cap over
+  the whole attic would have charged the world's repository to it and dropped snapshots for
+  nothing. The cap measures the snapshot store alone.

@@ -362,3 +362,15 @@ fn the_tracked_file_cannot_define_providers() {
         "the human's own file is honoured"
     );
 }
+
+#[test]
+fn the_attic_limits_default_and_can_be_set_anywhere() {
+    let g = Ground::new("attic-limits");
+    assert_eq!(g.load().unwrap().attic_limits(), (14, 2048));
+    g.tracked("[attic]\nkeep_days = 7\nmax_mb = 512\n");
+    assert_eq!(
+        g.load().unwrap().attic_limits(),
+        (7, 512),
+        "a tighter attic is not a looser gate"
+    );
+}
