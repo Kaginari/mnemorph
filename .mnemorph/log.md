@@ -1057,3 +1057,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     goes as it is, between markers made for the call); no id joined a decision to its outcome
     (now `DecisionRow.id` and `OutcomeRow`); `jev-latest` was assumed for jeff (`decide.model` is
     required with `via`).
+
+---
+
+### [2026-10-24T13:28:29+02:00] rimuru — no merge left half-done
+- **Task:** the review of #112 found raw conflict markers in `docs/05-architecture.md` on main
+  (the `[oni]` block of #110 against the System One config blocks), merged through a green CI.
+- **Files:** docs/05-architecture.md (both sides kept, `[oni]` beside its envelopes), justfile
+  (`docs` fails on a conflict marker in any tracked file), docs/lessons.md (Process row).
+- **Gate:** n/a. Instruments: `just docs` passes on the fixed tree and fails on a planted marker.
+- **Result:** in review as a pull request.
+- **Learned:** a green check is only as wide as what it reads: the site build parses markdown
+  and checks links, and a conflict marker is valid markdown.
