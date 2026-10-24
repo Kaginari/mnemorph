@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 
 use mnemorph_races::ToolClass;
 
-use super::{Place, Tally};
+use super::{Place, Rule, Tally};
 
 /// What a command does to a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,7 +185,10 @@ fn is_credential(path: &Path, home: &Path) -> bool {
 pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
     match (spot, act) {
         (Spot::Credential(p), _) => {
-            t.refuse(format!("{what} touches a credential: {}", p.display()));
+            t.refuse(
+                Rule::Credential,
+                format!("{what} touches a credential: {}", p.display()),
+            );
         }
         (Spot::Inside { .. } | Spot::Outside { .. } | Spot::Unknown, Act::Read)
         | (Spot::Device(Device::Harmless), _) => {}
@@ -195,7 +198,9 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
         (Spot::Device(Device::Other), Act::Read) => {
             t.raise(ToolClass::Write, format!("{what} reads a device"));
         }
-        (Spot::Device(Device::Other), _) => t.refuse(format!("{what} writes a device")),
+        (Spot::Device(Device::Other), _) => {
+            t.refuse(Rule::Device, format!("{what} writes a device"));
+        }
         (Spot::Inside { root: true }, Act::Delete) => {
             t.raise(
                 ToolClass::Destructive,
@@ -204,7 +209,7 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
         }
         (Spot::Inside { .. }, _) => t.raise(ToolClass::Write, format!("{what} changes the world")),
         (Spot::Outside { danger: true, path }, _) => {
-            t.refuse(format!("{what} changes {} — the root, a system directory, or an ancestor of the world or home", path.display()));
+            t.refuse(Rule::RootPath, format!("{what} changes {} — the root, a system directory, or an ancestor of the world or home", path.display()));
         }
         (Spot::Outside { path, .. }, Act::Modify) => {
             t.outside.push(path.clone());

@@ -65,11 +65,91 @@ pub enum Verdict {
         /// what an approval may open in the sandbox, and nothing more.
         outside: Vec<PathBuf>,
     },
-    /// The command never runs: the guard refuses it before any gate is asked.
+    /// The command never runs unless the human's configuration turns its rule into a question
+    /// (and the rule is not on the floor).
     Refuse {
+        /// The guard rule that refused it.
+        rule: Rule,
         /// The first reason found.
         reason: String,
+        /// The class the command has besides the refusal: what it runs at if the human's
+        /// configuration turns the rule into a question and the human approves.
+        class: ToolClass,
     },
+}
+
+/// The guard's rules, by name. A configuration may turn a rule into "ask the human" instead of
+/// "refuse" — except the floor, which no configuration loosens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Rule {
+    /// The command, a word in it, or a nested string cannot be read.
+    Unreadable,
+    /// A command name, `eval` or `sh -c` string known only at run time.
+    NotLiteral,
+    /// `sed -i`, `perl -i`: in-place edits that fail silently; the edit tool says where.
+    InPlaceEdit,
+    /// A password manager, the keychain, `gpg` secrets, a printed token.
+    SecretStore,
+    /// A credential path (`~/.ssh`, `~/.aws`, …) named by the command.
+    Credential,
+    /// A download piped into an interpreter.
+    RemoteCode,
+    /// Writing a device file (a disk). Floor.
+    Device,
+    /// Disk and power tools: `mkfs`, `fdisk`, `diskutil erase`, `shutdown`. Floor.
+    MachineTool,
+    /// Changing `/`, a top-level directory, or an ancestor of the world or the home. Floor.
+    RootPath,
+    /// A function that calls itself in the background: a fork bomb. Floor.
+    ForkBomb,
+}
+
+impl Rule {
+    /// Every rule.
+    pub const ALL: [Rule; 10] = [
+        Rule::Unreadable,
+        Rule::NotLiteral,
+        Rule::InPlaceEdit,
+        Rule::SecretStore,
+        Rule::Credential,
+        Rule::RemoteCode,
+        Rule::Device,
+        Rule::MachineTool,
+        Rule::RootPath,
+        Rule::ForkBomb,
+    ];
+
+    /// The name a configuration uses.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Rule::Unreadable => "unreadable",
+            Rule::NotLiteral => "not-literal",
+            Rule::InPlaceEdit => "in-place-edit",
+            Rule::SecretStore => "secret-store",
+            Rule::Credential => "credential",
+            Rule::RemoteCode => "remote-code",
+            Rule::Device => "device",
+            Rule::MachineTool => "machine-tool",
+            Rule::RootPath => "root-path",
+            Rule::ForkBomb => "fork-bomb",
+        }
+    }
+
+    /// The rule a configuration names.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Rule> {
+        Rule::ALL.into_iter().find(|r| r.name() == name)
+    }
+
+    /// On the floor: no configuration turns it into a question.
+    #[must_use]
+    pub fn floor(self) -> bool {
+        matches!(
+            self,
+            Rule::Device | Rule::MachineTool | Rule::RootPath | Rule::ForkBomb
+        )
+    }
 }
 
 impl Verdict {
@@ -115,7 +195,7 @@ pub(crate) fn rank(class: ToolClass) -> u8 {
 pub(crate) struct Tally {
     class: Option<ToolClass>,
     why: Vec<String>,
-    refused: Option<String>,
+    refused: Option<(Rule, String)>,
     pub(crate) outside: Vec<PathBuf>,
 }
 
@@ -129,15 +209,15 @@ impl Tally {
         }
     }
 
-    pub(crate) fn refuse(&mut self, reason: impl Into<String>) {
+    pub(crate) fn refuse(&mut self, rule: Rule, reason: impl Into<String>) {
         if self.refused.is_none() {
-            self.refused = Some(reason.into());
+            self.refused = Some((rule, reason.into()));
         }
     }
 
     pub(crate) fn absorb(&mut self, other: Self) {
-        if let Some(r) = other.refused {
-            self.refuse(r);
+        if let Some((rule, r)) = other.refused {
+            self.refuse(rule, r);
         }
         if let Some(c) = other.class
             && self.class.is_none_or(|mine| rank(c) > rank(mine))
@@ -158,7 +238,11 @@ impl Tally {
 
     fn verdict(self) -> Verdict {
         match self.refused {
-            Some(reason) => Verdict::Refuse { reason },
+            Some((rule, reason)) => Verdict::Refuse {
+                rule,
+                reason,
+                class: self.class.unwrap_or(ToolClass::Read),
+            },
             None => Verdict::Run {
                 class: self.class.unwrap_or(ToolClass::Read),
                 why: self.why,
@@ -188,13 +272,19 @@ impl Walker<'_> {
     /// Parse and walk a piece of shell source: the command line, or an `sh -c` / `eval` string.
     pub(crate) fn source(&mut self, src: &str, t: &mut Tally) {
         if self.depth >= MAX_DEPTH {
-            t.refuse("shell strings nest deeper than the classifier reads");
+            t.refuse(
+                Rule::Unreadable,
+                "shell strings nest deeper than the classifier reads",
+            );
             return;
         }
         let program = match parse(src) {
             Ok(p) => p,
             Err(e) => {
-                t.refuse(format!("the command does not parse as shell: {e}"));
+                t.refuse(
+                    Rule::Unreadable,
+                    format!("the command does not parse as shell: {e}"),
+                );
                 return;
             }
         };
@@ -229,6 +319,7 @@ impl Walker<'_> {
             let kind = self.command(cmd, t);
             if fetched && kind.runs_stdin {
                 t.refuse(
+                    Rule::RemoteCode,
                     "runs code fetched from the network (a download piped into an interpreter)",
                 );
             }
@@ -251,10 +342,13 @@ impl Walker<'_> {
                 let mut names = Vec::new();
                 collect_names(&f.body.0, &mut names);
                 if names.iter().any(|n| *n == f.fname.value) {
-                    t.refuse(format!(
-                        "the function `{}` calls itself (the shape of a fork bomb)",
-                        f.fname.value
-                    ));
+                    t.refuse(
+                        Rule::ForkBomb,
+                        format!(
+                            "the function `{}` calls itself (the shape of a fork bomb)",
+                            f.fname.value
+                        ),
+                    );
                 }
                 self.compound(&f.body.0, t);
                 self.redirects(f.body.1.as_ref(), t);
@@ -353,7 +447,7 @@ impl Walker<'_> {
             match expand(w, &self.place.home) {
                 Ok(lits) => argv.extend(lits),
                 Err(e) => {
-                    t.refuse(e);
+                    t.refuse(Rule::Unreadable, e);
                     return Kind::default();
                 }
             }
@@ -446,7 +540,7 @@ impl Walker<'_> {
                     self.source(sub, t);
                 }
             }
-            Err(e) => t.refuse(e),
+            Err(e) => t.refuse(Rule::Unreadable, e),
         }
     }
 
@@ -460,7 +554,7 @@ impl Walker<'_> {
                     self.touch(&lit, act, what, t);
                 }
             }
-            Err(e) => t.refuse(e),
+            Err(e) => t.refuse(Rule::Unreadable, e),
         }
     }
 

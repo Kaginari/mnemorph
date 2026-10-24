@@ -177,12 +177,36 @@ flowchart LR
   - **The network** opens only for an outward or destructive command the gate approved. An
     approval also opens the paths outside the world that the classifier located in the command
     — listed on the approval card — and nothing else: a path known only at run time stays shut.
+    Each path opens alone, never its folder: a new file is first made, empty, by the harness so
+    the sandbox can name it (and removed again if the command fails). An approved delete
+    outside the world stays refused: the kernel ties deletion to the folder, and the folder is
+    not opened.
+  - **Limits** — no core dumps, files up to 4 GiB, at most 8192 processes for the user; and no
+    new namespaces: `unshare` and a `clone` carrying a namespace flag fail, `clone3` reports
+    itself missing so the C library falls back to `clone`.
+- **The tripwire** covers what landlock cannot: landlock only adds access, so no read-only
+  corner can be carved out of the writable world. Git's executable configuration
+  (`.git/config` — `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`,
+  `.git/info`, a `.git` file) would run code outside any sandbox the next time the human runs
+  git, and `.mnemorph/` holds the world's records. Each command runs between two snapshots of
+  them; once its process group is dead, every change is put back and the body is told. The
+  file tools refuse those paths outright. `.mnemorph/shared/` (the work queue), `tmp/` and
+  `intel/` stay writable; a repository the command itself creates is its own.
+- **The guard's rules have names** (`in-place-edit`, `secret-store`, `credential`,
+  `not-literal`, `remote-code`, `unreadable`, …). The human's configuration may turn a rule into
+  a question — the command then waits on the gate with the class it would have had — except
+  the floor, which stays a refusal whatever any file says: `root-path`, `device`,
+  `machine-tool`, `fork-bomb`. The sandbox still holds under an approved rule: approving
+  `credential` does not open a credential path.
 - Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) refuses
   every cross-directory rename or link inside the sandbox (`mv` and git fall back to copying)
   and cannot restrict truncate; v4 (6.7+) adds network rules. The jail asks for the newest rules
   it knows, the kernel enforces what it has, and `status` prints what is actually in force —
   `landlock ABI 1 (of 5 asked) + seccomp, network off`, or `none — <reason>`.
-- macOS: a generated Seatbelt profile with the same policies.
+- macOS: a generated Seatbelt profile with the same policies — reads from the same allowlist
+  (metadata anywhere, for path lookups), writes only the world, and only the system services
+  commands need: not LaunchServices, through which `open -a` would start an application outside
+  the sandbox.
 - `--container`: the container **is** the sandbox — one container per body, its mounts limited
   to the body's soil and its network to the policy. It does not nest landlock or namespaces
   inside Docker's default profile.

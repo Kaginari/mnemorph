@@ -4,7 +4,7 @@ use mnemorph_races::ToolClass::{Destructive, Outward, Write};
 
 use super::paths::Act;
 use super::words::Lit;
-use super::{Kind, Tally, Walker, base_name};
+use super::{Kind, Rule, Tally, Walker, base_name};
 
 /// Commands that only look.
 const READS: &[&str] = &[
@@ -156,7 +156,10 @@ const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
 /// Classify `argv` (the command name first), raising `t`.
 pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind {
     let Some(name) = argv[0].text.as_deref() else {
-        t.refuse("the command name is known only at run time");
+        t.refuse(
+            Rule::NotLiteral,
+            "the command name is known only at run time",
+        );
         return Kind::default();
     };
     let name = base_name(name);
@@ -206,7 +209,10 @@ pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind 
         "eval" => {
             match words.iter().copied().collect::<Option<Vec<_>>>() {
                 Some(parts) => w.source(&parts.join(" "), t),
-                None => t.refuse("`eval` runs a string known only at run time"),
+                None => t.refuse(
+                    Rule::NotLiteral,
+                    "`eval` runs a string known only at run time",
+                ),
             }
             Kind::default()
         }
@@ -291,7 +297,10 @@ fn shell(w: &mut Walker<'_>, name: &str, args: &[Lit], t: &mut Tally) -> Kind {
                 w.source(src, t);
                 w.cwd = saved;
             }
-            Some(None) => t.refuse(format!("`{name} -c` runs a string known only at run time")),
+            Some(None) => t.refuse(
+                Rule::NotLiteral,
+                format!("`{name} -c` runs a string known only at run time"),
+            ),
             None => {}
         }
         return Kind::default();
@@ -306,7 +315,10 @@ fn shell(w: &mut Walker<'_>, name: &str, args: &[Lit], t: &mut Tally) -> Kind {
 
 fn interpreter(name: &str, words: &[Option<&str>], t: &mut Tally) -> Kind {
     if name == "perl" && has_short(words, 'i') {
-        t.refuse("in-place edits run blind (`perl -i`): use the edit tool");
+        t.refuse(
+            Rule::InPlaceEdit,
+            "in-place edits run blind (`perl -i`): use the edit tool",
+        );
     }
     t.raise(Write, format!("`{name}` runs code"));
     let code_flag = words
@@ -415,14 +427,17 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
             "--version" | "-v" | "whoami" | "signout" | "account" => {
                 t.raise(Outward, "`op` reaches 1Password");
             }
-            _ => t.refuse("`op` reads secrets from 1Password"),
+            _ => t.refuse(Rule::SecretStore, "`op` reads secrets from 1Password"),
         },
         "security" => {
             if matches!(
                 sub,
                 "dump-keychain" | "find-generic-password" | "find-internet-password" | "export"
             ) {
-                t.refuse(format!("`security {sub}` reads the keychain"));
+                t.refuse(
+                    Rule::SecretStore,
+                    format!("`security {sub}` reads the keychain"),
+                );
             }
         }
         "gpg" | "gpg2" => {
@@ -431,7 +446,7 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
                 .flatten()
                 .any(|w| w.starts_with("--export-secret") || matches!(*w, "--decrypt" | "-d"))
             {
-                t.refuse("`gpg` exports or decrypts secrets");
+                t.refuse(Rule::SecretStore, "`gpg` exports or decrypts secrets");
             }
         }
         "diskutil" => {
@@ -446,15 +461,24 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
             .iter()
             .any(|p| sub.to_ascii_lowercase().starts_with(p))
             {
-                t.refuse(format!("`diskutil {sub}` rewrites a disk"));
+                t.refuse(
+                    Rule::MachineTool,
+                    format!("`diskutil {sub}` rewrites a disk"),
+                );
             }
         }
         "sed" => {
-            if has_short(words, 'i') || has(words, &["--in-place"]) {
-                t.refuse("in-place edits run blind (`sed -i`): use the edit tool");
+            let in_place = has_short(words, 'i') || has(words, &["--in-place"]);
+            if in_place {
+                t.refuse(
+                    Rule::InPlaceEdit,
+                    "in-place edits run blind (`sed -i`): use the edit tool",
+                );
             }
+            // In place, the files are written: the class an approval would run at says so.
+            let act = if in_place { Act::Modify } else { Act::Read };
             for a in operands(args).into_iter().skip(1) {
-                w.touch(a, Act::Read, "`sed`", t);
+                w.touch(a, act, "`sed`", t);
             }
         }
         "touch" | "mkdir" | "tee" | "truncate" => {
@@ -498,9 +522,14 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
             t.raise(Write, format!("`{name}` builds or runs code"));
         }
         _ if NETWORK.contains(&name) => t.raise(Outward, format!("`{name}` reaches the network")),
-        _ if SECRET_STORES.contains(&name) => t.refuse(format!("`{name}` reads secrets")),
+        _ if SECRET_STORES.contains(&name) => {
+            t.refuse(Rule::SecretStore, format!("`{name}` reads secrets"));
+        }
         _ if MACHINE.contains(&name) || name.starts_with("mkfs") => {
-            t.refuse(format!("`{name}` rewrites disks or stops the machine"));
+            t.refuse(
+                Rule::MachineTool,
+                format!("`{name}` rewrites disks or stops the machine"),
+            );
         }
         _ if READS.contains(&name) => {
             for a in operands(args) {
@@ -631,7 +660,10 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
     }
     let Some(sub_lit) = args.get(i) else { return };
     let Some(sub) = sub_lit.text.as_deref() else {
-        t.refuse("the git subcommand is known only at run time");
+        t.refuse(
+            Rule::NotLiteral,
+            "the git subcommand is known only at run time",
+        );
         return;
     };
     let rest = &args[i + 1..];
@@ -798,7 +830,7 @@ fn gh(words: &[Option<&str>], t: &mut Tally) {
         ws.get(1).copied().unwrap_or(""),
     );
     if pair == ("auth", "token") {
-        t.refuse("`gh auth token` prints a credential");
+        t.refuse(Rule::SecretStore, "`gh auth token` prints a credential");
         return;
     }
     let method_delete = ws

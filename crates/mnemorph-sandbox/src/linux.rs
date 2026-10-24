@@ -7,7 +7,11 @@ use landlock::{
     ABI, Access, AccessFs, CompatLevel, Compatible, LandlockStatus, Ruleset, RulesetAttr,
     RulesetCreatedAttr, RulesetStatus, path_beneath_rules,
 };
-use seccompiler::{BpfProgram, SeccompAction, SeccompFilter, SeccompRule, TargetArch};
+use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+use seccompiler::{
+    BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
+    SeccompRule, TargetArch,
+};
 
 /// The newest landlock ABI the jail asks for; older kernels enforce what they know.
 const ABI_ASKED: ABI = ABI::V5;
@@ -58,17 +62,51 @@ const ALWAYS_DENIED: &[libc::c_long] = &[
     libc::SYS_quotactl,
 ];
 
-/// Restrict this process: landlock first (it also sets no-new-privileges), then seccomp.
+/// Processes the user may run while a command is in the jail: bounds a fork bomb. The kernel
+/// counts every process of the user, so the cap is generous.
+const MAX_PROCESSES: u64 = 8192;
+/// The largest file a command may write.
+const MAX_FILE_BYTES: u64 = 4 << 30;
+
+/// Namespace flags a `clone` may not carry: new namespaces widen the kernel's attack surface.
+const NAMESPACE_FLAGS: [libc::c_int; 7] = [
+    libc::CLONE_NEWNS,
+    libc::CLONE_NEWCGROUP,
+    libc::CLONE_NEWUTS,
+    libc::CLONE_NEWIPC,
+    libc::CLONE_NEWUSER,
+    libc::CLONE_NEWPID,
+    libc::CLONE_NEWNET,
+];
+
+/// Lower a limit to `cap`, never raise it.
+fn cap(resource: Resource, cap: u64) -> Result<(), String> {
+    let now = getrlimit(resource);
+    let lower = |v: Option<u64>| Some(v.map_or(cap, |v| v.min(cap)));
+    setrlimit(
+        resource,
+        Rlimit {
+            current: lower(now.current),
+            maximum: lower(now.maximum),
+        },
+    )
+    .map_err(|e| format!("limit {resource:?}: {e}"))
+}
+
+/// Restrict this process: limits, landlock (which also sets no-new-privileges), then seccomp. (it also sets no-new-privileges), then seccomp.
 /// Returns the status line for `status`.
 ///
 /// # Errors
 ///
 /// A message naming what could not be enforced; the caller must not run the command then.
 pub fn restrict(rules: &Rules) -> Result<String, String> {
+    cap(Resource::Core, 0)?;
+    cap(Resource::Fsize, MAX_FILE_BYTES)?;
+    cap(Resource::Nproc, MAX_PROCESSES)?;
     let landlock = landlock(rules)?;
     seccomp(rules.network)?;
     Ok(format!(
-        "{landlock} + seccomp, network {}",
+        "{landlock} + seccomp + limits, network {}",
         if rules.network { "on" } else { "off" }
     ))
 }
@@ -128,11 +166,50 @@ fn seccomp(network: bool) -> Result<(), String> {
         // out. `socketpair` stays: it reaches nothing.
         denied.insert(libc::SYS_socket, Vec::new());
     }
+    let clone_flags = NAMESPACE_FLAGS
+        .iter()
+        .map(|&flag| {
+            #[allow(
+                clippy::cast_sign_loss,
+                reason = "the clone flags are positive bit masks"
+            )]
+            let flag = flag as u64;
+            SeccompCondition::new(
+                0,
+                SeccompCmpArgLen::Qword,
+                SeccompCmpOp::MaskedEq(flag),
+                flag,
+            )
+            .and_then(|c| SeccompRule::new(vec![c]))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("seccomp: {e}"))?;
+    denied.insert(libc::SYS_clone, clone_flags);
     let arch = TargetArch::try_from(std::env::consts::ARCH).map_err(|e| format!("seccomp: {e}"))?;
+    apply(denied, libc::EPERM, arch)?;
+    // `clone3` takes its flags in memory seccomp cannot read: it reports itself missing, and the
+    // C library falls back to `clone`, whose flags the rule above sees.
+    apply(
+        BTreeMap::from([(libc::SYS_clone3, Vec::new())]),
+        libc::ENOSYS,
+        arch,
+    )
+}
+
+fn apply(
+    rules: BTreeMap<i64, Vec<SeccompRule>>,
+    errno: libc::c_int,
+    arch: TargetArch,
+) -> Result<(), String> {
+    #[allow(
+        clippy::cast_sign_loss,
+        reason = "errno values are small positive numbers"
+    )]
+    let errno = errno as u32;
     let filter = SeccompFilter::new(
-        denied,
+        rules,
         SeccompAction::Allow,
-        SeccompAction::Errno(libc::EPERM as u32),
+        SeccompAction::Errno(errno),
         arch,
     )
     .map_err(|e| format!("seccomp: {e}"))?;

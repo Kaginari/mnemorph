@@ -368,3 +368,45 @@ fn grep_finds_lines_or_files() {
     assert_eq!(o.content, "src/b.md:1: Main idea");
     assert!(run(&mut cx, "grep", r#"{"pattern": "("}"#).is_error);
 }
+
+#[test]
+fn protected_files_are_not_written_by_tools() {
+    let w = World::new("protected");
+    fs::create_dir_all(w.world().join(".git/hooks")).unwrap();
+    fs::write(w.world().join(".git/config"), "[core]\n").unwrap();
+    let mut cx = Context::new(Race::Slime, w.world(), &["."]);
+    for (name, args) in [
+        (
+            "write",
+            r#"{"path": ".git/config", "content": "[core]\n\tfsmonitor = x\n"}"#,
+        ),
+        (
+            "write",
+            r##"{"path": ".git/hooks/pre-commit", "content": "#!/bin/sh\n"}"##,
+        ),
+        (
+            "write",
+            r#"{"path": ".mnemorph/log.md", "content": "forged"}"#,
+        ),
+        (
+            "edit",
+            r#"{"path": ".git/config", "old_string": "[core]", "new_string": "[x]"}"#,
+        ),
+    ] {
+        let o = run(&mut cx, name, args);
+        assert!(
+            o.is_error && o.content.contains("is protected"),
+            "{name} {args}: {o:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(w.world().join(".git/config")).unwrap(),
+        "[core]\n"
+    );
+    let o = run(
+        &mut cx,
+        "write",
+        r#"{"path": ".mnemorph/shared/queue.jsonl", "content": "{}\n"}"#,
+    );
+    assert!(!o.is_error, "shared is writable: {o:?}");
+}
