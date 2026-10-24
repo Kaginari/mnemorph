@@ -4,7 +4,7 @@
 //! class and shelf seat come from there. Results carry structured metadata (`class`,
 //! `unchanged`, `wrote`) that consumers read instead of parsing the text.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ use mnemorph_sandbox::Sandbox;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use crate::classify::Rule;
 use crate::classify::paths::{join, real};
 use crate::files;
 use crate::gate::{Gate, NoHuman};
@@ -102,6 +103,7 @@ pub struct Context {
     home: PathBuf,
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
+    asked_rules: BTreeSet<Rule>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
 }
 
@@ -139,6 +141,7 @@ impl Context {
             home,
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
+            asked_rules: BTreeSet::new(),
             seen: HashMap::new(),
         }
     }
@@ -162,6 +165,20 @@ impl Context {
     pub fn with_sandbox(mut self, sandbox: Sandbox) -> Self {
         self.sandbox = sandbox;
         self
+    }
+
+    /// Turn these guard rules from "refuse" into "ask the human". Rules on the floor stay
+    /// refusals whatever the list says.
+    #[must_use]
+    pub fn with_asked_rules(mut self, rules: impl IntoIterator<Item = Rule>) -> Self {
+        self.asked_rules = rules.into_iter().filter(|r| !r.floor()).collect();
+        self
+    }
+
+    /// Whether a refusal under `rule` becomes a question for the human.
+    #[must_use]
+    pub fn asks(&self, rule: Rule) -> bool {
+        !rule.floor() && self.asked_rules.contains(&rule)
     }
 
     /// The sandbox commands run in.
@@ -211,6 +228,12 @@ impl Context {
     /// As [`Self::inside`], and the path must lie in the body's soil.
     pub(crate) fn writable(&self, text: &str) -> Result<PathBuf, String> {
         let path = self.inside(text)?;
+        if crate::tripwire::protects(&self.world, &path) {
+            return Err(format!(
+                "`{}` is protected: git's executable configuration and the world's records are not written by tools",
+                self.shown(&path)
+            ));
+        }
         if self.soil.iter().any(|s| path.starts_with(s)) {
             Ok(path)
         } else {

@@ -603,3 +603,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     still work.
   - The sandbox must not be stricter than the human: an approval opens exactly the outside
     paths on the card, nothing hidden behind a variable.
+
+---
+
+### [2026-10-24T03:32:20+02:00] rimuru — M4 rung 5: hardening
+- **Task:** close the gaps the threat model ranked: named guard rules a configuration may turn
+  into questions (the floor never), a tripwire over git's executable configuration and the
+  world's records, the jail's limits and namespace denial, macOS reads from an allowlist and
+  without LaunchServices. Veldora added: `.mnemorph/shared/` and `tmp/` stay writable.
+- **Files:** mnemorph-tools: classify/mod.rs (`Rule`, the floor, `Verdict::Refuse { rule,
+  reason, class }`), every refusal site named, src/tripwire.rs, shell.rs (asked rules go to the
+  gate; snapshot → run → restore), tool.rs (`with_asked_rules`, protected paths refused);
+  mnemorph-sandbox: linux.rs (limits; `clone` with namespace flags, `clone3` → ENOSYS),
+  macos.rs (allowlist reads, a short list of services); tests in both crates;
+  docs/05-architecture.md; issue #67 (openat2 for the file tools).
+- **Gate:** n/a. Instruments: `just check` (168 tests); macOS in CI.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Landlock only adds access: a read-only corner inside a writable tree is impossible. A
+    snapshot taken before and restored after — when the process group is already dead — covers
+    it on every platform, and nothing can race the restore.
+  - A tripwire must watch only what existed: `git init` inside the call creates a repository
+    that belongs to the command, and `.mnemorph/tmp` must exist before the first snapshot.
+  - Twice an edit silently missed rustfmt's layout and a test caught it (the macOS unused
+    import; the uncalled limits). Edits now assert the anchor matched.

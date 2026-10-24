@@ -8,7 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-rustix = { version = "1", features = ["process"] }
+rustix = { version = "1", features = ["process", "system"] }
 
 # The sandbox calls into the kernel: unsafe is denied, and allowed only at reviewed sites.
 # Cargo cannot override one workspace lint, so this mirrors the workspace table with that one

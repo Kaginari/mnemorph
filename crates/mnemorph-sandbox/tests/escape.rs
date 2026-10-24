@@ -19,7 +19,14 @@ impl Ground {
         let root =
             std::env::temp_dir().join(format!("mnemorph-escape-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        for d in ["world", "outside", "home/.ssh", "home/.aws", "tmp"] {
+        for d in [
+            "world",
+            "outside",
+            "home/.ssh",
+            "home/.aws",
+            "home/Documents",
+            "tmp",
+        ] {
             fs::create_dir_all(root.join(d)).unwrap();
         }
         fs::write(root.join("home/.ssh/id_ed25519"), "PRIVATE KEY\n").unwrap();
@@ -29,6 +36,7 @@ impl Ground {
         )
         .unwrap();
         fs::write(root.join("outside/target.txt"), "untouched\n").unwrap();
+        fs::write(root.join("home/Documents/diary.txt"), "dear diary\n").unwrap();
         let root = root.canonicalize().unwrap();
         Self { root }
     }
@@ -227,4 +235,61 @@ fn escape_syscalls_are_denied() {
         let (ok, out) = g.run(&g.policy(false), script);
         assert!(!ok, "{script}: {out}");
     }
+}
+
+/// A fork bomb is bounded, a crash leaves no core, a file cannot fill the disk.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_jail_sets_limits() {
+    let g = Ground::new("limits");
+    let (ok, out) = g.run(&g.policy(false), "ulimit -c; ulimit -u; ulimit -f");
+    assert!(ok, "{out}");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "0", "{out}");
+    assert!(lines[1].parse::<u64>().is_ok_and(|n| n <= 8192), "{out}");
+    assert!(lines[2].parse::<u64>().is_ok_and(|n| n <= 4 << 20), "{out}");
+}
+
+/// New namespaces widen the kernel's attack surface; neither `unshare` nor a namespace
+/// `clone` gets one.
+#[cfg(target_os = "linux")]
+#[test]
+fn no_new_namespaces() {
+    let g = Ground::new("namespaces");
+    if std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    // os.fork works (a plain clone); a clone carrying CLONE_NEWUSER through libc does not.
+    let script = "python3 - <<'PY'\nimport ctypes, os\nlibc = ctypes.CDLL(None, use_errno=True)\npid = os.fork()\nif pid == 0:\n    os._exit(0)\nos.waitpid(pid, 0)\nprint('fork ok')\nr = libc.unshare(0x10000000)\nprint('unshare', r, ctypes.get_errno())\nimport platform\nnr = {'x86_64': 56, 'aarch64': 220}[platform.machine()]\nr = libc.syscall(nr, 0x10000000 | 17, 0, 0, 0, 0)\nif r == 0:\n    os._exit(0)\nprint('clone', r, ctypes.get_errno())\nPY";
+    let (ok, out) = g.run(&g.policy(false), script);
+    assert!(ok && out.contains("fork ok"), "{out}");
+    assert!(
+        out.contains("unshare -1 1"),
+        "unshare(CLONE_NEWUSER) must fail with EPERM: {out}"
+    );
+    assert!(
+        out.contains("clone -1 1"),
+        "clone(CLONE_NEWUSER) must fail with EPERM: {out}"
+    );
+}
+
+/// Reads come from an allowlist: the home's ordinary files are as closed as its keys.
+#[test]
+fn the_home_is_closed_beyond_the_toolchains() {
+    let g = Ground::new("home");
+    let (ok, out) = g.run(&g.policy(false), "cat ~/Documents/diary.txt");
+    assert!(!ok && !out.contains("dear diary"), "{out}");
+}
+
+/// Through LaunchServices a command could start an application outside the sandbox.
+#[cfg(target_os = "macos")]
+#[test]
+fn no_application_is_launched_from_inside() {
+    let g = Ground::new("launch");
+    let (ok, out) = g.run(&g.policy(false), "open -g -a TextEdit");
+    assert!(!ok, "open -a succeeded from inside the sandbox: {out}");
 }

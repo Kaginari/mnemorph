@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 use crate::classify::{Place, Verdict, classify};
 use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool, args};
+use crate::tripwire::Snapshot;
 
 /// How long a command may run when the call names no timeout.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
@@ -93,18 +94,39 @@ impl Tool for Bash {
             home: cx.home().to_path_buf(),
             cwd: cx.world().to_path_buf(),
         };
-        let (class, why, outside) = match classify(&a.command, &place) {
-            Verdict::Refuse { reason } => return Outcome::error(format!("refused: {reason}")),
+        let (class, why, outside, asked) = match classify(&a.command, &place) {
+            Verdict::Refuse {
+                rule,
+                reason,
+                class,
+            } if cx.asks(rule) => {
+                let why = vec![format!(
+                    "guard rule `{}` asks instead of refusing: {reason}",
+                    rule.name()
+                )];
+                (class, why, Vec::new(), true)
+            }
+            Verdict::Refuse { rule, reason, .. } => {
+                let hint = if rule.floor() {
+                    String::new()
+                } else {
+                    format!(" (the human may let rule `{}` ask instead)", rule.name())
+                };
+                return Outcome::error(format!(
+                    "refused by guard rule `{}`: {reason}{hint}",
+                    rule.name()
+                ));
+            }
             Verdict::Run {
                 class,
                 why,
                 outside,
-            } => (class, why, outside),
+            } => (class, why, outside, false),
         };
         if let Err(refusal) = check_class(cx.race(), class) {
             return Outcome::error(refusal.to_string());
         }
-        if matches!(class, ToolClass::Outward | ToolClass::Destructive) {
+        if asked || matches!(class, ToolClass::Outward | ToolClass::Destructive) {
             let ask = Ask {
                 race: cx.race(),
                 class,
@@ -125,13 +147,27 @@ impl Tool for Bash {
         let network = matches!(class, ToolClass::Outward | ToolClass::Destructive);
         // An approved act may write the outside paths it named; an unapproved one never has any.
         let opened = if network { outside } else { Vec::new() };
+        if let Err(e) = std::fs::create_dir_all(cx.world().join(".mnemorph/tmp")) {
+            return Outcome::error(format!(
+                "could not prepare the command's temporary directory: {e}"
+            ));
+        }
+        let before = Snapshot::take(cx.world());
         let ran = match run(&a.command, cx, timeout, network, &opened) {
             Ok(r) => r,
             Err(e) => return Outcome::error(format!("could not start bash: {e}")),
         };
+        // The command's whole process group is dead: nothing can race the restore.
+        let tripped = before.restore();
         let mut out = Outcome::ok(ran.render(timeout), class);
         out.is_error = ran.timed_out || ran.code != Some(0);
         out.meta.exit = ran.code;
+        if !tripped.is_empty() {
+            out.is_error = true;
+            out.content.push_str("\n[the command changed protected files — git's executable configuration or the world's records; ");
+            out.content.push_str(&tripped.join("; "));
+            out.content.push(']');
+        }
         out
     }
 }

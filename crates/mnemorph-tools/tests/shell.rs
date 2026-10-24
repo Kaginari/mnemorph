@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use mnemorph_races::{Race, ToolClass};
 use mnemorph_sandbox::Sandbox;
 use mnemorph_tools::gate::Scripted;
-use mnemorph_tools::{Answer, Context, Outcome, call, registry};
+use mnemorph_tools::{Answer, Context, Outcome, Rule, call, registry};
 
 struct World {
     root: PathBuf,
@@ -74,7 +74,12 @@ fn a_refused_command_never_runs() {
         &mut w.cx(Race::Kijin, gate.clone()),
         &format!("touch {} && sed -i s/a/b/ x", marker.display()),
     );
-    assert!(o.is_error && o.content.starts_with("refused:"), "{o:?}");
+    assert!(
+        o.is_error
+            && o.content.contains("refused by guard rule `in-place-edit`")
+            && o.content.contains("may let rule"),
+        "{o:?}"
+    );
     assert!(!marker.exists());
     assert!(gate.asked().is_empty(), "a refusal comes before any gate");
 }
@@ -246,4 +251,174 @@ fn bash_runs_inside_the_jail() {
     );
     assert!(o.content.contains("Permission denied"), "{o:?}");
     assert!(!w.root.join("elsewhere").exists() && !hidden.exists());
+}
+
+#[test]
+fn every_rule_has_a_name_and_the_floor_is_four() {
+    for rule in Rule::ALL {
+        assert_eq!(Rule::from_name(rule.name()), Some(rule));
+    }
+    let floor: Vec<&str> = Rule::ALL
+        .iter()
+        .filter(|r| r.floor())
+        .map(|r| r.name())
+        .collect();
+    assert_eq!(floor, ["device", "machine-tool", "root-path", "fork-bomb"]);
+}
+
+/// A rule the human configured asks instead of refusing; the answer decides.
+#[test]
+fn a_configured_rule_asks_the_human() {
+    let w = World::new("asked");
+    fs::write(w.world().join("src/f.txt"), "a\n").unwrap();
+    let cx = |gate: Arc<Scripted>| {
+        w.cx(Race::Slime, gate)
+            .with_asked_rules([Rule::InPlaceEdit])
+    };
+
+    let deny = Arc::new(Scripted::new([Answer::Deny("no".into())]));
+    let o = bash(&mut cx(deny.clone()), "sed -i s/a/b/ src/f.txt");
+    assert!(o.is_error, "{o:?}");
+    assert!(
+        deny.asked()[0].why[0].contains("guard rule `in-place-edit` asks"),
+        "{:?}",
+        deny.asked()
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join("src/f.txt")).unwrap(),
+        "a\n"
+    );
+
+    let approve = Arc::new(Scripted::new([Answer::Approve]));
+    let o = bash(&mut cx(approve), "sed -i s/a/b/ src/f.txt");
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(w.world().join("src/f.txt")).unwrap(),
+        "b\n"
+    );
+}
+
+/// The floor stays refused whatever the configuration lists, and no gate is asked.
+#[test]
+fn the_floor_never_asks() {
+    let w = World::new("floor");
+    let gate = Arc::new(Scripted::new([Answer::Approve, Answer::Approve]));
+    let mut cx = w.cx(Race::Kijin, gate.clone()).with_asked_rules(Rule::ALL);
+    for cmd in ["rm -rf /", ":(){ :|:& };:"] {
+        let o = bash(&mut cx, cmd);
+        assert!(
+            o.is_error
+                && o.content.starts_with("refused by guard rule")
+                && !o.content.contains("may let"),
+            "{cmd}: {o:?}"
+        );
+    }
+    assert_eq!(gate.asked(), [] as [mnemorph_tools::Ask; 0]);
+}
+
+fn git(world: &std::path::Path, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "-c",
+            "init.defaultBranch=main",
+        ])
+        .args(args)
+        .current_dir(world)
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+/// Git's executable configuration runs outside any sandbox the next time the human runs git:
+/// a command that plants it finds it put back.
+#[test]
+fn the_tripwire_restores_git_config_and_hooks() {
+    let w = World::new("tripwire-git");
+    git(&w.world(), &["init", "-q"]);
+    let config = fs::read_to_string(w.world().join(".git/config")).unwrap();
+    let gate = Arc::new(Scripted::new([]));
+    let o = bash(
+        &mut w.cx(Race::Slime, gate.clone()),
+        "printf '[core]\\n\\tfsmonitor = touch /tmp/pwned\\n' >> .git/config; printf '#!/bin/sh\\necho pwned\\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit; echo done",
+    );
+    assert!(
+        o.is_error && o.content.contains("changed protected files"),
+        "{o:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join(".git/config")).unwrap(),
+        config
+    );
+    assert!(!w.world().join(".git/hooks/pre-commit").exists());
+
+    let o = bash(
+        &mut w.cx(Race::Slime, gate.clone()),
+        "rm -rf .git/hooks && ln -s /tmp .git/hooks",
+    );
+    assert!(o.is_error, "{o:?}");
+    assert!(
+        w.world().join(".git/hooks").is_dir()
+            && !fs::symlink_metadata(w.world().join(".git/hooks"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+    );
+
+    // Ordinary work does not trip it.
+    fs::write(w.world().join("src/a.rs"), "fn a() {}\n").unwrap();
+    let o = bash(
+        &mut w.cx(Race::Slime, gate),
+        "git add -A && git -c user.email=t@t -c user.name=t commit -qm a && git log --oneline | wc -l",
+    );
+    assert!(!o.is_error && o.content.trim().ends_with('1'), "{o:?}");
+}
+
+#[test]
+fn the_tripwire_keeps_the_worlds_records_and_spares_tmp() {
+    let w = World::new("tripwire-records");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::write(w.world().join(".mnemorph/log.md"), "the truth\n").unwrap();
+    let gate = Arc::new(Scripted::new([]));
+    let o = bash(
+        &mut w.cx(Race::Slime, gate.clone()),
+        "echo forged > .mnemorph/log.md; touch .mnemorph/new.toml; echo scratch > .mnemorph/tmp/x",
+    );
+    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(w.world().join(".mnemorph/log.md")).unwrap(),
+        "the truth\n"
+    );
+    assert!(!w.world().join(".mnemorph/new.toml").exists());
+    assert!(
+        w.world().join(".mnemorph/tmp/x").exists(),
+        "tmp is the command's own"
+    );
+
+    let o = bash(
+        &mut w.cx(Race::Slime, gate),
+        "echo scratch > .mnemorph/tmp/y && mkdir -p .mnemorph/shared && echo '{}' >> .mnemorph/shared/queue.jsonl",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert!(
+        w.world().join(".mnemorph/shared/queue.jsonl").exists(),
+        "shared is the bodies' common ground"
+    );
+}
+
+#[test]
+fn a_repository_the_command_creates_is_its_own() {
+    let w = World::new("tripwire-init");
+    let gate = Arc::new(Scripted::new([]));
+    let o = bash(
+        &mut w.cx(Race::Slime, gate),
+        "git init -q && git status --short | wc -l",
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert!(w.world().join(".git/config").exists());
 }
