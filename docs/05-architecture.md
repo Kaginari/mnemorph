@@ -330,10 +330,6 @@ kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
 
-<<<<<<< HEAD
-[oni]
-envelope_days = 30                 # the longest an envelope lasts (1–365); 30 when unset
-=======
 [providers.jeff]                   # System One on this machine; or TypeSafe's Jev:
 kind = "systemone"                 # base_url = "https://api.typesafe.ai"
 base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
@@ -346,7 +342,9 @@ llm = "claude-haiku-5-5"           # the fallback; the fast tier's model by defa
 [decide.cutoff]
 measured = 0.6                     # the least confidence to act on a System One answer
 stated = 0.9                       # and on an LLM's
->>>>>>> System One decisions: Jev and jeff behind config, an LLM fallback, and an answer that says who gave it
+
+[oni]
+envelope_days = 30                 # the longest an envelope lasts (1–365); 30 when unset
 
 [[oni.envelopes]]
 name = "feature branches"
