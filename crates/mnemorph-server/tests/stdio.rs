@@ -449,19 +449,24 @@ fn a_session_stops_at_the_humans_cap() {
     assert!(ending.starts_with("checkpoint: budget"), "{ending}");
 }
 
-/// A ledger with a line it cannot read opens no capped session: spend it cannot see is spend
-/// the cap cannot stop. The error names the lines to repair.
+/// A ledger with a line it cannot read still opens a capped session: the line is counted high,
+/// against every cap (20 000 wt at least), and the hello says so and names the lines to repair.
 #[test]
-fn a_torn_ledger_opens_no_capped_session() {
+fn a_torn_ledger_is_counted_high() {
     let config = format!("{UNGUARDED}[budget]\nday = 1000000\n");
     let mut c = Client::start("torn-ledger", &config, vec![ScriptedModel::text("never")]);
     let instruments = c.root.join("world/.mnemorph/instruments");
     std::fs::create_dir_all(&instruments).unwrap();
     std::fs::write(instruments.join("usage.jsonl"), "{\"torn\n").unwrap();
     let id = c.request("initialize", &json!({}));
-    let refused = c.response(id);
-    let why = refused["error"]["message"].as_str().unwrap_or_default();
-    assert!(why.contains("unreadable line(s) ([1])"), "{refused}");
+    let hello = c.response(id);
+    let holes = hello["result"]["holes"].to_string();
+    assert!(holes.contains("unreadable line(s) ([1])"), "{hello}");
+    assert_eq!(
+        hello["result"]["budget"],
+        json!({"leftWt": 980_000, "cap": "day"}),
+        "{hello}"
+    );
 }
 
 /// A send with nothing running is refused, by name: a line sent steers a turn that runs.

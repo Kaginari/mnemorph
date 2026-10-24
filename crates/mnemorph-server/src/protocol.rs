@@ -54,7 +54,8 @@ pub struct Hello {
     pub session: String,
     /// The run's id.
     pub run: String,
-    /// The configuration's holes: keys it did not take, and why.
+    /// The configuration's holes — keys it did not take, and why — and, under a cap, the usage
+    /// ledger's lines that cannot be read.
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps; `null` when they set none.
     pub budget: Option<Budget>,

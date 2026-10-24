@@ -295,3 +295,22 @@ test('a choice never carries over to the next approval', async () => {
   expect(core.sent.find((m) => m.id === 'gate-b')).toBeUndefined();
   ui.unmount();
 });
+
+test('a letter and the Enter right after it, before any render, still decide', async () => {
+  const { core, ui } = start();
+  await tick();
+  core.say({
+    jsonrpc: '2.0',
+    id: 'gate-fast',
+    method: 'gate/ask',
+    params: { class: 'write', act: 'sed -i x f', race: 'slime', why: [], outside: [] },
+  });
+  await tick();
+  ui.stdin.write('n');
+  ui.stdin.write('\r');
+  await tick();
+  expect(core.sent.find((m) => m.id === 'gate-fast')).toMatchObject({
+    result: { allow: false, reason: 'the human said no' },
+  });
+  ui.unmount();
+});

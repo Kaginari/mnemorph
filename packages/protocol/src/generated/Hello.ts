@@ -34,7 +34,8 @@ session: string,
  */
 run: string, 
 /**
- * The configuration's holes: keys it did not take, and why.
+ * The configuration's holes — keys it did not take, and why — and, under a cap, the usage
+ * ledger's lines that cannot be read.
  */
 holes: Array<string>, 
 /**

@@ -969,10 +969,10 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
         "{e:?}"
     );
     assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
-    // A torn last write: one line the ledger cannot read is spend the cap cannot see.
+    // A torn last write: the line is counted high, as the largest call, and the run goes on.
     std::fs::remove_dir_all(&path).unwrap();
     std::fs::write(&path, "{\"torn\n").unwrap();
-    let m = Arc::new(ScriptedModel::new([answer("never")]));
+    let m = Arc::new(ScriptedModel::new([answer("still")]));
     let e = ask(
         &mut w.run(m.clone(), limits()).with_caps(mnemorph_ledger::Caps {
             day: Some(u64::MAX),
@@ -981,8 +981,20 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
         "go",
     )
     .await;
+    assert!(matches!(e, Ending::Answered(_)), "{e:?}");
+    // Under a day cap smaller than what the torn line is taken to have cost, it stops.
+    std::fs::write(&path, "{\"torn\n").unwrap();
+    let m = Arc::new(ScriptedModel::new([answer("never")]));
+    let e = ask(
+        &mut w.run(m.clone(), limits()).with_caps(mnemorph_ledger::Caps {
+            day: Some(mnemorph_ledger::UNSEEN_FLOOR_WT),
+            ..caps
+        }),
+        "go",
+    )
+    .await;
     assert!(
-        matches!(&e, Ending::Checkpoint { why, .. } if why.contains("unreadable line(s) ([1])")),
+        matches!(&e, Ending::Checkpoint { why, .. } if why.contains("the day cap is spent")),
         "{e:?}"
     );
     assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);

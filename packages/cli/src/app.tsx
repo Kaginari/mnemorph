@@ -231,7 +231,14 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   const answer = useRef<((r: GateReply) => void) | undefined>(undefined);
   const quitting = useRef(false);
   // An approval is chosen, then confirmed: a key typed as the box appears approves nothing.
-  const [choice, setChoice] = useState<'y' | 'n' | undefined>(undefined);
+  const [choice, setChoiceShown] = useState<'y' | 'n' | undefined>(undefined);
+  // The keys read the choice from here: an Enter that arrives before the next render still sees
+  // the letter typed just before it.
+  const chosen = useRef<'y' | 'n' | undefined>(undefined);
+  const setChoice = (c: 'y' | 'n' | undefined) => {
+    chosen.current = c;
+    setChoiceShown(c);
+  };
 
   // Every width change reprints the transcript at the new width. Only the screen is cleared —
   // through Ink's own writer, so nothing races its frames — and the scrollback above is kept.
@@ -271,7 +278,8 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   // An approval the turn left behind is denied, never left to answer a dead question.
   useEffect(() => {
     // Every approval starts unchosen: a choice never carries over to the next one.
-    setChoice(undefined);
+    chosen.current = undefined;
+    setChoiceShown(undefined);
     if (!state.gate && answer.current) {
       answer.current({ allow: false, reason: 'the turn ended before the human answered' });
       answer.current = undefined;
@@ -362,9 +370,9 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       // A letter that came with a carriage return still chooses; only a bare Enter confirms.
       const letter = input.replace(/\r/g, '');
       if (letter === 'y' || letter === 'n') setChoice(letter);
-      else if (key.escape || (key.return && choice === 'n')) {
+      else if (key.escape || (key.return && chosen.current === 'n')) {
         decide({ allow: false, reason: 'the human said no' });
-      } else if (key.return && choice === 'y') decide({ allow: true });
+      } else if (key.return && chosen.current === 'y') decide({ allow: true });
       return;
     }
     if (key.ctrl && input === 'd') {
