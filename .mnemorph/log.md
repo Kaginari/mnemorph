@@ -1651,3 +1651,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     line meets the edge exactly. Lines of every length are the test.
   - A test with a fake transport cannot see a process left running. Only the real core showed
     the leak.
+
+---
+
+### [2026-10-24T21:00:49+02:00] rimuru — a torn ledger line counted high, not a wall
+- **Task:** the human's call. A damaged usage-ledger line must not block every capped session
+  after a crash. Count it as hidden spend instead.
+- **Files:**
+  - crates/mnemorph-ledger caps.rs — `unseen_wt`, `UNSEEN_FLOOR_WT`, `check_caps` taking
+    `unseen`;
+  - crates/mnemorph-loop:
+    - open.rs — the hole names the lines and their assumed weight;
+    - run.rs — counts them before every call;
+    - budget.rs;
+  - tests in ledger, loop and server;
+  - docs/06-consumption.md.
+- **Gate:** n/a. Instruments: a torn line opens the session with a hole and 20 000 wt less left; a
+  run under a cap at that weight stops before its call; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Fail-closed was right for a ledger that cannot be read at all, and wrong for one torn line.
+    A crash is the common case, and a wall after every crash makes the cap the thing the human
+    turns off. Counting high keeps the cap's promise without the wall.
+  - A line that cannot be read cannot say its day or session, so it counts against all three caps.

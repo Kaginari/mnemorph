@@ -178,18 +178,26 @@ pub fn open_with(
         month: config.budget_wt("month"),
     };
     let capped = caps != crate::budget::Caps::default();
-    let spent = if capped {
+    let mut unread = Vec::new();
+    let (spent, unseen) = if capped {
         let back = usage
             .read()
             .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
+        let unseen = mnemorph_ledger::unseen_wt(&back.rows, back.skipped.len());
         if !back.skipped.is_empty() {
-            return Err(unreadable_lines(usage.path(), &back.skipped));
+            unread.push(unreadable_lines(usage.path(), &back.skipped, unseen));
         }
-        back.rows
+        (back.rows, unseen)
     } else {
-        Vec::new()
+        (Vec::new(), 0)
     };
-    let budget = crate::budget::left(caps, &spent, &session_id, mnemorph_ledger::Timestamp::now());
+    let budget = crate::budget::left(
+        caps,
+        &spent,
+        &session_id,
+        mnemorph_ledger::Timestamp::now(),
+        unseen,
+    );
     let setup = Setup {
         model: model.clone(),
         tools: registry(),
@@ -224,6 +232,7 @@ pub fn open_with(
             .holes()
             .iter()
             .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
+            .chain(unread)
             .collect(),
         budget,
         key: None,
@@ -232,12 +241,12 @@ pub fn open_with(
     })
 }
 
-/// Why a capped session does not open, or a capped run stops, on a ledger with lines it cannot
-/// read: what they spent is unseen, so the caps cannot hold.
-pub(crate) fn unreadable_lines(path: &Path, lines: &[usize]) -> String {
+/// What the human is told of ledger lines that cannot be read: their spend is counted high, as
+/// `unseen` weighted tokens against every cap, until they are repaired or removed.
+pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> String {
     format!(
-        "the usage ledger {} has {} unreadable line(s) ({lines:?}): their spend cannot be counted \
-         against the budget caps — repair or remove them",
+        "the usage ledger {} has {} unreadable line(s) ({lines:?}): the caps count them as {unseen} \
+         wt, each as large as the largest call — repair or remove them to count them true",
         path.display(),
         lines.len()
     )

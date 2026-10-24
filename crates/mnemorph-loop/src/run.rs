@@ -778,22 +778,26 @@ impl Run {
     /// The human's caps against the ledger as it is now: why the run must stop, if it must.
     fn over_a_cap(&mut self) -> Option<String> {
         let caps = self.caps?;
-        let rows = match self.ledger.as_ref().map(|j| (j.path(), j.read())) {
-            Some((_, Ok(back))) if back.skipped.is_empty() => back.rows,
-            Some((path, Ok(back))) => {
-                return Some(format!(
-                    "budget: {}",
-                    crate::open::unreadable_lines(path, &back.skipped)
-                ));
+        // Lines the ledger cannot read are counted high, never skipped: the opener told the human.
+        let (rows, unseen) = match self.ledger.as_ref().map(Journal::read) {
+            Some(Ok(back)) => {
+                let unseen = mnemorph_ledger::unseen_wt(&back.rows, back.skipped.len());
+                (back.rows, unseen)
             }
-            Some((_, Err(e))) => {
+            Some(Err(e)) => {
                 return Some(format!(
                     "budget: the usage ledger could not be read ({e}), and no call runs on a cap it cannot see"
                 ));
             }
-            None => Vec::new(),
+            None => (Vec::new(), 0),
         };
-        match mnemorph_ledger::check_caps(&rows, &self.caller.session, Timestamp::now(), caps) {
+        match mnemorph_ledger::check_caps(
+            &rows,
+            &self.caller.session,
+            Timestamp::now(),
+            caps,
+            unseen,
+        ) {
             mnemorph_ledger::CapReading::Stop { cap, used, of } => Some(format!(
                 "budget: the {cap} cap is spent — {used} of {of} wt"
             )),

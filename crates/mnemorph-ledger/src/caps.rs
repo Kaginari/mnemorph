@@ -41,14 +41,40 @@ pub enum CapReading {
     },
 }
 
-/// Reads the caps against the journal's rows at `now`, for `session`.
+/// The weight a call the ledger cannot read is taken to have spent, when no call it can read is
+/// larger.
+pub const UNSEEN_FLOOR_WT: u64 = 20_000;
+
+/// The weight assumed for `lines` ledger lines that cannot be read — a torn write after a crash,
+/// a hand edit. Each is taken to be as large as the largest call the ledger can read, and never
+/// less than [`UNSEEN_FLOOR_WT`]: spend the caps cannot see is counted high, never skipped.
 #[must_use]
-pub fn check_caps(rows: &[UsageRow], session: &str, now: Timestamp, caps: Caps) -> CapReading {
+pub fn unseen_wt(rows: &[UsageRow], lines: usize) -> u64 {
+    let each = rows
+        .iter()
+        .map(|r| r.wt)
+        .max()
+        .unwrap_or(0)
+        .max(UNSEEN_FLOOR_WT);
+    each.saturating_mul(u64::try_from(lines).unwrap_or(u64::MAX))
+}
+
+/// Reads the caps against the journal's rows at `now`, for `session`. `unseen` — the weight
+/// assumed for lines that cannot be read ([`unseen_wt`]) — counts against every cap, since a
+/// line that cannot be read cannot say its day or its session.
+#[must_use]
+pub fn check_caps(
+    rows: &[UsageRow],
+    session: &str,
+    now: Timestamp,
+    caps: Caps,
+    unseen: u64,
+) -> CapReading {
     let today = now.day();
     let used = |pick: &dyn Fn(&UsageRow) -> bool| {
         rows.iter()
             .filter(|r| pick(r))
-            .fold(0_u64, |sum, r| sum.saturating_add(r.wt))
+            .fold(unseen, |sum, r| sum.saturating_add(r.wt))
     };
     let readings = [
         (
@@ -80,6 +106,28 @@ pub fn check_caps(rows: &[UsageRow], session: &str, now: Timestamp, caps: Caps) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A line the ledger cannot read is charged as its largest call, against every cap.
+    #[test]
+    fn unseen_lines_count_high_against_every_cap() {
+        assert_eq!(unseen_wt(&[], 2), 2 * UNSEEN_FLOOR_WT);
+        let caps = Caps {
+            session: Some(24_000),
+            ..Caps::default()
+        };
+        assert_eq!(
+            check_caps(&[], "s", Timestamp(NOW), caps, unseen_wt(&[], 1)),
+            CapReading::Warn {
+                cap: "session",
+                used: 20_000,
+                of: 24_000
+            }
+        );
+        assert!(matches!(
+            check_caps(&[], "s", Timestamp(NOW), caps, unseen_wt(&[], 2)),
+            CapReading::Stop { .. }
+        ));
+    }
     use crate::Usage;
 
     fn row(ts: i64, session: &str, wt: u64) -> UsageRow {
@@ -113,7 +161,7 @@ mod tests {
         ];
         let now = Timestamp(NOW);
         assert_eq!(
-            check_caps(&rows, "s2", now, Caps::default()),
+            check_caps(&rows, "s2", now, Caps::default(), 0),
             CapReading::Ok
         );
         assert_eq!(
@@ -124,7 +172,8 @@ mod tests {
                 Caps {
                     month: Some(900),
                     ..Caps::default()
-                }
+                },
+                0
             ),
             CapReading::Stop {
                 cap: "month",
@@ -140,7 +189,8 @@ mod tests {
                 Caps {
                     day: Some(700),
                     ..Caps::default()
-                }
+                },
+                0
             ),
             CapReading::Warn {
                 cap: "day",
@@ -156,7 +206,8 @@ mod tests {
                 Caps {
                     session: Some(1_000),
                     ..Caps::default()
-                }
+                },
+                0
             ),
             CapReading::Ok
         );
@@ -168,7 +219,8 @@ mod tests {
                 Caps {
                     session: Some(120),
                     ..Caps::default()
-                }
+                },
+                0
             ),
             CapReading::Warn {
                 cap: "session",
@@ -187,7 +239,7 @@ mod tests {
             session: None,
         };
         assert_eq!(
-            check_caps(&rows, "s", Timestamp(NOW), caps),
+            check_caps(&rows, "s", Timestamp(NOW), caps, 0),
             CapReading::Stop {
                 cap: "day",
                 used: 100,

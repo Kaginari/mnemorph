@@ -15,15 +15,22 @@ pub struct Left {
     pub cap: &'static str,
 }
 
-/// The budget left under `caps` at `now` for `session`, given what `rows` already spent; `None`
-/// when the human set no cap.
+/// The budget left under `caps` at `now` for `session`, given what `rows` already spent and the
+/// weight assumed for lines the ledger cannot read (`unseen`, against every cap); `None` when the
+/// human set no cap.
 #[must_use]
-pub fn left(caps: Caps, rows: &[UsageRow], session: &str, now: Timestamp) -> Option<Left> {
+pub fn left(
+    caps: Caps,
+    rows: &[UsageRow],
+    session: &str,
+    now: Timestamp,
+    unseen: u64,
+) -> Option<Left> {
     let today = now.day();
     let spent = |pick: &dyn Fn(&UsageRow) -> bool| -> u64 {
         rows.iter()
             .filter(|r| pick(r))
-            .fold(0, |sum, r| sum.saturating_add(r.wt))
+            .fold(unseen, |sum, r| sum.saturating_add(r.wt))
     };
     let month = spent(&|r| {
         let d = r.ts.day();
@@ -79,7 +86,7 @@ mod tests {
             row("2026-10-24T09:00:00Z", "this", 10_000),
         ];
         assert_eq!(
-            left(Caps::default(), &rows, "this", now),
+            left(Caps::default(), &rows, "this", now, 0),
             None,
             "no cap, no budget"
         );
@@ -90,7 +97,7 @@ mod tests {
         };
         // Today spent 40k of 80k; the session 10k of 100k; October 90k of 1M: the day binds.
         assert_eq!(
-            left(caps, &rows, "this", now),
+            left(caps, &rows, "this", now, 0),
             Some(Left {
                 wt: 40_000,
                 cap: "day"
@@ -101,7 +108,7 @@ mod tests {
             ..caps
         };
         assert_eq!(
-            left(caps, &rows, "this", now),
+            left(caps, &rows, "this", now, 0),
             Some(Left {
                 wt: 0,
                 cap: "month"
@@ -120,7 +127,8 @@ mod tests {
                 },
                 &huge,
                 "this",
-                now
+                now,
+                0
             )
             .unwrap()
             .wt,
