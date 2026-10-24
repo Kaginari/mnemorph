@@ -35,6 +35,7 @@ flowchart TB
       SERVER --> LOOP
       LOOP --> CONFIG --> TOOLS
       CONFIG --> RACES
+      CONFIG --> LEDGER
       LOOP --> WORLD --> RACES
       LOOP --> PROV --> LEDGER
       LOOP --> TOOLS --> SANDBOX
@@ -280,10 +281,20 @@ an empty list or table never overrides a lower layer:
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
-  envelope that is a bare `*` or admits a destructive or refused act, a fallback cycle: errors
-  that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
+  envelope that is a bare `*` or admits a destructive or refused act, an envelope without the
+  day it was signed, a fallback cycle: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
   any arguments, so it is tried as each destructive one (`--force`, `--delete`, `+ref`,
   `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
+- **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts 30
+  days unless its own `expires` is later or sooner, never on or before the signing; `uses` caps the
+  acts it covers in all, at least one; no two envelopes share a name. `Envelope::admits(today,
+  used)` is the check the gate makes at the moment of use, once it honours envelopes (M11), with
+  the ledger's count of acts the envelope already covered; it names the lapse that stops one:
+  revoked, not yet in force, expired, or spent. Revoking writes `revoked = <day>` into the
+  human's file that holds the envelope, through `toml_edit` like any write, and only once: the
+  envelope stays on record and covers nothing again. An envelope signed ahead may be revoked
+  before its signing day. The dates are the ledger's `Day`, the one calendar in the
+  workspace, so config reads the ledger crate.
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
   before it replaces the file; a failed save is returned, and the file stays as it was.
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
@@ -310,6 +321,8 @@ key_env = "OPENROUTER_API_KEY"
 [[oni.envelopes]]
 name = "feature branches"
 allow = ["git push origin feat/*", "gh run rerun *"]
+signed = 2026-10-24                # expires 2026-11-23, 30 days on, unless `expires` says
+uses = 50                          # optional: at most 50 acts in all
 ```
 
 ### Where each piece comes from in isekai

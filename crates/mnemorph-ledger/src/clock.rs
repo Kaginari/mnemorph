@@ -79,6 +79,21 @@ impl Timestamp {
     }
 }
 
+impl Day {
+    /// The day, if the calendar has it: no 31 April, no 29 February in a common year.
+    #[must_use]
+    pub fn new(year: i64, month: u8, day: u8) -> Option<Day> {
+        ((1..=12).contains(&month) && day >= 1 && day <= days_in_month(year, month))
+            .then_some(Day { year, month, day })
+    }
+
+    /// The day `days` later, or earlier when `days` is negative.
+    #[must_use]
+    pub fn plus(self, days: i64) -> Day {
+        civil(days_from_civil(self) + days)
+    }
+}
+
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let d = self.day();
@@ -209,5 +224,25 @@ mod tests {
         assert_eq!(serde_json::from_str::<Timestamp>(&json).unwrap(), t);
         assert!(serde_json::from_str::<Timestamp>("\"yesterday\"").is_err());
         assert!(Timestamp::now().0 > 1_700_000_000);
+    }
+
+    #[test]
+    fn days_exist_only_in_the_calendar_and_count_across_months() {
+        assert_eq!(Day::new(2026, 4, 31), None);
+        assert_eq!(Day::new(2025, 2, 29), None);
+        assert_eq!(Day::new(2026, 13, 1), None);
+        assert_eq!(Day::new(2026, 1, 0), None);
+        let signed = Day::new(2026, 10, 24).unwrap();
+        assert_eq!(signed.plus(30).to_string(), "2026-11-23");
+        assert_eq!(signed.plus(-24).to_string(), "2026-09-30");
+        assert_eq!(
+            Day::new(2028, 2, 28).unwrap().plus(1).to_string(),
+            "2028-02-29"
+        );
+        assert_eq!(
+            Day::new(2026, 12, 31).unwrap().plus(1).to_string(),
+            "2027-01-01"
+        );
+        assert!(signed < signed.plus(1));
     }
 }

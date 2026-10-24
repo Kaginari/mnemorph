@@ -955,6 +955,58 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T11:48:21+02:00] rimuru — Oni envelopes bounded: signed, expiring, capped, revocable (#88)
+- **Task:** Veldora: "start on #88". The book promised envelopes "signed, scoped, expiring
+  (default 30 days)"; `Envelope` held only a name and patterns. Nothing honours envelopes yet
+  (M11), so this lands before the first reader.
+- **Files:** crates/mnemorph-config/src/lib.rs (`signed`, `expires`, `uses`, `revoked`;
+  `ENVELOPE_DAYS`; `Lapse`; `Envelope::admits(today, used)`; `revoke_envelope`), src/write.rs
+  (`revoke`, once per envelope, one checked save shared with `set`), tests/config.rs (5 new), Cargo.toml (reads
+  the ledger); crates/mnemorph-ledger/src/clock.rs (`Day::new`, `Day::plus`);
+  tools/check-layers.mjs and docs/05-architecture.md (the config → ledger edge, bounded
+  envelopes), docs/02-races.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. Still open on #88: the ledger's use rows and their
+  count, the gate reading `admits` (M11), `status` listing envelopes (M6), the revoke command,
+  suspension on an observed mismatch (#93).
+- **Learned:**
+  - A promise in the book with no field in the struct is a hole only a reader finds; the
+    research pass found this one by reading the struct against the page.
+  - The calendar already lived in the ledger; drawing one edge kept a single calendar instead of
+    a second copy of Hinnant's conversion.
+  - An envelope is checked at the moment of use, with the ledger's count, so a cap or an expiry
+    passed between plan and act still stops it.
+  - The fresh Fable review found what the tests did not: a revoke the loader would then refuse
+    (an envelope signed ahead, withdrawn early) bricked every later load, and two envelopes under
+    one name left the second unrevocable. A write must leave a file its own reader accepts, not
+    only one TOML parses.
+
+---
+
+### [2026-10-24T12:48:19+02:00] rimuru — the conversation is cached
+- **Task:** a side note found long runs paying full price for their whole history every turn:
+  only the system prompt and the tools were marked for the cache. Make it smarter.
+- **Files:** crates/mnemorph-loop/src/compact.rs (`mark_cache`: the conversation's tail and the
+  previous request's tail, in the slots the stable tiers leave; `foldable`), src/run.rs (marks
+  every request; folds only when a fold takes out a fifth of the line), mnemorph-provider
+  openai.rs (Claude behind a gateway gets the automatic breakpoint), tests (a model that caches
+  as Anthropic does; the gateway mark; Esc tests that fire once the command runs), docs/03-loop.md,
+  docs/06-consumption.md (the layout gives breakpoint 4 to the conversation). `docs/study-maki.md`
+  untracked again (a merge of an old branch had brought it back; still gitignored, kept local).
+- **Gate:** n/a. Instruments: the 40-step run, billed as the cache would bill it: 32% of its
+  uncached input. `just check` (253).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Compaction and caching pull against each other: after 60% the fold point moved every turn,
+    so the run rewrote its history each turn — harmless while nothing was cached, a full-price
+    write per turn once it is. A fold has to be worth the rewrite it causes.
+  - The planned four static breakpoints would have left the conversation, most of a long run's
+    input, with none.
+  - Two Esc tests fired on a timer; under load the timer beat the ask's stale-Esc reset and the
+    Esc was swallowed. A test should fire on the event it means, not on a guess at when it comes.
+
+---
+
 ### [2026-10-24T15:40:00+02:00] rimuru — the book: memory (page 8), M8 replanned around it
 - **Task:** Veldora: use DIKWP MNEMORPH-85 as Mnemorph's memory system — is it possible, and the
   plan, in the book.
