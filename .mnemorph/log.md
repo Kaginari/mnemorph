@@ -541,3 +541,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Gate:** n/a. Instruments: corpus on Linux; CI on macOS.
 - **Result:** pushed to the classifier PR.
 - **Learned:** resolving symlinks before judging turned `/etc` into `/private/etc` and `/home` into `/System/Volumes/Data/home` on macOS — no longer top-level, no longer a credential path. Containment needs both spellings, and the corpus runs on every OS for exactly this.
+
+---
+
+### [2026-10-24T02:41:18+02:00] rimuru — M4 rung 2: the file tools
+- **Task:** read, write, edit, glob and grep, behind the world's border and the body's soil.
+- **Files:** crates/mnemorph-tools/src/tool.rs (the `Tool` trait, `registry`, `call`, `Outcome`
+  and `Meta`, `Context` with `inside`/`writable`), src/files.rs (the five tools),
+  tests/files.rs (12 tests against a real world on disk); the classifier's path resolver is
+  shared, so the border means the same in both.
+- **Gate:** n/a. Instruments: 15 tool tests; `just check` (136 tests).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The lessons map one to one onto tests: bad JSON and unknown fields are named errors and
+    nothing runs; a symlink out of the world is refused by every file tool; edit names the
+    closest line or every matching line; a re-read of an unchanged window is a pointer with
+    `meta.unchanged`, and a write resets it.
+  - Writes go to a temporary sibling and a rename: a file is replaced whole or not at all.

@@ -13,7 +13,7 @@
 //! can lower what the words before it already earned.
 
 mod commands;
-mod paths;
+pub(crate) mod paths;
 mod words;
 
 use std::path::{Path, PathBuf};

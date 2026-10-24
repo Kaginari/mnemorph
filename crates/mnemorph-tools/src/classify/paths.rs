@@ -85,7 +85,7 @@ pub(crate) fn join(cwd: Option<&Path>, text: &str) -> Option<PathBuf> {
 }
 
 /// Resolve symlinks along the longest prefix of `path` that exists, keep the rest as written.
-fn real(path: &Path) -> PathBuf {
+pub(crate) fn real(path: &Path) -> PathBuf {
     let mut existing = path.to_path_buf();
     let mut rest = Vec::new();
     loop {
