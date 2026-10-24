@@ -1,4 +1,6 @@
-//! `mnemorph-guard [--read P]… [--write P]… [--network] -- PROGRAM ARGS…`
+//! `mnemorph-guard [--read P]… [--write P]… [--rules FILE] [--network] -- PROGRAM ARGS…`
+//!
+//! `--rules` reads `r`/`w` and a path, each NUL-terminated, from FILE and removes it.
 //!
 //! Restricts its own process with landlock and seccomp, then execs PROGRAM in its place, so the
 //! command and everything it starts inherit the restriction. `--probe` restricts and prints the
@@ -22,6 +24,16 @@ fn main() {
             Some("--read") => rules.read.extend(args.next().map(PathBuf::from)),
             Some("--write") => rules.write.extend(args.next().map(PathBuf::from)),
             Some("--network") => rules.network = true,
+            Some("--rules") => {
+                let Some(file) = args.next().map(PathBuf::from) else {
+                    eprintln!("mnemorph-guard: --rules needs a file");
+                    exit(125);
+                };
+                if let Err(e) = read_rules(&file, &mut rules) {
+                    eprintln!("mnemorph-guard: the rules file: {e}; nothing ran");
+                    exit(125);
+                }
+            }
             Some("--probe") => probe = true,
             Some("--") => {
                 program.extend(args.by_ref());
@@ -54,6 +66,28 @@ fn main() {
         prog.to_string_lossy()
     );
     exit(127);
+}
+
+/// Read the rules file into `rules`, then remove it: it is read once, before any restriction.
+#[cfg(target_os = "linux")]
+fn read_rules(
+    file: &std::path::Path,
+    rules: &mut mnemorph_sandbox::linux::Rules,
+) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt as _;
+    let bytes = std::fs::read(file)?;
+    std::fs::remove_file(file)?;
+    let mut fields = bytes.split(|b| *b == 0);
+    while let (Some(kind), Some(path)) = (fields.next(), fields.next()) {
+        let path = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(path));
+        match kind {
+            b"r" => rules.read.push(path),
+            b"w" => rules.write.push(path),
+            b"" => break,
+            _ => return Err(std::io::Error::other("a rule is neither r nor w")),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]

@@ -355,9 +355,16 @@ fn run(
     network: bool,
     opened: &[PathBuf],
 ) -> std::io::Result<Ran> {
-    let tmp = cx.world().join(".mnemorph/tmp");
+    let tmp = cx.scratch();
     std::fs::create_dir_all(&tmp)?;
     let mut policy = Policy::new(cx.world(), cx.home(), &tmp, network);
+    // A commissioned creature writes what its soil admits; the rest of the world it only reads.
+    let grants = cx.grants();
+    if grants != [cx.world().to_path_buf()] {
+        policy.write.retain(|p| p != cx.world());
+        policy.write.extend(grants);
+        policy.read.push(cx.world().to_path_buf());
+    }
     // Each approved path exists by now and opens alone: never its folder.
     policy.write.extend(opened.iter().cloned());
     let mut cmd = cx

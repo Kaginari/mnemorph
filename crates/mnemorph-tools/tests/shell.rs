@@ -540,3 +540,227 @@ fn the_run_clock_stops_a_running_command() {
         "it says when it was really killed: {o:?}"
     );
 }
+
+/// A commissioned creature's commands are granted exactly its soil: the guard cannot except a spot
+/// inside an allowed folder, so the claim is granted part by part around another's spot, and the
+/// kernel refuses a write there. The write tool refuses it by name.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_creatures_commands_are_granted_around_anothers_spot() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("grants");
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join("src/deep")).unwrap();
+    fs::write(w.world().join("src/mine.rs"), "mine\n").unwrap();
+    fs::write(w.world().join("src/deep/a.rs"), "a\n").unwrap();
+    fs::write(w.world().join("src/other/theirs.rs"), "theirs\n").unwrap();
+    fs::write(w.world().join("README.md"), "root\n").unwrap();
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/"], &["src/other/"], false)
+            .with_build(&["target", ".mnemorph/instruments"])
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    // What git ignores is build output, granted — but never the records, even when ignored.
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(w.world())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    fs::write(
+        w.world().join(".gitignore"),
+        "target/\n.mnemorph/instruments/\nsrc/other/\n",
+    )
+    .unwrap();
+    fs::create_dir_all(w.world().join("target")).unwrap();
+    fs::create_dir_all(w.world().join(".mnemorph/instruments")).unwrap();
+    fs::write(w.world().join(".mnemorph/instruments/usage.jsonl"), "{}\n").unwrap();
+    let grants = cx().grants();
+    let world = w.world().canonicalize().unwrap();
+    assert!(grants.contains(&world.join("src/mine.rs")), "{grants:?}");
+    assert!(grants.contains(&world.join("src/deep")), "{grants:?}");
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join("src/other"))),
+        "{grants:?}"
+    );
+    assert!(!grants.contains(&world), "{grants:?}");
+    assert!(grants.contains(&world.join("target")), "{grants:?}");
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join(".mnemorph"))),
+        "{grants:?}"
+    );
+
+    let o = bash(
+        &mut cx(),
+        "echo changed > src/mine.rs && echo new > src/deep/b.rs && cat README.md",
+    );
+    assert!(
+        !o.is_error,
+        "its own soil is its own, and the world is still read: {o:?}"
+    );
+    let o = bash(&mut cx(), "echo stolen > src/other/theirs.rs");
+    assert!(o.is_error, "{o:?}");
+    let o = bash(&mut cx(), "echo stolen > README.md");
+    assert!(o.is_error, "{o:?}");
+    let o = bash(&mut cx(), "echo built > target/out");
+    assert!(!o.is_error, "build output is writable: {o:?}");
+    let o = bash(
+        &mut cx(),
+        "echo forged >> .mnemorph/instruments/usage.jsonl",
+    );
+    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(w.world().join("target/out")).unwrap(),
+        "built\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join(".mnemorph/instruments/usage.jsonl")).unwrap(),
+        "{}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join("src/other/theirs.rs")).unwrap(),
+        "theirs\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.world().join("README.md")).unwrap(),
+        "root\n"
+    );
+
+    let o = call(
+        &registry(),
+        "write",
+        r#"{"path": "src/other/theirs.rs", "content": "stolen"}"#,
+        &mut cx(),
+    );
+    assert!(
+        o.is_error && o.content.contains("outside your soil"),
+        "{o:?}"
+    );
+}
+
+/// The guard resolves every rule to what it names, so a link in a creature's soil must never
+/// grant its target: not another's spot, not another's zone, not a file outside the world.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_link_in_the_soil_grants_nothing_beyond_it() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("links");
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join("lib")).unwrap();
+    fs::write(w.world().join("src/other/theirs.rs"), "theirs\n").unwrap();
+    fs::write(w.world().join("lib/zone.rs"), "zone\n").unwrap();
+    fs::write(w.outside().join("secret"), "outside\n").unwrap();
+    let link = |target: PathBuf, name: &str| {
+        std::os::unix::fs::symlink(target, w.world().join(name)).unwrap();
+    };
+    link(w.world().join("src/other/theirs.rs"), "src/to-theirs");
+    link(w.world().join("lib"), "src/to-lib");
+    link(w.outside().join("secret"), "src/to-outside");
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/"], &["src/other/"], false)
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let grants = cx().grants();
+    let world = w.world().canonicalize().unwrap();
+    for never in [
+        world.join("src/other/theirs.rs"),
+        world.join("lib"),
+        w.outside().join("secret").canonicalize().unwrap(),
+    ] {
+        assert!(
+            !grants.contains(&never),
+            "{never:?} granted through a link: {grants:?}"
+        );
+    }
+    for (through, file) in [
+        ("src/to-theirs", w.world().join("src/other/theirs.rs")),
+        ("src/to-lib/zone.rs", w.world().join("lib/zone.rs")),
+        ("src/to-outside", w.outside().join("secret")),
+    ] {
+        let before = fs::read_to_string(&file).unwrap();
+        let o = bash(&mut cx(), &format!("echo stolen > {through}"));
+        assert!(o.is_error, "{through}: {o:?}");
+        assert_eq!(fs::read_to_string(&file).unwrap(), before, "{through}");
+    }
+}
+
+/// What the review of the grants found, each held: a link handed as build output grants
+/// nothing; a scratch nest that is a link is never used, and each creature's fallback scratch is
+/// its own; hundreds of grants still start; `truncate` by path is refused where landlock cannot.
+#[cfg(target_os = "linux")]
+#[test]
+fn build_links_scratch_many_grants_and_truncate() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("review");
+    fs::create_dir_all(w.world().join("lib")).unwrap();
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join(".mnemorph/tmp/slime-b")).unwrap();
+    fs::write(w.world().join("lib/zone.rs"), "zone\n").unwrap();
+    std::os::unix::fs::symlink(w.world().join("lib"), w.world().join("src/x.log")).unwrap();
+    std::os::unix::fs::symlink(
+        w.world().join(".mnemorph/tmp/slime-b"),
+        w.world().join(".mnemorph/tmp/slime-a"),
+    )
+    .unwrap();
+    for i in 0..600 {
+        fs::write(w.world().join(format!("src/f{i}.rs")), "x\n").unwrap();
+    }
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/", ".mnemorph/tmp/slime-a/"], &["src/other/"], false)
+            .with_build(&["src/x.log"])
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let world = w.world().canonicalize().unwrap();
+    let grants = cx().grants();
+    assert!(grants.len() >= 600, "{}", grants.len());
+    assert!(
+        grants.iter().all(|g| !g.starts_with(world.join("lib"))),
+        "a build link granted its target"
+    );
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join(".mnemorph/tmp/slime-b")))
+    );
+    let (one, two) = (cx().scratch(), cx().scratch());
+    assert!(!one.starts_with(&world) && one != two, "{one:?} {two:?}");
+    // Hundreds of grants go through a rules file; the command starts and writes its own soil.
+    let o = bash(&mut cx(), "echo y > src/f1.rs && cat src/f1.rs");
+    assert_eq!(o.content, "y\n", "{o:?}");
+    for cmd in [
+        "echo stolen > src/x.log/zone.rs",
+        "python3 -c \"import os; os.truncate('lib/zone.rs', 0)\"",
+    ] {
+        let o = bash(&mut cx(), cmd);
+        assert!(o.is_error, "{cmd}: {o:?}");
+    }
+    assert_eq!(
+        fs::read_to_string(w.world().join("lib/zone.rs")).unwrap(),
+        "zone\n"
+    );
+}

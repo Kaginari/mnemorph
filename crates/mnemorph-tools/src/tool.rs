@@ -100,6 +100,18 @@ pub struct Context {
     race: Race,
     world: PathBuf,
     soil: Vec<PathBuf>,
+    /// Claims inside the soil that are not the body's: the longest claim that covers a path
+    /// decides, and on a tie the exclusion wins.
+    except: Vec<PathBuf>,
+    /// Whether the world's root files are the body's (the workspace).
+    root_files: bool,
+    /// Whether the soil was handed by the world (a commissioned creature): then commands are
+    /// granted exactly what it admits, not the whole world.
+    narrowed: bool,
+    /// Build output granted besides the soil (see [`Self::with_build`]).
+    build: Vec<PathBuf>,
+    /// The creature's scratch nest, when it was handed one.
+    nest: Option<PathBuf>,
     home: PathBuf,
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
@@ -117,6 +129,7 @@ impl std::fmt::Debug for Context {
             .field("race", &self.race)
             .field("world", &self.world)
             .field("soil", &self.soil)
+            .field("except", &self.except)
             .field("home", &self.home)
             .field("sandbox", &self.sandbox)
             .finish_non_exhaustive()
@@ -142,6 +155,11 @@ impl Context {
             race,
             world,
             soil,
+            except: Vec::new(),
+            root_files: false,
+            narrowed: false,
+            build: Vec::new(),
+            nest: None,
             home,
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
@@ -151,6 +169,162 @@ impl Context {
             cancel: None,
             deadline: None,
             seen: HashMap::new(),
+        }
+    }
+
+    /// The body's soil as the world hands it: claims it writes, claims inside them it does not,
+    /// and whether the root files are its own (paths relative to the world).
+    #[must_use]
+    pub fn with_soil(
+        mut self,
+        write: &[impl AsRef<Path>],
+        except: &[impl AsRef<Path>],
+        root_files: bool,
+    ) -> Self {
+        // A claim reached through a link is no claim: resolved, it would be the link's target.
+        self.soil = write
+            .iter()
+            .filter(|s| !linked(&self.world, s.as_ref()))
+            .map(|s| real(&self.world.join(s.as_ref())))
+            .collect();
+        self.except = except
+            .iter()
+            .map(|s| real(&self.world.join(s.as_ref())))
+            .collect();
+        self.root_files = root_files;
+        self.narrowed = true;
+        // The scratch nest, read before any link is followed; else a fresh private directory.
+        let all = self.world.join(".mnemorph/tmp");
+        self.nest = write
+            .iter()
+            .map(|s| self.world.join(s.as_ref()))
+            .find(|s| s.starts_with(&all) && *s != all)
+            .filter(|s| !linked(&self.world, s.strip_prefix(&self.world).unwrap_or(s)))
+            .map(|s| real(&s))
+            .or_else(private_scratch);
+        self
+    }
+
+    /// The build output a commissioned creature may write besides its soil: paths git ignores
+    /// that the world gives it or nobody — never another's, never through a link.
+    #[must_use]
+    pub fn with_build(mut self, build: &[impl AsRef<Path>]) -> Self {
+        self.build = build
+            .iter()
+            .filter(|b| !linked(&self.world, b.as_ref()))
+            .map(|b| self.world.join(b.as_ref()))
+            .collect();
+        self
+    }
+
+    /// What a command may write, for the kernel guard: the whole world for a solo body; for a
+    /// commissioned creature, exactly the existing paths its soil admits, plus what git ignores
+    /// (build output, never a landing). The guard can allow a folder but not except a spot inside
+    /// it, so a claim that holds another's spot is granted part by part around that spot — and a
+    /// new file directly beside such a spot is the write tool's to make.
+    #[must_use]
+    pub fn grants(&self) -> Vec<PathBuf> {
+        if !self.narrowed {
+            return vec![self.world.clone()];
+        }
+        let mut out = Vec::new();
+        for w in &self.soil {
+            self.grant(w, &mut out);
+        }
+        if self.root_files
+            && let Ok(entries) = std::fs::read_dir(&self.world)
+        {
+            for e in entries.filter_map(Result::ok) {
+                let p = e.path();
+                if p.is_file() && self.admits(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        // Build output, as the world handed it: existing, and never a link.
+        let built: Vec<PathBuf> = self
+            .build
+            .iter()
+            .filter(|b| {
+                b.symlink_metadata()
+                    .is_ok_and(|m| !m.file_type().is_symlink())
+            })
+            .cloned()
+            .collect();
+        let built_real: Vec<PathBuf> = built.iter().filter_map(|b| b.canonicalize().ok()).collect();
+        let records = [self.world.join(".mnemorph"), self.world.join(".git")];
+        out.extend(built);
+        // The guard resolves every rule to the file it names: a symlink granted as an entry would
+        // grant its target. So each grant is resolved here, and kept only if what it resolves to
+        // is still inside the world, outside the records, and the creature's own.
+        let mut out: Vec<PathBuf> = out
+            .into_iter()
+            .filter_map(|g| {
+                let real = g.canonicalize().ok()?;
+                // A folder that holds another's spot is never granted whole.
+                let holds = self
+                    .except
+                    .iter()
+                    .any(|e| e.starts_with(&real) && *e != real)
+                    || records.iter().any(|r| r.starts_with(&real));
+                let built = built_real.iter().any(|b| real.starts_with(b))
+                    && !records.iter().any(|r| real.starts_with(r))
+                    && !self.except.iter().any(|e| real.starts_with(e));
+                (real.starts_with(&self.world) && !holds && (self.admits(&real) || built))
+                    .then_some(real)
+            })
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Grant `path` whole when no exclusion lies inside it; else each of its parts around them.
+    fn grant(&self, path: &Path, out: &mut Vec<PathBuf>) {
+        if !path.exists() {
+            return;
+        }
+        if !self.except.iter().any(|e| e.starts_with(path) && e != path) {
+            if self.admits(path) {
+                out.push(path.to_path_buf());
+            }
+            return;
+        }
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for e in entries.filter_map(Result::ok) {
+                self.grant(&e.path(), out);
+            }
+        }
+    }
+
+    /// Where a command keeps its temporary files: the creature's own scratch nest when the
+    /// world handed its soil, else the world's scratch.
+    #[must_use]
+    pub fn scratch(&self) -> PathBuf {
+        if self.narrowed {
+            return self
+                .nest
+                .clone()
+                .unwrap_or_else(|| self.world.join(".mnemorph/tmp/.none"));
+        }
+        self.world.join(".mnemorph/tmp")
+    }
+
+    /// Whether the soil admits `path`: the longest covering claim decides, a tie to the
+    /// exclusion; a root file by `root_files`, unless a claim excludes it.
+    fn admits(&self, path: &Path) -> bool {
+        let best = |claims: &[PathBuf]| {
+            claims
+                .iter()
+                .filter(|c| path.starts_with(c))
+                .map(|c| c.components().count())
+                .max()
+        };
+        let root = (self.root_files && path.parent() == Some(self.world.as_path())).then_some(0);
+        match (best(&self.soil).max(root), best(&self.except)) {
+            (Some(w), Some(e)) => w > e,
+            (Some(_), None) => true,
+            (None, _) => false,
         }
     }
 
@@ -295,7 +469,7 @@ impl Context {
                 self.shown(&path)
             ));
         }
-        if self.soil.iter().any(|s| path.starts_with(s)) {
+        if self.admits(&path) {
             Ok(path)
         } else {
             let soil: Vec<String> = self.soil.iter().map(|s| self.shown(s)).collect();
@@ -343,4 +517,65 @@ pub(crate) fn args<T: DeserializeOwned>(name: &str, value: Value) -> Result<T, O
             "the arguments to {name} do not fit its schema: {e}"
         ))
     })
+}
+
+/// What git ignores in `world`, relative to it: the candidates for build output. The world
+/// decides which of them a creature may write ([`Context::with_build`]).
+#[must_use]
+pub fn ignored(world: &Path) -> Vec<PathBuf> {
+    // Outside the sandbox: a clone's own configuration must not run anything (fsmonitor, hooks).
+    let out = std::process::Command::new("git")
+        .args(["-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null"])
+        .arg("-C")
+        .arg(world)
+        .args([
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+        ])
+        .output();
+    let Ok(out) = out else { return Vec::new() };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|p| !p.is_empty())
+        .map(|p| PathBuf::from(p.trim_end_matches('/')))
+        .collect()
+}
+
+/// Whether `rel` reaches through a link anywhere between the world and itself.
+fn linked(world: &Path, rel: &Path) -> bool {
+    let mut at = world.to_path_buf();
+    rel.components().any(|c| {
+        at.push(c);
+        at.symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+    })
+}
+
+/// A fresh directory only this creature uses, outside the world: owner-only, never a name another
+/// already holds.
+fn private_scratch() -> Option<PathBuf> {
+    use std::os::unix::fs::DirBuilderExt as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    for _ in 0..8 {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "mnemorph-scratch-{}-{stamp:x}-{n}",
+            std::process::id()
+        ));
+        if std::fs::DirBuilder::new().mode(0o700).create(&dir).is_ok() {
+            return Some(dir);
+        }
+    }
+    None
 }

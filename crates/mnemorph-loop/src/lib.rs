@@ -3,6 +3,7 @@
 
 pub mod beats;
 pub mod budget;
+pub mod commission;
 pub mod compact;
 pub mod decisions;
 pub mod gate;
@@ -18,7 +19,7 @@ pub mod stress;
 pub use beats::{Beat, conversation};
 pub use budget::{Caps, Left};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
-pub use gate::{EndGate, GateVerdict, Tree, snapshot};
+pub use gate::{Author, EndGate, GateVerdict, Tree, snapshot};
 /// The configuration, for a client that opens a session from it.
 pub use mnemorph_config::{Config, Paths};
 pub use mnemorph_provider::Event as StreamEvent;

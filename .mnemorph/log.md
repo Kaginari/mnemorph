@@ -1834,3 +1834,83 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     holds retired creatures, so every named route is checked for life.
   - A string that looks like a wire line must parse as one. The budget hole is built from the
     wire's own type.
+
+---
+
+### [2026-10-24T23:15:19+02:00] rimuru — M7: the right author, and commands granted exactly their soil
+- **Task:** the gate's half of ontology rung 2–3: *right author* and blocking findings. The human
+  asked for "a smart strategy" against shell commands writing past a creature's soil.
+- **Files:**
+  - crates/mnemorph-tools tool.rs — `with_soil` (exclusions, root files), `admits` by the
+    longest claim, `grants` (exactly the soil, part by part around another's spot, plus what git
+    ignores), `scratch`;
+  - shell.rs — the policy narrowed for a commissioned creature;
+  - crates/mnemorph-loop:
+    - gate.rs — `Author`, `right_author`, `touches`;
+    - commission.rs — `context_for`;
+  - tests: shell.rs under the real guard, loop tests/right_author.rs;
+  - docs/03, 05.
+- **Gate:** n/a. Instruments:
+  - under landlock, a command writes its own file and a new one in a granted folder, reads the
+    world, and is refused another's spot and a root file;
+  - the gate names a stray write's owner and route;
+  - an overlap blocks the landing it touches, and not the one that ends it;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Landlock only adds. "A claim minus a spot" is granted by walking the claim and leaving the
+    spot out. The cost: no new file directly beside the spot, only by the write tool.
+  - Granting exactly the soil would have broken every `cargo test`: `target/` is no one's. What
+    git ignores is never a landing, so it is granted.
+  - The third layer, restoring what a failed right-author check names from the commission's
+    attic snapshot, belongs to the commission runner (the next rung), where that snapshot is
+    taken.
+
+---
+
+### [2026-10-24T23:31:59+02:00] rimuru — M7 grants: a link never grants its target
+- **Task:** close the escape the review of #146 demonstrated before its report was cut off.
+- **Files:** crates/mnemorph-tools tool.rs (`grants` resolves every grant, keeps only what stays
+  the creature's own, excludes the records from build output; `scratch` refuses a linked nest),
+  tests/shell.rs (links to another's spot, another's zone, a file outside the world); docs/05.
+- **Gate:** n/a. Instruments:
+  - the link test fails on the previous commit, where the write through `src/to-theirs`
+    succeeded, and passes now;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A grant list is a list of names, but the guard grants what they resolve to. Every name is
+    resolved and judged by the same `admits` before the kernel sees it.
+  - My own grant test checked the grants by their resolved names, while the escape lived in an
+    unresolved one. A test of a border must try to cross it, not just read the list.
+
+---
+
+### [2026-10-24T23:48:37+02:00] rimuru — the border, reviewed twice: Opus, then Fable on Opus
+- **Task:** close what the sandbox review of #146 found. Opus 5.5 reviewed the code; Fable
+  reviewed that review, as the human now wants for sandbox work.
+- **Files:**
+  - tools tool.rs:
+    - `with_build` (build output handed by the world);
+    - `linked` (a claim reached through a link is none);
+    - a private per-creature scratch;
+    - `ignored` exported, its `git` told to run no fsmonitor or hooks;
+  - loop commission.rs — build output decided with `own`;
+  - sandbox:
+    - lib.rs — rules by an owner-only file past 256;
+    - mnemorph-guard — `--rules`;
+    - linux.rs — `truncate` refused below ABI 3;
+  - loop gate.rs — the snapshot records mode and ctime;
+  - tests: shell.rs under the guard, right_author.rs;
+  - docs/05 and 03.
+- **Gate:** n/a. Instruments: a crossing test per finding, under the real guard where the kernel
+  is the border; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - "Ignored" is not "build output". `.env` beside another's code is ignored too. Only `own`
+    decides what a creature may write, and git's list merely nominates.
+  - Grants and ownership must judge the same paths. Ownership reads them as written, and the
+    kernel resolves them, so a link anywhere is checked before it is followed.
+  - Open for the commission rung: a creature's seat is in its soil, but the tripwire reverts any
+    write under `.mnemorph/`. "Doc truthful" decides which of the two owns the seat. Commissions
+    are not wired yet, so none of this border is reached in production.

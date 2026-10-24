@@ -186,8 +186,31 @@ flowchart LR
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
     (`.cargo`, `.rustup`, `.local/bin`, …); never a credential path (`.ssh`, `.aws`, `.gnupg`,
     keyrings, …), which no rule names. Writes: the world, the command's temporary directory
-    inside it, and a few devices. The soil is the tools' border; the sandbox's border is the
-    world. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
+    inside it, and a few devices — for solo. A commissioned creature's commands are granted
+    exactly what its soil admits, and the rest of the world is read-only to them: landlock can
+    allow a folder but never except a spot inside it, so a claim that holds another's spot (a
+    seat, the queue, another's scratch) is granted part by part around that spot, existing
+    entries each on its own. A claim reached through a link is no claim. Build output is granted
+    besides the soil: what git ignores where `own` names the creature or nobody — never another's
+    ignored files, the records (`.mnemorph/`) or git's own files, and never through a link. The
+    guard resolves every rule to the file it names, so every grant is resolved first and kept
+    only if it still resolves inside the world to the creature's own. Past a few hundred rules
+    they reach the guard in an owner-only file it reads and removes before restricting itself.
+    The temporary directory is the creature's own scratch nest, or, when that nest is a link, a
+    fresh owner-only directory outside the world for that creature alone. Below landlock ABI 3,
+    which cannot refuse `truncate` on a path, seccomp refuses the call.
+
+    What this costs a commissioned creature, by design: in a folder that holds another's spot it
+    cannot create, delete or rename its own files, so `sed -i`, editors' atomic saves and
+    formatters that replace a file fail there — the write and edit tools do that work; a build
+    whose output directory or root lockfile does not exist yet cannot create it; `.git` is not
+    its to write (landing is the harness's); a claimed folder that does not exist yet gets no
+    grant until it is made. Landlock never governs a file's mode or times, so the end gate's
+    snapshot records each file's mode and inode change time, which no process can set back:
+    a `chmod`, a `touch` or a rewrite dressed in its old mtime counts as a change and is judged.
+    Layered, landlock refuses what it can, the tools refuse by name, and the end gate's *right
+    author* judges every changed file the snapshot sees; what git ignores is build output and is
+    not judged. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
     domain, so the harness's environment is closed to its commands; the harness additionally
     makes itself non-dumpable.
   - **seccomp** — without network, `socket()` fails for every family, Unix sockets included (a
