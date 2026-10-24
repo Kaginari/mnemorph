@@ -1087,3 +1087,175 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     without an error. Raw strings, and a per-span MathJax check, catch it.
   - DIKWP-MESH could count stances because its demo data had them filled in by hand; agents do
     not volunteer disagreement, so the ontology derives counters itself.
+### [2026-10-24T12:40:00+02:00] rimuru — an envelope's longest life is the human's to set (#88)
+- **Task:** Veldora: a cap of 30 days, "i want a cap configurable". After #108 an explicit
+  `expires` could be any date after `signed`, so `expires = 2099-01-01` lasted for decades.
+- **Files:** crates/mnemorph-config/src/lib.rs (`oni.envelope_days`, 1–365, loosening, so only
+  the local or global file sets it; `ENVELOPE_DAYS_CEILING`; `Config::envelope_days`; an
+  envelope past its limit is an error naming the file), tests/config.rs (1 new);
+  docs/05-architecture.md, docs/02-races.md, docs/roadmap.md (what M11 still owes envelopes).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A default without a ceiling bounds only the envelopes nobody thought about; the one written
+    by hand was the one that could last forever.
+  - The limit is a loosening key: raising it is the same act as signing a longer envelope, so it
+    lives where envelopes live. A compiled ceiling of a year keeps any setting from bringing back
+    an envelope that never ends.
+
+---
+
+### [2026-10-24T13:06:19+02:00] rimuru — System One decisions, with an LLM fallback
+- **Task:** Veldora's ask, from the research: make Jev-like models (TypeSafe's Jev, the open
+  jeff) a decision source switched on by config, falling back to the LLM when none is set. A
+  side note sharpened it: an LLM's stated probability is not a calibrated one, so the answer must
+  say who gave it and cut-offs must differ by backend.
+- **Files:** crates/mnemorph-provider/src/systemone.rs (the shared `/v1/systemone` wire: noul,
+  choice, score; order-preserving encoding; reading against the ask; the ladder on a decision's
+  scale), src/decide.rs (`Decider`: System One first, the LLM through an `answer` tool; `Decision`
+  with its `Source` and `Basis`; per-basis `Cutoffs`; the journal row), mnemorph-ledger row.rs
+  (`DecisionRow`), mnemorph-config (`decide.via`, `decide.model`, `decide.llm`,
+  `decide.cutoff.measured`, `decide.cutoff.stated`; `Config::decide`; `kind = "systemone"`),
+  tests (TypeSafe's recorded exchange, jeff's 529, the fallback and its reason, the same 85% sure
+  as measured and not as stated, a tracked file that cannot add a provider), docs/05-architecture.md
+  (*System One decisions*), clippy.toml (TypeSafe is a name).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No decision point calls it yet: each attaches with its
+  milestone.
+- **Learned:**
+  - Jeff answers Jev's protocol on the same path with the same shapes, so one client serves both;
+    jeff adds `orders`, drops `box`, rejects unknown fields and answers 529 when busy.
+  - A JSON map sorts option labels, and a System One model may read options by position: the
+    request is written in the caller's order by hand.
+  - One answer shape for two backends hides the switch. The basis, not the shape, says what a
+    probability is worth.
+  - A fresh Fable review, ten findings, all fixed: a negative cut-off made every answer sure; a
+    tracked file could still send the state to the human's own provider, or lower the bar
+    (`decide.via` and the cut-offs are now the human's alone); a measured answer of the wrong
+    shape was repaired into one that passed for measured (now refused, and the LLM answers);
+    the text parser took the first `{` to the last `}`; escaping the state changed it (now it
+    goes as it is, between markers made for the call); no id joined a decision to its outcome
+    (now `DecisionRow.id` and `OutcomeRow`); `jev-latest` was assumed for jeff (`decide.model` is
+    required with `via`).
+
+---
+
+### [2026-10-24T14:10:00+02:00] rimuru — the first decision point: a piped test run, read
+- **Task:** Veldora, after a side note that `decide.via` changed nothing: "can you implement it?"
+  The piped bench was the point already in the loop's code. The same turn sent a Jev key, so the
+  wire was also proven live.
+- **Files:** crates/mnemorph-loop/src/decisions.rs (`decisions` from the config, the fallback
+  through the run's own model; `bench_ask`, the output's tail; `bench_read`), src/run.rs
+  (`with_decisions`; the act step waits on a decision for a piped bench, Esc cancels it; a note
+  in the beat journal; the decision row), src/stress.rs (`act_read`, `Read`, `Bench.read`;
+  `muted` public), mnemorph-config (`decide.bench`, on by default), tests/decisions.rs (a sure
+  green unstalls the run that stalled; an unsure stated read stays muted; a seen status asks
+  nothing; the config builds it), mnemorph-provider tests/live_systemone.rs (one real decision,
+  opt-in), docs/03-loop.md, docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`; the live test once against TypeSafe: `jev-1.14.0`
+  read a two-failure pytest log red at 1.00 and "every test passed" at 0.01, measured, 350 ms,
+  392 input tokens, the strict reading satisfied.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Jev's real answers sum to exactly 1 over exactly the asked labels: the strict reading the
+    review asked for holds against the live service.
+  - A decision point belongs where the instrument already counts: the bench tally takes a read
+    as if the exit status had been seen, so no new stall rule was needed.
+  - A fresh Fable review, nine findings. Fixed: an Esc that stopped the command was followed by
+    a decision it could not cancel (the flag was already taken); a decision ran outside the
+    run's clock (now the least of 30 s and what the run has left); the shell keeps the first
+    30 000 bytes, so a long log's "tail" was its middle, and a read green there would reset the
+    one counter made for thrash (now cut output is never read); default-on asked an LLM on every
+    piped run, unpriced (now on only with `via` or `decide.bench = true`, and priced); the docs
+    called the point live, which no binary yet makes true. Kept as a warning, not a note: a
+    `Beat::Note` is replayed to the model on resume.
+
+---
+
+### [2026-10-24T13:28:29+02:00] rimuru — no merge left half-done
+- **Task:** the review of #112 found raw conflict markers in `docs/05-architecture.md` on main
+  (the `[oni]` block of #110 against the System One config blocks), merged through a green CI.
+- **Files:** docs/05-architecture.md (both sides kept, `[oni]` beside its envelopes), justfile
+  (`docs` fails on a conflict marker in any tracked file), docs/lessons.md (Process row).
+- **Gate:** n/a. Instruments: `just docs` passes on the fixed tree and fails on a planted marker.
+- **Result:** in review as a pull request.
+- **Learned:** a green check is only as wide as what it reads: the site build parses markdown
+  and checks links, and a conflict marker is valid markdown.
+
+---
+
+### [2026-10-24T13:44:06+02:00] rimuru — a seen failure is never read green
+- **Task:** the review of #113 (merged): a piped bench run was read by the decider even when the
+  shell saw it fail, so a timed-out or non-zero run could count green; the cut-output check missed
+  stderr's marker.
+- **Files:** crates/mnemorph-loop/src/run.rs (no read when the outcome is an error; both dropped
+  markers), src/decisions.rs (the green label says the run finished), tests/decisions.rs
+  (`a_failed_run_is_never_read_green`), docs/03-loop.md, docs/06-consumption.md (decision rows
+  in the usage ledger), docs/lessons.md (the bench row's guarantee, as it now holds).
+- **Gate:** n/a. Instruments: the new test fails with the fix removed and passes with it;
+  `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the #113 entry's Files line calls `decide.bench` on by default; it is off unless
+  the human names a System One provider or sets it (its own Learned bullet says so).
+
+---
+
+### [2026-10-24T14:55:00+02:00] rimuru — the offices named, and Metis routes within their bands
+- **Task:** Veldora: "a jev usecase: which model to choose based on complexity, the courts, the
+  offices (ciel, raphael, great-sage); find other names meaningful for mnemorph", then "go on" to
+  the proposal: the three first Muses for the offices, Metis for the router, routing off by
+  default.
+- **Files:** mnemorph-wire commission.rs (`Office::name` mneme/melete/aoede, `Office::function`
+  read/judge/write, `Office::ALL`), mnemorph-config (an office key names a Muse or a function,
+  anything else is an error; `model_pinned`, `tier_model`; `decide.route`), mnemorph-loop
+  route.rs (`band`, `route_ask`, `pick`, `route`; journaled at `model.route`), decisions.rs
+  (`bench` and `route` switches; `decision_usage`, shared with the bench), tests/route.rs, the
+  live test (`two_real_routes`), docs/02-races.md (*The offices*, *Metis routes within a band*),
+  docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`; live against TypeSafe: a rename read routine at 1.00
+  and hard-to-undo at 0.06; a production payments migration hard at 0.98 and hard-to-undo at 0.97.
+- **Result:** in review as a pull request. Honoured once dispatch builds bodies from commissions.
+- **Learned:**
+  - The canon's model table was already a complexity rule in words — Great Sage fast, Raphael
+    bumped for what is hard to undo, Ciel never below Raphael — so the router is the canon made
+    measurable, bounded by the floors the canon set.
+  - The office key never validated its office word: `models.office.orc.verdict` (the `@ASK` word,
+    not the office) configured a model nobody would ever ride.
+  - A fresh Fable review, ten findings, all fixed. The worst: a sure "routine" beside an
+    unresolved risk lowered a body (74% routine and 79% hard-to-undo went to fast); lowering now
+    needs both, surely routine and surely safe. The throne was routable; it is not. A cloned
+    repository could turn routing on, which moves spend; `decide.route` is now the human's alone.
+    A route ignored Esc and was journaled but never priced; it now takes a stop and a meter. One
+    office could be named twice with different models; that is an error. A tier with no model
+    could be picked; the default stands instead.
+
+---
+
+### [2026-10-24T15:27:51+02:00] rimuru — a revoked envelope does not break the load
+- **Task:** #111 (from the review of #110): lowering `oni.envelope_days` failed the whole load
+  over a revoked envelope kept on record, advising "sign it again".
+- **Files:** crates/mnemorph-config/src/lib.rs (`revoked` read before the cap; a revoked record
+  is not judged by it; the error names revoke and delete), tests/config.rs (lowered over a
+  revoked record; 365 accepted from the human's file), docs/05-architecture.md (the loosening
+  keys in full; revoked records; UTC days; a local list replaces the global one),
+  docs/02-races.md (status listing and time-of-use checks are M11's).
+- **Gate:** n/a. Instruments: the new case fails with the fix removed; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** an expired record still fails the load past a lowered limit: config has no clock,
+  and reading one there would make loading depend on the day. The error now says to delete it.
+
+---
+
+### [2026-10-24T15:36:48+02:00] rimuru — page 8, as its review asked
+- **Task:** the review of #87: what grounds a note, a relevance floor nothing could undercut,
+  machine-local proofs, δ as a joint probability, a gate that never reads a claim, a fold that
+  could not demote, `c` defined on fixtures, BM25 "already" there, and the port's details.
+- **Files:** docs/08-memory.md (the rule scoped to what stands behind a note; θ on the meaning term;
+  tracked proofs, "unresolved here" apart from unproven; latest event wins; δ conditional and per
+  route, accepted and corroborated at a lower κ; claims about the diff apart from claims about the
+  world; per-link weights; the port's numbers as MNEMORPH-85 has them), docs/roadmap.md (a route's
+  proof grounds; the exit as an exact count), crates/mnemorph-memory (personal, not long).
+- **Gate:** n/a. Instruments: `just docs`.
+- **Result:** in review as a pull request.
+- **Learned:** a floor applied to a sum of priors and a match measures the priors; it has to sit
+  on the term it means to bound.

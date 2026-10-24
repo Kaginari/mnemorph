@@ -238,7 +238,7 @@ diff proposal and writes nothing.
 ### M8 — Memory and toolbox · L
 
 Memory follows [its page](08-memory.md): the archive is never rewritten, notes are traces that
-point at it, and only a promotion route grounds a note into shared memory. Rungs, lowest first:
+point at it, and only a route's proof grounds a note into shared memory. Rungs, lowest first:
 
 1. **Notes as events.** The trace schema (polarity, salience, confidence, status, source), the
    append-only event log with its fold, a tolerant reader, `merge=union`. Short, personal and
@@ -263,10 +263,13 @@ point at it, and only a promotion route grounds a note into shared memory. Rungs
 **Exit:**
 
 - recall fixtures, among them one where the only correcting note ranks below $k$ and is still
-  recalled, and one where the best hit is a poor match and stays under $\theta$;
-- a 50-turn run whose scripted model makes one wrong claim in five and whose scripted gate misses
-  one wrong claim in ten: no note reaches shared memory without a route's proof, and the share of
-  wrong grounded notes stays within fixture noise of $0.2 \cdot 0.1 / (0.8 + 0.02) \approx 2.4\%$;
+  recalled, and one where the best hit's meaning is a poor match and stays under $\theta$ however
+  high its priors;
+- a 50-turn run whose scripted model makes one wrong claim in five about the diff (10 of 50), and
+  whose scripted verify lines catch nine of those ten: no note reaches shared memory without a
+  route's proof, and exactly one of the 41 grounded notes is wrong
+  ($\Pr[\text{wrong} \mid \text{pass}] = 1/41 \approx 2.4\%$), and none of its claims about the
+  world beyond the diff grounds through **checked**;
 - a findings-only commission's accepted claims reach shared memory with no test run, and its
   rejected ones stay personal;
 - a fresh session after a clear carries the last journal entries in its first prompt;
@@ -300,7 +303,10 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject` —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
-  protected deploys, unredacted or oversized text).
+  protected deploys, unredacted or oversized text). Their bounds are already config's (signed,
+  expiring within `oni.envelope_days`, a use cap, revocable, `Envelope::admits`); M11 adds the
+  ledger's use rows and the gate reading `admits` at the moment of use
+  ([#88](https://github.com/Kaginari/mnemorph/issues/88)).
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 

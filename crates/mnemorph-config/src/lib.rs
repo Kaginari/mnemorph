@@ -10,8 +10,9 @@
 //! instead of refusing, a gate turned off, standing approvals, Oni envelopes — is honoured only
 //! from the local or global file. Nothing else feeds those keys: not the environment, not a flag,
 //! and not a body, which cannot write `.mnemorph/` at all. An envelope is bounded besides: it is
-//! signed on a day, expires (30 days later unless it says otherwise), may cap its uses, and stays
-//! in the file once revoked, so the record of what was allowed is never lost.
+//! signed on a day, expires at most `oni.envelope_days` later (30 unless the human's own file
+//! says, never more than a year), may cap its uses, and stays in the file once revoked, so the
+//! record of what was allowed is never lost.
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
@@ -54,6 +55,10 @@ fast = "claude-haiku-5-5"
 kind = "anthropic"
 base_url = "https://api.anthropic.com"
 key_env = "ANTHROPIC_API_KEY"
+
+[decide.cutoff]
+measured = 0.6
+stated = 0.9
 "#;
 
 /// Keys only the local or global file may set: each one loosens the human gate.
@@ -62,7 +67,12 @@ const LOOSENING: &[&str] = &[
     "gate.ask_rules",
     "gate.approve",
     "oni.envelopes",
+    "oni.envelope_days",
     "sandbox.allow_unguarded",
+    "decide.via",
+    "decide.cutoff.measured",
+    "decide.cutoff.stated",
+    "decide.route",
 ];
 
 /// The kind of value a known key holds.
@@ -100,7 +110,15 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
+    ("decide.via", Kind::Str),
+    ("decide.model", Kind::Str),
+    ("decide.llm", Kind::Str),
+    ("decide.bench", Kind::Bool),
+    ("decide.route", Kind::Bool),
+    ("decide.cutoff.measured", Kind::Number),
+    ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
+    ("oni.envelope_days", Kind::Int),
 ];
 
 /// A configuration layer, lowest first.
@@ -231,7 +249,8 @@ pub struct Explained {
 /// Which model rides a body, and which provider serves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provider {
-    /// `anthropic` or `openai` (any OpenAI-compatible server).
+    /// `anthropic`, `openai` (any OpenAI-compatible server), or `systemone` (TypeSafe's API or
+    /// a jeff server: typed decisions, not conversations).
     pub kind: String,
     /// The server's base URL.
     pub base_url: String,
@@ -239,8 +258,35 @@ pub struct Provider {
     pub key_env: Option<String>,
 }
 
-/// How many days an envelope lasts when it does not name its own `expires`.
+/// How decisions are made: a System One provider when `via` names one, else the LLM `llm`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decide {
+    /// The System One provider tried first (`kind = "systemone"`), when one is configured.
+    pub via: Option<String>,
+    /// The model to ask at `via` (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server);
+    /// empty when there is no `via`.
+    pub model: String,
+    /// The LLM that answers when there is no `via`, or it fails.
+    pub llm: String,
+    /// Whether Metis routes a commission to a tier by how demanding it is (`decide.route`): off
+    /// unless the human turns it on, since it changes which model does the work.
+    pub route: bool,
+    /// Whether a piped test run's output is read by a decision instead of counted muted: as
+    /// `decide.bench` says, else on exactly when a System One provider is named, so no LLM is
+    /// asked unless the human chose it.
+    pub bench: bool,
+    /// The least confidence a System One answer needs before a caller acts on it.
+    pub cutoff_measured: f64,
+    /// The same for an LLM's answer, whose probabilities are its own guess.
+    pub cutoff_stated: f64,
+}
+
+/// How many days an envelope may last, and lasts when it names no `expires`, unless the human's
+/// own file sets `oni.envelope_days`.
 pub const ENVELOPE_DAYS: i64 = 30;
+
+/// The longest `oni.envelope_days` may be: no setting brings back an envelope that never ends.
+pub const ENVELOPE_DAYS_CEILING: i64 = 365;
 
 /// Standing permissions the human signed for Oni: outward acts that run without a prompt, for a
 /// bounded time and, when the human says so, a bounded number of acts.
@@ -252,7 +298,8 @@ pub struct Envelope {
     pub allow: Vec<String>,
     /// The day the human signed it; it covers nothing before.
     pub signed: Day,
-    /// The first day it covers nothing: its own `expires`, else [`ENVELOPE_DAYS`] after `signed`.
+    /// The first day it covers nothing: its own `expires`, at most `oni.envelope_days` after
+    /// `signed`, and exactly that when it names none.
     pub expires: Day,
     /// How many acts it may cover in all, counted by the ledger; `None` caps only by time.
     pub uses: Option<u64>,
@@ -417,14 +464,41 @@ impl Config {
                     return Err(format!("{at}: evolution.mode is `auto` or `propose`"));
                 }
                 "oni.envelopes" => {
-                    envelopes(&leaf.value, at)?;
+                    envelopes(&leaf.value, at, self.envelope_days())?;
+                }
+                "oni.envelope_days"
+                    if !leaf
+                        .value
+                        .as_integer()
+                        .is_some_and(|d| (1..=ENVELOPE_DAYS_CEILING).contains(&d)) =>
+                {
+                    return Err(format!(
+                        "{at}: oni.envelope_days is a count of days from 1 to {ENVELOPE_DAYS_CEILING}"
+                    ));
                 }
                 _ => {}
             }
             if let Some(rest) = key.strip_prefix("models.office.") {
-                let race = rest.split('.').next().unwrap_or("");
+                let (race, office) = rest.split_once('.').unwrap_or((rest, ""));
                 if Race::from_name(race).is_none() {
                     return Err(format!("{at}: models.office.{race}: no race `{race}`"));
+                }
+                if let Some((name, function)) = office_names(office)
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{name}"))
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{function}"))
+                {
+                    return Err(format!(
+                        "{at}: models.office.{race} names one office twice, as {name} and {function}: keep one"
+                    ));
+                }
+                if office_names(office).is_none() {
+                    return Err(format!(
+                        "{at}: models.office.{race}.{office}: the offices are mneme (read), melete (judge) and aoede (write)"
+                    ));
                 }
             }
             if let Some(tier) = key.strip_prefix("models.tier.")
@@ -544,19 +618,39 @@ impl Config {
         self.get("evolution.mode").and_then(|l| l.value.as_str()) == Some("propose")
     }
 
-    /// The model for a body: the creature's own, else its race's for this office, else its
-    /// race's default tier.
+    /// The model the human chose for a body, if they chose one: the creature's own, else its
+    /// race's for this office (named as `mneme`, `melete`, `aoede` or as `read`, `judge`,
+    /// `write`). `None` when the body would ride its race's tier — the only choice a router may
+    /// make.
     #[must_use]
-    pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
+    pub fn model_pinned(&self, creature: &str, race: Race, office: Option<&str>) -> Option<String> {
         let by = |key: String| {
             self.get(&key)
                 .and_then(|l| l.value.as_str())
                 .map(str::to_owned)
         };
-        by(format!("models.creature.{creature}"))
-            .or_else(|| office.and_then(|o| by(format!("models.office.{}.{o}", race.name()))))
-            .or_else(|| by(format!("models.tier.{}", tier_name(race.default_tier()))))
+        by(format!("models.creature.{creature}")).or_else(|| {
+            let (name, function) = office.and_then(office_names)?;
+            by(format!("models.office.{}.{name}", race.name()))
+                .or_else(|| by(format!("models.office.{}.{function}", race.name())))
+        })
+    }
+
+    /// The model configured for a tier.
+    #[must_use]
+    pub fn tier_model(&self, tier: ModelTier) -> String {
+        self.get(&format!("models.tier.{}", tier_name(tier)))
+            .and_then(|l| l.value.as_str())
+            .map(str::to_owned)
             .unwrap_or_default()
+    }
+
+    /// The model for a body: the one the human chose ([`Self::model_pinned`]), else its race's
+    /// default tier.
+    #[must_use]
+    pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
+        self.model_pinned(creature, race, office)
+            .unwrap_or_else(|| self.tier_model(race.default_tier()))
     }
 
     /// The models to try in order, starting with `model`: each one's configured next.
@@ -587,6 +681,92 @@ impl Config {
             next.clone_into(&mut at);
         }
         Ok(chain)
+    }
+
+    /// How decisions are made. `decide.llm` defaults to the fast tier's model.
+    ///
+    /// # Errors
+    ///
+    /// `decide.via` names no provider, or one that is not `kind = "systemone"`, or comes without
+    /// `decide.model`; a cut-off is not between 0 and 1. Each error names the file the value came
+    /// from.
+    pub fn decide(&self) -> Result<Decide, String> {
+        let text = |key: &str| {
+            self.get(key)
+                .and_then(|l| l.value.as_str())
+                .map(str::to_owned)
+        };
+        let number = |key: &str| {
+            self.get(key).map(|l| {
+                l.value
+                    .as_float()
+                    .or_else(|| {
+                        l.value
+                            .as_integer()
+                            .and_then(|i| i32::try_from(i).ok())
+                            .map(f64::from)
+                    })
+                    .unwrap_or(f64::NAN)
+            })
+        };
+        let origin = |key: &str| {
+            self.get(key)
+                .map_or_else(String::new, |l| l.origin.to_string())
+        };
+        let via = text("decide.via");
+        if let Some(name) = &via {
+            match self.providers().get(name) {
+                None => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}`, and no provider has that name",
+                        origin("decide.via")
+                    ));
+                }
+                Some(p) if p.kind != "systemone" => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}`, a provider of kind `{}`; decisions need `kind = \"systemone\"`",
+                        origin("decide.via"),
+                        p.kind
+                    ));
+                }
+                Some(_) if text("decide.model").is_none() => {
+                    return Err(format!(
+                        "{}: decide.via names `{name}` without decide.model: name the model to ask (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server)",
+                        origin("decide.via")
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
+        let cutoff = |key: &str| -> Result<f64, String> {
+            let v = number(key).unwrap_or_default();
+            if !(0.0..=1.0).contains(&v) {
+                return Err(format!(
+                    "{}: {key} is {v}; a cut-off is a confidence, from 0 to 1",
+                    origin(key)
+                ));
+            }
+            Ok(v)
+        };
+        let bench = self
+            .get("decide.bench")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(via.is_some());
+        let route = self
+            .get("decide.route")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(false);
+        Ok(Decide {
+            route,
+            via,
+            model: text("decide.model").unwrap_or_default(),
+            llm: text("decide.llm")
+                .or_else(|| text("models.tier.fast"))
+                .unwrap_or_default(),
+            bench,
+            cutoff_measured: cutoff("decide.cutoff.measured")?,
+            cutoff_stated: cutoff("decide.cutoff.stated")?,
+        })
     }
 
     /// The configured providers, by name.
@@ -626,7 +806,7 @@ impl Config {
     #[must_use]
     pub fn envelopes(&self) -> Vec<Envelope> {
         self.get("oni.envelopes")
-            .and_then(|l| envelopes(&l.value, &l.origin).ok())
+            .and_then(|l| envelopes(&l.value, &l.origin, self.envelope_days()).ok())
             .unwrap_or_default()
     }
 
@@ -654,11 +834,28 @@ impl Config {
         Ok(file)
     }
 
+    /// The longest an Oni envelope may last, in days, and how long one lasts that names no
+    /// `expires`: `oni.envelope_days` from the human's own file, else [`ENVELOPE_DAYS`].
+    #[must_use]
+    pub fn envelope_days(&self) -> i64 {
+        self.get("oni.envelope_days")
+            .and_then(|l| l.value.as_integer())
+            .filter(|d| (1..=ENVELOPE_DAYS_CEILING).contains(d))
+            .unwrap_or(ENVELOPE_DAYS)
+    }
+
     fn int(&self, key: &str) -> Option<u64> {
         self.get(key)
             .and_then(|l| l.value.as_integer())
             .and_then(|i| u64::try_from(i).ok())
     }
+}
+
+/// An office as configuration may name it, `(name, function)`: its Muse or what it does.
+fn office_names(word: &str) -> Option<(&'static str, &'static str)> {
+    [("mneme", "read"), ("melete", "judge"), ("aoede", "write")]
+        .into_iter()
+        .find(|(name, function)| word == *name || word == *function)
 }
 
 fn tier_name(tier: ModelTier) -> &'static str {
@@ -733,8 +930,9 @@ fn strings(value: &Value) -> impl Iterator<Item = &str> {
 }
 
 /// Read and vet the envelopes: a name no other envelope has, a list of patterns, none bare and
-/// none destructive; the day it was signed, an expiry after it, a use cap of at least one.
-fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
+/// none destructive; the day it was signed, an expiry after it and at most `days` on, a use cap
+/// of at least one.
+fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, String> {
     let place = Place::new("/world", "/home");
     let mut out = Vec::new();
     for (i, t) in value
@@ -769,13 +967,26 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
         let signed = date(t, "signed", name, at)?.ok_or_else(|| {
             format!(
                 "{at}: envelope `{name}` needs `signed = YYYY-MM-DD`, the day you signed it; it \
-                 lasts {ENVELOPE_DAYS} days unless `expires` says otherwise"
+                 lasts {days} days unless `expires` says sooner"
             )
         })?;
-        let expires = date(t, "expires", name, at)?.unwrap_or(signed.plus(ENVELOPE_DAYS));
+        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
+        // before it ever takes force, and the record says so.
+        let revoked = date(t, "revoked", name, at)?;
+        let longest = signed.plus(days);
+        let expires = date(t, "expires", name, at)?.unwrap_or(longest);
         if expires <= signed {
             return Err(format!(
                 "{at}: envelope `{name}` expires on {expires}, not after it was signed on {signed}"
+            ));
+        }
+        // A revoked envelope covers nothing, so a limit lowered after it was signed does not
+        // judge it: the record stays, and the configuration still loads.
+        if expires > longest && revoked.is_none() {
+            return Err(format!(
+                "{at}: envelope `{name}` expires on {expires}, more than {days} days after it was \
+                 signed on {signed}; sign it again for at most {days} days, revoke it, or delete \
+                 the record if it has ended — or raise `oni.envelope_days` in your own file"
             ));
         }
         let uses = match t.get("uses") {
@@ -789,9 +1000,6 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
                     })?,
             ),
         };
-        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
-        // before it ever takes force, and the record says so.
-        let revoked = date(t, "revoked", name, at)?;
         if out.iter().any(|e: &Envelope| e.name == name) {
             return Err(format!(
                 "{at}: two envelopes are called `{name}`; a name is how one is revoked, so each is \

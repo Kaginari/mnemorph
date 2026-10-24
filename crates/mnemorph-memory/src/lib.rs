@@ -1,1 +1,1 @@
-//! Memory tiers: short, long and shared; recall; the toolbox manifest.
+//! Memory tiers: short, personal and shared; recall; the toolbox manifest.
