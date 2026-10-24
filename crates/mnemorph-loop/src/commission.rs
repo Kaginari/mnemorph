@@ -263,8 +263,10 @@ fn file_facts(world: &Path, ending: &Ending, by: &str) {
         if u.kind == Some(mnemorph_wire::UnsaidKind::Territory)
             && let Some(event) = mnemorph_world::facts::from_unsaid(&u.text, by, None)
         {
-            // A fact that cannot be filed is lost to the ontology, never to the report.
-            let _ = mnemorph_world::Facts::record(world, &event);
+            // A fact that cannot be filed is lost to the ontology, never to the report — and said.
+            if let Err(e) = mnemorph_world::Facts::record(world, &event) {
+                eprintln!("mnemorph: {by}'s fact could not be filed: {e}");
+            }
         }
     }
 }
