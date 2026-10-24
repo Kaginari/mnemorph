@@ -607,6 +607,24 @@ fn an_envelope_lasts_at_most_the_human_s_envelope_days() {
     g.local(&ci(""));
     assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2026, 10, 31));
 
+    // Lowered over a revoked record, the configuration still loads: the record covers nothing.
+    // Over a live one, the error says how to end it.
+    g.global("[oni]\nenvelope_days = 90\n");
+    g.local(&ci("expires = 2027-01-22\nrevoked = 2026-11-01\n"));
+    g.global("[oni]\nenvelope_days = 30\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.envelopes()[0].revoked, Some(day(2026, 11, 1)));
+    g.local(&ci("expires = 2027-01-22\n"));
+    let e = g.load().unwrap_err();
+    assert!(
+        e.contains("revoke it") && e.contains("delete the record"),
+        "{e}"
+    );
+
+    // The 365-day ceiling itself is the human's to set.
+    g.global(&format!("[oni]\nenvelope_days = {ENVELOPE_DAYS_CEILING}\n"));
+    assert_eq!(g.load().unwrap().envelope_days(), ENVELOPE_DAYS_CEILING);
+
     // Never zero, never past a year.
     for days in [0, -1, ENVELOPE_DAYS_CEILING + 1] {
         g.global(&format!("[oni]\nenvelope_days = {days}\n"));

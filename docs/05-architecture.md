@@ -273,8 +273,8 @@ an empty list or table never overrides a lower layer:
 
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
-- **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`
-  and `oni.envelopes` loosen it, and `decide.via`, `decide.cutoff.*` and `decide.route` loosen
+- **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
+  `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it, and `decide.via`, `decide.cutoff.*` and `decide.route` loosen
   decisions (where their state goes, how sure they must be, which model does the work and what it
   costs), so they are honoured only from the local or global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
@@ -290,7 +290,10 @@ an empty list or table never overrides a lower layer:
 - **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts
   `oni.envelope_days` — 30 unless the human's own file says, from 1 to 365 — unless its own
   `expires` is sooner; never on or before the signing, never past that limit. Raising the limit
-  loosens the gate, so the tracked file cannot set it. `uses` caps the acts an envelope covers in
+  loosens the gate, so the tracked file cannot set it. A revoked envelope covers nothing, so a
+  limit lowered after it was signed does not judge it; a live one past the new limit is an error
+  that says to sign it again, revoke it or delete its record. Days are UTC calendar days. A list
+  of envelopes in the local file replaces the global one whole, as every list does. `uses` caps the acts an envelope covers in
   all, at least one; no two envelopes share a name. `Envelope::admits(today,
   used)` is the check the gate makes at the moment of use, once it honours envelopes (M11), with
   the ledger's count of acts the envelope already covered; it names the lapse that stops one:
