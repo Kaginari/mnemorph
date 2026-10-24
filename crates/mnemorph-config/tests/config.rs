@@ -730,3 +730,61 @@ fn a_tracked_file_cannot_turn_decisions_outward_or_lower_their_bar() {
         assert!(c.holes().iter().any(|h| h.key == key), "{key}");
     }
 }
+
+/// The offices are named for the three first Muses — Mneme reads, Melete judges, Aoede writes —
+/// and a configuration may name one by its Muse or by what it does. Any other word is refused:
+/// before, a misspelt office was a model nobody ever rode.
+#[test]
+fn offices_are_named_by_their_muse_or_their_function_and_nothing_else() {
+    let g = Ground::new("offices");
+    g.global("[models.office.orc]\nmelete = \"by-name\"\n[models.office.slime]\nread = \"by-function\"\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.model_for("orc-a", Race::Orc, Some("melete")), "by-name");
+    assert_eq!(
+        c.model_for("orc-a", Race::Orc, Some("judge")),
+        "by-name",
+        "one office, two spellings"
+    );
+    assert_eq!(
+        c.model_for("slime-a", Race::Slime, Some("mneme")),
+        "by-function"
+    );
+    assert_eq!(c.model_pinned("orc-a", Race::Orc, Some("aoede")), None);
+
+    g.global("[models.office.orc]\nverdict = \"x\"\n");
+    let err = g.load().unwrap_err();
+    assert!(
+        err.contains("mneme (read), melete (judge) and aoede (write)"),
+        "{err}"
+    );
+}
+
+#[test]
+fn routing_is_off_until_the_human_turns_it_on() {
+    let g = Ground::new("route-off");
+    assert!(!g.load().unwrap().decide().unwrap().route);
+    g.global("[decide]\nroute = true\n");
+    assert!(g.load().unwrap().decide().unwrap().route);
+}
+
+#[test]
+fn one_office_is_named_once() {
+    let g = Ground::new("office-twice");
+    g.global("[models.office.orc]\nmelete = \"a\"\njudge = \"b\"\n");
+    let err = g.load().unwrap_err();
+    assert!(
+        err.contains("names one office twice, as melete and judge"),
+        "{err}"
+    );
+}
+
+/// Routing changes which model does the work, and what it costs: a cloned repository cannot turn
+/// it on.
+#[test]
+fn a_tracked_file_cannot_turn_routing_on() {
+    let g = Ground::new("route-tracked");
+    g.tracked("[decide]\nroute = true\n");
+    let c = g.load().unwrap();
+    assert!(!c.decide().unwrap().route);
+    assert!(c.holes().iter().any(|h| h.key == "decide.route"));
+}

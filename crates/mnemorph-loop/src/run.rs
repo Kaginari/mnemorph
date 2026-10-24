@@ -237,8 +237,8 @@ impl Run {
         }
     }
 
-    /// The run with its decision points on: a piped test run's output is read by `decisions`'
-    /// decider, and each decision is journaled.
+    /// The run with its decisions: when `decisions.bench` is on, a piped test run's output is
+    /// read by its decider, and each decision is journaled and priced.
     #[must_use]
     pub fn with_decisions(mut self, decisions: Decisions) -> Self {
         self.decisions = Some(decisions);
@@ -282,29 +282,16 @@ impl Run {
                 return None;
             }
         };
-        if let Some(d) = &self.decisions {
-            let _ = d
-                .journal
-                .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()));
+        if let Some(d) = &self.decisions
+            && let Err(e) =
+                d.journal
+                    .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()))
+        {
+            eprintln!("mnemorph: the decision journal could not be written: {e}");
         }
         // What the decision cost reaches the meter like any call: unpriced (`usd: null`) for a
         // model the price table does not know.
-        let row = UsageRow {
-            ts: Timestamp::now(),
-            session: self.caller.session.clone(),
-            run: self.caller.run.clone(),
-            body: self.caller.body.clone(),
-            race: self.caller.race.clone(),
-            commission: self.caller.commission.clone(),
-            model: decision.source.model.clone(),
-            provider: decision.source.provider.clone(),
-            usage: decision.usage,
-            prefix: 0,
-            wt: 0,
-            usd: None,
-            envelope: None,
-        }
-        .priced(&self.prices);
+        let row = crate::decisions::decision_usage(&decision, &self.caller, &self.prices);
         self.spent_wt += row.wt;
         if let Some(ledger) = &self.ledger
             && let Err(e) = ledger.append(&row)
@@ -758,7 +745,7 @@ impl Run {
                 Some(c)
                     if !interrupted
                         && !o.is_error
-                        && self.decisions.is_some()
+                        && self.decisions.as_ref().is_some_and(|d| d.bench)
                         && bench_of(c).is_some()
                         && muted(c) =>
                 {

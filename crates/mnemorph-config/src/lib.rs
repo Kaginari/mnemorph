@@ -72,6 +72,7 @@ const LOOSENING: &[&str] = &[
     "decide.via",
     "decide.cutoff.measured",
     "decide.cutoff.stated",
+    "decide.route",
 ];
 
 /// The kind of value a known key holds.
@@ -113,6 +114,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("decide.model", Kind::Str),
     ("decide.llm", Kind::Str),
     ("decide.bench", Kind::Bool),
+    ("decide.route", Kind::Bool),
     ("decide.cutoff.measured", Kind::Number),
     ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
@@ -266,6 +268,9 @@ pub struct Decide {
     pub model: String,
     /// The LLM that answers when there is no `via`, or it fails.
     pub llm: String,
+    /// Whether Metis routes a commission to a tier by how demanding it is (`decide.route`): off
+    /// unless the human turns it on, since it changes which model does the work.
+    pub route: bool,
     /// Whether a piped test run's output is read by a decision instead of counted muted: as
     /// `decide.bench` says, else on exactly when a System One provider is named, so no LLM is
     /// asked unless the human chose it.
@@ -474,9 +479,26 @@ impl Config {
                 _ => {}
             }
             if let Some(rest) = key.strip_prefix("models.office.") {
-                let race = rest.split('.').next().unwrap_or("");
+                let (race, office) = rest.split_once('.').unwrap_or((rest, ""));
                 if Race::from_name(race).is_none() {
                     return Err(format!("{at}: models.office.{race}: no race `{race}`"));
+                }
+                if let Some((name, function)) = office_names(office)
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{name}"))
+                    && self
+                        .leaves
+                        .contains_key(&format!("models.office.{race}.{function}"))
+                {
+                    return Err(format!(
+                        "{at}: models.office.{race} names one office twice, as {name} and {function}: keep one"
+                    ));
+                }
+                if office_names(office).is_none() {
+                    return Err(format!(
+                        "{at}: models.office.{race}.{office}: the offices are mneme (read), melete (judge) and aoede (write)"
+                    ));
                 }
             }
             if let Some(tier) = key.strip_prefix("models.tier.")
@@ -596,19 +618,39 @@ impl Config {
         self.get("evolution.mode").and_then(|l| l.value.as_str()) == Some("propose")
     }
 
-    /// The model for a body: the creature's own, else its race's for this office, else its
-    /// race's default tier.
+    /// The model the human chose for a body, if they chose one: the creature's own, else its
+    /// race's for this office (named as `mneme`, `melete`, `aoede` or as `read`, `judge`,
+    /// `write`). `None` when the body would ride its race's tier — the only choice a router may
+    /// make.
     #[must_use]
-    pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
+    pub fn model_pinned(&self, creature: &str, race: Race, office: Option<&str>) -> Option<String> {
         let by = |key: String| {
             self.get(&key)
                 .and_then(|l| l.value.as_str())
                 .map(str::to_owned)
         };
-        by(format!("models.creature.{creature}"))
-            .or_else(|| office.and_then(|o| by(format!("models.office.{}.{o}", race.name()))))
-            .or_else(|| by(format!("models.tier.{}", tier_name(race.default_tier()))))
+        by(format!("models.creature.{creature}")).or_else(|| {
+            let (name, function) = office.and_then(office_names)?;
+            by(format!("models.office.{}.{name}", race.name()))
+                .or_else(|| by(format!("models.office.{}.{function}", race.name())))
+        })
+    }
+
+    /// The model configured for a tier.
+    #[must_use]
+    pub fn tier_model(&self, tier: ModelTier) -> String {
+        self.get(&format!("models.tier.{}", tier_name(tier)))
+            .and_then(|l| l.value.as_str())
+            .map(str::to_owned)
             .unwrap_or_default()
+    }
+
+    /// The model for a body: the one the human chose ([`Self::model_pinned`]), else its race's
+    /// default tier.
+    #[must_use]
+    pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
+        self.model_pinned(creature, race, office)
+            .unwrap_or_else(|| self.tier_model(race.default_tier()))
     }
 
     /// The models to try in order, starting with `model`: each one's configured next.
@@ -710,7 +752,12 @@ impl Config {
             .get("decide.bench")
             .and_then(|l| l.value.as_bool())
             .unwrap_or(via.is_some());
+        let route = self
+            .get("decide.route")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(false);
         Ok(Decide {
+            route,
             via,
             model: text("decide.model").unwrap_or_default(),
             llm: text("decide.llm")
@@ -802,6 +849,13 @@ impl Config {
             .and_then(|l| l.value.as_integer())
             .and_then(|i| u64::try_from(i).ok())
     }
+}
+
+/// An office as configuration may name it, `(name, function)`: its Muse or what it does.
+fn office_names(word: &str) -> Option<(&'static str, &'static str)> {
+    [("mneme", "read"), ("melete", "judge"), ("aoede", "write")]
+        .into_iter()
+        .find(|(name, function)| word == *name || word == *function)
 }
 
 fn tier_name(tier: ModelTier) -> &'static str {

@@ -87,3 +87,63 @@ async fn one_real_decision() {
     assert_eq!(outcome.choice(), "red", "{outcome:?}");
     assert!(d.answer("passed").unwrap().probability("true") < 0.5);
 }
+
+/// Metis's two questions, asked of the real service: a rename is routine, a payments migration is
+/// hard and hard to undo.
+#[tokio::test]
+#[ignore = "spends two decisions: run with MNEMORPH_LIVE=1 and TYPESAFE_API_KEY"]
+async fn two_real_routes() {
+    if std::env::var("MNEMORPH_LIVE").as_deref() != Ok("1") {
+        return;
+    }
+    let key = std::env::var("TYPESAFE_API_KEY").ok();
+    let policy = SystemOne::policy();
+    let transport = Arc::new(HttpTransport::new(policy.connect).expect("tls"));
+    let jev = SystemOne::new(transport, "https://api.typesafe.ai", key, policy);
+    let ask = |work: &str| {
+        Ask {
+        state: work.into(),
+        questions: vec![
+            (
+                "demand".into(),
+                Question::Score {
+                    instructions: "How demanding is this work for the model that will do it?".into(),
+                    levels: vec![
+                        "Routine: a lookup, a rename, a small change with an obvious shape.".into(),
+                        "Involved: several files or steps, some judgement, a known pattern.".into(),
+                        "Hard: subtle reasoning, an unclear design, wide or tricky change.".into(),
+                    ],
+                },
+            ),
+            (
+                "irreversible".into(),
+                Question::Noul {
+                    instructions: "A mistake in this work would be costly or hard to undo: security, money, migrations, data loss, or an outward act.".into(),
+                },
+            ),
+        ],
+    }
+    };
+    let easy = jev
+        .decide(
+            "jev-latest",
+            &ask("Rename the local variable `cnt` to `count` in src/report.rs."),
+        )
+        .await
+        .expect("a decision");
+    let hard = jev
+        .decide(
+            "jev-latest",
+            &ask(
+                "Migrate the payments ledger to the new schema in production: split the \
+                  `amount` column into currency and minor units, backfill eleven million rows, \
+                  and keep refunds consistent while both writers run.",
+            ),
+        )
+        .await
+        .expect("a decision");
+    eprintln!("easy {:?}\nhard {:?}", easy.answers, hard.answers);
+    assert_eq!(easy.answers[0].1.choice(), "0", "a rename is routine");
+    assert_eq!(hard.answers[0].1.choice(), "2", "a live migration is hard");
+    assert_eq!(hard.answers[1].1.choice(), "true", "and hard to undo");
+}
