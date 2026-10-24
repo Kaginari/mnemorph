@@ -15,13 +15,13 @@ pub struct Creature {
     pub seat: String,
     /// Who it reports to, by name.
     pub reports_to: Option<String>,
-    /// A Slime's zone: the directory prefixes it writes.
+    /// A Slime's zone: the paths it writes — directories and files.
     pub zone: Vec<String>,
-    /// An Orc's domain: the prefixes it routes and judges, never writes.
+    /// An Orc's domain: the paths it routes and judges, never writes.
     pub domain: Vec<String>,
-    /// A Kijin's post: the files its outward acts own (CI, release, deploy).
+    /// A Kijin's post: the files and directories its outward acts own (CI, release, deploy).
     pub post: Vec<String>,
-    /// An Elf's lane: the prefixes it plans across. It owns nothing.
+    /// An Elf's lane: the paths it plans across. It owns nothing.
     pub lane: Vec<String>,
     /// Its verify lines.
     pub verify: Vec<String>,
@@ -31,7 +31,7 @@ pub struct Creature {
     pub retired: bool,
 }
 
-/// A directory prefix as a claim reads it: relative, `/`-separated, ending in `/`, no `./`.
+/// A seat's directory as ownership reads it: relative, `/`-separated, ending in `/`, no `./`.
 #[must_use]
 pub fn prefix(raw: &str) -> String {
     let p = raw.trim().trim_start_matches("./").trim_matches('/');
@@ -61,23 +61,44 @@ fn words(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// The prefixes of a ground field: a list of paths, never prose — prose is never a claim.
-fn prefixes(value: &str, field: &str, seat: &Path) -> Result<Vec<String>, String> {
+/// One claim of a ground field: a directory written with its trailing `/` (`src/`,
+/// `.github/workflows/`), or a file written with a `/` in it (`./CHANGELOG.md`,
+/// `packages/cli/package.json`). Inside the world, never absolute, never climbing out of it.
+fn claim(word: &str) -> Option<String> {
+    let path_like = word.contains('/') && !word.starts_with('/');
+    if !path_like || word.chars().any(char::is_control) {
+        return None;
+    }
+    if word.split('/').any(|s| s == "..") {
+        return None;
+    }
+    let p = crate::own::normal(word)?;
+    Some(p)
+}
+
+/// Whether `claim` covers `path`: a directory claim covers what lies under it, a file claim the
+/// file alone.
+#[must_use]
+pub fn covers(claim: &str, path: &str) -> bool {
+    if claim.ends_with('/') {
+        path.starts_with(claim)
+    } else {
+        path == claim
+    }
+}
+
+/// The claims of a ground field: a list of paths, never prose — prose is never a claim.
+fn claims(value: &str, field: &str, seat: &Path) -> Result<Vec<String>, String> {
     words(value)
         .into_iter()
         .map(|w| {
-            // A directory prefix is written as one, with its `/`: `src/`, `.github/`.
-            if w.contains('/')
-                && w.chars()
-                    .all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c))
-            {
-                Ok(prefix(&w))
-            } else {
-                Err(format!(
-                    "{}: {field} is a list of directory prefixes, each written with its `/`; `{w}` is not one",
+            claim(&w).ok_or_else(|| {
+                format!(
+                    "{}: {field} is a list of paths inside the world — a directory with its \
+                     trailing `/`, a file with a `/` in it (`./CHANGELOG.md`); `{w}` is not one",
                     seat.display()
-                ))
-            }
+                )
+            })
         })
         .collect()
 }
@@ -110,7 +131,7 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
     };
     let mut territory = Vec::new();
     // Only the header's fields count: a field-looking line under a later heading is prose.
-    for line in text.lines().take_while(|l| !l.starts_with("## ")) {
+    for line in text.lines().take_while(|l| !l.starts_with("##")) {
         if let Some(v) = field(line, "Race") {
             race = Some(
                 Race::from_name(v.trim_matches('`'))
@@ -119,11 +140,11 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         } else if let Some(v) = field(line, "Reports to") {
             c.reports_to = Some(v.trim_matches('`').to_owned()).filter(|v| !v.is_empty());
         } else if let Some(v) = field(line, "Territory") {
-            territory.extend(prefixes(v, "Territory", seat)?);
+            territory.extend(claims(v, "Territory", seat)?);
         } else if let Some(v) = field(line, "Domain") {
-            c.domain.extend(prefixes(v, "Domain", seat)?);
+            c.domain.extend(claims(v, "Domain", seat)?);
         } else if let Some(v) = field(line, "Post") {
-            c.post.extend(prefixes(v, "Post", seat)?);
+            c.post.extend(claims(v, "Post", seat)?);
         } else if let Some(v) = field(line, "Verify") {
             c.verify.push(v.trim_matches('`').to_owned());
         } else if let Some(v) = field(line, "Minds") {

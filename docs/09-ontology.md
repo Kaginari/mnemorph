@@ -100,22 +100,27 @@ possible triples is finite, so $\mathcal{G}^{*}$ is unique and reached in finite
 It is rebuilt when the docs' fingerprint moves, before a dispatch, never on a model call.
 
 **Claims.** A creature's doc is `.mnemorph/<race>/<name>/README.md`: a `# name` heading, then
-fields as list items, read before the first `##` section and nowhere else.
+fields as list items, read before the first `##` heading of any depth and nowhere else. The
+throne has a doc too, `.mnemorph/rimuru/<name>/README.md`: what reads the world reads it as it
+reads every creature.
 
 | Field | Who | Means |
 |---|---|---|
 | `Race` | every creature | its race, as the races name themselves (`slime`, `high-orc`) |
 | `Reports to` | every creature but the throne | the creature above it: the chain of command |
-| `Territory` | a Slime; an Elf | a Slime's zone, the prefixes it writes; an Elf's lane, the prefixes it plans across — owning nothing |
-| `Domain` | an Orc | the prefixes it routes and judges, never writes |
-| `Post` | a Kijin | the files its outward acts own (CI, release, deploy) |
+| `Territory` | a Slime; an Elf | a Slime's zone, the paths it writes; an Elf's lane, the paths it plans across — owning nothing |
+| `Domain` | an Orc | the paths it routes and judges, never writes |
+| `Post` | a Kijin | the files and directories its outward acts own (CI, release, deploy) |
 | `Verify` | a creature with a gate | one verify line per field |
 | `Minds` | any | the Minds it wears |
-| `Retired` | any | `yes`: it owns and commands nothing; its seat and prefixes are skipped |
+| `Retired` | any | `yes`: it owns and commands nothing; its seat and claims are skipped |
 
-A ground field is a list of directory prefixes, each written with its `/` (`src/`, `.github/`),
-normalised. Anything else — a sentence, a word without its `/` — makes the doc unreadable, and an
-unreadable doc is reported, never guessed: the creature is not in the roster until it reads. A
+A ground field is a list of paths inside the world: a directory written with its trailing `/`
+(`src/`, `.github/workflows/`), covering what lies under it, or a file written with a `/` in it
+(`./CHANGELOG.md`, `packages/cli/package.json`), covering that file alone. Anything else — a
+sentence, a bare word, an absolute path, a `..` — makes the doc unreadable, and an unreadable doc
+is reported, never guessed: the creature is not in the roster until it reads. So is a doc that
+cannot be read at all, and a race's directory that cannot be listed. A
 path mentioned in prose is never a claim; it raises a low `prose-claim` finding that the field
 and the prose disagree. isekai read claims from prose too, and the rules
 that kept prose mentions from becoming false claims grew into the largest and most fragile part
@@ -123,19 +128,25 @@ of its ontology; a field cannot be misread.
 
 ### Ownership: one function
 
-$\mathrm{own} : \text{Path} \to \text{Creature} \cup \lbrace \bot\rbrace $ takes the first rule that matches:
+$\mathrm{own} : \text{Path} \to \text{Creature} \cup \lbrace \bot\rbrace $ reads a path relative to the
+world segment by segment — `.` dropped, `..` taking the segment before it, a directory ending in
+`/` — so `crates/a/../../.mnemorph/law.md` is the law; a path that is absolute or climbs out of
+the world is $\bot$. Then it takes the first rule that matches:
 
-1. **Harness soil** — `.mnemorph/shared/`, `instruments/`, `memory/`, `ontology/`, `index/` and
-   the journal `log.md`: no body; only the harness writes them. The law, `.mnemorph/law.md`, is
-   the human's: it changes only as a diff they apply.
+1. **Harness soil** — `.mnemorph/shared/`, `instruments/`, `memory/`, `ontology/`, `index/`,
+   evolution's staging `tmp/evolution/` and the journal `log.md`: no body; only the harness writes
+   them. The law, `.mnemorph/law.md`, and the world's configuration, `config.toml` and
+   `config.local.toml`, are the human's: they change only as a diff the human applies.
 2. **Scratch** — `.mnemorph/tmp/<body>/`: the body that owns the nest.
 3. **A seat** — a living creature's directory under `.mnemorph/<race>/<name>/`: that creature,
    even inside a broader claim; the deepest seat wins.
-4. **The compiled soils** of [the races](02-races.md#soil--who-may-write-what): the workspace, a
-   post, the proving ground, the plan and the dimension manifest.
-5. **The longest territory prefix** among living authoring creatures (the Slimes' zones).
-6. **The longest domain prefix** among living gate-holders: an Orc's doc names its domain as
-   prefixes, and a path inside it that no Slime's zone covers is the Orc's to route.
+4. **The compiled soils** of [the races](02-races.md#soil--who-may-write-what): the plan
+   (`.mnemorph/plan.md`) and the dimension manifest, the throne's; the proving ground
+   `.mnemorph/dark-elf/`, one ground with one keeper, the first living Dark Elf by name; the
+   longest claim of a Kijin's post; the workspace — every root file, and `tools/`.
+5. **The longest territory claim** among living authoring creatures (the Slimes' zones).
+6. **The longest domain claim** among living gate-holders: an Orc's doc names its domain, and a
+   path inside it that no Slime's zone covers is the Orc's to route.
 7. Otherwise $\bot$: unowned soil, and Rimuru routes its birth.
 
 Owning a path is not the right to write it. The gate's *right author* holds only when
@@ -146,7 +157,7 @@ Slime is born or extended for it — and writes it never, beyond its tests' veri
 $\mathrm{own}$ returns one creature per path. A Slime's doc is the Slime's; the gate's line-range
 split, which gives the verify block to its Orc, is a refinement the *right author* check applies
 to that one file ([the end gate](03-loop.md#the-end-gate)). Retired creatures own nothing: their
-seats and prefixes are skipped. When two creatures tie on the same prefix — itself a critical
+seats and claims are skipped. When two creatures tie on the same claim — itself a critical
 finding — the tie breaks by creature name, so the answer stays deterministic while the finding
 blocks.
 

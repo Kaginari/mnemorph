@@ -2,7 +2,7 @@
 
 - **Race:** slime
 - **Reports to:** orc-workspace
-- **Territory:** tools/
+- **Territory:** tools/ .cargo/ .claude/
 - **Verify:** `just check`
 
 ## Traits

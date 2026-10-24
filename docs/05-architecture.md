@@ -127,6 +127,7 @@ mnemorph/
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
+| plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
 | relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references seen, the ledger relations are learned from | yes |

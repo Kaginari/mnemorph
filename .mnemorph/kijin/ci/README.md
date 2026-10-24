@@ -2,7 +2,7 @@
 
 - **Race:** kijin
 - **Reports to:** rimuru
-- **Post:** .github/
+- **Post:** .github/workflows/
 - **Verify:** `actionlint`
 
 ## Traits

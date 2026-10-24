@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::ErrorKind;
 use std::path::Path;
 
 use mnemorph_races::Race;
@@ -17,7 +18,8 @@ pub struct Roster {
     pub creatures: BTreeMap<String, Creature>,
     /// Docs that could not be read, and why.
     pub problems: Vec<String>,
-    /// The docs' fingerprint: when it moves, the roster is read again.
+    /// The docs' fingerprint: when it moves, the roster is read again. In-process only — the
+    /// hasher is not stable across Rust releases, so it is never written down.
     pub fingerprint: u64,
 }
 
@@ -29,17 +31,43 @@ impl Roster {
         let mut hasher = DefaultHasher::new();
         let records = world.join(".mnemorph");
         for race in Race::ALL {
-            let Ok(seats) = fs::read_dir(records.join(race.name())) else {
-                continue;
+            let dir = records.join(race.name());
+            let seats = match fs::read_dir(&dir) {
+                Ok(seats) => seats,
+                Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                Err(e) => {
+                    let why = format!(
+                        "{}: the race's directory cannot be read: {e}",
+                        dir.display()
+                    );
+                    why.hash(&mut hasher);
+                    roster.problems.push(why);
+                    continue;
+                }
             };
-            let mut seats: Vec<_> = seats.filter_map(Result::ok).map(|e| e.path()).collect();
+            let mut seats: Vec<_> = seats
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
             seats.sort();
             for seat in seats {
                 let doc = seat.join("README.md");
-                let Ok(text) = fs::read_to_string(&doc) else {
-                    continue;
-                };
                 let rel = seat.strip_prefix(world).unwrap_or(&seat).to_path_buf();
+                // No doc is no creature; a doc that cannot be read is reported, never guessed.
+                let text = match fs::read_to_string(&doc) {
+                    Ok(text) => text,
+                    Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                    Err(e) => {
+                        let why = format!("{}: the doc cannot be read: {e}", rel.display());
+                        rel.hash(&mut hasher);
+                        why.hash(&mut hasher);
+                        // A doc that is not text still moves the fingerprint when it changes.
+                        fs::read(&doc).unwrap_or_default().hash(&mut hasher);
+                        roster.problems.push(why);
+                        continue;
+                    }
+                };
                 rel.hash(&mut hasher);
                 text.hash(&mut hasher);
                 match parse(&text, &rel) {

@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-engine
-- **Domain:** tools/
+- **Domain:** tools/ .cargo/ .claude/
 
 ## Traits
 
