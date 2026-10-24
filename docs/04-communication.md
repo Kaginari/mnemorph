@@ -318,6 +318,23 @@ order and once each (`resync()` replays from the last `seq` it saw, dropping wha
 had), answers `gate/ask` with the handler the interface gives it — denying when there is none —
 and fails whatever waits when the core's end closes, with the reason the core gave.
 
+**The terminal client.** `mnemorph` starts the core and opens a session in this world; `mnemorph
+run "<ask>"` asks once, prints the answer on stdout and the calls and the ending on stderr, and
+exits 0 only when the body answered. `run` reads its ask from stdin only when none is on the
+command line (`run` or `run -`), so an inherited open pipe never holds it, and it asks no one:
+an act that needs the human is denied, and the denial says so. `--help` and `--version` answer
+before any world is looked for; a core that will not start says why on the terminal before
+anything is drawn. In a session the transcript goes to the terminal's own scrollback, printed
+once per item and again whole when the width changes; below it live the text as it streams, the
+calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
+status line — model, spend (`unpriced` when the price tables do not know the model), context
+against the stress line, the cache's share. **Enter** sends, and while a turn runs the line
+waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
+**Esc** stops the turn; **Ctrl+C** stops the turn, or quits when nothing runs; **↑ ↓** walk the
+history. An approval is answered only by **y** or by **n** and Esc — never by Enter alone. Every
+printable character is text while the input has focus, and keys that arrive together are taken
+in order, a carriage return among them as Enter.
+
 Rules:
 
 - Every event carries `{session, run, body, seq}`; `seq` rises by one, in the order events reach

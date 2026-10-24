@@ -1426,3 +1426,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a child's `'exit'` is when it died, `'close'` is when it finished speaking; a
   client reads speech.
+
+---
+
+### [2026-10-24T17:49:51+02:00] rimuru — M6: the terminal client
+- **Task:** M6's third rung: `mnemorph`, the terminal client — a session in Ink and `run`.
+- **Files:** packages/cli (`args` — help and version first, arguments over stdin; `core` — which
+  mnemorphd; `transcript` — the events folded into what the view shows; `editor` — the input,
+  pure; `run` — one ask; `app.tsx` — the view; `cli.tsx`; tests for each, the view through a
+  real `Client` over a fake core), packages/sdk (`onClosed`), tsup.config.ts (the workspace's
+  packages bundled), docs/04-communication.md.
+- **Gate:** n/a. Instruments: `just check`; a live `mnemorph run` through OpenRouter
+  (`openai/gpt-4o-mini`, two turns, ~900 input tokens each) read a file with the `read` tool and
+  answered; a live session driven through a pseudo-terminal streamed its answer, showed the
+  status line and quit on Ctrl+C.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The first live session lost its Enter: keys typed fast arrive as one input (`".\r"`), and
+    the editor took the carriage return for a newline. Every test had sent Enter alone. A burst
+    is now taken key by key, against an editor no render can make stale.
+  - The first build crashed before `--version` could answer: the workspace's packages are
+    TypeScript sources and were left outside the bundle.
