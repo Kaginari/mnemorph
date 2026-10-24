@@ -495,6 +495,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T02:03:52+02:00] rimuru — Veldora wears the emblem
+- **Task:** Veldora asked for the hex emblem as their own icon.
+- **Files:** assets/portraits/veldora{,@64,@32}.png (from assets/brand/mnemorph-hex), assets/cards/veldora.png (redrawn), assets/README.md.
+- **Gate:** n/a. Instruments: the redrawn card viewed.
+- **Result:** in review as a pull request.
+- **Learned:** every portrait now comes from one Gemini sheet — the set is uniform.
+
+---
+
 ### [2026-10-24T02:14:37+02:00] rimuru — M4 rung 1: the shell classifier
 - **Task:** M4 began ("go"). First rung: every shell command a body runs is classified read,
   write, outward or destructive — or refused by the guard — from a parsed AST.
