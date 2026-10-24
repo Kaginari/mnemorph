@@ -39,6 +39,7 @@ impl World {
             .with_sandbox(Sandbox::None(
                 "these tests check the gate and the process group".into(),
             ))
+            .with_unguarded(true)
     }
 }
 
@@ -183,24 +184,24 @@ fn exit_codes_and_stderr_are_reported() {
     assert_eq!(o.content, "out\n[stderr]\nerr\n\n[exit 3]");
 }
 
-/// The jail beside the test binaries (`target/<profile>/mnemorph-jail`), when the workspace built it.
+/// The guard beside the test binaries (`target/<profile>/mnemorph-guard`), when the workspace built it.
 #[cfg(target_os = "linux")]
-fn jail() -> Option<PathBuf> {
+fn guard() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let jail = exe.parent()?.parent()?.join("mnemorph-jail");
-    jail.is_file().then_some(jail)
+    let guard = exe.parent()?.parent()?.join("mnemorph-guard");
+    guard.is_file().then_some(guard)
 }
 
 /// The classifier judges words; the sandbox stops what words hide. An approval opens the
 /// network, never the filesystem beyond the world.
 #[cfg(target_os = "linux")]
 #[test]
-fn bash_runs_inside_the_jail() {
-    let Some(jail) = jail() else {
-        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-jail exists");
+fn bash_runs_inside_the_guard() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
         return;
     };
-    let w = World::new("jail");
+    let w = World::new("guard");
     let home = w.root.join("home");
     fs::create_dir_all(home.join(".ssh")).unwrap();
     fs::write(home.join(".ssh/id_ed25519"), "PRIVATE KEY\n").unwrap();
@@ -213,7 +214,7 @@ fn bash_runs_inside_the_jail() {
         Context::new(race, w.world(), &["src"])
             .with_gate(gate)
             .with_home(&home)
-            .with_sandbox(Sandbox::Jail(jail.clone()))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
     };
 
     let o = bash(
@@ -450,4 +451,26 @@ fn a_repository_the_command_creates_is_its_own() {
     );
     assert!(!o.is_error, "{o:?}");
     assert!(w.world().join(".git/config").exists());
+}
+
+/// With no kernel guard in force nothing runs — unless the human allowed it.
+#[test]
+fn no_guard_no_command() {
+    let w = World::new("unguarded");
+    let marker = w.world().join("src/ran");
+    let mut cx = Context::new(Race::Slime, w.world(), &["src"])
+        .with_sandbox(Sandbox::None("the guard helper is missing".into()));
+    let o = bash(&mut cx, &format!("touch {}", marker.display()));
+    assert!(
+        o.is_error
+            && o.content
+                .contains("no kernel guard is in force (the guard helper is missing)"),
+        "{o:?}"
+    );
+    assert!(o.content.contains("sandbox.allow_unguarded"));
+    assert!(!marker.exists());
+    let mut cx = cx.with_unguarded(true);
+    let o = bash(&mut cx, &format!("touch {}", marker.display()));
+    assert!(!o.is_error, "{o:?}");
+    assert!(marker.exists());
 }

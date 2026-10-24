@@ -1,6 +1,6 @@
 //! The escape suite (M4's exit): writes outside the world, network from a body without it,
 //! symlink and `..` tricks, `/proc` reads of the harness's secrets, credential paths — every
-//! one refused, on Linux (the real jail) and on macOS (the real `sandbox-exec`).
+//! one refused, on Linux (the real guard) and on macOS (the real `sandbox-exec`).
 
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
@@ -84,7 +84,7 @@ impl Drop for Ground {
 
 fn sandbox() -> Sandbox {
     if cfg!(target_os = "linux") {
-        Sandbox::Jail(PathBuf::from(env!("CARGO_BIN_EXE_mnemorph-jail")))
+        Sandbox::Guard(PathBuf::from(env!("CARGO_BIN_EXE_mnemorph-guard")))
     } else {
         Sandbox::detect()
     }
@@ -240,7 +240,7 @@ fn escape_syscalls_are_denied() {
 /// A fork bomb is bounded, a crash leaves no core, a file cannot fill the disk.
 #[cfg(target_os = "linux")]
 #[test]
-fn the_jail_sets_limits() {
+fn the_guard_sets_limits() {
     let g = Ground::new("limits");
     let (ok, out) = g.run(&g.policy(false), "ulimit -c; ulimit -u; ulimit -f");
     assert!(ok, "{out}");
