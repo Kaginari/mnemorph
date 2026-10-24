@@ -1,0 +1,461 @@
+//! One body's run: the six beats, until it answers or stops honestly.
+
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use mnemorph_ledger::{Journal, Prices, Timestamp, UsageRow, occupancy};
+use mnemorph_provider::{
+    Block, Caller, Event, Message, Request, Role, StopReason, Tool as ToolSpec, usage_row,
+};
+use mnemorph_races::Race;
+use mnemorph_tools::{Context, Tool, call};
+
+use crate::beats::{Beat, block_json, conversation, push_user};
+use crate::model::Model;
+use crate::stress::{Signal, Stress};
+
+/// Who runs: the body's name, race, model and system prompt.
+#[derive(Debug, Clone)]
+pub struct Body {
+    /// The creature's name (`rimuru`, `slime-wire`).
+    pub name: String,
+    /// Its race.
+    pub race: Race,
+    /// The model that rides it.
+    pub model: String,
+    /// Its system prompt: the stable, cached prefix.
+    pub system: String,
+}
+
+/// The meters a run reads before every model call.
+#[derive(Debug, Clone, Copy)]
+pub struct Limits {
+    /// Model turns.
+    pub steps: u32,
+    /// Wall clock.
+    pub deadline: Duration,
+    /// The model's context window, in tokens; the run stops at 90% of it.
+    pub window: u64,
+    /// The most a turn may write.
+    pub max_tokens: u32,
+    /// The carved budget, in weighted tokens (thousandths), if any.
+    pub budget_wt: Option<u64>,
+}
+
+impl Limits {
+    /// A race's steps, a session's clock, a 200k window.
+    #[must_use]
+    pub fn for_race(race: Race) -> Self {
+        let steps = match race {
+            Race::Kijin | Race::Oni => 20,
+            Race::Elf | Race::HighElf | Race::Orc | Race::HighOrc => 30,
+            Race::NamedSlime => 60,
+            Race::Rimuru | Race::Slime | Race::DarkElf | Race::ArchDarkElf => 40,
+        };
+        Self {
+            steps,
+            deadline: Duration::from_hours(1),
+            window: 200_000,
+            max_tokens: 8192,
+            budget_wt: None,
+        }
+    }
+}
+
+/// How a run ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ending {
+    /// The model answered.
+    Answered(String),
+    /// An honest stop: the journal holds every beat and `resume` continues from it.
+    Checkpoint {
+        /// Which meter or instrument stopped it.
+        why: String,
+        /// What the body wrote in its salvage turn, after a clock death.
+        salvage: Option<String>,
+    },
+    /// Too many failed acts: one hop up.
+    Escalate(String),
+    /// The model or the provider failed.
+    Failed(String),
+}
+
+impl Ending {
+    fn words(&self) -> String {
+        match self {
+            Ending::Answered(_) => "answered".into(),
+            Ending::Checkpoint { why, .. } => format!("checkpoint: {why}"),
+            Ending::Escalate(why) => format!("escalate: {why}"),
+            Ending::Failed(why) => format!("failed: {why}"),
+        }
+    }
+}
+
+/// Why perceive stops a run.
+enum Stop {
+    /// End here.
+    End(Ending),
+    /// The clock: one salvage turn first.
+    Salvage(&'static str),
+}
+
+/// The tokens a clock death's salvage turn may write.
+pub const SALVAGE_TOKENS: u32 = 4096;
+/// The share of context at which the run stops (percent).
+pub const CONTEXT_STRESS_PCT: u64 = 90;
+
+/// One body's run.
+pub struct Run {
+    body: Body,
+    limits: Limits,
+    model: Arc<dyn Model>,
+    tools: Vec<Box<dyn Tool>>,
+    cx: Context,
+    journal: Journal<Beat>,
+    ledger: Option<Journal<UsageRow>>,
+    prices: Prices,
+    caller: Caller,
+    messages: Vec<Message>,
+    stress: Stress,
+    steps: u32,
+    spent_wt: u64,
+    last_occupancy: u64,
+    started: Instant,
+}
+
+/// What a run needs that is not the body itself.
+pub struct Setup {
+    /// The model.
+    pub model: Arc<dyn Model>,
+    /// The tools on the body's shelf.
+    pub tools: Vec<Box<dyn Tool>>,
+    /// The tools' context: world, soil, gate, sandbox.
+    pub cx: Context,
+    /// The run's beat journal.
+    pub journal: Journal<Beat>,
+    /// The usage ledger, if the run records spend.
+    pub ledger: Option<Journal<UsageRow>>,
+    /// Prices for the ledger.
+    pub prices: Prices,
+    /// Who calls, for the ledger.
+    pub caller: Caller,
+}
+
+impl Run {
+    /// A fresh run.
+    #[must_use]
+    pub fn new(body: Body, limits: Limits, setup: Setup) -> Self {
+        Self {
+            body,
+            limits,
+            model: setup.model,
+            tools: setup.tools,
+            cx: setup.cx,
+            journal: setup.journal,
+            ledger: setup.ledger,
+            prices: setup.prices,
+            caller: setup.caller,
+            messages: Vec::new(),
+            stress: Stress::default(),
+            steps: 0,
+            spent_wt: 0,
+            last_occupancy: 0,
+            started: Instant::now(),
+        }
+    }
+
+    /// A run continued from its journal: the conversation rebuilt beat by beat, the steps it
+    /// already took counted. An act the journal shows no answer for is answered with an error.
+    ///
+    /// # Errors
+    ///
+    /// The journal cannot be read.
+    pub fn resume(body: Body, limits: Limits, setup: Setup) -> std::io::Result<Self> {
+        let beats = setup.journal.read()?.rows;
+        let mut run = Self::new(body, limits, setup);
+        run.steps = u32::try_from(
+            beats
+                .iter()
+                .filter(|b| matches!(b, Beat::Model { .. }))
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        run.messages = conversation(&beats);
+        Ok(run)
+    }
+
+    /// The conversation so far.
+    #[must_use]
+    pub fn messages(&self) -> &[Message] {
+        &self.messages
+    }
+
+    /// Model turns taken.
+    #[must_use]
+    pub fn steps(&self) -> u32 {
+        self.steps
+    }
+
+    /// The tools' context.
+    pub fn context(&mut self) -> &mut Context {
+        &mut self.cx
+    }
+
+    fn record(&self, beat: &Beat) {
+        // The journal is the run's memory across a crash: a failed append is reported, and the
+        // run goes on — losing the journal must not also lose the work in flight.
+        if let Err(e) = self.journal.append(beat) {
+            eprintln!("mnemorph: the run's journal could not be written: {e}");
+        }
+    }
+
+    fn end(&self, ending: Ending) -> Ending {
+        self.record(&Beat::End {
+            ending: ending.words(),
+        });
+        ending
+    }
+
+    /// The request for the next turn: the system prompt and the tools as the cached prefix.
+    fn request(&self, max_tokens: u32) -> Request {
+        let count = self.tools.len();
+        let tools = self
+            .tools
+            .iter()
+            .enumerate()
+            .map(|(i, t)| ToolSpec {
+                name: t.name().to_owned(),
+                description: t.description().to_owned(),
+                input_schema: t.schema(),
+                cache: i + 1 == count,
+            })
+            .collect();
+        Request {
+            model: self.body.model.clone(),
+            system: vec![Block::Text {
+                text: self.body.system.clone(),
+                cache: true,
+            }],
+            tools,
+            messages: self.messages.clone(),
+            max_tokens,
+            effort: None,
+        }
+    }
+
+    /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
+    /// they stream.
+    pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
+        self.record(&Beat::Ask {
+            text: text.to_owned(),
+        });
+        push_user(
+            &mut self.messages,
+            vec![Block::Text {
+                text: text.to_owned(),
+                cache: false,
+            }],
+        );
+        loop {
+            // Perceive: the meters, read from the core, never from the model.
+            match self.perceive() {
+                Some(Stop::End(ending)) => return self.end(ending),
+                Some(Stop::Salvage(why)) => return self.salvage(why).await,
+                None => {}
+            }
+            // Plan: one model call, inside what is left of the clock.
+            let request = self.request(self.limits.max_tokens);
+            let left = self.limits.deadline.saturating_sub(self.started.elapsed());
+            let response = match tokio::time::timeout(left, self.model.complete(&request, on)).await
+            {
+                Err(_) => {
+                    return self
+                        .salvage("clock: the deadline passed during the model call")
+                        .await;
+                }
+                Ok(Err(e)) => return self.end(Ending::Failed(e.to_string())),
+                Ok(Ok(r)) => r,
+            };
+            self.record_turn(&response);
+            let calls: Vec<(String, String, String)> = response
+                .content
+                .iter()
+                .filter_map(|b| match b {
+                    Block::ToolUse { id, name, input } => {
+                        Some((id.clone(), name.clone(), input.to_string()))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if calls.is_empty() {
+                match response.stop {
+                    StopReason::Refusal => {
+                        let why = response.stop_details.map_or_else(
+                            || "the model refused".to_owned(),
+                            |d| format!("the model refused: {d}"),
+                        );
+                        return self.end(Ending::Failed(why));
+                    }
+                    // A server-paused turn continues with what it has.
+                    StopReason::PauseTurn => continue,
+                    _ => return self.end(Ending::Answered(text_of(&response.content))),
+                }
+            }
+            // Act, verify, record.
+            if let Some(ending) = self.act(calls) {
+                return self.end(ending);
+            }
+        }
+    }
+
+    /// The meters, before a model call: a reason to stop, or none.
+    fn perceive(&mut self) -> Option<Stop> {
+        let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
+        if self.steps >= self.limits.steps {
+            return checkpoint(format!("steps: {} taken", self.steps));
+        }
+        if self.started.elapsed() >= self.limits.deadline {
+            return Some(Stop::Salvage("clock: the deadline passed between turns"));
+        }
+        if self.last_occupancy * 100 >= self.limits.window * CONTEXT_STRESS_PCT {
+            return checkpoint(format!(
+                "context: {} of {} tokens",
+                self.last_occupancy, self.limits.window
+            ));
+        }
+        if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {
+            return checkpoint(format!("budget: {} of {budget} spent", self.spent_wt));
+        }
+        if let Some(Signal::Stall(which)) = self.stress.turn() {
+            return checkpoint(format!("stall: {which}"));
+        }
+        None
+    }
+
+    /// Count the turn, price it into the ledger, journal it, add it to the conversation.
+    fn record_turn(&mut self, response: &mnemorph_provider::Response) {
+        self.steps += 1;
+        self.last_occupancy = occupancy(response.usage);
+        let row = usage_row(
+            response,
+            &self.caller,
+            self.model.provider(),
+            &self.prices,
+            Timestamp::now(),
+        );
+        self.spent_wt += row.wt;
+        if let Some(ledger) = &self.ledger
+            && let Err(e) = ledger.append(&row)
+        {
+            eprintln!("mnemorph: the usage ledger could not be written: {e}");
+        }
+        let stop = match &response.stop {
+            StopReason::Other(s) => s.clone(),
+            other => format!("{other:?}"),
+        };
+        self.record(&Beat::Model {
+            content: response.content.iter().map(block_json).collect(),
+            stop,
+        });
+        self.messages.push(Message {
+            role: Role::Assistant,
+            content: response.content.clone(),
+        });
+    }
+
+    /// Run each call in order, give every result back, and read the instruments: a reason to
+    /// stop, or none.
+    fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
+        let mut results = Vec::new();
+        let mut signals = Vec::new();
+        for (id, name, input) in calls {
+            let o = call(&self.tools, &name, &input, &mut self.cx);
+            self.record(&Beat::Result {
+                tool_use_id: id.clone(),
+                content: o.content.clone(),
+                is_error: o.is_error,
+            });
+            signals.extend(self.stress.act(&o));
+            results.push(Block::ToolResult {
+                tool_use_id: id,
+                content: o.content,
+                is_error: o.is_error,
+                cache: false,
+            });
+        }
+        push_user(&mut self.messages, results);
+        for s in signals {
+            match s {
+                Signal::Warn(text) => {
+                    self.record(&Beat::Note { text: text.clone() });
+                    push_user(&mut self.messages, vec![Block::Text { text, cache: false }]);
+                }
+                Signal::Doom => {
+                    return Some(Ending::Checkpoint {
+                        why: "doom: guts warned three windows running".into(),
+                        salvage: None,
+                    });
+                }
+                Signal::Escalate => {
+                    return Some(Ending::Escalate(
+                        "more than two failed acts in a row".into(),
+                    ));
+                }
+                Signal::Stall(which) => {
+                    return Some(Ending::Checkpoint {
+                        why: format!("stall: {which}"),
+                        salvage: None,
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// A clock death: one more short turn, without tools, to write down what the body learned —
+    /// then the checkpoint, carrying it.
+    async fn salvage(&mut self, why: &str) -> Ending {
+        let note =
+            "Time is up. In a few lines: what you did, what you learned, what is left. No tools."
+                .to_owned();
+        self.record(&Beat::Note { text: note.clone() });
+        push_user(
+            &mut self.messages,
+            vec![Block::Text {
+                text: note,
+                cache: false,
+            }],
+        );
+        let mut request = self.request(SALVAGE_TOKENS);
+        request.tools.clear();
+        let grace =
+            (self.limits.deadline / 10).clamp(Duration::from_secs(2), Duration::from_secs(60));
+        let mut quiet = |_: Event| {};
+        let salvage =
+            match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
+                Ok(Ok(r)) => {
+                    self.record(&Beat::Model {
+                        content: r.content.iter().map(block_json).collect(),
+                        stop: "salvage".into(),
+                    });
+                    Some(text_of(&r.content))
+                }
+                _ => None,
+            };
+        self.end(Ending::Checkpoint {
+            why: why.to_owned(),
+            salvage,
+        })
+    }
+}
+
+fn text_of(content: &[Block]) -> String {
+    content
+        .iter()
+        .filter_map(|b| match b {
+            Block::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}

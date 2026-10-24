@@ -733,3 +733,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   kernel-enforced permission list, set by the helper on itself before it becomes the command.
   It runs per command because those restrictions are one-way; a resident helper would still
   have to restrict a fresh process each time. Naming it for what it does settled the question.
+
+---
+
+### [2026-10-24T04:41:22+02:00] rimuru — M5 rung 1: the loop core
+- **Task:** the six beats for one body over the parts M2–M4 left ready.
+- **Files:** crates/mnemorph-loop/src/model.rs (`Model`: Anthropic, OpenAI-compatible, a
+  scripted model for tests), beats.rs (the beat journal; `conversation` rebuilds a run; a call
+  cut mid-flight is answered with an error), stress.rs (guts, doom, escalation, `repin`,
+  `actBudget`; a landing resets them), run.rs (perceive · plan · act · verify · record; the
+  steps, clock, context and cost meters; salvage on a clock death; priced ledger rows; resume),
+  tests/loop.rs (14); mnemorph-tools re-exports `Sandbox`; docs/03-loop.md (the journal,
+  salvage, guts scoring).
+- **Gate:** n/a. Instruments: 14 loop tests against the scripted model; `just check` (199).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The layer check caught a test reaching past its layer (loop → sandbox); the type belongs
+    with the API that takes it, so tools re-exports it.
+  - A guts window restarts after each warning, so a test's pattern must restart with it: my
+    first doom script drifted half a window and never reached three warnings.
