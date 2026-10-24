@@ -1795,3 +1795,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     files are all unowned.
   - Findings and the graph must read the same bonds. The graph dropped a retired parent while
     the loop check still walked through it.
+
+---
+
+### [2026-10-24T22:56:24+02:00] rimuru — M7: dispatch, the world's half
+- **Task:** the first dispatch rung. The races' law decides on five facts; the world now finds
+  them from the creature docs and names the creature a refused order goes to.
+- **Files:**
+  - crates/mnemorph-world dispatch.rs — `dispatch`, `Ask`, `Hop`, `Refused`;
+  - tests/dispatch.rs — this world's chain, a fixture for verify-first and the other lane;
+  - docs/04 — the five facts and the refusal routes.
+- **Gate:** n/a. Instruments: every refusal on this world's chain names a creature; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The law's words say what kind of act is lawful. Only the world knows to whom, and a reach
+    downward is lawful one rank at a time. "Not one hop" from above a target names the next rank
+    toward it, never the human.
+  - The commission itself is the next rung: carving the slice, the fresh context, the report as
+    the parent's tool result, and the gate's *right author* calling `own`.

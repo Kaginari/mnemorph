@@ -171,6 +171,22 @@ flowchart TD
     class NO1,NO2,NO3,NO4,NO5 bad
 ```
 
+The law decides on five facts and the world finds them, from the creature docs: the lineage
+(the target's chain of command reaches the dispatcher), the plan item (the dispatcher's open
+plan names the target), the verify line (the target Slime's doc carries one), the lane (the
+first Elf above the target is not the dispatcher) and the budget (the slice fits what the
+envelope has left). A refusal names the creature the order goes to instead:
+
+| Refused | The lawful next act |
+|---|---|
+| not one hop | below the dispatcher: commission the next rank toward the target; else report it to the dispatcher's commander |
+| not your line | ask the target's own commander |
+| no plan item | open a plan item that names the target |
+| verify first | code the verify line on the target's doc |
+| budget | `@? budget: need ~<n> wt, have <m> wt` to the dispatcher's commander |
+
+A name that is no living creature is refused before the law is asked: Rimuru routes its birth.
+
 The return path: the child's report is the parent's tool result, headed by the exit line
 `@S <word>`; its written paths are recorded as court work so the parent's gate does not judge them
 twice; its `@U` lines are landed as proposed notes, and the parent's verdict accepts or rejects
