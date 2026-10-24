@@ -778,9 +778,15 @@ impl Run {
     /// The human's caps against the ledger as it is now: why the run must stop, if it must.
     fn over_a_cap(&mut self) -> Option<String> {
         let caps = self.caps?;
-        let rows = match self.ledger.as_ref().map(Journal::read) {
-            Some(Ok(back)) => back.rows,
-            Some(Err(e)) => {
+        let rows = match self.ledger.as_ref().map(|j| (j.path(), j.read())) {
+            Some((_, Ok(back))) if back.skipped.is_empty() => back.rows,
+            Some((path, Ok(back))) => {
+                return Some(format!(
+                    "budget: {}",
+                    crate::open::unreadable_lines(path, &back.skipped)
+                ));
+            }
+            Some((_, Err(e))) => {
                 return Some(format!(
                     "budget: the usage ledger could not be read ({e}), and no call runs on a cap it cannot see"
                 ));

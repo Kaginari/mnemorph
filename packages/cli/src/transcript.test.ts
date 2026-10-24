@@ -123,3 +123,7 @@ test('the budget left is the cap less what the session spent', () => {
   expect(status(s.usage, { leftWt: 12_000, cap: 'day' }).at(-1)).toBe('left 9.5k wt (day)');
   expect(status(s.usage, { leftWt: 1000, cap: 'session' }).at(-1)).toBe('left 0 wt (session)');
 });
+
+test('before the first call the status says nothing about spend', () => {
+  expect(status(initial().usage)).toEqual([]);
+});

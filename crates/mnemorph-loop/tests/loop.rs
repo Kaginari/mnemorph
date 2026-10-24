@@ -969,6 +969,23 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
         "{e:?}"
     );
     assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
+    // A torn last write: one line the ledger cannot read is spend the cap cannot see.
+    std::fs::remove_dir_all(&path).unwrap();
+    std::fs::write(&path, "{\"torn\n").unwrap();
+    let m = Arc::new(ScriptedModel::new([answer("never")]));
+    let e = ask(
+        &mut w.run(m.clone(), limits()).with_caps(mnemorph_ledger::Caps {
+            day: Some(u64::MAX),
+            ..caps
+        }),
+        "go",
+    )
+    .await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.contains("unreadable line(s) ([1])")),
+        "{e:?}"
+    );
+    assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
 }
 
 /// A line sent while the body works reaches it after its next tool step, marked as the human's.

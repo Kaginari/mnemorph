@@ -2,6 +2,7 @@
 import { Client, stdio, type Transport } from '@mnemorph/sdk';
 import type { Command } from './args.js';
 import { findCore } from './core.js';
+import { RELEASE } from './index.js';
 import { summary } from './transcript.js';
 
 export interface Io {
@@ -61,10 +62,11 @@ export async function runOnce(
     });
   });
   try {
-    await client.initialize({ name: 'mnemorph run', version: '0.0.0' });
+    await client.initialize({ name: 'mnemorph run', version: RELEASE });
     await client.prompt(ask);
   } catch (e) {
     io.stderr.write(`mnemorph: ${(e as Error).message}\n`);
+    client.close();
     return 1;
   }
   const ending = await Promise.race([

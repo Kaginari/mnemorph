@@ -58,6 +58,11 @@ pub struct Hello {
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps; `null` when they set none.
     pub budget: Option<Budget>,
+    /// Where the provider's key comes from — its variable and the file naming it, never the
+    /// value; `null` when the provider takes no key.
+    pub key: Option<String>,
+    /// The sandbox actually in force for the session's commands, or `none — <reason>`.
+    pub sandbox: String,
 }
 
 /// A session's budget under the human's caps.

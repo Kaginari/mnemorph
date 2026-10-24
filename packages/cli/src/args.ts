@@ -17,6 +17,7 @@ export type Command =
       core?: string | undefined;
       json: boolean;
     }
+  | { kind: 'status'; world?: string | undefined; core?: string | undefined }
   | { kind: 'error'; message: string };
 
 export const HELP = `mnemorph — talk to a Mnemorph body in your terminal
@@ -25,6 +26,7 @@ Usage:
   mnemorph [options]                 a session in this world
   mnemorph run "<ask>" [options]     ask once, print the answer, exit
   mnemorph run [-]                   ask once, the ask read from stdin
+  mnemorph status [options]          the build, the core, the key's origin, the sandbox
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -39,6 +41,7 @@ In a session:
   Enter            send; while a turn runs, the line waits its turn
   Alt+Enter        a new line in the message (Shift+Enter where the terminal reports it)
   Esc              stop the turn; at an approval, deny it
+  y n, then Enter  at an approval: choose, then confirm
   Ctrl+C           stop the turn; when nothing runs, quit
   ↑ ↓              earlier messages
   /help /status /theme /quit
@@ -80,6 +83,12 @@ export function parse(argv: string[]): Command {
   if (rest.length === 0) {
     if (json) return { kind: 'error', message: '--json goes with run' };
     return { kind: 'chat', world, core, theme };
+  }
+  if (rest[0] === 'status') {
+    if (json) return { kind: 'error', message: '--json goes with run' };
+    if (rest.length > 1)
+      return { kind: 'error', message: 'status takes no words; see mnemorph --help' };
+    return { kind: 'status', world, core };
   }
   if (rest[0] !== 'run') {
     return { kind: 'error', message: `unknown command ${rest[0]}; see mnemorph --help` };

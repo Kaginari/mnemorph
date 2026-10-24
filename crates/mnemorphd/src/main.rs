@@ -18,6 +18,14 @@ Options:
   -V, --version   the version
 ";
 
+/// The version and the commit it was built from: `0.0.0 (a1b2c3d4e5)`.
+const VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("MNEMORPH_COMMIT"),
+    ")"
+);
+
 fn main() -> ExitCode {
     let mut world = None;
     let mut args = std::env::args().skip(1);
@@ -29,7 +37,7 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-V" | "--version" => {
-                println!("mnemorphd {}", env!("CARGO_PKG_VERSION"));
+                println!("mnemorphd {VERSION}");
                 return ExitCode::SUCCESS;
             }
             "--world" => match args.next() {
@@ -52,7 +60,7 @@ fn main() -> ExitCode {
     match mnemorph_server::serve(
         input,
         std::io::stdout(),
-        env!("CARGO_PKG_VERSION"),
+        VERSION,
         mnemorph_server::opener(world),
     ) {
         Ok(()) => ExitCode::SUCCESS,

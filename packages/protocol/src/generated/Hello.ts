@@ -40,4 +40,13 @@ holes: Array<string>,
 /**
  * What the session may spend under the human's caps; `null` when they set none.
  */
-budget: Budget | null, };
+budget: Budget | null, 
+/**
+ * Where the provider's key comes from — its variable and the file naming it, never the
+ * value; `null` when the provider takes no key.
+ */
+key: string | null, 
+/**
+ * The sandbox actually in force for the session's commands, or `none — <reason>`.
+ */
+sandbox: string, };

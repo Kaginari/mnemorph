@@ -189,7 +189,8 @@ Esc stops a running command within a second.
 
 ### M6 — Protocol, SDK, CLI · L · 🐕 dogfood
 
-- `mnemorph-server`: JSON-RPC over stdio and WebSocket, events with `seq`, reconnect, gate request.
+- `mnemorph-server`: JSON-RPC over stdio, events with `seq`, reconnect, gate request; `mnemorph
+  status` (version and commit, key origins, the sandbox in force).
 - `@mnemorph/protocol` generated, `@mnemorph/sdk`, `@mnemorph/cli` with Ink: streaming text, tool
   call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
   themes; Enter queues while a turn runs, `/send`.
@@ -312,7 +313,8 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
 ### M12 — Board · L
 
 - The cockpit, the colony net (2D and 3D), the timeline, ledger and consumption dashboards, race
-  cards rendered from the compiled law with the generated art, live over the WebSocket.
+  cards rendered from the compiled law with the generated art, live over the WebSocket — the
+  server's second transport, beside stdio.
 
 **Exit:** Playwright suite green in both themes; Fable design review.
 

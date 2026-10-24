@@ -507,6 +507,8 @@ fn hello(opened: &Opened, version: &str) -> Value {
             left_wt: b.wt,
             cap: b.cap.to_owned(),
         }),
+        key: opened.key.clone(),
+        sandbox: opened.sandbox.clone(),
     })
     .unwrap_or(Value::Null)
 }

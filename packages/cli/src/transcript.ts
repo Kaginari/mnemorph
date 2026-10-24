@@ -96,8 +96,13 @@ export function fold(s: State, e: Arrived): State {
         ? push(moved, { kind: 'assistant', text: done.trim(), cont: s.flushed !== '' })
         : moved;
     }
-    case 'toolStart':
-      return s;
+    case 'toolStart': {
+      // A call shows as soon as it starts, before its input has streamed.
+      if (s.running.has(e.id)) return s;
+      const running = new Map(s.running);
+      running.set(e.id, { kind: 'tool', id: 0, call: e.id, name: e.name, input: null });
+      return { ...s, running };
+    }
     case 'assistant': {
       // The whole turn's text, less what already left paragraph by paragraph.
       const rest = s.flushed
@@ -177,6 +182,8 @@ export function info(s: State, text: string): State {
 
 /** The one-line summary of a tool call's input. */
 export function summary(_name: string, input: unknown): string {
+  // A call whose input is still streaming has nothing to say yet.
+  if (input === null) return '';
   if (input && typeof input === 'object') {
     const o = input as Record<string, unknown>;
     for (const key of ['command', 'path', 'pattern', 'query', 'url']) {
@@ -197,9 +204,12 @@ export function wt(n: number): string {
 /** The status line's reading of the usage, and of the budget the session opened with. */
 export function status(u: Usage, budget?: { leftWt: number; cap: string } | null): string[] {
   const parts: string[] = [];
-  parts.push(
-    u.unpriced && u.usd === 0 ? 'unpriced' : `$${u.usd.toFixed(4)}${u.unpriced ? '+' : ''}`,
-  );
+  // Before the first call there is no spend to price.
+  if (u.spentWt > 0 || u.usd > 0) {
+    parts.push(
+      u.unpriced && u.usd === 0 ? 'unpriced' : `$${u.usd.toFixed(4)}${u.unpriced ? '+' : ''}`,
+    );
+  }
   if (u.stressLine > 0) {
     parts.push(`ctx ${Math.round((100 * u.occupancy) / u.stressLine)}%`);
   }
