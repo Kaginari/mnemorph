@@ -73,3 +73,19 @@ fn onto_says_what_it_needs() {
     let (ok, _, err) = onto(&["onto", "who"], &here);
     assert!(!ok && err.contains("onto has no `who`"), "{err}");
 }
+
+#[test]
+fn check_passes_this_world_and_names_its_findings() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let (ok, out, err) = onto(&["onto", "check"], &repo);
+    assert!(ok, "{out}{err}");
+    assert!(out.starts_with("@S PASS "), "{out}");
+    for line in out.lines().skip(1) {
+        assert!(
+            line.starts_with("medium\t") || line.starts_with("low\t"),
+            "{line}"
+        );
+    }
+    let (ok, _, err) = onto(&["onto", "check", "src/"], &repo);
+    assert!(!ok && err.contains("takes no paths"), "{err}");
+}
