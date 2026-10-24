@@ -934,6 +934,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T10:59:25+02:00] rimuru — M5b review fixes
+- **Task:** the fresh Fable review that closes M5b — 13 findings, all addressed.
+- **Files:** crates/mnemorph-tools/src/attic.rs (own excludes and attributes, an 8 MiB file
+  ceiling named in the result, what became ignored leaves the index, `-z` paths, forget only
+  what the world dropped, the snapshot log trimmed), classify/paths.rs (writing `.git` or the
+  records in place asks; `intel` stays writable), shell.rs (an approved destructive act is not
+  undone; the true kill time), tripwire.rs (a deleted repository is released), loop run.rs (Esc
+  during verify is not a verdict; the clock set per ask), stress.rs (the bench key and muting),
+  solo.rs (`configure`), tests, docs 03 and 05.
+- **Gate:** n/a. Instruments: `just check` (246).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A hard link keeps a file through a deletion, not through a write: "immutable" was a
+    property of git's habits, not of the inode.
+  - A safety net that ignores the human's approval is a second, louder refusal: the attic and
+    the tripwire both had to learn to let an approved act stand.
+  - The tripwire's tests went through the classifier's front door; once that door asks, they
+    belong in a script, the only way a write reaches the tripwire in earnest.
+
+---
+
 ### [2026-10-24T15:40:00+02:00] rimuru — the book: memory (page 8), M8 replanned around it
 - **Task:** Veldora: use DIKWP MNEMORPH-85 as Mnemorph's memory system — is it possible, and the
   plan, in the book.

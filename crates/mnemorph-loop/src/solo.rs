@@ -6,7 +6,7 @@ use std::path::Path;
 use mnemorph_races::{Race, ToolClass};
 use mnemorph_tools::Context;
 
-use crate::run::Body;
+use crate::run::{Body, Limits};
 
 /// Solo's system prompt: the stable, cached prefix of every turn.
 pub const SOLO_PROMPT: &str = "\
@@ -44,4 +44,23 @@ pub fn solo(world: &Path, model: &str) -> (Body, Context) {
     }
     debug_assert!(!Race::Slime.shelf().contains(&ToolClass::Outward));
     (body, cx)
+}
+
+/// The human's configuration, applied to a run: the attic's limits, the stress line, the guard
+/// rules that ask instead of refusing, and whether commands may run with no kernel guard.
+#[must_use]
+pub fn configure(
+    config: &mnemorph_config::Config,
+    mut cx: Context,
+    mut limits: Limits,
+) -> (Context, Limits) {
+    let (keep_days, max_mb) = config.attic_limits();
+    if let Some(attic) = mnemorph_tools::Attic::for_world(cx.world()) {
+        cx = cx.with_attic(attic.with_limits(keep_days, max_mb));
+    }
+    cx = cx
+        .with_asked_rules(config.asked_rules())
+        .with_unguarded(config.allow_unguarded());
+    limits.stress_tokens = config.context_stress_tokens();
+    (cx, limits)
 }

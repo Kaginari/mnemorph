@@ -212,19 +212,24 @@ flowchart LR
   up to 16 MiB of content; a change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard
   lets no command reach. Before every command and every file write, the working tree is
-  snapshotted into the attic's own git object store — only changed files are hashed again,
-  ignored files (`node_modules`, `target`) are left out because they rebuild, and the
-  command's `.mnemorph/tmp` is skipped. A command that deleted files is told how many and which
-  snapshot holds them, so `rm -rf src` and a script that wipes a folder are both undone by
-  restoring from it. The world's `.git` is kept another way: its objects — immutable, named by
-  their hash — are hard-linked into the attic and its refs copied, so a command that deletes or
-  breaks `.git` finds it put back after it ends. Deleting `.git` or the world's records outright
-  is `destructive`, so it asks first. The attic's git runs deaf to every configuration but its
-  own: no hooks, no filters, no fsmonitor from the world or the human's files.
+  snapshotted into the attic's own git object store — only changed files are hashed again.
+  What the world ignores is left out, and so, by the attic's own rules whatever the world
+  ignores, are build output and dependencies (`target`, `node_modules`, `.venv`, `dist`,
+  `build`, …), the command's `.mnemorph/tmp` and the machine-local records (`instruments`,
+  `index`, `intel`); a file that becomes ignored leaves the next snapshot. A file over 8 MiB is
+  not kept, and the command's result names it. A command that deleted files is told how many
+  and which snapshot holds them, so `rm -rf src` and a script that wipes a folder are both
+  undone by restoring from it. The world's `.git` is kept another way: its objects are
+  hard-linked into the attic (copied, across devices) and its refs copied, so a command that
+  deletes or breaks `.git` finds it put back after it ends. A hard link shares the file, so it
+  survives a deletion, not a write in place: deleting or changing `.git` or the world's records
+  outright is `destructive`, so it asks first — and what the human approved, the attic keeps but
+  does not undo. The attic's git runs deaf to every configuration but its own: no hooks, no
+  filters, no attributes, no fsmonitor from the world or the human's files.
   It prunes itself at most once a day: snapshots older than `attic.keep_days` (14) go, then the
   oldest while the snapshot store is over `attic.max_mb` (2048) — the newest always stays — and
-  `git gc` packs what remains; kept `.git` objects the world itself has dropped age out with the
-  same window. The cap measures the snapshot store only: the kept `.git` objects are hard links
+  `git gc` packs what remains; a kept `.git` object ages out with the same window only once the
+  world itself has dropped it. The cap measures the snapshot store only: the kept `.git` objects are hard links
   and cost no disk beside the world's own. Measured on this repository: the first snapshot
   takes 1.8 s and about 13 MB (9 MB once packed); an unchanged one, 24 ms and nothing.
 - **The file tools** run in the harness, not the sandbox, so they guard their own opens: a path

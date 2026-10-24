@@ -358,6 +358,9 @@ impl Run {
         self.ask_steps = 0;
         self.stress = Stress::default();
         self.noticed = false;
+        // The clock reaches every command of this ask, the gate's verify lines included.
+        self.cx
+            .set_deadline(Some(self.started + self.limits.deadline));
         // Only an Esc fired during this ask counts.
         self.interrupt.take();
         let mut gate_retried = false;
@@ -466,6 +469,10 @@ impl Run {
             return Some(Ending::Answered(answer));
         };
         let verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        // A verify command Esc stopped is not a verdict: the ask ends, interrupted.
+        if self.interrupt.take() {
+            return Some(Ending::Interrupted);
+        }
         self.record(&Beat::Gate {
             changed: verdict
                 .changed

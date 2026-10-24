@@ -126,6 +126,16 @@ impl Snapshot {
         }
     }
 
+    /// A repository the human approved deleting is gone, not tampered with: stop watching its
+    /// pieces, so none of them is put back into a `.git` that is no longer there.
+    pub(crate) fn release_deleted_repository(&mut self) {
+        let git = self.world.join(".git");
+        if fs::symlink_metadata(&git).is_err() {
+            self.watched.retain(|r| !r.starts_with(&git));
+            self.entries.retain(|p, _| !p.starts_with(&git));
+        }
+    }
+
     /// Compare with the world now and put back what changed. Returns one line per change; a
     /// change that could not be undone says so.
     pub(crate) fn restore(&self) -> Vec<String> {
