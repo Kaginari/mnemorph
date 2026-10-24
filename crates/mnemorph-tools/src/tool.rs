@@ -106,6 +106,8 @@ pub struct Context {
     asked_rules: BTreeSet<Rule>,
     unguarded: bool,
     attic: Option<Arc<crate::attic::Attic>>,
+    cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    deadline: Option<std::time::Instant>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
 }
 
@@ -146,6 +148,8 @@ impl Context {
             asked_rules: BTreeSet::new(),
             unguarded: false,
             attic: None,
+            cancel: None,
+            deadline: None,
             seen: HashMap::new(),
         }
     }
@@ -210,6 +214,32 @@ impl Context {
     #[must_use]
     pub fn attic(&self) -> Option<&crate::attic::Attic> {
         self.attic.as_deref()
+    }
+
+    /// Stop a running command as soon as this flag is set — the human's Esc.
+    #[must_use]
+    pub fn with_cancel(mut self, flag: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        self.cancel = Some(flag);
+        self
+    }
+
+    /// No command runs past this instant — the run's clock.
+    pub fn set_deadline(&mut self, deadline: Option<std::time::Instant>) {
+        self.deadline = deadline;
+    }
+
+    /// Whether the human asked to stop.
+    #[must_use]
+    pub fn cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|f| f.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    /// The instant no command may run past, if any.
+    #[must_use]
+    pub fn deadline(&self) -> Option<std::time::Instant> {
+        self.deadline
     }
 
     /// Whether commands may run with no kernel guard in force.

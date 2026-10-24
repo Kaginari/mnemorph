@@ -101,11 +101,17 @@ impl Ending {
 /// beats and during a model call.
 #[derive(Debug, Default)]
 pub struct Interrupt {
-    fired: AtomicBool,
+    fired: Arc<AtomicBool>,
     notify: tokio::sync::Notify,
 }
 
 impl Interrupt {
+    /// The flag itself, for the tools: a running command stops when it is set.
+    #[must_use]
+    pub fn flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.fired)
+    }
+
     /// Interrupt the turn in progress.
     pub fn fire(&self) {
         self.fired.store(true, Ordering::SeqCst);
@@ -189,12 +195,13 @@ impl Run {
     /// A fresh run.
     #[must_use]
     pub fn new(body: Body, limits: Limits, setup: Setup) -> Self {
+        let interrupt = Arc::new(Interrupt::default());
         Self {
             body,
             limits,
             model: setup.model,
             tools: setup.tools,
-            cx: setup.cx,
+            cx: setup.cx.with_cancel(Arc::clone(&interrupt.fired)),
             journal: setup.journal,
             ledger: setup.ledger,
             prices: setup.prices,
@@ -208,7 +215,7 @@ impl Run {
             started: Instant::now(),
             gate: None,
             before: None,
-            interrupt: Arc::new(Interrupt::default()),
+            interrupt,
         }
     }
 
@@ -561,7 +568,11 @@ impl Run {
                 });
                 continue;
             }
+            self.cx
+                .set_deadline(Some(self.started + self.limits.deadline));
             let o = call(&self.tools, &name, &input, &mut self.cx);
+            // An Esc that stopped this call stops the calls after it too.
+            interrupted |= self.interrupt.take();
             self.record(&Beat::Result {
                 tool_use_id: id.clone(),
                 content: o.content.clone(),

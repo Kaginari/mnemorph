@@ -129,8 +129,11 @@ A session is one body's run and the lines the human types while it works. **Ente
 queues the line; when the turn ends, the next queued line becomes the next ask. **Esc** interrupts
 the turn wherever it is: during a model call the call is dropped and nothing half-streamed enters
 the conversation (an answer that has already arrived is kept, and Esc is honoured before any of
-its acts runs); between tool calls the calls not yet run are answered "interrupted by the human
-before it ran", and none of them runs. Either way the session pivots to the next queued line.
+its acts runs); during a command, the command's whole process group stops within a poll, and
+what it printed so far is kept in its result; between tool calls the calls not yet run are
+answered "interrupted by the human before it ran", and none of them runs. The run's clock reaches
+a running command the same way — including the end gate's verify commands — so no command
+outlives the deadline. Either way the session pivots to the next queued line.
 
 The step budget and the stress instruments are each ask's own — a session of questions is not
 thrash; the clock, the context and the cost run for the session, and a resumed run reads what

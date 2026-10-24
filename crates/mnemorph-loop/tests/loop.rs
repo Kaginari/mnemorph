@@ -648,3 +648,55 @@ async fn opaque_blocks_survive_the_journal() {
     let rebuilt = conversation(&w.journal().read().unwrap().rows);
     assert_eq!(rebuilt[1].content[0], thinking);
 }
+
+/// Esc during a long command ends the turn at once, not when the command would have finished.
+#[tokio::test]
+async fn esc_reaches_a_running_command() {
+    let w = World::new("esc-command");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "bash", json!({"command": "sleep 30"})),
+        answer("never"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let interrupt = run.interrupt();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        interrupt.fire();
+    });
+    let started = std::time::Instant::now();
+    assert_eq!(ask(&mut run, "wait").await, Ending::Interrupted);
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(model.requests().len(), 1, "no turn after the interrupt");
+}
+
+/// The clock reaches a running command; the salvage turn follows at once.
+#[tokio::test]
+async fn the_clock_reaches_a_running_command() {
+    let w = World::new("clock-command");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "bash", json!({"command": "sleep 30"})),
+        answer("I was waiting on sleep."),
+    ]));
+    let mut run = w.run(
+        model,
+        Limits {
+            deadline: Duration::from_millis(500),
+            ..limits()
+        },
+    );
+    let started = std::time::Instant::now();
+    let e = ask(&mut run, "wait").await;
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, salvage: Some(_) } if why.starts_with("clock")),
+        "{e:?}"
+    );
+}
