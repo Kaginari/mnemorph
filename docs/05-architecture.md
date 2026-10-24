@@ -395,7 +395,10 @@ flowchart LR
   distribution, so any other shape is a fault, refused rather than repaired into something that
   would pass for measured. `SystemOne` keeps the
   provider ladder (the same statuses, waits and `retry-after`, and 529 as busy) on a decision's
-  scale: seconds, not minutes, so a fallback can still answer in time.
+  scale: seconds, not minutes, so a fallback can still answer in time. A decision's state holds
+  at most 24 000 bytes: a point sends the part that decides (a log's tail, a commission's head),
+  and a larger one is refused before anything is sent — past it the System One models refuse,
+  and the fallback would pay full price for all of it.
 - **The fallback is the LLM, through one tool.** `decide.llm` gets the state exactly as it is,
   between `<document id="…">` tags whose marker is made for that call, so no text written
   beforehand can close the document early. It is told to treat everything inside as data, never
@@ -405,19 +408,28 @@ flowchart LR
   probabilities are clamped and rescaled to sum to 1.
 - **Every answer says who gave it.** Both backends return the same `Answer`, so its shape cannot
   show that the backend changed. A `Decision` carries its `Source`: the provider, the model, and
-  the `Basis`. A System One model is built for calibration (*measured*); an LLM writes its
-  probabilities about itself (*stated*), and a stated 70% is not a measured one.
+  the `Basis`. A System One provider says its models are trained for calibration (*measured* —
+  a claim the decision record tests, below); an LLM writes its probabilities about itself
+  (*stated*), and a stated 70% is not a measured one.
 - **Cut-offs are per basis.** `Decision::sure(question, cutoffs)` returns the answer only when its
-  confidence, `(max p − 1/n) / (1 − 1/n)`, clears the cut-off for its basis; otherwise the caller
-  keeps its default. The same 85% yes passes as measured and fails as stated. For a score, the
-  confidence is the top level's share and is blind to adjacency, so a point that reads a scale
-  as ordered uses its expected level.
+  confidence clears the cut-off for its basis; otherwise the caller keeps its default. The
+  confidence is the one the provider measured and sent, when it sent one; else TypeSafe's
+  definitions: for a choice, `(max p − 1/n) / (1 − 1/n)` (`|2p − 1|` for a yes-or-no); for a
+  score, adjacency-aware, `max(0, 1 − Σ pᵢ·|i − m| / MAD)`, so an even split between neighbouring
+  levels is surer than one between the ends. The same 85% yes passes as measured and fails as
+  stated. The cut-offs (0.6 measured, 0.9 stated) are conservative starting points, untuned: they
+  are a margin over an even spread, not a raw probability, and are meant to be set from the
+  record.
 - **Every decision has an id and a record.** Each decision point journals a `DecisionRow`: the
   id (the provider's request id, else one made for it), the point, provider, model, basis, why
   it fell back when it did, each question's probabilities, the milliseconds and the tokens. When
   the point learns what proved true, an `OutcomeRow` names the decision's id and the label that
   did. The two join into calibration per provider, model and basis, never pooled, so a cut-off is
-  set from the record rather than guessed.
+  set from the record rather than guessed. A decision answered by the LLM is a model call like
+  any other: its row reaches the usage ledger priced, and its cost the run's budget. Jev's input
+  is priced at $0.042 per million tokens and its output is free, but TypeSafe publishes no cache
+  prices, so it stays out of the price tables (never guessed) and its rows count in weighted
+  tokens with `usd` null.
 - **Containment.** A System One provider is a provider: only the human's own files define one,
   and only they set `decide.via`. Until the human names one, no decision leaves for anything but
   the LLM the session already uses.

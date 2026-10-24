@@ -1163,3 +1163,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** an expired record still fails the load past a lowered limit: config has no clock,
   and reading one there would make loading depend on the day. The error now says to delete it.
+### [2026-10-24T15:33:25+02:00] rimuru — decisions bounded, and confident the provider's way
+- **Task:** #115 (from the review of #112): the decider sent any size of state, ignored the
+  provider's own confidence, and its score confidence was blind to adjacency; a dead model-id
+  constant was left behind.
+- **Files:** crates/mnemorph-provider/src/systemone.rs (`MAX_STATE_BYTES`; `Answer.ordered` and
+  `.measured`; `confidence()` prefers the provider's measure, else TypeSafe's choice and score
+  definitions; `DEFAULT_MODEL` gone), src/decide.rs (LLM score answers are ordered), tests (the
+  score's adjacency, the provider's measure winning, an oversized state refused before sending),
+  docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Both decision points already bound and priced what they send (12 000 and 8 000 bytes); the
+    cap in `Ask::check` is the floor every later point stands on.
+  - A reviewer's worktree built `origin/main` into the shared target dir: cargo leaves a workspace
+    crate's path out of its hash, so its artifacts replaced this branch's and looked fresh, and
+    tests compiled against the old library. Touching the sources rebuilt them. Worktrees that
+    build need their own target dir, or a rebuild after.
