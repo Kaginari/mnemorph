@@ -30,7 +30,11 @@ export interface Transport {
 
 /** Start `mnemorphd` and speak to it on its stdin and stdout. */
 export function stdio(
-  options: { command?: string; world?: string; env?: NodeJS.ProcessEnv } = {},
+  options: {
+    command?: string | undefined;
+    world?: string | undefined;
+    env?: NodeJS.ProcessEnv | undefined;
+  } = {},
 ): Transport {
   const args = options.world ? ['--world', options.world] : [];
   const child = spawn(options.command ?? 'mnemorphd', args, {
@@ -68,6 +72,10 @@ export function stdio(
     close: () => {
       if (!closed) child.stdin.end();
       close('the client closed the connection');
+      // A core that does not leave when its input ends is stopped.
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+      }, 1000).unref();
     },
   };
 }
@@ -93,6 +101,7 @@ export class Client {
   private next = 0;
   private readonly pending = new Map<number, Pending>();
   private readonly listeners = new Set<(event: Arrived) => void>();
+  private readonly closers = new Set<(why: string) => void>();
   private gate: GateHandler = () => ({ allow: false, reason: 'no one is there to approve it' });
   private closedWhy: string | undefined;
   /** The highest `seq` seen: replay asks from here. */
@@ -103,6 +112,7 @@ export class Client {
     transport.onLine((line) => this.receive(line));
     transport.onClose((why) => {
       this.closedWhy ??= why;
+      for (const l of this.closers) l(this.closedWhy);
       for (const p of this.pending.values()) p.reject(new Error(why));
       this.pending.clear();
     });
@@ -148,10 +158,23 @@ export class Client {
     this.transport.close();
   }
 
+  /** Close this end without asking: the core's input ends, and a core that does not leave is
+   * stopped. */
+  close(): void {
+    this.closedWhy ??= 'the client closed the connection';
+    this.transport.close();
+  }
+
   /** Listen to every event, in order, once each; returns the way to stop. */
   on(listener: (event: Arrived) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Called once when the connection closes, with why; returns the way to stop. */
+  onClosed(listener: (why: string) => void): () => void {
+    this.closers.add(listener);
+    return () => this.closers.delete(listener);
   }
 
   /** Answer the human gate with `handler`. */

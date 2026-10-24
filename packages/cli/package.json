@@ -7,12 +7,22 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "tsup src/cli.ts --format esm --clean"
+    "build": "tsup"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "bin": {
     "mnemorph": "./dist/cli.js"
+  },
+  "dependencies": {
+    "@mnemorph/sdk": "workspace:*",
+    "@mnemorph/theme": "workspace:*",
+    "ink": "^8.0.0",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "ink-testing-library": "^4.0.0"
   }
 }
