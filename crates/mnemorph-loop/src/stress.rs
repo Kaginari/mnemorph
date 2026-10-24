@@ -80,6 +80,17 @@ pub struct Bench {
     pub since_progress: u32,
     /// Muted visits since its last green: a landing does not reset them.
     pub muted_streak: u32,
+    /// Piped runs a sure decision read from their output, green or red, instead of muting them.
+    pub read: u32,
+}
+
+/// What a decision read a piped bench run's output as, when it was sure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Read {
+    /// Every test passed.
+    Green,
+    /// A test failed.
+    Red,
 }
 
 /// The bench a command runs, if it runs one: the command before any pipe, trimmed — piped or
@@ -127,7 +138,8 @@ pub fn bench_of(command: &str) -> Option<String> {
 }
 
 /// Whether a bench run hides its exit status: piped, or followed by `;` or `||`.
-fn muted(command: &str) -> bool {
+#[must_use]
+pub fn muted(command: &str) -> bool {
     command.contains('|') || command.contains(';')
 }
 
@@ -161,6 +173,18 @@ impl Stress {
     /// Read one act. Every landing resets the triggers it relieves, so a relieved run is not
     /// stopped by its own past.
     pub fn act(&mut self, call: &str, command: Option<&str>, o: &Outcome) -> Vec<Signal> {
+        self.act_read(call, command, o, None)
+    }
+
+    /// [`Self::act`], with what a decision read a piped bench run as: a sure read counts the run
+    /// green or red, as if its exit status had been seen; no read leaves it muted.
+    pub fn act_read(
+        &mut self,
+        call: &str,
+        command: Option<&str>,
+        o: &Outcome,
+        read: Option<Read>,
+    ) -> Vec<Signal> {
         let mut out = Vec::new();
         // The same call again: its result will not change.
         if self.last_call.as_deref() == Some(call) {
@@ -189,8 +213,22 @@ impl Stress {
             b.visits += 1;
             b.since_progress += 1;
             if hidden {
-                b.muted += 1;
-                b.muted_streak += 1;
+                match read {
+                    Some(Read::Green) => {
+                        b.read += 1;
+                        b.green += 1;
+                        b.since_progress = 0;
+                        b.muted_streak = 0;
+                    }
+                    Some(Read::Red) => {
+                        b.read += 1;
+                        b.red += 1;
+                    }
+                    None => {
+                        b.muted += 1;
+                        b.muted_streak += 1;
+                    }
+                }
             } else if o.is_error {
                 b.red += 1;
             } else {

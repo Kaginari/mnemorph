@@ -1057,3 +1057,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     goes as it is, between markers made for the call); no id joined a decision to its outcome
     (now `DecisionRow.id` and `OutcomeRow`); `jev-latest` was assumed for jeff (`decide.model` is
     required with `via`).
+
+---
+
+### [2026-10-24T14:10:00+02:00] rimuru — the first decision point: a piped test run, read
+- **Task:** Veldora, after a side note that `decide.via` changed nothing: "can you implement it?"
+  The piped bench was the point already in the loop's code. The same turn sent a Jev key, so the
+  wire was also proven live.
+- **Files:** crates/mnemorph-loop/src/decisions.rs (`decisions` from the config, the fallback
+  through the run's own model; `bench_ask`, the output's tail; `bench_read`), src/run.rs
+  (`with_decisions`; the act step waits on a decision for a piped bench, Esc cancels it; a note
+  in the beat journal; the decision row), src/stress.rs (`act_read`, `Read`, `Bench.read`;
+  `muted` public), mnemorph-config (`decide.bench`, on by default), tests/decisions.rs (a sure
+  green unstalls the run that stalled; an unsure stated read stays muted; a seen status asks
+  nothing; the config builds it), mnemorph-provider tests/live_systemone.rs (one real decision,
+  opt-in), docs/03-loop.md, docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`; the live test once against TypeSafe: `jev-1.14.0`
+  read a two-failure pytest log red at 1.00 and "every test passed" at 0.01, measured, 350 ms,
+  392 input tokens, the strict reading satisfied.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Jev's real answers sum to exactly 1 over exactly the asked labels: the strict reading the
+    review asked for holds against the live service.
+  - A decision point belongs where the instrument already counts: the bench tally takes a read
+    as if the exit status had been seen, so no new stall rule was needed.

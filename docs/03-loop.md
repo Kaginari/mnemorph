@@ -180,7 +180,12 @@ greens and muted runs. A run that hides its exit status (`cargo test | tail`,
 `cargo test; echo ok`) is muted, never green. Red runs with fixes landing between them are
 test-driven work; twelve with nothing landed stop the run, and so do eight muted runs in a row,
 however much landed between them: the body that ran one bench 63 times in twenty minutes, every
-run piped, is the reason.
+run piped, is the reason. With decisions on (`decide.bench`, on by default), a piped run's output
+is read instead of muted: the decider (a System One provider when `decide.via` names one, else
+`decide.llm`) answers green, red or unknown, and a sure green or red counts as if the exit status
+had been seen. An unsure answer, a failed decision, or an Esc while it decides leaves the run
+muted, as it was; every decision is journaled in `.mnemorph/instruments/decisions.jsonl`, and a
+note in the beat journal says who read it and how sure it was.
 
 The human's configuration reaches a run through `configure`: the attic's limits, the stress
 line, the guard rules that ask instead of refusing, and whether commands may run unguarded.
