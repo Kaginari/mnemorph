@@ -26,7 +26,7 @@ flowchart TB
       GS --> OWN["own(path)<br/>exactly one owner"]
     end
     subgraph plural["🌐 the outer layer — many voices, kept apart"]
-      F["facts<br/>by · source · counters"]
+      F["facts<br/>keyed · anchored · triaged"]
       R["relations<br/>between worlds"]
     end
     U["@U territory"] --> F
@@ -57,7 +57,10 @@ ask it about any path and it names one creature, or says nobody, and Rimuru must
 Around the core sit two things that are not one person's to decide. **Facts**: what creatures
 learned about their territory, each remembered with who said it and on what evidence. When one
 creature says the opposite of another, the ontology does not pick the newer one; it marks the
-fact *contested*, shows both sides, and waits for a check, the Orc or the human. **Relations**:
+fact *contested*, shows both sides, and waits for a check, the Orc or the human. Disagreement is
+caught even when nobody flags it: facts with a fixed key are compared by code, a fact whose
+evidence changed is marked for a recheck, and a new fact that resembles an old one on the same
+path is put in front of the Orc, who must say how the two relate. **Relations**:
 how this world connects to others — it deploys one, reads secrets from another. A relation is
 learned only when it is seen twice, proposed to the human, and dropped again if it stops being
 seen.
@@ -147,11 +150,13 @@ and its normalised text, so every assertion of the same fact is one more *suppor
 same id. `<about>` is always a path — it contains a `/` or starts with `.` — so the first word of
 a fact's text is never mistaken for one. On the wire:
 
-    @U territory <about> <fact>                  # asserts a fact
+    @U territory <about> <key>=<value>           # a keyed fact
+    @U territory <about> <fact>                  # a free fact
     @U territory <about> !#<fact-id> <reason>    # counters one, naming it
 
-A creature *supports* a fact by asserting it, and *counters* it with the second form. For a
-fact, count distinct creatures — $p$ supporters and $q$ counters — and read its status in order:
+A creature *supports* a fact by asserting it, and *counters* it with the third form, or by one of
+the ways below that need no one to name anything. For a fact, count distinct creatures — $p$
+supporters and $q$ counters — and read its status in order:
 
 | Status | Rule |
 |---|---|
@@ -164,6 +169,62 @@ fact, count distinct creatures — $p$ supporters and $q$ counters — and read 
 The rows partition every case. The 0.35 tolerance is DIKWP-MESH's gluing threshold, applied to
 creatures instead of tags and measured on the losing side, so more counters move a fact towards
 *countered*, never back towards agreement.
+
+### Catching what nobody flags
+
+Agents do not volunteer disagreement: a body that believes the opposite of an old fact usually
+just writes its own. DIKWP-MESH could count stances because its data had them filled in by hand.
+Mnemorph derives counters three ways, cheapest first, and only the last costs a model any tokens.
+
+**1. Keyed facts, compared by code.** A compiled vocabulary of keys, each with one value per path:
+
+| Key | Value | Inherited by paths below |
+|---|---|---|
+| `entry` | a file inside the path | no |
+| `build` | a command | no |
+| `test` | a command | no |
+| `generated` | `yes` or `no` | yes |
+| `deprecated` | `yes`, `no` or `by <path>` | yes |
+
+Each key is a functional property, a shape the core already checks:
+$\lvert \lbrace v : (\text{about}, k, v) \rbrace \rvert \le 1$, after normalising $v$ (commands with
+whitespace collapsed, paths normalised). Two creatures asserting different values for the same key
+on the same path, or on a path below one where an inherited key is set, counter each other
+automatically: each assertion is a support event on its own fact and a counter event on every
+fact it collides with. The status table then applies unchanged, and no one had to name an id.
+
+**2. Anchors that drift.** A fact's source records a digest of what it points at: the cited lines
+of a `file:line`, the listing of a directory, a commit (which never drifts), a journal entry (never
+either). When the digest no longer matches, the fact reads **stale** wherever it is shown, and
+`onto check` raises a `stale-fact` finding. Staleness is computed, not stored, so it never adds a
+counter; a creature that asserts the fact again re-anchors it. Most contradictions in a codebase
+are a fact written before the code moved, and this catches them with a hash.
+
+**3. Triage on collision.** A free fact lands through its body's parent (the Orc, for a Slime).
+If the path, or a path above or below it, already holds active free facts, the landing shows the
+parent the three that rank highest by BM25 against the new text, above a floor $\theta_t$, and the
+parent's verdict labels the new fact against each:
+
+    @V #<new-id> support #<id>      # the same fact: merged as a support event
+    @V #<new-id> counter #<id>      # the opposite: a counter event
+    @V #<new-id> refines #<id>      # narrower: both stand, linked
+    @V #<new-id> distinct           # unrelated to all shown
+
+A collision left unlabeled keeps the new fact **single** and raises an `untriaged-fact` finding.
+Similarity only chooses what to compare; it never makes a fact contested by itself, because two
+facts that share words agree as often as they clash. The cost is bounded: at most three candidate
+lines per landed free fact, and none when nothing collides. Keyed facts skip triage — code already
+decided.
+
+A contradiction slips through only when it is free text, *and* recall misses the older fact or
+the parent mislabels it:
+
+```math
+\Pr[\text{silent}] \le \Pr[\text{free}] \cdot \big(\Pr[\text{old fact not in the top 3}] + \Pr[\text{mislabel}]\big)
+```
+
+Each term is pushed down by a different lever: more keys shrink the first, the recall fixtures
+measure the second, and the parent's own verdicts are what the value ledger scores.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
 proof: a landing by the path's owner that passed its gate and cites the fact, the Orc's verdict
@@ -226,6 +287,8 @@ blocking. Findings are never summed into a score.
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
 | `prose-claim` | low | a doc's prose names a path its Territory field does not claim |
+| `stale-fact` | low | a fact whose anchor's digest no longer matches |
+| `untriaged-fact` | low | a free fact landed beside similar ones without the parent's label |
 
 `mnemorph onto check` prints `@S PASS|FAIL <n> findings` with each finding's code, severity and
 `file:line`; evolution's overlay must add none.

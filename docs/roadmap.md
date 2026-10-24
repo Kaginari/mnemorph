@@ -219,7 +219,9 @@ build Mnemorph in solo mode.
   3. the shapes as findings with codes and severities; *right author* failing on critical and
      high ones that touch the landing;
   4. territory facts as events — `by`, source, support, counter, settle — with their status and
-     the `contested-fact` finding; `@ONTO` showing both sides;
+     the `contested-fact` finding; `@ONTO` showing both sides; counters derived without anyone
+     naming an id: keyed facts compared by code, anchors that drift, the parent's triage on
+     collision;
   5. relation sightings, the named-twice proposal with its synonym check and expiry, and
      `onto check --dimension`.
 
@@ -227,7 +229,10 @@ build Mnemorph in solo mode.
 gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,
 the queue or scratch; an ontology fixture with an overlap, a loop in the chain, a contested fact
 and one dimension obstruction reports each with its code and severity, and the gate blocks only
-the critical and high ones; one relation sighted twice by two bodies produces exactly one manifest
+the critical and high ones; two creatures that write different `build=` values for one path,
+neither naming the other, make the fact contested; a fact whose cited lines change reads stale;
+a free fact resembling an older one reaches the parent, and left unlabeled raises
+`untriaged-fact`; one relation sighted twice by two bodies produces exactly one manifest
 diff proposal and writes nothing.
 
 ### M8 — Memory and toolbox · L

@@ -285,6 +285,7 @@ Mnemorph's ontology inherits isekai's: a set of triples, rules and shapes.
 |---|---|---|
 | Claims indexed by observer, with stance and source | `SemanticAtom`, $\kappa_a$ | territory facts carry `by` and `source`, and creatures support or counter them ([ontology](../09-ontology.md#facts-who-said-what)) |
 | Contradictions kept as obstructions, decided by the counting rule | `gluing.py` | the `contested-fact` finding, with the 0.35 tolerance measured on the losing side; the projection shows both sides |
+| Stances as input | `SemanticAtom.stance`, filled in by hand in the demo bundle | agents do not volunteer stances, so counters are derived: keyed facts compared by code, anchors that drift, and the parent's triage when a new fact resembles an old one ([ontology](../09-ontology.md#catching-what-nobody-flags)) |
 | Local sections glued on overlaps | §4 | worlds of a dimension as local sections: a relation two worlds state differently is an obstruction reported to Rimuru |
 | The install protocol for a new axis | formal model §6 | learning a relation: a sightings ledger, named twice, a no-synonym check, the human's yes, a rollback by expiry |
 | Coded findings with severities | `audit.py` | every `onto check` finding has a code and a severity; the gate blocks on critical and high in the landing's territory |
