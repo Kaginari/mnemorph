@@ -35,6 +35,12 @@ pub enum Beat {
         /// The text.
         text: String,
     },
+    /// A warning from the provider (a tool call cut by the output ceiling, …): journaled for the
+    /// human, never fed back to the model.
+    Warning {
+        /// The text.
+        text: String,
+    },
     /// The end gate's verdict on an answer.
     Gate {
         /// The paths the run changed.
@@ -131,7 +137,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
             }
             Beat::Model { content, .. } => {
                 close(&mut messages, &mut pending);
-                let blocks: Vec<Block> = content.iter().filter_map(json_block).collect();
+                let blocks = clean(content.iter().filter_map(json_block).collect());
                 pending = blocks
                     .iter()
                     .filter_map(|b| match b {
@@ -161,7 +167,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 );
             }
             Beat::End { .. } => close(&mut messages, &mut pending),
-            Beat::Gate { .. } => {}
+            Beat::Gate { .. } | Beat::Warning { .. } => {}
         }
     }
     close(&mut messages, &mut pending);
@@ -178,4 +184,39 @@ pub(crate) fn push_user(messages: &mut Vec<Message>, content: Vec<Block>) {
             content,
         }),
     }
+}
+
+/// What the model returned, made fit to send back: empty text blocks dropped, a repeated tool
+/// call id made unique, and an empty reply stated as such — a provider refuses all three, and
+/// the loop must never build a conversation it would refuse.
+#[must_use]
+pub fn clean(content: Vec<Block>) -> Vec<Block> {
+    let mut ids = std::collections::BTreeSet::new();
+    let mut out: Vec<Block> = content
+        .into_iter()
+        .filter(|b| !matches!(b, Block::Text { text, .. } if text.trim().is_empty()))
+        .map(|b| match b {
+            Block::ToolUse { id, name, input } => {
+                let mut unique = id.clone();
+                let mut n = 2;
+                while !ids.insert(unique.clone()) {
+                    unique = format!("{id}-{n}");
+                    n += 1;
+                }
+                Block::ToolUse {
+                    id: unique,
+                    name,
+                    input,
+                }
+            }
+            other => other,
+        })
+        .collect();
+    if out.is_empty() {
+        out.push(Block::Text {
+            text: "(the model returned nothing)".into(),
+            cache: false,
+        });
+    }
+    out
 }

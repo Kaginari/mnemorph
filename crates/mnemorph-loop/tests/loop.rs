@@ -464,3 +464,187 @@ async fn the_cached_prefix_is_stable() {
         "the prefix ends cached"
     );
 }
+
+fn reply(content: Vec<Block>, stop: StopReason) -> Result<Response, Error> {
+    Ok(Response {
+        id: "m".into(),
+        model: "claude-sonnet-5-5".into(),
+        content,
+        stop,
+        stop_details: None,
+        usage: usage(100),
+        warnings: vec![],
+    })
+}
+
+/// An empty reply is common on OpenAI-compatible servers: it is not an answer, and it must not
+/// poison the conversation for the asks after it.
+#[tokio::test]
+async fn an_empty_reply_is_nudged_and_the_session_lives_on() {
+    let w = World::new("empty");
+    let model = Arc::new(ScriptedModel::new([
+        reply(vec![], StopReason::EndTurn),
+        reply(
+            vec![Block::Text {
+                text: String::new(),
+                cache: false,
+            }],
+            StopReason::EndTurn,
+        ),
+        answer("here"),
+        answer("again"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    assert_eq!(ask(&mut run, "one").await, Ending::Answered("here".into()));
+    assert_eq!(ask(&mut run, "two").await, Ending::Answered("again".into()));
+    for r in model.requests() {
+        mnemorph_loop::validate(&r.messages).unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_reply_cut_by_the_ceiling_is_continued() {
+    let w = World::new("maxtokens");
+    let model = Arc::new(ScriptedModel::new([
+        reply(
+            vec![Block::Text {
+                text: "I will now ed".into(),
+                cache: false,
+            }],
+            StopReason::MaxTokens,
+        ),
+        answer("edited"),
+    ]));
+    let mut run = w.run(model, limits());
+    assert_eq!(
+        ask(&mut run, "edit").await,
+        Ending::Answered("edited".into())
+    );
+}
+
+/// The stress instruments belong to an ask: a session of questions is not thrash.
+#[tokio::test]
+async fn stress_starts_again_with_each_ask() {
+    let w = World::new("per-ask");
+    fs::write(w.world().join("a.txt"), "a\n").unwrap();
+    let script = (0..5).flat_map(|i| {
+        [
+            tool(&format!("t{i}"), "read", json!({"path": "a.txt"})),
+            answer("a"),
+        ]
+    });
+    let mut run = w.run(Arc::new(ScriptedModel::new(script)), limits());
+    for _ in 0..5 {
+        assert_eq!(
+            ask(&mut run, "what is in a.txt?").await,
+            Ending::Answered("a".into())
+        );
+    }
+}
+
+/// An Esc that landed after the last answer does not interrupt the next ask.
+#[tokio::test]
+async fn a_stale_esc_does_not_interrupt_the_next_ask() {
+    let w = World::new("stale-esc");
+    let mut run = w.run(
+        Arc::new(ScriptedModel::new([answer("one"), answer("two")])),
+        limits(),
+    );
+    assert_eq!(ask(&mut run, "first").await, Ending::Answered("one".into()));
+    run.interrupt().fire();
+    assert_eq!(
+        ask(&mut run, "second").await,
+        Ending::Answered("two".into())
+    );
+}
+
+/// A budget checkpoint resumes knowing what was spent: no call it already could not afford.
+#[tokio::test]
+async fn resume_remembers_the_spend() {
+    let w = World::new("resume-spend");
+    let first = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*"})),
+        answer("never"),
+    ]));
+    let mut run = w.run(
+        first,
+        Limits {
+            budget_wt: Some(1),
+            ..limits()
+        },
+    );
+    assert!(
+        matches!(ask(&mut run, "spend").await, Ending::Checkpoint { why, .. } if why.starts_with("budget"))
+    );
+    let second = Arc::new(ScriptedModel::new([answer("should not be called")]));
+    let mut run = Run::resume(
+        body(),
+        Limits {
+            budget_wt: Some(1),
+            ..limits()
+        },
+        w.setup(second.clone()),
+    )
+    .unwrap();
+    assert!(
+        matches!(ask(&mut run, "go on").await, Ending::Checkpoint { why, .. } if why.starts_with("budget"))
+    );
+    assert!(second.requests().is_empty(), "no call past the budget");
+}
+
+#[tokio::test]
+async fn a_repeated_tool_id_is_made_unique() {
+    let w = World::new("dup-ids");
+    let calls = vec![
+        Block::ToolUse {
+            id: "x".into(),
+            name: "glob".into(),
+            input: json!({"pattern": "*"}),
+        },
+        Block::ToolUse {
+            id: "x".into(),
+            name: "glob".into(),
+            input: json!({"pattern": "*"}),
+        },
+    ];
+    let model = Arc::new(ScriptedModel::new([
+        reply(calls, StopReason::ToolUse),
+        answer("ok"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    assert_eq!(ask(&mut run, "twice").await, Ending::Answered("ok".into()));
+    mnemorph_loop::validate(&model.requests()[1].messages).unwrap();
+}
+
+/// Thinking travels as an opaque block: the journal keeps it whole so a resume sends it back
+/// unchanged.
+#[tokio::test]
+async fn opaque_blocks_survive_the_journal() {
+    let w = World::new("opaque");
+    let thinking =
+        Block::Opaque(json!({"type": "thinking", "thinking": "plan", "signature": "sig=="}));
+    let model = Arc::new(ScriptedModel::new([
+        reply(
+            vec![
+                thinking.clone(),
+                Block::ToolUse {
+                    id: "t1".into(),
+                    name: "glob".into(),
+                    input: json!({"pattern": "*"}),
+                },
+            ],
+            StopReason::ToolUse,
+        ),
+        answer("never"),
+    ]));
+    let mut run = w.run(
+        model,
+        Limits {
+            steps: 1,
+            ..limits()
+        },
+    );
+    ask(&mut run, "think").await;
+    let rebuilt = conversation(&w.journal().read().unwrap().rows);
+    assert_eq!(rebuilt[1].content[0], thinking);
+}

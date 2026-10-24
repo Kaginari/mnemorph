@@ -15,9 +15,6 @@ use ignore::WalkBuilder;
 use mnemorph_tools::{Context, Tool, call};
 use serde_json::json;
 
-/// Bytes of a test file the snapshot keeps, to count its skip markers.
-const TEST_BYTES: u64 = 256 * 1024;
-
 /// What marks a test as skipped, across the usual frameworks.
 const SKIP_MARKERS: &[&str] = &[
     "#[ignore",
@@ -31,6 +28,25 @@ const SKIP_MARKERS: &[&str] = &[
     "t.Skip(",
     "@Disabled",
     "skip(\"",
+    ".only(",
+    "t.Skipf(",
+    "t.SkipNow(",
+    "it.todo(",
+    "test.todo(",
+    "pytest.skip(",
+];
+
+/// What declares a test, across the usual frameworks: a file with fewer than before lost one.
+const TEST_MARKERS: &[&str] = &[
+    "#[test]",
+    "#[tokio::test",
+    "\nfunc Test",
+    "def test_",
+    "\nit(",
+    " it(",
+    "\ntest(",
+    " test(",
+    "@Test",
 ];
 
 /// The gate's configuration: the commands that must pass.
@@ -44,7 +60,8 @@ pub struct EndGate {
 struct Seen {
     len: u64,
     modified: Option<std::time::SystemTime>,
-    test_text: Option<String>,
+    /// For a test file, read whole whatever its size: its skip markers and its tests.
+    counts: Option<(usize, usize)>,
 }
 
 /// The files of a world at one moment (honouring `.gitignore`; `.git` and `.mnemorph` aside).
@@ -68,14 +85,17 @@ pub fn snapshot(world: &Path) -> Tree {
         let path = entry.path();
         let Ok(meta) = entry.metadata() else { continue };
         let rel = path.strip_prefix(world).unwrap_or(path).to_path_buf();
-        let test_text = (is_test(&rel) && meta.len() <= TEST_BYTES)
-            .then(|| fs::read_to_string(path).unwrap_or_default());
+        let counts = is_test(&rel).then(|| {
+            let text = String::from_utf8_lossy(&fs::read(path).unwrap_or_default()).into_owned();
+            (count(&text, SKIP_MARKERS), count(&text, TEST_MARKERS))
+        });
+
         files.insert(
             rel,
             Seen {
                 len: meta.len(),
                 modified: meta.modified().ok(),
-                test_text,
+                counts,
             },
         );
     }
@@ -100,8 +120,8 @@ fn is_test(rel: &Path) -> bool {
         || name.contains(".spec.")
 }
 
-fn skips(text: &str) -> usize {
-    SKIP_MARKERS.iter().map(|m| text.matches(m).count()).sum()
+fn count(text: &str, markers: &[&str]) -> usize {
+    markers.iter().map(|m| text.matches(m).count()).sum()
 }
 
 /// The gate's word on a run.
@@ -153,11 +173,17 @@ impl EndGate {
             if was.is_none() {
                 changed.push(path.clone());
             }
-            if let Some(text) = &now.test_text {
-                let before_skips = was.and_then(|w| w.test_text.as_deref()).map_or(0, skips);
-                if skips(text) > before_skips {
+            if let Some((skips, tests)) = now.counts {
+                let (was_skips, was_tests) = was.and_then(|w| w.counts).unwrap_or((0, 0));
+                if skips > was_skips {
                     failures.push(format!(
                         "tests intact: `{}` skips a test it did not skip before",
+                        path.display()
+                    ));
+                }
+                if tests < was_tests {
+                    failures.push(format!(
+                        "tests intact: `{}` has {tests} tests, it had {was_tests}",
                         path.display()
                     ));
                 }

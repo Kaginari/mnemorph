@@ -11,7 +11,7 @@ use mnemorph_provider::{
 use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
-use crate::beats::{Beat, block_json, conversation, push_user};
+use crate::beats::{Beat, block_json, clean, conversation, push_user};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
 use crate::sequence::validate;
@@ -41,7 +41,7 @@ pub struct Limits {
     pub window: u64,
     /// The most a turn may write.
     pub max_tokens: u32,
-    /// The carved budget, in weighted tokens (thousandths), if any.
+    /// The carved budget, in weighted tokens, if any.
     pub budget_wt: Option<u64>,
 }
 
@@ -229,6 +229,18 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // The cost and context meters read the ledger, so a budget or context checkpoint does
+        // not resume into one more call it already could not afford.
+        if let Some(ledger) = &run.ledger {
+            let rows: Vec<UsageRow> = ledger
+                .read()?
+                .rows
+                .into_iter()
+                .filter(|r| r.run == run.caller.run)
+                .collect();
+            run.spent_wt = rows.iter().map(|r| r.wt).sum();
+            run.last_occupancy = rows.last().map_or(0, |r| occupancy(r.usage));
+        }
         Ok(run)
     }
 
@@ -320,8 +332,11 @@ impl Run {
         if self.gate.is_some() {
             self.before = Some(snapshot(self.cx.world()));
         }
-        // The step budget is each commission's: a human ask is one.
+        // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
+        self.stress = Stress::default();
+        // Only an Esc fired during this ask counts.
+        self.interrupt.take();
         let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
@@ -364,9 +379,8 @@ impl Run {
                 Ok(Err(e)) => return self.end(Ending::Failed(e.to_string())),
                 Ok(Ok(r)) => r,
             };
-            self.record_turn(&response);
-            let calls: Vec<(String, String, String)> = response
-                .content
+            let content = self.record_turn(&response);
+            let calls: Vec<(String, String, String)> = content
                 .iter()
                 .filter_map(|b| match b {
                     Block::ToolUse { id, name, input } => {
@@ -384,9 +398,17 @@ impl Run {
                         );
                         return self.end(Ending::Failed(why));
                     }
-                    // A server-paused turn continues with what it has.
-                    StopReason::PauseTurn => continue,
-                    _ => match self.judge(text_of(&response.content), &mut gate_retried) {
+                    // Not an answer: a reply cut by the output ceiling, a paused turn, an empty
+                    // reply. The body is told and goes on, bounded by the step meter.
+                    StopReason::MaxTokens | StopReason::PauseTurn => {
+                        self.nudge("Your reply was cut short; continue where you stopped.");
+                        continue;
+                    }
+                    _ if text_of(&response.content).trim().is_empty() => {
+                        self.nudge("Your reply was empty. Answer the ask, or call a tool.");
+                        continue;
+                    }
+                    _ => match self.judge(text_of(&content), &mut gate_retried) {
                         Some(ending) => return self.end(ending),
                         None => continue,
                     },
@@ -397,6 +419,20 @@ impl Run {
                 return self.end(ending);
             }
         }
+    }
+
+    /// Tell the body something in its own turn, and journal it.
+    fn nudge(&mut self, text: &str) {
+        self.record(&Beat::Note {
+            text: text.to_owned(),
+        });
+        push_user(
+            &mut self.messages,
+            vec![Block::Text {
+                text: text.to_owned(),
+                cache: false,
+            }],
+        );
     }
 
     /// The end gate on an answer: the answer, a failure, or — the first time it fails — `None`,
@@ -464,7 +500,7 @@ impl Run {
     }
 
     /// Count the turn, price it into the ledger, journal it, add it to the conversation.
-    fn record_turn(&mut self, response: &mnemorph_provider::Response) {
+    fn record_turn(&mut self, response: &mnemorph_provider::Response) -> Vec<Block> {
         self.steps += 1;
         self.ask_steps += 1;
         self.last_occupancy = occupancy(response.usage);
@@ -485,14 +521,19 @@ impl Run {
             StopReason::Other(s) => s.clone(),
             other => format!("{other:?}"),
         };
+        let content = clean(response.content.clone());
         self.record(&Beat::Model {
-            content: response.content.iter().map(block_json).collect(),
+            content: content.iter().map(block_json).collect(),
             stop,
         });
+        for w in &response.warnings {
+            self.record(&Beat::Warning { text: w.clone() });
+        }
         self.messages.push(Message {
             role: Role::Assistant,
-            content: response.content.clone(),
+            content: content.clone(),
         });
+        content
     }
 
     /// Run each call in order, give every result back, and read the instruments: a reason to

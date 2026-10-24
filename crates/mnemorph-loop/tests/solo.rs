@@ -254,7 +254,11 @@ async fn an_answer_that_changed_nothing_skips_the_gate() {
         ask(&mut run, "how is it built?").await,
         Ending::Answered("the build uses just".into())
     );
-    assert!(gate_beats(&w).is_empty() || gate_beats(&w)[0].is_empty());
+    assert_eq!(
+        gate_beats(&w),
+        vec![Vec::<String>::new()],
+        "judged, nothing changed, nothing failed"
+    );
 }
 
 /// Solo holds no outward act: the shelf refuses it with the lawful route.
@@ -271,4 +275,77 @@ async fn solo_cannot_reach_outside() {
         matches!(b, Block::ToolResult { content, is_error: true, .. } if content.contains("not on the slime shelf") && content.contains("kijin"))
     });
     assert!(refused);
+}
+
+/// `.only(` runs one test and silently skips the rest.
+#[tokio::test]
+async fn a_focused_test_fails_the_gate() {
+    let w = World::new("only");
+    fs::write(
+        w.world().join("login.test.js"),
+        "describe('login', () => { it('works', () => {}) })\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "edit",
+            json!({"path": "login.test.js", "old_string": "describe(", "new_string": "describe.only("}),
+        ),
+        answer("done"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, &[]);
+    assert!(
+        matches!(ask(&mut run, "focus").await, Ending::Failed(why) if why.contains("skips a test"))
+    );
+}
+
+/// A large test file is read whole: padding it past any cap hides nothing.
+#[tokio::test]
+async fn a_large_test_file_is_read_whole() {
+    let w = World::new("large");
+    let filler = "// filler\n".repeat(40_000);
+    fs::write(
+        w.world().join("big_test.rs"),
+        format!("{filler}#[test]\nfn a() {{}}\n"),
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "edit",
+            json!({"path": "big_test.rs", "old_string": "#[test]\nfn a", "new_string": "#[test]\n#[ignore]\nfn a"}),
+        ),
+        answer("done"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, &[]);
+    assert!(
+        matches!(ask(&mut run, "quiet it").await, Ending::Failed(why) if why.contains("skips a test"))
+    );
+}
+
+/// Deleting a test from a file is deleting a test.
+#[tokio::test]
+async fn a_removed_test_function_fails_the_gate() {
+    let w = World::new("removed");
+    fs::write(
+        w.world().join("auth_test.rs"),
+        "#[test]\nfn a() {}\n#[test]\nfn b() {}\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "edit",
+            json!({"path": "auth_test.rs", "old_string": "#[test]\nfn b() {}\n", "new_string": ""}),
+        ),
+        answer("done"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, &[]);
+    assert!(
+        matches!(ask(&mut run, "trim").await, Ending::Failed(why) if why.contains("has 1 tests, it had 2"))
+    );
 }
