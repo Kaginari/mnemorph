@@ -492,3 +492,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** the repository is public; the book change in review as a pull request.
 - **Learned:** escalation reads only code-held signals — occupancy from the ledger, a soil
   refusal, a shelf refusal — so solo never decides by itself that it is "stressed".
+
+---
+
+### [2026-10-24T02:03:52+02:00] rimuru — Veldora wears the emblem
+- **Task:** Veldora asked for the hex emblem as their own icon.
+- **Files:** assets/portraits/veldora{,@64,@32}.png (from assets/brand/mnemorph-hex), assets/cards/veldora.png (redrawn), assets/README.md.
+- **Gate:** n/a. Instruments: the redrawn card viewed.
+- **Result:** in review as a pull request.
+- **Learned:** every portrait now comes from one Gemini sheet — the set is uniform.
