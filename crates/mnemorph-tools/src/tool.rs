@@ -463,12 +463,54 @@ impl Context {
         }
     }
 
+    /// As [`Self::writable`], but the last component is the entry itself, never what a link
+    /// there points to: what a delete removes, or a move renames.
+    pub(crate) fn writable_entry(&self, text: &str) -> Result<PathBuf, String> {
+        let lexical =
+            join(Some(&self.world), text).ok_or_else(|| format!("`{text}` is not a path"))?;
+        self.writable_at(&lexical)
+    }
+
+    /// As [`Self::writable_entry`], for a path already in hand (a walk's entry): never through a
+    /// lossy string.
+    pub(crate) fn writable_at(&self, lexical: &Path) -> Result<PathBuf, String> {
+        let text = lexical.display();
+        let (Some(dir), Some(name)) = (lexical.parent(), lexical.file_name()) else {
+            return Err(format!("`{text}` names no entry"));
+        };
+        let path = real(dir).join(name);
+        if !path.starts_with(&self.world) || path == self.world {
+            return Err(format!(
+                "`{text}` is outside the world ({}); tools stay inside it",
+                path.display()
+            ));
+        }
+        self.in_soil(path)
+    }
+
+    /// Whether another's spot lies strictly inside `dir`: such a folder is never moved whole.
+    pub(crate) fn holds_spot(&self, dir: &Path) -> bool {
+        self.except.iter().any(|e| e.starts_with(dir) && e != dir)
+    }
+
     /// As [`Self::inside`], and the path must lie in the body's soil.
     pub(crate) fn writable(&self, text: &str) -> Result<PathBuf, String> {
         let path = self.inside(text)?;
+        self.in_soil(path)
+    }
+
+    /// The soil's judgement on a resolved path: git's files and the records are never a
+    /// tool's, and the rest must be admitted.
+    fn in_soil(&self, path: PathBuf) -> Result<PathBuf, String> {
         if crate::tripwire::protects(&self.world, &path) {
             return Err(format!(
                 "`{}` is protected: git's executable configuration and the world's records are not written by tools",
+                self.shown(&path)
+            ));
+        }
+        if path.starts_with(self.world.join(".git")) {
+            return Err(format!(
+                "`{}` is git's: landing is the harness's, never a tool's",
                 self.shown(&path)
             ));
         }

@@ -328,6 +328,14 @@ impl Attic {
             .collect()
     }
 
+    /// Whether `snap` holds the file `rel` (relative to the world): what a delete must know
+    /// before it may say a copy is kept.
+    #[must_use]
+    pub fn holds(&self, snap: &Snapshot, rel: &str) -> bool {
+        self.git(&["ls-tree", "--name-only", snap.tree.as_str(), "--", rel])
+            .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == rel)
+    }
+
     /// Put `paths` back as they were in `snap` (all of them when `paths` is empty).
     ///
     /// # Errors

@@ -202,6 +202,12 @@ impl Tool for Write {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
+        if crate::beneath::read(cx.world(), &path).is_ok_and(|b| b == a.content.as_bytes()) {
+            return Outcome::error(format!(
+                "`{}` already holds exactly that; nothing was written",
+                cx.shown(&path)
+            ));
+        }
         keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, a.content.as_bytes()) {
             return Outcome::error(format!("cannot write `{}`: {e}", cx.shown(&path)));
@@ -316,10 +322,16 @@ impl Tool for Edit {
             Err(e) => return Outcome::error(e),
         };
         let shown = cx.shown(&path);
-        let text = match crate::beneath::read(cx.world(), &path)
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-        {
-            Ok(t) => t,
+        let text = match crate::beneath::read(cx.world(), &path) {
+            Ok(b) => match String::from_utf8(b) {
+                Ok(t) => t,
+                // Rewriting it would replace the bytes that are not text: refused whole.
+                Err(_) => {
+                    return Outcome::error(format!(
+                        "`{shown}` is not UTF-8 text; edit would replace its bytes — rewrite it whole with write"
+                    ));
+                }
+            },
             Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
         };
         let (updated, n, first_line) =
@@ -457,9 +469,15 @@ impl Tool for MultiEdit {
             Err(e) => return Outcome::error(e),
         };
         let shown = cx.shown(&path);
-        let mut text = match crate::beneath::read(cx.world(), &path) {
-            Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+        let original = match crate::beneath::read(cx.world(), &path) {
+            Ok(b) => b,
             Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
+        };
+        // A file that is not UTF-8 text would come back with its bytes replaced: refused whole.
+        let Ok(mut text) = String::from_utf8(original.clone()) else {
+            return Outcome::error(format!(
+                "`{shown}` is not UTF-8 text; multiedit would replace its bytes — rewrite it whole with write"
+            ));
         };
         let mut total = 0;
         for (i, e) in a.edits.iter().enumerate() {
@@ -476,6 +494,11 @@ impl Tool for MultiEdit {
                     ));
                 }
             }
+        }
+        if text.as_bytes() == original.as_slice() {
+            return Outcome::error(format!(
+                "the edits leave `{shown}` as it was; nothing was written"
+            ));
         }
         keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, text.as_bytes()) {
@@ -540,7 +563,8 @@ impl Tool for Move {
             Ok(a) => a,
             Err(o) => return o,
         };
-        let (from, to) = match (cx.writable(&a.from), cx.writable(&a.to)) {
+        // The entries themselves: a link is moved as a link, never its target.
+        let (from, to) = match (cx.writable_entry(&a.from), cx.writable_entry(&a.to)) {
             (Ok(f), Ok(t)) => (f, t),
             (Err(e), _) | (_, Err(e)) => return Outcome::error(e),
         };
@@ -548,14 +572,37 @@ impl Tool for Move {
         let Ok(meta) = from.symlink_metadata() else {
             return Outcome::error(format!("`{shown_from}` does not exist"));
         };
+        if to.starts_with(&from) {
+            return Outcome::error(format!(
+                "cannot move `{shown_from}` into itself (`{shown_to}`)"
+            ));
+        }
         let mut moved = vec![from.clone()];
         if meta.is_dir() {
+            // A folder that holds another's spot, at either end, is never moved whole: its files
+            // may be the body's, the spot is not.
+            for (end, shown) in [(&from, &shown_from), (&to, &shown_to)] {
+                if cx.holds_spot(end) {
+                    return Outcome::error(format!(
+                        "`{shown}` holds another's spot; move the files that are yours one by one"
+                    ));
+                }
+            }
             // Every file the directory holds must be the body's to move, and land where it may.
-            for entry in walkdir(&from) {
+            let entries = match walkdir(&from) {
+                Ok(e) => e,
+                Err(dir) => {
+                    return Outcome::error(format!(
+                        "cannot move `{shown_from}`: `{}` cannot be read, so it cannot be checked",
+                        cx.shown(&dir)
+                    ));
+                }
+            };
+            for entry in entries {
                 let rel = entry.strip_prefix(&from).unwrap_or(&entry);
                 let landing = to.join(rel);
                 for p in [&entry, &landing] {
-                    if let Err(e) = cx.writable(&cx.shown(p)) {
+                    if let Err(e) = cx.writable_at(p) {
                         return Outcome::error(format!("cannot move `{shown_from}`: {e}"));
                     }
                 }
@@ -564,7 +611,7 @@ impl Tool for Move {
         }
         if to.symlink_metadata().is_ok() {
             return Outcome::error(format!(
-                "`{shown_to}` already exists; move does not overwrite — delete it first, or pick another name"
+                "`{shown_to}` already exists; move does not overwrite — pick another name, or delete it first"
             ));
         }
         keep(cx);
@@ -578,7 +625,16 @@ impl Tool for Move {
             format!("moved `{shown_from}` to `{shown_to}`"),
             ToolClass::Write,
         );
-        o.meta.wrote.extend([from, to]);
+        // What the call wrote: every file it moved, at both ends.
+        for p in &moved {
+            let rel = p.strip_prefix(&from).unwrap_or(Path::new(""));
+            o.meta.wrote.push(p.clone());
+            o.meta.wrote.push(if rel.as_os_str().is_empty() {
+                to.clone()
+            } else {
+                to.join(rel)
+            });
+        }
         o
     }
 }
@@ -627,7 +683,8 @@ impl Tool for Delete {
             Ok(a) => a,
             Err(o) => return o,
         };
-        let path = match cx.writable(&a.path) {
+        // The entry itself: a link is deleted as a link, never its target.
+        let path = match cx.writable_entry(&a.path) {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
@@ -635,9 +692,22 @@ impl Tool for Delete {
         match path.symlink_metadata() {
             Err(_) => return Outcome::error(format!("`{shown}` does not exist")),
             Ok(m) if m.is_dir() => {
-                return Outcome::error(format!(
-                    "`{shown}` is a directory; delete its files one by one"
-                ));
+                // An empty directory holds nothing to lose: it goes without a copy.
+                let empty = std::fs::read_dir(&path).is_ok_and(|mut d| d.next().is_none());
+                if !empty {
+                    return Outcome::error(format!(
+                        "`{shown}` is a directory with files in it; delete its files first"
+                    ));
+                }
+                if let Err(e) = crate::beneath::remove(cx.world(), &path, true) {
+                    return Outcome::error(format!("cannot delete `{shown}`: {e}"));
+                }
+                let mut o = Outcome::ok(
+                    format!("deleted the empty directory `{shown}`"),
+                    ToolClass::Write,
+                );
+                o.meta.wrote.push(path);
+                return o;
             }
             Ok(_) => {}
         }
@@ -647,12 +717,22 @@ impl Tool for Delete {
                 "delete keeps a copy in the attic first, and this body has no attic; nothing was deleted",
             );
         };
-        if let Err(e) = attic.snapshot("before a delete") {
+        let snap = match attic.snapshot("before a delete") {
+            Ok(snap) => snap,
+            Err(e) => {
+                return Outcome::error(format!(
+                    "the attic could not keep a copy ({e}); nothing was deleted"
+                ));
+            }
+        };
+        // The attic leaves out what the world ignores, build output and large files: a delete
+        // goes ahead only when the copy is really there.
+        if !attic.holds(&snap, &shown) {
             return Outcome::error(format!(
-                "the attic could not keep a copy ({e}); nothing was deleted"
+                "the attic keeps no copy of `{shown}` (ignored, build output, or too large); nothing was deleted — remove it with a command if it is yours to lose"
             ));
         }
-        if let Err(e) = crate::beneath::remove(cx.world(), &path) {
+        if let Err(e) = crate::beneath::remove(cx.world(), &path, false) {
             return Outcome::error(format!("cannot delete `{shown}`: {e}"));
         }
         cx.seen.remove(&path);
@@ -665,24 +745,24 @@ impl Tool for Delete {
     }
 }
 
-/// Every file under `dir`, without following links.
-fn walkdir(dir: &Path) -> Vec<std::path::PathBuf> {
+/// Every entry under `dir` that is not a directory — files and links, links never followed —
+/// or the first directory that cannot be read.
+fn walkdir(dir: &Path) -> Result<Vec<PathBuf>, PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in entries.filter_map(Result::ok) {
+        let entries = std::fs::read_dir(&d).map_err(|_| d.clone())?;
+        for e in entries {
+            let e = e.map_err(|_| d.clone())?;
             let p = e.path();
             match e.file_type() {
                 Ok(t) if t.is_dir() => stack.push(p),
                 Ok(_) => out.push(p),
-                Err(_) => {}
+                Err(_) => return Err(p),
             }
         }
     }
-    out
+    Ok(out)
 }
 
 // ── glob and grep ───────────────────────────────────────────────────────────

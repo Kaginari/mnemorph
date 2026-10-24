@@ -1944,3 +1944,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     a git store, so delete snapshots first and refuses when it cannot.
   - `patch` (a unified diff across files, for models trained on one) is the next tool: it
     deserves its own tests and review.
+
+---
+
+### [2026-10-25T00:11:17+02:00] rimuru — the file tools, reviewed twice: Opus, then Fable on Opus
+- **Task:** close what the review of #147 found. Opus 5.5 reviewed the code; Fable reviewed that
+  review and named what it missed.
+- **Files:**
+  - tools:
+    - files.rs:
+      - delete asks the attic whether it holds the file;
+      - move and delete act on the entry, never a link's target;
+      - a folder holding another's spot, at either end, is never moved whole, and nothing moves
+        into itself;
+      - an unreadable subdirectory refuses the move;
+      - a move reports its files;
+      - an empty directory may be deleted;
+      - an unchanged write or multiedit writes nothing;
+      - edits refuse non-UTF-8 text;
+    - beneath.rs — a failed rename unmakes its directories;
+    - tool.rs — `writable_entry`/`writable_at`, `holds_spot`, git's files refused;
+    - attic.rs — `holds`;
+  - tests;
+  - docs/05.
+- **Gate:** n/a. Instruments: a test for each finding; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - "Kept a copy" is a claim: ask the store, not the snapshot's success. The attic leaves out
+    what the world ignores, and a delete trusted it blindly.
+  - A tool that acts on a name — move, delete — must not resolve the last component. A tool that
+    acts on content — read, write, edit — must. The two need two checks.

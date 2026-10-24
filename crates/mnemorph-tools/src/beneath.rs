@@ -78,10 +78,16 @@ pub(crate) fn write(world: &Path, path: &Path, content: &[u8]) -> io::Result<()>
     Ok(())
 }
 
-/// Remove a file under the world, following no symlink on the way; a directory is refused.
-pub(crate) fn remove(world: &Path, path: &Path) -> io::Result<()> {
-    let (dir, name) = parent(world, path, false)?;
-    rustix::fs::unlinkat(&dir, name.as_str(), rustix::fs::AtFlags::empty())?;
+/// Remove a file, or an empty directory with `dir`, under the world, following no symlink on
+/// the way.
+pub(crate) fn remove(world: &Path, path: &Path, dir: bool) -> io::Result<()> {
+    let (parent_dir, name) = parent(world, path, false)?;
+    let flags = if dir {
+        rustix::fs::AtFlags::REMOVEDIR
+    } else {
+        rustix::fs::AtFlags::empty()
+    };
+    rustix::fs::unlinkat(&parent_dir, name.as_str(), flags)?;
     Ok(())
 }
 
@@ -89,14 +95,27 @@ pub(crate) fn remove(world: &Path, path: &Path) -> io::Result<()> {
 /// destination's directories made on the way; an existing destination is refused.
 pub(crate) fn rename(world: &Path, from: &Path, to: &Path) -> io::Result<()> {
     let (from_dir, from_name) = parent(world, from, false)?;
+    // A refusal leaves the tree as it was: the directories made for the destination go again.
+    let made: Vec<std::path::PathBuf> = to
+        .ancestors()
+        .skip(1)
+        .take_while(|a| a.starts_with(world) && *a != world && a.symlink_metadata().is_err())
+        .map(Path::to_path_buf)
+        .collect();
     let (to_dir, to_name) = parent(world, to, true)?;
-    rustix::fs::renameat_with(
+    let renamed = rustix::fs::renameat_with(
         &from_dir,
         from_name.as_str(),
         &to_dir,
         to_name.as_str(),
         rustix::fs::RenameFlags::NOREPLACE,
-    )?;
+    );
+    if let Err(e) = renamed {
+        for dir in &made {
+            let _ = remove(world, dir, true);
+        }
+        return Err(e.into());
+    }
     Ok(())
 }
 
@@ -104,7 +123,7 @@ pub(crate) fn rename(world: &Path, from: &Path, to: &Path) -> io::Result<()> {
 mod tests {
     use std::fs;
 
-    use super::{read, write};
+    use super::{read, rename, write};
 
     /// The race the border check alone cannot close: a directory swapped for a symlink after
     /// the path was resolved.
@@ -155,5 +174,22 @@ mod tests {
         assert_eq!(fs::read_to_string(world.join("x/y/z.txt")).unwrap(), "two");
         assert!(!world.join("x/y/.z.txt.mnemorph-tmp").exists());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A rename that fails after the destination's directories were made unmakes them: a
+    /// refusal leaves the tree as it was.
+    #[test]
+    fn a_failed_rename_leaves_no_directory_behind() {
+        let root = std::env::temp_dir().join(format!("mnemorph-rename-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src")).unwrap();
+        let world = root.canonicalize().unwrap();
+        let gone = world.join("src/gone.rs");
+        assert!(rename(&world, &gone, &world.join("src/new/deep/gone.rs")).is_err());
+        assert!(
+            !world.join("src/new").exists(),
+            "a refused rename made directories"
+        );
+        fs::remove_dir_all(&root).unwrap();
     }
 }

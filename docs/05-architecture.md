@@ -210,9 +210,15 @@ flowchart LR
     a `chmod`, a `touch` or a rewrite dressed in its old mtime counts as a change and is judged.
     The file tools run in the harness, not under landlock, each path checked against the soil
     and opened component by component without following a link: `read`, `write` (whole, atomic),
-    `edit` (one exact replacement), `multiedit` (several, in order, all or none), `move` (a file
-    or a directory, both ends and every file in it the body's own, never over an existing file)
-    and `delete` (a file, a copy kept in the attic first — without an attic nothing is deleted).
+    `edit` (one exact replacement), `multiedit` (several, in order, all or none, and never a
+    rewrite that leaves the file as it was), `move` (a file or a directory, both ends and every
+    entry in it the body's own, never a folder holding another's spot, never into itself, never
+    over an existing file) and `delete` (a file, only once the attic's snapshot holds a copy of it
+    — so not what the attic leaves out: ignored files, build output, large files — or an empty
+    directory). A link is moved or deleted as itself, never its target; git's own files are never
+    a tool's; a refusal leaves the tree as it was, the directories a failed move made unmade; a
+    write of what a file already holds writes nothing; and `edit` and `multiedit` refuse a file
+    that is not UTF-8 text rather than replace its bytes.
     `sed -i` and `perl -i` are refused, pointing to `edit` and `multiedit`: an anchor that misses
     exits 0 and changes nothing.
     Layered, landlock refuses what it can, the tools refuse by name, and the end gate's *right
