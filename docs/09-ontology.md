@@ -334,13 +334,13 @@ blocking. Findings are never summed into a score.
 
 | Code | Severity | Read as |
 |---|---|---|
-| `overlap` | critical | two creatures' territories equal or nested |
+| `overlap` | critical | two creatures' write grounds (zones, posts) equal or nested |
 | `above-cycle` | critical | the chain of command loops |
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
-| `dead-bond` | high | an `above` target with no doc |
+| `dead-bond` | high | an `above` target with no doc, or retired |
 | `heir-dead` | high | an heir that is retired or missing |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold |
-| `unowned-soil` | medium | a tracked path where `own` returns $\bot$ |
+| `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind nobody wears and not marked shared |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |

@@ -175,13 +175,15 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
     let tracked = std::process::Command::new("git")
         .arg("-C")
         .arg(world)
-        .arg("ls-files")
+        // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).
+        .args(["ls-files", "-z"])
         .output()
         .ok()
         .filter(|o| o.status.success());
     let tracked: Vec<String> = if let Some(o) = tracked {
         String::from_utf8_lossy(&o.stdout)
-            .lines()
+            .split('\0')
+            .filter(|p| !p.is_empty())
             .map(str::to_owned)
             .collect()
     } else {

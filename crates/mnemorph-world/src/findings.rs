@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use mnemorph_races::Race;
 
 use crate::doc::covers;
-use crate::own::{Rule, explain};
+use crate::own::{Owner, Rule, explain};
 use crate::roster::Roster;
 
 /// How much a finding weighs. Critical and high block a landing they touch; medium and low are
@@ -123,6 +123,13 @@ fn cycles(roster: &Roster, out: &mut Vec<Finding>) {
                 .get(&next)
                 .and_then(|c| c.reports_to.clone());
         }
+        // A loop through a retired creature is no loop: its bonds are gone (a `dead-bond`).
+        if members
+            .iter()
+            .any(|m| roster.creatures.get(m).is_none_or(|c| c.retired))
+        {
+            continue;
+        }
         let mut key = members.clone();
         key.sort();
         if !seen.insert(key.clone()) {
@@ -147,14 +154,22 @@ fn cycles(roster: &Roster, out: &mut Vec<Finding>) {
 fn bonds(roster: &Roster, out: &mut Vec<Finding>) {
     for c in roster.living() {
         let parent = c.reports_to.as_ref().map(|p| (p, roster.creatures.get(p)));
-        if let Some((name, None)) = parent {
+        // A retired parent holds no bond: the graph drops it, so the report reaches nobody.
+        let dead = match parent {
+            Some((name, None)) => Some(format!("{} reports to `{name}`, which has no doc", c.name)),
+            Some((name, Some(p))) if p.retired => {
+                Some(format!("{} reports to `{name}`, which is retired", c.name))
+            }
+            _ => None,
+        };
+        if let Some(message) = dead {
             out.push(Finding {
                 code: "dead-bond",
                 severity: Severity::High,
                 at: c.at("Reports to"),
                 paths: Vec::new(),
                 creatures: vec![c.name.clone()],
-                message: format!("{} reports to `{name}`, which has no doc", c.name),
+                message,
             });
         }
         let to_an_orc =
@@ -172,31 +187,30 @@ fn bonds(roster: &Roster, out: &mut Vec<Finding>) {
     }
 }
 
-/// `unowned-soil`: tracked files `own` gives nobody, one finding per directory.
+/// `unowned-soil`: tracked files `own` gives nobody — no claim, or a compiled soil or scratch
+/// whose keeper does not live — one finding per directory.
 fn unowned(roster: &Roster, tracked: &[String], out: &mut Vec<Finding>) {
-    let mut by_dir: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for path in tracked {
-        if explain(roster, path).rule == Rule::Unclaimed {
+        let o = explain(roster, path);
+        if o.owner == Owner::Unowned && o.rule != Rule::Outside {
             let dir = path
                 .rsplit_once('/')
                 .map_or_else(String::new, |(d, _)| format!("{d}/"));
-            *by_dir.entry(dir).or_default() += 1;
+            by_dir.entry(dir).or_default().push(path.clone());
         }
     }
-    for (dir, n) in by_dir {
+    for (dir, files) in by_dir {
         out.push(Finding {
             code: "unowned-soil",
             severity: Severity::Medium,
-            at: if dir.is_empty() {
-                "./".into()
-            } else {
-                dir.clone()
-            },
-            paths: vec![dir],
-            creatures: Vec::new(),
+            at: if dir.is_empty() { "./".into() } else { dir },
             message: format!(
-                "{n} tracked file(s) here no creature owns: Rimuru routes their birth"
+                "{} tracked file(s) here no creature owns: Rimuru routes their birth",
+                files.len()
             ),
+            paths: files,
+            creatures: Vec::new(),
         });
     }
 }

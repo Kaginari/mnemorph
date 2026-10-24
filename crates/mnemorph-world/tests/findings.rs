@@ -112,3 +112,50 @@ fn domains_and_lanes_never_overlap_the_zones_they_hold() {
     let found = check(&roster, &[]);
     assert!(found.iter().all(|f| !f.severity.blocks()), "{found:#?}");
 }
+
+/// Before genesis there is no workspace Slime and no throne: root files, `tools/` and the plan
+/// are unowned soil too. A report to a retired parent is a dead bond, and a loop through one is
+/// none.
+#[test]
+fn compiled_soil_without_its_keeper_and_retired_parents() {
+    let w = World::new("keeperless");
+    w.doc(
+        "orc",
+        "w",
+        "# orc-w\n\n- **Race:** orc\n- **Reports to:** elf-r\n- **Domain:** src/\n",
+    )
+    .doc(
+        "elf",
+        "r",
+        "# elf-r\n\n- **Race:** elf\n- **Reports to:** elf-q\n- **Retired:** yes\n",
+    )
+    .doc(
+        "elf",
+        "q",
+        "# elf-q\n\n- **Race:** elf\n- **Reports to:** elf-r\n",
+    );
+    let roster = Roster::load(&w.0);
+    let tracked = [
+        "Cargo.toml",
+        "README.md",
+        "tools/x.sh",
+        ".mnemorph/plan.md",
+        "src/a.rs",
+    ]
+    .map(str::to_owned);
+    let found = check(&roster, &tracked);
+    let codes: Vec<(&str, &str)> = found.iter().map(|f| (f.code, f.at.as_str())).collect();
+    assert_eq!(
+        codes,
+        [
+            ("dead-bond", ".mnemorph/elf/q/README.md:4"),
+            ("dead-bond", ".mnemorph/orc/w/README.md:4"),
+            ("unowned-soil", "./"),
+            ("unowned-soil", ".mnemorph/"),
+            ("unowned-soil", "tools/"),
+        ],
+        "{found:#?}"
+    );
+    assert!(found[1].message.ends_with("which is retired"));
+    assert_eq!(found[2].paths, ["Cargo.toml", "README.md"]);
+}

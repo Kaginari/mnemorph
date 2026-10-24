@@ -1774,3 +1774,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     claims, the rule would block every landing.
   - The gate blocking on these findings, and the codes for facts, heirs, Minds and relations,
     come with the rungs that bring what they read.
+
+---
+
+### [2026-10-24T22:33:15+02:00] rimuru — M7 findings: the review's fixes
+- **Task:** fix what the Fable review of the findings rung found (verdict: merge after fixes).
+- **Files:**
+  - findings.rs:
+    - `unowned-soil` reads the owner, not the rule;
+    - a retired parent is a `dead-bond`;
+    - a loop through a retired creature is none;
+  - mnemorphd — `git ls-files -z`;
+  - tests: keeperless compiled soil, retired parents, a name git quotes;
+  - docs/09's table.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A finding about ownership must ask who owns, not which rule answered. "No claim" and "a
+    compiled soil whose keeper does not live" are the same ⊥. Before genesis, a world's root
+    files are all unowned.
+  - Findings and the graph must read the same bonds. The graph dropped a retired parent while
+    the loop check still walked through it.
