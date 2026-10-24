@@ -1101,6 +1101,7 @@ dependencies = [
  "mnemorph-sandbox",
  "proptest",
  "regex",
+ "rustix",
  "serde",
  "serde_json",
 ]
