@@ -1029,7 +1029,12 @@ async fn a_handoff_is_written_for_the_next_session() {
     ask(&mut run, "ship the cli").await;
     let mut quiet = |_| {};
     let path = run.handoff(Some("the board"), &mut quiet).await.unwrap();
-    assert!(path.starts_with(mnemorph_loop::handoffs(&w.world())));
+    // The run knows its world by its real path (on macOS the temp dir is a symlink).
+    let world = w.world().canonicalize().unwrap();
+    assert!(
+        path.starts_with(mnemorph_loop::handoffs(&world)),
+        "{path:?}"
+    );
     assert!(
         std::fs::read_to_string(&path)
             .unwrap()
@@ -1040,7 +1045,7 @@ async fn a_handoff_is_written_for_the_next_session() {
         asked.contains("first ask: ship the cli")
             && asked.contains("Focus the handoff on: the board")
     );
-    let (latest, age) = mnemorph_loop::latest_handoff(&w.world()).unwrap();
+    let (latest, age) = mnemorph_loop::latest_handoff(&world).unwrap();
     assert_eq!((latest, age), (path, 0));
 }
 
