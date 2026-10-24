@@ -19,8 +19,14 @@ fn main() {
             println!("cargo:rerun-if-changed={p}");
         }
     }
+    // A loose ref is watched while it exists; a packed one is no file, and a missing path would
+    // rebuild every time. The refs directory changes whenever git writes a ref loose again.
+    if let Some(refs) = git(&["rev-parse", "--git-path", "refs/heads"]) {
+        println!("cargo:rerun-if-changed={refs}");
+    }
     if let Some(head) = git(&["symbolic-ref", "-q", "HEAD"])
         && let Some(p) = git(&["rev-parse", "--git-path", &head])
+        && std::path::Path::new(&p).exists()
     {
         println!("cargo:rerun-if-changed={p}");
     }

@@ -270,6 +270,8 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
 
   // An approval the turn left behind is denied, never left to answer a dead question.
   useEffect(() => {
+    // Every approval starts unchosen: a choice never carries over to the next one.
+    setChoice(undefined);
     if (!state.gate && answer.current) {
       answer.current({ allow: false, reason: 'the turn ended before the human answered' });
       answer.current = undefined;
@@ -357,7 +359,9 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       return;
     }
     if (state.gate) {
-      if (input === 'y' || input === 'n') setChoice(input);
+      // A letter that came with a carriage return still chooses; only a bare Enter confirms.
+      const letter = input.replace(/\r/g, '');
+      if (letter === 'y' || letter === 'n') setChoice(letter);
       else if (key.escape || (key.return && choice === 'n')) {
         decide({ allow: false, reason: 'the human said no' });
       } else if (key.return && choice === 'y') decide({ allow: true });

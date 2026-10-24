@@ -345,7 +345,7 @@ text reaching the body after its next tool step as the human's, and said to the 
 turn ends first; **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
 nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the
 history. An approval is chosen with **y** or **n** and confirmed with **Enter**, so a key typed as
-the box appears approves nothing; **Esc** denies it; while it is open the input waits; and one
+the box appears approves nothing; **Esc** denies it; while it is open, keys typed and pastes are dropped; and one
 whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an
 emoji as one. Every
 printable character is text while the input has focus, and keys that arrive together are taken

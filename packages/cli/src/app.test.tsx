@@ -266,3 +266,32 @@ test('a tool call shows as it starts, before its input has streamed', async () =
   expect(ui.lastFrame()).toContain('a.txt …');
   ui.unmount();
 });
+
+test('a choice never carries over to the next approval', async () => {
+  const { core, ui } = start();
+  await tick();
+  const ask = (id: string) =>
+    core.say({
+      jsonrpc: '2.0',
+      id,
+      method: 'gate/ask',
+      params: { class: 'write', act: `sed -i ${id} f`, race: 'slime', why: [], outside: [] },
+    });
+  core.event('turnStarted', { text: 'go' });
+  ask('gate-a');
+  await tick();
+  // A y and its Enter in one burst chooses, and confirms nothing.
+  ui.stdin.write('y\r');
+  await tick();
+  expect(ui.lastFrame()).toContain('Enter confirms');
+  expect(core.sent.find((m) => m.id === 'gate-a')).toBeUndefined();
+  core.event('turnEnded', { ending: 'interrupted' });
+  await tick();
+  core.event('turnStarted', { text: 'again' });
+  ask('gate-b');
+  await tick();
+  ui.stdin.write('\r');
+  await tick();
+  expect(core.sent.find((m) => m.id === 'gate-b')).toBeUndefined();
+  ui.unmount();
+});
