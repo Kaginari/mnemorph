@@ -168,9 +168,14 @@ calls, interrupts and queued lines at a session and checks every request it send
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
-| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`), or 40 turns with nothing landed (`actBudget`) | checkpoint: the run is busy, not working |
+| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`); 40 turns with nothing landed (`actBudget`); the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times without a green (`bench`) | checkpoint: the run is busy, not working |
 
 All are code. None of them asks the body how it feels.
+
+The **bench tally** keeps, per test command (the command before any pipe), its visits, reds,
+greens and muted runs. A piped run (`cargo test | tail`) hides the exit status, so it is muted —
+never green — and twelve visits without one green stop the run however much it landed between
+them: the body that ran one bench 63 times in twenty minutes, every run piped, is the reason.
 
 The council's keys are `stress.escalateAt` (5), `stress.relieveAt` (7) and `stress.maxConsults`
 (3): after three warrants the report is forced to `@S ESCALATE` and reaches the human. Strain is

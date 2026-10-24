@@ -623,7 +623,18 @@ impl Run {
                 content: o.content.clone(),
                 is_error: o.is_error,
             });
-            signals.extend(self.stress.act(&o));
+            let command = (name == "bash")
+                .then(|| serde_json::from_str::<serde_json::Value>(&input).ok())
+                .flatten()
+                .and_then(|v| {
+                    v.get("command")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                });
+            signals.extend(
+                self.stress
+                    .act(&format!("{name} {input}"), command.as_deref(), &o),
+            );
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,

@@ -916,3 +916,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The exit run first ended in `stall: actBudget` — forty turns that only read are the thrash
     the guard exists for. A real long run lands work as it goes; the script now does too.
   - The fresh-body act needs dispatch (M7); until then the line's act is to tell the human.
+
+---
+
+### [2026-10-24T10:36:03+02:00] rimuru — M5b: the loop breaker, the bench tally, the prefix ceiling
+- **Task:** M5b's last rung: the identical-call loop breaker and the per-bench tally (#40, the
+  lessons), and a CI ceiling on the cached prefix (#43).
+- **Files:** crates/mnemorph-loop/src/stress.rs (`act(call, command, outcome)`: the loop
+  warning at 3 and stall at 5; `Bench`, `bench_of`, the tally and its stall at 12 visits with no
+  green), src/run.rs (passes the call and its bash command), tests (4), docs/03-loop.md.
+- **Gate:** n/a. Instruments: the solo prefix measures ≈1137 tokens (ceiling 4000);
+  `just check` (241).
+- **Result:** in review as a pull request.
+- **Learned:** the bench's key must be the bench, not the command line: `pytest -q` and
+  `pytest -q | tail -1` first counted as two benches, each under the limit — a pipe split the
+  tally it was meant to make suspicious.
