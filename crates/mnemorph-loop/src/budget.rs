@@ -79,6 +79,14 @@ mod tests {
     #[test]
     fn the_tightest_cap_sets_the_budget_and_counts_every_call() {
         let now = Timestamp::parse("2026-10-24T12:00:00Z").unwrap();
+        // Unseen spend comes out of the cap's hidden reserve, never more: nine torn lines leave
+        // 85% of a session cap.
+        let session = Caps {
+            session: Some(100_000),
+            ..Caps::default()
+        };
+        let nine = mnemorph_ledger::unseen_wt(&[], 9);
+        assert_eq!(left(session, &[], "this", now, nine).unwrap().wt, 85_000);
         let rows = [
             row("2026-10-24T08:00:00Z", "other", 30_000),
             row("2026-10-23T23:59:59Z", "other", 50_000),
