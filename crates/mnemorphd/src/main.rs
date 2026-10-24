@@ -193,7 +193,10 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
         );
         Vec::new()
     };
-    let findings = mnemorph_server::world::check(roster, &tracked);
+    let mut findings = mnemorph_server::world::check(roster, &tracked);
+    let facts = mnemorph_server::world::Facts::load(world);
+    findings.extend(mnemorph_server::world::fact_findings(&facts, world));
+    findings.sort_by(|a, b| b.severity.cmp(&a.severity).then_with(|| a.at.cmp(&b.at)));
     let failed = !roster.problems.is_empty() || findings.iter().any(|f| f.severity.blocks());
     let mut out = std::io::stdout().lock();
     let _ = writeln!(

@@ -214,3 +214,61 @@ fn unowned(roster: &Roster, tracked: &[String], out: &mut Vec<Finding>) {
         });
     }
 }
+
+/// The facts' findings: `contested-fact` (medium), a fact read stale because its evidence moved
+/// (`stale-fact`, low), a free fact that landed beside similar ones with no label from the
+/// parent (`untriaged-fact`, low).
+#[must_use]
+pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Vec<Finding> {
+    use crate::facts::Status;
+    let mut out = Vec::new();
+    for f in facts.live() {
+        let mut push = |code, severity, message: String| {
+            out.push(Finding {
+                code,
+                severity,
+                at: f.about.clone(),
+                paths: vec![f.about.clone()],
+                creatures: f.supporters.iter().chain(&f.counters).cloned().collect(),
+                message,
+            });
+        };
+        if f.status() == Status::Contested {
+            push(
+                "contested-fact",
+                Severity::Medium,
+                format!(
+                    "#{} `{}`: {} for, {} against — a check settles it, never recency",
+                    f.id,
+                    f.text,
+                    f.supporters.len(),
+                    f.counters.len()
+                ),
+            );
+        }
+        if f.stale(world) {
+            push(
+                "stale-fact",
+                Severity::Low,
+                format!(
+                    "#{} `{}`: its evidence moved since it was said",
+                    f.id, f.text
+                ),
+            );
+        }
+        if f.keyed.is_none()
+            && !f.labelled
+            && !facts.candidates(f, crate::facts::THETA_T).is_empty()
+        {
+            push(
+                "untriaged-fact",
+                Severity::Low,
+                format!(
+                    "#{} `{}` landed beside similar facts and the parent has not labelled it",
+                    f.id, f.text
+                ),
+            );
+        }
+    }
+    out
+}

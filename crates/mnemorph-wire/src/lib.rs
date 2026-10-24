@@ -14,6 +14,7 @@
 
 mod commission;
 mod fnv;
+pub use fnv::fnv64a;
 mod forge;
 mod hole;
 mod report;

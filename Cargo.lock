@@ -1179,6 +1179,7 @@ dependencies = [
  "mnemorph-memory",
  "mnemorph-races",
  "mnemorph-wire",
+ "serde",
 ]
 
 [[package]]
