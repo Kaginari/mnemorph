@@ -561,6 +561,7 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
     let cx = || {
         Context::new(Race::Slime, w.world(), &["."])
             .with_soil(&["src/"], &["src/other/"], false)
+            .with_build(&["target", ".mnemorph/instruments"])
             .with_gate(Arc::new(Scripted::new([])))
             .with_home(w.root.join("home"))
             .with_sandbox(Sandbox::Guard(guard.clone()))
@@ -700,4 +701,66 @@ fn a_link_in_the_soil_grants_nothing_beyond_it() {
         assert!(o.is_error, "{through}: {o:?}");
         assert_eq!(fs::read_to_string(&file).unwrap(), before, "{through}");
     }
+}
+
+/// What the review of the grants found, each held: a link handed as build output grants
+/// nothing; a scratch nest that is a link is never used, and each creature's fallback scratch is
+/// its own; hundreds of grants still start; `truncate` by path is refused where landlock cannot.
+#[cfg(target_os = "linux")]
+#[test]
+fn build_links_scratch_many_grants_and_truncate() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("review");
+    fs::create_dir_all(w.world().join("lib")).unwrap();
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join(".mnemorph/tmp/slime-b")).unwrap();
+    fs::write(w.world().join("lib/zone.rs"), "zone\n").unwrap();
+    std::os::unix::fs::symlink(w.world().join("lib"), w.world().join("src/x.log")).unwrap();
+    std::os::unix::fs::symlink(
+        w.world().join(".mnemorph/tmp/slime-b"),
+        w.world().join(".mnemorph/tmp/slime-a"),
+    )
+    .unwrap();
+    for i in 0..600 {
+        fs::write(w.world().join(format!("src/f{i}.rs")), "x\n").unwrap();
+    }
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/", ".mnemorph/tmp/slime-a/"], &["src/other/"], false)
+            .with_build(&["src/x.log"])
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let world = w.world().canonicalize().unwrap();
+    let grants = cx().grants();
+    assert!(grants.len() >= 600, "{}", grants.len());
+    assert!(
+        grants.iter().all(|g| !g.starts_with(world.join("lib"))),
+        "a build link granted its target"
+    );
+    assert!(
+        grants
+            .iter()
+            .all(|g| !g.starts_with(world.join(".mnemorph/tmp/slime-b")))
+    );
+    let (one, two) = (cx().scratch(), cx().scratch());
+    assert!(!one.starts_with(&world) && one != two, "{one:?} {two:?}");
+    // Hundreds of grants go through a rules file; the command starts and writes its own soil.
+    let o = bash(&mut cx(), "echo y > src/f1.rs && cat src/f1.rs");
+    assert_eq!(o.content, "y\n", "{o:?}");
+    for cmd in [
+        "echo stolen > src/x.log/zone.rs",
+        "python3 -c \"import os; os.truncate('lib/zone.rs', 0)\"",
+    ] {
+        let o = bash(&mut cx(), cmd);
+        assert!(o.is_error, "{cmd}: {o:?}");
+    }
+    assert_eq!(
+        fs::read_to_string(w.world().join("lib/zone.rs")).unwrap(),
+        "zone\n"
+    );
 }

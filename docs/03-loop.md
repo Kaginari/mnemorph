@@ -235,7 +235,9 @@ Runs on the body's own writes (minus what its Courts already landed on their own
 
 1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
    for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the
-   Slime's. Writes are found by snapshotting the tree, whatever tool made them — a shell
+   Slime's. The records under `.mnemorph/` are outside the tree's snapshot: the tripwire refuses
+   or reverts a tool's write there, beyond the shared queue, scratch and the advisory mirror.
+   Writes are found by snapshotting the tree, whatever tool made them — a shell
    redirect counts the same as the write tool. A path's owner is read with `own` on the roster
    as the commission found it, and the failure names the owner and the route (`` `lib/x.rs` is
    slime-b's (zone lib/), not slime-a's — ask slime-b ``). A critical or high ontology finding

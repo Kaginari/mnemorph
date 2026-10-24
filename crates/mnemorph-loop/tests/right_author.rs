@@ -111,3 +111,63 @@ fn a_finding_blocks_the_landing_it_touches_not_the_one_that_ends_it() {
     );
     assert_eq!(w.judge(&before, &roster), Vec::<String>::new());
 }
+
+/// Build output is what git ignores where `own` names the creature or nobody: never another's
+/// ignored files, never the workspace's root files.
+#[test]
+fn build_output_is_never_anothers() {
+    let w = World::new("build");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&w.0)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    fs::write(w.0.join(".gitignore"), ".env\ntarget/\n").unwrap();
+    fs::write(w.0.join("lib/.env"), "theirs\n").unwrap();
+    fs::write(w.0.join(".env"), "root\n").unwrap();
+    fs::create_dir_all(w.0.join("target")).unwrap();
+    fs::create_dir_all(w.0.join("lib/target")).unwrap();
+    fs::write(w.0.join("src/mine.rs"), "x\n").unwrap();
+    fs::write(w.0.join("lib/theirs.rs"), "x\n").unwrap();
+    git(&["add", "src", "lib", ".gitignore"]);
+    let roster = Roster::load(&w.0);
+    let grants = context_for(&w.0, &roster, "slime-a").unwrap().grants();
+    let real = w.0.canonicalize().unwrap();
+    assert!(grants.contains(&real.join("target")), "{grants:?}");
+    for never in ["lib/.env", "lib/target", ".env"] {
+        assert!(!grants.contains(&real.join(never)), "{never}: {grants:?}");
+    }
+}
+
+/// A same-length rewrite dressed in its old mtime still counts as changed: the gate sees the
+/// inode's change time, which no process sets back.
+#[test]
+fn a_rewrite_in_its_old_clothes_is_still_seen() {
+    let w = World::new("ctime");
+    fs::write(w.0.join("lib/theirs.rs"), "aaaa\n").unwrap();
+    let roster = Roster::load(&w.0);
+    let before = snapshot(&w.0);
+    let mtime = fs::metadata(w.0.join("lib/theirs.rs"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(w.0.join("lib/theirs.rs"), "bbbb\n").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(w.0.join("lib/theirs.rs"))
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+    let failures = w.judge(&before, &roster);
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.contains("`lib/theirs.rs` is slime-b's")),
+        "{failures:?}"
+    );
+}

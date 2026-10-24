@@ -190,11 +190,22 @@ impl Sandbox {
         match self {
             Self::Guard(guard) => {
                 let mut cmd = Command::new(guard);
-                for p in Policy::existing(&policy.read) {
-                    cmd.arg("--read").arg(p);
-                }
-                for p in Policy::existing(&policy.write) {
-                    cmd.arg("--write").arg(p);
+                let read = Policy::existing(&policy.read);
+                let write = Policy::existing(&policy.write);
+                // Past a few hundred rules the command line would not hold them: they go in a
+                // private file the guard reads, then removes, before it restricts itself.
+                if let Some(file) = (read.len() + write.len() > RULES_ON_ARGV)
+                    .then(|| rules_file(&read, &write))
+                    .flatten()
+                {
+                    cmd.arg("--rules").arg(file);
+                } else {
+                    for p in read {
+                        cmd.arg("--read").arg(p);
+                    }
+                    for p in write {
+                        cmd.arg("--write").arg(p);
+                    }
                 }
                 if policy.network {
                     cmd.arg("--network");
@@ -267,4 +278,36 @@ pub fn harden_self() -> std::io::Result<()> {
         rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)?;
     }
     Ok(())
+}
+
+/// The most rules passed on the guard's command line; past it they go in a file.
+const RULES_ON_ARGV: usize = 256;
+
+/// Write the rules to a fresh owner-only file outside every world: `r` or `w`, then a path,
+/// each NUL-terminated. `None` when no such file could be made (the rules then go on argv).
+fn rules_file(read: &[PathBuf], write: &[PathBuf]) -> Option<PathBuf> {
+    use std::io::Write as _;
+    use std::os::unix::ffi::OsStrExt as _;
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let path =
+        std::env::temp_dir().join(format!("mnemorph-rules-{}-{stamp:x}", std::process::id()));
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path)
+        .ok()?;
+    let mut bytes = Vec::new();
+    for (kind, list) in [(b'r', read), (b'w', write)] {
+        for p in list {
+            bytes.extend([kind, 0]);
+            bytes.extend(p.as_os_str().as_bytes());
+            bytes.push(0);
+        }
+    }
+    f.write_all(&bytes).ok()?;
+    Some(path)
 }

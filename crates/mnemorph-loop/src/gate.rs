@@ -77,6 +77,10 @@ pub struct Author {
 struct Seen {
     len: u64,
     modified: Option<std::time::SystemTime>,
+    /// The mode and the inode's change time: any write, chmod or touch moves the change time,
+    /// and no process can set it back, so a same-length rewrite dressed in its old mtime still
+    /// counts as changed.
+    stamp: (u32, i64, i64),
     /// For a test file, read whole whatever its size: its skip markers and its tests.
     counts: Option<(usize, usize)>,
 }
@@ -112,11 +116,18 @@ pub fn snapshot(world: &Path) -> Tree {
             Seen {
                 len: meta.len(),
                 modified: meta.modified().ok(),
+                stamp: stamp(&meta),
                 counts,
             },
         );
     }
     Tree { files }
+}
+
+/// A file's mode and change time, where the platform has them.
+fn stamp(meta: &fs::Metadata) -> (u32, i64, i64) {
+    use std::os::unix::fs::MetadataExt as _;
+    (meta.mode(), meta.ctime(), meta.ctime_nsec())
 }
 
 /// A path that holds tests, by the usual conventions.

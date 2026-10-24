@@ -103,15 +103,18 @@ pub fn restrict(rules: &Rules) -> Result<String, String> {
     cap(Resource::Core, 0)?;
     cap(Resource::Fsize, MAX_FILE_BYTES)?;
     cap(Resource::Nproc, MAX_PROCESSES)?;
-    let landlock = landlock(rules)?;
-    seccomp(rules.network)?;
+    let (landlock, abi) = landlock(rules)?;
+    // Below ABI 3 landlock cannot refuse `truncate(2)` on a path it only lets be read: seccomp
+    // refuses the call instead (`ftruncate` and `O_TRUNC` need a descriptor opened for writing,
+    // which landlock does check).
+    seccomp(rules.network, abi < 3)?;
     Ok(format!(
         "{landlock} + seccomp + limits, network {}",
         if rules.network { "on" } else { "off" }
     ))
 }
 
-fn landlock(rules: &Rules) -> Result<String, String> {
+fn landlock(rules: &Rules) -> Result<(String, i32), String> {
     let fail = |e: &dyn std::fmt::Display| format!("landlock: {e}");
     let status = Ruleset::default()
         .set_compatibility(CompatLevel::BestEffort)
@@ -134,11 +137,14 @@ fn landlock(rules: &Rules) -> Result<String, String> {
     if !status.no_new_privs {
         return Err("no-new-privileges could not be set".into());
     }
-    let abi = match status.landlock {
+    let (abi, effective) = match status.landlock {
         LandlockStatus::Available {
             effective_abi,
             kernel_abi,
-        } => kernel_abi.map_or_else(|| format!("{}", effective_abi as i32), |k| k.to_string()),
+        } => (
+            kernel_abi.map_or_else(|| format!("{}", effective_abi as i32), |k| k.to_string()),
+            effective_abi as i32,
+        ),
         LandlockStatus::NotEnabled => {
             return Err(
                 "landlock is built in but not enabled (add it to the lsm= boot parameter)".into(),
@@ -149,18 +155,21 @@ fn landlock(rules: &Rules) -> Result<String, String> {
         }
     };
     match status.ruleset {
-        RulesetStatus::FullyEnforced => Ok(format!("landlock ABI {abi}")),
-        RulesetStatus::PartiallyEnforced => Ok(format!(
-            "landlock ABI {abi} (of {} asked)",
-            ABI_ASKED as i32
+        RulesetStatus::FullyEnforced => Ok((format!("landlock ABI {abi}"), effective)),
+        RulesetStatus::PartiallyEnforced => Ok((
+            format!("landlock ABI {abi} (of {} asked)", ABI_ASKED as i32),
+            effective,
         )),
         RulesetStatus::NotEnforced => Err("landlock rules were not enforced".into()),
     }
 }
 
-fn seccomp(network: bool) -> Result<(), String> {
+fn seccomp(network: bool, no_truncate: bool) -> Result<(), String> {
     let mut denied: BTreeMap<i64, Vec<SeccompRule>> =
         ALWAYS_DENIED.iter().map(|s| ((*s), Vec::new())).collect();
+    if no_truncate {
+        denied.insert(libc::SYS_truncate, Vec::new());
+    }
     if !network {
         // Every socket, Unix ones included: a host daemon's socket (docker, an agent) is a way
         // out. `socketpair` stays: it reaches nothing.
