@@ -200,8 +200,8 @@ order as its prompt, its soil as its tools' border, its verify lines and *right 
 end gate, its slice of the dispatcher's envelope (half of what is left unless the call names
 one) as its budget, and the same commission tool when its race dispatches, so the order goes on
 down. What the child changed off its ground — its gate refused it — is put back from the attic,
-a new file removed; a child that did not answer — a FAIL, a checkpoint, an Esc — has its whole
-landing put back, its slice spent, and may be commissioned again; what an answering child and
+a new file removed; a child that did not answer — a FAIL, an ESCALATE, a checkpoint, an Esc — has its
+whole landing put back, what it spent charged, and may be commissioned again; what an answering child and
 its own commissions landed is the dispatcher's court work, which its gate does not judge again —
 as landed: a later edit to it is the dispatcher's own, and so is anything the dispatcher had
 changed on that path before the commission; a stray that could not be put back stays in front

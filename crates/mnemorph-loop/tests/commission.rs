@@ -473,3 +473,25 @@ async fn a_zero_slice_is_refused() {
         w.results()
     );
 }
+
+/// An Esc already pending on the shared flag when a commissioned body starts is its own: it stops
+/// before any call. A body that does not share its dispatcher's flag starts clean.
+#[tokio::test]
+async fn an_esc_pending_at_a_shared_start_is_honoured() {
+    let w = World::new("pending");
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("never")]));
+    let shared = Arc::new(mnemorph_loop::run::Interrupt::default());
+    shared.fire();
+    let mut run = w.rimuru(model.clone()).with_interrupt(Arc::clone(&shared));
+    let ending = run.ask("go", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Interrupted), "{ending:?}");
+    assert_eq!(model.requests().len(), 0);
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let mut own = w.rimuru(model.clone());
+    own.interrupt().fire();
+    let ending = own.ask("go", &mut |_| {}).await;
+    assert!(
+        matches!(ending, Ending::Answered(_)),
+        "an Esc from before the ask is not this ask's: {ending:?}"
+    );
+}
