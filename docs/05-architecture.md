@@ -162,10 +162,21 @@ flowchart LR
     class DENY bad
 ```
 
-- Linux: every command starts through `mnemorph-jail`, which restricts its own process and
-  then execs the command, so everything the command starts inherits the restriction. No unsafe
-  code and no namespaces are needed, so it works where unprivileged user namespaces are
-  restricted (Ubuntu 23.10+ through AppArmor).
+- **A kernel guard, not a jail.** A jail gives a command another world — its own filesystem
+  view, users and network. The guard does not: the command runs as the human, in the real
+  files, with the real tools. It only has the kernel enforce a permission list on that one
+  process — which folders it may read, that it may write only the world, whether it may open a
+  socket. On Linux every command starts through `mnemorph-guard`: the helper sets the list on
+  its own process and then *becomes* the command (`exec`), so it never stays in between and
+  everything the command starts inherits the list. It runs once per command because the
+  kernel's restrictions are one-way — a process can tighten, never loosen — so each command,
+  with its own list, needs a fresh process; it costs about a millisecond. No unsafe code and no
+  namespaces are needed, so it works where unprivileged user namespaces are restricted (Ubuntu
+  23.10+ through AppArmor).
+- **No guard, no command.** When no guard is in force — the helper missing, an unsupported
+  system — `bash` refuses to run and says why. The human may choose otherwise with
+  `sandbox.allow_unguarded = true` in their local or global file (never the tracked one); the
+  status line then reads `none — <reason>`.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
     (`.cargo`, `.rustup`, `.local/bin`, …); never a credential path (`.ssh`, `.aws`, `.gnupg`,
     keyrings, …), which no rule names. Writes: the world, the command's temporary directory
@@ -211,7 +222,7 @@ flowchart LR
   `credential` does not open a credential path.
 - Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) refuses
   every cross-directory rename or link inside the sandbox (`mv` and git fall back to copying)
-  and cannot restrict truncate; v4 (6.7+) adds network rules. The jail asks for the newest rules
+  and cannot restrict truncate; v4 (6.7+) adds network rules. The guard asks for the newest rules
   it knows, the kernel enforces what it has, and `status` prints what is actually in force —
   `landlock ABI 1 (of 5 asked) + seccomp, network off`, or `none — <reason>`.
 - macOS: a generated Seatbelt profile with the same policies — reads from the same allowlist

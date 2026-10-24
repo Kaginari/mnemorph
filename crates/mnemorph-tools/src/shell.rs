@@ -85,6 +85,15 @@ impl Tool for Bash {
             Ok(a) => a,
             Err(o) => return o,
         };
+        // Containment is never claimed, and never silently skipped: with no kernel guard in
+        // force nothing runs, unless the human chose otherwise in their own configuration.
+        if let mnemorph_sandbox::Sandbox::None(reason) = cx.sandbox()
+            && !cx.allows_unguarded()
+        {
+            return Outcome::error(format!(
+                "no kernel guard is in force ({reason}), so the command did not run; to run commands unguarded, set `sandbox.allow_unguarded = true` in your local or global config"
+            ));
+        }
         let place = Place {
             world: cx.world().to_path_buf(),
             home: cx.home().to_path_buf(),

@@ -1,4 +1,4 @@
-//! The Linux side: the jail restricts its own process, then execs the command.
+//! The Linux side: the guard restricts its own process, then execs the command.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -13,10 +13,10 @@ use seccompiler::{
     SeccompRule, TargetArch,
 };
 
-/// The newest landlock ABI the jail asks for; older kernels enforce what they know.
+/// The newest landlock ABI the guard asks for; older kernels enforce what they know.
 const ABI_ASKED: ABI = ABI::V5;
 
-/// What the jail restricts itself to.
+/// What the guard restricts itself to.
 #[derive(Debug, Default)]
 pub struct Rules {
     /// Readable and executable.
@@ -62,7 +62,7 @@ const ALWAYS_DENIED: &[libc::c_long] = &[
     libc::SYS_quotactl,
 ];
 
-/// Processes the user may run while a command is in the jail: bounds a fork bomb. The kernel
+/// Processes the user may run while a command is in the guard: bounds a fork bomb. The kernel
 /// counts every process of the user, so the cap is generous.
 const MAX_PROCESSES: u64 = 8192;
 /// The largest file a command may write.

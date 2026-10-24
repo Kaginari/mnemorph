@@ -104,6 +104,7 @@ pub struct Context {
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
     asked_rules: BTreeSet<Rule>,
+    unguarded: bool,
     pub(crate) seen: HashMap<PathBuf, Seen>,
 }
 
@@ -142,6 +143,7 @@ impl Context {
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
             asked_rules: BTreeSet::new(),
+            unguarded: false,
             seen: HashMap::new(),
         }
     }
@@ -181,10 +183,24 @@ impl Context {
         !rule.floor() && self.asked_rules.contains(&rule)
     }
 
+    /// Let commands run when no kernel guard is in force — the human's own choice, from their
+    /// local or global configuration. Without it, no guard means no command.
+    #[must_use]
+    pub fn with_unguarded(mut self, allowed: bool) -> Self {
+        self.unguarded = allowed;
+        self
+    }
+
     /// The sandbox commands run in.
     #[must_use]
     pub fn sandbox(&self) -> &Sandbox {
         &self.sandbox
+    }
+
+    /// Whether commands may run with no kernel guard in force.
+    #[must_use]
+    pub fn allows_unguarded(&self) -> bool {
+        self.unguarded
     }
 
     /// The body's race.

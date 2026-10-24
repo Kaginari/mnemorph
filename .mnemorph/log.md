@@ -715,3 +715,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   claim than its name: pure-floor commands only, envelopes with `*` after the dangerous word,
   substitutions only at word level. A test's name is a claim; its inputs must reach the claim's
   edges.
+
+---
+
+### [2026-10-24T04:31:14+02:00] rimuru — a kernel guard, not a jail; no guard, no command
+- **Task:** Veldora: "i dont want a jail more like a helper a kernel guard"; and a side review:
+  with the helper missing, commands ran unprotected and only the status line said so.
+- **Files:** crates/mnemorph-sandbox (the helper is `mnemorph-guard`, `Sandbox::Guard`,
+  `MNEMORPH_GUARD`), crates/mnemorph-tools (bash refuses when no guard is in force unless the
+  context allows it; `Context::with_unguarded`), crates/mnemorph-config
+  (`sandbox.allow_unguarded`, a loosening key: local or global file only), tests in all three,
+  docs/05-architecture.md (what the guard is and is not; why once per command).
+- **Gate:** n/a. Instruments: 200 commands timed bare and through the guard — about 1 ms each;
+  `just check` (185 tests).
+- **Result:** in review as a pull request.
+- **Learned:** the helper never was a jail — no other world, the real files and tools — only a
+  kernel-enforced permission list, set by the helper on itself before it becomes the command.
+  It runs per command because those restrictions are one-way; a resident helper would still
+  have to restrict a fresh process each time. Naming it for what it does settled the question.

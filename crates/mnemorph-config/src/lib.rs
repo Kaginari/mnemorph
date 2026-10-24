@@ -59,6 +59,7 @@ const LOOSENING: &[&str] = &[
     "gate.ask_rules",
     "gate.approve",
     "oni.envelopes",
+    "sandbox.allow_unguarded",
 ];
 
 /// The kind of value a known key holds.
@@ -78,6 +79,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gate.timeout_secs", Kind::Int),
     ("gate.ask_rules", Kind::StrList),
     ("gate.approve", Kind::StrList),
+    ("sandbox.allow_unguarded", Kind::Bool),
     ("budget.month_usd", Kind::Number),
     ("budget.day_usd", Kind::Number),
     ("budget.session_usd", Kind::Number),
@@ -417,6 +419,14 @@ impl Config {
     #[must_use]
     pub fn gate_timeout_secs(&self) -> u64 {
         self.int("gate.timeout_secs").unwrap_or(300)
+    }
+
+    /// Commands may run with no kernel guard in force (local or global file only).
+    #[must_use]
+    pub fn allow_unguarded(&self) -> bool {
+        self.get("sandbox.allow_unguarded")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(false)
     }
 
     /// The guard rules the human turned into questions.

@@ -1,4 +1,4 @@
-//! `mnemorph-jail [--read P]… [--write P]… [--network] -- PROGRAM ARGS…`
+//! `mnemorph-guard [--read P]… [--write P]… [--network] -- PROGRAM ARGS…`
 //!
 //! Restricts its own process with landlock and seccomp, then execs PROGRAM in its place, so the
 //! command and everything it starts inherit the restriction. `--probe` restricts and prints the
@@ -28,7 +28,7 @@ fn main() {
                 break;
             }
             _ => {
-                eprintln!("mnemorph-jail: unknown argument {}", a.to_string_lossy());
+                eprintln!("mnemorph-guard: unknown argument {}", a.to_string_lossy());
                 exit(125);
             }
         }
@@ -36,7 +36,7 @@ fn main() {
     let status = match restrict(&rules) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("mnemorph-jail: {e}; nothing ran");
+            eprintln!("mnemorph-guard: {e}; nothing ran");
             exit(125);
         }
     };
@@ -45,12 +45,12 @@ fn main() {
         return;
     }
     let Some((prog, rest)) = program.split_first() else {
-        eprintln!("mnemorph-jail: no command after --");
+        eprintln!("mnemorph-guard: no command after --");
         exit(125);
     };
     let err = Command::new(prog).args(rest).exec();
     eprintln!(
-        "mnemorph-jail: cannot run {}: {err}",
+        "mnemorph-guard: cannot run {}: {err}",
         prog.to_string_lossy()
     );
     exit(127);
@@ -58,6 +58,6 @@ fn main() {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    eprintln!("mnemorph-jail runs on Linux only");
+    eprintln!("mnemorph-guard runs on Linux only");
     std::process::exit(125);
 }

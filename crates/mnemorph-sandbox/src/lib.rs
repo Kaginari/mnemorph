@@ -4,7 +4,7 @@
 //! directory, read only the system's directories, the world and the toolchains in the home —
 //! never a credential — and reach the network only when the policy says so.
 //!
-//! - **Linux**: the command is started through `mnemorph-jail`, which restricts itself with
+//! - **Linux**: the command is started through `mnemorph-guard`, which restricts itself with
 //!   landlock (the file rules) and seccomp (no sockets without network; no `ptrace`, `mount`,
 //!   `unshare`, `bpf`, `io_uring`, … ever), then execs the command. No namespaces are needed, so
 //!   it works where unprivileged user namespaces are restricted.
@@ -146,8 +146,8 @@ impl Policy {
 /// How commands are contained on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sandbox {
-    /// Through the `mnemorph-jail` helper at this path (Linux).
-    Jail(PathBuf),
+    /// Through the `mnemorph-guard` helper at this path (Linux).
+    Guard(PathBuf),
     /// Through `sandbox-exec` (macOS).
     Seatbelt(PathBuf),
     /// Not at all, and why.
@@ -155,22 +155,22 @@ pub enum Sandbox {
 }
 
 impl Sandbox {
-    /// Find the sandbox for this machine: `MNEMORPH_JAIL`, or `mnemorph-jail` beside the running
+    /// Find the sandbox for this machine: `MNEMORPH_GUARD`, or `mnemorph-guard` beside the running
     /// binary, on Linux; `/usr/bin/sandbox-exec` on macOS.
     #[must_use]
     pub fn detect() -> Self {
         if cfg!(target_os = "linux") {
-            let candidate = std::env::var_os("MNEMORPH_JAIL")
+            let candidate = std::env::var_os("MNEMORPH_GUARD")
                 .map(PathBuf::from)
                 .or_else(|| {
                     std::env::current_exe()
                         .ok()
-                        .and_then(|exe| exe.parent().map(|d| d.join("mnemorph-jail")))
+                        .and_then(|exe| exe.parent().map(|d| d.join("mnemorph-guard")))
                 });
             match candidate {
-                Some(p) if p.is_file() => Self::Jail(p),
-                Some(p) => Self::None(format!("the jail helper is missing ({})", p.display())),
-                None => Self::None("the jail helper cannot be located".into()),
+                Some(p) if p.is_file() => Self::Guard(p),
+                Some(p) => Self::None(format!("the guard helper is missing ({})", p.display())),
+                None => Self::None("the guard helper cannot be located".into()),
             }
         } else if cfg!(target_os = "macos") {
             let p = PathBuf::from("/usr/bin/sandbox-exec");
@@ -188,8 +188,8 @@ impl Sandbox {
     #[must_use]
     pub fn command(&self, policy: &Policy, program: &str, args: &[&str]) -> Command {
         match self {
-            Self::Jail(jail) => {
-                let mut cmd = Command::new(jail);
+            Self::Guard(guard) => {
+                let mut cmd = Command::new(guard);
                 for p in Policy::existing(&policy.read) {
                     cmd.arg("--read").arg(p);
                 }
@@ -226,12 +226,12 @@ impl Sandbox {
     }
 
     /// What is in force, in one line — `landlock ABI 1 + seccomp, network off`, or
-    /// `none — <reason>`. On Linux the jail restricts a probe and reports what the kernel did.
+    /// `none — <reason>`. On Linux the guard restricts a probe and reports what the kernel did.
     #[must_use]
     pub fn status(&self, network: bool) -> String {
         match self {
-            Self::Jail(jail) => {
-                let mut probe = Command::new(jail);
+            Self::Guard(guard) => {
+                let mut probe = Command::new(guard);
                 probe.arg("--probe");
                 if network {
                     probe.arg("--network");
@@ -241,10 +241,10 @@ impl Sandbox {
                         String::from_utf8_lossy(&out.stdout).trim().to_owned()
                     }
                     Ok(out) => format!(
-                        "none — the jail refused: {}",
+                        "none — the guard refused: {}",
                         String::from_utf8_lossy(&out.stderr).trim()
                     ),
-                    Err(e) => format!("none — the jail did not start: {e}"),
+                    Err(e) => format!("none — the guard did not start: {e}"),
                 }
             }
             Self::Seatbelt(_) => {

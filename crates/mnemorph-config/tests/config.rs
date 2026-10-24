@@ -146,7 +146,7 @@ fn wrong_types_and_bad_toml_are_errors_naming_the_file() {
 fn the_tracked_file_cannot_loosen_the_gate() {
     let g = Ground::new("loosen");
     g.tracked(
-        "[gate]\nenabled = false\nask_rules = [\"secret-store\"]\napprove = [\"outward\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n",
+        "[gate]\nenabled = false\nask_rules = [\"secret-store\"]\napprove = [\"outward\"]\n[sandbox]\nallow_unguarded = true\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n",
     );
     let c = g.load().unwrap();
     assert!(c.gate_enabled());
@@ -164,9 +164,11 @@ fn the_tracked_file_cannot_loosen_the_gate() {
             "gate.approve",
             "gate.ask_rules",
             "gate.enabled",
-            "oni.envelopes"
+            "oni.envelopes",
+            "sandbox.allow_unguarded"
         ]
     );
+    assert!(!c.allow_unguarded());
 
     // The same keys from the human's own files are honoured.
     g.local("[gate]\nask_rules = [\"secret-store\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n");
