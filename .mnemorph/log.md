@@ -504,9 +504,40 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T02:14:37+02:00] rimuru — M4 rung 1: the shell classifier
+- **Task:** M4 began ("go"). First rung: every shell command a body runs is classified read,
+  write, outward or destructive — or refused by the guard — from a parsed AST.
+- **Files:** crates/mnemorph-tools/src/classify/ (mod.rs: the walker over brush-parser's AST,
+  prefix-max, pipelines, subshell cwd; words.rs: braces, quotes, `~`/`$HOME`, substitutions;
+  paths.rs: whole-segment placement after `..` and symlinks, devices, credentials, dangerous
+  roots; commands.rs: wrappers, shells, git, gh, registries, network, secret stores, disks,
+  file commands), tests/corpus.txt (257 rows) + corpus.rs, tests/properties.rs.
+- **Gate:** n/a. Instruments: corpus 257/257; proptest "arguments only tighten" (4000 cases);
+  never panics on arbitrary input; a symlink out of the world judged outside; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - brush files `x=y` after the command name as an assignment word: `dd of=/dev/disk2` read as
+    nothing until suffix assignments became arguments. A corpus row caught it.
+  - Prefix-max makes lesson 29 true by construction, and costs one row of precision: bare
+    `git stash` writes, so `git stash list` classifies as write too.
+  - A glob has two meanings: a bare `*` is all of its directory (`rm -rf ~/*` is the home);
+    `*.log` is a child. `find -delete` acts on what it finds, never its start.
+  - The disk is at its last few hundred MB: `target/` is 3.6 GB of it.
+
+---
+
 ### [2026-10-24T02:18:38+02:00] rimuru — the maki study stays local
 - **Task:** Veldora asked to keep docs/study-maki.md out of git, local only.
 - **Files:** .gitignore, docs/README.md and site/.vitepress/config.ts (link and sidebar entry gone; `srcExclude` keeps a local build from rendering it); docs/study-maki.md untracked, kept on disk.
 - **Gate:** n/a. Instruments: a clean site build has no maki page; diagrams parse.
 - **Result:** in review as a pull request.
 - **Learned:** the repository went public before this, so the file remains in history; removing it there would need a history rewrite and a force push — Veldora's call.
+
+---
+
+### [2026-10-24T02:32:38+02:00] rimuru — the classifier on macOS: aliases of system directories
+- **Task:** CI on macOS failed four rows of the classifier corpus that pass on Linux.
+- **Files:** crates/mnemorph-tools/src/classify/paths.rs (danger and credentials judged on the written and the resolved path, with `/private` and `/System/Volumes/Data` removed), tests/corpus.txt (three `/private` rows).
+- **Gate:** n/a. Instruments: corpus on Linux; CI on macOS.
+- **Result:** pushed to the classifier PR.
+- **Learned:** resolving symlinks before judging turned `/etc` into `/private/etc` and `/home` into `/System/Volumes/Data/home` on macOS — no longer top-level, no longer a credential path. Containment needs both spellings, and the corpus runs on every OS for exactly this.

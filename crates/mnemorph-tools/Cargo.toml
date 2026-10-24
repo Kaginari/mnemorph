@@ -8,8 +8,12 @@ license.workspace = true
 publish = false
 
 [dependencies]
+brush-parser = "0.4"
 mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-sandbox = { path = "../mnemorph-sandbox" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+proptest = "1"
