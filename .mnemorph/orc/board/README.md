@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-faces
-- **Territory:** packages/board/
+- **Domain:** packages/board/
 
 ## Traits
 

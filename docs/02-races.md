@@ -199,7 +199,7 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 | the creature's **own doc** | every creature but the throne | its gate, or the doc check alone for an Elf |
 | a **zone** (directory prefixes) | one Slime | its Orc's verify lines |
 | the **verify block** of a Slime's doc | that Slime's Orc — the rest of the doc is the Slime's; the gate diffs by line range | the Orc's own gate |
-| the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/` | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
+| the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/`; the root's toolchain directories (`.cargo/`, `.claude/`) are its zone's by its doc | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
 | a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
 | the **proving ground** `.mnemorph/dark-elf/` | the Dark Elf | its own gate (self-gated) |
 | the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |

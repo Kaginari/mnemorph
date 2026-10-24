@@ -1573,3 +1573,49 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a note meant for the next session, written into a tracked tree, is a note for
   every reader of the repository; what a session must carry over belongs where only the harness
   reads it. `/send` stays: it never touches a file.
+
+---
+
+### [2026-10-24T19:52:05+02:00] rimuru — M7: creatures as data, and ownership
+- **Task:** M7's first rung: the world's creatures read from their docs, the chain of command,
+  and ownership as one function (the ontology's rungs 1 and 2, before the gate calls it).
+- **Files:** crates/mnemorph-world (doc.rs — the fields read as data, ground fields only lists of
+  `/`-written prefixes; roster.rs — every doc, a fingerprint, the chain, `above`, loops; own.rs —
+  harness soil, the law, scratch, seats, the compiled soils, the longest zone, the longest
+  domain, else unowned), tests/own.rs (this repository's own world, and worlds made to break
+  it), .mnemorph/orc/*, .mnemorph/kijin/ci (Domain and Post, as the races say),
+  .mnemorph/*/workspace (a sentence for a territory, made a prefix), docs/09-ontology.md.
+- **Gate:** n/a. Instruments: the world's 30 docs read with no problem; every owner the tests name
+  matches the docs; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Two docs gave their ground as a sentence ("every file at the repository root, and tools/");
+    a parser that read words would have claimed `every/` and `file/`. A claim is a prefix with
+    its `/`, or the doc does not read.
+  - `crates/mnemorph-config/` has no Slime and no Orc: unowned soil, found by the first owner query
+    — the findings rung will report it.
+
+---
+
+### [2026-10-24T20:35:13+02:00] rimuru — M7 ownership: the review's fixes
+- **Task:** fix what the Fable review of the first M7 rung found (verdict: merge after fixes).
+- **Files:**
+  - crates/mnemorph-world:
+    - own.rs — paths read segment by segment; human files; evolution's staging; the plan
+      exactly; the throne read from its doc;
+    - doc.rs — file claims, a claim inside the world only, the header ending at any heading;
+    - roster.rs — unreadable docs and race directories reported and fingerprinted;
+    - tests/own.rs.
+  - The world: .mnemorph/rimuru/rimuru (the throne's doc); orc-engine and orc-clients (the
+    config crate and the theme package); the workspace (`.cargo/`, `.claude/`); kijin-ci
+    (`.github/workflows/` only).
+  - docs/09, 02, 05.
+- **Gate:** n/a. Instruments: the three `..` paths the review used, now owned as written;
+  `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A path is input, not a fact. `own()` trusted `crates/mnemorph-wire/../../.mnemorph/law.md`
+    to be the wire's because its first segments said so. Reading segment by segment is the one
+    place this can be settled.
+  - The throne was an owner by a hard-coded name and no doc. Every Elf reported to a creature
+    the world could not read.

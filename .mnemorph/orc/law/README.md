@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-engine
-- **Territory:** crates/mnemorph-wire/ crates/mnemorph-races/
+- **Domain:** crates/mnemorph-wire/ crates/mnemorph-races/
 
 ## Traits
 
