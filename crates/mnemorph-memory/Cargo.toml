@@ -1,6 +1,6 @@
 [package]
 name = "mnemorph-memory"
-description = "Memory tiers: short, long and shared; recall; the toolbox manifest."
+description = "Memory tiers: short, personal and shared; recall; the toolbox manifest."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1188,3 +1188,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** an expired record still fails the load past a lowered limit: config has no clock,
   and reading one there would make loading depend on the day. The error now says to delete it.
+
+---
+
+### [2026-10-24T15:36:48+02:00] rimuru — page 8, as its review asked
+- **Task:** the review of #87: what grounds a note, a relevance floor nothing could undercut,
+  machine-local proofs, δ as a joint probability, a gate that never reads a claim, a fold that
+  could not demote, `c` defined on fixtures, BM25 "already" there, and the port's details.
+- **Files:** docs/08-memory.md (the rule scoped to what stands behind a note; θ on the meaning term;
+  tracked proofs, "unresolved here" apart from unproven; latest event wins; δ conditional and per
+  route, accepted and corroborated at a lower κ; claims about the diff apart from claims about the
+  world; per-link weights; the port's numbers as MNEMORPH-85 has them), docs/roadmap.md (a route's
+  proof grounds; the exit as an exact count), crates/mnemorph-memory (personal, not long).
+- **Gate:** n/a. Instruments: `just docs`.
+- **Result:** in review as a pull request.
+- **Learned:** a floor applied to a sum of priors and a match measures the priors; it has to sit
+  on the term it means to bound.
