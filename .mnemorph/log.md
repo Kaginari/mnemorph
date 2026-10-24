@@ -1813,3 +1813,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     toward it, never the human.
   - The commission itself is the next rung: carving the slice, the fresh context, the report as
     the parent's tool result, and the gate's *right author* calling `own`.
+
+---
+
+### [2026-10-24T23:04:36+02:00] rimuru — M7 dispatch: the review's fixes
+- **Task:** fix what the Fable review of dispatch's world half found (verdict: merge after
+  fixes).
+- **Files:**
+  - dispatch.rs:
+    - a route never names a retired creature;
+    - the budget refusal is the wire's `Hole::Budget`, its commander in `whom`;
+    - a target that reports across a skipped rank is said as such;
+  - doc.rs — a blank verify line is none;
+  - tests: a second Elf, sideways Orc to Orc, a retired commander, a blank verify, a skipped rank;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A refusal that names its route must name a creature who can take the order. The chain still
+    holds retired creatures, so every named route is checked for life.
+  - A string that looks like a wire line must parse as one. The budget hole is built from the
+    wire's own type.

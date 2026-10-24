@@ -5,6 +5,7 @@
 use std::fmt;
 
 use mnemorph_races::{DispatchContext, Race, Refusal, Route, may_dispatch};
+use mnemorph_wire::Hole;
 
 use crate::roster::Roster;
 
@@ -38,8 +39,10 @@ pub enum Hop {
 pub struct Refused {
     /// The law's reason; `None` when a name is no living creature.
     pub why: Option<Refusal>,
-    /// The lawful next act, in words.
+    /// The lawful next act, in words — for a budget refusal, the wire's typed `@?` hole.
     pub next: String,
+    /// The creature the next act goes to, when it goes to one.
+    pub whom: Option<String>,
 }
 
 impl fmt::Display for Refused {
@@ -61,6 +64,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
     let unknown = |name: &str| Refused {
         why: None,
         next: format!("`{name}` is no living creature: Rimuru routes its birth"),
+        whom: None,
     };
     let a = living(from).ok_or_else(|| unknown(from))?;
     let b = living(to).ok_or_else(|| unknown(to))?;
@@ -85,31 +89,62 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
             target: to.to_owned(),
         }),
         Err(why) => {
-            let next = match why {
+            let (next, whom) = match why {
                 // Below the dispatcher, the lawful hop is the next rank down toward the target;
                 // anywhere else, it goes up.
                 Refusal::NotOneHop => match chain.iter().position(|n| n == from) {
-                    Some(i) if i > 0 => {
-                        format!("commission {}, the next rank toward {to}", chain[i - 1])
+                    Some(0) => (
+                        format!(
+                            "{to} reports to {from} directly, skipping a rank: Rimuru routes its lane"
+                        ),
+                        None,
+                    ),
+                    Some(i) => {
+                        let n = chain[i - 1].clone();
+                        (
+                            format!("commission {n}, the next rank toward {to}"),
+                            Some(n),
+                        )
                     }
-                    _ => format!("report it to {parent}"),
+                    None => (format!("report it to {parent}"), a.reports_to.clone()),
                 },
-                Refusal::NotYourLine => format!(
-                    "ask {}, whose chain holds {to}",
-                    b.reports_to.as_deref().unwrap_or("Rimuru")
-                ),
-                Refusal::NoPlanItem => format!("open a plan item that names {to}"),
-                Refusal::VerifyFirst => {
-                    format!("code the verify line on {to}'s doc ({})", b.doc())
+                Refusal::NotYourLine => {
+                    let n = b.reports_to.clone().unwrap_or_else(|| "rimuru".into());
+                    (format!("ask {n}, whose chain holds {to}"), Some(n))
                 }
-                Refusal::Budget => format!(
-                    "@? budget: need ~{} wt, have {} wt — to {parent}",
-                    ask.slice_wt, ask.left_wt
+                Refusal::NoPlanItem => (format!("open a plan item that names {to}"), None),
+                Refusal::VerifyFirst => (
+                    format!("code the verify line on {to}'s doc ({})", b.doc()),
+                    None,
+                ),
+                // The wire's own hole, so the two never drift; the commander is its own field.
+                Refusal::Budget => (
+                    format!(
+                        "@? {}",
+                        Hole::Budget {
+                            need: ask.slice_wt,
+                            have: ask.left_wt,
+                        }
+                    ),
+                    a.reports_to.clone(),
                 ),
             };
+            // A route never names a creature that cannot take the order.
+            if let Some(n) = whom.as_deref()
+                && living(n).is_none()
+            {
+                return Err(Refused {
+                    why: None,
+                    next: format!(
+                        "`{n}` is no living creature: Rimuru routes a new commander for its line"
+                    ),
+                    whom: None,
+                });
+            }
             Err(Refused {
                 why: Some(why),
                 next,
+                whom,
             })
         }
     }

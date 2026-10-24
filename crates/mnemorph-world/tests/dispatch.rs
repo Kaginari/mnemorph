@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mnemorph_races::Refusal;
+use mnemorph_wire::Hole;
 use mnemorph_world::{Ask, Hop, Roster, dispatch};
 
 fn repo() -> Roster {
@@ -72,11 +73,22 @@ fn every_refusal_names_its_lawful_route() {
         },
     );
     assert_eq!(e.why, Some(Refusal::Budget));
+    // The wire's own typed hole, its addressee beside it.
+    assert_eq!(e.next, "@? budget: need ~300000 wt, have 200000 wt");
     assert_eq!(
-        e.next,
-        "@? budget: need ~300000 wt, have 200000 wt — to elf-engine"
+        Hole::parse(e.next.strip_prefix("@? ").unwrap()),
+        Hole::Budget {
+            need: 300_000,
+            have: 200_000
+        }
     );
+    assert_eq!(e.whom.as_deref(), Some("elf-engine"));
     assert!(e.to_string().starts_with("refused: the slice does not fit"));
+    // Sideways, Orc to Orc: lawful without lineage.
+    assert_eq!(
+        dispatch(&r, "orc-law", "orc-engine", &ask(&none)),
+        Ok(Hop::Direct("orc-engine".into()))
+    );
     let e = refused("orc-law", "slime-nobody", &ask(&none));
     assert_eq!(e.why, None);
     assert!(e.next.contains("Rimuru routes its birth"));
@@ -105,32 +117,22 @@ impl Drop for World {
     }
 }
 
-/// A Slime with no verify line waits for its test; a High Elf reaches another lane's Orc only
-/// through that lane's Elf.
+/// A Slime with no verify line — or a blank one — waits for its test; a High Elf reaches another
+/// lane's Orc only through that lane's Elf, and a plain Elf not at all; a refusal never names a
+/// retired creature; a rank skipped in the docs is said as such.
 #[test]
-fn verify_first_and_the_other_lane() {
+fn verify_first_lanes_retired_and_skipped_ranks() {
     let w = World::new();
     w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n")
-        .doc(
-            "high-elf",
-            "h",
-            "# high-elf-h\n\n- **Race:** high-elf\n- **Reports to:** rimuru\n",
-        )
-        .doc(
-            "elf",
-            "e",
-            "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
-        )
-        .doc(
-            "orc",
-            "o",
-            "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
-        )
-        .doc(
-            "slime",
-            "s",
-            "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
-        );
+        .doc("high-elf", "h", "# high-elf-h\n\n- **Race:** high-elf\n- **Reports to:** rimuru\n")
+        .doc("elf", "e", "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n")
+        .doc("elf", "f", "# elf-f\n\n- **Race:** elf\n- **Reports to:** rimuru\n")
+        .doc("orc", "o", "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n")
+        .doc("orc", "gone", "# orc-gone\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Retired:** yes\n")
+        .doc("orc", "skip", "# orc-skip\n\n- **Race:** orc\n- **Reports to:** rimuru\n")
+        .doc("slime", "s", "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n")
+        .doc("slime", "b", "# slime-b\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Verify:**\n- **Territory:** lib/\n")
+        .doc("slime", "orphan", "# slime-orphan\n\n- **Race:** slime\n- **Reports to:** orc-gone\n- **Verify:** `true`\n- **Territory:** etc/\n");
     let r = Roster::load(&w.0);
     assert!(r.problems.is_empty(), "{:?}", r.problems);
     let none: [String; 0] = [];
@@ -139,6 +141,12 @@ fn verify_first_and_the_other_lane() {
     assert_eq!(
         e.next,
         "code the verify line on slime-s's doc (.mnemorph/slime/s/README.md)"
+    );
+    let e = dispatch(&r, "orc-o", "slime-b", &ask(&none)).unwrap_err();
+    assert_eq!(
+        e.why,
+        Some(Refusal::VerifyFirst),
+        "a blank verify line is none"
     );
     let plan = ["orc-o".to_owned()];
     assert_eq!(
@@ -149,6 +157,34 @@ fn verify_first_and_the_other_lane() {
         })
     );
     // A plain Elf has no such road: another lane's Orc is not its line.
-    let e = dispatch(&r, "elf-e", "orc-o", &ask(&plan));
-    assert_eq!(e, Ok(Hop::Direct("orc-o".into())));
+    let e = dispatch(&r, "elf-f", "orc-o", &ask(&plan)).unwrap_err();
+    assert_eq!(e.why, Some(Refusal::NotYourLine));
+    assert_eq!(
+        (e.next.as_str(), e.whom.as_deref()),
+        ("ask elf-e, whose chain holds orc-o", Some("elf-e"))
+    );
+    assert_eq!(
+        dispatch(&r, "elf-e", "orc-o", &ask(&plan)),
+        Ok(Hop::Direct("orc-o".into()))
+    );
+    // A retired commander is never the route.
+    let e = dispatch(&r, "orc-o", "slime-orphan", &ask(&none)).unwrap_err();
+    assert_eq!(e.why, None);
+    assert!(
+        e.next.starts_with("`orc-gone` is no living creature"),
+        "{}",
+        e.next
+    );
+    let e = dispatch(&r, "elf-e", "slime-orphan", &ask(&none)).unwrap_err();
+    assert!(
+        e.next.starts_with("`orc-gone` is no living creature"),
+        "{}",
+        e.next
+    );
+    // An Orc whose doc reports straight to the throne skips its Elf.
+    let e = dispatch(&r, "rimuru", "orc-skip", &ask(&none)).unwrap_err();
+    assert_eq!(
+        e.next,
+        "orc-skip reports to rimuru directly, skipping a rank: Rimuru routes its lane"
+    );
 }
