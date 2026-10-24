@@ -278,7 +278,8 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   // An approval the turn left behind is denied, never left to answer a dead question.
   useEffect(() => {
     // Every approval starts unchosen: a choice never carries over to the next one.
-    setChoice(undefined);
+    chosen.current = undefined;
+    setChoiceShown(undefined);
     if (!state.gate && answer.current) {
       answer.current({ allow: false, reason: 'the turn ended before the human answered' });
       answer.current = undefined;
