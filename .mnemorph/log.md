@@ -1350,3 +1350,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a protection on one key is only as wide as every other way to say the same thing:
   `models.provider` was the human's, and `models.default = "vllm:…"` said it again from the
   tracked file.
+
+---
+
+### [2026-10-24T16:59:14+02:00] rimuru — M6: the protocol served over stdio
+- **Task:** M6's first rung: `mnemorph-server` speaking the client protocol over stdio, driving
+  one solo session, and `mnemorphd` serving it.
+- **Files:** crates/mnemorph-loop (the run's observer, `Seen`, one `spend` for a turn's and a
+  decision's cost; `open` and `open_with`/`Bound`: a session from the world's configuration
+  through the human's backend; `ScriptedModel::text`/`tool`), crates/mnemorph-server (the
+  protocol's types; `serve`: one writer thread, one reader that answers the gate, one driver
+  task; `gate/ask` with a 10-minute deny; replay since a `seq`), crates/mnemorphd (`--world`,
+  help and version before any world), tests/stdio.rs (4, through real pipes),
+  docs/03-loop.md, docs/04-communication.md.
+- **Gate:** n/a. Instruments: `just check`; the pipe tests three times in a row.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The beats were already the event stream: one observer at the journal's door gives a client
+    everything the protocol lists, with no second account of what happened to drift.
+  - `open_with` attached the human's attic through `solo()`; tests reached it only by luck, so the
+    attic is now an explicit part of what a test binds.

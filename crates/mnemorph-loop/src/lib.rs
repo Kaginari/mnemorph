@@ -6,6 +6,7 @@ pub mod compact;
 pub mod decisions;
 pub mod gate;
 pub mod model;
+pub mod open;
 pub mod route;
 pub mod run;
 pub mod sequence;
@@ -16,9 +17,16 @@ pub mod stress;
 pub use beats::{Beat, conversation};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
 pub use gate::{EndGate, GateVerdict, Tree, snapshot};
+/// The configuration, for a client that opens a session from it.
+pub use mnemorph_config::{Config, Paths};
+pub use mnemorph_provider::Event as StreamEvent;
+pub use mnemorph_races::ToolClass;
+/// The human gate's types, for a client that answers it.
+pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
+pub use open::{Bound, Opened, open, open_with};
 pub use route::{Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, pick, route, route_ask};
-pub use run::{Body, Ending, Interrupt, Limits, Run, Setup};
+pub use run::{Body, Ending, Interrupt, Limits, Observer, Run, Seen, Setup};
 pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};

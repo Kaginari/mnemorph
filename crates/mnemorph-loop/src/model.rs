@@ -7,6 +7,9 @@ use std::sync::Mutex;
 
 use mnemorph_provider::{Anthropic, Error, Event, OpenAiCompatible, Request, Response};
 
+/// One scripted reply: what a model answers, or how it fails.
+pub type Reply = Result<Response, Error>;
+
 /// A boxed future, so models of every kind sit behind one trait object.
 pub type Completion<'a> = Pin<Box<dyn Future<Output = Result<Response, Error>> + Send + 'a>>;
 
@@ -71,6 +74,37 @@ pub struct ScriptedModel {
 }
 
 impl ScriptedModel {
+    /// A reply that answers with `text`.
+    ///
+    /// # Errors
+    ///
+    /// Never: the `Result` is the shape a script holds.
+    pub fn text(text: &str) -> Result<Response, Error> {
+        Ok(scripted(
+            vec![mnemorph_provider::Block::Text {
+                text: text.into(),
+                cache: false,
+            }],
+            mnemorph_provider::StopReason::EndTurn,
+        ))
+    }
+
+    /// A reply that calls `name` with `input`.
+    ///
+    /// # Errors
+    ///
+    /// Never: the `Result` is the shape a script holds.
+    pub fn tool(id: &str, name: &str, input: serde_json::Value) -> Result<Response, Error> {
+        Ok(scripted(
+            vec![mnemorph_provider::Block::ToolUse {
+                id: id.into(),
+                name: name.into(),
+                input,
+            }],
+            mnemorph_provider::StopReason::ToolUse,
+        ))
+    }
+
     /// A model that gives `replies` in order, then fails.
     #[must_use]
     pub fn new(replies: impl IntoIterator<Item = Result<Response, Error>>) -> Self {
@@ -125,5 +159,25 @@ impl Model for ScriptedModel {
             }
         }
         Box::pin(async move { reply })
+    }
+}
+
+fn scripted(
+    content: Vec<mnemorph_provider::Block>,
+    stop: mnemorph_provider::StopReason,
+) -> Response {
+    Response {
+        id: "scripted".into(),
+        model: "scripted".into(),
+        content,
+        stop,
+        stop_details: None,
+        usage: mnemorph_ledger::Usage {
+            input: 100,
+            output: 20,
+            cache_read: 0,
+            cache_write: 0,
+        },
+        warnings: vec![],
     }
 }
