@@ -157,7 +157,7 @@ async fn one_order_down_and_back() {
             "write",
             json!({"path": "src/done.txt", "content": "done\n"}),
         ),
-        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@U territory src/ build=cargo test\n@E"),
         ScriptedModel::text("@S DONE\n@V the landing holds\n@E"),
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done: src/done.txt is there."),
@@ -176,6 +176,14 @@ async fn one_order_down_and_back() {
         "the Elf's report is Rimuru's tool result: {results:?}"
     );
     assert_eq!(model.requests().len(), 8);
+    // What the Slime learned about its territory is a fact, in its name.
+    let facts = mnemorph_loop::world::Facts::load(&w.0);
+    let f = facts
+        .live()
+        .find(|f| f.about == "src")
+        .expect("the Slime's fact was filed");
+    assert_eq!(f.text, "build=cargo test");
+    assert!(f.supporters.contains("slime-s"), "{f:?}");
 }
 
 #[tokio::test]
