@@ -879,3 +879,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the measurement found the cap's own bug — `du` counts hard links, so a cap over
   the whole attic would have charged the world's repository to it and dropped snapshots for
   nothing. The cap measures the snapshot store alone.
+
+---
+
+### [2026-10-24T10:24:34+02:00] rimuru — M5b: Esc and the clock reach a running command
+- **Task:** #78 — a long command (or a gate's verify lines) blocked Esc and the clock until it
+  finished.
+- **Files:** crates/mnemorph-tools/src/tool.rs (`with_cancel`, `set_deadline`), shell.rs (the
+  wait loop stops the group on the cancel flag or the run's deadline; output so far kept),
+  crates/mnemorph-loop/src/run.rs (the interrupt's flag is the tools' cancel flag; the clock is
+  set before each call; an Esc that stopped a call stops the rest), tests (4),
+  docs/03-loop.md.
+- **Gate:** n/a. Instruments: `sleep 30` stopped by Esc and by the clock in well under a second;
+  `just check` (234).
+- **Result:** in review as a pull request.
+- **Learned:** no thread rework was needed: bash already polled its child every 10 ms, so the
+  same atomic the interface fires on Esc, read in that poll, is the whole mechanism.

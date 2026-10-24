@@ -474,3 +474,49 @@ fn no_guard_no_command() {
     assert!(!o.is_error, "{o:?}");
     assert!(marker.exists());
 }
+
+/// Esc reaches a running command: the whole group stops within a second, and what it printed is
+/// kept.
+#[test]
+fn esc_stops_a_running_command_and_keeps_its_output() {
+    let w = World::new("cancel");
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut cx = w
+        .cx(Race::Slime, Arc::new(Scripted::new([])))
+        .with_cancel(Arc::clone(&flag));
+    let firing = Arc::clone(&flag);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        firing.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let started = Instant::now();
+    let o = bash(&mut cx, "echo started; sleep 30 & sleep 30; echo never");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(
+        o.is_error
+            && o.content.starts_with("started\n")
+            && o.content.contains("interrupted by the human"),
+        "{o:?}"
+    );
+    assert!(!o.content.contains("never"));
+}
+
+/// The run's clock reaches a running command, whatever the call's own limit.
+#[test]
+fn the_run_clock_stops_a_running_command() {
+    let w = World::new("deadline");
+    let mut cx = w.cx(Race::Slime, Arc::new(Scripted::new([])));
+    cx.set_deadline(Some(Instant::now() + Duration::from_millis(300)));
+    let started = Instant::now();
+    let o = bash(&mut cx, "sleep 30");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(o.is_error && o.content.contains("killed after"), "{o:?}");
+}

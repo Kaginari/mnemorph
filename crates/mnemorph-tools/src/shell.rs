@@ -126,7 +126,7 @@ impl Tool for Bash {
             Err(e) => return Outcome::error(format!("could not start bash: {e}")),
         };
         // A command that failed leaves no empty file behind it.
-        if ran.timed_out || ran.code != Some(0) {
+        if ran.timed_out || ran.interrupted || ran.code != Some(0) {
             for path in &made {
                 if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
                     let _ = fs::remove_file(path);
@@ -137,7 +137,7 @@ impl Tool for Bash {
         let tripped = before.restore();
         let attic_note = attic_note(cx, kept.as_ref());
         let mut out = Outcome::ok(ran.render(timeout), class);
-        out.is_error = ran.timed_out || ran.code != Some(0);
+        out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
         out.meta.exit = ran.code;
         if let Some(note) = attic_note {
             let _ = write!(out.content, "\n[{note}]");
@@ -265,6 +265,7 @@ struct Ran {
     stderr: Captured,
     code: Option<i32>,
     timed_out: bool,
+    interrupted: bool,
 }
 
 #[derive(Default)]
@@ -297,7 +298,11 @@ impl Ran {
                 );
             }
         }
-        if self.timed_out {
+        if self.interrupted {
+            s.push_str(
+                "\n[interrupted by the human: the command and everything it started were stopped]",
+            );
+        } else if self.timed_out {
             let _ = write!(
                 s,
                 "\n[killed after {}s: the command and everything it started]",
@@ -347,14 +352,24 @@ fn run(
     let mut child = cmd.spawn()?;
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
-    let deadline = Instant::now() + timeout;
+    // The call's own limit, or the run's clock, whichever comes first.
+    let deadline = cx.deadline().map_or(Instant::now() + timeout, |d| {
+        d.min(Instant::now() + timeout)
+    });
     let mut timed_out = false;
+    let mut interrupted = false;
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break Some(status);
         }
         if Instant::now() >= deadline {
             timed_out = true;
+            kill_group(&child);
+            break child.wait().ok();
+        }
+        // Esc: the whole group stops within one poll, and what it printed so far is kept.
+        if cx.cancelled() {
+            interrupted = true;
             kill_group(&child);
             break child.wait().ok();
         }
@@ -367,6 +382,7 @@ fn run(
         stderr: stderr.recv_timeout(DRAIN).unwrap_or_default(),
         code: status.and_then(|s| s.code()),
         timed_out,
+        interrupted,
     })
 }
 
