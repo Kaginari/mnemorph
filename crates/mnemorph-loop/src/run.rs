@@ -12,7 +12,7 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
-use crate::compact::{fold, fold_point};
+use crate::compact::{fold, fold_point, foldable, mark_cache};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
 use crate::sequence::validate;
@@ -325,7 +325,7 @@ impl Run {
                 cache: i + 1 == count,
             })
             .collect();
-        Request {
+        let mut request = Request {
             model: self.body.model.clone(),
             system: vec![Block::Text {
                 text: self.body.system.clone(),
@@ -335,7 +335,10 @@ impl Run {
             messages: fold(&self.messages, self.folded_upto),
             max_tokens,
             effort: None,
-        }
+        };
+        let budget = mnemorph_provider::MAX_BREAKPOINTS.saturating_sub(request.breakpoints());
+        mark_cache(&mut request.messages, budget);
+        request
     }
 
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
@@ -520,7 +523,16 @@ impl Run {
         let line = self.stress_line();
         if self.last_occupancy * 100 >= line * COMPACT_PCT {
             let point = fold_point(&self.messages);
-            if point > self.folded_upto {
+            // A fold rewrites the cached conversation from its first folded message on, so it
+            // happens only when it takes out a fifth of the line or more: rare, large batches,
+            // with the prefix still between them.
+            let worth = usize::try_from(line)
+                .unwrap_or(usize::MAX)
+                .saturating_mul(4)
+                / 5;
+            if point > self.folded_upto
+                && foldable(&self.messages, self.folded_upto, point) >= worth
+            {
                 self.folded_upto = point;
                 self.record(&Beat::Warning {
                     text: format!("compacted: tool outputs before message {point} are sent folded"),

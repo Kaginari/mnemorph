@@ -15,11 +15,43 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Sandbox, registry};
 use serde_json::json;
 
-/// A model whose reported input is the size of what it was sent, as a real one's is.
+/// A model whose reported input is the size of what it was sent, as a real one's is — and whose
+/// cache works as Anthropic's does: a request reads the longest prefix an earlier request marked,
+/// writes up to its own last mark, and pays full price for the rest.
 struct Sized {
     script: Mutex<VecDeque<Vec<Block>>>,
     sent: Mutex<Vec<usize>>,
     folded_seen: Mutex<bool>,
+    cached: Mutex<std::collections::HashSet<String>>,
+    /// Input billed in hundredths of a base-price byte: full, 1.25× written, 0.1× read.
+    billed: Mutex<usize>,
+}
+
+/// The request as the cache sees it: one string per position, marks stripped, and whether each
+/// position carries a mark.
+fn positions(request: &Request) -> Vec<(String, bool)> {
+    let body = encode(request).unwrap();
+    let mut out = Vec::new();
+    let mut push = |v: &serde_json::Value, role: &str| {
+        let mut v = v.clone();
+        let marked = v
+            .as_object_mut()
+            .and_then(|o| o.remove("cache_control"))
+            .is_some();
+        out.push((format!("{role}{v}"), marked));
+    };
+    for t in body["tools"].as_array().into_iter().flatten() {
+        push(t, "tool");
+    }
+    for b in body["system"].as_array().into_iter().flatten() {
+        push(b, "system");
+    }
+    for m in body["messages"].as_array().into_iter().flatten() {
+        for b in m["content"].as_array().into_iter().flatten() {
+            push(b, m["role"].as_str().unwrap());
+        }
+    }
+    out
 }
 
 impl Model for Sized {
@@ -34,6 +66,23 @@ impl Model for Sized {
     ) -> Completion<'a> {
         let bytes = serde_json::to_vec(&encode(request).unwrap()).unwrap().len();
         self.sent.lock().unwrap().push(bytes);
+        let (mut read, mut written, mut prefix, mut len) = (0, 0, String::new(), 0);
+        let mut cached = self.cached.lock().unwrap();
+        for (text, marked) in positions(request) {
+            prefix.push_str(&text);
+            len += text.len();
+            if marked {
+                if cached.contains(&prefix) {
+                    read = len;
+                } else {
+                    written = len;
+                    cached.insert(prefix.clone());
+                }
+            }
+        }
+        let written = written.saturating_sub(read);
+        let full = len - read - written;
+        *self.billed.lock().unwrap() += 100 * full + 125 * written + 10 * read;
         let folded = request.messages.iter().flat_map(|m| &m.content).any(
             |b| matches!(b, Block::ToolResult { content, .. } if content.starts_with("[folded")),
         );
@@ -51,10 +100,10 @@ impl Model for Sized {
             StopReason::EndTurn
         };
         let usage = Usage {
-            input: (bytes / 4) as u64,
+            input: (full / 4) as u64,
             output: 20,
-            cache_read: 0,
-            cache_write: 0,
+            cache_read: (read / 4) as u64,
+            cache_write: (written / 4) as u64,
         };
         Box::pin(async move {
             Ok(Response {
@@ -109,6 +158,8 @@ async fn a_long_run_stays_under_its_stress_line() {
         script: Mutex::new(script),
         sent: Mutex::new(Vec::new()),
         folded_seen: Mutex::new(false),
+        cached: Mutex::new(std::collections::HashSet::new()),
+        billed: Mutex::new(0),
     });
     let (body, cx) = solo(&root.join("world"), "m");
     let cx = cx
@@ -164,7 +215,21 @@ async fn a_long_run_stays_under_its_stress_line() {
         largest * 2 < unfolded,
         "far below the history it would have re-sent ({unfolded} bytes)"
     );
+    the_history_is_read_from_the_cache(&model, &sent);
     let _ = fs::remove_dir_all(&root);
+}
+
+/// Each turn reads what the last one wrote; unmarked, every request would be billed whole.
+fn the_history_is_read_from_the_cache(model: &Sized, sent: &[usize]) {
+    let billed = *model.billed.lock().unwrap();
+    let uncached = 100 * sent.iter().sum::<usize>();
+    eprintln!(
+        "billed {}% of the uncached input ({} of {} base-price bytes)",
+        100 * billed / uncached,
+        billed / 100,
+        uncached / 100
+    );
+    assert!(10 * billed < 4 * uncached, "{billed} of {uncached}");
 }
 
 #[test]
