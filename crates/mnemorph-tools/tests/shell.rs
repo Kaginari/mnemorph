@@ -36,6 +36,9 @@ impl World {
         Context::new(race, self.world(), &["src"])
             .with_gate(gate)
             .with_home("/h")
+            .with_sandbox(Sandbox::None(
+                "these tests check the gate and the process group".into(),
+            ))
     }
 }
 
