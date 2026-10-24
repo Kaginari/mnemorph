@@ -616,7 +616,10 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
     assert!(o.is_error, "{o:?}");
     let o = bash(&mut cx(), "echo built > target/out");
     assert!(!o.is_error, "build output is writable: {o:?}");
-    let o = bash(&mut cx(), "echo forged >> .mnemorph/instruments/usage.jsonl");
+    let o = bash(
+        &mut cx(),
+        "echo forged >> .mnemorph/instruments/usage.jsonl",
+    );
     assert!(o.is_error, "{o:?}");
     assert_eq!(
         fs::read_to_string(w.world().join("target/out")).unwrap(),
@@ -645,4 +648,56 @@ fn a_creatures_commands_are_granted_around_anothers_spot() {
         o.is_error && o.content.contains("outside your soil"),
         "{o:?}"
     );
+}
+
+/// The guard resolves every rule to what it names, so a link in a creature's soil must never
+/// grant its target: not another's spot, not another's zone, not a file outside the world.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_link_in_the_soil_grants_nothing_beyond_it() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("links");
+    fs::create_dir_all(w.world().join("src/other")).unwrap();
+    fs::create_dir_all(w.world().join("lib")).unwrap();
+    fs::write(w.world().join("src/other/theirs.rs"), "theirs\n").unwrap();
+    fs::write(w.world().join("lib/zone.rs"), "zone\n").unwrap();
+    fs::write(w.outside().join("secret"), "outside\n").unwrap();
+    let link = |target: PathBuf, name: &str| {
+        std::os::unix::fs::symlink(target, w.world().join(name)).unwrap();
+    };
+    link(w.world().join("src/other/theirs.rs"), "src/to-theirs");
+    link(w.world().join("lib"), "src/to-lib");
+    link(w.outside().join("secret"), "src/to-outside");
+    let cx = || {
+        Context::new(Race::Slime, w.world(), &["."])
+            .with_soil(&["src/"], &["src/other/"], false)
+            .with_gate(Arc::new(Scripted::new([])))
+            .with_home(w.root.join("home"))
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let grants = cx().grants();
+    let world = w.world().canonicalize().unwrap();
+    for never in [
+        world.join("src/other/theirs.rs"),
+        world.join("lib"),
+        w.outside().join("secret").canonicalize().unwrap(),
+    ] {
+        assert!(
+            !grants.contains(&never),
+            "{never:?} granted through a link: {grants:?}"
+        );
+    }
+    for (through, file) in [
+        ("src/to-theirs", w.world().join("src/other/theirs.rs")),
+        ("src/to-lib/zone.rs", w.world().join("lib/zone.rs")),
+        ("src/to-outside", w.outside().join("secret")),
+    ] {
+        let before = fs::read_to_string(&file).unwrap();
+        let o = bash(&mut cx(), &format!("echo stolen > {through}"));
+        assert!(o.is_error, "{through}: {o:?}");
+        assert_eq!(fs::read_to_string(&file).unwrap(), before, "{through}");
+    }
 }

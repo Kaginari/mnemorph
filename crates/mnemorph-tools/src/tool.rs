@@ -215,13 +215,38 @@ impl Context {
         // Build output, never the records, git's own files, or anything that holds or sits in
         // another's spot: an ignored `.mnemorph/instruments/` is the harness's ledger, not output.
         let records = [self.world.join(".mnemorph"), self.world.join(".git")];
-        out.extend(ignored(&self.world).into_iter().filter(|p| {
-            !records.iter().any(|r| p.starts_with(r) || r.starts_with(p))
-                && !self
+        let built: Vec<PathBuf> = ignored(&self.world)
+            .into_iter()
+            .filter(|p| {
+                !records.iter().any(|r| p.starts_with(r) || r.starts_with(p))
+                    && !self
+                        .except
+                        .iter()
+                        .any(|e| e.starts_with(p) || p.starts_with(e))
+            })
+            .collect();
+        let built_real: Vec<PathBuf> = built.iter().filter_map(|b| b.canonicalize().ok()).collect();
+        out.extend(built);
+        // The guard resolves every rule to the file it names: a symlink granted as an entry would
+        // grant its target. So each grant is resolved here, and kept only if what it resolves to
+        // is still inside the world, outside the records, and the creature's own.
+        let mut out: Vec<PathBuf> = out
+            .into_iter()
+            .filter_map(|g| {
+                let real = g.canonicalize().ok()?;
+                // A folder that holds another's spot is never granted whole.
+                let holds = self
                     .except
                     .iter()
-                    .any(|e| e.starts_with(p) || p.starts_with(e))
-        }));
+                    .any(|e| e.starts_with(&real) && *e != real)
+                    || records.iter().any(|r| r.starts_with(&real));
+                let built = built_real.iter().any(|b| real.starts_with(b))
+                    && !records.iter().any(|r| real.starts_with(r))
+                    && !self.except.iter().any(|e| real.starts_with(e));
+                (real.starts_with(&self.world) && !holds && (self.admits(&real) || built))
+                    .then_some(real)
+            })
+            .collect();
         out.sort();
         out.dedup();
         out
@@ -250,10 +275,19 @@ impl Context {
     #[must_use]
     pub fn scratch(&self) -> PathBuf {
         let all = self.world.join(".mnemorph/tmp");
-        if self.narrowed
-            && let Some(nest) = self.soil.iter().find(|s| s.starts_with(&all) && *s != &all)
-        {
-            return nest.clone();
+        if self.narrowed {
+            // The nest, resolved: a nest that is a link elsewhere is no nest.
+            return self
+                .soil
+                .iter()
+                .find(|s| s.starts_with(&all) && *s != &all)
+                .filter(|nest| nest.canonicalize().map_or(true, |r| r == **nest))
+                .cloned()
+                // No nest of its own, or one that links elsewhere: a private directory outside
+                // the world, never a scratch others share.
+                .unwrap_or_else(|| {
+                    std::env::temp_dir().join(format!("mnemorph-scratch-{}", std::process::id()))
+                });
         }
         all
     }

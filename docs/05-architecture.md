@@ -191,8 +191,12 @@ flowchart LR
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a
     seat, the queue, another's scratch) is granted part by part around that spot, existing
     entries each on its own; a new file directly beside such a spot is the write tool's to make.
-    What git ignores — build output, caches — is granted too, being never a landing, and the
-    temporary directory is the creature's own scratch nest. Three layers hold the border:
+    What git ignores — build output, caches — is granted too, being never a landing, but never
+    the records (`.mnemorph/`), git's own files, or anything holding or inside another's spot.
+    The guard resolves every rule to the file it names, so every grant is resolved first and
+    kept only if what it resolves to is still inside the world and the creature's own: a link in
+    the soil never grants its target. The temporary directory is the creature's own scratch nest,
+    or, when that nest is a link, a private directory outside the world. Three layers hold the border:
     landlock prevents, the tools refuse by name, and the end gate's *right author* catches
     whatever a path through neither would leave. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
     domain, so the harness's environment is closed to its commands; the harness additionally

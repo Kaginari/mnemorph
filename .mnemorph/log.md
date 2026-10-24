@@ -1865,3 +1865,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The third layer, restoring what a failed right-author check names from the commission's
     attic snapshot, belongs to the commission runner (the next rung), where that snapshot is
     taken.
+
+---
+
+### [2026-10-24T23:31:59+02:00] rimuru — M7 grants: a link never grants its target
+- **Task:** close the escape the review of #146 demonstrated before its report was cut off.
+- **Files:** crates/mnemorph-tools tool.rs (`grants` resolves every grant, keeps only what stays
+  the creature's own, excludes the records from build output; `scratch` refuses a linked nest),
+  tests/shell.rs (links to another's spot, another's zone, a file outside the world); docs/05.
+- **Gate:** n/a. Instruments:
+  - the link test fails on the previous commit, where the write through `src/to-theirs`
+    succeeded, and passes now;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A grant list is a list of names, but the guard grants what they resolve to. Every name is
+    resolved and judged by the same `admits` before the kernel sees it.
+  - My own grant test checked the grants by their resolved names, while the escape lived in an
+    unresolved one. A test of a border must try to cross it, not just read the list.
