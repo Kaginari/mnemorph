@@ -1043,3 +1043,71 @@ async fn a_handoff_is_written_for_the_next_session() {
     let (latest, age) = mnemorph_loop::latest_handoff(&w.world()).unwrap();
     assert_eq!((latest, age), (path, 0));
 }
+
+/// A handoff is written right after a context checkpoint — the moment the CLI offers one.
+#[tokio::test]
+async fn a_handoff_is_written_after_a_context_checkpoint() {
+    let w = World::new("handoff-full");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*.x"}), usage(181_000)),
+        answer("## Goal\nSaved."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "fill it").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("context")),
+        "{e:?}"
+    );
+    let mut quiet = |_| {};
+    let path = run
+        .handoff(None, &mut quiet)
+        .await
+        .expect("written past the context line");
+    assert!(std::fs::read_to_string(path).unwrap().contains("Saved."));
+}
+
+/// A line sent while the last model call runs is said with that turn's end, not the next's.
+#[tokio::test]
+async fn a_late_line_is_reported_when_its_turn_ends() {
+    let w = World::new("send-tail");
+    let model = Arc::new(ScriptedModel::new([answer("done")]));
+    let mut run = w.run(model, limits());
+    let lane = run.steer();
+    let mut on = |e: mnemorph_provider::Event| {
+        if matches!(e, mnemorph_provider::Event::Text(_)) {
+            lane.lock().unwrap().push_back("too late".into());
+        }
+    };
+    run.ask("go", &mut on).await;
+    let beats = w.journal().read().unwrap().rows;
+    let warned = beats
+        .iter()
+        .position(|b| matches!(b, Beat::Warning { text } if text.contains("too late")));
+    let ended = beats.iter().position(|b| matches!(b, Beat::End { .. }));
+    assert!(
+        matches!((warned, ended), (Some(a), Some(b)) if a < b),
+        "{beats:?}"
+    );
+}
+
+/// Two handoffs in one second keep two files; a handoff's own ask is never the session's first.
+#[tokio::test]
+async fn handoffs_never_overwrite_and_never_quote_themselves() {
+    let w = World::new("handoff-twice");
+    let model = Arc::new(ScriptedModel::new([
+        answer("## Goal\nOne."),
+        answer("## Goal\nTwo."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let mut quiet = |_| {};
+    let a = run.handoff(None, &mut quiet).await.unwrap();
+    let b = run.handoff(None, &mut quiet).await.unwrap();
+    assert_ne!(a, b);
+    assert!(std::fs::read_to_string(&a).unwrap().contains("One."));
+    assert!(std::fs::read_to_string(&b).unwrap().contains("Two."));
+    let second = format!("{:?}", model.requests()[1].messages.last().unwrap());
+    assert!(
+        !second.contains("first ask: Write the handoff"),
+        "the template is not the first ask"
+    );
+}

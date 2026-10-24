@@ -429,20 +429,10 @@ async fn main_lane(
                 Some(lane) => steer_with(&core, id, lane, &msg.params),
                 None => core.fail(id, -32002, "initialize first"),
             },
-            "session/handoff" => {
-                let Some(tx) = &prompts else {
-                    core.fail(id, -32002, "initialize first");
-                    continue;
-                };
-                let work = if msg.params["read"].as_bool() == Some(true) {
-                    Work::ReadHandoff
-                } else {
-                    Work::Handoff(msg.params["focus"].as_str().map(str::to_owned))
-                };
-                let queued = core.outstanding.fetch_add(1, Ordering::SeqCst) > 0;
-                let _ = tx.send(work);
-                core.reply(id, &json!({"queued": queued}));
-            }
+            "session/handoff" => match &prompts {
+                Some(tx) => hand_off(&core, id, tx, &msg.params),
+                None => core.fail(id, -32002, "initialize first"),
+            },
             "session/interrupt" => {
                 if let Some(i) = &interrupt {
                     i.fire();
@@ -487,6 +477,56 @@ fn steer_with(core: &Core, id: Option<&Value>, lane: &mnemorph_loop::Steer, para
         .unwrap_or_else(PoisonError::into_inner)
         .push_back(text.to_owned());
     core.reply(id, &json!({}));
+}
+
+/// `session/handoff`: write one, or read the newest, in order behind the lines already sent.
+fn hand_off(
+    core: &Core,
+    id: Option<&Value>,
+    tx: &tokio::sync::mpsc::UnboundedSender<Work>,
+    params: &Value,
+) {
+    let work = if params["read"].as_bool() == Some(true) {
+        Work::ReadHandoff
+    } else {
+        Work::Handoff(params["focus"].as_str().map(str::to_owned))
+    };
+    let queued = core.outstanding.fetch_add(1, Ordering::SeqCst) > 0;
+    if queued {
+        core.emit(&Event::Queued {
+            text: match &work {
+                Work::ReadHandoff => "/handoff read".to_owned(),
+                Work::Handoff(Some(f)) => format!("/handoff {f}"),
+                Work::Handoff(None) | Work::Line(_) => "/handoff".to_owned(),
+            },
+        });
+    }
+    let _ = tx.send(work);
+    core.reply(id, &json!({"queued": queued}));
+}
+
+/// The most bytes of a handoff `/handoff read` gives the body.
+const READ_BYTES: u64 = 64 * 1024;
+
+/// The ask that gives the newest handoff to the body, or why there is none to give.
+fn read_handoff(world: &std::path::Path) -> Result<String, String> {
+    let Some((path, _)) = mnemorph_loop::latest_handoff(world) else {
+        return Err("no handoff is waiting in .mnemorph/handoffs".into());
+    };
+    let size = std::fs::metadata(&path).map_or(0, |m| m.len());
+    if size > READ_BYTES {
+        return Err(format!(
+            "{} is {size} bytes, more than a handoff should be ({READ_BYTES}); read it yourself",
+            path.display()
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("{} cannot be read as text: {e}", path.display()))?;
+    Ok(format!(
+        "{}\n\nThe handoff, {}:\n\n{text}",
+        mnemorph_loop::HANDOFF_READ,
+        path.display()
+    ))
 }
 
 /// `session/events`: every kept event after `since`, and where the kept ones begin — so a gap
@@ -569,20 +609,11 @@ async fn drive(
                 }),
                 Err(why) => core.emit(&Event::Warning { text: why }),
             },
-            Work::ReadHandoff => match mnemorph_loop::latest_handoff(&world)
-                .and_then(|(path, _)| Some((std::fs::read_to_string(&path).ok()?, path)))
-            {
-                Some((text, path)) => {
-                    let ask = format!(
-                        "{}\n\nThe handoff, {}:\n\n{text}",
-                        mnemorph_loop::HANDOFF_READ,
-                        path.display()
-                    );
-                    session.drive(&ask, &mut on).await;
+            Work::ReadHandoff => match read_handoff(&world) {
+                Ok(ask) => {
+                    session.run().ask_for_core(&ask, &mut on).await;
                 }
-                None => core.emit(&Event::Warning {
-                    text: "no handoff is waiting in .mnemorph/handoffs".into(),
-                }),
+                Err(why) => core.emit(&Event::Warning { text: why }),
             },
         }
         core.outstanding.fetch_sub(1, Ordering::SeqCst);

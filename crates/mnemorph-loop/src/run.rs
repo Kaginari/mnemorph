@@ -101,6 +101,23 @@ pub type Steer = Arc<std::sync::Mutex<std::collections::VecDeque<String>>>;
 /// How a sent line reaches the body.
 pub const SENT: &str = "[the human, while you work]";
 
+/// Whose ask a run is answering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Asking {
+    /// The human's.
+    Human,
+    /// The core's own, such as reading a handoff.
+    Core,
+    /// The core's handoff.
+    Handoff,
+}
+
+/// The most model calls a handoff may take.
+pub const HANDOFF_STEPS: u32 = 8;
+
+/// The most bytes of the journal's tail, and of the previous handoff, a handoff's facts carry.
+pub const HANDOFF_FACT_BYTES: usize = 16 * 1024;
+
 /// Sees a run live: called on the run's own task, so it must not block.
 pub type Observer = Arc<dyn Fn(&Seen) + Send + Sync>;
 
@@ -224,6 +241,10 @@ pub struct Run {
     cap_warned: bool,
     steer: Steer,
     first_ask: Option<String>,
+    /// Whose ask runs: the human's, the core's own (never the session's first ask), or a
+    /// handoff — which may pass the context line and the carved budget, being how a full session
+    /// saves what it knows, but never the human's caps.
+    asking: Asking,
 }
 
 /// What a run needs that is not the body itself.
@@ -277,6 +298,7 @@ impl Run {
             cap_warned: false,
             steer: Steer::default(),
             first_ask: None,
+            asking: Asking::Human,
         }
     }
 
@@ -311,6 +333,7 @@ impl Run {
             self.spent_wt
         );
         if let Ok(log) = std::fs::read_to_string(world.join(".mnemorph/log.md")) {
+            let log = last_bytes(&log, HANDOFF_FACT_BYTES);
             let tail: Vec<&str> = log.lines().rev().take(40).collect();
             let tail: Vec<&str> = tail.into_iter().rev().collect();
             let _ = write!(
@@ -324,25 +347,35 @@ impl Run {
         {
             let _ = write!(
                 facts,
-                "\n- The previous handoff ({}):\n\n{previous}",
-                path.display()
+                "\n- The previous handoff ({}):\n\n{}",
+                path.display(),
+                first_bytes(&previous, HANDOFF_FACT_BYTES)
             );
         }
         if let Some(focus) = focus.filter(|f| !f.trim().is_empty()) {
             let _ = write!(facts, "\n\nFocus the handoff on: {focus}");
         }
-        match self.ask(&facts, on).await {
-            Ending::Answered(text) => {
-                let dir = handoffs(&world);
-                std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-                let name = Timestamp::now().to_string().replace(':', "-");
-                let path = dir.join(format!("{name}.md"));
-                std::fs::write(&path, format!("{}\n", text.trim()))
-                    .map_err(|e| format!("{}: {e}", path.display()))?;
-                Ok(path)
-            }
+        // What is already folded stays folded and the rest of the old output folds now, so the
+        // handoff fits the window of a session that filled it.
+        self.folded_upto = self
+            .folded_upto
+            .max(crate::compact::fold_point(&self.messages));
+        self.asking = Asking::Handoff;
+        let ending = self.ask(&facts, on).await;
+        self.asking = Asking::Human;
+        match ending {
+            Ending::Answered(text) => write_handoff(&handoffs(&world), &text),
             other => Err(format!("the handoff was not written: {}", other.words())),
         }
+    }
+
+    /// Ask on the core's own behalf (reading a handoff): the same turn, never the session's
+    /// first ask.
+    pub async fn ask_for_core(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
+        self.asking = Asking::Core;
+        let ending = self.ask(text, on).await;
+        self.asking = Asking::Human;
+        ending
     }
 
     /// The send lane: push a line, and the body reads it after its next tool step.
@@ -548,7 +581,7 @@ impl Run {
 
     /// Lines sent to a turn that ended before a tool step: never smuggled into the next turn,
     /// and the human is told.
-    fn drop_steering(&mut self) {
+    fn drop_steering(&self) {
         let left: Vec<String> = self
             .steer
             .lock()
@@ -563,6 +596,8 @@ impl Run {
     }
 
     fn end(&self, ending: Ending) -> Ending {
+        // A line sent too late for this turn is said with this turn's end.
+        self.drop_steering();
         self.record(&Beat::End {
             ending: ending.words(),
         });
@@ -626,7 +661,9 @@ impl Run {
         // ask's to read.
         self.interrupt.take();
         self.drop_steering();
-        self.first_ask.get_or_insert_with(|| text.to_owned());
+        if self.asking == Asking::Human {
+            self.first_ask.get_or_insert_with(|| text.to_owned());
+        }
         let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
@@ -809,20 +846,29 @@ impl Run {
     /// The meters, before a model call: a reason to stop, or none.
     fn perceive(&mut self) -> Option<Stop> {
         let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
-        if self.ask_steps >= self.limits.steps {
+        let steps = if self.asking == Asking::Handoff {
+            self.limits.steps.min(HANDOFF_STEPS)
+        } else {
+            self.limits.steps
+        };
+        if self.ask_steps >= steps {
             return checkpoint(format!("steps: {} taken", self.ask_steps));
         }
         if self.started.elapsed() >= self.limits.deadline {
             return Some(Stop::Salvage("clock: the deadline passed between turns"));
         }
         let line = self.stress_line();
-        if self.last_occupancy >= line {
+        if self.last_occupancy >= line && self.asking != Asking::Handoff {
             return checkpoint(format!(
                 "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
                 self.last_occupancy
             ));
         }
-        if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {
+        if let Some(budget) = self
+            .limits
+            .budget_wt
+            .filter(|b| self.spent_wt >= *b && self.asking != Asking::Handoff)
+        {
             return checkpoint(format!("budget: {} of {budget} spent", self.spent_wt));
         }
         if let Some(why) = self.over_a_cap() {
@@ -1062,17 +1108,88 @@ pub fn handoffs(world: &std::path::Path) -> std::path::PathBuf {
     world.join(".mnemorph/handoffs")
 }
 
-/// The newest handoff in `world`, and its age in days.
+/// The newest handoff in `world`, and its age in days — read from its name, which a clone or a
+/// checkout does not change, else from the file's time.
 #[must_use]
 pub fn latest_handoff(world: &std::path::Path) -> Option<(std::path::PathBuf, u64)> {
     let newest = std::fs::read_dir(handoffs(world))
         .ok()?
         .filter_map(Result::ok)
-        .filter(|e| e.path().extension().is_some_and(|x| x == "md"))
-        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-        .max_by_key(|(t, _)| *t)?;
-    let age = newest.0.elapsed().map_or(0, |d| d.as_secs() / 86_400);
-    Some((newest.1, age))
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "md"))
+        .max_by_key(|p| p.file_name().map(std::ffi::OsStr::to_os_string))?;
+    let named = newest
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(written_at)
+        .map(|t| u64::try_from((Timestamp::now().0 - t.0).max(0)).unwrap_or(0) / 86_400);
+    let age = named.or_else(|| {
+        std::fs::metadata(&newest)
+            .ok()?
+            .modified()
+            .ok()?
+            .elapsed()
+            .ok()
+            .map(|d| d.as_secs() / 86_400)
+    })?;
+    Some((newest, age))
+}
+
+/// When a handoff named `2026-10-24T17-07-10Z` (or `…Z-2`) was written.
+fn written_at(stem: &str) -> Option<Timestamp> {
+    let (date, time) = stem.split_once('T')?;
+    let time = time.get(..8)?.replace('-', ":");
+    Timestamp::parse(&format!("{date}T{time}Z"))
+}
+
+/// Write a handoff under a name of its own: two in one second never overwrite each other.
+fn write_handoff(dir: &std::path::Path, text: &str) -> Result<std::path::PathBuf, String> {
+    use std::io::Write as _;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let stamp = Timestamp::now().to_string().replace(':', "-");
+    for n in 1..100 {
+        let name = if n == 1 {
+            format!("{stamp}.md")
+        } else {
+            format!("{stamp}-{n}.md")
+        };
+        let path = dir.join(name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut f) => {
+                f.write_all(format!("{}\n", text.trim()).as_bytes())
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                return Ok(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        }
+    }
+    Err(format!(
+        "{}: a hundred handoffs in one second",
+        dir.display()
+    ))
+}
+
+/// The last `n` bytes of `text`, on a character boundary.
+fn last_bytes(text: &str, n: usize) -> &str {
+    let mut start = text.len().saturating_sub(n);
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
+}
+
+/// The first `n` bytes of `text`, on a character boundary.
+fn first_bytes(text: &str, n: usize) -> &str {
+    let mut end = text.len().min(n);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 /// What the body is asked to fill when a session hands off.

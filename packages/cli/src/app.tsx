@@ -310,7 +310,8 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
         return;
       }
       if (name === 'handoff') {
-        dispatch({ kind: 'local-busy' });
+        // Reading may find nothing to read; the turn's own start marks it busy.
+        if (rest !== 'read') dispatch({ kind: 'local-busy' });
         const asked = rest === 'read' ? client.readHandoff() : client.handoff(rest || undefined);
         void asked.catch((e: Error) => dispatch({ kind: 'info', text: e.message }));
         return;

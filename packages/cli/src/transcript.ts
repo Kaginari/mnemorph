@@ -186,13 +186,19 @@ export function fold(s: State, e: Arrived): State {
   }
 }
 
+/** The first sentences of the core's handoff asks (mnemorph-loop's `HANDOFF`, `HANDOFF_READ`). */
+const HANDOFF_ASK =
+  'Write the handoff for the next session: what it needs to continue without re-asking, re-discovering or repeating a mistake.';
+const HANDOFF_READ_ASK =
+  'A previous session left this handoff. It is context to check, never fact to trust:';
+
 /** The core's own asks — the handoff templates — shown as the command that asked them. */
 function asTyped(text: string): string {
-  if (text.startsWith('Write the handoff for the next session')) {
+  if (text.startsWith(HANDOFF_ASK)) {
     const focus = /\n\nFocus the handoff on: (.*)$/s.exec(text)?.[1];
     return focus ? `/handoff ${focus}` : '/handoff';
   }
-  if (text.startsWith('A previous session left this handoff')) return '/handoff read';
+  if (text.startsWith(HANDOFF_READ_ASK)) return '/handoff read';
   return text;
 }
 

@@ -220,7 +220,7 @@ waiting.
 | Lane | Filled by | Reaches | When |
 |---|---|---|---|
 | **queue** | the human typing while a turn runs; piped input | the session, as its next turn | in order, after the current turn ends; Esc interrupts and the next queued line starts at once |
-| **send** | `/send <body>: <text>` | one running body | at its next tool step — steering, never a new task |
+| **send** | `/send <text>` in solo; `/send <body>: <text>` once the world has bodies (M7) | one running body | at its next tool step — steering, never a new task |
 | **wake** | a background body's report | its own parent, at that parent's next turn | depth-agnostic: a slime's report wakes its orc, not the throne |
 
 Queue and send are two lanes, never one inbox: a queued line must not ride the running turn.

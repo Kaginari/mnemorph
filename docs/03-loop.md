@@ -280,11 +280,17 @@ knows, read by the one that does not.
   previous handoff.
 - **When.** On demand, and offered by the core when the context reaches the stress zone and at
   every checkpoint — the moment a session is about to lose what it knows.
-- **What runs today.** The core gathers the session's first ask, its spend, the journal's last
-  lines and the previous handoff; the body, with its tools, looks at the rest (the changes, the
-  recent commits). Its answer is the file. The shared queue's work joins the facts with the
+- **What runs today.** The core gathers the session's first ask (the human's, never one of its
+  own), its spend, the journal's last lines and the previous handoff, each at most 16 KiB; the
+  body, with its tools, looks at the rest (the changes, the recent commits). Its answer is the
+  file, under a name no other handoff takes. A handoff may pass the context line and a carved
+  budget — it is how a full session saves what it knows — in at most eight calls, and never the
+  human's caps. Handoffs are tracked in git like the journal, so "secrets by location only" is
+  the rule the body follows and the human checks: a value pasted into a session can reach one. The shared queue's work joins the facts with the
   queue (M7), and the offer at the stress zone with the core's notice there; a checkpoint
   already offers it.
-- **Reading.** A new session is told a handoff is waiting (younger than 14 days). `/handoff read`
+- **Reading.** A new session is told a handoff is waiting (younger than 14 days, by the time in
+  its name, which a clone does not change). `/handoff read`
   gives the model the file with one rule: read every listed file, verify every claim against the
-  code, then wait for the human. A handoff is context to check, never fact to trust.
+  code, then wait for the human. A handoff is context to check, never fact to trust. One over
+  64 KiB is not given to the body, and one that is not text is said as such.
