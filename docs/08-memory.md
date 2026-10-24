@@ -84,13 +84,13 @@ Five rules follow:
 
 A trace is
 
-$$
+```math
 \tau = (\text{text},\ \text{tags},\ \text{owner},\ \pi,\ s,\ \kappa,\ \text{status},\ \text{source})
-$$
+```
 
-- **polarity** $\pi \in \{\text{support},\ \text{counter},\ \text{revise}\}$;
+- **polarity** $\pi \in \lbrace \text{support},\ \text{counter},\ \text{revise}\rbrace $;
 - **salience** $s$ and **confidence** $\kappa$, both in $[0,1]$;
-- **status** $\in \{\text{proposed},\ \text{grounded},\ \text{dormant},\ \text{tombstoned}\}$;
+- **status** $\in \lbrace \text{proposed},\ \text{grounded},\ \text{dormant},\ \text{tombstoned}\rbrace $;
 - **source**: the evidence it points at, such as a journal entry, a gate verdict, a commit or a
   `file:line`.
 
@@ -108,7 +108,7 @@ that claims a standing must cite its proof (section *Two scopes, two standings*)
 that the proof resolves: the journal entry, gate verdict or commit it cites exists and says what
 the event claims.
 
-Let $C$ be the notes with $\pi \in \{\text{counter}, \text{revise}\}$ (the *dissent*) and $S^{+}$
+Let $C$ be the notes with $\pi \in \lbrace \text{counter}, \text{revise}\rbrace $ (the *dissent*) and $S^{+}$
 the rest.
 
 ### Recall
@@ -117,14 +117,14 @@ Recall keeps the lessons already written for it: never rebuild the index inline,
 the query has no content words, and boost the body's own and its race's notes over the episodic
 log. On top of BM25 it adds priors and dissent, over a budget of $k = 6$ anchors ($k \ge 2$):
 
-$$
+```math
 \mathrm{score}(\tau) =
 \underbrace{w_q\,\widehat{\mathrm{bm25}}(q,\tau)}_{\text{meaning}}
 + \underbrace{w_r\,\mathrm{rel}(\tau)}_{\text{owner, race, log}}
 + w_s\,s + w_\kappa\,\kappa
 + w_t\,2^{-\Delta/H}
 + \beta\,\mathbf{1}[\tau \in C]
-$$
+```
 
 $\widehat{\mathrm{bm25}} = \mathrm{bm25} / (\mathrm{bm25} + c)$ saturates into $[0,1)$ without
 looking at the other hits, so a poor best match stays a poor score. $c$ is the median best raw
@@ -189,9 +189,9 @@ checked by the gate's *right author* rule, not by recall.
 
 **The dissent seat.** With a budget of $k \ge 2$ anchors:
 
-$$
+```math
 \mathcal{S} = \operatorname{top}_{k-2}(S^{+}) \ \cup\ \{\arg\max_{\tau \in C} \mathrm{score}(\tau)\} \ \cup\ \text{fill to } k
-$$
+```
 
 If $C \neq \emptyset$, at least one dissenting note is always recalled. Plain top-$k$ cannot
 promise that: when agreeing notes outnumber disagreeing ones, the one correction that matters
@@ -201,9 +201,9 @@ ranks $k+1$ and is never seen.
 count and at most three anchors, never their text, so the body knows recall was partial without
 paying for it in the uncached tail every turn:
 
-$$
+```math
 \mathcal{O} = \{\tau \notin \mathcal{S} : \mathrm{score}(\tau) \ge \theta\}
-$$
+```
 
 When no dissenting note was selected, recall says *none selected*, never *none exist*.
 
@@ -234,16 +234,16 @@ second creature's anchors, a human answer). A body cannot ground its own words.
 notes. If notes come from the model's own output, which is wrong when recall was wrong or when the
 model errs (rate $\varepsilon$) on a correct recall:
 
-$$
+```math
 f_{t+1} - f_t = \frac{m}{N_t + m}\,\varepsilon\,(1 - f_t) \;>\; 0
-$$
+```
 
 The error fraction rises for any $\varepsilon > 0$, and its only fixed point is $f^{*} = 1$. If
 only observations write, with observation noise $\delta$ independent of what the model said:
 
-$$
+```math
 f_{t+1} = \frac{N_t f_t + m\,\delta}{N_t + m} \;\longrightarrow\; \delta
-$$
+```
 
 The floor is set by how well the routes observe, not by how often the model is wrong: for a
 grounded note, $\delta = \Pr[\text{claim wrong} \wedge \text{its route passes}]$. A checked route's
@@ -265,9 +265,9 @@ body's last chance spent, or a gate verdict of `FAIL` — reconsolidates, and th
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 
-$$
+```math
 (0.10 \cdot 1.0 + 0.07 \cdot 0.9 + 0.10) - (0.10 \cdot 0.6 + 0.07 \cdot 0.7) = 0.263 - 0.109 = 0.154
-$$
+```
 
 which is worth $0.154 / 0.42 \approx 0.37$ of normalised meaning: a correction outranks an ordinary
 note that matches the query 0.37 better. Recency, by contrast, can move a score by at most
