@@ -131,10 +131,11 @@ Currency caps convert through the same table; a model with no known price is sti
   never cut in half, so a run can pass a cap by the one call that crosses it; every call — the
   salvage turn after a clock death included — is metered and ledgered. A ledger that cannot be
   read opens no capped session and stops a capped run: spend it cannot see is spend it cannot
-  stop. A line it cannot read — a torn last write after a crash, a hand edit — stops nothing: it
-  is counted high, as the largest call the ledger knows (20 000 wt at least), against every cap,
-  since it cannot say its day or its session; the session opens telling the human which lines to
-  repair or remove to count them true. Weighted tokens count every call — priced, unpriced or free — so no model slips under a
+  stop. A line it cannot read — a torn last write after a crash, a hand edit — is counted high, as
+  the largest call the ledger knows (20 000 wt at least), against every cap, since it cannot say
+  its day or its session; against each cap it weighs at most a hidden reserve of 15% of the cap,
+  so by itself it never stops a session, and with real spend it brings the stop that much nearer.
+  The session opens telling the human which lines to repair or remove to count them true. Weighted tokens count every call — priced, unpriced or free — so no model slips under a
   cap; a dollar cap could not promise that, and the dollar keys (`budget.*_usd`) are a view for
   the board (M12), never a limit.
 - **Only cost is carved.** Steps and the wall clock pass down whole, per race

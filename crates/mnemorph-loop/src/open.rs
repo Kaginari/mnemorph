@@ -247,8 +247,10 @@ pub fn open_with(
 pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> String {
     format!(
         "the usage ledger {} has {} unreadable line(s) ({lines:?}): the caps count them as {unseen} \
-         wt, each as large as the largest call — repair or remove them to count them true",
+         wt, each as large as the largest call, against each cap at most its hidden {}% — repair \
+         or remove them to count them true",
         path.display(),
-        lines.len()
+        lines.len(),
+        mnemorph_ledger::UNSEEN_RESERVE_PCT
     )
 }

@@ -13,7 +13,9 @@ mod prices;
 mod row;
 mod usage;
 
-pub use caps::{CapReading, Caps, UNSEEN_FLOOR_WT, check_caps, unseen_wt};
+pub use caps::{
+    CapReading, Caps, UNSEEN_FLOOR_WT, UNSEEN_RESERVE_PCT, check_caps, unseen_against, unseen_wt,
+};
 pub use clock::{Day, Timestamp};
 pub use envelope::{
     BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Slice,

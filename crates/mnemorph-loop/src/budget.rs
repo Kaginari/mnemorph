@@ -16,8 +16,8 @@ pub struct Left {
 }
 
 /// The budget left under `caps` at `now` for `session`, given what `rows` already spent and the
-/// weight assumed for lines the ledger cannot read (`unseen`, against every cap); `None` when the
-/// human set no cap.
+/// weight assumed for lines the ledger cannot read (`unseen`, against every cap, as far as its
+/// hidden reserve); `None` when the human set no cap.
 #[must_use]
 pub fn left(
     caps: Caps,
@@ -30,7 +30,7 @@ pub fn left(
     let spent = |pick: &dyn Fn(&UsageRow) -> bool| -> u64 {
         rows.iter()
             .filter(|r| pick(r))
-            .fold(unseen, |sum, r| sum.saturating_add(r.wt))
+            .fold(0, |sum, r| sum.saturating_add(r.wt))
     };
     let month = spent(&|r| {
         let d = r.ts.day();
@@ -46,7 +46,7 @@ pub fn left(
     .into_iter()
     .filter_map(|(cap, limit, used)| {
         limit.map(|of| Left {
-            wt: of.saturating_sub(used),
+            wt: of.saturating_sub(used.saturating_add(mnemorph_ledger::unseen_against(unseen, of))),
             cap,
         })
     })
@@ -79,6 +79,14 @@ mod tests {
     #[test]
     fn the_tightest_cap_sets_the_budget_and_counts_every_call() {
         let now = Timestamp::parse("2026-10-24T12:00:00Z").unwrap();
+        // Unseen spend comes out of the cap's hidden reserve, never more: nine torn lines leave
+        // 85% of a session cap.
+        let session = Caps {
+            session: Some(100_000),
+            ..Caps::default()
+        };
+        let nine = mnemorph_ledger::unseen_wt(&[], 9);
+        assert_eq!(left(session, &[], "this", now, nine).unwrap().wt, 85_000);
         let rows = [
             row("2026-10-24T08:00:00Z", "other", 30_000),
             row("2026-10-23T23:59:59Z", "other", 50_000),

@@ -1674,3 +1674,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     A crash is the common case, and a wall after every crash makes the cap the thing the human
     turns off. Counting high keeps the cap's promise without the wall.
   - A line that cannot be read cannot say its day or session, so it counts against all three caps.
+
+---
+
+### [2026-10-24T21:18:51+02:00] rimuru — unseen spend drawn from a hidden 15% reserve
+- **Task:** the human's call. Counted alone, a torn ledger line could still block a cap under
+  20 000 wt and quietly took 20 000 wt off every cap until repaired. Hold back 15% of each cap,
+  out of sight, for spend the ledger cannot read.
+- **Files:**
+  - crates/mnemorph-ledger caps.rs — `UNSEEN_RESERVE_PCT` and `unseen_against`; `check_caps`
+    adds unseen spend per cap, clamped;
+  - crates/mnemorph-loop budget.rs and open.rs (the hole names the reserve);
+  - tests;
+  - docs/06-consumption.md.
+- **Gate:** n/a. Instruments:
+  - nine torn lines under a 100 000 cap still read Ok;
+  - 70 000 of real spend plus the reserve warns at 85 000;
+  - a 20 000 day cap with one torn line answers;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** an assumed cost needs a ceiling as much as a floor. The floor keeps unseen spend
+  from being skipped; the ceiling keeps it from becoming the wall it replaced.
