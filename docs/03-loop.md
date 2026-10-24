@@ -123,6 +123,22 @@ also writes a priced row to the usage ledger, and the cost meter reads that sum.
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The
 checkpoint carries it.
 
+### The session: queue and interrupt
+
+A session is one body's run and the lines the human types while it works. **Enter** during a turn
+queues the line; when the turn ends, the next queued line becomes the next ask. **Esc** interrupts
+the turn wherever it is: during a model call the call is dropped and nothing half-streamed enters
+the conversation; between tool calls the calls not yet run are answered "interrupted by the human
+before it ran", and none of them runs. Either way the session pivots to the next queued line.
+
+The step budget is each ask's own; the clock, the context and the cost run for the session.
+
+Before every request the conversation is **validated**: it starts and ends with the user, roles
+alternate, no turn is empty, every tool call is answered by the very next user turn with its
+results first, and no result answers a call nobody made. A broken conversation fails the run with
+its reason instead of being refused by the provider. A property test throws random answers, tool
+calls, interrupts and queued lines at a session and checks every request it sends.
+
 ### Stress, in four instruments
 
 | Instrument | Trigger | Response |

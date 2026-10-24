@@ -1,6 +1,7 @@
 //! One body's run: the six beats, until it answers or stops honestly.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use mnemorph_ledger::{Journal, Prices, Timestamp, UsageRow, occupancy};
@@ -13,6 +14,7 @@ use mnemorph_tools::{Context, Tool, call};
 use crate::beats::{Beat, block_json, conversation, push_user};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
+use crate::sequence::validate;
 use crate::stress::{Signal, Stress};
 
 /// Who runs: the body's name, race, model and system prompt.
@@ -79,6 +81,8 @@ pub enum Ending {
     Escalate(String),
     /// The model or the provider failed.
     Failed(String),
+    /// The human interrupted the turn (Esc).
+    Interrupted,
 }
 
 impl Ending {
@@ -88,6 +92,41 @@ impl Ending {
             Ending::Checkpoint { why, .. } => format!("checkpoint: {why}"),
             Ending::Escalate(why) => format!("escalate: {why}"),
             Ending::Failed(why) => format!("failed: {why}"),
+            Ending::Interrupted => "interrupted".into(),
+        }
+    }
+}
+
+/// The human's Esc, shared with the interface: fired from any thread, seen by the run between
+/// beats and during a model call.
+#[derive(Debug, Default)]
+pub struct Interrupt {
+    fired: AtomicBool,
+    notify: tokio::sync::Notify,
+}
+
+impl Interrupt {
+    /// Interrupt the turn in progress.
+    pub fn fire(&self) {
+        self.fired.store(true, Ordering::SeqCst);
+        self.notify.notify_waiters();
+    }
+
+    /// Take the interrupt: whether it was fired since it was last taken.
+    pub fn take(&self) -> bool {
+        self.fired.swap(false, Ordering::SeqCst)
+    }
+
+    /// Wait until it is fired.
+    pub async fn fired(&self) {
+        loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.fired.load(Ordering::SeqCst) {
+                return;
+            }
+            notified.await;
         }
     }
 }
@@ -119,11 +158,13 @@ pub struct Run {
     messages: Vec<Message>,
     stress: Stress,
     steps: u32,
+    ask_steps: u32,
     spent_wt: u64,
     last_occupancy: u64,
     started: Instant,
     gate: Option<EndGate>,
     before: Option<Tree>,
+    interrupt: Arc<Interrupt>,
 }
 
 /// What a run needs that is not the body itself.
@@ -161,11 +202,13 @@ impl Run {
             messages: Vec::new(),
             stress: Stress::default(),
             steps: 0,
+            ask_steps: 0,
             spent_wt: 0,
             last_occupancy: 0,
             started: Instant::now(),
             gate: None,
             before: None,
+            interrupt: Arc::new(Interrupt::default()),
         }
     }
 
@@ -194,6 +237,12 @@ impl Run {
     pub fn with_gate(mut self, gate: EndGate) -> Self {
         self.gate = Some(gate);
         self
+    }
+
+    /// The handle the interface fires on Esc.
+    #[must_use]
+    pub fn interrupt(&self) -> Arc<Interrupt> {
+        Arc::clone(&self.interrupt)
     }
 
     /// The conversation so far.
@@ -271,6 +320,8 @@ impl Run {
         if self.gate.is_some() {
             self.before = Some(snapshot(self.cx.world()));
         }
+        // The step budget is each commission's: a human ask is one.
+        self.ask_steps = 0;
         let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
@@ -279,11 +330,29 @@ impl Run {
                 Some(Stop::Salvage(why)) => return self.salvage(why).await,
                 None => {}
             }
-            // Plan: one model call, inside what is left of the clock.
+            // Plan: one model call, inside what is left of the clock, unless the human interrupts.
+            if self.interrupt.take() {
+                return self.end(Ending::Interrupted);
+            }
+            if let Err(e) = validate(&self.messages) {
+                return self.end(Ending::Failed(format!(
+                    "the conversation is malformed: {e}"
+                )));
+            }
             let request = self.request(self.limits.max_tokens);
             let left = self.limits.deadline.saturating_sub(self.started.elapsed());
-            let response = match tokio::time::timeout(left, self.model.complete(&request, on)).await
-            {
+            let interrupt = Arc::clone(&self.interrupt);
+            let call = tokio::time::timeout(left, self.model.complete(&request, on));
+            let answered = tokio::select! {
+                answered = call => Some(answered),
+                () = interrupt.fired() => None,
+            };
+            let Some(answered) = answered else {
+                // Nothing half-streamed enters the conversation: it still ends with the user.
+                self.interrupt.take();
+                return self.end(Ending::Interrupted);
+            };
+            let response = match answered {
                 Err(_) => {
                     return self
                         .salvage("clock: the deadline passed during the model call")
@@ -370,8 +439,8 @@ impl Run {
     /// The meters, before a model call: a reason to stop, or none.
     fn perceive(&mut self) -> Option<Stop> {
         let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
-        if self.steps >= self.limits.steps {
-            return checkpoint(format!("steps: {} taken", self.steps));
+        if self.ask_steps >= self.limits.steps {
+            return checkpoint(format!("steps: {} taken", self.ask_steps));
         }
         if self.started.elapsed() >= self.limits.deadline {
             return Some(Stop::Salvage("clock: the deadline passed between turns"));
@@ -394,6 +463,7 @@ impl Run {
     /// Count the turn, price it into the ledger, journal it, add it to the conversation.
     fn record_turn(&mut self, response: &mnemorph_provider::Response) {
         self.steps += 1;
+        self.ask_steps += 1;
         self.last_occupancy = occupancy(response.usage);
         let row = usage_row(
             response,
@@ -427,7 +497,26 @@ impl Run {
     fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
+        let mut interrupted = false;
         for (id, name, input) in calls {
+            // Esc between calls: the calls not yet run are answered, so the conversation stays
+            // whole, and none of them runs.
+            if interrupted || self.interrupt.take() {
+                interrupted = true;
+                let content = "interrupted by the human before it ran".to_owned();
+                self.record(&Beat::Result {
+                    tool_use_id: id.clone(),
+                    content: content.clone(),
+                    is_error: true,
+                });
+                results.push(Block::ToolResult {
+                    tool_use_id: id,
+                    content,
+                    is_error: true,
+                    cache: false,
+                });
+                continue;
+            }
             let o = call(&self.tools, &name, &input, &mut self.cx);
             self.record(&Beat::Result {
                 tool_use_id: id.clone(),
@@ -443,6 +532,9 @@ impl Run {
             });
         }
         push_user(&mut self.messages, results);
+        if interrupted {
+            return Some(Ending::Interrupted);
+        }
         for s in signals {
             match s {
                 Signal::Warn(text) => {
