@@ -492,3 +492,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** the repository is public; the book change in review as a pull request.
 - **Learned:** escalation reads only code-held signals — occupancy from the ledger, a soil
   refusal, a shelf refusal — so solo never decides by itself that it is "stressed".
+
+---
+
+### [2026-10-24T02:14:37+02:00] rimuru — M4 rung 1: the shell classifier
+- **Task:** M4 began ("go"). First rung: every shell command a body runs is classified read,
+  write, outward or destructive — or refused by the guard — from a parsed AST.
+- **Files:** crates/mnemorph-tools/src/classify/ (mod.rs: the walker over brush-parser's AST,
+  prefix-max, pipelines, subshell cwd; words.rs: braces, quotes, `~`/`$HOME`, substitutions;
+  paths.rs: whole-segment placement after `..` and symlinks, devices, credentials, dangerous
+  roots; commands.rs: wrappers, shells, git, gh, registries, network, secret stores, disks,
+  file commands), tests/corpus.txt (257 rows) + corpus.rs, tests/properties.rs.
+- **Gate:** n/a. Instruments: corpus 257/257; proptest "arguments only tighten" (4000 cases);
+  never panics on arbitrary input; a symlink out of the world judged outside; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - brush files `x=y` after the command name as an assignment word: `dd of=/dev/disk2` read as
+    nothing until suffix assignments became arguments. A corpus row caught it.
+  - Prefix-max makes lesson 29 true by construction, and costs one row of precision: bare
+    `git stash` writes, so `git stash list` classifies as write too.
+  - A glob has two meanings: a bare `*` is all of its directory (`rm -rf ~/*` is the home);
+    `*.log` is a child. `find -delete` acts on what it finds, never its start.
+  - The disk is at its last few hundred MB: `target/` is 3.6 GB of it.
