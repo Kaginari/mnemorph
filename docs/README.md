@@ -38,7 +38,8 @@ review a canvas change like a code change.
 | 5 | [Architecture](05-architecture.md) | crates, packages, processes, storage, sandbox |
 | 6 | [Consumption](06-consumption.md) | how every token is budgeted, metered and stopped |
 | 7 | [MCP](07-mcp.md) | the client, agent-mcp and toolbox-mcp: every spec in, only the needed ones out |
-| 8 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
+| 8 | [Memory](08-memory.md) | the archive and the traces, recall with a seat for dissent, why only the gate writes memory |
+| 9 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 

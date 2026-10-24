@@ -14,6 +14,8 @@ export default withMermaid(
     // Local-only notes (ignored by git) never reach the site.
     srcExclude: ['study-maki.md'],
     cleanUrls: true,
+    // The memory page states its rules as formulas; GitHub renders them too.
+    markdown: { math: true },
     // The brand's files are the site's public files: the emblem is the logo and the favicon.
     vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
     head: [
@@ -49,6 +51,7 @@ export default withMermaid(
             { text: 'Architecture', link: '/05-architecture' },
             { text: 'Consumption', link: '/06-consumption' },
             { text: 'MCP', link: '/07-mcp' },
+            { text: 'Memory', link: '/08-memory' },
             { text: 'Roadmap', link: '/roadmap' },
           ],
         },

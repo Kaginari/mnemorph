@@ -119,7 +119,9 @@ mnemorph/
 |---|---|---|
 | law, creature docs, Minds | `.mnemorph/law.md`, `.mnemorph/<race>/<name>/README.md`, `.mnemorph/minds/` | yes |
 | journal | `.mnemorph/log.md` — append-only writer | yes |
-| shared notes | `.mnemorph/memory/shared/notes.jsonl` | yes |
+| shared notes | `.mnemorph/memory/shared/notes.jsonl` — append-only note events ([memory](08-memory.md)) | yes |
+| personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
+| semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
 | handoffs | `.mnemorph/handoffs/<time>.md` | yes |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |

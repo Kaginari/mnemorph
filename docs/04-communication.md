@@ -57,8 +57,9 @@ Between bodies the messages are short tagged lines instead of prose — `@S` ope
 written to a file and the path is sent. This is how a deep chain stays affordable.
 
 The `@U` line is the most important one: it is something the body learned that is written
-nowhere on disk. When a body's context dies, its `@U` lines are what survives — they are filed as
-shared notes and ontology facts automatically.
+nowhere on disk. When a body's context dies, its `@U` lines are what survives — they are filed in
+the creature's personal memory as proposed notes, and reach shared memory once a check or the
+parent's verdict confirms them; territory facts go to the ontology ([memory](08-memory.md)).
 
 ## Technical detail
 
@@ -89,6 +90,7 @@ shared notes and ontology facts automatically.
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
 | `@T <tool> <cost>` | a tool offered in the level-1 manifest |
+| `@M <anchor> <scope> <standing> <polarity>` · `@M -<n> <anchors>` | a recalled note, and the count cut above the floor ([memory](08-memory.md)) |
 | `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |
 
@@ -169,7 +171,8 @@ flowchart TD
 
 The return path: the child's report is the parent's tool result, headed by the exit line
 `@S <word>`; its written paths are recorded as court work so the parent's gate does not judge them
-twice; its `@U` lines are landed; the value ledger folds the run; council warrants, ascensions
+twice; its `@U` lines are landed as proposed notes, and the parent's verdict accepts or rejects
+each by name; the value ledger folds the run; council warrants, ascensions
 and evolutions ride the report as bracketed notes.
 
 ### The lanes of a session, and the shared queue

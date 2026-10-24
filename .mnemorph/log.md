@@ -931,3 +931,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the bench's key must be the bench, not the command line: `pytest -q` and
   `pytest -q | tail -1` first counted as two benches, each under the limit — a pipe split the
   tally it was meant to make suspicious.
+
+---
+
+### [2026-10-24T15:40:00+02:00] rimuru — the book: memory (page 8), M8 replanned around it
+- **Task:** Veldora: use DIKWP MNEMORPH-85 as Mnemorph's memory system — is it possible, and the
+  plan, in the book.
+- **Files:** docs/08-memory.md (new: archive and traces, recall with priors, a dissent seat and
+  declared omissions, the write rule, reconsolidation, dissent-exempt distillation, three
+  pathologies), docs/roadmap.md (M8 · L, seven rungs, a measurable exit), docs/README.md,
+  docs/03-loop.md, docs/05-architecture.md, site (math on, page in the sidebar,
+  markdown-it-mathjax3).
+- **Gate:** n/a. A fresh Fable review: 16 findings, all fixed here (a no-write pass is not a
+  check; one revise event per run-ending failure; 04's `@U` landing; fold order and precedence;
+  proofs the fold can resolve; saturating BM25; stated defaults; a measurable exit). Instruments:
+  diagram check 17 parse; site build green; 0 MathJax errors; `--frozen-lockfile` install clean;
+  xmldom pinned past its deprecated releases.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The rules port; the code does not: MNEMORPH-85 is Python with token-overlap recall and
+    concatenation as synthesis. Its rules (model output never writes memory, a seat for dissent,
+    correction priors, replay detection, dissent-exempt summaries) fit M8 with BM25 underneath.
+  - Mnemorph already owns the hard part MNEMORPH-85 leaves abstract: the "observed world effect"
+    is the verify line and the end gate.
+  - "Proposed until checked" alone would have kept research and failed runs' lessons private
+    forever (a side agent's catch); scope (personal · shared) is now its own axis, with four
+    routes to shared: checked, accepted, corroborated, confirmed.
+  - Open (@?): the weights are untuned until the recall fixtures exist; the corroboration
+    match (what makes two claims "the same") needs its own fixture.
