@@ -245,7 +245,7 @@ fn a_write_resets_what_read_withholds() {
     run(
         &mut cx,
         "write",
-        r#"{"path": "src/a.txt", "content": "one\n"}"#,
+        r#"{"path": "src/a.txt", "content": "two\n"}"#,
     );
     let o = run(&mut cx, "read", r#"{"path": "src/a.txt"}"#);
     assert!(
@@ -409,4 +409,263 @@ fn protected_files_are_not_written_by_tools() {
         r#"{"path": ".mnemorph/shared/queue.jsonl", "content": "{}\n"}"#,
     );
     assert!(!o.is_error, "shared is writable: {o:?}");
+}
+
+fn use_tool(cx: &mut Context, name: &str, args: &serde_json::Value) -> Outcome {
+    call(&registry(), name, &args.to_string(), cx)
+}
+
+/// Several edits, in order, all or none.
+#[test]
+fn multiedit_writes_all_or_nothing() {
+    let w = World::new("multiedit");
+    w.put("src/a.rs", "fn one() {}\nfn two() {}\n");
+    let mut cx = w.cx();
+    let o = use_tool(
+        &mut cx,
+        "multiedit",
+        &serde_json::json!({"path": "src/a.rs", "edits": [
+            {"old_string": "fn one()", "new_string": "fn uno()"},
+            {"old_string": "fn uno() {}\nfn two()", "new_string": "fn uno() {}\nfn dos()"}
+        ]}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/a.rs"), "fn uno() {}\nfn dos() {}\n");
+    let o = use_tool(
+        &mut cx,
+        "multiedit",
+        &serde_json::json!({"path": "src/a.rs", "edits": [
+            {"old_string": "fn uno()", "new_string": "fn first()"},
+            {"old_string": "fn missing()", "new_string": "x"}
+        ]}),
+    );
+    assert!(
+        o.is_error
+            && o.content.starts_with("edit 2 of 2:")
+            && o.content.ends_with("Nothing was written."),
+        "{o:?}"
+    );
+    assert_eq!(w.get("src/a.rs"), "fn uno() {}\nfn dos() {}\n");
+}
+
+/// A move inside the soil, a directory with its files, never over an existing file, never out —
+/// and inside a folder that holds another's spot, where a command's `mv` is refused.
+#[test]
+fn move_stays_inside_the_soil() {
+    let w = World::new("move");
+    w.put("src/a.rs", "a\n");
+    w.put("src/dir/x.rs", "x\n");
+    w.put("src/other/theirs.rs", "theirs\n");
+    w.put("src/b.rs", "b\n");
+    let mut cx =
+        Context::new(Race::Slime, w.world(), &["."]).with_soil(&["src/"], &["src/other/"], false);
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/a.rs", "to": "src/sub/renamed.rs"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/sub/renamed.rs"), "a\n");
+    assert!(!w.world().join("src/a.rs").exists());
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/dir", "to": "src/moved"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(w.get("src/moved/x.rs"), "x\n");
+    for (from, to, why) in [
+        ("src/b.rs", "src/sub/renamed.rs", "already exists"),
+        ("src/b.rs", "src/other/b.rs", "outside your soil"),
+        ("src/other/theirs.rs", "src/stolen.rs", "outside your soil"),
+        ("src/b.rs", "../outside/b.rs", "outside the world"),
+        ("src/nothing.rs", "src/n.rs", "does not exist"),
+    ] {
+        let o = use_tool(
+            &mut cx,
+            "move",
+            &serde_json::json!({"from": from, "to": to}),
+        );
+        assert!(
+            o.is_error && o.content.contains(why),
+            "{from} → {to}: {o:?}"
+        );
+    }
+    assert_eq!(w.get("src/other/theirs.rs"), "theirs\n");
+    assert_eq!(w.get("src/b.rs"), "b\n");
+}
+
+/// A delete keeps a copy in the attic first; a directory, or a body with no attic, is refused.
+#[test]
+fn delete_keeps_a_copy_first() {
+    let w = World::new("delete");
+    w.put("src/gone.rs", "gone\n");
+    w.put("src/dir/x.rs", "x\n");
+    let mut bare = w.cx();
+    let o = use_tool(
+        &mut bare,
+        "delete",
+        &serde_json::json!({"path": "src/gone.rs"}),
+    );
+    assert!(o.is_error && o.content.contains("no attic"), "{o:?}");
+    assert!(w.world().join("src/gone.rs").exists());
+    let attic =
+        mnemorph_tools::Attic::at(&w.root.join("attic"), &w.world()).expect("git is installed");
+    let mut cx = w.cx().with_attic(attic);
+    let o = use_tool(&mut cx, "delete", &serde_json::json!({"path": "src/dir"}));
+    assert!(o.is_error && o.content.contains("is a directory"), "{o:?}");
+    let o = use_tool(
+        &mut cx,
+        "delete",
+        &serde_json::json!({"path": "src/gone.rs"}),
+    );
+    assert!(
+        !o.is_error && o.content.contains("the attic keeps a copy"),
+        "{o:?}"
+    );
+    assert!(!w.world().join("src/gone.rs").exists());
+    let o = use_tool(
+        &mut cx,
+        "delete",
+        &serde_json::json!({"path": "../outside/secret.txt"}),
+    );
+    assert!(o.is_error, "{o:?}");
+}
+
+/// What the review of the file tools found, each held: a delete with no copy in the attic deletes
+/// nothing; a link is deleted or moved as a link; a folder holding another's spot, even an empty
+/// one, never moves whole; a move into itself leaves nothing behind; a multiedit that changes
+/// nothing writes nothing; git's own files are never a tool's.
+#[cfg(unix)]
+#[test]
+fn the_file_tools_review_held() {
+    let w = World::new("review");
+    w.put(".gitignore", "*.env\n");
+    w.put("src/secret.env", "KEY=1\n");
+    w.put("src/real.rs", "real\n");
+    w.put("src/r2.rs", "r2\n");
+    w.put("src/dir/x.rs", "x\n");
+    w.put("src/a.rs", "aaa\n");
+    w.put(".git/HEAD", "ref: refs/heads/main\n");
+    fs::create_dir_all(w.world().join("src/box/spot/deeper")).unwrap();
+    w.link("src/l", &w.world().join("src/real.rs"));
+    w.link("src/l2", &w.world().join("src/r2.rs"));
+    let attic =
+        mnemorph_tools::Attic::at(&w.root.join("attic"), &w.world()).expect("git is installed");
+    let mut cx = Context::new(Race::Slime, w.world(), &["."])
+        .with_soil(&["src/", ".git/"], &["src/box/spot/"], false)
+        .with_attic(attic);
+
+    let o = use_tool(
+        &mut cx,
+        "delete",
+        &serde_json::json!({"path": "src/secret.env"}),
+    );
+    assert!(o.is_error && o.content.contains("keeps no copy"), "{o:?}");
+    assert!(w.world().join("src/secret.env").exists());
+
+    let o = use_tool(&mut cx, "delete", &serde_json::json!({"path": "src/l"}));
+    assert!(!o.is_error, "{o:?}");
+    assert!(
+        w.world().join("src/l").symlink_metadata().is_err() && w.get("src/real.rs") == "real\n"
+    );
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/l2", "to": "src/m2"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert!(
+        w.world()
+            .join("src/m2")
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(w.get("src/r2.rs"), "r2\n");
+
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/box", "to": "src/box2"}),
+    );
+    assert!(
+        o.is_error && o.content.contains("holds another's spot"),
+        "{o:?}"
+    );
+    assert!(w.world().join("src/box/spot/deeper").is_dir());
+
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/dir", "to": "src/dir/a/b"}),
+    );
+    assert!(o.is_error && o.content.contains("into itself"), "{o:?}");
+    assert!(!w.world().join("src/dir/a").exists());
+
+    let o = use_tool(
+        &mut cx,
+        "multiedit",
+        &serde_json::json!({"path": "src/a.rs", "edits": [
+            {"old_string": "aaa", "new_string": "bbb"},
+            {"old_string": "bbb", "new_string": "aaa"}
+        ]}),
+    );
+    assert!(o.is_error && o.content.contains("as it was"), "{o:?}");
+
+    let o = use_tool(
+        &mut cx,
+        "write",
+        &serde_json::json!({"path": ".git/HEAD", "content": "x"}),
+    );
+    assert!(o.is_error && o.content.contains("is git's"), "{o:?}");
+    assert_eq!(w.get(".git/HEAD"), "ref: refs/heads/main\n");
+}
+
+/// What the review of the review added: a failed move leaves no directory behind; a delete takes
+/// an empty directory; a write of what is already there writes nothing; a file that is not text
+/// is never rewritten by an edit.
+#[test]
+fn refusals_leave_the_tree_as_it_was() {
+    let w = World::new("leave");
+    w.put("src/a.rs", "a\n");
+    w.put("src/taken.rs", "taken\n");
+    fs::create_dir_all(w.world().join("src/empty")).unwrap();
+    fs::write(w.world().join("src/bin.dat"), [0xff, 0xfe, b'x']).unwrap();
+    let attic =
+        mnemorph_tools::Attic::at(&w.root.join("attic"), &w.world()).expect("git is installed");
+    let mut cx = w.cx().with_attic(attic);
+    // A move into new directories makes them, and reports the file at both ends.
+    let o = use_tool(
+        &mut cx,
+        "move",
+        &serde_json::json!({"from": "src/a.rs", "to": "src/new/deep/a.rs"}),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(o.meta.wrote.len(), 2, "{o:?}");
+    let o = use_tool(&mut cx, "delete", &serde_json::json!({"path": "src/empty"}));
+    assert!(
+        !o.is_error && !w.world().join("src/empty").exists(),
+        "{o:?}"
+    );
+    let o = use_tool(
+        &mut cx,
+        "write",
+        &serde_json::json!({"path": "src/taken.rs", "content": "taken\n"}),
+    );
+    assert!(
+        o.is_error && o.content.contains("already holds exactly that"),
+        "{o:?}"
+    );
+    let o = use_tool(
+        &mut cx,
+        "edit",
+        &serde_json::json!({"path": "src/bin.dat", "old_string": "x", "new_string": "y"}),
+    );
+    assert!(o.is_error && o.content.contains("not UTF-8 text"), "{o:?}");
+    assert_eq!(
+        fs::read(w.world().join("src/bin.dat")).unwrap(),
+        [0xff, 0xfe, b'x']
+    );
 }
