@@ -2061,3 +2061,86 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the exit's own case, `build=` on one path, slipped through on a trailing slash.
   Ownership needs `src/` to mean a directory, and a fact's path needs it to mean the same thing
   as `src`. Each reads the path for its own purpose.
+### [2026-10-25T00:30:41+02:00] rimuru — M7: one order, down and back
+- **Task:** the commission runner, the heart of M7's exit: "the full one-order-down-and-back
+  sequence runs with scripted bodies and passes its gate".
+- **Files:**
+  - crates/mnemorph-loop:
+    - commission.rs — `CommissionTool`, `Commissioner`, `order`, `plan_items`, `repair`, the
+      child's prompt;
+    - run.rs — the `commission` call run by the loop, `with_commissioner`, `courts`,
+      `spent_wt`;
+    - gate.rs — `courts`, `changed`, `Tree::has`;
+  - crates/mnemorph-tools — `Context::inherit`, `Outcome::ok`/`error` public;
+  - tests/commission.rs;
+  - the EndGate literals gain `courts`;
+  - docs/04.
+- **Gate:** n/a. Instruments:
+  - Rimuru → elf → orc → slime, the Slime landing under its gate, each report climbing as its
+    dispatcher's tool result;
+  - a reach past a rank refused naming the next rank;
+  - a Slime's command off its ground put back after its gate refused it twice;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A grandchild's landing is the child's court work, or every rank above it "repairs" it away.
+    The first run removed the Slime's file at the Elf's level.
+  - A child that may dispatch needs the commissioner too. Without it, the order stopped at the
+    Orc on the tool's "cannot commission", and the Slime never ran.
+  - Still to come: the queue and wake lanes, Courts with fresh contexts per office, the council
+    and relief, facts (ontology rung 4), and `mnemorph q`. The human's session does not open
+    Rimuru as a dispatcher yet; that wiring comes with the lanes.
+
+---
+
+### [2026-10-25T00:50:02+02:00] rimuru — the commission, reworked after its review
+- **Task:** the review of #149 said rework. Its findings are fixed:
+  - court work was exempt by path, so a dispatcher could rewrite it;
+  - a restored stray failed every gate above;
+  - Esc did not reach a child;
+  - a body could commission itself without end;
+  - a failed child's landing rode up as court work;
+  - prose read as DONE;
+  - children ran outside the caps.
+- **Files:**
+  - loop:
+    - gate.rs — `Tree::refresh`; `courts` gone from the gate;
+    - run.rs — the baseline takes what a commission landed or put back; `with_interrupt`; the
+      run's own `landed`;
+    - commission.rs — seats claimed and freed; a zero slice refused; caps and stress from the
+      commissioner; a failed child put back whole; off-the-wire answers are FAIL; INTERRUPTED;
+      neutral put-back notes;
+  - tools — `set_cancel`;
+  - tests: tampering judged, a modified stray restored and silent above, Esc three ranks down,
+    one court per seat, prose a FAIL;
+  - each test world has its own attic.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review again.
+- **Learned:**
+  - An exemption by name is a hole: "this path is judged" must mean "this path as it stands
+    now". The baseline refresh makes any later edit a change again.
+  - Tests sharing one attic beside their worlds made a correct restore fail at random. Every
+    store a test writes must be its own.
+
+---
+
+### [2026-10-25T01:02:46+02:00] rimuru — the commission, third pass
+- **Task:** the re-review of #149 said rework.
+  - The baseline refresh laundered a dispatcher's own earlier write once its child touched the
+    file, and absorbed put-backs that failed.
+  - An Esc during setup was swallowed.
+  - Seats were not freed on a panic.
+  - The docs were short.
+- **Files:**
+  - loop:
+    - gate.rs — `refresh` takes only paths the dispatcher had not changed since its baseline;
+    - run.rs — a shared interrupt is not cleared at ask start;
+    - commission.rs — `Order.at`, only real put-backs refreshed, `Seat` freed on drop;
+  - tests: laundering (proven failing without the fix), a stray with no attic refused above, a
+    zero slice;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review again.
+- **Learned:** "judged by its own gate" covers what the child did, not what the path held. The
+  dispatcher's changes before the order are still its own. A baseline refresh must compare
+  against the world as the order found it, not just as it stands after.

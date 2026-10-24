@@ -91,6 +91,59 @@ pub struct Tree {
     files: BTreeMap<PathBuf, Seen>,
 }
 
+impl Tree {
+    /// Take `paths` as they stand now into the baseline: what a commission landed or put back
+    /// is judged by its own gate, so the dispatcher's gate sees only what changes after — an
+    /// edit to court work included. A path the dispatcher itself had changed before the
+    /// commission began (`at` is the world then) keeps its baseline: that change is still the
+    /// dispatcher's to answer for.
+    pub fn refresh(&mut self, world: &Path, paths: &[PathBuf], at: &Tree) {
+        let now = snapshot(world);
+        let untouched: Vec<PathBuf> = paths
+            .iter()
+            .filter(|p| self.files.get(*p) == at.files.get(*p))
+            .cloned()
+            .collect();
+        for p in &untouched {
+            match now.files.get(p) {
+                Some(seen) => {
+                    self.files.insert(p.clone(), seen.clone());
+                }
+                None => {
+                    self.files.remove(p);
+                }
+            }
+        }
+    }
+
+    /// Whether the tree held `rel` (a path relative to the world).
+    #[must_use]
+    pub fn has(&self, rel: &Path) -> bool {
+        self.files.contains_key(rel)
+    }
+}
+
+/// The paths added, changed or removed between `before` and the world now, relative to it.
+#[must_use]
+pub fn changed(before: &Tree, world: &Path) -> Vec<PathBuf> {
+    let after = snapshot(world);
+    let mut out: Vec<PathBuf> = before
+        .files
+        .iter()
+        .filter(|(p, was)| after.files.get(*p) != Some(*was))
+        .map(|(p, _)| p.clone())
+        .chain(
+            after
+                .files
+                .keys()
+                .filter(|p| !before.files.contains_key(*p))
+                .cloned(),
+        )
+        .collect();
+    out.sort();
+    out
+}
+
 /// Snapshot the world.
 #[must_use]
 pub fn snapshot(world: &Path) -> Tree {

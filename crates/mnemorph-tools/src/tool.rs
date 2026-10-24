@@ -78,7 +78,9 @@ pub struct Meta {
 }
 
 impl Outcome {
-    pub(crate) fn ok(content: impl Into<String>, class: ToolClass) -> Self {
+    /// A result the call produced, of `class`.
+    #[must_use]
+    pub fn ok(content: impl Into<String>, class: ToolClass) -> Self {
         Self {
             content: content.into(),
             is_error: false,
@@ -89,7 +91,9 @@ impl Outcome {
         }
     }
 
-    pub(crate) fn error(content: impl Into<String>) -> Self {
+    /// A refusal or a failure, in words that name the lawful route.
+    #[must_use]
+    pub fn error(content: impl Into<String>) -> Self {
         Self {
             content: content.into(),
             is_error: true,
@@ -332,6 +336,20 @@ impl Context {
         }
     }
 
+    /// What a commissioned body takes from the one that commissioned it: the human's gate, the
+    /// sandbox, the home, the guard rules that ask, whether commands may run unguarded, and the
+    /// attic. Its soil is its own.
+    #[must_use]
+    pub fn inherit(mut self, from: &Context) -> Self {
+        self.home.clone_from(&from.home);
+        self.gate = Arc::clone(&from.gate);
+        self.sandbox.clone_from(&from.sandbox);
+        self.asked_rules.clone_from(&from.asked_rules);
+        self.unguarded = from.unguarded;
+        self.attic.clone_from(&from.attic);
+        self
+    }
+
     /// Ask this gate for outward and destructive acts.
     #[must_use]
     pub fn with_gate(mut self, gate: Arc<dyn Gate>) -> Self {
@@ -399,6 +417,11 @@ impl Context {
     pub fn with_cancel(mut self, flag: Arc<std::sync::atomic::AtomicBool>) -> Self {
         self.cancel = Some(flag);
         self
+    }
+
+    /// As [`Self::with_cancel`], in place.
+    pub fn set_cancel(&mut self, flag: Arc<std::sync::atomic::AtomicBool>) {
+        self.cancel = Some(flag);
     }
 
     /// No command runs past this instant — the run's clock.

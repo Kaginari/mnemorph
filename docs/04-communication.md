@@ -172,8 +172,8 @@ flowchart TD
 ```
 
 The law decides on five facts and the world finds them, from the creature docs: the lineage
-(the target's chain of command reaches the dispatcher), the plan item (the dispatcher's open
-plan names the target), the verify line (the target Slime's doc carries one), the lane (the
+(the target's chain of command reaches the dispatcher), the plan item (an open
+`- [ ] <creature>: <item>` line of the `plan.md` in the dispatcher's seat names the target), the verify line (the target Slime's doc carries one), the lane (the
 first Elf above the target is not the dispatcher) and the budget (the slice fits what the
 envelope has left). A refusal names the creature the order goes to instead:
 
@@ -192,6 +192,23 @@ budget fact is the slice against what is left, the per-race share being a carvin
 trusts the chain as the docs write it: a loop or a skipped rank is the findings' to report
 ([ontology](09-ontology.md#findings)), and a target that reports to its dispatcher across a
 skipped rank is refused with that said.
+
+A dispatching body (Rimuru, an Elf, an Orc) holds a `commission` tool: `{to, ask, budget_wt}`.
+The loop runs the call. It asks the law, and a refusal is the tool's result, naming the creature
+the order goes to instead. A lawful order runs the child with a fresh context: its doc and the
+order as its prompt, its soil as its tools' border, its verify lines and *right author* as its
+end gate, its slice of the dispatcher's envelope (half of what is left unless the call names
+one) as its budget, and the same commission tool when its race dispatches, so the order goes on
+down. What the child changed off its ground — its gate refused it — is put back from the attic,
+a new file removed; a child that did not answer — a FAIL, an ESCALATE, a checkpoint, an Esc — has its
+whole landing put back, what it spent charged, and may be commissioned again; what an answering child and
+its own commissions landed is the dispatcher's court work, which its gate does not judge again —
+as landed: a later edit to it is the dispatcher's own, and so is anything the dispatcher had
+changed on that path before the commission; a stray that could not be put back stays in front
+of every gate above; and what the child spent counts against the dispatcher's envelope. One
+court per seat: a body never commissions itself, nor a seat already at work. An answer that does
+not open with `@S` reaches the dispatcher as a FAIL, never a DONE; the human's Esc reaches every
+body the order went down to.
 
 The return path: the child's report is the parent's tool result, headed by the exit line
 `@S <word>`; its written paths are recorded as court work so the parent's gate does not judge them
