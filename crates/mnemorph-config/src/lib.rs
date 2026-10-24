@@ -80,6 +80,8 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gate.ask_rules", Kind::StrList),
     ("gate.approve", Kind::StrList),
     ("sandbox.allow_unguarded", Kind::Bool),
+    ("attic.keep_days", Kind::Int),
+    ("attic.max_mb", Kind::Int),
     ("budget.month_usd", Kind::Number),
     ("budget.day_usd", Kind::Number),
     ("budget.session_usd", Kind::Number),
@@ -427,6 +429,15 @@ impl Config {
         self.get("sandbox.allow_unguarded")
             .and_then(|l| l.value.as_bool())
             .unwrap_or(false)
+    }
+
+    /// How long the attic keeps snapshots, in days, and how large it may grow, in megabytes.
+    #[must_use]
+    pub fn attic_limits(&self) -> (u64, u64) {
+        (
+            self.int("attic.keep_days").unwrap_or(14),
+            self.int("attic.max_mb").unwrap_or(2048),
+        )
     }
 
     /// The guard rules the human turned into questions.

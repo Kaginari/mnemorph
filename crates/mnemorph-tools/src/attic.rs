@@ -22,7 +22,16 @@ use std::process::{Command, Output};
 pub struct Attic {
     dir: PathBuf,
     world: PathBuf,
+    keep_secs: u64,
+    max_bytes: u64,
 }
+
+/// How long snapshots are kept, by default.
+pub const KEEP_DAYS: u64 = 14;
+/// The attic's size past which the oldest snapshots go, by default.
+pub const MAX_MB: u64 = 2048;
+/// How often the attic prunes itself, at most.
+const PRUNE_EVERY_SECS: u64 = 24 * 60 * 60;
 
 /// One snapshot of the working tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +74,17 @@ impl Attic {
         Some(Self {
             dir: dir.to_path_buf(),
             world: world.to_path_buf(),
+            keep_secs: KEEP_DAYS * 24 * 60 * 60,
+            max_bytes: MAX_MB * 1024 * 1024,
         })
+    }
+
+    /// Keep snapshots `keep_days` days, and no more than `max_mb` megabytes of them.
+    #[must_use]
+    pub fn with_limits(mut self, keep_days: u64, max_mb: u64) -> Self {
+        self.keep_secs = keep_days * 24 * 60 * 60;
+        self.max_bytes = max_mb * 1024 * 1024;
+        self
     }
 
     /// Where it keeps things.
@@ -144,14 +163,81 @@ impl Attic {
             ":(exclude).mnemorph/tmp",
         ])?;
         let tree = self.ok(&["write-tree"])?;
+        // A ref per snapshot tells git which trees are still wanted, so pruning keeps them whole.
+        let now = mnemorph_now();
+        self.ok(&[
+            "update-ref",
+            &format!("refs/attic/{now:012}-{}", &tree[..12.min(tree.len())]),
+            &tree,
+        ])?;
         self.keep_git()?;
         let mut log = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(self.dir.join("snapshots.log"))
             .map_err(|e| format!("attic log: {e}"))?;
-        let _ = writeln!(log, "{} {tree} {}", mnemorph_now(), why.replace('\n', " "));
+        let _ = writeln!(log, "{now} {tree} {}", why.replace('\n', " "));
+        self.prune_when_due(now);
         Ok(Snapshot { tree })
+    }
+
+    /// Prune at most once a day; a failed prune is retried the next day and never stops a
+    /// snapshot.
+    fn prune_when_due(&self, now: u64) {
+        let stamp = self.dir.join("pruned");
+        let last = fs::read_to_string(&stamp)
+            .ok()
+            .and_then(|t| t.trim().parse::<u64>().ok())
+            .unwrap_or(0);
+        if now.saturating_sub(last) >= PRUNE_EVERY_SECS {
+            let _ = fs::write(&stamp, now.to_string());
+            let _ = self.prune(now);
+        }
+    }
+
+    /// Drop snapshots older than the keep window, then the oldest while the attic is over its
+    /// size (the newest always stays); pack what remains; forget kept copies of `.git` objects
+    /// the world itself no longer has, once they are past the window. Returns the snapshot
+    /// store's size after, in bytes — the cap measures only that store: the kept `.git` objects
+    /// are hard links, and cost no disk beside the world's own.
+    ///
+    /// # Errors
+    ///
+    /// Git fails.
+    pub fn prune(&self, now: u64) -> Result<u64, String> {
+        let refs = self.ok(&["for-each-ref", "--format=%(refname)", "refs/attic/"])?;
+        let mut refs: Vec<(u64, String)> = refs
+            .lines()
+            .filter_map(|r| {
+                let ts = r
+                    .strip_prefix("refs/attic/")?
+                    .split('-')
+                    .next()?
+                    .parse()
+                    .ok()?;
+                Some((ts, r.to_owned()))
+            })
+            .collect();
+        refs.sort();
+        let cutoff = now.saturating_sub(self.keep_secs);
+        let keep_from = refs
+            .iter()
+            .position(|(ts, _)| *ts >= cutoff)
+            .unwrap_or(refs.len())
+            .min(refs.len().saturating_sub(1));
+        for (_, r) in refs.drain(..keep_from) {
+            self.ok(&["update-ref", "-d", &r])?;
+        }
+        self.ok(&["gc", "--quiet", "--prune=now"])?;
+        while dir_size(&self.dir.join("store.git")) > self.max_bytes && refs.len() > 1 {
+            let drop = (refs.len() / 4).max(1).min(refs.len() - 1);
+            for (_, r) in refs.drain(..drop) {
+                self.ok(&["update-ref", "-d", &r])?;
+            }
+            self.ok(&["gc", "--quiet", "--prune=now"])?;
+        }
+        forget_old_links(&self.dir.join("dotgit/objects"), cutoff);
+        Ok(dir_size(&self.dir.join("store.git")))
     }
 
     /// Files present in `snap` and gone from the world now.
@@ -280,4 +366,35 @@ fn mnemorph_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+/// Bytes under `dir`.
+fn dir_size(dir: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() => dir_size(&e.path()),
+            Ok(t) if t.is_file() => e.metadata().map_or(0, |m| m.len()),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// Remove kept `.git` object copies that only the attic still names, once older than `cutoff`.
+fn forget_old_links(dir: &Path, cutoff: u64) {
+    use std::os::unix::fs::MetadataExt as _;
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.filter_map(Result::ok) {
+        let Ok(meta) = e.metadata() else { continue };
+        if meta.is_dir() {
+            forget_old_links(&e.path(), cutoff);
+        } else if meta.nlink() == 1 && u64::try_from(meta.mtime()).unwrap_or(0) < cutoff {
+            let _ = fs::remove_file(e.path());
+        }
+    }
 }

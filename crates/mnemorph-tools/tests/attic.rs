@@ -168,3 +168,95 @@ fn an_overwritten_file_comes_back() {
         "fn a() {}\n"
     );
 }
+
+const DAY: u64 = 24 * 60 * 60;
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+fn two_snapshots(g: &Ground) -> (Attic, Snapshot, Snapshot) {
+    let attic = g.attic();
+    let old = attic.snapshot("first").unwrap();
+    fs::write(g.world().join("src/a.rs"), "fn a2() {}\n").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let new = attic.snapshot("second").unwrap();
+    (attic, old, new)
+}
+
+/// Snapshots past the keep window go; the newest always stays.
+#[test]
+fn old_snapshots_are_pruned_and_the_newest_stays() {
+    let g = Ground::new("prune-age");
+    let (attic, old, new) = two_snapshots(&g);
+    attic.prune(now() + DAY).unwrap();
+    assert!(
+        attic.restore(&old, &["src/a.rs"]).is_ok(),
+        "a day later both are kept"
+    );
+    attic.prune(now() + 15 * DAY).unwrap();
+    assert!(
+        attic.restore(&old, &["src/a.rs"]).is_err(),
+        "past the window the old one is gone"
+    );
+    attic.restore(&new, &["src/a.rs"]).unwrap();
+    assert_eq!(
+        fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
+        "fn a2() {}\n"
+    );
+}
+
+/// Over its size, the attic drops the oldest snapshots first — never the newest.
+#[test]
+fn the_size_cap_drops_the_oldest() {
+    let g = Ground::new("prune-size");
+    let (attic, old, new) = two_snapshots(&g);
+    let attic = attic.with_limits(14, 0);
+    attic.prune(now()).unwrap();
+    assert!(attic.restore(&old, &["src/a.rs"]).is_err());
+    assert!(attic.restore(&new, &["src/a.rs"]).is_ok());
+}
+
+/// A kept `.git` object the world itself no longer has ages out with the window.
+#[test]
+fn kept_git_objects_age_out_once_the_world_dropped_them() {
+    let g = Ground::new("prune-git");
+    git(&g.world(), &["init", "-q"]);
+    git(&g.world(), &["add", "-A"]);
+    git(&g.world(), &["commit", "-qm", "first"]);
+    let attic = g.attic();
+    attic.snapshot("keep").unwrap();
+    let mirror = attic.dir().join("dotgit/objects");
+    let count = |d: &Path| walk(d).len();
+    let before = count(&mirror);
+    // The world drops one object (as its own gc would); the attic's copy is then the only name.
+    let dropped = walk(&g.world().join(".git/objects"))
+        .into_iter()
+        .find(|p| {
+            p.parent()
+                .is_some_and(|d| d.file_name().is_some_and(|n| n.len() == 2))
+        })
+        .unwrap();
+    fs::remove_file(&dropped).unwrap();
+    attic.prune(now() + 15 * DAY).unwrap();
+    assert_eq!(
+        count(&mirror),
+        before - 1,
+        "only the object the world dropped is forgotten"
+    );
+}
+
+fn walk(d: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in fs::read_dir(d).into_iter().flatten().filter_map(Result::ok) {
+        if e.file_type().unwrap().is_dir() {
+            out.extend(walk(&e.path()));
+        } else {
+            out.push(e.path());
+        }
+    }
+    out
+}
