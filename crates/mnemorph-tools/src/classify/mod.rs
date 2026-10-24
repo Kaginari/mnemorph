@@ -210,7 +210,13 @@ impl Tally {
     }
 
     pub(crate) fn refuse(&mut self, rule: Rule, reason: impl Into<String>) {
-        if self.refused.is_none() {
+        // The first refusal stands, except that a floor rule displaces one the human may ask:
+        // no co-occurring rule can turn a floor refusal into a question.
+        let displaces = self
+            .refused
+            .as_ref()
+            .is_some_and(|(r, _)| !r.floor() && rule.floor());
+        if self.refused.is_none() || displaces {
             self.refused = Some((rule, reason.into()));
         }
     }

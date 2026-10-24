@@ -195,7 +195,8 @@ flowchart LR
   git, and `.mnemorph/` holds the world's records. Each command runs between two snapshots of
   them; once its process group is dead, every change is put back and the body is told. The
   file tools refuse those paths outright. `.mnemorph/shared/` (the work queue), `tmp/` and
-  `intel/` stay writable; a repository the command itself creates is its own.
+  `intel/` stay writable; a repository the command itself creates is its own. The snapshot keeps
+  up to 16 MiB of content; a change to a protected file beyond that is reported, not undone.
 - **The file tools** run in the harness, not the sandbox, so they guard their own opens: a path
   is resolved and checked inside the world (and the soil, for writes), then opened again one
   component at a time from the world's root following no symlink, and written through a
@@ -205,7 +206,8 @@ flowchart LR
   `not-literal`, `remote-code`, `unreadable`, …). The human's configuration may turn a rule into
   a question — the command then waits on the gate with the class it would have had — except
   the floor, which stays a refusal whatever any file says: `root-path`, `device`,
-  `machine-tool`, `fork-bomb`. The sandbox still holds under an approved rule: approving
+  `machine-tool`, `fork-bomb`. A floor refusal displaces any askable one found earlier in the
+  same command, so no co-occurring rule can turn it into a question. The sandbox still holds under an approved rule: approving
   `credential` does not open a credential path.
 - Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) refuses
   every cross-directory rename or link inside the sandbox (`mv` and git fall back to copying)
@@ -238,12 +240,15 @@ an empty list or table never overrides a lower layer:
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`
   and `oni.envelopes` loosen it, so they are honoured only from the local or global file; from
-  the tracked file they become holes saying so. Nothing else feeds them: no environment
+  the tracked file they become holes saying so. So are `providers.*`: a provider decides where
+  a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
-  envelope that is a bare `*` or covers a destructive or refused act, a fallback cycle: errors
-  that name the file.
+  envelope that is a bare `*` or admits a destructive or refused act, a fallback cycle: errors
+  that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
+  any arguments, so it is tried as each destructive one (`--force`, `--delete`, `+ref`,
+  `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
   before it replaces the file; a failed save is returned, and the file stays as it was.
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else

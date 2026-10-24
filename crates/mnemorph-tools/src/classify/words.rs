@@ -57,7 +57,7 @@ pub(crate) fn expand(raw: &str, home: &Path) -> Result<Vec<Lit>, String> {
                 text: Some(String::new()),
                 subs: Vec::new(),
             };
-            fold(&pieces, home, &mut lit);
+            fold(&pieces, alt, home, &mut lit)?;
             Ok(lit)
         })
         .collect()
@@ -137,7 +137,12 @@ fn sequence(start: i64, end: i64, increment: i64, mut each: impl FnMut(i64)) -> 
     Ok(())
 }
 
-fn fold(pieces: &[WordPieceWithSource], home: &Path, lit: &mut Lit) {
+fn fold(
+    pieces: &[WordPieceWithSource],
+    src: &str,
+    home: &Path,
+    lit: &mut Lit,
+) -> Result<(), String> {
     for p in pieces {
         match &p.piece {
             WordPiece::Text(s) | WordPiece::SingleQuotedText(s) | WordPiece::AnsiCQuotedText(s) => {
@@ -146,20 +151,45 @@ fn fold(pieces: &[WordPieceWithSource], home: &Path, lit: &mut Lit) {
             WordPiece::EscapeSequence(s) => push(lit, s.strip_prefix('\\').unwrap_or(s)),
             WordPiece::DoubleQuotedSequence(inner)
             | WordPiece::GettextDoubleQuotedSequence(inner) => {
-                fold(inner, home, lit);
+                fold(inner, src, home, lit)?;
             }
             WordPiece::TildeExpansion(TildeExpr::Home) => push(lit, &home.to_string_lossy()),
             WordPiece::ParameterExpansion(ParameterExpr::Parameter {
                 parameter: Parameter::Named(name),
                 indirect: false,
             }) if name == "HOME" => push(lit, &home.to_string_lossy()),
-            WordPiece::CommandSubstitution(src) | WordPiece::BackquotedCommandSubstitution(src) => {
-                lit.subs.push(src.clone());
+            WordPiece::CommandSubstitution(sub) | WordPiece::BackquotedCommandSubstitution(sub) => {
+                lit.subs.push(sub.clone());
                 lit.text = None;
             }
-            _ => lit.text = None,
+            WordPiece::ParameterExpansion(_) | WordPiece::ArithmeticExpression(_) => {
+                // `${x:-$(cmd)}`, `${x/$(cmd)/y}`, `$(( $(cmd) ))`: the parser keeps the inside as
+                // raw text, and the shell runs what is in it. Read it again as words and classify
+                // every substitution found there; what cannot be read is refused.
+                lit.text = None;
+                let raw = src.get(p.start_index..p.end_index).ok_or(
+                    "an expansion's text cannot be recovered, so what it runs cannot be read",
+                )?;
+                if raw.contains("$(") || raw.contains('`') || raw.contains("${") {
+                    let inner = raw
+                        .strip_prefix("$((")
+                        .and_then(|r| r.strip_suffix("))"))
+                        .or_else(|| raw.strip_prefix("${").and_then(|r| r.strip_suffix('}')))
+                        .unwrap_or(raw);
+                    if inner.len() >= raw.len() {
+                        return Err(format!("the expansion `{raw}` cannot be read"));
+                    }
+                    for nested in expand(inner, home)? {
+                        lit.subs.extend(nested.subs);
+                    }
+                }
+            }
+            // `~user`, `~+`, `~-`: known only at run time. Every word piece is named, so a piece
+            // a new parser version adds is a compile error here, never a silent pass.
+            WordPiece::TildeExpansion(_) => lit.text = None,
         }
     }
+    Ok(())
 }
 
 fn push(lit: &mut Lit, s: &str) {

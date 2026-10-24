@@ -35,15 +35,10 @@ const DRAIN: Duration = Duration::from_millis(500);
 const MAX_OUTPUT: usize = 30_000;
 
 /// Words that mark an environment variable as a secret, matched in its name.
-const SECRET_WORDS: &[&str] = &[
-    "KEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "CREDENTIAL",
-    "AUTH",
-];
+const SECRET_WORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"];
+/// Words that mark a secret only as a whole `_`-separated part of the name (`NPM_AUTH`, not
+/// `AUTHOR`).
+const SECRET_PARTS: &[&str] = &["AUTH", "PAT"];
 
 /// Run a shell command inside the world.
 pub struct Bash;
@@ -352,7 +347,9 @@ pub(crate) fn scrubbed_env() -> Vec<(String, String)> {
 
 fn is_secret(name: &str, value: &str) -> bool {
     let upper = name.to_ascii_uppercase();
-    SECRET_WORDS.iter().any(|w| upper.contains(w)) || has_userinfo(value)
+    SECRET_WORDS.iter().any(|w| upper.contains(w))
+        || upper.split('_').any(|part| SECRET_PARTS.contains(&part))
+        || has_userinfo(value)
 }
 
 /// `scheme://user:pass@host` — a URL carrying credentials.
@@ -392,6 +389,7 @@ mod tests {
             ("HOME", "/h"),
             ("SITE", "https://example.com/a@b"),
             ("LANG", "C.UTF-8"),
+            ("GIT_AUTHOR_NAME", "me"),
         ] {
             assert!(!is_secret(name, value), "{name}={value}");
         }
