@@ -114,7 +114,7 @@ impl Tool for Bash {
             Ok(m) => m,
             Err(e) => return Outcome::error(e),
         };
-        let before = Snapshot::take(cx.world());
+        let mut before = Snapshot::take(cx.world());
         // What the command may take away is kept first; a failed snapshot is said, not fatal: the
         // attic is recovery, the guard is containment.
         let line: String = a.command.chars().take(200).collect();
@@ -134,9 +134,12 @@ impl Tool for Bash {
             }
         }
         // The command's whole process group is dead: nothing can race the restore.
+        if class == ToolClass::Destructive {
+            before.release_deleted_repository();
+        }
         let tripped = before.restore();
-        let attic_note = attic_note(cx, kept.as_ref());
-        let mut out = Outcome::ok(ran.render(timeout), class);
+        let attic_note = attic_note(cx, kept.as_ref(), class);
+        let mut out = Outcome::ok(ran.render(), class);
         out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
         out.meta.exit = ran.code;
         if let Some(note) = attic_note {
@@ -212,6 +215,7 @@ fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outco
 fn attic_note(
     cx: &Context,
     kept: Option<&Result<crate::attic::Snapshot, String>>,
+    class: ToolClass,
 ) -> Option<String> {
     let attic = cx.attic()?;
     match kept? {
@@ -228,7 +232,24 @@ fn attic_note(
                     if gone.len() > 5 { ", …" } else { "" }
                 ));
             }
-            notes.extend(attic.repair_git());
+            if !snap.skipped.is_empty() {
+                notes.push(format!(
+                    "{} file(s) over {} MiB were not kept in the attic: {}",
+                    snap.skipped.len(),
+                    crate::attic::MAX_FILE_BYTES / (1024 * 1024),
+                    snap.skipped
+                        .iter()
+                        .take(3)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            // A destructive act the human approved is the human's: the attic keeps it, and does
+            // not undo it.
+            if class != ToolClass::Destructive {
+                notes.extend(attic.repair_git());
+            }
             (!notes.is_empty()).then(|| notes.join("; "))
         }
         Err(e) => Some(format!(
@@ -266,6 +287,7 @@ struct Ran {
     code: Option<i32>,
     timed_out: bool,
     interrupted: bool,
+    waited: Duration,
 }
 
 #[derive(Default)]
@@ -275,7 +297,7 @@ struct Captured {
 }
 
 impl Ran {
-    fn render(&self, timeout: Duration) -> String {
+    fn render(&self) -> String {
         let mut s = String::from_utf8_lossy(&self.stdout.bytes).into_owned();
         if self.stdout.dropped > 0 {
             let _ = write!(
@@ -305,8 +327,8 @@ impl Ran {
         } else if self.timed_out {
             let _ = write!(
                 s,
-                "\n[killed after {}s: the command and everything it started]",
-                timeout.as_secs_f32()
+                "\n[killed after {:.1}s: the command and everything it started]",
+                self.waited.as_secs_f32()
             );
         } else {
             match self.code {
@@ -356,6 +378,7 @@ fn run(
     let deadline = cx.deadline().map_or(Instant::now() + timeout, |d| {
         d.min(Instant::now() + timeout)
     });
+    let started = Instant::now();
     let mut timed_out = false;
     let mut interrupted = false;
     let status = loop {
@@ -383,6 +406,7 @@ fn run(
         code: status.and_then(|s| s.code()),
         timed_out,
         interrupted,
+        waited: started.elapsed(),
     })
 }
 

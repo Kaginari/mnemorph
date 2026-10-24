@@ -121,7 +121,8 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
         let records = rel.starts_with(".git")
             || (rel.starts_with(".mnemorph")
                 && !rel.starts_with(".mnemorph/shared")
-                && !rel.starts_with(".mnemorph/tmp"));
+                && !rel.starts_with(".mnemorph/tmp")
+                && !rel.starts_with(".mnemorph/intel"));
         return Spot::Inside {
             root: path == world,
             records,
@@ -211,6 +212,14 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
         }
         (Spot::Device(Device::Other), _) => {
             t.refuse(Rule::Device, format!("{what} writes a device"));
+        }
+        // Written in place, an object the attic keeps by hard link would change in the attic too:
+        // changing the repository or the records asks, as deleting them does.
+        (Spot::Inside { records: true, .. }, Act::Modify) => {
+            t.raise(
+                ToolClass::Destructive,
+                format!("{what} changes the repository's history or the world's records in place"),
+            );
         }
         (Spot::Inside { records: true, .. }, Act::Delete) => {
             t.raise(

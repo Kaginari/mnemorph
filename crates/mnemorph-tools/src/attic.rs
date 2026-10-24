@@ -38,7 +38,34 @@ const PRUNE_EVERY_SECS: u64 = 24 * 60 * 60;
 pub struct Snapshot {
     /// The tree's id in the attic's store.
     pub tree: String,
+    /// Files too large to keep, left out of this snapshot.
+    pub skipped: Vec<String>,
 }
+
+/// What the attic never keeps, whatever the world ignores: build output and dependencies
+/// rebuild, and the world's machine-local records are not its to keep.
+const EXCLUDE: &[&str] = &[
+    "target/",
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    "dist/",
+    "build/",
+    "__pycache__/",
+    ".gradle/",
+    ".next/",
+    ".nuxt/",
+    ".cache/",
+    ".tox/",
+    "*.pyc",
+    ".mnemorph/tmp/",
+    ".mnemorph/instruments/",
+    ".mnemorph/index/",
+    ".mnemorph/intel/",
+];
+
+/// The largest file a snapshot keeps.
+pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
 impl Attic {
     /// The attic for `world` under the human's state directory
@@ -104,6 +131,8 @@ impl Attic {
                 "core.fsmonitor=false",
                 "-c",
                 "core.autocrlf=false",
+                "-c",
+                "core.quotePath=false",
             ])
             .args(args)
             .env_clear()
@@ -122,6 +151,19 @@ impl Attic {
         let out = self.git(args).map_err(|e| format!("git: {e}"))?;
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+        } else {
+            Err(format!(
+                "git {}: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    }
+
+    fn ok_bytes(&self, args: &[&str]) -> Result<String, String> {
+        let out = self.git(args).map_err(|e| format!("git: {e}"))?;
+        if out.status.success() {
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         } else {
             Err(format!(
                 "git {}: {}",
@@ -153,15 +195,42 @@ impl Attic {
                 ));
             }
         }
-        // The command's own scratch is not worth keeping; everything else that is not ignored is.
-        self.ok(&[
-            "add",
-            "-A",
-            "--ignore-errors",
-            "--",
-            ".",
-            ":(exclude).mnemorph/tmp",
+        // The attic's own rules, out of every command's reach: what it never keeps, the files too
+        // large to keep this time, and attributes switched off so a restore is byte for byte.
+        let skipped = large_files(&self.world);
+        let info = self.dir.join("store.git/info");
+        fs::create_dir_all(&info).map_err(|e| format!("{}: {e}", info.display()))?;
+        let mut exclude = EXCLUDE.join("\n");
+        for big in &skipped {
+            exclude.push_str("\n/");
+            exclude.push_str(&big.replace(['*', '?', '[', '\\'], "?"));
+        }
+        fs::write(info.join("exclude"), exclude + "\n")
+            .map_err(|e| format!("attic exclude: {e}"))?;
+        fs::write(
+            info.join("attributes"),
+            "* -text -eol -ident -filter -diff -merge\n",
+        )
+        .map_err(|e| format!("attic attributes: {e}"))?;
+        self.ok(&["add", "-A", "--ignore-errors", "--", "."])?;
+        // What is ignored now leaves the index, even if an earlier snapshot kept it.
+        let stale = self.ok_bytes(&[
+            "ls-files",
+            "-z",
+            "--cached",
+            "--ignored",
+            "--exclude-standard",
         ])?;
+        let stale: Vec<String> = stale
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect();
+        for chunk in stale.chunks(200) {
+            let mut args = vec!["rm", "--cached", "-q", "--ignore-unmatch", "--"];
+            args.extend(chunk.iter().map(String::as_str));
+            self.ok(&args)?;
+        }
         let tree = self.ok(&["write-tree"])?;
         // A ref per snapshot tells git which trees are still wanted, so pruning keeps them whole.
         let now = mnemorph_now();
@@ -178,7 +247,7 @@ impl Attic {
             .map_err(|e| format!("attic log: {e}"))?;
         let _ = writeln!(log, "{now} {tree} {}", why.replace('\n', " "));
         self.prune_when_due(now);
-        Ok(Snapshot { tree })
+        Ok(Snapshot { tree, skipped })
     }
 
     /// Prune at most once a day; a failed prune is retried the next day and never stops a
@@ -236,18 +305,24 @@ impl Attic {
             }
             self.ok(&["gc", "--quiet", "--prune=now"])?;
         }
-        forget_old_links(&self.dir.join("dotgit/objects"), cutoff);
+        forget_old_links(
+            &self.dir.join("dotgit/objects"),
+            &self.world.join(".git/objects"),
+            cutoff,
+        );
+        trim_log(&self.dir.join("snapshots.log"), cutoff);
         Ok(dir_size(&self.dir.join("store.git")))
     }
 
     /// Files present in `snap` and gone from the world now.
     #[must_use]
     pub fn deleted_since(&self, snap: &Snapshot) -> Vec<String> {
-        let Ok(out) = self.git(&["ls-tree", "-r", "--name-only", &snap.tree]) else {
+        let Ok(out) = self.git(&["ls-tree", "-r", "-z", "--name-only", &snap.tree]) else {
             return Vec::new();
         };
         String::from_utf8_lossy(&out.stdout)
-            .lines()
+            .split('\0')
+            .filter(|p| !p.is_empty())
             .filter(|p| fs::symlink_metadata(self.world.join(p)).is_err())
             .map(str::to_owned)
             .collect()
@@ -384,17 +459,59 @@ fn dir_size(dir: &Path) -> u64 {
 }
 
 /// Remove kept `.git` object copies that only the attic still names, once older than `cutoff`.
-fn forget_old_links(dir: &Path, cutoff: u64) {
+fn forget_old_links(dir: &Path, world: &Path, cutoff: u64) {
     use std::os::unix::fs::MetadataExt as _;
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     for e in entries.filter_map(Result::ok) {
         let Ok(meta) = e.metadata() else { continue };
+        let theirs = world.join(e.file_name());
         if meta.is_dir() {
-            forget_old_links(&e.path(), cutoff);
-        } else if meta.nlink() == 1 && u64::try_from(meta.mtime()).unwrap_or(0) < cutoff {
+            forget_old_links(&e.path(), &theirs, cutoff);
+        } else if !theirs.exists() && u64::try_from(meta.mtime()).unwrap_or(0) < cutoff {
+            // Only a copy the world itself no longer has, and only once past the window —
+            // whether the copy is a hard link or, across devices, a real copy.
             let _ = fs::remove_file(e.path());
         }
     }
+}
+
+/// Keep only the snapshot log's lines inside the window.
+fn trim_log(log: &Path, cutoff: u64) {
+    let Ok(text) = fs::read_to_string(log) else {
+        return;
+    };
+    let kept: String = text
+        .lines()
+        .filter(|l| {
+            l.split(' ')
+                .next()
+                .and_then(|t| t.parse::<u64>().ok())
+                .is_some_and(|t| t >= cutoff)
+        })
+        .flat_map(|l| [l, "\n"])
+        .collect();
+    let _ = fs::write(log, kept);
+}
+
+/// Files under the world, not ignored, larger than [`MAX_FILE_BYTES`], relative to it.
+fn large_files(world: &Path) -> Vec<String> {
+    let skip: Vec<&str> = EXCLUDE.iter().filter_map(|e| e.strip_suffix('/')).collect();
+    ignore::WalkBuilder::new(world)
+        .hidden(false)
+        .filter_entry(move |e| e.file_name() != ".git" && !skip.iter().any(|s| e.file_name() == *s))
+        .build()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_type().is_some_and(|t| t.is_file())
+                && e.metadata().is_ok_and(|m| m.len() > MAX_FILE_BYTES)
+        })
+        .filter_map(|e| {
+            e.path()
+                .strip_prefix(world)
+                .ok()
+                .map(|p| p.to_string_lossy().into_owned())
+        })
+        .collect()
 }

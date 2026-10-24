@@ -67,7 +67,10 @@ fn tree_of(o: &Outcome) -> Snapshot {
         .chars()
         .take_while(char::is_ascii_hexdigit)
         .collect();
-    Snapshot { tree: short }
+    Snapshot {
+        tree: short,
+        skipped: Vec::new(),
+    }
 }
 
 fn git(world: &Path, args: &[&str]) -> String {
@@ -162,7 +165,15 @@ fn an_overwritten_file_comes_back() {
         .nth(1)
         .unwrap()
         .to_owned();
-    attic.restore(&Snapshot { tree }, &["src/a.rs"]).unwrap();
+    attic
+        .restore(
+            &Snapshot {
+                tree,
+                skipped: Vec::new(),
+            },
+            &["src/a.rs"],
+        )
+        .unwrap();
     assert_eq!(
         fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
         "fn a() {}\n"
@@ -259,4 +270,65 @@ fn walk(d: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// The attic keeps its own rules: build output and dependencies never, ignored or not; nothing
+/// over its size ceiling; and what becomes ignored leaves it.
+#[test]
+fn the_attic_keeps_only_what_is_worth_keeping() {
+    let g = Ground::new("bounded");
+    fs::create_dir_all(g.world().join("target/debug")).unwrap();
+    fs::write(g.world().join("target/debug/app"), "binary").unwrap();
+    fs::write(g.world().join("big.bin"), vec![0u8; 9 * 1024 * 1024]).unwrap();
+    fs::write(g.world().join("café.md"), "accents\n").unwrap();
+    fs::write(g.world().join("log.txt"), "noise\n").unwrap();
+    let attic = g.attic();
+    let snap = attic.snapshot("first").unwrap();
+    assert_eq!(
+        snap.skipped,
+        ["big.bin"],
+        "the oversized file is named, not kept"
+    );
+    let listed = git_in(&attic, &["ls-tree", "-r", "-z", "--name-only", &snap.tree]);
+    assert!(
+        !listed.contains("target/") && !listed.contains("big.bin"),
+        "{listed}"
+    );
+    assert!(listed.contains("café.md") && listed.contains("log.txt"));
+    assert!(
+        attic.deleted_since(&snap).is_empty(),
+        "nothing is reported deleted — accents included"
+    );
+    fs::write(g.world().join(".gitignore"), "log.txt\n").unwrap();
+    let snap = attic.snapshot("second").unwrap();
+    assert!(
+        !git_in(&attic, &["ls-tree", "-r", "-z", "--name-only", &snap.tree]).contains("log.txt"),
+        "what became ignored left"
+    );
+}
+
+fn git_in(attic: &Attic, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args(args)
+        .env("GIT_DIR", attic.dir().join("store.git"))
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A destructive act the human approved is the human's: the attic does not undo it.
+#[test]
+fn an_approved_deletion_of_the_repository_stays_done() {
+    let g = Ground::new("approved");
+    git(&g.world(), &["init", "-q"]);
+    let mut cx = Context::new(Race::Kijin, g.world(), &["."])
+        .with_gate(Arc::new(Scripted::new([mnemorph_tools::Answer::Approve])))
+        .with_home("/h")
+        .with_sandbox(Sandbox::None("attic tests run unguarded".into()))
+        .with_unguarded(true)
+        .with_attic(g.attic());
+    let o = bash(&mut cx, "rm -rf .git");
+    assert!(!o.is_error, "{o:?}");
+    assert!(!o.content.contains("put back"), "{o:?}");
+    assert!(!g.world().join(".git").exists());
 }
