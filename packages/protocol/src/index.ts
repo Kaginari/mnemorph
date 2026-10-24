@@ -2,6 +2,7 @@
  * The protocol between mnemorphd and its clients. The types are generated from the Rust crates
  * (`crates/mnemorph-server/src/protocol.rs`) and checked in; the check fails when they drift.
  */
+export type { Budget } from './generated/Budget.js';
 export type { Envelope } from './generated/Envelope.js';
 export type { Event } from './generated/Event.js';
 export type { EventsParams } from './generated/EventsParams.js';

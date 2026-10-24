@@ -73,6 +73,9 @@ const LOOSENING: &[&str] = &[
     "oni.envelope_days",
     "sandbox.allow_unguarded",
     "models.provider",
+    "budget.session",
+    "budget.day",
+    "budget.month",
     "decide.enabled",
     "decide.via",
     "decide.cutoff.measured",
@@ -100,6 +103,9 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("sandbox.allow_unguarded", Kind::Bool),
     ("attic.keep_days", Kind::Int),
     ("attic.max_mb", Kind::Int),
+    ("budget.session", Kind::Int),
+    ("budget.day", Kind::Int),
+    ("budget.month", Kind::Int),
     ("budget.month_usd", Kind::Number),
     ("budget.day_usd", Kind::Number),
     ("budget.session_usd", Kind::Number),
@@ -515,6 +521,41 @@ impl Config {
         }
     }
 
+    /// The budget caps, the race models and the default backend, checked.
+    fn check_caps_and_models(&self, key: &str, leaf: &Leaf) -> Result<(), String> {
+        let at = &leaf.origin;
+        if matches!(key, "budget.session" | "budget.day" | "budget.month")
+            && leaf.value.as_integer().is_some_and(|n| n < 1)
+        {
+            return Err(format!(
+                "{at}: {key} is a count of weighted tokens of at least 1; to spend nothing, \
+                 do not start a session"
+            ));
+        }
+        if let Some(race) = key.strip_prefix("models.race.")
+            && Race::from_name(race).is_none()
+        {
+            return Err(format!("{at}: models.race.{race}: no race `{race}`"));
+        }
+        if key == "models.provider" {
+            let name = leaf.value.as_str().unwrap_or_default();
+            match self.providers().get(name) {
+                None => {
+                    return Err(format!(
+                        "{at}: models.provider names `{name}`, and no provider has that name"
+                    ));
+                }
+                Some(p) if p.kind == "systemone" => {
+                    return Err(format!(
+                        "{at}: models.provider names `{name}`, a classifier; models need a provider of kind \"anthropic\" or \"openai\""
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
+        Ok(())
+    }
+
     fn validate(&self) -> Result<(), String> {
         for (key, leaf) in &self.leaves {
             let at = &leaf.origin;
@@ -576,27 +617,7 @@ impl Config {
                     ));
                 }
             }
-            if let Some(race) = key.strip_prefix("models.race.")
-                && Race::from_name(race).is_none()
-            {
-                return Err(format!("{at}: models.race.{race}: no race `{race}`"));
-            }
-            if key == "models.provider" {
-                let name = leaf.value.as_str().unwrap_or_default();
-                match self.providers().get(name) {
-                    None => {
-                        return Err(format!(
-                            "{at}: models.provider names `{name}`, and no provider has that name"
-                        ));
-                    }
-                    Some(p) if p.kind == "systemone" => {
-                        return Err(format!(
-                            "{at}: models.provider names `{name}`, a classifier; models need a provider of kind \"anthropic\" or \"openai\""
-                        ));
-                    }
-                    Some(_) => {}
-                }
-            }
+            self.check_caps_and_models(key, leaf)?;
             if let Some(tier) = key.strip_prefix("models.tier.")
                 && !matches!(tier, "frontier" | "strong" | "fast")
             {
@@ -681,6 +702,13 @@ impl Config {
         self.get("gate.ask_rules")
             .map(|l| strings(&l.value).filter_map(Rule::from_name).collect())
             .unwrap_or_default()
+    }
+
+    /// A budget cap in weighted tokens — `session`, `day` or `month` — when the human set one.
+    /// Weighted tokens count every call, priced or not, so no model slips under a cap.
+    #[must_use]
+    pub fn budget_wt(&self, period: &str) -> Option<u64> {
+        self.int(&format!("budget.{period}"))
     }
 
     /// A budget cap in dollars: `month`, `day` or `session`.

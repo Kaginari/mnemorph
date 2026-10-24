@@ -37,6 +37,8 @@ pub struct Opened {
     pub run_id: String,
     /// The configuration's holes: keys it did not take, and why.
     pub holes: Vec<String>,
+    /// What the session may spend under the human's caps, when they set any.
+    pub budget: Option<crate::budget::Left>,
 }
 
 /// Open a solo session in `world`: its configuration loaded, its model reached through the
@@ -142,7 +144,7 @@ pub fn open_with(
         attic,
     } = bound;
     let (body, cx) = solo(world, model_id);
-    let (mut cx, limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
+    let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     if let Some(dir) = attic {
         let (keep_days, max_mb) = config.attic_limits();
         let kept = mnemorph_tools::Attic::at(dir, world)
@@ -155,12 +157,25 @@ pub fn open_with(
     let session_id = format!("s{stamp}-{}", std::process::id());
     let run_id = format!("r{stamp}-{}", std::process::id());
     let instruments = world.join(".mnemorph/instruments");
+    // The caps against what this world already spent today and this month.
+    let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
+    let spent = usage.read().map(|r| r.rows).unwrap_or_default();
+    let budget = crate::budget::left(
+        crate::budget::Caps {
+            session: config.budget_wt("session"),
+            day: config.budget_wt("day"),
+            month: config.budget_wt("month"),
+        },
+        &spent,
+        mnemorph_ledger::Timestamp::now().day(),
+    );
+    limits.budget_wt = budget.map(|b| b.wt);
     let setup = Setup {
         model: model.clone(),
         tools: registry(),
         cx,
         journal: Journal::new(instruments.join("loop").join(format!("{run_id}.jsonl"))),
-        ledger: Some(Journal::new(instruments.join("usage.jsonl"))),
+        ledger: Some(usage),
         prices: anthropic_prices().map_err(|e| format!("prices: {e}"))?,
         caller: Caller {
             session: session_id.clone(),
@@ -187,5 +202,6 @@ pub fn open_with(
             .iter()
             .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
             .collect(),
+        budget,
     })
 }

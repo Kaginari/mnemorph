@@ -206,6 +206,9 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
     let s = initial();
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
     for (const h of hello.holes) s = info(s, `  config hole: ${h}`);
+    if (hello.budget && hello.budget.leftWt === 0) {
+      s = info(s, `  the ${hello.budget.cap} cap is spent: a turn stops at once until it resets`);
+    }
     return s;
   });
   // The editor lives in a ref every key updates at once, so a burst of keys — a fast typist, a
@@ -290,7 +293,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
       if (name === 'status') {
         return dispatch({
           kind: 'info',
-          text: `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session} · ${status(state.usage).join(' · ')}`,
+          text: `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session} · ${status(state.usage, hello.budget).join(' · ')}`,
         });
       }
       if (name === 'theme') {
@@ -364,7 +367,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   });
 
   const running = [...state.running.values()];
-  const parts = [hello.model, ...status(state.usage)];
+  const parts = [hello.model, ...status(state.usage, hello.budget)];
   if (state.queued.length > 0) parts.push(`${state.queued.length} queued`);
   // What streams gets the rows the input, the status line and the calls leave, and no more.
   const room = Math.max(3, rows - 6 - running.length - state.queued.length - (state.gate ? 6 : 0));
@@ -373,36 +376,36 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   return (
     <ThemeContext.Provider value={p}>
       <Box flexDirection="column" width={Math.max(10, columns - 1)}>
-      <Static key={epoch} items={state.items}>
-        {(item) => <ItemView key={item.id} item={item} />}
-      </Static>
-      {state.streaming.trim() ? (
-        <Box marginTop={state.flushed ? 0 : 1}>
-          <Row prefix={state.flushed ? '  ' : '● '} color={races.rimuru}>
-            <Text>{tail(state.streaming, room)}</Text>
+        <Static key={epoch} items={state.items}>
+          {(item) => <ItemView key={item.id} item={item} />}
+        </Static>
+        {state.streaming.trim() ? (
+          <Box marginTop={state.flushed ? 0 : 1}>
+            <Row prefix={state.flushed ? '  ' : '● '} color={races.rimuru}>
+              <Text>{tail(state.streaming, room)}</Text>
+            </Row>
+          </Box>
+        ) : null}
+        {running.map((t) => (
+          <Row key={t.call} prefix="⏺ " color={p.holo}>
+            <Text>
+              <Text bold>{t.name}</Text>
+              <Text color={p.textMuted}> {summary(t.name, t.input)} …</Text>
+            </Text>
           </Row>
-        </Box>
-      ) : null}
-      {running.map((t) => (
-        <Row key={t.call} prefix="⏺ " color={p.holo}>
-          <Text>
-            <Text bold>{t.name}</Text>
-            <Text color={p.textMuted}> {summary(t.name, t.input)} …</Text>
+        ))}
+        {state.queued.map((q, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the same line may wait twice
+          <Text key={i} color={p.textMuted}>{`  waiting: ${q}`}</Text>
+        ))}
+        {state.gate ? <Gate request={state.gate.request} /> : null}
+        <Box marginTop={1} flexDirection="column">
+          <Input editor={editor} busy={state.busy} />
+          <Text color={p.textMuted}>
+            {`  ${parts.join(' · ')}`}
+            {state.busy ? '  ·  esc to stop' : '  ·  /help'}
           </Text>
-        </Row>
-      ))}
-      {state.queued.map((q, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the same line may wait twice
-        <Text key={i} color={p.textMuted}>{`  waiting: ${q}`}</Text>
-      ))}
-      {state.gate ? <Gate request={state.gate.request} /> : null}
-      <Box marginTop={1} flexDirection="column">
-        <Input editor={editor} busy={state.busy} />
-        <Text color={p.textMuted}>
-          {`  ${parts.join(' · ')}`}
-          {state.busy ? '  ·  esc to stop' : '  ·  /help'}
-        </Text>
-      </Box>
+        </Box>
       </Box>
     </ThemeContext.Provider>
   );

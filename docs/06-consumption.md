@@ -122,9 +122,14 @@ Currency caps convert through the same table; a model with no known price is sti
 
 ### Envelopes
 
-- **Caps:** `budget.month`, `budget.day`, `budget.session`, in weighted tokens. A fold over the
-  journal enforces the UTC month and day across sessions; the dollar view of the same rows is a
-  fold, shown beside it, never the limit (an unpriced model would slip under a dollar cap).
+- **Caps:** `budget.session`, `budget.day`, `budget.month`, in weighted tokens, from the human's
+  own files only — a cloned repository cannot raise one. A session opens with the tightest of
+  them: the session cap, and what the world's usage ledger leaves of the UTC day's and the
+  month's, so the day and month hold across sessions. When the run's spend reaches it, the run
+  stops at a checkpoint (`budget: <spent> of <budget> spent`), and the client shows what is
+  left. Weighted tokens count every call — priced, unpriced or free — so no model slips under a
+  cap; a dollar cap could not promise that, and the dollar keys (`budget.*_usd`) are a view for
+  the board (M12), never a limit.
 - **Only cost is carved.** Steps and the wall clock pass down whole, per race
   ([the loop](03-loop.md#budgets-are-readings)); splitting them would leave the Slime — the only
   body that writes code — a handful of steps.

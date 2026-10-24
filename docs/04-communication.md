@@ -332,7 +332,8 @@ the lines the terminal has room for, so the live region never outgrows it. Below
 live the text as it streams, the
 calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
 status line — model, spend (`unpriced` when the price tables do not know the model), context
-against the stress line, the cache's share. **Enter** sends, and while a turn runs the line
+against the stress line, the cache's share, and what the human's caps leave
+([consumption](06-consumption.md)). **Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
 **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
 nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the

@@ -1475,3 +1475,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     waiting until Ink has taken the new width in fixed it.
   - Quitting is not done until the child is gone: the UI ended, the process stayed, held by a
     core that never left.
+
+---
+
+### [2026-10-24T18:41:22+02:00] rimuru — the caps enforced
+- **Task:** checked how spend works rather than supposed: the price table knows only Anthropic's
+  ids, so OpenRouter calls are `usd: null`; `budget.*_usd` were read by nothing; the run's
+  weighted-token budget existed but nothing set it — a session had no limit at all, against
+  06-consumption's caps.
+- **Files:** crates/mnemorph-config (`budget.session|day|month` in wt, the human's files only,
+  at least 1; `budget_wt`), crates/mnemorph-loop/src/budget.rs (`left`: the tightest of the
+  session cap and what the world's usage ledger leaves of the UTC day and month), open.rs (the
+  run opens with it), mnemorph-server (the hello's `budget`), packages/protocol (`Budget`),
+  packages/cli (`left … wt (cap)` in the status line; a spent cap said at the start),
+  docs/06-consumption.md, docs/04-communication.md; tests in config, loop, server and CLI.
+- **Gate:** n/a. Instruments: a session with `budget.session = 1` stops at a checkpoint after
+  its first call; `just check`. Live tests now run on OpenRouter's free models
+  (`poolside/laguna-s-2.1:free` read a file and answered, $0).
+- **Result:** in review as a pull request.
+- **Learned:** the book promised caps, the config parsed dollar keys, and the run had a budget
+  field — three pieces of a limit, none connected. Weighted tokens are the only unit every call
+  reports, so the caps are in it.
