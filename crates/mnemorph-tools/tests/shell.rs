@@ -372,11 +372,14 @@ fn the_tripwire_restores_git_config_and_hooks() {
     let w = World::new("tripwire-git");
     git(&w.world(), &["init", "-q"]);
     let config = fs::read_to_string(w.world().join(".git/config")).unwrap();
+    // Written directly, the classifier asks first; the tripwire is for what it cannot see.
+    fs::write(
+        w.world().join("plant.sh"),
+        "printf '[core]\\n\\tfsmonitor = touch /tmp/pwned\\n' >> .git/config; printf '#!/bin/sh\\necho pwned\\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit; echo done\n",
+    )
+    .unwrap();
     let gate = Arc::new(Scripted::new([]));
-    let o = bash(
-        &mut w.cx(Race::Slime, gate.clone()),
-        "printf '[core]\\n\\tfsmonitor = touch /tmp/pwned\\n' >> .git/config; printf '#!/bin/sh\\necho pwned\\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit; echo done",
-    );
+    let o = bash(&mut w.cx(Race::Slime, gate.clone()), "bash plant.sh");
     assert!(
         o.is_error && o.content.contains("changed protected files"),
         "{o:?}"
@@ -387,10 +390,12 @@ fn the_tripwire_restores_git_config_and_hooks() {
     );
     assert!(!w.world().join(".git/hooks/pre-commit").exists());
 
-    let o = bash(
-        &mut w.cx(Race::Slime, gate.clone()),
-        "rm -rf .git/hooks && ln -s /tmp .git/hooks",
-    );
+    fs::write(
+        w.world().join("swap.sh"),
+        "rm -rf .git/hooks && ln -s /tmp .git/hooks\n",
+    )
+    .unwrap();
+    let o = bash(&mut w.cx(Race::Slime, gate.clone()), "bash swap.sh");
     assert!(o.is_error, "{o:?}");
     assert!(
         w.world().join(".git/hooks").is_dir()
@@ -414,11 +419,13 @@ fn the_tripwire_keeps_the_worlds_records_and_spares_tmp() {
     let w = World::new("tripwire-records");
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(w.world().join(".mnemorph/log.md"), "the truth\n").unwrap();
+    fs::write(
+        w.world().join("forge.sh"),
+        "echo forged > .mnemorph/log.md; touch .mnemorph/new.toml; echo scratch > .mnemorph/tmp/x\n",
+    )
+    .unwrap();
     let gate = Arc::new(Scripted::new([]));
-    let o = bash(
-        &mut w.cx(Race::Slime, gate.clone()),
-        "echo forged > .mnemorph/log.md; touch .mnemorph/new.toml; echo scratch > .mnemorph/tmp/x",
-    );
+    let o = bash(&mut w.cx(Race::Slime, gate.clone()), "bash forge.sh");
     assert!(o.is_error, "{o:?}");
     assert_eq!(
         fs::read_to_string(w.world().join(".mnemorph/log.md")).unwrap(),
@@ -490,7 +497,10 @@ fn esc_stops_a_running_command_and_keeps_its_output() {
         firing.store(true, std::sync::atomic::Ordering::SeqCst);
     });
     let started = Instant::now();
-    let o = bash(&mut cx, "echo started; sleep 30 & sleep 30; echo never");
+    let o = bash(
+        &mut cx,
+        "echo started; sleep 30 & echo $! > src/pid; sleep 30; echo never",
+    );
     assert!(
         started.elapsed() < Duration::from_secs(2),
         "{:?}",
@@ -503,6 +513,13 @@ fn esc_stops_a_running_command_and_keeps_its_output() {
         "{o:?}"
     );
     assert!(!o.content.contains("never"));
+    let pid = fs::read_to_string(w.world().join("src/pid")).unwrap();
+    let alive = std::process::Command::new("kill")
+        .args(["-0", pid.trim()])
+        .status()
+        .unwrap()
+        .success();
+    assert!(!alive, "the backgrounded child died with its group");
 }
 
 /// The run's clock reaches a running command, whatever the call's own limit.
@@ -518,5 +535,8 @@ fn the_run_clock_stops_a_running_command() {
         "{:?}",
         started.elapsed()
     );
-    assert!(o.is_error && o.content.contains("killed after"), "{o:?}");
+    assert!(
+        o.is_error && o.content.contains("killed after 0."),
+        "it says when it was really killed: {o:?}"
+    );
 }

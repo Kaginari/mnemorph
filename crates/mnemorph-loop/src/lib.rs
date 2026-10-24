@@ -17,5 +17,5 @@ pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use run::{Body, Ending, Interrupt, Limits, Run, Setup};
 pub use sequence::validate;
 pub use session::{Queue, Session};
-pub use solo::{SOLO_PROMPT, solo};
+pub use solo::{SOLO_PROMPT, configure, solo};
 pub use stress::{Bench, Signal, Stress, bench_of};

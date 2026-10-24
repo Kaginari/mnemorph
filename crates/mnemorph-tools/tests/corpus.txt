@@ -190,6 +190,10 @@ destructive rm -rf .git
 destructive rm -rf .git/objects
 destructive rm .mnemorph/log.md
 write     rm -rf .mnemorph/tmp/scratch
+write     rm -rf .mnemorph/intel/osv
+destructive chmod u+w .git/objects/ab/cdef
+destructive dd if=/dev/zero of=.git/objects/pack/p.pack
+destructive echo x >> .git/HEAD
 destructive rm -rf "$DIR"
 destructive xargs rm < files.txt
 destructive sudo brew services restart postgresql
