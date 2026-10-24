@@ -38,7 +38,10 @@ pub fn solo(world: &Path, model: &str) -> (Body, Context) {
         model: model.to_owned(),
         system: SOLO_PROMPT.to_owned(),
     };
-    let cx = Context::new(Race::Slime, world, &["."]);
+    let mut cx = Context::new(Race::Slime, world, &["."]);
+    if let Some(attic) = mnemorph_tools::Attic::for_world(cx.world()) {
+        cx = cx.with_attic(attic);
+    }
     debug_assert!(!Race::Slime.shelf().contains(&ToolClass::Outward));
     (body, cx)
 }

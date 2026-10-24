@@ -75,7 +75,10 @@ async fn live_solo_fixes_a_typo() {
     // The guard helper is not beside the test binary; this test proves the loop, not the guard.
     let cx = cx
         .with_sandbox(Sandbox::None("the live loop test runs unguarded".into()))
-        .with_unguarded(true);
+        .with_unguarded(true)
+        .with_attic(
+            mnemorph_tools::Attic::at(&root.join("attic"), &root.join("world")).expect("git"),
+        );
     let ledger: Journal<UsageRow> = Journal::new(root.join("usage.jsonl"));
     let setup = Setup {
         model: model.clone(),

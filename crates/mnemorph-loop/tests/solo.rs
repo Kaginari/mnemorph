@@ -41,7 +41,10 @@ impl World {
         let (body, cx) = solo(&self.world(), "claude-sonnet-5-5");
         let cx = cx
             .with_sandbox(Sandbox::None("solo tests run unguarded".into()))
-            .with_unguarded(true);
+            .with_unguarded(true)
+            .with_attic(
+                mnemorph_tools::Attic::at(&self.root.join("attic"), &self.world()).expect("git"),
+            );
         let setup = Setup {
             model,
             tools: registry(),

@@ -18,7 +18,12 @@ pub(crate) enum Act {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Spot {
     /// Inside the world; `root` when it is the world's root itself (or all of its contents).
-    Inside { root: bool },
+    Inside {
+        /// The world's root itself, or all of its contents.
+        root: bool,
+        /// Inside `.git` or the world's records in `.mnemorph` (but `shared/` and `tmp/`).
+        records: bool,
+    },
     /// A device file.
     Device(Device),
     /// A credential: a key, a token store, a password vault.
@@ -112,8 +117,14 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
         return Spot::Credential(path);
     }
     if path.starts_with(&world) {
+        let rel = path.strip_prefix(&world).unwrap_or(&path);
+        let records = rel.starts_with(".git")
+            || (rel.starts_with(".mnemorph")
+                && !rel.starts_with(".mnemorph/shared")
+                && !rel.starts_with(".mnemorph/tmp"));
         return Spot::Inside {
             root: path == world,
+            records,
         };
     }
     let top_level = forms.iter().any(|f| f.components().count() <= 2);
@@ -201,7 +212,13 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
         (Spot::Device(Device::Other), _) => {
             t.refuse(Rule::Device, format!("{what} writes a device"));
         }
-        (Spot::Inside { root: true }, Act::Delete) => {
+        (Spot::Inside { records: true, .. }, Act::Delete) => {
+            t.raise(
+                ToolClass::Destructive,
+                format!("{what} deletes the repository's history or the world's records"),
+            );
+        }
+        (Spot::Inside { root: true, .. }, Act::Delete) => {
             t.raise(
                 ToolClass::Destructive,
                 format!("{what} deletes the whole world"),

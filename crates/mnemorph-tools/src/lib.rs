@@ -1,5 +1,6 @@
 //! The tools: read, write, edit, glob, grep, bash, git; the shell classifier; secret injection.
 
+pub mod attic;
 mod beneath;
 pub mod classify;
 pub mod files;
@@ -8,6 +9,7 @@ pub mod shell;
 pub mod tool;
 mod tripwire;
 
+pub use attic::{Attic, Snapshot};
 pub use classify::{Place, Rule, Verdict, classify};
 pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 /// The sandbox a context runs commands in, as the context takes it.
