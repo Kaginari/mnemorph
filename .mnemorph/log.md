@@ -2074,3 +2074,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     now". The baseline refresh makes any later edit a change again.
   - Tests sharing one attic beside their worlds made a correct restore fail at random. Every
     store a test writes must be its own.
+
+---
+
+### [2026-10-25T01:02:46+02:00] rimuru — the commission, third pass
+- **Task:** the re-review of #149 said rework.
+  - The baseline refresh laundered a dispatcher's own earlier write once its child touched the
+    file, and absorbed put-backs that failed.
+  - An Esc during setup was swallowed.
+  - Seats were not freed on a panic.
+  - The docs were short.
+- **Files:**
+  - loop:
+    - gate.rs — `refresh` takes only paths the dispatcher had not changed since its baseline;
+    - run.rs — a shared interrupt is not cleared at ask start;
+    - commission.rs — `Order.at`, only real put-backs refreshed, `Seat` freed on drop;
+  - tests: laundering (proven failing without the fix), a stray with no attic refused above, a
+    zero slice;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review again.
+- **Learned:** "judged by its own gate" covers what the child did, not what the path held. The
+  dispatcher's changes before the order are still its own. A baseline refresh must compare
+  against the world as the order found it, not just as it stands after.

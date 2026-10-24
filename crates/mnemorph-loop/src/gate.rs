@@ -94,10 +94,17 @@ pub struct Tree {
 impl Tree {
     /// Take `paths` as they stand now into the baseline: what a commission landed or put back
     /// is judged by its own gate, so the dispatcher's gate sees only what changes after — an
-    /// edit to court work included.
-    pub fn refresh(&mut self, world: &Path, paths: &[PathBuf]) {
+    /// edit to court work included. A path the dispatcher itself had changed before the
+    /// commission began (`at` is the world then) keeps its baseline: that change is still the
+    /// dispatcher's to answer for.
+    pub fn refresh(&mut self, world: &Path, paths: &[PathBuf], at: &Tree) {
         let now = snapshot(world);
-        for p in paths {
+        let untouched: Vec<PathBuf> = paths
+            .iter()
+            .filter(|p| self.files.get(*p) == at.files.get(*p))
+            .cloned()
+            .collect();
+        for p in &untouched {
             match now.files.get(p) {
                 Some(seen) => {
                     self.files.insert(p.clone(), seen.clone());

@@ -103,8 +103,10 @@ pub struct Order {
     pub spent: u64,
     /// What the child and its own commissions landed, when it answered.
     pub landed: Vec<PathBuf>,
-    /// What was put back after it.
+    /// What was put back after it — only what really was.
     pub put_back: Vec<PathBuf>,
+    /// The world when the commission began: what the dispatcher's own changes are told apart by.
+    pub at: crate::gate::Tree,
     /// The human's Esc stopped it.
     pub interrupted: bool,
 }
@@ -162,6 +164,7 @@ pub(crate) async fn order(
         spent: 0,
         landed: Vec::new(),
         put_back: Vec::new(),
+        at: crate::gate::Tree::default(),
         interrupted: false,
     };
     let a: CommissionArgs = match serde_json::from_str(input) {
@@ -192,14 +195,16 @@ pub(crate) async fn order(
         Ok(Hop::Direct(_)) => {}
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
-    if a.to == parent.name || !claim_seat(c, &a.to) {
+    let seat = (a.to != parent.name)
+        .then(|| Seat::claim(c, &a.to))
+        .flatten();
+    if seat.is_none() {
         return refused(format!(
             "{} holds a live court already; one court per seat — ask again when it has reported",
             a.to
         ));
     }
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
-        release_seat(c, &a.to);
         return refused(format!("`{}` is no living creature", a.to));
     };
     let mut child = child_run(c, &roster, &a.to, parent, slice, child_cx.inherit(cx))
@@ -210,7 +215,7 @@ pub(crate) async fn order(
         .and_then(|attic| attic.snapshot("before a commission").ok());
     let before = snapshot(&c.world);
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
-    release_seat(c, &a.to);
+    drop(seat);
     let spent = child.spent_wt();
     // Court work counts only when the child answered: a failed landing is put back whole.
     let answered = matches!(ending, Ending::Answered(_));
@@ -233,22 +238,46 @@ pub(crate) async fn order(
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
         landed,
-        put_back: put_back.into_iter().map(|(p, _)| p).collect(),
+        // A put-back that failed stays out of the dispatcher's baseline: its gate judges it.
+        put_back: put_back
+            .into_iter()
+            .filter(|(_, ok)| *ok)
+            .map(|(p, _)| p)
+            .collect(),
+        at: before,
         interrupted: matches!(ending, Ending::Interrupted),
     }
 }
 
-/// Take `seat` for a court; `false` when it holds one already.
-fn claim_seat(c: &Commissioner, seat: &str) -> bool {
-    c.busy
-        .lock()
-        .is_ok_and(|mut busy| busy.insert(seat.to_owned()))
+/// A seat holding a live court: freed when dropped, on every path — a refusal, an answer, a
+/// panic or a dropped future.
+struct Seat {
+    commissioner: Arc<Commissioner>,
+    name: String,
 }
 
-/// Free `seat` when its court reports.
-fn release_seat(c: &Commissioner, seat: &str) {
-    if let Ok(mut busy) = c.busy.lock() {
-        busy.remove(seat);
+impl Seat {
+    /// Take `name` for a court; `None` when it holds one already.
+    fn claim(c: &Arc<Commissioner>, name: &str) -> Option<Seat> {
+        let mut busy = c
+            .busy
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        busy.insert(name.to_owned()).then(|| Seat {
+            commissioner: Arc::clone(c),
+            name: name.to_owned(),
+        })
+    }
+}
+
+impl Drop for Seat {
+    fn drop(&mut self) {
+        let mut busy = self
+            .commissioner
+            .busy
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        busy.remove(&self.name);
     }
 }
 

@@ -227,6 +227,8 @@ pub struct Run {
     commissioner: Option<Arc<crate::commission::Commissioner>>,
     /// What this body's commissions landed under their own gates, for its own report.
     landed: Vec<PathBuf>,
+    /// The interrupt is its dispatcher's.
+    shared_interrupt: bool,
 }
 
 /// What a run needs that is not the body itself.
@@ -281,6 +283,7 @@ impl Run {
             steer: Steer::default(),
             commissioner: None,
             landed: Vec::new(),
+            shared_interrupt: false,
         }
     }
 
@@ -302,6 +305,7 @@ impl Run {
     pub fn with_interrupt(mut self, interrupt: Arc<Interrupt>) -> Self {
         self.cx.set_cancel(interrupt.flag());
         self.interrupt = interrupt;
+        self.shared_interrupt = true;
         self
     }
 
@@ -599,8 +603,11 @@ impl Run {
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
         // Only an Esc fired during this ask counts; a line sent to a turn that ended is not this
-        // ask's to read.
-        self.interrupt.take();
+        // ask's to read. A commissioned body shares its dispatcher's flag: an Esc fired while the
+        // commission was being prepared is this ask's.
+        if !self.shared_interrupt {
+            self.interrupt.take();
+        }
         self.drop_steering();
         let mut gate_retried = false;
         loop {
@@ -902,7 +909,7 @@ impl Run {
                     .cloned()
                     .collect();
                 if let Some(before) = self.before.as_mut() {
-                    before.refresh(&world, &judged);
+                    before.refresh(&world, &judged, &order.at);
                 }
                 self.landed.extend(order.landed);
                 if order.interrupted {
