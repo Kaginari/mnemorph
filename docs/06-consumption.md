@@ -153,19 +153,31 @@ Currency caps convert through the same table; a model with no known price is sti
 
 The provider renders tools, then the system prompt, then the messages. Changing any tool
 definition invalidates everything after it, so the tools tier comes first and never varies.
-Anthropic allows at most four cache breakpoints; Mnemorph uses all four:
+Anthropic allows at most four cache breakpoints. Most of a long run's input is its
+conversation, not its prompt, so one breakpoint always rides the conversation's tail:
 
 ```
 [ tools: the race's full, stable tool list ]  ← identical for every body of a race:  breakpoint 1
-[ crest + nature law                       ]  ← identical for every body:            breakpoint 2
-[ race card (compiled text)                ]  ← identical for every body of a race:  breakpoint 3
-[ creature card + its rules + Minds        ]  ← identical across its turns:          breakpoint 4
-[ recall anchors · toolbox manifest text · commission · conversation ]  ← changes
+[ crest + nature law + race card           ]  ← identical for every body of a race:  breakpoint 2
+[ creature card + its rules + Minds        ]  ← identical across its turns:          breakpoint 3
+[ recall anchors · toolbox manifest text · commission · conversation ]
+                                              ← the last block sent:                breakpoint 4
 ```
+
+- The conversation's breakpoint moves forward every turn, so each request reads everything the
+  last one sent at the cache-read price and writes only what the turn added. The conversation
+  takes the slots the stable tiers leave, the tail first; a spare slot marks the previous
+  request's tail too, so a turn that appends many blocks still lands within the provider's
+  lookback of the entry the last one wrote.
+- Compaction rewrites the conversation from its first folded message on, so it folds only in
+  rare, large batches ([The loop](03-loop.md)): between folds, the history is read, not resent.
+- Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
+  the gateway's one automatic breakpoint, which moves with the conversation. The other models
+  there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.
 
 - The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
   offering different tools per turn never breaks the cache.
-- A test renders two consecutive turns for each race and asserts every tier up to breakpoint 4
+- A test renders two consecutive turns for each race and asserts every tier up to breakpoint 3
   is byte-identical, tool JSON included. Any timestamp, map ordering or counter that leaks into
   the stable prefix fails CI.
 - Each provider and model has a minimum cacheable prefix; a test asserts each breakpoint's

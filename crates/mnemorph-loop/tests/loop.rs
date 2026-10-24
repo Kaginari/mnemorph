@@ -654,15 +654,11 @@ async fn opaque_blocks_survive_the_journal() {
 async fn esc_reaches_a_running_command() {
     let w = World::new("esc-command");
     let model = Arc::new(ScriptedModel::new([
-        tool("t1", "bash", json!({"command": "sleep 30"})),
+        tool("t1", "bash", json!({"command": "touch running; sleep 30"})),
         answer("never"),
     ]));
     let mut run = w.run(model.clone(), limits());
-    let interrupt = run.interrupt();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(300));
-        interrupt.fire();
-    });
+    fire_once_running(run.interrupt(), w.world().join("running"));
     let started = std::time::Instant::now();
     assert_eq!(ask(&mut run, "wait").await, Ending::Interrupted);
     assert!(
@@ -840,13 +836,9 @@ async fn esc_during_a_verify_is_not_a_verdict() {
     let mut run = w
         .run(model.clone(), limits())
         .with_gate(mnemorph_loop::EndGate {
-            verify: vec!["sleep 30".into()],
+            verify: vec!["touch running; sleep 30".into()],
         });
-    let interrupt = run.interrupt();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(400));
-        interrupt.fire();
-    });
+    fire_once_running(run.interrupt(), w.world().join("running"));
     assert_eq!(ask(&mut run, "write a").await, Ending::Interrupted);
     let beats = w.journal().read().unwrap().rows;
     assert!(
@@ -880,4 +872,15 @@ fn the_configuration_reaches_the_run() {
     let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
     assert_eq!(limits.stress_tokens, 90_000);
     assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
+}
+
+/// Fire Esc once the command has started — marked by the file it touches — not on a timer that
+/// a slow start would outrun.
+fn fire_once_running(interrupt: Arc<mnemorph_loop::Interrupt>, marker: std::path::PathBuf) {
+    std::thread::spawn(move || {
+        while !marker.exists() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        interrupt.fire();
+    });
 }

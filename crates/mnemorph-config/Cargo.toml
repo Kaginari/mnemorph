@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mnemorph-ledger = { path = "../mnemorph-ledger" }
 mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-tools = { path = "../mnemorph-tools" }
 toml = "1"

@@ -9,7 +9,9 @@
 //! The tracked file may only tighten the human gate. What loosens it — guard rules that ask
 //! instead of refusing, a gate turned off, standing approvals, Oni envelopes — is honoured only
 //! from the local or global file. Nothing else feeds those keys: not the environment, not a flag,
-//! and not a body, which cannot write `.mnemorph/` at all.
+//! and not a body, which cannot write `.mnemorph/` at all. An envelope is bounded besides: it is
+//! signed on a day, expires (30 days later unless it says otherwise), may cap its uses, and stays
+//! in the file once revoked, so the record of what was allowed is never lost.
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
@@ -22,11 +24,12 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mnemorph_ledger::Day;
 use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
-pub use write::set;
+pub use write::{revoke, set};
 
 /// The compiled defaults: the lowest layer, and the reference `config explain` shows.
 const DEFAULTS: &str = r#"
@@ -236,13 +239,74 @@ pub struct Provider {
     pub key_env: Option<String>,
 }
 
-/// Standing permissions the human signed for Oni: outward acts that run without a prompt.
+/// How many days an envelope lasts when it does not name its own `expires`.
+pub const ENVELOPE_DAYS: i64 = 30;
+
+/// Standing permissions the human signed for Oni: outward acts that run without a prompt, for a
+/// bounded time and, when the human says so, a bounded number of acts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope {
     /// Its name, for the ledger and `status`.
     pub name: String,
     /// The command patterns it covers; `*` at the end of a word matches the rest.
     pub allow: Vec<String>,
+    /// The day the human signed it; it covers nothing before.
+    pub signed: Day,
+    /// The first day it covers nothing: its own `expires`, else [`ENVELOPE_DAYS`] after `signed`.
+    pub expires: Day,
+    /// How many acts it may cover in all, counted by the ledger; `None` caps only by time.
+    pub uses: Option<u64>,
+    /// The day the human revoked it. A revoked envelope stays in the file and covers nothing.
+    pub revoked: Option<Day>,
+}
+
+/// Why an envelope does not cover an act on a given day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lapse {
+    /// Signed for a later day.
+    NotYet(Day),
+    /// Expired on this day.
+    Expired(Day),
+    /// Revoked on this day.
+    Revoked(Day),
+    /// Every one of this many uses is spent.
+    Spent(u64),
+}
+
+impl fmt::Display for Lapse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Lapse::NotYet(day) => write!(f, "signed for {day}, not yet in force"),
+            Lapse::Expired(day) => write!(f, "expired on {day}"),
+            Lapse::Revoked(day) => write!(f, "revoked on {day}"),
+            Lapse::Spent(uses) => write!(f, "all {uses} uses spent"),
+        }
+    }
+}
+
+impl Envelope {
+    /// Whether the envelope is in force on `today`, after `used` acts it already covered (the
+    /// ledger's count). Whether a command matches `allow` is the gate's question; this is only
+    /// the envelope's own time and count, read at the moment of use, never only at plan time.
+    ///
+    /// # Errors
+    ///
+    /// The [`Lapse`] that stops it: revoked, not yet signed, expired or spent, in that order.
+    pub fn admits(&self, today: Day, used: u64) -> Result<(), Lapse> {
+        if let Some(day) = self.revoked {
+            return Err(Lapse::Revoked(day));
+        }
+        if today < self.signed {
+            return Err(Lapse::NotYet(self.signed));
+        }
+        if today >= self.expires {
+            return Err(Lapse::Expired(self.expires));
+        }
+        match self.uses {
+            Some(cap) if used >= cap => Err(Lapse::Spent(cap)),
+            _ => Ok(()),
+        }
+    }
 }
 
 impl Config {
@@ -557,12 +621,37 @@ impl Config {
         out
     }
 
-    /// The Oni envelopes the human signed (local or global file only).
+    /// The Oni envelopes the human signed (local or global file only), revoked and expired ones
+    /// included: [`Envelope::admits`] says which are in force.
     #[must_use]
     pub fn envelopes(&self) -> Vec<Envelope> {
         self.get("oni.envelopes")
             .and_then(|l| envelopes(&l.value, &l.origin).ok())
             .unwrap_or_default()
+    }
+
+    /// Revoke the envelope `name` on `day`, in the human's file that holds it: the envelope stays
+    /// written, with `revoked = <day>`, and covers nothing from then on. Returns that file.
+    ///
+    /// # Errors
+    ///
+    /// No envelope is signed, none is called `name`, it is already revoked, or the file cannot be
+    /// written — each named.
+    pub fn revoke_envelope(&self, name: &str, day: Day) -> Result<PathBuf, String> {
+        let envelope = self
+            .envelopes()
+            .into_iter()
+            .find(|e| e.name == name)
+            .ok_or_else(|| format!("no envelope `{name}` is signed"))?;
+        if let Some(on) = envelope.revoked {
+            return Err(format!("envelope `{name}` was already revoked on {on}"));
+        }
+        let file = self
+            .get("oni.envelopes")
+            .and_then(|l| l.origin.file.clone())
+            .ok_or_else(|| format!("envelope `{name}` lives in no file"))?;
+        revoke(&file, name, day)?;
+        Ok(file)
     }
 
     fn int(&self, key: &str) -> Option<u64> {
@@ -643,7 +732,8 @@ fn strings(value: &Value) -> impl Iterator<Item = &str> {
         .filter_map(Value::as_str)
 }
 
-/// Read and vet the envelopes: a name, a list of patterns, none bare and none destructive.
+/// Read and vet the envelopes: a name no other envelope has, a list of patterns, none bare and
+/// none destructive; the day it was signed, an expiry after it, a use cap of at least one.
 fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
     let place = Place::new("/world", "/home");
     let mut out = Vec::new();
@@ -676,12 +766,64 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
         for pattern in &allow {
             vet(name, pattern, &place, at)?;
         }
+        let signed = date(t, "signed", name, at)?.ok_or_else(|| {
+            format!(
+                "{at}: envelope `{name}` needs `signed = YYYY-MM-DD`, the day you signed it; it \
+                 lasts {ENVELOPE_DAYS} days unless `expires` says otherwise"
+            )
+        })?;
+        let expires = date(t, "expires", name, at)?.unwrap_or(signed.plus(ENVELOPE_DAYS));
+        if expires <= signed {
+            return Err(format!(
+                "{at}: envelope `{name}` expires on {expires}, not after it was signed on {signed}"
+            ));
+        }
+        let uses = match t.get("uses") {
+            None => None,
+            Some(v) => Some(
+                v.as_integer()
+                    .and_then(|n| u64::try_from(n).ok())
+                    .filter(|&n| n >= 1)
+                    .ok_or_else(|| {
+                        format!("{at}: envelope `{name}`: `uses` is a count of at least 1")
+                    })?,
+            ),
+        };
+        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
+        // before it ever takes force, and the record says so.
+        let revoked = date(t, "revoked", name, at)?;
+        if out.iter().any(|e: &Envelope| e.name == name) {
+            return Err(format!(
+                "{at}: two envelopes are called `{name}`; a name is how one is revoked, so each is \
+                 its own"
+            ));
+        }
         out.push(Envelope {
             name: name.to_owned(),
             allow,
+            signed,
+            expires,
+            uses,
+            revoked,
         });
     }
     Ok(out)
+}
+
+/// An envelope's date: a bare TOML date (`2026-10-24`), never a time or a string.
+fn date(t: &Table, key: &str, name: &str, at: &Origin) -> Result<Option<Day>, String> {
+    let Some(value) = t.get(key) else {
+        return Ok(None);
+    };
+    let day = match value {
+        Value::Datetime(dt) if dt.time.is_none() && dt.offset.is_none() => dt
+            .date
+            .and_then(|d| Day::new(i64::from(d.year), d.month, d.day)),
+        _ => None,
+    };
+    day.map(Some).ok_or_else(|| {
+        format!("{at}: envelope `{name}`: `{key}` is a date, written bare: `{key} = 2026-10-24`")
+    })
 }
 
 /// What a standalone `*` in an envelope may stand for, at its worst: the arguments that make a

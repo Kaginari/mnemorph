@@ -1067,6 +1067,7 @@ dependencies = [
 name = "mnemorph-config"
 version = "0.0.0"
 dependencies = [
+ "mnemorph-ledger",
  "mnemorph-races",
  "mnemorph-tools",
  "toml",
