@@ -558,3 +558,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     closest line or every matching line; a re-read of an unchanged window is a pointer with
     `meta.unchanged`, and a write resets it.
   - Writes go to a temporary sibling and a rename: a file is replaced whole or not at all.
+
+---
+
+### [2026-10-24T02:50:28+02:00] rimuru — M4 rung 3: the human gate and bash
+- **Task:** the gate as an interface, and a bash tool that is classified, shelved, gated and
+  contained.
+- **Files:** crates/mnemorph-tools/src/gate.rs (`Gate`, `Ask`, `Answer`, `Pending`: first answer
+  wins, silence denies; `Terminal`, `NoHuman`, `Scripted`), src/shell.rs (bash: classify →
+  shelf → gate → a process group of its own, killed whole at the deadline and after the shell
+  exits; a scrubbed environment), src/tool.rs (the context carries the race, the gate and the
+  home; `call` checks the shelf before any tool runs), tests/shell.rs, tests/gate.rs.
+- **Gate:** n/a. Instruments: 27 tool tests; `just check` (148 tests).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - An `Ask` has no recommendation field, so an approval card cannot nudge (lesson 59) — by
+    construction rather than by rule.
+  - Killing the group after a normal exit is what un-hangs `(sleep 30) & echo done`: the
+    background child holds stdout, and only its death closes the pipe.
+  - Scope held back on purpose: one shell per call (a `cd` does not carry over) until the loop
+    needs more; a dedicated git tool waits for the landings in M7.

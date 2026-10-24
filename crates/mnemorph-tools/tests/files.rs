@@ -37,7 +37,7 @@ impl World {
     }
 
     fn cx(&self) -> Context {
-        Context::new(self.world(), &["src"])
+        Context::new(Race::Slime, self.world(), &["src"])
     }
 
     #[cfg(unix)]

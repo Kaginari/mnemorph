@@ -6,13 +6,16 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use mnemorph_races::ToolClass;
+use mnemorph_races::{Race, ToolClass, check_class};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::classify::paths::{join, real};
 use crate::files;
+use crate::gate::{Gate, NoHuman};
+use crate::shell;
 
 /// One tool a body can call.
 pub trait Tool: Send + Sync {
@@ -22,7 +25,8 @@ pub trait Tool: Send + Sync {
     fn description(&self) -> &'static str;
     /// Its JSON Schema (an object schema).
     fn schema(&self) -> Value;
-    /// The class of every call, which decides the shelf it sits on.
+    /// The lowest class a call runs at, which decides the shelf it sits on. A call may rise
+    /// above it: `bash` classifies each command.
     fn class(&self) -> ToolClass;
     /// A valid call, kept beside the schema so the two cannot drift.
     fn example(&self) -> Value;
@@ -39,6 +43,7 @@ pub fn registry() -> Vec<Box<dyn Tool>> {
         Box::new(files::Edit),
         Box::new(files::Glob),
         Box::new(files::Grep),
+        Box::new(shell::Bash),
     ]
 }
 
@@ -62,6 +67,8 @@ pub struct Meta {
     pub unchanged: bool,
     /// Files the call wrote.
     pub wrote: Vec<PathBuf>,
+    /// The exit code of a command; `None` for other tools, or a command killed by a signal.
+    pub exit: Option<i32>,
 }
 
 impl Outcome {
@@ -85,12 +92,26 @@ impl Outcome {
     }
 }
 
-/// Where a body works: the world it may read, the soil it may write, and what it already read.
-#[derive(Debug)]
+/// Where a body works: who it is, the world it may read, the soil it may write, the gate it
+/// asks, and what it already read.
 pub struct Context {
+    race: Race,
     world: PathBuf,
     soil: Vec<PathBuf>,
+    home: PathBuf,
+    gate: Arc<dyn Gate>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
+}
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("race", &self.race)
+            .field("world", &self.world)
+            .field("soil", &self.soil)
+            .field("home", &self.home)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The last window of a file a body read, and the content it saw.
@@ -101,16 +122,49 @@ pub(crate) struct Seen {
 }
 
 impl Context {
-    /// A body in `world` that may write under each prefix of `soil` (paths relative to the world
-    /// are joined onto it).
-    pub fn new(world: impl AsRef<Path>, soil: &[impl AsRef<Path>]) -> Self {
+    /// A body of `race` in `world` that may write under each prefix of `soil` (paths relative to
+    /// the world are joined onto it). Its gate denies until [`Self::with_gate`] attaches a human.
+    pub fn new(race: Race, world: impl AsRef<Path>, soil: &[impl AsRef<Path>]) -> Self {
         let world = real(world.as_ref());
         let soil = soil.iter().map(|s| real(&world.join(s.as_ref()))).collect();
+        let home =
+            std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), |h| real(Path::new(&h)));
         Self {
+            race,
             world,
             soil,
+            home,
+            gate: Arc::new(NoHuman),
             seen: HashMap::new(),
         }
+    }
+
+    /// Ask this gate for outward and destructive acts.
+    #[must_use]
+    pub fn with_gate(mut self, gate: Arc<dyn Gate>) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    /// Resolve `~` and `$HOME` to this directory instead of the process's home.
+    #[must_use]
+    pub fn with_home(mut self, home: impl AsRef<Path>) -> Self {
+        self.home = real(home.as_ref());
+        self
+    }
+
+    /// The body's race.
+    #[must_use]
+    pub fn race(&self) -> Race {
+        self.race
+    }
+
+    pub(crate) fn home(&self) -> &Path {
+        &self.home
+    }
+
+    pub(crate) fn gate(&self) -> &dyn Gate {
+        self.gate.as_ref()
     }
 
     /// The world's root, resolved.
@@ -170,6 +224,9 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
             names.join(", ")
         ));
     };
+    if let Err(refusal) = check_class(cx.race, tool.class()) {
+        return Outcome::error(refusal.to_string());
+    }
     match serde_json::from_str::<Value>(raw_args) {
         Ok(args) => tool.run(args, cx),
         Err(e) => Outcome::error(format!("the arguments to {name} are not valid JSON: {e}")),
