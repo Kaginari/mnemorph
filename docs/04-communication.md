@@ -208,7 +208,9 @@ changed on that path before the commission; a stray that could not be put back s
 of every gate above; and what the child spent counts against the dispatcher's envelope. One
 court per seat: a body never commissions itself, nor a seat already at work. An answer that does
 not open with `@S` reaches the dispatcher as a FAIL, never a DONE; the human's Esc reaches every
-body the order went down to.
+body the order went down to. An answering child's `@U territory` lines are filed as facts in its
+name — a support, or a counter naming an id — in the ontology's journal
+([facts](09-ontology.md#facts-who-said-what)).
 
 The return path: the child's report is the parent's tool result, headed by the exit line
 `@S <word>`; its written paths are recorded as court work so the parent's gate does not judge them

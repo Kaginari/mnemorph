@@ -233,6 +233,7 @@ pub(crate) async fn order(
     landed.extend(courts);
     landed.sort();
     landed.dedup();
+    file_facts(&c.world, &ending, &a.to);
     let report = report_of(&ending, &landed, &put_back);
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
@@ -246,6 +247,25 @@ pub(crate) async fn order(
             .collect(),
         at: before,
         interrupted: matches!(ending, Ending::Interrupted),
+    }
+}
+
+/// What the child learned about its territory, said in its `@U territory` lines, filed as facts
+/// in its name: a support, or a counter naming a fact's id.
+fn file_facts(world: &Path, ending: &Ending, by: &str) {
+    let Ending::Answered(text) = ending else {
+        return;
+    };
+    let Some(report) = Report::parse(text) else {
+        return;
+    };
+    for u in &report.unsaid {
+        if u.kind == Some(mnemorph_wire::UnsaidKind::Territory)
+            && let Some(event) = mnemorph_world::facts::from_unsaid(&u.text, by, None)
+        {
+            // A fact that cannot be filed is lost to the ontology, never to the report.
+            let _ = mnemorph_world::Facts::record(world, &event);
+        }
     }
 }
 

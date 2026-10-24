@@ -2144,3 +2144,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** "judged by its own gate" covers what the child did, not what the path held. The
   dispatcher's changes before the order are still its own. A baseline refresh must compare
   against the world as the order found it, not just as it stands after.
+
+---
+
+### [2026-10-25T01:22:18+02:00] rimuru — a commission's facts, filed
+- **Task:** close the loop between the commission and the facts: what a child learned about its
+  territory reaches the ontology in its name.
+- **Files:** crates/mnemorph-loop/src/commission.rs (`file_facts`), tests/commission.rs (the
+  Slime's `@U territory src/ build=cargo test` filed and supported by slime-s), docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the parent's triage of a new free fact rides its `@V #<new> …` verdict. The loop
+  does not read verdicts yet, so a collision stays `untriaged-fact` until it does. The finding is
+  the honest state.
