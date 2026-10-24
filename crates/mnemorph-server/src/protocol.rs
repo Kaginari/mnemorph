@@ -58,6 +58,20 @@ pub struct Hello {
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps; `null` when they set none.
     pub budget: Option<Budget>,
+    /// A handoff younger than 14 days, waiting to be read; `null` when there is none.
+    pub handoff: Option<Waiting>,
+}
+
+/// A handoff a previous session left.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Waiting {
+    /// The file.
+    pub path: String,
+    /// Its age, in whole days.
+    #[ts(type = "number")]
+    pub age_days: u64,
 }
 
 /// A session's budget under the human's caps.
@@ -181,6 +195,11 @@ pub enum Event {
         /// What failed.
         failures: Vec<String>,
     },
+    /// A handoff was written for the next session.
+    Handoff {
+        /// The file.
+        path: String,
+    },
     /// A turn ended.
     TurnEnded {
         /// How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
@@ -204,6 +223,7 @@ impl Event {
             Event::Note { .. } => "note",
             Event::Warning { .. } => "warning",
             Event::GateVerdict { .. } => "gateVerdict",
+            Event::Handoff { .. } => "handoff",
             Event::TurnEnded { .. } => "turnEnded",
         }
     }

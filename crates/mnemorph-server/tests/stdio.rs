@@ -448,3 +448,44 @@ fn a_session_stops_at_the_humans_cap() {
     let ending = ended["params"]["ending"].as_str().unwrap();
     assert!(ending.starts_with("checkpoint: budget"), "{ending}");
 }
+
+/// A send with nothing running is refused, by name; a handoff is written and announced, and
+/// `read` gives the newest one back to the body to check.
+#[test]
+fn send_and_handoff() {
+    let mut c = Client::start(
+        "handoff",
+        UNGUARDED,
+        vec![
+            ScriptedModel::text("## Goal\nThe CLI.\n## Open work\nThe board."),
+            ScriptedModel::text("Checked: it holds."),
+        ],
+    );
+    let id = c.request("initialize", &json!({}));
+    assert!(
+        c.response(id)["result"]["handoff"].is_null(),
+        "none waiting yet"
+    );
+    let id = c.request("session/send", &json!({"text": "faster"}));
+    assert_eq!(c.response(id)["error"]["code"], -32003);
+    c.request("session/handoff", &json!({"focus": "the board"}));
+    let mut seen = Vec::new();
+    let written = c.until(&mut seen, |l| method(l) == "event/handoff");
+    let path = written["params"]["path"].as_str().unwrap().to_owned();
+    assert!(path.contains(".mnemorph/handoffs/"), "{path}");
+    assert!(std::fs::read_to_string(&path).unwrap().contains("The CLI."));
+    c.request("session/handoff", &json!({"read": true}));
+    let started = c.until(&mut seen, |l| {
+        method(l) == "event/turnStarted"
+            && l["params"]["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("The CLI."))
+    });
+    assert!(
+        started["params"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("verify every claim")
+    );
+    c.until(&mut seen, |l| method(l) == "event/turnEnded");
+}

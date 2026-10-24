@@ -117,7 +117,11 @@ changed: Array<string>,
 /**
  * What failed.
  */
-failures: Array<string>, } | { "type": "turnEnded", 
+failures: Array<string>, } | { "type": "handoff", 
+/**
+ * The file.
+ */
+path: string, } | { "type": "turnEnded", 
 /**
  * How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
  */

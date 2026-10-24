@@ -139,6 +139,23 @@ export class Client {
     return this.request('session/prompt', { text }) as Promise<PromptResult>;
   }
 
+  /** Steer the running turn: the body reads `text` after its next tool step. Refused when
+   * nothing runs — then it is a message. */
+  async send(text: string): Promise<void> {
+    await this.request('session/send', { text });
+  }
+
+  /** Write a handoff for the next session, focused on `focus` if given; announced by a
+   * `handoff` event with its path. */
+  handoff(focus?: string): Promise<PromptResult> {
+    return this.request('session/handoff', focus ? { focus } : {}) as Promise<PromptResult>;
+  }
+
+  /** Give the newest handoff to the body, to check against the code. */
+  readHandoff(): Promise<PromptResult> {
+    return this.request('session/handoff', { read: true }) as Promise<PromptResult>;
+  }
+
   /** Esc: stop the turn in flight, and any act waiting at the gate. */
   async interrupt(): Promise<void> {
     await this.request('session/interrupt', {});

@@ -38,6 +38,12 @@ impl Session {
         self.run.interrupt()
     }
 
+    /// The send lane: a line pushed here reaches the running body at its next tool step.
+    #[must_use]
+    pub fn steer(&self) -> crate::run::Steer {
+        self.run.steer()
+    }
+
     /// The run.
     pub fn run(&mut self) -> &mut Run {
         &mut self.run

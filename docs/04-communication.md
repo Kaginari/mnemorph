@@ -220,7 +220,7 @@ waiting.
 | Lane | Filled by | Reaches | When |
 |---|---|---|---|
 | **queue** | the human typing while a turn runs; piped input | the session, as its next turn | in order, after the current turn ends; Esc interrupts and the next queued line starts at once |
-| **send** | `/send <body>: <text>` | one running body | at its next tool step — steering, never a new task |
+| **send** | `/send <text>` in solo; `/send <body>: <text>` once the world has bodies (M7) | one running body | at its next tool step — steering, never a new task |
 | **wake** | a background body's report | its own parent, at that parent's next turn | depth-agnostic: a slime's report wakes its orc, not the throne |
 
 Queue and send are two lanes, never one inbox: a queued line must not ride the running turn.
@@ -268,7 +268,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, session, run, holes, budget}
+    D-->>CLI: {protocol, version, world, model, session, run, holes, budget, handoff}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -289,12 +289,12 @@ sequenceDiagram
 
 | Kind | Served by the solo session | Served once the world is |
 |---|---|---|
-| requests (client → core) | `initialize`, `session/prompt`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/send`, `session/resume`, `session/handoff`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
+| requests (client → core) | `initialize`, `session/prompt`, `session/send`, `session/handoff`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/resume`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
 | requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on | |
-| events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
+| events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `handoff`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
-world, model, provider, session, run, holes, budget}`; a client that speaks another `protocol` stops
+world, model, provider, session, run, holes, budget, handoff}` (`handoff`: one younger than 14 days, waiting); a client that speaks another `protocol` stops
 rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
@@ -335,7 +335,11 @@ status line — model, spend (`unpriced` when the price tables do not know the m
 against the stress line, the cache's share, and what the human's caps leave
 ([consumption](06-consumption.md)). **Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
-**Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
+**`/send <text>`** steers the turn that runs — `session/send`, refused when nothing runs, the
+text reaching the body after its next tool step as the human's, and said to the human when the
+turn ends first; **`/handoff [focus]`** and **`/handoff read`** write and read a handoff
+(`session/handoff`, [the loop](03-loop.md#between-sessions-the-handoff)), a session tells you
+when one is waiting, and a checkpoint offers one; **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
 nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the
 history. An approval is answered only by **y** or by **n** and Esc — never by Enter alone — and
 one whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an

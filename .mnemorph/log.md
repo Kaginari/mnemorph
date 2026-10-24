@@ -1515,3 +1515,43 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a cap read once is a quota for one session; a cap across sessions is a fold read
   again before each call. The ledger crate had the right fold all along, with nothing calling it.
+
+---
+
+### [2026-10-24T19:08:52+02:00] rimuru — M6: /send and /handoff
+- **Task:** the polish rung's last pieces: the send lane and the handoff.
+- **Files:** crates/mnemorph-loop/src/run.rs (`steer`: a line sent reaches the body after its
+  next tool step, marked as the human's; one a turn never reached is said, never carried into the
+  next; `handoff`: the template filled from the facts the core gathers, written to
+  `.mnemorph/handoffs/<time>.md`; `latest_handoff`), session.rs, mnemorph-server (`session/send`
+  — refused when nothing runs; `session/handoff {focus | read}` through the session's lane, in
+  order; the `handoff` event; the hello's waiting handoff), packages/protocol (`Waiting`),
+  packages/sdk (`send`, `handoff`, `readHandoff`), packages/cli (`/send`, `/handoff [focus]`,
+  `/handoff read`; a waiting handoff said at the start; a checkpoint offers one; the core's own
+  asks shown as the commands that asked them), docs/03-loop.md, docs/04-communication.md, tests.
+- **Gate:** n/a. Instruments: a live `/handoff` on a free model (`poolside/laguna-s-2.1:free`)
+  wrote the seven sections, and recorded that `git` failed in a world with no repository;
+  `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the core's own asks are long templates; shown as the human's line, they buried
+  the transcript. The transcript shows the command that asked.
+
+---
+
+### [2026-10-24T19:24:46+02:00] rimuru — /send and /handoff, after their review
+- **Task:** the review of #136: `/handoff` refused after a checkpoint, where the CLI offers it;
+  a late `/send` reported only at the next turn; `/handoff read` with nothing to read left the
+  CLI busy; two handoffs in one second overwrote each other; the template quoted as the first
+  ask; unbounded facts; age by mtime; the marker undefined to the body; the docs' `/send` form.
+- **Files:** crates/mnemorph-loop/src/run.rs (a handoff passes the context line and a carved
+  budget, never the caps, in at most 8 calls, after folding; the core's asks never the first;
+  a late line said with its turn's end; names that never collide; age from the name; facts
+  capped at 16 KiB; `ask_for_core`), solo.rs (the marker is the human's only as its own text),
+  mnemorph-server (read refuses past 64 KiB and says what is unreadable; a queued handoff is
+  `queued`), packages/cli (`/handoff read` not busy before it starts; the exact template
+  sentence), docs/03-loop.md, docs/04-communication.md, tests.
+- **Gate:** n/a. Instruments: a handoff written after a context checkpoint; a late line warned
+  before its turn's end; two handoffs, two files; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** the save operation is used when the meters are full; a save gated by the same
+  meters saves nothing. It passes the soft lines and stops at the human's.
