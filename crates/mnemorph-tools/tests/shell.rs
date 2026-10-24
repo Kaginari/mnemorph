@@ -301,7 +301,7 @@ fn a_configured_rule_asks_the_human() {
     };
 
     let deny = Arc::new(Scripted::new([Answer::Deny("no".into())]));
-    let o = bash(&mut cx(deny.clone()), "sed -i s/a/b/ src/f.txt");
+    let o = bash(&mut cx(deny.clone()), "sed -i.bak s/a/b/ src/f.txt");
     assert!(o.is_error, "{o:?}");
     assert!(
         deny.asked()[0].why[0].contains("guard rule `in-place-edit` asks"),
@@ -314,8 +314,9 @@ fn a_configured_rule_asks_the_human() {
     );
 
     let approve = Arc::new(Scripted::new([Answer::Approve]));
-    let o = bash(&mut cx(approve), "sed -i s/a/b/ src/f.txt");
+    let o = bash(&mut cx(approve), "sed -i.bak s/a/b/ src/f.txt");
     assert!(!o.is_error, "{o:?}");
+    assert_eq!(o.meta.class, Some(ToolClass::Write), "an in-place edit writes");
     assert_eq!(
         fs::read_to_string(w.world().join("src/f.txt")).unwrap(),
         "b\n"

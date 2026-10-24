@@ -468,14 +468,17 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
             }
         }
         "sed" => {
-            if has_short(words, 'i') || has(words, &["--in-place"]) {
+            let in_place = has_short(words, 'i') || has(words, &["--in-place"]);
+            if in_place {
                 t.refuse(
                     Rule::InPlaceEdit,
                     "in-place edits run blind (`sed -i`): use the edit tool",
                 );
             }
+            // In place, the files are written: the class an approval would run at says so.
+            let act = if in_place { Act::Modify } else { Act::Read };
             for a in operands(args).into_iter().skip(1) {
-                w.touch(a, Act::Read, "`sed`", t);
+                w.touch(a, act, "`sed`", t);
             }
         }
         "touch" | "mkdir" | "tee" | "truncate" => {
