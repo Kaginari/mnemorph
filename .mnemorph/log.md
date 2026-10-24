@@ -673,3 +673,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Envelopes are vetted by the same classifier the gate trusts: a pattern the guard calls
     destructive or refuses can never become a standing permission.
   - Veldora: a part ships with its docs in the same pull request — now a standing rule.
+
+---
+
+### [2026-10-24T04:01:30+02:00] rimuru — the file tools open beneath the world
+- **Task:** #67 — the file tools checked a resolved path, then opened it by name: a symlink
+  swapped in between would have led them out of the world.
+- **Files:** crates/mnemorph-tools/src/beneath.rs (open the checked path again from the world's
+  root, one component at a time, following no symlink; writes renamed inside the same directory
+  handle), src/files.rs (read, write, edit and grep through it), docs/05-architecture.md.
+- **Gate:** n/a. Instruments: a swapped directory and a swapped last component refused by read
+  and write; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** no `openat2` is needed: the check resolves the path, and a walk with `O_NOFOLLOW`
+  re-checks it by construction, on Linux and macOS alike.

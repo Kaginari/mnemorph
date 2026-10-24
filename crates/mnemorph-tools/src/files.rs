@@ -3,7 +3,6 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::Write as _;
-use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
@@ -27,21 +26,6 @@ fn hash(bytes: &[u8]) -> u64 {
     let mut h = DefaultHasher::new();
     bytes.hash(&mut h);
     h.finish()
-}
-
-/// Write `content` to `path` whole or not at all: a temporary sibling, then a rename.
-fn write_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    let tmp = path.with_file_name(format!(
-        ".{}.mnemorph-tmp",
-        path.file_name()
-            .map(|n| n.to_string_lossy())
-            .unwrap_or_default()
-    ));
-    fs::write(&tmp, content)?;
-    fs::rename(&tmp, path)
 }
 
 // ── read ────────────────────────────────────────────────────────────────────
@@ -98,7 +82,7 @@ impl Tool for Read {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
-        let bytes = match fs::read(&path) {
+        let bytes = match crate::beneath::read(cx.world(), &path) {
             Ok(b) => b,
             Err(e) => return Outcome::error(format!("cannot read `{}`: {e}", cx.shown(&path))),
         };
@@ -210,7 +194,7 @@ impl Tool for Write {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
-        if let Err(e) = write_atomic(&path, a.content.as_bytes()) {
+        if let Err(e) = crate::beneath::write(cx.world(), &path, a.content.as_bytes()) {
             return Outcome::error(format!("cannot write `{}`: {e}", cx.shown(&path)));
         }
         cx.seen.remove(&path);
@@ -290,7 +274,9 @@ impl Tool for Edit {
             Err(e) => return Outcome::error(e),
         };
         let shown = cx.shown(&path);
-        let text = match fs::read_to_string(&path) {
+        let text = match crate::beneath::read(cx.world(), &path)
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+        {
             Ok(t) => t,
             Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
         };
@@ -319,7 +305,7 @@ impl Tool for Edit {
         } else {
             text.replacen(&a.old_string, &a.new_string, 1)
         };
-        if let Err(e) = write_atomic(&path, updated.as_bytes()) {
+        if let Err(e) = crate::beneath::write(cx.world(), &path, updated.as_bytes()) {
             return Outcome::error(format!("cannot write `{shown}`: {e}"));
         }
         cx.seen.remove(&path);
@@ -550,7 +536,9 @@ impl Tool for Grep {
             {
                 continue;
             }
-            let Ok(bytes) = fs::read(&file) else { continue };
+            let Ok(bytes) = crate::beneath::read(cx.world(), &file) else {
+                continue;
+            };
             if bytes.iter().take(8192).any(|b| *b == 0) {
                 continue;
             }
