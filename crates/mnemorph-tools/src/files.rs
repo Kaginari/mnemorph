@@ -29,7 +29,7 @@ fn hash(bytes: &[u8]) -> u64 {
 }
 
 /// Keep the world as it is in the attic before a write replaces part of it.
-fn keep(cx: &Context) {
+pub(crate) fn keep(cx: &Context) {
     if let Some(attic) = cx.attic() {
         // The attic is recovery, not containment: a failed snapshot does not stop the write.
         let _ = attic.snapshot("before a file write");

@@ -5,6 +5,7 @@ mod beneath;
 pub mod classify;
 pub mod files;
 pub mod gate;
+pub mod patch;
 pub mod shell;
 pub mod tool;
 mod tripwire;
