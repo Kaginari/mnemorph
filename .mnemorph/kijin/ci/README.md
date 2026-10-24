@@ -2,7 +2,7 @@
 
 - **Race:** kijin
 - **Reports to:** rimuru
-- **Territory:** .github/
+- **Post:** .github/
 - **Verify:** `actionlint`
 
 ## Traits

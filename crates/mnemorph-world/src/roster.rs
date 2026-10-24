@@ -1,0 +1,112 @@
+//! The roster: every creature the world's docs describe, read fresh when the docs change.
+
+use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::Path;
+
+use mnemorph_races::Race;
+
+use crate::doc::{Creature, parse};
+
+/// The creatures of a world, by name, and the docs that could not be read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Roster {
+    /// Every creature, by name.
+    pub creatures: BTreeMap<String, Creature>,
+    /// Docs that could not be read, and why.
+    pub problems: Vec<String>,
+    /// The docs' fingerprint: when it moves, the roster is read again.
+    pub fingerprint: u64,
+}
+
+impl Roster {
+    /// Read every `.mnemorph/<race>/<name>/README.md` of `world`.
+    #[must_use]
+    pub fn load(world: &Path) -> Roster {
+        let mut roster = Roster::default();
+        let mut hasher = DefaultHasher::new();
+        let records = world.join(".mnemorph");
+        for race in Race::ALL {
+            let Ok(seats) = fs::read_dir(records.join(race.name())) else {
+                continue;
+            };
+            let mut seats: Vec<_> = seats.filter_map(Result::ok).map(|e| e.path()).collect();
+            seats.sort();
+            for seat in seats {
+                let doc = seat.join("README.md");
+                let Ok(text) = fs::read_to_string(&doc) else {
+                    continue;
+                };
+                let rel = seat.strip_prefix(world).unwrap_or(&seat).to_path_buf();
+                rel.hash(&mut hasher);
+                text.hash(&mut hasher);
+                match parse(&text, &rel) {
+                    Ok(c) => {
+                        if let Some(other) = roster.creatures.get(&c.name) {
+                            roster.problems.push(format!(
+                                "{}: `{}` is already the creature at {}",
+                                rel.display(),
+                                c.name,
+                                other.seat
+                            ));
+                        } else {
+                            roster.creatures.insert(c.name.clone(), c);
+                        }
+                    }
+                    Err(e) => roster.problems.push(e),
+                }
+            }
+        }
+        roster.fingerprint = hasher.finish();
+        roster
+    }
+
+    /// The living creatures: retired ones own nothing and command no one.
+    pub fn living(&self) -> impl Iterator<Item = &Creature> {
+        self.creatures.values().filter(|c| !c.retired)
+    }
+
+    /// The chain above `name`, nearest first, stopping at the throne, a missing name or a loop.
+    #[must_use]
+    pub fn chain(&self, name: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut at = self.creatures.get(name).and_then(|c| c.reports_to.clone());
+        while let Some(next) = at {
+            if next == name || out.contains(&next) {
+                break;
+            }
+            out.push(next.clone());
+            at = self.creatures.get(&next).and_then(|c| c.reports_to.clone());
+        }
+        out
+    }
+
+    /// Whether `a` is above `b` in the chain of command (`above` is transitive).
+    #[must_use]
+    pub fn is_above(&self, a: &str, b: &str) -> bool {
+        self.chain(b).iter().any(|n| n == a)
+    }
+
+    /// Every creature whose chain comes back to itself: the chain of command loops.
+    #[must_use]
+    pub fn loops(&self) -> Vec<String> {
+        self.creatures
+            .keys()
+            .filter(|name| {
+                let mut seen = vec![(*name).clone()];
+                let mut at = self.creatures.get(*name).and_then(|c| c.reports_to.clone());
+                while let Some(next) = at {
+                    if seen.contains(&next) {
+                        return next == **name;
+                    }
+                    seen.push(next.clone());
+                    at = self.creatures.get(&next).and_then(|c| c.reports_to.clone());
+                }
+                false
+            })
+            .cloned()
+            .collect()
+    }
+}

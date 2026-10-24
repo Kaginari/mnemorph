@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-faces
-- **Territory:** packages/protocol/ packages/sdk/ packages/cli/
+- **Domain:** packages/protocol/ packages/sdk/ packages/cli/
 
 ## Traits
 

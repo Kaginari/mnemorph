@@ -2,7 +2,7 @@
 
 - **Race:** orc
 - **Reports to:** elf-canon
-- **Territory:** docs/ assets/ site/
+- **Domain:** docs/ assets/ site/
 
 ## Traits
 

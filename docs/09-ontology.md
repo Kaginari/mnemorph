@@ -99,9 +99,25 @@ $\mathcal{G}^{*} = \bigcup_n R^n(\mathcal{G}_0)$. The rules only add triples and
 possible triples is finite, so $\mathcal{G}^{*}$ is unique and reached in finitely many steps.
 It is rebuilt when the docs' fingerprint moves, before a dispatch, never on a model call.
 
-**Claims.** A territory is read from the doc's structured Territory field only: directory
-prefixes, normalised. A path mentioned in prose is never a claim; it raises a low `prose-claim`
-finding that the field and the prose disagree. isekai read claims from prose too, and the rules
+**Claims.** A creature's doc is `.mnemorph/<race>/<name>/README.md`: a `# name` heading, then
+fields as list items, read before the first `##` section and nowhere else.
+
+| Field | Who | Means |
+|---|---|---|
+| `Race` | every creature | its race, as the races name themselves (`slime`, `high-orc`) |
+| `Reports to` | every creature but the throne | the creature above it: the chain of command |
+| `Territory` | a Slime; an Elf | a Slime's zone, the prefixes it writes; an Elf's lane, the prefixes it plans across — owning nothing |
+| `Domain` | an Orc | the prefixes it routes and judges, never writes |
+| `Post` | a Kijin | the files its outward acts own (CI, release, deploy) |
+| `Verify` | a creature with a gate | one verify line per field |
+| `Minds` | any | the Minds it wears |
+| `Retired` | any | `yes`: it owns and commands nothing; its seat and prefixes are skipped |
+
+A ground field is a list of directory prefixes, each written with its `/` (`src/`, `.github/`),
+normalised. Anything else — a sentence, a word without its `/` — makes the doc unreadable, and an
+unreadable doc is reported, never guessed: the creature is not in the roster until it reads. A
+path mentioned in prose is never a claim; it raises a low `prose-claim` finding that the field
+and the prose disagree. isekai read claims from prose too, and the rules
 that kept prose mentions from becoming false claims grew into the largest and most fragile part
 of its ontology; a field cannot be misread.
 
@@ -109,8 +125,9 @@ of its ontology; a field cannot be misread.
 
 $\mathrm{own} : \text{Path} \to \text{Creature} \cup \lbrace \bot\rbrace $ takes the first rule that matches:
 
-1. **Harness soil** — the shared queue, instruments, memory and ontology event files: no body;
-   only the harness writes them.
+1. **Harness soil** — `.mnemorph/shared/`, `instruments/`, `memory/`, `ontology/`, `index/` and
+   the journal `log.md`: no body; only the harness writes them. The law, `.mnemorph/law.md`, is
+   the human's: it changes only as a diff they apply.
 2. **Scratch** — `.mnemorph/tmp/<body>/`: the body that owns the nest.
 3. **A seat** — a living creature's directory under `.mnemorph/<race>/<name>/`: that creature,
    even inside a broader claim; the deepest seat wins.
