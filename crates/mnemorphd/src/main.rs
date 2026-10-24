@@ -9,13 +9,16 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 
 Usage: mnemorphd [--world <dir>]
        mnemorphd onto owner <path>... [--world <dir>]
+       mnemorphd onto check [--world <dir>]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout. The
 `mnemorph` CLI starts it; run it by hand only to test a client.
 
 `onto owner` names each path's owner, the rule that gave it and the claim that matched, read
 from the creature docs; it needs no key and opens no session. A path is relative to the
-current directory, or absolute.
+current directory, or absolute. `onto check` prints `@S PASS|FAIL <n> findings`, then each
+finding's severity, code, place and message; it fails on a critical or high finding, or a doc
+that does not read.
 
 Options:
   --world <dir>   the world to work in (default: the current directory)
@@ -91,11 +94,11 @@ fn onto(args: &[String]) -> ExitCode {
     let mut world = None;
     let mut paths = Vec::new();
     let mut words = args.iter();
-    match words.next().map(String::as_str) {
-        Some("owner") => {}
+    let command = match words.next().map(String::as_str) {
+        Some(c @ ("owner" | "check")) => c,
         Some(other) => return fail(&format!("onto has no `{other}`; see --help")),
-        None => return fail("onto needs a command: owner; see --help"),
-    }
+        None => return fail("onto needs a command: owner or check; see --help"),
+    };
     while let Some(w) = words.next() {
         if w == "--world" {
             match words.next() {
@@ -108,8 +111,11 @@ fn onto(args: &[String]) -> ExitCode {
             paths.push(w.clone());
         }
     }
-    if paths.is_empty() {
+    if command == "owner" && paths.is_empty() {
         return fail("onto owner needs a path");
+    }
+    if command == "check" && !paths.is_empty() {
+        return fail("onto check takes no paths: it checks the whole world");
     }
     let Ok(cwd) = std::env::current_dir() else {
         return fail("the current directory cannot be read");
@@ -121,6 +127,9 @@ fn onto(args: &[String]) -> ExitCode {
     let roster = Roster::load(&world);
     for problem in &roster.problems {
         let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
+    }
+    if command == "check" {
+        return check(&world, &roster);
     }
     let mut out = std::io::stdout().lock();
     for path in &paths {
@@ -158,6 +167,56 @@ fn onto(args: &[String]) -> ExitCode {
         let _ = writeln!(out, "{path}\t{owner}\t{why}");
     }
     ExitCode::SUCCESS
+}
+
+/// `onto check`: every finding about the world's shape, most severe first. It fails on a
+/// critical or high finding, or a doc that does not read.
+fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
+    let tracked = std::process::Command::new("git")
+        .arg("-C")
+        .arg(world)
+        // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).
+        .args(["ls-files", "-z"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success());
+    let tracked: Vec<String> = if let Some(o) = tracked {
+        String::from_utf8_lossy(&o.stdout)
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect()
+    } else {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: the world is no git repository; unowned soil is not checked"
+        );
+        Vec::new()
+    };
+    let findings = mnemorph_server::world::check(roster, &tracked);
+    let failed = !roster.problems.is_empty() || findings.iter().any(|f| f.severity.blocks());
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(
+        out,
+        "@S {} {} findings",
+        if failed { "FAIL" } else { "PASS" },
+        findings.len()
+    );
+    for f in &findings {
+        let _ = writeln!(
+            out,
+            "{}\t{}\t{}\t{}",
+            f.severity.word(),
+            f.code,
+            f.at,
+            f.message
+        );
+    }
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 /// `path` made absolute against `cwd` and read segment by segment, without touching the disk:

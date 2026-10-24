@@ -1749,3 +1749,49 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     tool policy all wait for the dispatch rung that calls them.
   - The anchor list restated `own`'s soils. Only the filter asked `own`, so a new harness prefix
     could have been missed. Both now come from one list.
+
+---
+
+### [2026-10-24T22:24:49+02:00] rimuru — M7: the shapes as findings, and onto check
+- **Task:** the ontology's rung 3: each shape the law demands, checked as a finding with a code
+  and a severity.
+- **Files:**
+  - crates/mnemorph-world:
+    - findings.rs — `overlap`, `above-cycle`, `dead-bond`, `slime-truth`, `unowned-soil`;
+    - doc.rs — each field's line, for `file:line`;
+    - tests/findings.rs;
+  - mnemorphd — `onto check`, tests/onto.rs;
+  - docs/09.
+- **Gate:** n/a. Instruments:
+  - a fixture holding every breach reports each with its code, severity and place;
+  - this world passes, with two medium unowned-soil findings: `.github/`'s templates, which wait
+    for a forge Kijin;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Overlap is between write grounds, not between all claims. In this world every Slime's zone
+    equals its Orc's domain and its Elf's lane, which is the hierarchy working. Read across all
+    claims, the rule would block every landing.
+  - The gate blocking on these findings, and the codes for facts, heirs, Minds and relations,
+    come with the rungs that bring what they read.
+
+---
+
+### [2026-10-24T22:33:15+02:00] rimuru — M7 findings: the review's fixes
+- **Task:** fix what the Fable review of the findings rung found (verdict: merge after fixes).
+- **Files:**
+  - findings.rs:
+    - `unowned-soil` reads the owner, not the rule;
+    - a retired parent is a `dead-bond`;
+    - a loop through a retired creature is none;
+  - mnemorphd — `git ls-files -z`;
+  - tests: keeperless compiled soil, retired parents, a name git quotes;
+  - docs/09's table.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A finding about ownership must ask who owns, not which rule answered. "No claim" and "a
+    compiled soil whose keeper does not live" are the same ⊥. Before genesis, a world's root
+    files are all unowned.
+  - Findings and the graph must read the same bonds. The graph dropped a retired parent while
+    the loop check still walked through it.

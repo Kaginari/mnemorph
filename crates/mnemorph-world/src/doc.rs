@@ -1,5 +1,6 @@
 //! A creature's document: its structured fields, read as data. Prose is never a claim.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use mnemorph_races::Race;
@@ -29,6 +30,24 @@ pub struct Creature {
     pub minds: Vec<String>,
     /// Retired creatures own nothing; their seats and prefixes are skipped.
     pub retired: bool,
+    /// The line each field first stands on, for a finding's `file:line`.
+    pub lines: BTreeMap<String, usize>,
+}
+
+impl Creature {
+    /// The doc's path, relative to the world.
+    #[must_use]
+    pub fn doc(&self) -> String {
+        format!("{}README.md", self.seat)
+    }
+
+    /// Where a field stands: `doc:line`, or the doc alone when the field is absent.
+    #[must_use]
+    pub fn at(&self, field: &str) -> String {
+        self.lines
+            .get(field)
+            .map_or_else(|| self.doc(), |n| format!("{}:{n}", self.doc()))
+    }
 }
 
 /// A seat's directory as ownership reads it: relative, `/`-separated, ending in `/`, no `./`.
@@ -128,10 +147,29 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         verify: Vec::new(),
         minds: Vec::new(),
         retired: false,
+        lines: BTreeMap::new(),
     };
     let mut territory = Vec::new();
     // Only the header's fields count: a field-looking line under a later heading is prose.
-    for line in text.lines().take_while(|l| !l.starts_with("##")) {
+    for (n, line) in text
+        .lines()
+        .enumerate()
+        .take_while(|(_, l)| !l.starts_with("##"))
+    {
+        for name in [
+            "Race",
+            "Reports to",
+            "Territory",
+            "Domain",
+            "Post",
+            "Verify",
+            "Minds",
+            "Retired",
+        ] {
+            if field(line, name).is_some() {
+                c.lines.entry(name.to_owned()).or_insert(n + 1);
+            }
+        }
         if let Some(v) = field(line, "Race") {
             race = Some(
                 Race::from_name(v.trim_matches('`'))

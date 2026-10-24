@@ -73,3 +73,53 @@ fn onto_says_what_it_needs() {
     let (ok, _, err) = onto(&["onto", "who"], &here);
     assert!(!ok && err.contains("onto has no `who`"), "{err}");
 }
+
+#[test]
+fn check_passes_this_world_and_names_its_findings() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let (ok, out, err) = onto(&["onto", "check"], &repo);
+    assert!(ok, "{out}{err}");
+    assert!(out.starts_with("@S PASS "), "{out}");
+    for line in out.lines().skip(1) {
+        assert!(
+            line.starts_with("medium\t") || line.starts_with("low\t"),
+            "{line}"
+        );
+    }
+    let (ok, _, err) = onto(&["onto", "check", "src/"], &repo);
+    assert!(!ok && err.contains("takes no paths"), "{err}");
+}
+
+/// A name git would quote (`café`) reaches the check as it is.
+#[test]
+fn check_reads_names_git_would_quote() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-onto-quote-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph/slime/a")).unwrap();
+    std::fs::create_dir_all(dir.join(".mnemorph/orc/o")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join(".mnemorph/orc/o/README.md"),
+        "# orc-o\n\n- **Race:** orc\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(".mnemorph/slime/a/README.md"),
+        "# slime-a\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/café.rs"), "").unwrap();
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    git(&["add", "src", ".mnemorph"]);
+    let (_, out, _) = onto(&["onto", "check"], &dir);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(!out.contains("src/"), "the Slime owns src/café.rs: {out}");
+}

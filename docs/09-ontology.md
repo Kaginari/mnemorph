@@ -180,9 +180,11 @@ A path is the human's: relative to where they stand, or absolute; one outside th
 nobody's. It reads the docs alone, so it needs no key and opens no session; a doc that does not
 read is said on stderr.
 
-**Overlap.** Two creatures whose prefixes are equal, or one inside the other, are a critical
-finding — except a seat doc inside a broader claim, which rule 3 settles. Two prefixes of one
-creature never collide.
+**Overlap.** Two creatures whose write grounds — a Slime's zone, a Kijin's post — are equal, or
+one inside the other, are a critical finding — except a seat doc inside a broader claim, which
+rule 3 settles. An Orc's domain and an Elf's lane are not write grounds: they hold the zones
+below them by design, so a domain over its Slimes' zones is the shape, not a breach. Two claims
+of one creature never collide.
 
 ### Facts: who said what
 
@@ -332,13 +334,13 @@ blocking. Findings are never summed into a score.
 
 | Code | Severity | Read as |
 |---|---|---|
-| `overlap` | critical | two creatures' territories equal or nested |
+| `overlap` | critical | two creatures' write grounds (zones, posts) equal or nested |
 | `above-cycle` | critical | the chain of command loops |
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
-| `dead-bond` | high | an `above` target with no doc |
+| `dead-bond` | high | an `above` target with no doc, or retired |
 | `heir-dead` | high | an heir that is retired or missing |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold |
-| `unowned-soil` | medium | a tracked path where `own` returns $\bot$ |
+| `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind nobody wears and not marked shared |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
@@ -346,8 +348,11 @@ blocking. Findings are never summed into a score.
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |
 | `untriaged-fact` | low | a free fact landed beside similar ones without the parent's label |
 
-`mnemorph onto check` prints `@S PASS|FAIL <n> findings` with each finding's code, severity and
-`file:line`; evolution's overlay must add none.
+`mnemorph onto check` prints `@S PASS|FAIL <n> findings`, then one line per finding — severity,
+code, `file:line` (the doc's field the finding stands on) and what it says — most severe first;
+evolution's overlay must add none. It fails on a critical or high finding, and on a doc that
+does not read, which is said on stderr. `unowned-soil` reads the tracked files from git and is
+reported once per directory, with its count.
 
 ### Not taken from DIKWP-MESH
 
