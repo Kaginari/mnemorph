@@ -1,5 +1,6 @@
 //! The world: creatures, territory, dispatch, the end gate, the log writer, evolution.
 
+pub mod dispatch;
 pub mod doc;
 pub mod findings;
 pub mod graph;
@@ -7,6 +8,7 @@ pub mod own;
 pub mod roster;
 pub mod soil;
 
+pub use dispatch::{Ask, Hop, Refused, dispatch};
 pub use doc::{Creature, parse};
 pub use findings::{Finding, Severity, check};
 pub use graph::{Bond, Graph};

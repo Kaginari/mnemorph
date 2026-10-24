@@ -184,7 +184,11 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         } else if let Some(v) = field(line, "Post") {
             c.post.extend(claims(v, "Post", seat)?);
         } else if let Some(v) = field(line, "Verify") {
-            c.verify.push(v.trim_matches('`').to_owned());
+            // A blank verify line judges nothing: it is no verify line.
+            let line = v.trim_matches('`').trim();
+            if !line.is_empty() {
+                c.verify.push(line.to_owned());
+            }
         } else if let Some(v) = field(line, "Minds") {
             c.minds.extend(words(v));
         } else if let Some(v) = field(line, "Retired") {
