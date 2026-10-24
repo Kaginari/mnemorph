@@ -123,7 +123,8 @@ else for the pair (race, office), where the office comes from the commission's `
 configured for the race's `DEFAULT_TIER`. The default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and
 the adversary think hardest), **strong** for Orc, Slime and Kijin.
 
-**Solo mode.** One body runs as Rimuru's voice and a single Slime's hands, under the shelves,
+**Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
+Slime's shelf (`read`, `write`; nothing outward) — under the shelves,
 the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole repository, or in
 a world with creatures the territory the ask touches. It is the default for small asks and for
 headless and benchmark runs: a hierarchy pays a prefix and a report on every hop, and a short

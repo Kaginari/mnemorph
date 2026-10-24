@@ -11,6 +11,7 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, conversation, push_user};
+use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
 use crate::stress::{Signal, Stress};
 
@@ -121,6 +122,8 @@ pub struct Run {
     spent_wt: u64,
     last_occupancy: u64,
     started: Instant,
+    gate: Option<EndGate>,
+    before: Option<Tree>,
 }
 
 /// What a run needs that is not the body itself.
@@ -161,6 +164,8 @@ impl Run {
             spent_wt: 0,
             last_occupancy: 0,
             started: Instant::now(),
+            gate: None,
+            before: None,
         }
     }
 
@@ -182,6 +187,13 @@ impl Run {
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
         Ok(run)
+    }
+
+    /// Judge every answer that changed files with this end gate.
+    #[must_use]
+    pub fn with_gate(mut self, gate: EndGate) -> Self {
+        self.gate = Some(gate);
+        self
     }
 
     /// The conversation so far.
@@ -256,6 +268,10 @@ impl Run {
                 cache: false,
             }],
         );
+        if self.gate.is_some() {
+            self.before = Some(snapshot(self.cx.world()));
+        }
+        let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
             match self.perceive() {
@@ -298,7 +314,10 @@ impl Run {
                     }
                     // A server-paused turn continues with what it has.
                     StopReason::PauseTurn => continue,
-                    _ => return self.end(Ending::Answered(text_of(&response.content))),
+                    _ => match self.judge(text_of(&response.content), &mut gate_retried) {
+                        Some(ending) => return self.end(ending),
+                        None => continue,
+                    },
                 }
             }
             // Act, verify, record.
@@ -306,6 +325,46 @@ impl Run {
                 return self.end(ending);
             }
         }
+    }
+
+    /// The end gate on an answer: the answer, a failure, or — the first time it fails — `None`,
+    /// with the failure handed back to the body to fix.
+    fn judge(&mut self, answer: String, retried: &mut bool) -> Option<Ending> {
+        let (Some(gate), Some(before)) = (&self.gate, &self.before) else {
+            return Some(Ending::Answered(answer));
+        };
+        let verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        self.record(&Beat::Gate {
+            changed: verdict
+                .changed
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect(),
+            failures: verdict.failures.clone(),
+        });
+        if verdict.passed() {
+            return Some(Ending::Answered(answer));
+        }
+        if *retried {
+            return Some(Ending::Failed(format!(
+                "the end gate failed twice: {}",
+                verdict.failures.join("; ")
+            )));
+        }
+        *retried = true;
+        let note = format!(
+            "The end gate failed:\n- {}\nFix it, then answer again.",
+            verdict.failures.join("\n- ")
+        );
+        self.record(&Beat::Note { text: note.clone() });
+        push_user(
+            &mut self.messages,
+            vec![Block::Text {
+                text: note,
+                cache: false,
+            }],
+        );
+        None
     }
 
     /// The meters, before a model call: a reason to stop, or none.
