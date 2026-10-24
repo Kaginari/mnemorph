@@ -21,8 +21,23 @@ pub const ACT_BUDGET: u32 = 40;
 pub const LOOP_WARN: u32 = 3;
 /// See [`LOOP_WARN`].
 pub const LOOP_STALL: u32 = 5;
-/// Visits of one test bench without a single green before the stall.
+/// Visits of one test bench with no green and nothing landed between them, before the stall.
 pub const BENCH_STALL: u32 = 12;
+/// Muted visits of one bench — its exit status hidden — with no green, before the stall.
+pub const MUTED_STALL: u32 = 8;
+
+/// Words that run a command without being it: stripped before a bench is recognised.
+const RUNNERS: &[&str] = &[
+    "uv run",
+    "poetry run",
+    "pnpm exec",
+    "npx",
+    "bunx",
+    "pipenv run",
+    "nice",
+    "time",
+    "env",
+];
 
 /// Commands that run a test bench, by their start.
 const BENCHES: &[&str] = &[
@@ -61,19 +76,59 @@ pub struct Bench {
     pub green: u32,
     /// Times it ran piped, its exit status hidden: never counted green.
     pub muted: u32,
+    /// Visits since its last green or the last landing.
+    pub since_progress: u32,
+    /// Muted visits since its last green: a landing does not reset them.
+    pub muted_streak: u32,
 }
 
 /// The bench a command runs, if it runs one: the command before any pipe, trimmed — piped or
 /// not, it is the same bench.
 #[must_use]
 pub fn bench_of(command: &str) -> Option<String> {
-    let c = command.split('|').next().unwrap_or(command).trim();
+    let mut c = command
+        .split('|')
+        .next()
+        .unwrap_or(command)
+        .split(';')
+        .next()
+        .unwrap_or(command)
+        .trim();
+    loop {
+        let before = c;
+        if let Some((first, rest)) = c.split_once(' ') {
+            // `VAR=value cmd`, `timeout 600 cmd`, `uv run cmd`, …
+            if first.contains('=') && !first.starts_with('-') {
+                c = rest.trim_start();
+            } else if first == "timeout" {
+                c = rest
+                    .trim_start()
+                    .split_once(' ')
+                    .map_or(rest, |(_, r)| r)
+                    .trim_start();
+            } else if let Some(r) = RUNNERS
+                .iter()
+                .find_map(|w| c.strip_prefix(w).and_then(|r| r.strip_prefix(' ')))
+            {
+                c = r.trim_start();
+            }
+        }
+        if c == before {
+            break;
+        }
+    }
+    if let Some((_, after)) = c.rsplit_once("&& ") {
+        c = after;
+    }
     BENCHES
         .iter()
-        .any(|b| {
-            c.starts_with(b) || c.contains(&format!("&& {b}")) || c.contains(&format!("; {b}"))
-        })
-        .then(|| c.to_owned())
+        .any(|b| c.starts_with(b))
+        .then(|| c.trim().to_owned())
+}
+
+/// Whether a bench run hides its exit status: piped, or followed by `;` or `||`.
+fn muted(command: &str) -> bool {
+    command.contains('|') || command.contains(';')
 }
 
 /// What an instrument says after an act or a turn.
@@ -121,19 +176,29 @@ impl Stress {
         } else if self.repeats >= LOOP_STALL {
             out.push(Signal::Stall("loop"));
         }
-        // The bench tally: a piped run hides its exit status, so it is never green.
+        // The bench tally: a run that hides its exit status is muted, never green. A landing
+        // resets the honest reds, never the muted runs.
+        if !o.meta.wrote.is_empty() {
+            for b in self.benches.values_mut() {
+                b.since_progress = 0;
+            }
+        }
         if let Some(bench) = command.and_then(bench_of) {
-            let piped = command.is_some_and(|c| c.contains('|'));
+            let hidden = command.is_some_and(muted);
             let b = self.benches.entry(bench).or_default();
             b.visits += 1;
-            if piped {
+            b.since_progress += 1;
+            if hidden {
                 b.muted += 1;
+                b.muted_streak += 1;
             } else if o.is_error {
                 b.red += 1;
             } else {
                 b.green += 1;
+                b.since_progress = 0;
+                b.muted_streak = 0;
             }
-            if b.green == 0 && b.visits >= BENCH_STALL {
+            if b.since_progress >= BENCH_STALL || b.muted_streak >= MUTED_STALL {
                 out.push(Signal::Stall("bench"));
             }
         }

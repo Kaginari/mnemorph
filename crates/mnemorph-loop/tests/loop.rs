@@ -723,19 +723,17 @@ async fn an_identical_call_loop_is_broken() {
     assert!(warned);
 }
 
-/// A bench run again and again without one green stalls the run — a piped run, whose exit
-/// status is hidden, never counts as green, even when work lands between runs.
+/// A bench whose runs all hide their exit status stalls the run, however much lands between.
 #[tokio::test]
-async fn a_bench_that_never_goes_green_stalls() {
-    let w = World::new("bench");
+async fn a_muted_bench_stalls() {
+    let w = World::new("bench-muted");
     let mut script = Vec::new();
-    for i in 0..13 {
-        let command = if i % 2 == 0 {
-            "pytest -q"
-        } else {
-            "pytest -q | tail -1"
-        };
-        script.push(tool(&format!("b{i}"), "bash", json!({"command": command})));
+    for i in 0..9 {
+        script.push(tool(
+            &format!("b{i}"),
+            "bash",
+            json!({"command": "pytest -q | tail -1"}),
+        ));
         script.push(tool(
             &format!("w{i}"),
             "write",
@@ -756,6 +754,37 @@ async fn a_bench_that_never_goes_green_stalls() {
     );
 }
 
+/// Red runs with fixes landing between them are test-driven work, not thrash.
+#[tokio::test]
+async fn red_runs_with_fixes_between_them_do_not_stall() {
+    let w = World::new("bench-tdd");
+    let mut script = Vec::new();
+    for i in 0..14 {
+        script.push(tool(
+            &format!("b{i}"),
+            "bash",
+            json!({"command": "pytest -q"}),
+        ));
+        script.push(tool(
+            &format!("w{i}"),
+            "write",
+            json!({"path": format!("fix{i}.py"), "content": "x = 1\n"}),
+        ));
+    }
+    script.push(answer("still red, here is what I learned"));
+    let mut run = w.run(
+        Arc::new(ScriptedModel::new(script)),
+        Limits {
+            steps: 60,
+            ..limits()
+        },
+    );
+    assert!(matches!(
+        ask(&mut run, "make the tests pass").await,
+        Ending::Answered(_)
+    ));
+}
+
 #[test]
 fn benches_are_known_by_their_command() {
     use mnemorph_loop::bench_of;
@@ -766,6 +795,10 @@ fn benches_are_known_by_their_command() {
         bench_of("pytest -q"),
         "piped or not, the same bench"
     );
+    assert!(bench_of("RUST_BACKTRACE=1 cargo test").is_some());
+    assert!(bench_of("timeout 600 cargo test").is_some());
+    assert!(bench_of("uv run pytest").is_some());
+    assert!(bench_of("cargo test || true").is_some());
     assert!(bench_of("cargo build").is_none());
     assert!(bench_of("echo testing").is_none());
 }
@@ -792,4 +825,59 @@ fn the_solo_prefix_stays_under_its_ceiling() {
         tokens <= CEILING_TOKENS,
         "the solo prefix grew to ≈{tokens} tokens"
     );
+}
+
+/// Esc during a verify command is not a verdict: the ask ends interrupted, with no failure
+/// recorded and no "fix it" note.
+#[tokio::test]
+async fn esc_during_a_verify_is_not_a_verdict() {
+    let w = World::new("esc-verify");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "write", json!({"path": "a.txt", "content": "x"})),
+        answer("done"),
+        answer("never"),
+    ]));
+    let mut run = w
+        .run(model.clone(), limits())
+        .with_gate(mnemorph_loop::EndGate {
+            verify: vec!["sleep 30".into()],
+        });
+    let interrupt = run.interrupt();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(400));
+        interrupt.fire();
+    });
+    assert_eq!(ask(&mut run, "write a").await, Ending::Interrupted);
+    let beats = w.journal().read().unwrap().rows;
+    assert!(
+        !beats.iter().any(|b| matches!(b, Beat::Gate { .. })),
+        "no verdict was recorded"
+    );
+    assert_eq!(
+        model.requests().len(),
+        2,
+        "no turn to 'fix' an interrupted gate"
+    );
+}
+
+/// The human's configuration reaches the run.
+#[test]
+fn the_configuration_reaches_the_run() {
+    let w = World::new("configure");
+    let root = w.root.join("cfg");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::write(
+        w.world().join(".mnemorph/config.local.toml"),
+        "[stress]\ncontext_tokens = 90000\n[gate]\nask_rules = [\"in-place-edit\"]\n",
+    )
+    .unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        root.join("none.toml"),
+        &w.world(),
+    ))
+    .unwrap();
+    let (body, cx) = mnemorph_loop::solo(&w.world(), "m");
+    let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
+    assert_eq!(limits.stress_tokens, 90_000);
+    assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
 }

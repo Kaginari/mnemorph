@@ -123,8 +123,8 @@ also writes a priced row to the usage ledger, and the cost meter reads that sum.
 to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
 it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every
 small result and the last four exchanges stay whole. It folds in one batch when the context
-crosses 60% of the stress line, not a little each turn, so the cached prefix holds between
-folds. The journal is never touched: compaction shapes only what is sent. A 40-step run whose
+crosses 60% of the stress line, not a little each turn, so the conversation sent stays the same
+between folds — the shape a cache breakpoint on it will need. The journal is never touched: compaction shapes only what is sent. A 40-step run whose
 history would be 150 KB sends at most about 53 KB a turn.
 
 **A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
@@ -168,14 +168,20 @@ calls, interrupts and queued lines at a session and checks every request it send
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
-| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`); 40 turns with nothing landed (`actBudget`); the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times without a green (`bench`) | checkpoint: the run is busy, not working |
+| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`); 40 turns with nothing landed (`actBudget`); the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times with no green and nothing landed between, or 8 times muted (`bench`) | checkpoint: the run is busy, not working |
 
 All are code. None of them asks the body how it feels.
 
-The **bench tally** keeps, per test command (the command before any pipe), its visits, reds,
-greens and muted runs. A piped run (`cargo test | tail`) hides the exit status, so it is muted —
-never green — and twelve visits without one green stop the run however much it landed between
-them: the body that ran one bench 63 times in twenty minutes, every run piped, is the reason.
+The **bench tally** keeps, per test command — the command before any pipe or `;`, its
+`VAR=value`, `timeout` and runner words (`uv run`, `npx`, …) set aside — its visits, reds,
+greens and muted runs. A run that hides its exit status (`cargo test | tail`,
+`cargo test; echo ok`) is muted, never green. Red runs with fixes landing between them are
+test-driven work; twelve with nothing landed stop the run, and so do eight muted runs in a row,
+however much landed between them: the body that ran one bench 63 times in twenty minutes, every
+run piped, is the reason.
+
+The human's configuration reaches a run through `configure`: the attic's limits, the stress
+line, the guard rules that ask instead of refusing, and whether commands may run unguarded.
 
 The council's keys are `stress.escalateAt` (5), `stress.relieveAt` (7) and `stress.maxConsults`
 (3): after three warrants the report is forced to `@S ESCALATE` and reaches the human. Strain is
