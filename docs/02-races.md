@@ -146,7 +146,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | Class | Meaning | Who holds it |
 |---|---|---|
 | `read` | look inside the world | everyone |
-| `write` | change files inside the world — including deleting or renaming inside the writer's own soil, which moves the old file to the attic with a ledger line | every race, inside its own soil only (see below): code is a Slime's alone |
+| `write` | change files inside the world — including deleting or renaming inside the writer's own soil; whatever it takes away is kept in the attic first | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
 | `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
 | `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |

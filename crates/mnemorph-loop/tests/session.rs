@@ -141,7 +141,10 @@ fn session(root: &PathBuf, model: &Arc<Chaos>) -> Session {
     let (body, cx) = solo(&root.join("world"), "m");
     let cx = cx
         .with_sandbox(Sandbox::None("session tests run unguarded".into()))
-        .with_unguarded(true);
+        .with_unguarded(true)
+        .with_attic(
+            mnemorph_tools::Attic::at(&root.join("attic"), &root.join("world")).expect("git"),
+        );
     let setup = Setup {
         model: model.clone(),
         tools: registry(),

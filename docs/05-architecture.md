@@ -126,7 +126,7 @@ mnemorph/
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations | yes |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
-| attic | `.mnemorph/attic/` — deleted and replaced files, with a ledger line each | yes |
+| attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
 | derived indexes | `.mnemorph/index/` | no — rebuildable |
 | run journals | `.mnemorph/instruments/loop/` | no |
@@ -208,6 +208,17 @@ flowchart LR
   file tools refuse those paths outright. `.mnemorph/shared/` (the work queue), `tmp/` and
   `intel/` stay writable; a repository the command itself creates is its own. The snapshot keeps
   up to 16 MiB of content; a change to a protected file beyond that is reported, not undone.
+- **The attic** keeps what a command or a write takes away, outside the world where the guard
+  lets no command reach. Before every command and every file write, the working tree is
+  snapshotted into the attic's own git object store — only changed files are hashed again,
+  ignored files (`node_modules`, `target`) are left out because they rebuild, and the
+  command's `.mnemorph/tmp` is skipped. A command that deleted files is told how many and which
+  snapshot holds them, so `rm -rf src` and a script that wipes a folder are both undone by
+  restoring from it. The world's `.git` is kept another way: its objects — immutable, named by
+  their hash — are hard-linked into the attic and its refs copied, so a command that deletes or
+  breaks `.git` finds it put back after it ends. Deleting `.git` or the world's records outright
+  is `destructive`, so it asks first. The attic's git runs deaf to every configuration but its
+  own: no hooks, no filters, no fsmonitor from the world or the human's files.
 - **The file tools** run in the harness, not the sandbox, so they guard their own opens: a path
   is resolved and checked inside the world (and the soil, for writes), then opened again one
   component at a time from the world's root following no symlink, and written through a

@@ -105,6 +105,7 @@ pub struct Context {
     sandbox: Sandbox,
     asked_rules: BTreeSet<Rule>,
     unguarded: bool,
+    attic: Option<Arc<crate::attic::Attic>>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
 }
 
@@ -144,6 +145,7 @@ impl Context {
             sandbox: Sandbox::detect(),
             asked_rules: BTreeSet::new(),
             unguarded: false,
+            attic: None,
             seen: HashMap::new(),
         }
     }
@@ -195,6 +197,19 @@ impl Context {
     #[must_use]
     pub fn sandbox(&self) -> &Sandbox {
         &self.sandbox
+    }
+
+    /// Keep what commands and writes take away in this attic.
+    #[must_use]
+    pub fn with_attic(mut self, attic: crate::attic::Attic) -> Self {
+        self.attic = Some(Arc::new(attic));
+        self
+    }
+
+    /// The attic, if the context keeps one.
+    #[must_use]
+    pub fn attic(&self) -> Option<&crate::attic::Attic> {
+        self.attic.as_deref()
     }
 
     /// Whether commands may run with no kernel guard in force.

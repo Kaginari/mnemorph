@@ -186,6 +186,10 @@ destructive rm -rf ~/old-project
 destructive rm -rf $HOME/old-project/tmp
 destructive rm -rf ./*
 destructive rm -rf .
+destructive rm -rf .git
+destructive rm -rf .git/objects
+destructive rm .mnemorph/log.md
+write     rm -rf .mnemorph/tmp/scratch
 destructive rm -rf "$DIR"
 destructive xargs rm < files.txt
 destructive sudo brew services restart postgresql

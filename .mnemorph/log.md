@@ -837,3 +837,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** every finding survived the 200-case proptest because its generator only ever
   answered with text. A generator must produce what the world produces — empty replies, cut
   replies — or it proves the easy path many times.
+
+---
+
+### [2026-10-24T10:08:16+02:00] rimuru — the attic: what commands take away comes back
+- **Task:** a side review: deletes inside the project ran without a question and with no undo;
+  the book promised an attic that did not exist. Checked: true — and worse, `rm -rf .git` was a
+  plain write, and the tripwire put back only `.git/config`, `hooks` and `info`: a command could
+  erase the repository's history. The book also placed the attic in `.mnemorph/attic/`, inside
+  the world a command can write.
+- **Files:** crates/mnemorph-tools/src/attic.rs (a git object store outside the world —
+  snapshots before every command and file write, `deleted_since`, `restore`; `.git` objects
+  hard-linked, refs copied, `repair_git`), shell.rs (`admit` split out; the attic's report),
+  files.rs (write and edit snapshot first), tool.rs (`with_attic`), classify/paths.rs
+  (deleting `.git` or the records is destructive), mnemorph-loop solo.rs (solo keeps an attic);
+  tests/attic.rs (5), corpus rows; docs (05-architecture attic row and section, 02-races write,
+  roadmap).
+- **Gate:** n/a. Instruments: `rm -rf src` reported and restored; a script's `rm -rf .git`
+  undone with history intact; an overwritten file restored; `just check` (226).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A safety net inside the space it protects is not one: the attic lives in the state
+    directory, where the guard admits no command.
+  - Hard links are the cheap way to keep immutable files: `rm -rf .git` unlinks names, not the
+    objects the attic also names.
+  - `solo()` attached the real attic in tests and left eight attics in `~/.local/state`; every
+    suite now gives its runs a private one, and the leak was removed.

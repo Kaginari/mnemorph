@@ -28,6 +28,14 @@ fn hash(bytes: &[u8]) -> u64 {
     h.finish()
 }
 
+/// Keep the world as it is in the attic before a write replaces part of it.
+fn keep(cx: &Context) {
+    if let Some(attic) = cx.attic() {
+        // The attic is recovery, not containment: a failed snapshot does not stop the write.
+        let _ = attic.snapshot("before a file write");
+    }
+}
+
 // ── read ────────────────────────────────────────────────────────────────────
 
 /// Read a file's lines, numbered.
@@ -194,6 +202,7 @@ impl Tool for Write {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
+        keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, a.content.as_bytes()) {
             return Outcome::error(format!("cannot write `{}`: {e}", cx.shown(&path)));
         }
@@ -305,6 +314,7 @@ impl Tool for Edit {
         } else {
             text.replacen(&a.old_string, &a.new_string, 1)
         };
+        keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, updated.as_bytes()) {
             return Outcome::error(format!("cannot write `{shown}`: {e}"));
         }

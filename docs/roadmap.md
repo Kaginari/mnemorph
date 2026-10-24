@@ -139,7 +139,7 @@ match hand-computed fixtures with both providers' cache shapes.
 - Tools: read (with unchanged-window withholding), write, edit, glob, grep, bash, git.
 - Classifier: `read | write | outward | destructive` from a parsed shell AST (wrappers like
   `env`, `sh -c`, `xargs`, `sudo` unwrapped; brace expansion; redirects to `/dev/tcp`); deletes
-  and renames inside the writer's soil are `write` to the attic; tag pushes and registry
+  and renames inside the writer's soil are `write`, kept in the attic first; tag pushes and registry
   publishes are `destructive`.
 - Sandbox: landlock + seccomp (sockets denied without network) on Linux; Seatbelt on macOS; secrets by name
   with output redaction.

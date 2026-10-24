@@ -94,57 +94,10 @@ impl Tool for Bash {
                 "no kernel guard is in force ({reason}), so the command did not run; to run commands unguarded, set `sandbox.allow_unguarded = true` in your local or global config"
             ));
         }
-        let place = Place {
-            world: cx.world().to_path_buf(),
-            home: cx.home().to_path_buf(),
-            cwd: cx.world().to_path_buf(),
+        let (class, outside) = match admit(&a.command, cx) {
+            Ok(admitted) => admitted,
+            Err(refused) => return refused,
         };
-        let (class, why, outside, asked) = match classify(&a.command, &place) {
-            Verdict::Refuse {
-                rule,
-                reason,
-                class,
-            } if cx.asks(rule) => {
-                let why = vec![format!(
-                    "guard rule `{}` asks instead of refusing: {reason}",
-                    rule.name()
-                )];
-                (class, why, Vec::new(), true)
-            }
-            Verdict::Refuse { rule, reason, .. } => {
-                let hint = if rule.floor() {
-                    String::new()
-                } else {
-                    format!(" (the human may let rule `{}` ask instead)", rule.name())
-                };
-                return Outcome::error(format!(
-                    "refused by guard rule `{}`: {reason}{hint}",
-                    rule.name()
-                ));
-            }
-            Verdict::Run {
-                class,
-                why,
-                outside,
-            } => (class, why, outside, false),
-        };
-        if let Err(refusal) = check_class(cx.race(), class) {
-            return Outcome::error(refusal.to_string());
-        }
-        if asked || matches!(class, ToolClass::Outward | ToolClass::Destructive) {
-            let ask = Ask {
-                race: cx.race(),
-                class,
-                act: a.command.clone(),
-                why,
-                outside: outside.clone(),
-            };
-            if let Answer::Deny(reason) = cx.gate().ask(&ask) {
-                return Outcome::error(format!(
-                    "the human gate did not approve this {class} command: {reason}"
-                ));
-            }
-        }
         let timeout = a
             .timeout_ms
             .map_or(DEFAULT_TIMEOUT, Duration::from_millis)
@@ -162,6 +115,12 @@ impl Tool for Bash {
             Err(e) => return Outcome::error(e),
         };
         let before = Snapshot::take(cx.world());
+        // What the command may take away is kept first; a failed snapshot is said, not fatal: the
+        // attic is recovery, the guard is containment.
+        let line: String = a.command.chars().take(200).collect();
+        let kept = cx
+            .attic()
+            .map(|attic| attic.snapshot(&format!("before bash: {line}")));
         let ran = match run(&a.command, cx, timeout, network, &opened) {
             Ok(r) => r,
             Err(e) => return Outcome::error(format!("could not start bash: {e}")),
@@ -176,9 +135,13 @@ impl Tool for Bash {
         }
         // The command's whole process group is dead: nothing can race the restore.
         let tripped = before.restore();
+        let attic_note = attic_note(cx, kept.as_ref());
         let mut out = Outcome::ok(ran.render(timeout), class);
         out.is_error = ran.timed_out || ran.code != Some(0);
         out.meta.exit = ran.code;
+        if let Some(note) = attic_note {
+            let _ = write!(out.content, "\n[{note}]");
+        }
         if !tripped.is_empty() {
             out.is_error = true;
             out.content.push_str("\n[the command changed protected files — git's executable configuration or the world's records; ");
@@ -186,6 +149,91 @@ impl Tool for Bash {
             out.content.push(']');
         }
         out
+    }
+}
+
+/// Whether the command may run, and at what class: classified, shelved, asked when it must be.
+/// Returns the class and the outside paths it named, or the refusal to give the body.
+fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outcome> {
+    let place = Place {
+        world: cx.world().to_path_buf(),
+        home: cx.home().to_path_buf(),
+        cwd: cx.world().to_path_buf(),
+    };
+    let (class, why, outside, asked) = match classify(command, &place) {
+        Verdict::Refuse {
+            rule,
+            reason,
+            class,
+        } if cx.asks(rule) => {
+            let why = vec![format!(
+                "guard rule `{}` asks instead of refusing: {reason}",
+                rule.name()
+            )];
+            (class, why, Vec::new(), true)
+        }
+        Verdict::Refuse { rule, reason, .. } => {
+            let hint = if rule.floor() {
+                String::new()
+            } else {
+                format!(" (the human may let rule `{}` ask instead)", rule.name())
+            };
+            return Err(Outcome::error(format!(
+                "refused by guard rule `{}`: {reason}{hint}",
+                rule.name()
+            )));
+        }
+        Verdict::Run {
+            class,
+            why,
+            outside,
+        } => (class, why, outside, false),
+    };
+    check_class(cx.race(), class).map_err(|refusal| Outcome::error(refusal.to_string()))?;
+    if asked || matches!(class, ToolClass::Outward | ToolClass::Destructive) {
+        let ask = Ask {
+            race: cx.race(),
+            class,
+            act: command.to_owned(),
+            why,
+            outside: outside.clone(),
+        };
+        if let Answer::Deny(reason) = cx.gate().ask(&ask) {
+            return Err(Outcome::error(format!(
+                "the human gate did not approve this {class} command: {reason}"
+            )));
+        }
+    }
+    Ok((class, outside))
+}
+
+/// What the attic says after a command: the files it deleted and where they are kept, a
+/// repository put back — or that no snapshot could be kept.
+fn attic_note(
+    cx: &Context,
+    kept: Option<&Result<crate::attic::Snapshot, String>>,
+) -> Option<String> {
+    let attic = cx.attic()?;
+    match kept? {
+        Ok(snap) => {
+            let mut notes = Vec::new();
+            let gone = attic.deleted_since(snap);
+            if !gone.is_empty() {
+                let first: Vec<&str> = gone.iter().take(5).map(String::as_str).collect();
+                notes.push(format!(
+                    "deleted {} file(s) — kept in the attic, snapshot {}: {}{}",
+                    gone.len(),
+                    &snap.tree[..12.min(snap.tree.len())],
+                    first.join(", "),
+                    if gone.len() > 5 { ", …" } else { "" }
+                ));
+            }
+            notes.extend(attic.repair_git());
+            (!notes.is_empty()).then(|| notes.join("; "))
+        }
+        Err(e) => Some(format!(
+            "the attic could not keep a snapshot before this command: {e}"
+        )),
     }
 }
 
