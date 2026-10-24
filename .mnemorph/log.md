@@ -952,3 +952,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     the tripwire both had to learn to let an approved act stand.
   - The tripwire's tests went through the classifier's front door; once that door asks, they
     belong in a script, the only way a write reaches the tripwire in earnest.
+
+---
+
+### [2026-10-24T11:48:21+02:00] rimuru — Oni envelopes bounded: signed, expiring, capped, revocable (#88)
+- **Task:** Veldora: "start on #88". The book promised envelopes "signed, scoped, expiring
+  (default 30 days)"; `Envelope` held only a name and patterns. Nothing honours envelopes yet
+  (M11), so this lands before the first reader.
+- **Files:** crates/mnemorph-config/src/lib.rs (`signed`, `expires`, `uses`, `revoked`;
+  `ENVELOPE_DAYS`; `Lapse`; `Envelope::admits(today, used)`; `revoke_envelope`), src/write.rs
+  (`revoke`, once per envelope, one checked save shared with `set`), tests/config.rs (5 new), Cargo.toml (reads
+  the ledger); crates/mnemorph-ledger/src/clock.rs (`Day::new`, `Day::plus`);
+  tools/check-layers.mjs and docs/05-architecture.md (the config → ledger edge, bounded
+  envelopes), docs/02-races.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. Still open on #88: the ledger's use rows and their
+  count, the gate reading `admits` (M11), `status` listing envelopes (M6), the revoke command,
+  suspension on an observed mismatch (#93).
+- **Learned:**
+  - A promise in the book with no field in the struct is a hole only a reader finds; the
+    research pass found this one by reading the struct against the page.
+  - The calendar already lived in the ledger; drawing one edge kept a single calendar instead of
+    a second copy of Hinnant's conversion.
+  - An envelope is checked at the moment of use, with the ledger's count, so a cap or an expiry
+    passed between plan and act still stops it.
+  - The fresh Fable review found what the tests did not: a revoke the loader would then refuse
+    (an envelope signed ahead, withdrawn early) bricked every later load, and two envelopes under
+    one name left the second unrevocable. A write must leave a file its own reader accepts, not
+    only one TOML parses.
