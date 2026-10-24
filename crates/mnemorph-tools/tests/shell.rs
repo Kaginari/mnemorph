@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use mnemorph_races::{Race, ToolClass};
+use mnemorph_sandbox::Sandbox;
 use mnemorph_tools::gate::Scripted;
 use mnemorph_tools::{Answer, Context, Outcome, call, registry};
 
@@ -172,4 +173,74 @@ fn exit_codes_and_stderr_are_reported() {
     assert!(o.is_error);
     assert_eq!(o.meta.exit, Some(3));
     assert_eq!(o.content, "out\n[stderr]\nerr\n\n[exit 3]");
+}
+
+/// The jail beside the test binaries (`target/<profile>/mnemorph-jail`), when the workspace built it.
+#[cfg(target_os = "linux")]
+fn jail() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let jail = exe.parent()?.parent()?.join("mnemorph-jail");
+    jail.is_file().then_some(jail)
+}
+
+/// The classifier judges words; the sandbox stops what words hide. An approval opens the
+/// network, never the filesystem beyond the world.
+#[cfg(target_os = "linux")]
+#[test]
+fn bash_runs_inside_the_jail() {
+    let Some(jail) = jail() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-jail exists");
+        return;
+    };
+    let w = World::new("jail");
+    let home = w.root.join("home");
+    fs::create_dir_all(home.join(".ssh")).unwrap();
+    fs::write(home.join(".ssh/id_ed25519"), "PRIVATE KEY\n").unwrap();
+    fs::write(
+        w.world().join("src/peek.sh"),
+        "cat \"$1\"/.ssh/id_ed25519\n",
+    )
+    .unwrap();
+    let cx = |race, gate| {
+        Context::new(race, w.world(), &["src"])
+            .with_gate(gate)
+            .with_home(&home)
+            .with_sandbox(Sandbox::Jail(jail.clone()))
+    };
+
+    let o = bash(
+        &mut cx(Race::Slime, Arc::new(Scripted::new([]))),
+        "echo built > src/out.txt && cat src/out.txt",
+    );
+    assert_eq!(o.content, "built\n", "{o:?}");
+
+    let o = bash(
+        &mut cx(Race::Slime, Arc::new(Scripted::new([]))),
+        &format!("bash src/peek.sh {}", home.display()),
+    );
+    assert!(o.is_error && !o.content.contains("PRIVATE KEY"), "{o:?}");
+
+    // Approved, an act may write exactly the outside paths it named, and the card showed them.
+    let marker = w.outside().join("approved");
+    let gate = Arc::new(Scripted::new([Answer::Approve]));
+    let o = bash(
+        &mut cx(Race::Kijin, gate.clone()),
+        &format!("echo hi > {}", marker.display()),
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(fs::read_to_string(&marker).unwrap(), "hi\n");
+    assert_eq!(gate.asked()[0].outside, vec![marker.clone()]);
+
+    // Approval opens what was named, nothing beside it: a path the words hide stays shut.
+    let hidden = w.outside().join("hidden");
+    let o = bash(
+        &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
+        &format!(
+            "echo hi > {}; f={}; echo sneaky > \"$f\"",
+            marker.display(),
+            w.root.join("elsewhere").display()
+        ),
+    );
+    assert!(o.content.contains("Permission denied"), "{o:?}");
+    assert!(!w.root.join("elsewhere").exists() && !hidden.exists());
 }

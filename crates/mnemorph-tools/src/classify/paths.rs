@@ -40,28 +40,7 @@ pub(crate) enum Device {
     Other,
 }
 
-/// Credential paths under the home, by their first segment (or first two).
-const HOME_CREDENTIALS: &[&str] = &[
-    ".ssh",
-    ".aws",
-    ".gnupg",
-    ".password-store",
-    ".netrc",
-    ".git-credentials",
-    ".npmrc",
-    ".pypirc",
-    ".docker/config.json",
-    ".kube/config",
-    ".config/gh",
-    ".config/gcloud",
-    ".azure",
-    ".cargo/credentials",
-    ".cargo/credentials.toml",
-    "Library/Keychains",
-];
-
-/// Credential files anywhere on the system.
-const SYSTEM_CREDENTIALS: &[&str] = &["/etc/shadow", "/etc/gshadow", "/etc/sudoers"];
+use mnemorph_sandbox::{HOME_CREDENTIALS, SYSTEM_CREDENTIALS};
 
 /// Join `text` onto `cwd` the way the shell would, `..` and `.` folded lexically.
 pub(crate) fn join(cwd: Option<&Path>, text: &str) -> Option<PathBuf> {
@@ -228,12 +207,14 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
             t.refuse(format!("{what} changes {} — the root, a system directory, or an ancestor of the world or home", path.display()));
         }
         (Spot::Outside { path, .. }, Act::Modify) => {
+            t.outside.push(path.clone());
             t.raise(
                 ToolClass::Outward,
                 format!("{what} writes outside the world: {}", path.display()),
             );
         }
         (Spot::Outside { path, .. }, Act::Delete) => {
+            t.outside.push(path.clone());
             t.raise(
                 ToolClass::Destructive,
                 format!("{what} deletes outside the world: {}", path.display()),

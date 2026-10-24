@@ -26,6 +26,8 @@ pub struct Ask {
     pub act: String,
     /// Why the act has its class: the classifier's reasons.
     pub why: Vec<String>,
+    /// Paths outside the world the act writes or deletes: approving opens exactly these.
+    pub outside: Vec<std::path::PathBuf>,
 }
 
 /// The human's answer.
@@ -146,6 +148,9 @@ impl Gate for Terminal {
         );
         for why in &ask.why {
             let _ = writeln!(card, "  · {why}");
+        }
+        for path in &ask.outside {
+            let _ = writeln!(card, "  ⚠ approving lets it write {}", path.display());
         }
         let _ = write!(
             card,

@@ -141,7 +141,7 @@ match hand-computed fixtures with both providers' cache shapes.
   `env`, `sh -c`, `xargs`, `sudo` unwrapped; brace expansion; redirects to `/dev/tcp`); deletes
   and renames inside the writer's soil are `write` to the attic; tag pushes and registry
   publishes are `destructive`.
-- Sandbox: landlock + seccomp + network namespace on Linux; Seatbelt on macOS; secrets by name
+- Sandbox: landlock + seccomp (sockets denied without network) on Linux; Seatbelt on macOS; secrets by name
   with output redaction.
 - The gate request as an interface (a TTY answer or a test double), with deny on timeout.
 

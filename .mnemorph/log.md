@@ -578,3 +578,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     background child holds stdout, and only its death closes the pipe.
   - Scope held back on purpose: one shell per call (a `cd` does not carry over) until the loop
     needs more; a dedicated git tool waits for the landings in M7.
+
+---
+
+### [2026-10-24T03:06:48+02:00] rimuru — M4 rung 4: the sandbox and its escape suite
+- **Task:** contain every command: landlock + seccomp on Linux, Seatbelt on macOS, the escape
+  suite as M4's exit; then, at Veldora's word, let an approval open what it names.
+- **Files:** crates/mnemorph-sandbox/ (lib.rs: `Policy`, `Sandbox` (detect, command, status),
+  the credential lists, `harden_self`; linux.rs: landlock rules + a seccomp denylist, sockets
+  denied without network; macos.rs: the Seatbelt profile; src/bin/mnemorph-jail.rs: restrict
+  self, then exec; tests/escape.rs: 9 escapes), mnemorph-tools (bash runs in the context's
+  sandbox; the classifier's `outside` paths reach the card and, approved, the policy; the
+  credential list comes from the sandbox crate), docs/05-architecture.md, docs/roadmap.md.
+- **Gate:** n/a. Instruments: the escape suite on this 5.15 kernel (landlock ABI 1); a jailed
+  bash test in the tools crate; `just check` (158 tests); macOS in CI.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A helper that restricts itself and execs needs no unsafe code and no namespaces — it works
+    where Ubuntu restricts unprivileged user namespaces, and a seccomp `socket()` denial closes
+    the network for every program, Unix sockets included.
+  - Landlock already keeps a sandboxed process out of `/proc` of processes outside its domain:
+    the harness's environment was closed before `harden_self` was added.
+  - On ABI 1 every cross-directory rename is refused; `mv` and git fall back to copying and
+    still work.
+  - The sandbox must not be stricter than the human: an approval opens exactly the outside
+    paths on the card, nothing hidden behind a variable.

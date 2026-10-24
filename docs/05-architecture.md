@@ -142,11 +142,11 @@ config:
 ---
 flowchart LR
     T["tool call"] --> P{"policy for<br/>this race + soil"}
-    P --> FS["landlock: read world,<br/>write only the soil"]
+    P --> FS["landlock: read system + world,<br/>write only the world"]
     P --> NET{"network?"}
-    NET -- "Kijin outward act" --> ALLOW["allow listed hosts only"]
-    NET -- "anyone else" --> DENY["no network namespace"]
-    P --> SC["seccomp: no ptrace, mount,<br/>keyctl, bpf"]
+    NET -- "approved outward act" --> ALLOW["sockets open"]
+    NET -- "anything else" --> DENY["seccomp: no socket()"]
+    P --> SC["seccomp: no ptrace, mount,<br/>unshare, bpf, io_uring"]
     P --> ENV["env: secrets by name,<br/>outputs redacted"]
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
     class T,P,NET step
@@ -158,15 +158,30 @@ flowchart LR
     class DENY bad
 ```
 
-- Linux: landlock (filesystem) and seccomp (syscalls) always. Network isolation for every
-  non-Kijin process is a fresh network namespace **when unprivileged user namespaces are
-  available** (Ubuntu 23.10+ restricts them through AppArmor by default); otherwise a seccomp
-  filter that denies `socket()` for non-local families. pid/ipc/uts namespaces under the same
-  condition.
-- Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) cannot
-  allow cross-directory renames (`mv a/x b/x` inside the soil fails) and cannot restrict
-  truncate; v4 (6.7+) adds network rules. The core probes the ABI at start, uses what it has,
-  and `mnemorph status` prints the sandbox actually in force — never more than that.
+- Linux: every command starts through `mnemorph-jail`, which restricts its own process and
+  then execs the command, so everything the command starts inherits the restriction. No unsafe
+  code and no namespaces are needed, so it works where unprivileged user namespaces are
+  restricted (Ubuntu 23.10+ through AppArmor).
+  - **landlock** — reads: the system's directories, the world, and the toolchains in the home
+    (`.cargo`, `.rustup`, `.local/bin`, …); never a credential path (`.ssh`, `.aws`, `.gnupg`,
+    keyrings, …), which no rule names. Writes: the world, the command's temporary directory
+    inside it, and a few devices. The soil is the tools' border; the sandbox's border is the
+    world. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
+    domain, so the harness's environment is closed to its commands; the harness additionally
+    makes itself non-dumpable.
+  - **seccomp** — without network, `socket()` fails for every family, Unix sockets included (a
+    host daemon's socket is a way out); `socketpair` stays. Always denied: `ptrace`,
+    `process_vm_*`, `mount`, `unshare`, `setns`, `pivot_root`, `chroot`, `bpf`,
+    `perf_event_open`, the kernel keyring, module loading, `io_uring` (it would bypass the
+    socket rule).
+  - **The network** opens only for an outward or destructive command the gate approved. An
+    approval also opens the paths outside the world that the classifier located in the command
+    — listed on the approval card — and nothing else: a path known only at run time stays shut.
+- Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) refuses
+  every cross-directory rename or link inside the sandbox (`mv` and git fall back to copying)
+  and cannot restrict truncate; v4 (6.7+) adds network rules. The jail asks for the newest rules
+  it knows, the kernel enforces what it has, and `status` prints what is actually in force —
+  `landlock ABI 1 (of 5 asked) + seccomp, network off`, or `none — <reason>`.
 - macOS: a generated Seatbelt profile with the same policies.
 - `--container`: the container **is** the sandbox — one container per body, its mounts limited
   to the body's soil and its network to the policy. It does not nest landlock or namespaces

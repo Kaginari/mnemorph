@@ -7,12 +7,14 @@
 
 use std::fmt::Write as _;
 use std::os::unix::process::CommandExt as _;
-use std::process::{Child, Command, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use mnemorph_races::{ToolClass, check_class};
+use mnemorph_sandbox::Policy;
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -91,9 +93,13 @@ impl Tool for Bash {
             home: cx.home().to_path_buf(),
             cwd: cx.world().to_path_buf(),
         };
-        let (class, why) = match classify(&a.command, &place) {
+        let (class, why, outside) = match classify(&a.command, &place) {
             Verdict::Refuse { reason } => return Outcome::error(format!("refused: {reason}")),
-            Verdict::Run { class, why } => (class, why),
+            Verdict::Run {
+                class,
+                why,
+                outside,
+            } => (class, why, outside),
         };
         if let Err(refusal) = check_class(cx.race(), class) {
             return Outcome::error(refusal.to_string());
@@ -104,6 +110,7 @@ impl Tool for Bash {
                 class,
                 act: a.command.clone(),
                 why,
+                outside: outside.clone(),
             };
             if let Answer::Deny(reason) = cx.gate().ask(&ask) {
                 return Outcome::error(format!(
@@ -115,7 +122,10 @@ impl Tool for Bash {
             .timeout_ms
             .map_or(DEFAULT_TIMEOUT, Duration::from_millis)
             .min(MAX_TIMEOUT);
-        let ran = match run(&a.command, cx, timeout) {
+        let network = matches!(class, ToolClass::Outward | ToolClass::Destructive);
+        // An approved act may write the outside paths it named; an unapproved one never has any.
+        let opened = if network { outside } else { Vec::new() };
+        let ran = match run(&a.command, cx, timeout, network, &opened) {
             Ok(r) => r,
             Err(e) => return Outcome::error(format!("could not start bash: {e}")),
         };
@@ -185,16 +195,37 @@ impl Ran {
     }
 }
 
-fn run(command: &str, cx: &Context, timeout: Duration) -> std::io::Result<Ran> {
-    let mut cmd = Command::new("bash");
-    cmd.args(["--noprofile", "--norc", "-c", command])
-        .current_dir(cx.world())
+/// Run `command` in the context's sandbox: the world writable, a private temporary directory
+/// inside it, the network open only for an approved outward or destructive act.
+fn run(
+    command: &str,
+    cx: &Context,
+    timeout: Duration,
+    network: bool,
+    opened: &[PathBuf],
+) -> std::io::Result<Ran> {
+    let tmp = cx.world().join(".mnemorph/tmp");
+    std::fs::create_dir_all(&tmp)?;
+    let mut policy = Policy::new(cx.world(), cx.home(), &tmp, network);
+    // A file that exists opens itself; one still to be made opens its directory.
+    policy.write.extend(opened.iter().map(|p| {
+        if p.exists() {
+            p.clone()
+        } else {
+            p.parent().map_or_else(|| p.clone(), Path::to_path_buf)
+        }
+    }));
+    let mut cmd = cx
+        .sandbox()
+        .command(&policy, "bash", &["--noprofile", "--norc", "-c", command]);
+    cmd.current_dir(cx.world())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0)
         .env_clear()
-        .envs(scrubbed_env());
+        .envs(scrubbed_env())
+        .env("TMPDIR", &tmp);
     let mut child = cmd.spawn()?;
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
