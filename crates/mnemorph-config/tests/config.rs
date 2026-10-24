@@ -428,10 +428,6 @@ fn envelope_dates_and_caps_are_vetted_and_name_the_file() {
         ("signed = 2026-10-24\nuses = 0", "at least 1"),
         ("signed = 2026-10-24\nuses = -3", "at least 1"),
         ("signed = 2026-10-24\nuses = \"many\"", "at least 1"),
-        (
-            "signed = 2026-10-24\nrevoked = 2026-10-23",
-            "before it was signed",
-        ),
     ] {
         g.local(&format!(
             "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n{extra}\n"
@@ -440,6 +436,15 @@ fn envelope_dates_and_caps_are_vetted_and_name_the_file() {
         assert!(e.contains(wanted), "{extra}: {e}");
         assert!(e.contains("config.local.toml"), "{extra}: {e}");
     }
+}
+
+#[test]
+fn two_envelopes_never_share_a_name() {
+    let g = Ground::new("envelope-names");
+    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
+    let e = g.load().unwrap_err();
+    assert!(e.contains("two envelopes are called `ci`"), "{e}");
+    assert!(e.contains("config.local.toml"), "{e}");
 }
 
 #[test]
@@ -513,6 +518,40 @@ fn revoking_keeps_the_envelope_and_its_file_readable() {
     assert!(e.contains("already revoked on 2026-10-26"), "{e}");
     let e = c.revoke_envelope("deploy", day(2026, 10, 27)).unwrap_err();
     assert!(e.contains("no envelope `deploy`"), "{e}");
+
+    // A configuration loaded before a revoke cannot move its date.
+    c.revoke_envelope("ci", day(2026, 10, 27)).unwrap();
+    let stale = c.revoke_envelope("ci", day(2026, 10, 28)).unwrap_err();
+    assert!(
+        stale.contains("already revoked; the first date stands"),
+        "{stale}"
+    );
+
+    // An envelope signed ahead can be withdrawn before it takes force, and the file still loads.
+    g.local(
+        "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-11-01\n",
+    );
+    g.load()
+        .unwrap()
+        .revoke_envelope("ci", day(2026, 10, 25))
+        .unwrap();
+    let e = &g.load().unwrap().envelopes()[0];
+    assert_eq!(
+        e.admits(day(2026, 11, 2), 0),
+        Err(Lapse::Revoked(day(2026, 10, 25)))
+    );
+
+    // Global alone holds the envelope: the revoke is written there.
+    let gg = Ground::new("envelope-revoke-global");
+    gg.global(
+        "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n",
+    );
+    let file = gg
+        .load()
+        .unwrap()
+        .revoke_envelope("ci", day(2026, 10, 25))
+        .unwrap();
+    assert_eq!(file, gg.paths().global);
 
     // An envelope written inline is revoked in place too.
     g.local("[oni]\nenvelopes = [{ name = \"ci\", allow = [\"gh run rerun *\"], signed = 2026-10-24 }]\n");

@@ -285,11 +285,13 @@ an empty list or table never overrides a lower layer:
   `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
 - **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts 30
   days unless its own `expires` is later or sooner, never on or before the signing; `uses` caps the
-  acts it covers in all, at least one. `Envelope::admits(today, used)` reads them at the moment of
-  use, with the ledger's count of acts already covered, and names the lapse that stops it:
+  acts it covers in all, at least one; no two envelopes share a name. `Envelope::admits(today,
+  used)` is the check the gate makes at the moment of use, once it honours envelopes (M11), with
+  the ledger's count of acts the envelope already covered; it names the lapse that stops one:
   revoked, not yet in force, expired, or spent. Revoking writes `revoked = <day>` into the
-  human's file that holds the envelope, through `toml_edit` like any write: the envelope stays on
-  record and covers nothing again. The dates are the ledger's `Day`, the one calendar in the
+  human's file that holds the envelope, through `toml_edit` like any write, and only once: the
+  envelope stays on record and covers nothing again. An envelope signed ahead may be revoked
+  before its signing day. The dates are the ledger's `Day`, the one calendar in the
   workspace, so config reads the ledger crate.
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
   before it replaces the file; a failed save is returned, and the file stays as it was.

@@ -47,12 +47,13 @@ pub fn set(path: &Path, key: &str, value: impl Into<Value>) -> Result<(), String
 }
 
 /// Mark the Oni envelope `name` in the file at `path` as revoked on `day`: `revoked = <day>` is
-/// added to its table, written as `[[oni.envelopes]]` or inline; nothing else is touched.
+/// added to its table, written as `[[oni.envelopes]]` or inline; nothing else is touched. The file
+/// is read afresh, so an envelope revoked since the configuration was loaded keeps its first date.
 ///
 /// # Errors
 ///
-/// The file does not parse, holds no envelope `name`, the day does not fit a TOML date, the result
-/// would not parse, or the file cannot be written — each named.
+/// The file does not parse, holds no envelope `name` or holds it already revoked, the day does not
+/// fit a TOML date, the result would not parse, or the file cannot be written — each named.
 pub fn revoke(path: &Path, name: &str, day: Day) -> Result<(), String> {
     let mut doc = open(path)?;
     let date = Datetime {
@@ -66,6 +67,12 @@ pub fn revoke(path: &Path, name: &str, day: Day) -> Result<(), String> {
         offset: None,
     };
     let missing = || format!("{}: no envelope `{name}`", path.display());
+    let already = || {
+        format!(
+            "{}: envelope `{name}` is already revoked; the first date stands",
+            path.display()
+        )
+    };
     let envelopes = doc
         .get_mut("oni")
         .and_then(Item::as_table_like_mut)
@@ -74,6 +81,9 @@ pub fn revoke(path: &Path, name: &str, day: Day) -> Result<(), String> {
     let named = |t: &dyn toml_edit::TableLike| t.get("name").and_then(Item::as_str) == Some(name);
     if let Some(tables) = envelopes.as_array_of_tables_mut() {
         let table = tables.iter_mut().find(|t| named(*t)).ok_or_else(missing)?;
+        if table.contains_key("revoked") {
+            return Err(already());
+        }
         table.insert("revoked", Item::Value(date.into()));
     } else if let Some(array) = envelopes.as_array_mut() {
         let table = array
@@ -81,6 +91,9 @@ pub fn revoke(path: &Path, name: &str, day: Day) -> Result<(), String> {
             .filter_map(Value::as_inline_table_mut)
             .find(|t| named(*t))
             .ok_or_else(missing)?;
+        if table.contains_key("revoked") {
+            return Err(already());
+        }
         table.insert("revoked", date.into());
     } else {
         return Err(missing());

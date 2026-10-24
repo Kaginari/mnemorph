@@ -732,8 +732,8 @@ fn strings(value: &Value) -> impl Iterator<Item = &str> {
         .filter_map(Value::as_str)
 }
 
-/// Read and vet the envelopes: a name, a list of patterns, none bare and none destructive; the
-/// day it was signed, an expiry after it, a use cap of at least one, a revocation not before it.
+/// Read and vet the envelopes: a name no other envelope has, a list of patterns, none bare and
+/// none destructive; the day it was signed, an expiry after it, a use cap of at least one.
 fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
     let place = Place::new("/world", "/home");
     let mut out = Vec::new();
@@ -789,10 +789,13 @@ fn envelopes(value: &Value, at: &Origin) -> Result<Vec<Envelope>, String> {
                     })?,
             ),
         };
+        // A revocation may come before the signing day: an envelope signed ahead can be withdrawn
+        // before it ever takes force, and the record says so.
         let revoked = date(t, "revoked", name, at)?;
-        if let Some(day) = revoked.filter(|&d| d < signed) {
+        if out.iter().any(|e: &Envelope| e.name == name) {
             return Err(format!(
-                "{at}: envelope `{name}` is revoked on {day}, before it was signed on {signed}"
+                "{at}: two envelopes are called `{name}`; a name is how one is revoked, so each is \
+                 its own"
             ));
         }
         out.push(Envelope {

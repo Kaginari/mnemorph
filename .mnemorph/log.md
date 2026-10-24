@@ -961,7 +961,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (M11), so this lands before the first reader.
 - **Files:** crates/mnemorph-config/src/lib.rs (`signed`, `expires`, `uses`, `revoked`;
   `ENVELOPE_DAYS`; `Lapse`; `Envelope::admits(today, used)`; `revoke_envelope`), src/write.rs
-  (`revoke`, one checked save shared with `set`), tests/config.rs (4 new), Cargo.toml (reads
+  (`revoke`, once per envelope, one checked save shared with `set`), tests/config.rs (5 new), Cargo.toml (reads
   the ledger); crates/mnemorph-ledger/src/clock.rs (`Day::new`, `Day::plus`);
   tools/check-layers.mjs and docs/05-architecture.md (the config → ledger edge, bounded
   envelopes), docs/02-races.md.
@@ -976,3 +976,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     a second copy of Hinnant's conversion.
   - An envelope is checked at the moment of use, with the ledger's count, so a cap or an expiry
     passed between plan and act still stops it.
+  - The fresh Fable review found what the tests did not: a revoke the loader would then refuse
+    (an envelope signed ahead, withdrawn early) bricked every later load, and two envelopes under
+    one name left the second unrevocable. A write must leave a file its own reader accepts, not
+    only one TOML parses.
