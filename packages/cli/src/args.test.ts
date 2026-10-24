@@ -31,3 +31,13 @@ test('what is not understood is said, by name', () => {
     message: expect.stringContaining('blue'),
   });
 });
+
+test('onto hands its words to the core', () => {
+  expect(parse(['onto', 'owner', 'a.rs', '--world', 'w'])).toEqual({
+    kind: 'onto',
+    words: ['owner', 'a.rs'],
+    world: 'w',
+    core: undefined,
+  });
+  expect(parse(['onto', 'owner', '--json']).kind).toBe('error');
+});

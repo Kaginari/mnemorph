@@ -83,7 +83,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | Bond | From → to | Properties |
 |---|---|---|
 | `above` | creature → creature | transitive; `truth` (Slime → Orc), `verdict` (Orc → Elf) and `reports` (→ throne) are sub-bonds; `below` is its inverse |
-| `owns` | creature → path prefix | from the doc's Territory field only |
+| `owns` · `routes` · `posts` | creature → claim | a Slime's Territory, an Orc's Domain, a Kijin's Post — the doc's fields only |
 | `wears` / `wornBy` | creature ↔ Mind | inverse pair |
 | `heir` · `retired` | creature → creature · flag | relief and evolution |
 | `about` · `by` · `counters` | fact → path · creature · fact | see *Facts* |
@@ -97,7 +97,9 @@ append-only event files, folded in $(\text{time}, \text{event id})$ order like
 transitivity of `above`, applied until nothing new appears: the least fixed point
 $\mathcal{G}^{*} = \bigcup_n R^n(\mathcal{G}_0)$. The rules only add triples and the set of
 possible triples is finite, so $\mathcal{G}^{*}$ is unique and reached in finitely many steps.
-It is rebuilt when the docs' fingerprint moves, before a dispatch, never on a model call.
+It is rebuilt when the docs' fingerprint moves, before a dispatch, never on a model call. A
+direct report is typed by its two ends: a Slime to its Orc is `truth`, an Orc to its Elf is
+`verdict`, anyone to the throne is `reports`; every one of them is `above`.
 
 **Claims.** A creature's doc is `.mnemorph/<race>/<name>/README.md`: a `# name` heading, then
 fields as list items, read before the first `##` heading of any depth and nowhere else. The
@@ -166,7 +168,17 @@ queue and scratch, because rules 1–3 are asked first. The gate's *right author
 and `mnemorph onto owner <path>` call this one function. The tool policy cannot: it sits below the
 world in the crate graph and checks soil as prefixes. The loop hands each body the soil `own`
 yields for it, as prefixes with exclusions (its territory minus the seats, queue and scratch the
-earlier rules give away), so the policy and the gate never disagree.
+earlier rules give away), so the policy and the gate never disagree: the longest claim that
+covers a path decides, and on a tie the exclusion wins. A soil holds what `own` gives the body
+by every rule but a domain — an Orc's soil is its seat and scratch. Its exclusions are found by
+asking `own` of every claim inside the body's, never by restating the rules, and a test holds
+the two to the same answer on every tracked file.
+
+`mnemorph onto owner <path>...` prints, for each path, its owner, the rule that gave it and the
+claim that matched — `crates/mnemorph-wire/src/lib.rs  slime-wire  zone crates/mnemorph-wire/`.
+A path is the human's: relative to where they stand, or absolute; one outside the world is
+nobody's. It reads the docs alone, so it needs no key and opens no session; a doc that does not
+read is said on stderr.
 
 **Overlap.** Two creatures whose prefixes are equal, or one inside the other, are a critical
 finding — except a seat doc inside a broader claim, which rule 3 settles. Two prefixes of one

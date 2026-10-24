@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /** `mnemorph`: the command line first, then a session in the terminal or one ask. */
+import { spawnSync } from 'node:child_process';
 import { Client, stdio } from '@mnemorph/sdk';
 import { render } from 'ink';
 import { App } from './app.js';
@@ -9,6 +10,18 @@ import { RELEASE } from './index.js';
 import { runOnce } from './run.js';
 import { statusOnce } from './status.js';
 import { chooseTheme } from './theme.js';
+
+/** `onto …`: the core answers from the creature docs, with no session and no key. */
+function onto(cmd: Extract<ReturnType<typeof parse>, { kind: 'onto' }>): number {
+  const core = findCore(cmd.core);
+  const args = ['onto', ...cmd.words, ...(cmd.world ? ['--world', cmd.world] : [])];
+  const ran = spawnSync(core, args, { stdio: 'inherit' });
+  if (ran.error) {
+    process.stderr.write(`mnemorph: the core ${core} did not start: ${ran.error.message}\n`);
+    return 1;
+  }
+  return ran.status ?? 1;
+}
 
 async function main(): Promise<number> {
   const cmd = parse(process.argv.slice(2));
@@ -26,6 +39,8 @@ async function main(): Promise<number> {
       return runOnce(cmd, process);
     case 'status':
       return statusOnce(cmd, process);
+    case 'onto':
+      return onto(cmd);
     case 'chat': {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
         process.stderr.write(

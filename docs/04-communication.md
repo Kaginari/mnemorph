@@ -338,7 +338,9 @@ shows as soon as it starts, before its input has streamed. **`mnemorph status`**
 in a session — prints the build's version and commit, the core's, where the provider's key comes
 from (its variable and the file that names it, never the value), the sandbox actually in force
 (or `none — <reason>`) and what the caps leave; the hello carries the core's part (`key`,
-`sandbox`). **Enter** sends, and while a turn runs the line
+`sandbox`). **`mnemorph onto owner <path>...`** asks the core who owns each path, by which rule
+and claim ([ontology](09-ontology.md#ownership-one-function)), with no session and no key.
+**Enter** sends, and while a turn runs the line
 waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
 **`/send <text>`** steers the turn that runs — `session/send`, refused when nothing runs, the
 text reaching the body after its next tool step as the human's, and said to the human when the

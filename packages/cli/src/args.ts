@@ -18,6 +18,7 @@ export type Command =
       json: boolean;
     }
   | { kind: 'status'; world?: string | undefined; core?: string | undefined }
+  | { kind: 'onto'; words: string[]; world?: string | undefined; core?: string | undefined }
   | { kind: 'error'; message: string };
 
 export const HELP = `mnemorph — talk to a Mnemorph body in your terminal
@@ -27,6 +28,7 @@ Usage:
   mnemorph run "<ask>" [options]     ask once, print the answer, exit
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [options]          the build, the core, the key's origin, the sandbox
+  mnemorph onto owner <path>...      who owns each path, by which rule and claim
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -89,6 +91,11 @@ export function parse(argv: string[]): Command {
     if (rest.length > 1)
       return { kind: 'error', message: 'status takes no words; see mnemorph --help' };
     return { kind: 'status', world, core };
+  }
+  if (rest[0] === 'onto') {
+    if (json) return { kind: 'error', message: '--json goes with run' };
+    // The core reads the world and answers; the words go to it as they are.
+    return { kind: 'onto', words: rest.slice(1), world, core };
   }
   if (rest[0] !== 'run') {
     return { kind: 'error', message: `unknown command ${rest[0]}; see mnemorph --help` };

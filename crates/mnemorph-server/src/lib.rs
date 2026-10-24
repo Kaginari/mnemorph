@@ -9,6 +9,9 @@
 
 pub mod protocol;
 
+/// The world, for the commands that read it without a session (`onto owner`).
+pub use mnemorph_loop::world;
+
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};

@@ -1695,3 +1695,32 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** an assumed cost needs a ceiling as much as a floor. The floor keeps unseen spend
   from being skipped; the ceiling keeps it from becoming the wall it replaced.
+
+---
+
+### [2026-10-24T22:02:40+02:00] rimuru — M7: the closed graph, each body's soil, and onto owner
+- **Task:** finish the ontology's rungs 1 and 2:
+  - the graph inferred to its fixed point;
+  - ownership with the rule that decided it;
+  - the soil each body is handed;
+  - `onto owner` for the human.
+- **Files:**
+  - crates/mnemorph-world:
+    - graph.rs — `IsA`, `above` with its truth, verdict and reports sub-bonds, `below`, `owns`,
+      `routes`, `posts`, `wears`, closed;
+    - own.rs — `explain`, `Rule`, `Ownership`;
+    - soil.rs — `Soil`, `soil`, `admits`;
+    - tests/graph.rs and own.rs;
+  - mnemorph-loop and mnemorph-server re-export the world;
+  - mnemorphd — `onto owner`, tests/onto.rs;
+  - packages/cli — args.ts and cli.tsx, `mnemorph onto`;
+  - docs/09 and 04.
+- **Gate:** n/a. Instruments:
+  - every living creature's soil agrees with `own` on every tracked file, and on the greedy
+    fixture;
+  - `onto owner` run from the root and from a crate;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a soil's exclusions are found by asking `own` of every claim inside the body's,
+  never by restating the rules. The two cannot drift: a test walks every tracked file and checks
+  both give the same answer.
