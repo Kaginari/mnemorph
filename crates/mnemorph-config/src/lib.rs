@@ -56,9 +56,6 @@ kind = "anthropic"
 base_url = "https://api.anthropic.com"
 key_env = "ANTHROPIC_API_KEY"
 
-[decide]
-bench = true
-
 [decide.cutoff]
 measured = 0.6
 stated = 0.9
@@ -269,7 +266,9 @@ pub struct Decide {
     pub model: String,
     /// The LLM that answers when there is no `via`, or it fails.
     pub llm: String,
-    /// Whether a piped test run's output is read by a decision instead of counted muted.
+    /// Whether a piped test run's output is read by a decision instead of counted muted: as
+    /// `decide.bench` says, else on exactly when a System One provider is named, so no LLM is
+    /// asked unless the human chose it.
     pub bench: bool,
     /// The least confidence a System One answer needs before a caller acts on it.
     pub cutoff_measured: f64,
@@ -707,16 +706,17 @@ impl Config {
             }
             Ok(v)
         };
+        let bench = self
+            .get("decide.bench")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(via.is_some());
         Ok(Decide {
             via,
             model: text("decide.model").unwrap_or_default(),
             llm: text("decide.llm")
                 .or_else(|| text("models.tier.fast"))
                 .unwrap_or_default(),
-            bench: self
-                .get("decide.bench")
-                .and_then(|l| l.value.as_bool())
-                .unwrap_or(true),
+            bench,
             cutoff_measured: cutoff("decide.cutoff.measured")?,
             cutoff_stated: cutoff("decide.cutoff.stated")?,
         })

@@ -1081,3 +1081,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     review asked for holds against the live service.
   - A decision point belongs where the instrument already counts: the bench tally takes a read
     as if the exit status had been seen, so no new stall rule was needed.
+  - A fresh Fable review, nine findings. Fixed: an Esc that stopped the command was followed by
+    a decision it could not cancel (the flag was already taken); a decision ran outside the
+    run's clock (now the least of 30 s and what the run has left); the shell keeps the first
+    30 000 bytes, so a long log's "tail" was its middle, and a read green there would reset the
+    one counter made for thrash (now cut output is never read); default-on asked an LLM on every
+    piped run, unpriced (now on only with `via` or `decide.bench = true`, and priced); the docs
+    called the point live, which no binary yet makes true. Kept as a warning, not a note: a
+    `Beat::Note` is replayed to the model on resume.

@@ -10,7 +10,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use mnemorph_ledger::{DecisionRow, Journal, Usage};
+use mnemorph_ledger::{DecisionRow, Journal, Usage, UsageRow};
 use mnemorph_loop::{
     Beat, Body, Decisions, Ending, Limits, Run, ScriptedModel, Setup, bench_ask, decisions,
 };
@@ -39,6 +39,10 @@ impl World {
         self.root.join("world")
     }
 
+    fn usage(&self) -> Journal<UsageRow> {
+        Journal::new(self.root.join("usage.jsonl"))
+    }
+
     fn decisions_journal(&self) -> Journal<DecisionRow> {
         Journal::new(self.root.join("decisions.jsonl"))
     }
@@ -52,7 +56,7 @@ impl World {
             tools: registry(),
             cx,
             journal: Journal::new(self.root.join("run.jsonl")),
-            ledger: None,
+            ledger: Some(self.usage()),
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
@@ -269,6 +273,114 @@ async fn a_sure_read_turns_a_muted_bench_green_and_the_run_finishes() {
         "{:?}",
         w.warnings()
     );
+    let spent = w.usage().read().unwrap().rows;
+    assert_eq!(
+        spent.iter().filter(|r| r.provider == "jeff").count(),
+        9,
+        "each decision reaches the usage ledger"
+    );
+}
+
+fn system_one(replies: impl IntoIterator<Item = Reply>) -> (Arc<Scripted>, SystemOne) {
+    let t = Arc::new(Scripted::new(replies));
+    let c = SystemOne::new(
+        t.clone(),
+        "http://127.0.0.1:8765",
+        None,
+        SystemOne::policy(),
+    );
+    (t, c)
+}
+
+/// A sure red is a red seen: with fixes landing between, it is test-driven work, not a muted
+/// streak, so the run that would have stalled goes on.
+#[tokio::test]
+async fn a_sure_red_read_is_test_driven_work_not_a_muted_streak() {
+    let w = World::new("red");
+    let red = r#"{"model":"jeff","answers":{"outcome":{"type":"choice","probabilities":{"green":0.01,"red":0.98,"unknown":0.01}}}}"#;
+    let (_, client) = system_one((0..9).map(|_| Reply::ok(red)));
+    let llm = Arc::new(Llm::default());
+    let mut run = w
+        .run(piped_runs(true))
+        .with_decisions(with(&w, Some(client), &llm));
+    let e = ask(&mut run).await;
+    assert!(matches!(&e, Ending::Answered(_)), "{e:?}");
+    assert!(w.warnings().iter().any(|t| t.contains("read red by jeff")));
+}
+
+/// A decision that fails changes nothing: the run stays muted and stalls where it always did.
+#[tokio::test]
+async fn a_failed_decision_leaves_the_run_as_it_was() {
+    let w = World::new("failed");
+    let (_, client) =
+        system_one((0..9).map(|_| Reply::status(401, r#"{"error":{"message":"bad key"}}"#, &[])));
+    let llm = Arc::new(Llm::default());
+    let mut run = w
+        .run(piped_runs(false))
+        .with_decisions(with(&w, Some(client), &llm));
+    let e = ask(&mut run).await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: bench"),
+        "{e:?}"
+    );
+    assert!(
+        w.warnings()
+            .iter()
+            .any(|t| t.contains("the decision failed"))
+    );
+}
+
+/// The shell keeps the first 30 000 bytes, so a long log's tail is not its summary: it is never
+/// read, and nothing is sent.
+#[tokio::test]
+async fn output_the_shell_cut_short_is_never_read() {
+    let w = World::new("cut");
+    let (jeff, client) = system_one([]);
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "b",
+            "bash",
+            json!({"command": "pytest -q; head -c 40000 /dev/zero | tr '\\0' a"}),
+        ),
+        answer("done"),
+    ]));
+    let llm = Arc::new(Llm::default());
+    let mut run = w.run(model).with_decisions(with(&w, Some(client), &llm));
+    let _ = ask(&mut run).await;
+    assert_eq!(jeff.sent(), Vec::new(), "nothing is sent");
+    assert!(
+        w.warnings().iter().any(|t| t.contains("cut short")),
+        "{:?}",
+        w.warnings()
+    );
+}
+
+/// An Esc that stops the test command is not followed by a decision about its output.
+#[tokio::test]
+async fn an_esc_during_the_command_sends_nothing() {
+    let w = World::new("esc");
+    let (jeff, client) = system_one([]);
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "b",
+            "bash",
+            json!({"command": "pytest -q; touch running; sleep 30"}),
+        ),
+        answer("never"),
+    ]));
+    let llm = Arc::new(Llm::default());
+    let mut run = w.run(model).with_decisions(with(&w, Some(client), &llm));
+    let marker = w.world().join("running");
+    let interrupt = run.interrupt();
+    std::thread::spawn(move || {
+        while !marker.exists() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        interrupt.fire();
+    });
+    assert_eq!(ask(&mut run).await, Ending::Interrupted);
+    assert_eq!(jeff.sent(), Vec::new(), "nothing is sent");
+    assert_eq!(*llm.asked.lock().unwrap(), 0);
 }
 
 /// An LLM's 80% is a guess about itself: under the stated cut-off, the run stays muted and stalls
@@ -343,7 +455,13 @@ fn decisions_are_built_from_the_humans_configuration() {
             .is_none()
     );
 
-    let llm_only = load("");
+    // No System One named: nothing is asked unless the human turns the point on.
+    assert!(
+        decisions(&load(""), &world, model.clone(), none)
+            .unwrap()
+            .is_none()
+    );
+    let llm_only = load("[decide]\nbench = true\n");
     let d = decisions(&llm_only, &world, model.clone(), none)
         .unwrap()
         .unwrap();

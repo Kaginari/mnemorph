@@ -246,15 +246,27 @@ impl Run {
     }
 
     /// A piped bench run's output, read: green or red when the decider is sure for its basis,
-    /// nothing when it is unsure, fails, or the human presses Esc while it decides. Every answer
-    /// is journaled, and a note for the human says who read it.
+    /// nothing when it is unsure, fails, runs out of time, or the human presses Esc while it
+    /// decides. Output the shell cut short is never read: its summary is in the part dropped.
+    /// Every answer is journaled and priced, and a warning for the human says who read it.
     async fn read_bench(&mut self, command: &str, output: &str) -> Option<Read> {
         let d = self.decisions.as_ref()?;
+        if output.contains(" more bytes of output dropped") {
+            self.record(&Beat::Warning {
+                text: format!("[{BENCH_POINT}] `{command}` stays muted: its output was cut short"),
+            });
+            return None;
+        }
         let (decider, cutoffs) = (Arc::clone(&d.decider), d.cutoffs);
         let interrupt = Arc::clone(&self.interrupt);
+        // A decision is meant to take milliseconds: it never outlives the run's own clock.
+        let left = (self.started + self.limits.deadline).saturating_duration_since(Instant::now());
+        let budget = left.min(mnemorph_provider::SystemOne::policy().turn);
         let ask = bench_ask(command, output);
         let decision = tokio::select! {
-            d = decider.decide(&ask) => d,
+            d = tokio::time::timeout(budget, decider.decide(&ask)) => {
+                d.unwrap_or(Err(mnemorph_provider::Error::Timeout(mnemorph_provider::Wait::Turn)))
+            }
             () = interrupt.fired() => return None,
         };
         let decision = match decision {
@@ -272,6 +284,30 @@ impl Run {
             let _ = d
                 .journal
                 .append(&decision.row(&self.caller, BENCH_POINT, Timestamp::now()));
+        }
+        // What the decision cost reaches the meter like any call: unpriced (`usd: null`) for a
+        // model the price table does not know.
+        let row = UsageRow {
+            ts: Timestamp::now(),
+            session: self.caller.session.clone(),
+            run: self.caller.run.clone(),
+            body: self.caller.body.clone(),
+            race: self.caller.race.clone(),
+            commission: self.caller.commission.clone(),
+            model: decision.source.model.clone(),
+            provider: decision.source.provider.clone(),
+            usage: decision.usage,
+            prefix: 0,
+            wt: 0,
+            usd: None,
+            envelope: None,
+        }
+        .priced(&self.prices);
+        self.spent_wt += row.wt;
+        if let Some(ledger) = &self.ledger
+            && let Err(e) = ledger.append(&row)
+        {
+            eprintln!("mnemorph: the usage ledger could not be written: {e}");
         }
         let read = bench_read(&decision, cutoffs);
         let answer = decision.answer("outcome");
@@ -714,7 +750,13 @@ impl Run {
                         .map(str::to_owned)
                 });
             let read = match command.as_deref() {
-                Some(c) if self.decisions.is_some() && bench_of(c).is_some() && muted(c) => {
+                // An Esc that stopped the command is not followed by a decision about it.
+                Some(c)
+                    if !interrupted
+                        && self.decisions.is_some()
+                        && bench_of(c).is_some()
+                        && muted(c) =>
+                {
                     let read = self.read_bench(c, &o.content).await;
                     interrupted |= self.interrupt.take();
                     read
