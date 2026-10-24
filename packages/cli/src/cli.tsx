@@ -7,6 +7,7 @@ import { HELP, parse } from './args.js';
 import { findCore } from './core.js';
 import { VERSION } from './index.js';
 import { runOnce } from './run.js';
+import { chooseTheme } from './theme.js';
 
 async function main(): Promise<number> {
   const cmd = parse(process.argv.slice(2));
@@ -43,6 +44,7 @@ async function main(): Promise<number> {
         <App
           client={client}
           hello={hello}
+          theme={chooseTheme(cmd.theme === 'auto' ? undefined : cmd.theme)}
           onCoreClosed={(why) => {
             lost = why;
           }}

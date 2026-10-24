@@ -3,7 +3,12 @@
 export type Command =
   | { kind: 'help' }
   | { kind: 'version' }
-  | { kind: 'chat'; world?: string | undefined; core?: string | undefined }
+  | {
+      kind: 'chat';
+      world?: string | undefined;
+      core?: string | undefined;
+      theme?: string | undefined;
+    }
   | {
       kind: 'run';
       ask?: string | undefined;
@@ -25,6 +30,7 @@ Options:
   --world <dir>    the world to work in (default: the current directory)
   --core <path>    the mnemorphd to start (default: MNEMORPH_CORE, then the one built in
                    this checkout, then PATH)
+  --theme <name>   dark, light or auto (default: MNEMORPH_THEME, then the terminal's)
   --json           with run: print every event as a JSON line
   -h, --help       this help
   -V, --version    the version
@@ -35,7 +41,8 @@ In a session:
   Esc              stop the turn; at an approval, deny it
   Ctrl+C           stop the turn; when nothing runs, quit
   ↑ ↓              earlier messages
-  /help /quit      the session's commands
+  /help /status /theme /quit
+                   the session's commands
 `;
 
 /** Read `argv` (without node and the script). */
@@ -46,16 +53,18 @@ export function parse(argv: string[]): Command {
   let world: string | undefined;
   let core: string | undefined;
   let json = false;
+  let theme: string | undefined;
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
-    if (a === '--world' || a === '--core') {
+    if (a === '--world' || a === '--core' || a === '--theme') {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) {
         return { kind: 'error', message: `${a} needs a value` };
       }
       if (a === '--world') world = value;
-      else core = value;
+      else if (a === '--core') core = value;
+      else theme = value;
       i++;
     } else if (a === '--json') {
       json = true;
@@ -67,7 +76,7 @@ export function parse(argv: string[]): Command {
   }
   if (rest.length === 0) {
     if (json) return { kind: 'error', message: '--json goes with run' };
-    return { kind: 'chat', world, core };
+    return { kind: 'chat', world, core, theme };
   }
   if (rest[0] !== 'run') {
     return { kind: 'error', message: `unknown command ${rest[0]}; see mnemorph --help` };

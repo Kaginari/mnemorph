@@ -7,7 +7,8 @@ test('help and the version answer before anything else is read', () => {
 });
 
 test('a session, or one ask; arguments win over stdin', () => {
-  expect(parse([])).toEqual({ kind: 'chat', world: undefined, core: undefined });
+  expect(parse([])).toEqual({ kind: 'chat', world: undefined, core: undefined, theme: undefined });
+  expect(parse(['--theme', 'light'])).toMatchObject({ kind: 'chat', theme: 'light' });
   expect(parse(['run', 'fix', 'the', 'test'])).toMatchObject({
     kind: 'run',
     ask: 'fix the test',

@@ -1,10 +1,11 @@
 /** The session in the terminal: Ink renders the state the reducers keep; it decides nothing. */
 import type { Client, GateReply, GateRequest, Hello } from '@mnemorph/sdk';
-import { dark, races } from '@mnemorph/theme';
+import { races } from '@mnemorph/theme';
 import { Box, Static, Text, useApp, useInput, usePaste, useStdout, useWindowSize } from 'ink';
 import type { ReactNode } from 'react';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import * as ed from './editor.js';
+import { palette, ThemeContext, type ThemeName, usePalette } from './theme.js';
 import { fold, type Item, info, initial, type State, status, summary } from './transcript.js';
 
 type Action =
@@ -26,7 +27,8 @@ function reduce(s: State, a: Action): State {
   }
 }
 
-export const COMMANDS = '/help  the keys and commands · /status  the session · /quit  leave';
+export const COMMANDS =
+  '/help  the keys and commands · /status  the session · /theme dark|light · /quit  leave';
 
 const RESULT_LINES = 4;
 
@@ -48,11 +50,12 @@ function Row({ prefix, color, children }: { prefix: string; color: string; child
 }
 
 export function ItemView({ item }: { item: Item }) {
+  const p = usePalette();
   switch (item.kind) {
     case 'user':
       return (
         <Box marginTop={1}>
-          <Row prefix="❯ " color={dark.textMuted}>
+          <Row prefix="❯ " color={p.textMuted}>
             <Text bold>{item.text}</Text>
           </Row>
         </Box>
@@ -73,22 +76,22 @@ export function ItemView({ item }: { item: Item }) {
       const cut = item.result?.cut ?? 0;
       return (
         <Box flexDirection="column" marginTop={1}>
-          <Row prefix="⏺ " color={bad ? dark.alarm : dark.holo}>
+          <Row prefix="⏺ " color={bad ? p.alarm : p.holo}>
             <Text>
               <Text bold>{item.name}</Text>
-              <Text color={dark.textMuted}> {summary(item.name, item.input)}</Text>
+              <Text color={p.textMuted}> {summary(item.name, item.input)}</Text>
             </Text>
           </Row>
-          <Row prefix="  ⎿ " color={dark.textMuted}>
+          <Row prefix="  ⎿ " color={p.textMuted}>
             <Box flexDirection="column">
               {shown.map((line, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: lines of one finished result never move
-                <Text key={i} color={bad ? dark.alarm : dark.textMuted}>
+                <Text key={i} color={bad ? p.alarm : p.textMuted}>
                   {line}
                 </Text>
               ))}
               {more > 0 || cut > 0 ? (
-                <Text color={dark.textMuted}>
+                <Text color={p.textMuted}>
                   {'… '}
                   {more > 0 ? `${more} more lines` : ''}
                   {cut > 0 ? ` (${cut} bytes cut)` : ''}
@@ -101,47 +104,48 @@ export function ItemView({ item }: { item: Item }) {
     }
     case 'note':
       return (
-        <Row prefix="  " color={dark.textMuted}>
-          <Text color={dark.textMuted}>{item.text}</Text>
+        <Row prefix="  " color={p.textMuted}>
+          <Text color={p.textMuted}>{item.text}</Text>
         </Row>
       );
     case 'warning':
       return (
-        <Row prefix="  ! " color={dark.gold}>
-          <Text color={dark.gold}>{item.text}</Text>
+        <Row prefix="  ! " color={p.gold}>
+          <Text color={p.gold}>{item.text}</Text>
         </Row>
       );
     case 'verdict':
       return item.passed ? (
         <Text color={races.elf}>{'  ✓ the end gate passed'}</Text>
       ) : (
-        <Row prefix="  ✗ " color={dark.alarm}>
-          <Text color={dark.alarm}>{`the end gate: ${item.failures.join('; ')}`}</Text>
+        <Row prefix="  ✗ " color={p.alarm}>
+          <Text color={p.alarm}>{`the end gate: ${item.failures.join('; ')}`}</Text>
         </Row>
       );
     case 'ending':
       return (
         <Box marginTop={1}>
-          <Text color={item.ending === 'interrupted' ? dark.textMuted : dark.alarm}>
+          <Text color={item.ending === 'interrupted' ? p.textMuted : p.alarm}>
             {`— ${item.ending}`}
           </Text>
         </Box>
       );
     case 'info':
-      return <Text color={dark.textMuted}>{item.text}</Text>;
+      return <Text color={p.textMuted}>{item.text}</Text>;
   }
 }
 
 /** The input, its cursor drawn as an inverse cell over one whole character. */
 function Input({ editor, busy }: { editor: ed.Editor; busy: boolean }) {
+  const p = usePalette();
   const end = ed.after(editor.text, editor.cursor);
   const before = editor.text.slice(0, editor.cursor);
   const at = editor.text.slice(editor.cursor, end);
   const after = editor.text.slice(end);
   const cursor = at === '' || at === '\n' ? ' ' : at;
   return (
-    <Box borderStyle="round" borderColor={busy ? dark.line : dark.holo} paddingX={1}>
-      <Row prefix="❯ " color={dark.textMuted}>
+    <Box borderStyle="round" borderColor={busy ? p.line : p.holo} paddingX={1}>
+      <Row prefix="❯ " color={p.textMuted}>
         <Text>
           {before}
           <Text inverse>{cursor}</Text>
@@ -154,23 +158,24 @@ function Input({ editor, busy }: { editor: ed.Editor; busy: boolean }) {
 }
 
 function Gate({ request }: { request: GateRequest }) {
+  const p = usePalette();
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={dark.gold} paddingX={1}>
-      <Text color={dark.gold} bold>
+    <Box flexDirection="column" borderStyle="round" borderColor={p.gold} paddingX={1}>
+      <Text color={p.gold} bold>
         {`Approve this ${request.class} act?`}
       </Text>
       <Text>{request.act}</Text>
       {request.why.map((w) => (
-        <Text key={w} color={dark.textMuted}>{`  · ${w}`}</Text>
+        <Text key={w} color={p.textMuted}>{`  · ${w}`}</Text>
       ))}
       {request.outside.length > 0 ? (
-        <Text color={dark.alarm}>{`  opens outside the world: ${request.outside.join(', ')}`}</Text>
+        <Text color={p.alarm}>{`  opens outside the world: ${request.outside.join(', ')}`}</Text>
       ) : null}
       <Text>
         <Text bold>y</Text>
-        <Text color={dark.textMuted}> run it once · </Text>
+        <Text color={p.textMuted}> run it once · </Text>
         <Text bold>n</Text>
-        <Text color={dark.textMuted}> or Esc deny</Text>
+        <Text color={p.textMuted}> or Esc deny</Text>
       </Text>
     </Box>
   );
@@ -187,9 +192,13 @@ export interface AppProps {
   hello: Hello;
   /** Told why the core closed, when it closed by itself. */
   onCoreClosed?: (why: string) => void;
+  /** The palette to start with. */
+  theme?: ThemeName;
 }
 
-export function App({ client, hello, onCoreClosed }: AppProps) {
+export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }: AppProps) {
+  const [theme, setTheme] = useState<ThemeName>(startTheme);
+  const p = palette(theme);
   const { exit } = useApp();
   const { write } = useStdout();
   const { columns, rows } = useWindowSize();
@@ -284,6 +293,17 @@ export function App({ client, hello, onCoreClosed }: AppProps) {
           text: `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session} · ${status(state.usage).join(' · ')}`,
         });
       }
+      if (name === 'theme') {
+        const [, word] = line.slice(1).split(/\s+/);
+        if (word !== 'dark' && word !== 'light') {
+          return dispatch({ kind: 'info', text: `/theme dark or /theme light (now ${theme})` });
+        }
+        setTheme(word);
+        // The transcript is reprinted in the new colours.
+        write('\u001b[2J\u001b[H');
+        setEpoch((n) => n + 1);
+        return;
+      }
       return dispatch({ kind: 'info', text: `no command /${name}; ${COMMANDS}` });
     }
     dispatch({ kind: 'local-busy' });
@@ -351,7 +371,8 @@ export function App({ client, hello, onCoreClosed }: AppProps) {
   // The last column stays free: a line that fills it would wrap its trailing space onto a row
   // of its own.
   return (
-    <Box flexDirection="column" width={Math.max(10, columns - 1)}>
+    <ThemeContext.Provider value={p}>
+      <Box flexDirection="column" width={Math.max(10, columns - 1)}>
       <Static key={epoch} items={state.items}>
         {(item) => <ItemView key={item.id} item={item} />}
       </Static>
@@ -363,25 +384,26 @@ export function App({ client, hello, onCoreClosed }: AppProps) {
         </Box>
       ) : null}
       {running.map((t) => (
-        <Row key={t.call} prefix="⏺ " color={dark.holo}>
+        <Row key={t.call} prefix="⏺ " color={p.holo}>
           <Text>
             <Text bold>{t.name}</Text>
-            <Text color={dark.textMuted}> {summary(t.name, t.input)} …</Text>
+            <Text color={p.textMuted}> {summary(t.name, t.input)} …</Text>
           </Text>
         </Row>
       ))}
       {state.queued.map((q, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: the same line may wait twice
-        <Text key={i} color={dark.textMuted}>{`  waiting: ${q}`}</Text>
+        <Text key={i} color={p.textMuted}>{`  waiting: ${q}`}</Text>
       ))}
       {state.gate ? <Gate request={state.gate.request} /> : null}
       <Box marginTop={1} flexDirection="column">
         <Input editor={editor} busy={state.busy} />
-        <Text color={dark.textMuted}>
+        <Text color={p.textMuted}>
           {`  ${parts.join(' · ')}`}
           {state.busy ? '  ·  esc to stop' : '  ·  /help'}
         </Text>
       </Box>
-    </Box>
+      </Box>
+    </ThemeContext.Provider>
   );
 }
