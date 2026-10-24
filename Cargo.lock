@@ -1089,6 +1089,7 @@ dependencies = [
 name = "mnemorph-loop"
 version = "0.0.0"
 dependencies = [
+ "ignore",
  "mnemorph-ledger",
  "mnemorph-memory",
  "mnemorph-provider",

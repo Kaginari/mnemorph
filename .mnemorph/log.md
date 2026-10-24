@@ -752,3 +752,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     with the API that takes it, so tools re-exports it.
   - A guts window restarts after each warning, so a test's pattern must restart with it: my
     first doom script drifted half a window and never reached three warnings.
+
+---
+
+### [2026-10-24T04:48:24+02:00] rimuru — M5 rung 2: solo mode and its end gate
+- **Task:** solo mode — Rimuru's voice, a Slime's hands, the whole repository as soil — and the
+  first end gate.
+- **Files:** crates/mnemorph-loop/src/solo.rs (`SOLO_PROMPT`, `solo`), src/gate.rs (`snapshot`,
+  `EndGate::judge`: traits hold, duties done, tests intact), src/run.rs (`with_gate`; one chance
+  to fix, then FAIL; each verdict a `gate` beat), src/beats.rs, tests/solo.rs (7), docs
+  (03-loop end gate in solo, 02-races solo's shelf).
+- **Gate:** n/a. Instruments: 21 loop tests; `just check` (206 tests).
+- **Result:** in review as a pull request.
+- **Learned:** the gate finds writes by snapshotting the tree, not by trusting the write tool's
+  metadata: a `rm` through bash is caught the same as an edit — the first test that would have
+  slipped past metadata alone.

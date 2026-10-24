@@ -178,6 +178,15 @@ Runs on the body's own writes (minus what its Courts already landed on their own
 6. **No seal** — the territory is not sealed, or this landing is the fix: it carries the frozen
    witness into the zone's tests, unchanged by hash.
 
+**In solo mode** the gate judges what the run changed against the tree as it was when the ask
+arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
+verify commands, through the same classified and guarded `bash`, 120 s each), duties done (a
+non-empty answer) and tests intact (no test file deleted; no test file with more skip markers —
+`#[ignore`, `it.skip(`, `t.Skip(`, `@pytest.mark.skip`, … — than before). Right author holds by
+construction: the whole repository is solo's soil, and the tripwire keeps `.git` and
+`.mnemorph` out. An answer that changed nothing passes untouched. A first failure goes back to
+the body as a note; a second ends the run as FAIL, every verdict journaled.
+
 A landing on a risk surface passes as `PASS (challenge pending)` and opens a Dark Elf commission
 automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 

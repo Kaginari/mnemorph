@@ -35,6 +35,13 @@ pub enum Beat {
         /// The text.
         text: String,
     },
+    /// The end gate's verdict on an answer.
+    Gate {
+        /// The paths the run changed.
+        changed: Vec<String>,
+        /// What failed; empty when it passed.
+        failures: Vec<String>,
+    },
     /// How the run ended.
     End {
         /// The ending, in words.
@@ -154,6 +161,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 );
             }
             Beat::End { .. } => close(&mut messages, &mut pending),
+            Beat::Gate { .. } => {}
         }
     }
     close(&mut messages, &mut pending);

@@ -1,0 +1,274 @@
+//! Solo mode and its end gate, against a scripted model.
+
+#![allow(
+    clippy::unnecessary_wraps,
+    reason = "scripted replies are Results: the script also holds errors"
+)]
+
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use mnemorph_ledger::{Journal, Usage};
+use mnemorph_loop::{Beat, EndGate, Ending, Limits, Run, ScriptedModel, Setup, solo};
+use mnemorph_provider::{Block, Caller, Error, Response, StopReason, anthropic_prices};
+use mnemorph_races::Race;
+use mnemorph_tools::{Sandbox, registry};
+use serde_json::{Value, json};
+
+struct World {
+    root: PathBuf,
+}
+
+impl World {
+    fn new(name: &str) -> Self {
+        let root =
+            std::env::temp_dir().join(format!("mnemorph-solo-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("world")).unwrap();
+        Self { root }
+    }
+
+    fn world(&self) -> PathBuf {
+        self.root.join("world")
+    }
+
+    fn journal(&self) -> Journal<Beat> {
+        Journal::new(self.root.join("run.jsonl"))
+    }
+
+    fn run(&self, model: Arc<ScriptedModel>, verify: &[&str]) -> Run {
+        let (body, cx) = solo(&self.world(), "claude-sonnet-5-5");
+        let cx = cx
+            .with_sandbox(Sandbox::None("solo tests run unguarded".into()))
+            .with_unguarded(true);
+        let setup = Setup {
+            model,
+            tools: registry(),
+            cx,
+            journal: self.journal(),
+            ledger: None,
+            prices: anthropic_prices().unwrap(),
+            caller: Caller {
+                session: "s".into(),
+                run: "r".into(),
+                body: "rimuru".into(),
+                race: "rimuru".into(),
+                commission: None,
+                prefix: 0,
+            },
+        };
+        Run::new(body, Limits::for_race(Race::Rimuru), setup).with_gate(EndGate {
+            verify: verify.iter().map(|s| (*s).to_owned()).collect(),
+        })
+    }
+}
+
+impl Drop for World {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+fn reply(content: Block, stop: StopReason) -> Result<Response, Error> {
+    Ok(Response {
+        id: "m".into(),
+        model: "claude-sonnet-5-5".into(),
+        content: vec![content],
+        stop,
+        stop_details: None,
+        usage: Usage {
+            input: 100,
+            output: 20,
+            cache_read: 0,
+            cache_write: 0,
+        },
+        warnings: vec![],
+    })
+}
+
+fn answer(text: &str) -> Result<Response, Error> {
+    reply(
+        Block::Text {
+            text: text.into(),
+            cache: false,
+        },
+        StopReason::EndTurn,
+    )
+}
+
+fn tool(id: &str, name: &str, input: Value) -> Result<Response, Error> {
+    reply(
+        Block::ToolUse {
+            id: id.into(),
+            name: name.into(),
+            input,
+        },
+        StopReason::ToolUse,
+    )
+}
+
+async fn ask(run: &mut Run, text: &str) -> Ending {
+    let mut quiet = |_| {};
+    run.ask(text, &mut quiet).await
+}
+
+fn gate_beats(w: &World) -> Vec<Vec<String>> {
+    w.journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Gate { failures, .. } => Some(failures),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_change_that_verifies_passes_the_gate() {
+    let w = World::new("pass");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "out.txt", "content": "fixed\n"}),
+        ),
+        answer("wrote out.txt"),
+    ]));
+    let mut run = w.run(model, &["grep -q fixed out.txt"]);
+    assert_eq!(
+        ask(&mut run, "make out.txt").await,
+        Ending::Answered("wrote out.txt".into())
+    );
+    assert_eq!(gate_beats(&w), vec![Vec::<String>::new()]);
+}
+
+/// A failed gate gets one chance: the failure goes back to the body, which fixes it.
+#[tokio::test]
+async fn a_failed_gate_gets_one_chance_to_fix() {
+    let w = World::new("fix");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "out.txt", "content": "broken\n"}),
+        ),
+        answer("done"),
+        tool(
+            "t2",
+            "write",
+            json!({"path": "out.txt", "content": "fixed\n"}),
+        ),
+        answer("fixed it"),
+    ]));
+    let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
+    assert_eq!(
+        ask(&mut run, "make out.txt").await,
+        Ending::Answered("fixed it".into())
+    );
+    let gates = gate_beats(&w);
+    assert_eq!(gates.len(), 2);
+    assert!(
+        gates[0][0].contains("traits hold") && gates[1].is_empty(),
+        "{gates:?}"
+    );
+    let told = model.requests()[2]
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .any(|b| matches!(b, Block::Text { text, .. } if text.starts_with("The end gate failed")));
+    assert!(told, "the failure reached the body");
+}
+
+#[tokio::test]
+async fn a_second_failure_goes_up_as_fail() {
+    let w = World::new("fail");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "out.txt", "content": "broken\n"}),
+        ),
+        answer("done"),
+        answer("still done"),
+    ]));
+    let mut run = w.run(model, &["grep -q fixed out.txt"]);
+    assert!(
+        matches!(ask(&mut run, "make out.txt").await, Ending::Failed(why) if why.starts_with("the end gate failed twice"))
+    );
+}
+
+/// Writes are found by snapshotting the tree: a shell redirect counts like the write tool, and a
+/// deleted test fails the gate.
+#[tokio::test]
+async fn a_test_deleted_by_the_shell_fails_the_gate() {
+    let w = World::new("deleted");
+    fs::create_dir_all(w.world().join("tests")).unwrap();
+    fs::write(w.world().join("tests/login.rs"), "#[test]\nfn login() {}\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "bash", json!({"command": "rm tests/login.rs"})),
+        answer("removed a flaky test"),
+        answer("it was flaky"),
+    ]));
+    let mut run = w.run(model, &[]);
+    let e = ask(&mut run, "the build is red").await;
+    assert!(
+        matches!(&e, Ending::Failed(why) if why.contains("tests/login.rs") && why.contains("deleted")),
+        "{e:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_newly_skipped_test_fails_the_gate() {
+    let w = World::new("skipped");
+    fs::write(
+        w.world().join("auth_test.go"),
+        "func TestLogin(t *testing.T) {}\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "edit",
+            json!({"path": "auth_test.go", "old_string": "testing.T) {}", "new_string": "testing.T) { t.Skip(\"later\") }"}),
+        ),
+        answer("done"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, &[]);
+    let e = ask(&mut run, "make CI green").await;
+    assert!(
+        matches!(&e, Ending::Failed(why) if why.contains("skips a test")),
+        "{e:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_answer_that_changed_nothing_skips_the_gate() {
+    let w = World::new("nothing");
+    let model = Arc::new(ScriptedModel::new([answer("the build uses just")]));
+    let mut run = w.run(model, &["false"]);
+    assert_eq!(
+        ask(&mut run, "how is it built?").await,
+        Ending::Answered("the build uses just".into())
+    );
+    assert!(gate_beats(&w).is_empty() || gate_beats(&w)[0].is_empty());
+}
+
+/// Solo holds no outward act: the shelf refuses it with the lawful route.
+#[tokio::test]
+async fn solo_cannot_reach_outside() {
+    let w = World::new("outward");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "bash", json!({"command": "git push origin main"})),
+        answer("needs a push"),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    ask(&mut run, "ship it").await;
+    let refused = model.requests()[1].messages.iter().flat_map(|m| &m.content).any(|b| {
+        matches!(b, Block::ToolResult { content, is_error: true, .. } if content.contains("not on the slime shelf") && content.contains("kijin"))
+    });
+    assert!(refused);
+}
