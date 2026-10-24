@@ -242,6 +242,9 @@ pub struct Hole {
 pub struct Config {
     leaves: BTreeMap<String, Leaf>,
     holes: Vec<Hole>,
+    /// The providers the human's own files define, known before any layer is merged, so a
+    /// tracked model that names one as its backend is caught whichever file defines it.
+    human_providers: std::collections::BTreeSet<String>,
 }
 
 /// One line of `config explain`.
@@ -398,6 +401,7 @@ impl Config {
                 file: None,
             },
         )?;
+        let mut files = Vec::new();
         for layer in [Layer::Global, Layer::Tracked, Layer::Local] {
             let Some(path) = paths.of(layer) else {
                 continue;
@@ -409,6 +413,19 @@ impl Config {
             };
             let table: Table =
                 toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+            files.push((layer, path, table));
+        }
+        config.human_providers = std::iter::once(&defaults)
+            .chain(
+                files
+                    .iter()
+                    .filter(|(l, ..)| *l != Layer::Tracked)
+                    .map(|(.., t)| t),
+            )
+            .filter_map(|t| t.get("providers").and_then(toml::Value::as_table))
+            .flat_map(|t| t.keys().cloned())
+            .collect();
+        for (layer, path, table) in files {
             config.layer(
                 &table,
                 &Origin {
@@ -440,6 +457,20 @@ impl Config {
                     key,
                     origin: origin.clone(),
                     why: "a provider decides where a key is sent, so it is honoured only from the local or global file".into(),
+                });
+                continue;
+            }
+            if origin.layer == Layer::Tracked
+                && key.starts_with("models.")
+                && value
+                    .as_str()
+                    .and_then(|v| v.split_once(':'))
+                    .is_some_and(|(p, _)| self.human_providers.contains(p))
+            {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "names a backend: where a model's requests and key go is honoured only from the local or global file".into(),
                 });
                 continue;
             }
@@ -694,13 +725,21 @@ impl Config {
                 .and_then(|l| l.value.as_str())
                 .map(str::to_owned)
         };
-        by(format!("models.creature.{creature}"))
-            .or_else(|| {
-                let (name, function) = office.and_then(office_names)?;
-                by(format!("models.office.{}.{name}", race.name()))
-                    .or_else(|| by(format!("models.office.{}.{function}", race.name())))
-            })
-            .or_else(|| by(format!("models.race.{}", race.name())))
+        by(format!("models.creature.{creature}")).or_else(|| {
+            let (name, function) = office.and_then(office_names)?;
+            by(format!("models.office.{}.{name}", race.name()))
+                .or_else(|| by(format!("models.office.{}.{function}", race.name())))
+        })
+    }
+
+    /// The model a race rides at a tier: its own model (`models.race.<race>`) at its default tier —
+    /// a default, so a router may still move a body off it within the band — else the tier's.
+    #[must_use]
+    pub fn model_at(&self, race: Race, tier: ModelTier) -> String {
+        self.get(&format!("models.race.{}", race.name()))
+            .filter(|_| tier == race.default_tier())
+            .and_then(|l| l.value.as_str())
+            .map_or_else(|| self.tier_model(tier), str::to_owned)
     }
 
     /// The model configured for a tier: the tier as the human set it, else `models.default` —
@@ -709,7 +748,8 @@ impl Config {
     pub fn tier_model(&self, tier: ModelTier) -> String {
         let leaf = self.get(&format!("models.tier.{}", tier_name(tier)));
         let text = |l: &Leaf| l.value.as_str().map(str::to_owned);
-        leaf.filter(|l| l.origin.layer != Layer::Default)
+        let human = |l: &&Leaf| matches!(l.origin.layer, Layer::Global | Layer::Local);
+        leaf.filter(human)
             .and_then(text)
             .or_else(|| self.get("models.default").and_then(text))
             .or_else(|| leaf.and_then(text))
@@ -739,6 +779,9 @@ impl Config {
         let provider = providers.get(&name).cloned().ok_or_else(|| {
             format!("model `{model}` goes to provider `{name}`, and no provider has that name")
         })?;
+        if id.trim().is_empty() {
+            return Err(format!("model `{model}` names no model"));
+        }
         if provider.kind == "systemone" {
             return Err(format!(
                 "model `{model}` goes to `{name}`, a classifier (`kind = \"systemone\"`): it makes decisions, not conversations"
@@ -756,7 +799,7 @@ impl Config {
     #[must_use]
     pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
         self.model_pinned(creature, race, office)
-            .unwrap_or_else(|| self.tier_model(race.default_tier()))
+            .unwrap_or_else(|| self.model_at(race, race.default_tier()))
     }
 
     /// The models to try in order, starting with `model`: each one's configured next.
@@ -863,9 +906,7 @@ impl Config {
             route,
             via,
             model: text("decide.model").unwrap_or_default(),
-            llm: text("decide.llm")
-                .or_else(|| text("models.tier.fast"))
-                .unwrap_or_default(),
+            llm: text("decide.llm").unwrap_or_else(|| self.tier_model(ModelTier::Fast)),
             bench,
             cutoff_measured: cutoff("decide.cutoff.measured")?,
             cutoff_stated: cutoff("decide.cutoff.stated")?,

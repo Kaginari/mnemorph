@@ -845,6 +845,42 @@ fn decisions_need_the_switch_and_a_classifier() {
     );
 }
 
+/// A cloned repository cannot send a model to another of the human's backends by naming one,
+/// from any key; a `:` that names no backend is part of the id. And the human's one model beats
+/// the repository's tiers.
+#[test]
+fn a_tracked_model_never_names_its_backend() {
+    let g = Ground::new("backends-tracked-prefix");
+    g.local(
+        "[providers.vllm]\nkind = \"openai\"\nbase_url = \"https://gateway.example/v1\"\n\
+         [models]\ndefault = \"m\"\n",
+    );
+    g.tracked(
+        "[models]\ndefault = \"vllm:qwen3-coder\"\n[models.race]\nrimuru = \"vllm:big\"\n\
+         [models.tier]\nfast = \"small\"\nstrong = \"qwen3:32b\"\n",
+    );
+    let c = g.load().unwrap();
+    for key in ["models.default", "models.race.rimuru"] {
+        assert!(
+            c.holes()
+                .iter()
+                .any(|h| h.key == key && h.why.contains("names a backend")),
+            "{key}: {:?}",
+            c.holes()
+        );
+    }
+    assert_eq!(
+        c.tier_model(ModelTier::Fast),
+        "m",
+        "the human's one model beats the repository's tier"
+    );
+    assert_eq!(c.model_for("rimuru", Race::Rimuru, None), "m");
+    assert!(
+        !c.holes().iter().any(|h| h.key == "models.tier.strong"),
+        "a `:` naming no backend is an id"
+    );
+}
+
 /// One model for everything, or one per race, office or creature; every model goes through the
 /// backend the human named — OpenRouter or a vLLM gateway with its key — unless it names its own.
 #[test]
@@ -881,6 +917,20 @@ fn models_go_through_the_humans_backend() {
         c.model_for("de-1", Race::DarkElf, None),
         "anthropic/claude-opus-5.5"
     );
+    // A race's model is a default, not a pin, so a router may still move it within its band.
+    assert_eq!(c.model_pinned("de-1", Race::DarkElf, None), None);
+    assert_eq!(
+        c.model_at(Race::DarkElf, ModelTier::Frontier),
+        "anthropic/claude-opus-5.5"
+    );
+    assert_eq!(
+        c.model_at(Race::DarkElf, ModelTier::Fast),
+        "anthropic/claude-sonnet-5.5"
+    );
+    // The decisions' fallback rides the same one model, never a compiled id the gateway lacks.
+    assert_eq!(c.decide().unwrap().llm, "anthropic/claude-sonnet-5.5");
+    // An empty id is no model.
+    assert!(c.backend("").is_err() && c.backend("vllm:").is_err());
     let judge = c.model_for("orc-gate", Race::Orc, Some("melete"));
     assert_eq!(judge, "vllm:qwen3-coder");
     // Through the default backend, or the one a model names; a `:` that names no provider is

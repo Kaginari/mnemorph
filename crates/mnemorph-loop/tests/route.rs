@@ -550,3 +550,41 @@ fn a_route_reads_the_commissions_head_and_never_splits_a_character() {
     assert!(!ask.state.ends_with("tail"));
     assert!(ask.state.len() < 8_100);
 }
+
+/// One model for everything leaves no room in any band: nothing is asked, nothing is spent. A
+/// race's own model is its default, and a sure reading still moves the body off it.
+#[tokio::test]
+async fn one_model_leaves_no_room_and_a_race_model_is_a_default() {
+    let ground = Ground::new("one-model");
+    let config = ground.config("[models]\ndefault = \"only\"\n");
+    let (wire, on) = deciders(&ground, vec![], Llm::default(), true);
+    let r = routed(
+        &config,
+        Some(&on),
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
+    )
+    .await;
+    assert_eq!((r.model.as_str(), r.reason), ("only", Reason::Off));
+    assert_eq!(wire.sent(), Vec::new(), "no room, no question");
+
+    let config = ground.config(&format!("{TIERS}[models.race]\norc = \"orc-model\"\n"));
+    let (wire, on) = deciders(
+        &ground,
+        vec![measured([0.02, 0.03, 0.95], 0.9)],
+        Llm::default(),
+        true,
+    );
+    let r = routed(
+        &config,
+        Some(&on),
+        &ground,
+        work(Race::Orc, Some(Office::Verdict)),
+    )
+    .await;
+    assert_eq!(wire.sent().len(), 1, "a race's model is routed, not pinned");
+    assert_eq!(
+        r.model, "big",
+        "a hard, irreversible commission rides the band's ceiling"
+    );
+}

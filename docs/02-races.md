@@ -132,9 +132,12 @@ office, is an error. The key names the race as written, so an ascended form (`hi
 configured under its own name.
 
 **Which model rides a body.** One rule, in order: a model configured for the exact creature;
-else for the pair (race, office); else for the race; else the model configured for the race's
-`DEFAULT_TIER`, and when the human named one model for everything (`models.default`), every tier
-they did not set rides it. The
+else for the pair (race, office) — those two are the human's pins, never routed; else the
+race's own model, at its default tier; else the model configured for the race's `DEFAULT_TIER`,
+and when the human named one model for everything (`models.default`), every tier their own files
+did not set rides it. A race's model and the one model are defaults: Metis may still move a body
+off them within its band, and when every tier of a band rides the same model there is nothing to
+route and nothing is asked. The
 default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and the
 adversary think hardest), **strong** for Orc, Slime and Kijin.
 

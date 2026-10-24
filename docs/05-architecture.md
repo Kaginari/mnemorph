@@ -310,20 +310,24 @@ an empty list or table never overrides a lower layer:
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
   before it replaces the file; a failed save is returned, and the file stays as it was.
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
-  `models.race.<race>`, else `models.tier.<the race's tier>` — and `models.default` is one model
-  for everything: every tier the human did not set rides it. `models.fallback.<model>` names the
-  next model to try when a model is not found.
+  `models.race.<race>` (the race's model at its default tier), else `models.tier.<the race's
+  tier>` — and `models.default` is one model for everything: every tier the human's own files did
+  not set rides it, so a cloned repository's tiers do not override it.
+  `models.fallback.<model>` names the next model to try when a model is not found. The tracked
+  file may name models — a team picks the models its world uses — but neither a provider nor a
+  model's backend, so a model it names resolves only through the backend the human chose, at the
+  human's prices; whether a body is routed, and how sure a decision must be, stay the human's.
 - **Backends**: every model goes through `models.provider` (`anthropic` unless the human says),
   any provider that holds conversations: Anthropic's API, or an OpenAI-compatible gateway with
   its key — OpenRouter, a vLLM gateway, a LiteLLM proxy. A model written `<provider>:<id>`
   (`vllm:qwen3-coder`) goes to that provider instead; a `:` that names no provider is part of the
-  id (`qwen3:32b`). `Config::backend(model)` returns the provider, its URL and key variable, and
-  the id it knows the model by. The tracked file may name models — a team picks the models its world uses
-  — but it cannot add a provider, so a model it names resolves only through a provider the human
-  defined, at the human's prices; whether a body is routed, and how sure a decision must be, stay
-  the human's. **Providers** name the environment variable holding their key
-  (`key_env`), never the key. A provider's `kind` is `anthropic`, `openai` (any
-  OpenAI-compatible server) or `systemone` (TypeSafe's Jev, or a jeff server on your own machine).
+  id (`qwen3:32b`); an empty id is no model. From the tracked file, a model written
+  `<provider>:<id>` is a hole, as `models.provider` is. `Config::backend(model)` returns the
+  provider, its URL and key variable, and the id it knows the model by; it is honoured once a
+  binary builds runs from the configuration (the CLI, M6). **Providers** name the environment
+  variable holding their key (`key_env`), never the key. A provider's `kind` is `anthropic`,
+  `openai` (any OpenAI-compatible server) or `systemone` (a classifier: TypeSafe's Jev, or a
+  jeff server on your own machine).
 - **Decisions** (`decide.*`) are a feature the human switches on and off (`decide.enabled`, off by
   default), and only a classifier makes them: `decide.via` names a provider of
   `kind = "systemone"` — TypeSafe's Jev, a jeff server, or any server that speaks the same

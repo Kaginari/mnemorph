@@ -1333,3 +1333,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     a `:` (`qwen3:32b`) stay whole.
   - `decide.bench = true` used to switch the LLM on as the decider; the LLM now only stands in
     for a classifier that failed.
+
+---
+
+### [2026-10-24T16:13:18+02:00] rimuru — backends, after their review
+- **Task:** the review of #122: the decisions' fallback ignored the one model; a race's model was
+  a pin that silenced Metis; a tracked model could name a backend; the docs claimed requests
+  already flow; a repository's tier beat the human's one model; an empty id passed.
+- **Files:** crates/mnemorph-config/src/lib.rs (`decide.llm` from `tier_model(Fast)`;
+  `model_at`, a race's model as its default; the human's providers known before layering, a
+  tracked `<provider>:<id>` a hole; human tiers over the one model over tracked tiers; empty ids
+  refused), crates/mnemorph-loop/src/route.rs (`model_at`; a band with no room asks nothing),
+  tests, docs/02-races.md, docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a protection on one key is only as wide as every other way to say the same thing:
+  `models.provider` was the human's, and `models.default = "vllm:…"` said it again from the
+  tracked file.
