@@ -46,6 +46,9 @@ max_consults = 3
 [evolution]
 mode = "auto"
 
+[models]
+provider = "anthropic"
+
 [models.tier]
 frontier = "claude-opus-5-5"
 strong = "claude-sonnet-5-5"
@@ -69,6 +72,8 @@ const LOOSENING: &[&str] = &[
     "oni.envelopes",
     "oni.envelope_days",
     "sandbox.allow_unguarded",
+    "models.provider",
+    "decide.enabled",
     "decide.via",
     "decide.cutoff.measured",
     "decide.cutoff.stated",
@@ -103,6 +108,9 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
     ("evolution.mode", Kind::Str),
+    ("models.provider", Kind::Str),
+    ("models.default", Kind::Str),
+    ("models.race.*", Kind::Str),
     ("models.tier.*", Kind::Str),
     ("models.office.*.*", Kind::Str),
     ("models.creature.*", Kind::Str),
@@ -110,6 +118,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
+    ("decide.enabled", Kind::Bool),
     ("decide.via", Kind::Str),
     ("decide.model", Kind::Str),
     ("decide.llm", Kind::Str),
@@ -233,6 +242,9 @@ pub struct Hole {
 pub struct Config {
     leaves: BTreeMap<String, Leaf>,
     holes: Vec<Hole>,
+    /// The providers the human's own files define, known before any layer is merged, so a
+    /// tracked model that names one as its backend is caught whichever file defines it.
+    human_providers: std::collections::BTreeSet<String>,
 }
 
 /// One line of `config explain`.
@@ -258,22 +270,37 @@ pub struct Provider {
     pub key_env: Option<String>,
 }
 
-/// How decisions are made: a System One provider when `via` names one, else the LLM `llm`.
+/// Where one model's requests go: the provider, and the id it knows the model by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Backend {
+    /// The provider's name in the configuration.
+    pub provider_name: String,
+    /// The provider: its kind, URL and key variable.
+    pub provider: Provider,
+    /// The model's id at that provider.
+    pub model: String,
+}
+
+/// How decisions are made: by the classifier `via`, when the human switched decisions on and named
+/// one; the LLM `llm` answers only when that classifier fails.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decide {
+    /// Whether decisions are on: the human turned them on (`decide.enabled`) **and** named a
+    /// classifier to make them (`decide.via`). Without a classifier the feature is off, whatever
+    /// else the section says.
+    pub enabled: bool,
     /// The System One provider tried first (`kind = "systemone"`), when one is configured.
     pub via: Option<String>,
     /// The model to ask at `via` (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server);
     /// empty when there is no `via`.
     pub model: String,
-    /// The LLM that answers when there is no `via`, or it fails.
+    /// The LLM that answers when the classifier fails.
     pub llm: String,
     /// Whether Metis routes a commission to a tier by how demanding it is (`decide.route`): off
     /// unless the human turns it on, since it changes which model does the work.
     pub route: bool,
-    /// Whether a piped test run's output is read by a decision instead of counted muted: as
-    /// `decide.bench` says, else on exactly when a System One provider is named, so no LLM is
-    /// asked unless the human chose it.
+    /// Whether a piped test run's output is read by a decision instead of counted muted: on
+    /// with decisions unless `decide.bench = false`.
     pub bench: bool,
     /// The least confidence a System One answer needs before a caller acts on it.
     pub cutoff_measured: f64,
@@ -374,6 +401,7 @@ impl Config {
                 file: None,
             },
         )?;
+        let mut files = Vec::new();
         for layer in [Layer::Global, Layer::Tracked, Layer::Local] {
             let Some(path) = paths.of(layer) else {
                 continue;
@@ -385,6 +413,19 @@ impl Config {
             };
             let table: Table =
                 toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+            files.push((layer, path, table));
+        }
+        config.human_providers = std::iter::once(&defaults)
+            .chain(
+                files
+                    .iter()
+                    .filter(|(l, ..)| *l != Layer::Tracked)
+                    .map(|(.., t)| t),
+            )
+            .filter_map(|t| t.get("providers").and_then(toml::Value::as_table))
+            .flat_map(|t| t.keys().cloned())
+            .collect();
+        for (layer, path, table) in files {
             config.layer(
                 &table,
                 &Origin {
@@ -394,6 +435,7 @@ impl Config {
             )?;
         }
         config.validate()?;
+        config.decisions_need_a_classifier();
         Ok(config)
     }
 
@@ -418,6 +460,20 @@ impl Config {
                 });
                 continue;
             }
+            if origin.layer == Layer::Tracked
+                && key.starts_with("models.")
+                && value
+                    .as_str()
+                    .and_then(|v| v.split_once(':'))
+                    .is_some_and(|(p, _)| self.human_providers.contains(p))
+            {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "names a backend: where a model's requests and key go is honoured only from the local or global file".into(),
+                });
+                continue;
+            }
             if origin.layer == Layer::Tracked && LOOSENING.contains(&key.as_str()) {
                 self.holes.push(Hole {
                     key,
@@ -438,6 +494,25 @@ impl Config {
             );
         }
         Ok(())
+    }
+
+    /// Decisions turned on with no classifier named stay off, and the human is told why.
+    fn decisions_need_a_classifier(&mut self) {
+        let on = self
+            .get("decide.enabled")
+            .filter(|l| l.value.as_bool() == Some(true));
+        if let Some(leaf) = on
+            && self.get("decide.via").is_none()
+        {
+            let origin = leaf.origin.clone();
+            self.holes.push(Hole {
+                key: "decide.enabled".into(),
+                origin,
+                why: "decisions need a classifier: name one with decide.via (a provider of kind \
+                      \"systemone\", such as TypeSafe's Jev or a jeff server); until then they stay off"
+                    .into(),
+            });
+        }
     }
 
     fn validate(&self) -> Result<(), String> {
@@ -499,6 +574,27 @@ impl Config {
                     return Err(format!(
                         "{at}: models.office.{race}.{office}: the offices are mneme (read), melete (judge) and aoede (write)"
                     ));
+                }
+            }
+            if let Some(race) = key.strip_prefix("models.race.")
+                && Race::from_name(race).is_none()
+            {
+                return Err(format!("{at}: models.race.{race}: no race `{race}`"));
+            }
+            if key == "models.provider" {
+                let name = leaf.value.as_str().unwrap_or_default();
+                match self.providers().get(name) {
+                    None => {
+                        return Err(format!(
+                            "{at}: models.provider names `{name}`, and no provider has that name"
+                        ));
+                    }
+                    Some(p) if p.kind == "systemone" => {
+                        return Err(format!(
+                            "{at}: models.provider names `{name}`, a classifier; models need a provider of kind \"anthropic\" or \"openai\""
+                        ));
+                    }
+                    Some(_) => {}
                 }
             }
             if let Some(tier) = key.strip_prefix("models.tier.")
@@ -636,13 +732,66 @@ impl Config {
         })
     }
 
-    /// The model configured for a tier.
+    /// The model a race rides at a tier: its own model (`models.race.<race>`) at its default tier —
+    /// a default, so a router may still move a body off it within the band — else the tier's.
+    #[must_use]
+    pub fn model_at(&self, race: Race, tier: ModelTier) -> String {
+        self.get(&format!("models.race.{}", race.name()))
+            .filter(|_| tier == race.default_tier())
+            .and_then(|l| l.value.as_str())
+            .map_or_else(|| self.tier_model(tier), str::to_owned)
+    }
+
+    /// The model configured for a tier: the tier as the human set it, else `models.default` —
+    /// one model for everything — else the compiled tier.
     #[must_use]
     pub fn tier_model(&self, tier: ModelTier) -> String {
-        self.get(&format!("models.tier.{}", tier_name(tier)))
-            .and_then(|l| l.value.as_str())
-            .map(str::to_owned)
+        let leaf = self.get(&format!("models.tier.{}", tier_name(tier)));
+        let text = |l: &Leaf| l.value.as_str().map(str::to_owned);
+        let human = |l: &&Leaf| matches!(l.origin.layer, Layer::Global | Layer::Local);
+        leaf.filter(human)
+            .and_then(text)
+            .or_else(|| self.get("models.default").and_then(text))
+            .or_else(|| leaf.and_then(text))
             .unwrap_or_default()
+    }
+
+    /// Where a model's requests go: `<provider>:<id>` when the part before the first `:` names a
+    /// configured provider (`vllm:qwen3-coder`), else the model as written, through
+    /// `models.provider` — the backend every model goes to by default. A model id may itself
+    /// hold a `:` (`qwen3:32b`); it is split only on a provider's name.
+    ///
+    /// # Errors
+    ///
+    /// The provider is not configured, or it does not serve conversations (`kind = "systemone"`).
+    pub fn backend(&self, model: &str) -> Result<Backend, String> {
+        let providers = self.providers();
+        let (name, id) = match model.split_once(':') {
+            Some((p, id)) if providers.contains_key(p) => (p.to_owned(), id.to_owned()),
+            _ => (
+                self.get("models.provider")
+                    .and_then(|l| l.value.as_str())
+                    .unwrap_or("anthropic")
+                    .to_owned(),
+                model.to_owned(),
+            ),
+        };
+        let provider = providers.get(&name).cloned().ok_or_else(|| {
+            format!("model `{model}` goes to provider `{name}`, and no provider has that name")
+        })?;
+        if id.trim().is_empty() {
+            return Err(format!("model `{model}` names no model"));
+        }
+        if provider.kind == "systemone" {
+            return Err(format!(
+                "model `{model}` goes to `{name}`, a classifier (`kind = \"systemone\"`): it makes decisions, not conversations"
+            ));
+        }
+        Ok(Backend {
+            provider_name: name,
+            provider,
+            model: id,
+        })
     }
 
     /// The model for a body: the one the human chose ([`Self::model_pinned`]), else its race's
@@ -650,7 +799,7 @@ impl Config {
     #[must_use]
     pub fn model_for(&self, creature: &str, race: Race, office: Option<&str>) -> String {
         self.model_pinned(creature, race, office)
-            .unwrap_or_else(|| self.tier_model(race.default_tier()))
+            .unwrap_or_else(|| self.model_at(race, race.default_tier()))
     }
 
     /// The models to try in order, starting with `model`: each one's configured next.
@@ -748,21 +897,16 @@ impl Config {
             }
             Ok(v)
         };
-        let bench = self
-            .get("decide.bench")
-            .and_then(|l| l.value.as_bool())
-            .unwrap_or(via.is_some());
-        let route = self
-            .get("decide.route")
-            .and_then(|l| l.value.as_bool())
-            .unwrap_or(false);
+        let flag = |key: &str| self.get(key).and_then(|l| l.value.as_bool());
+        let enabled = flag("decide.enabled").unwrap_or(false) && via.is_some();
+        let bench = enabled && flag("decide.bench").unwrap_or(true);
+        let route = enabled && flag("decide.route").unwrap_or(false);
         Ok(Decide {
+            enabled,
             route,
             via,
             model: text("decide.model").unwrap_or_default(),
-            llm: text("decide.llm")
-                .or_else(|| text("models.tier.fast"))
-                .unwrap_or_default(),
+            llm: text("decide.llm").unwrap_or_else(|| self.tier_model(ModelTier::Fast)),
             bench,
             cutoff_measured: cutoff("decide.cutoff.measured")?,
             cutoff_stated: cutoff("decide.cutoff.stated")?,

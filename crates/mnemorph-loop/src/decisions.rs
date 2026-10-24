@@ -74,7 +74,8 @@ impl Complete for Own {
 
 /// The run's decisions from the configuration: `decide.via`'s System One provider first, its key
 /// read from the environment variable it names (`env`); then `decide.llm` through the run's own
-/// `model`. `None` when no decision point is on (`decide.bench`, `decide.route`).
+/// `model`, when it fails. `None` when decisions are off — not switched on (`decide.enabled`), no
+/// classifier named, or every point off (`decide.bench`, `decide.route`).
 ///
 /// # Errors
 ///

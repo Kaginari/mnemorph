@@ -1312,3 +1312,41 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     default with no change here.
   - An Elf may be routed from frontier to fast for a routine, safe `findings` commission; that is
     the band table as written, left for the human to keep or close.
+
+---
+
+### [2026-10-24T16:01:50+02:00] rimuru — backends in config; decisions only with a classifier
+- **Task:** the human: models through OpenRouter or a vLLM gateway with its key, the backend in
+  config; one model for everything, changed by race and office; decisions a feature switched on
+  and off, active only when a classifier such as Jev is configured, disabled otherwise.
+- **Files:** crates/mnemorph-config/src/lib.rs (`models.provider`, `models.default`,
+  `models.race.*`, `Config::backend`, `Backend`; `decide.enabled`, decisions off without a
+  classifier with a hole saying why; both switches the human's files only), tests (the switch and
+  the classifier; backends, one model, race and office, `provider:id`), mnemorph-loop's
+  `decisions()` doc and test, docs/02-races.md, 03-loop.md, 05-architecture.md (backends, the
+  example config, the decisions switch, the diagram).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The config had providers and models but nothing joining them: a model had no backend. A
+    model now names its backend only by a provider's own name before a `:`, so ids that hold
+    a `:` (`qwen3:32b`) stay whole.
+  - `decide.bench = true` used to switch the LLM on as the decider; the LLM now only stands in
+    for a classifier that failed.
+
+---
+
+### [2026-10-24T16:13:18+02:00] rimuru — backends, after their review
+- **Task:** the review of #122: the decisions' fallback ignored the one model; a race's model was
+  a pin that silenced Metis; a tracked model could name a backend; the docs claimed requests
+  already flow; a repository's tier beat the human's one model; an empty id passed.
+- **Files:** crates/mnemorph-config/src/lib.rs (`decide.llm` from `tier_model(Fast)`;
+  `model_at`, a race's model as its default; the human's providers known before layering, a
+  tracked `<provider>:<id>` a hole; human tiers over the one model over tracked tiers; empty ids
+  refused), crates/mnemorph-loop/src/route.rs (`model_at`; a band with no room asks nothing),
+  tests, docs/02-races.md, docs/05-architecture.md.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a protection on one key is only as wide as every other way to say the same thing:
+  `models.provider` was the human's, and `models.default = "vllm:…"` said it again from the
+  tracked file.

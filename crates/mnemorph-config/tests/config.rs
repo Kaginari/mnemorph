@@ -7,7 +7,7 @@ use mnemorph_config::{
     Config, ENVELOPE_DAYS, ENVELOPE_DAYS_CEILING, Envelope, Lapse, Layer, Paths, set,
 };
 use mnemorph_ledger::Day;
-use mnemorph_races::Race;
+use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::Rule;
 
 /// A world and a global directory under a fresh temporary root.
@@ -781,8 +781,203 @@ fn offices_are_named_by_their_muse_or_their_function_and_nothing_else() {
 fn routing_is_off_until_the_human_turns_it_on() {
     let g = Ground::new("route-off");
     assert!(!g.load().unwrap().decide().unwrap().route);
-    g.global("[decide]\nroute = true\n");
+    g.global(&format!(
+        "{CLASSIFIER}[decide]\nenabled = true\nvia = \"jeff\"\nmodel = \"jeff\"\nroute = true\n"
+    ));
     assert!(g.load().unwrap().decide().unwrap().route);
+}
+
+const CLASSIFIER: &str =
+    "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n";
+
+/// Decisions are a feature the human switches on, and only a classifier can make them: on with
+/// none named, they stay off and the human is told; switched off, a named one is not asked.
+#[test]
+fn decisions_need_the_switch_and_a_classifier() {
+    let g = Ground::new("decide-switch");
+    let d = g.load().unwrap().decide().unwrap();
+    assert!(!d.enabled && !d.bench && !d.route, "off by default");
+
+    g.global("[decide]\nenabled = true\nbench = true\nroute = true\n");
+    let c = g.load().unwrap();
+    let d = c.decide().unwrap();
+    assert!(
+        !d.enabled && !d.bench && !d.route,
+        "no classifier, no decisions"
+    );
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "decide.enabled" && h.why.contains("need a classifier")),
+        "{:?}",
+        c.holes()
+    );
+
+    g.global(&format!(
+        "{CLASSIFIER}[decide]\nvia = \"jeff\"\nmodel = \"jeff\"\n"
+    ));
+    assert!(
+        !g.load().unwrap().decide().unwrap().enabled,
+        "named, not switched on"
+    );
+
+    g.global(&format!(
+        "{CLASSIFIER}[decide]\nenabled = true\nvia = \"jeff\"\nmodel = \"jeff\"\n"
+    ));
+    let d = g.load().unwrap().decide().unwrap();
+    assert!(
+        d.enabled && d.bench && !d.route,
+        "the bench reads with it, routing waits to be asked"
+    );
+
+    // A cloned repository cannot switch them on.
+    let g = Ground::new("decide-switch-tracked");
+    g.global(&format!(
+        "{CLASSIFIER}[decide]\nvia = \"jeff\"\nmodel = \"jeff\"\n"
+    ));
+    g.tracked("[decide]\nenabled = true\n");
+    let c = g.load().unwrap();
+    assert!(!c.decide().unwrap().enabled);
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "decide.enabled" && h.why.contains("loosens"))
+    );
+}
+
+/// A cloned repository cannot send a model to another of the human's backends by naming one,
+/// from any key; a `:` that names no backend is part of the id. And the human's one model beats
+/// the repository's tiers.
+#[test]
+fn a_tracked_model_never_names_its_backend() {
+    let g = Ground::new("backends-tracked-prefix");
+    g.local(
+        "[providers.vllm]\nkind = \"openai\"\nbase_url = \"https://gateway.example/v1\"\n\
+         [models]\ndefault = \"m\"\n",
+    );
+    g.tracked(
+        "[models]\ndefault = \"vllm:qwen3-coder\"\n[models.race]\nrimuru = \"vllm:big\"\n\
+         [models.tier]\nfast = \"small\"\nstrong = \"qwen3:32b\"\n",
+    );
+    let c = g.load().unwrap();
+    for key in ["models.default", "models.race.rimuru"] {
+        assert!(
+            c.holes()
+                .iter()
+                .any(|h| h.key == key && h.why.contains("names a backend")),
+            "{key}: {:?}",
+            c.holes()
+        );
+    }
+    assert_eq!(
+        c.tier_model(ModelTier::Fast),
+        "m",
+        "the human's one model beats the repository's tier"
+    );
+    assert_eq!(c.model_for("rimuru", Race::Rimuru, None), "m");
+    assert!(
+        !c.holes().iter().any(|h| h.key == "models.tier.strong"),
+        "a `:` naming no backend is an id"
+    );
+}
+
+/// One model for everything, or one per race, office or creature; every model goes through the
+/// backend the human named — OpenRouter or a vLLM gateway with its key — unless it names its own.
+#[test]
+fn models_go_through_the_humans_backend() {
+    let g = Ground::new("backends");
+    // The compiled default: Anthropic's API, its models by tier.
+    let c = g.load().unwrap();
+    let b = c.backend(&c.tier_model(ModelTier::Strong)).unwrap();
+    assert_eq!(
+        (b.provider_name.as_str(), b.provider.kind.as_str()),
+        ("anthropic", "anthropic")
+    );
+
+    g.global(
+        "[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\n\
+         key_env = \"OPENROUTER_API_KEY\"\n\
+         [providers.vllm]\nkind = \"openai\"\nbase_url = \"https://gateway.example/v1\"\n\
+         key_env = \"GATEWAY_API_KEY\"\n\
+         [models]\nprovider = \"openrouter\"\ndefault = \"anthropic/claude-sonnet-5.5\"\n\
+         [models.race]\ndark-elf = \"anthropic/claude-opus-5.5\"\n\
+         [models.office.orc]\njudge = \"vllm:qwen3-coder\"\n",
+    );
+    let c = g.load().unwrap();
+    // All in one model: every tier rides it.
+    for tier in [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast] {
+        assert_eq!(c.tier_model(tier), "anthropic/claude-sonnet-5.5");
+    }
+    assert_eq!(
+        c.model_for("rimuru", Race::Rimuru, None),
+        "anthropic/claude-sonnet-5.5"
+    );
+    // By race, then by office.
+    assert_eq!(
+        c.model_for("de-1", Race::DarkElf, None),
+        "anthropic/claude-opus-5.5"
+    );
+    // A race's model is a default, not a pin, so a router may still move it within its band.
+    assert_eq!(c.model_pinned("de-1", Race::DarkElf, None), None);
+    assert_eq!(
+        c.model_at(Race::DarkElf, ModelTier::Frontier),
+        "anthropic/claude-opus-5.5"
+    );
+    assert_eq!(
+        c.model_at(Race::DarkElf, ModelTier::Fast),
+        "anthropic/claude-sonnet-5.5"
+    );
+    // The decisions' fallback rides the same one model, never a compiled id the gateway lacks.
+    assert_eq!(c.decide().unwrap().llm, "anthropic/claude-sonnet-5.5");
+    // An empty id is no model.
+    assert!(c.backend("").is_err() && c.backend("vllm:").is_err());
+    let judge = c.model_for("orc-gate", Race::Orc, Some("melete"));
+    assert_eq!(judge, "vllm:qwen3-coder");
+    // Through the default backend, or the one a model names; a `:` that names no provider is
+    // part of the id.
+    let b = c.backend("anthropic/claude-sonnet-5.5").unwrap();
+    assert_eq!(b.provider_name, "openrouter");
+    assert_eq!(b.provider.key_env.as_deref(), Some("OPENROUTER_API_KEY"));
+    assert_eq!(b.model, "anthropic/claude-sonnet-5.5");
+    let b = c.backend(&judge).unwrap();
+    assert_eq!(
+        (b.provider_name.as_str(), b.model.as_str()),
+        ("vllm", "qwen3-coder")
+    );
+    assert_eq!(b.provider.base_url, "https://gateway.example/v1");
+    let b = c.backend("qwen3:32b").unwrap();
+    assert_eq!(
+        (b.provider_name.as_str(), b.model.as_str()),
+        ("openrouter", "qwen3:32b")
+    );
+
+    // A tier the human sets still beats the one model.
+    g.global(
+        "[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\n\
+         [models]\nprovider = \"openrouter\"\ndefault = \"m\"\n[models.tier]\nfast = \"small\"\n",
+    );
+    let c = g.load().unwrap();
+    assert_eq!(
+        (
+            c.tier_model(ModelTier::Fast).as_str(),
+            c.tier_model(ModelTier::Strong).as_str()
+        ),
+        ("small", "m")
+    );
+
+    // The backend must be a provider that holds conversations, and the human's to choose.
+    g.global("[models]\nprovider = \"nowhere\"\n");
+    assert!(g.load().unwrap_err().contains("no provider has that name"));
+    g.global(&format!("{CLASSIFIER}[models]\nprovider = \"jeff\"\n"));
+    assert!(g.load().unwrap_err().contains("a classifier"));
+    g.global("[models.race]\nwizard = \"m\"\n");
+    assert!(g.load().unwrap_err().contains("no race `wizard`"));
+    let g = Ground::new("backends-tracked");
+    g.global("[providers.vllm]\nkind = \"openai\"\nbase_url = \"https://gateway.example/v1\"\n");
+    g.tracked("[models]\nprovider = \"vllm\"\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.backend("m").unwrap().provider_name, "anthropic");
+    assert!(c.holes().iter().any(|h| h.key == "models.provider"));
 }
 
 #[test]

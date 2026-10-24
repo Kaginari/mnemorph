@@ -208,12 +208,15 @@ pub async fn route(
     }
     let b = band(race, office);
     let default = |reason: Reason, decision: Option<Decision>| Routed {
-        model: config.tier_model(b.1),
+        model: config.model_at(race, b.1),
         tier: Some(b.1),
         reason,
         decision,
     };
-    let Some(d) = decisions.filter(|d| d.route && b.0 != b.2) else {
+    // A band with no room — one tier, or every tier riding the same model — has nothing to decide,
+    // so no classifier is asked and nothing is spent.
+    let room = b.0 != b.2 && config.model_at(race, b.0) != config.model_at(race, b.2);
+    let Some(d) = decisions.filter(|d| d.route && room) else {
         return default(Reason::Off, None);
     };
     let budget = stop.map_or(SystemOne::policy().turn, |s| {
@@ -244,7 +247,7 @@ pub async fn route(
         eprintln!("mnemorph: the usage ledger could not be written: {e}");
     }
     let (tier, reason) = pick(&decision, d, b);
-    let model = config.tier_model(tier);
+    let model = config.model_at(race, tier);
     if model.is_empty() {
         return default(Reason::Unconfigured(tier), Some(decision));
     }

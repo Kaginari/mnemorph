@@ -435,8 +435,11 @@ fn the_bench_question_reads_the_tail_where_runners_print_their_summary() {
     assert!(ask.state.len() < 13_000, "{}", ask.state.len());
 }
 
-/// A config builds the run's decisions: off with `decide.bench = false`; the LLM through the run's
-/// own provider when no System One is named; the named one, with its key from the environment.
+const JEFF: &str = "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n";
+
+/// A config builds the run's decisions only when the human turned them on and named a
+/// classifier; then the classifier first, the LLM through the run's own provider as its fallback,
+/// and the classifier's key from the environment.
 #[test]
 fn decisions_are_built_from_the_humans_configuration() {
     let w = World::new("config");
@@ -450,35 +453,35 @@ fn decisions_are_built_from_the_humans_configuration() {
     let model: Arc<ScriptedModel> = Arc::new(ScriptedModel::new([]));
     let none = |_: &str| None;
 
-    let off = load("[decide]\nbench = false\n");
+    // Off by default; on without a classifier, still off — no LLM is asked in its place.
+    for text in ["", "[decide]\nenabled = true\nbench = true\nroute = true\n"] {
+        assert!(
+            decisions(&load(text), &world, model.clone(), none)
+                .unwrap()
+                .is_none(),
+            "{text}"
+        );
+    }
+    // A classifier named but the feature not turned on: off.
+    let named = format!("{JEFF}[decide]\nvia = \"jeff\"\nmodel = \"jeff-latest\"\n");
     assert!(
-        decisions(&off, &world, model.clone(), none)
+        decisions(&load(&named), &world, model.clone(), none)
             .unwrap()
             .is_none()
     );
-
+    // Turned on, with every point switched off: off.
+    let quiet = format!("{named}enabled = true\nbench = false\n");
+    assert!(
+        decisions(&load(&quiet), &world, model.clone(), none)
+            .unwrap()
+            .is_none()
+    );
     // Routing alone is a reason to build the decider; the bench stays off.
-    let route_only = decisions(
-        &load("[decide]\nroute = true\n"),
-        &world,
-        model.clone(),
-        none,
-    )
-    .unwrap()
-    .unwrap();
-    assert!(route_only.route && !route_only.bench);
-
-    // No System One named: nothing is asked unless the human turns the point on.
-    assert!(
-        decisions(&load(""), &world, model.clone(), none)
-            .unwrap()
-            .is_none()
-    );
-    let llm_only = load("[decide]\nbench = true\n");
-    let d = decisions(&llm_only, &world, model.clone(), none)
+    let route_only = format!("{named}enabled = true\nbench = false\nroute = true\n");
+    let d = decisions(&load(&route_only), &world, model.clone(), none)
         .unwrap()
         .unwrap();
-    assert!(d.decider.primary.is_none());
+    assert!(d.route && !d.bench);
     assert_eq!(d.decider.fallback.provider, "scripted");
     assert_eq!(d.decider.fallback.model, "claude-haiku-5-5");
     assert!(
@@ -489,7 +492,7 @@ fn decisions_are_built_from_the_humans_configuration() {
 
     let jeff = load(
         "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n\
-         [decide]\nvia = \"jeff\"\nmodel = \"jeff-latest\"\n",
+         [decide]\nenabled = true\nvia = \"jeff\"\nmodel = \"jeff-latest\"\n",
     );
     let d = decisions(&jeff, &world, model.clone(), none)
         .unwrap()
@@ -502,7 +505,7 @@ fn decisions_are_built_from_the_humans_configuration() {
 
     let jev = load(
         "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\n\
-         key_env = \"TYPESAFE_API_KEY\"\n[decide]\nvia = \"jev\"\nmodel = \"jev-latest\"\n",
+         key_env = \"TYPESAFE_API_KEY\"\n[decide]\nenabled = true\nvia = \"jev\"\nmodel = \"jev-latest\"\n",
     );
     let err = decisions(&jev, &world, model.clone(), none).err().unwrap();
     assert!(err.contains("TYPESAFE_API_KEY is not set"), "{err}");
