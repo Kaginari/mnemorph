@@ -428,13 +428,14 @@ pub fn llm_answers(ask: &Ask, response: &Response) -> Result<Vec<(String, Answer
         .map(|(name, q)| {
             let wrong = || Error::Decode(format!("the answer to `{name}` has the wrong shape"));
             let a = answers.get(name).ok_or_else(wrong)?;
-            let answer = match q {
-                Question::Noul { .. } => {
-                    let p = a.as_f64().ok_or_else(wrong)?.clamp(0.0, 1.0);
-                    Answer::normalised(q.labels(), vec![1.0 - p, p])
-                }
-                _ => Answer::from_map(q.labels(), a.as_object().ok_or_else(wrong)?)
-                    .ok_or_else(wrong)?,
+            let answer = if let Question::Noul { .. } = q {
+                let p = a.as_f64().ok_or_else(wrong)?.clamp(0.0, 1.0);
+                Answer::normalised(q.labels(), vec![1.0 - p, p])
+            } else {
+                let mut answer = Answer::from_map(q.labels(), a.as_object().ok_or_else(wrong)?)
+                    .ok_or_else(wrong)?;
+                answer.ordered = matches!(q, Question::Score { .. });
+                answer
             };
             Ok((name.clone(), answer))
         })

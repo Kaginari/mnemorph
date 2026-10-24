@@ -262,8 +262,9 @@ fn confidence_is_distance_from_a_coin_toss() {
     let a = |p: &[f64]| Answer {
         labels: (0..p.len()).map(|i| format!("l{i}")).collect(),
         probabilities: p.to_vec(),
+        ..Answer::default()
     };
-    // The reference adapter's own example: (0.82 − ½) / (1 − ½).
+    // Two options: (0.82 − ½) / (1 − ½).
     assert!((a(&[0.82, 0.18]).confidence() - 0.64).abs() < 1e-9);
     assert!(
         a(&[0.25; 4]).confidence().abs() < 1e-9,
@@ -545,12 +546,14 @@ fn an_answer_with_nothing_in_it_is_no_confidence_and_no_choice() {
     let empty = Answer {
         labels: vec![],
         probabilities: vec![],
+        ..Answer::default()
     };
     assert_eq!(empty.choice(), "");
     assert!(empty.confidence().abs() < 1e-9);
     let nan = Answer {
         labels: vec!["a".into(), "b".into()],
         probabilities: vec![f64::NAN, 1.0],
+        ..Answer::default()
     };
     assert!(
         nan.confidence().abs() < 1e-9,
@@ -618,4 +621,60 @@ async fn a_measured_decision_takes_the_providers_request_id() {
         .await
         .unwrap();
     assert_eq!(d.id, "req-9");
+}
+
+/// A score's confidence knows its levels are ordered (TypeSafe's definition): a split between the
+/// two ends is no confidence, a split between neighbours is some; the provider's own measure wins.
+#[test]
+fn a_score_is_surer_split_between_neighbours_than_between_ends() {
+    let score = |p: &[f64]| Answer {
+        labels: (0..p.len()).map(|i| format!("l{i}")).collect(),
+        probabilities: p.to_vec(),
+        ordered: true,
+        measured: None,
+    };
+    assert!(score(&[0.5, 0.0, 0.5]).confidence().abs() < 1e-9);
+    assert!((score(&[0.0, 0.5, 0.5]).confidence() - 0.25).abs() < 1e-9);
+    assert!((score(&[0.0, 1.0, 0.0]).confidence() - 1.0).abs() < 1e-9);
+    let sent = Answer {
+        measured: Some(0.7),
+        ..score(&[0.5, 0.0, 0.5])
+    };
+    assert!(
+        (sent.confidence() - 0.7).abs() < 1e-9,
+        "the provider's measure wins"
+    );
+    let bogus = Answer {
+        measured: Some(1.5),
+        ..score(&[0.0, 1.0, 0.0])
+    };
+    assert!(
+        (bogus.confidence() - 1.0).abs() < 1e-9,
+        "an impossible measure is ignored"
+    );
+}
+
+/// A state past the limit is refused before anything is sent: the decision point sends the part
+/// that decides, never a whole log to be paid for in full.
+#[tokio::test]
+async fn an_oversized_state_is_refused_before_it_is_sent() {
+    let t = Arc::new(Scripted::new([]));
+    let client = SystemOne::new(
+        t.clone(),
+        "http://127.0.0.1:8765",
+        None,
+        SystemOne::policy(),
+    );
+    let ask = Ask {
+        state: "x".repeat(mnemorph_provider::MAX_STATE_BYTES + 1),
+        questions: vec![(
+            "ok".into(),
+            Question::Noul {
+                instructions: "It passed.".into(),
+            },
+        )],
+    };
+    let err = client.decide("jeff", &ask).await.unwrap_err();
+    assert!(matches!(err, Error::Invalid(_)), "{err:?}");
+    assert_eq!(t.sent(), [] as [mnemorph_provider::HttpRequest; 0]);
 }
