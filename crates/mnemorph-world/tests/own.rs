@@ -379,3 +379,80 @@ fn a_greedy_creatures_soil_leaves_the_seats_the_queue_and_scratch() {
         }
     }
 }
+
+/// The family a reader worries about: claims nested three deep with alternating owners, a file
+/// claim inside another's directory, nested posts, a zone inside a post, a seat, scratch and the
+/// proving ground inside zones, a retired creature's old claims. Every soil agrees with `own`.
+#[test]
+fn nested_claims_every_soil_agrees_with_own() {
+    let w = World::new("nested");
+    w.doc(
+        "slime",
+        "a",
+        "# slime-a\n\n- **Race:** slime\n- **Territory:** src/ src/b/a/ .mnemorph/\n",
+    )
+    .doc(
+        "slime",
+        "b",
+        "# slime-b\n\n- **Race:** slime\n- **Territory:** src/b/ src/x.rs .github/scripts/\n",
+    )
+    .doc(
+        "kijin",
+        "out",
+        "# kijin-out\n\n- **Race:** kijin\n- **Post:** .github/ ./VERSION\n",
+    )
+    .doc(
+        "kijin",
+        "in",
+        "# kijin-in\n\n- **Race:** kijin\n- **Post:** .github/workflows/\n",
+    )
+    .doc("dark-elf", "d", "# dark-elf-d\n\n- **Race:** dark-elf\n")
+    .doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n")
+    .doc(
+        "slime",
+        "old",
+        "# slime-old\n\n- **Race:** slime\n- **Territory:** src/b/a/old/\n- **Retired:** yes\n",
+    );
+    let roster = Roster::load(&w.0);
+    assert!(roster.problems.is_empty(), "{:?}", roster.problems);
+    let paths = [
+        "src/y.rs",
+        "src/b/y.rs",
+        "src/b/a/y.rs",
+        "src/b/a/old/y.rs",
+        "src/x.rs",
+        "src/x.rs.bak",
+        ".github/ci.yml",
+        ".github/workflows/w.yml",
+        ".github/scripts/s.sh",
+        "VERSION",
+        "README.md",
+        ".mnemorph/notes.md",
+        ".mnemorph/slime/b/README.md",
+        ".mnemorph/slime/old/README.md",
+        ".mnemorph/tmp/slime-b/x",
+        ".mnemorph/tmp/ghost/x",
+        ".mnemorph/tmp/",
+        ".mnemorph/tmp/evolution/1/x",
+        ".mnemorph/dark-elf/witness/x",
+        ".mnemorph/dark-elf/d/README.md",
+        ".mnemorph/plan.md",
+        ".mnemorph/shared/q",
+        ".mnemorph/log.md",
+        ".mnemorph/law.md",
+        "src/b/",
+        ".mnemorph",
+    ];
+    for c in roster.living() {
+        let s = soil(&roster, &c.name).unwrap();
+        for p in paths {
+            let e = explain(&roster, p);
+            let writes = e.owner == Owner::Creature(c.name.clone()) && e.rule != Rule::Domain;
+            assert_eq!(s.admits(p), writes, "{} on {p}: {e:?}, soil {s:?}", c.name);
+        }
+    }
+    assert_eq!(
+        explain(&roster, ".mnemorph/tmp/").claim.as_deref(),
+        Some(".mnemorph/tmp/")
+    );
+}

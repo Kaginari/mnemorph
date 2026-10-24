@@ -42,6 +42,17 @@ fn owner_names_the_owner_the_rule_and_the_claim() {
         ".mnemorph/law.md\tthe human\tthe human's file .mnemorph/law.md"
     );
     assert_eq!(lines[2], "../outside\tnobody\toutside the world");
+    // A directory that exists is read as one, its `/` typed or not; the world's root is no claim.
+    let (_, out, _) = onto(&["onto", "owner", "crates/mnemorph-wire", "."], &repo);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(
+        lines[0],
+        "crates/mnemorph-wire\tslime-wire\tzone crates/mnemorph-wire/"
+    );
+    assert_eq!(lines[1], ".\tnobody\tthe world's root");
+    // The version answers first, wherever it stands.
+    let (ok, out, _) = onto(&["onto", "owner", "--version"], &repo);
+    assert!(ok && out.starts_with("mnemorphd "), "{out}");
     // From inside the world, a path is the human's: relative to where they stand.
     let (ok, out, _) = onto(
         &["onto", "owner", "src/lib.rs", "--world", "../.."],

@@ -93,8 +93,8 @@ The derived graph is never written back; docs are the truth. Asserted facts and 
 append-only event files, folded in $(\text{time}, \text{event id})$ order like
 [memory notes](08-memory.md#the-two-layers).
 
-**Inference.** Subclass and sub-bond closure, domain and range typing, inverses and the
-transitivity of `above`, applied until nothing new appears: the least fixed point
+**Inference.** Subclass and sub-bond closure, inverses and the transitivity of `above` —
+and, with the classes facts and worlds bring, domain and range typing — applied until nothing new appears: the least fixed point
 $\mathcal{G}^{*} = \bigcup_n R^n(\mathcal{G}_0)$. The rules only add triples and the set of
 possible triples is finite, so $\mathcal{G}^{*}$ is unique and reached in finitely many steps.
 It is rebuilt when the docs' fingerprint moves, before a dispatch, never on a model call. A
@@ -167,7 +167,7 @@ The order is the rule: a creature that claims `.mnemorph` itself does not swallo
 queue and scratch, because rules 1–3 are asked first. The gate's *right author*, the dispatch card
 and `mnemorph onto owner <path>` call this one function. The tool policy cannot: it sits below the
 world in the crate graph and checks soil as prefixes. The loop hands each body the soil `own`
-yields for it, as prefixes with exclusions (its territory minus the seats, queue and scratch the
+yields for it when it dispatches, as prefixes with exclusions (its territory minus the seats, queue and scratch the
 earlier rules give away), so the policy and the gate never disagree: the longest claim that
 covers a path decides, and on a tie the exclusion wins. A soil holds what `own` gives the body
 by every rule but a domain — an Orc's soil is its seat and scratch. Its exclusions are found by

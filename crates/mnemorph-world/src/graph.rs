@@ -126,10 +126,10 @@ fn close(mut t: BTreeSet<Triple>) -> BTreeSet<Triple> {
                 _ => {}
             }
             if matches!(b, Bond::Above | Bond::IsA) {
-                for (s2, b2, o2) in &t {
-                    if b2 == b && s2 == o {
-                        new.push((s.clone(), *b, o2.clone()));
-                    }
+                // The set is ordered by subject, then bond: `o b _` is one range, not a scan.
+                let from = (o.clone(), *b, String::new());
+                for (_, _, o2) in t.range(from..).take_while(|(s2, b2, _)| s2 == o && b2 == b) {
+                    new.push((s.clone(), *b, o2.clone()));
                 }
             }
         }

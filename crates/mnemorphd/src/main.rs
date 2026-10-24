@@ -38,6 +38,10 @@ fn main() -> ExitCode {
         print!("{HELP}");
         return ExitCode::SUCCESS;
     }
+    if all.iter().any(|a| a == "-V" || a == "--version") {
+        println!("mnemorphd {VERSION}");
+        return ExitCode::SUCCESS;
+    }
     if all.first().map(String::as_str) == Some("onto") {
         return onto(&all[1..]);
     }
@@ -128,13 +132,18 @@ fn onto(args: &[String]) -> ExitCode {
             |_| full.display().to_string(),
             |r| {
                 let r = r.to_string_lossy().into_owned();
-                if path.ends_with('/') {
+                // A directory is read as one, typed with its `/` or not.
+                if !r.is_empty() && (path.ends_with('/') || full.is_dir()) {
                     format!("{r}/")
                 } else {
                     r
                 }
             },
         );
+        if rel.is_empty() {
+            let _ = writeln!(out, "{path}\tnobody\tthe world's root");
+            continue;
+        }
         let e = explain(&roster, &rel);
         let owner = match &e.owner {
             Owner::Creature(name) => name.clone(),

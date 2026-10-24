@@ -1724,3 +1724,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a soil's exclusions are found by asking `own` of every claim inside the body's,
   never by restating the rules. The two cannot drift: a test walks every tracked file and checks
   both give the same answer.
+
+---
+
+### [2026-10-24T22:16:47+02:00] rimuru — M7 graph and soil: the review's fixes
+- **Task:** fix what the Fable review of the graph-and-soil rung found (verdict: merge after
+  fixes).
+- **Files:**
+  - mnemorphd main.rs:
+    - an existing directory is read as one, with or without its `/`;
+    - the world's root is named as such;
+    - `--version` answers first;
+  - world:
+    - soil.rs — builds its anchors from own.rs's constants;
+    - own.rs — the empty scratch claim;
+    - graph.rs — the closure joins by range instead of a full scan;
+  - tests: the review's nested fixture, lifted; onto's directory, root and version cases;
+  - docs/09.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The previous entry said this rung finished rungs 1 and 2. It delivers their functions only.
+    The rebuild on the docs' fingerprint, the gate's *right author* and handing `soil` to the
+    tool policy all wait for the dispatch rung that calls them.
+  - The anchor list restated `own`'s soils. Only the filter asked `own`, so a new harness prefix
+    could have been missed. Both now come from one list.

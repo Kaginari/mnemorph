@@ -20,7 +20,7 @@ pub enum Owner {
 }
 
 /// Harness soil, under `.mnemorph/`.
-const HARNESS: &[&str] = &[
+pub(crate) const HARNESS: &[&str] = &[
     ".mnemorph/shared/",
     ".mnemorph/instruments/",
     ".mnemorph/memory/",
@@ -30,17 +30,17 @@ const HARNESS: &[&str] = &[
 ];
 
 /// The human's files.
-const HUMAN: &[&str] = &[
+pub(crate) const HUMAN: &[&str] = &[
     ".mnemorph/law.md",
     ".mnemorph/config.toml",
     ".mnemorph/config.local.toml",
 ];
 
 /// The proving ground: one ground, one keeper.
-const PROVING_GROUND: &str = ".mnemorph/dark-elf/";
+pub(crate) const PROVING_GROUND: &str = ".mnemorph/dark-elf/";
 
 /// The throne's files: the plan and the dimension manifest.
-const THRONE: &[&str] = &[".mnemorph/plan.md", ".mnemorph/dimension.toml"];
+pub(crate) const THRONE: &[&str] = &[".mnemorph/plan.md", ".mnemorph/dimension.toml"];
 
 /// The compiled zone that holds the workspace: root files and `tools/`.
 pub const WORKSPACE: &str = "slime-workspace";
@@ -168,11 +168,12 @@ pub fn explain(roster: &Roster, path: &str) -> Ownership {
     if let Some(rest) = path.strip_prefix(".mnemorph/tmp/") {
         let body = rest.split('/').next().unwrap_or_default();
         let owner = living(roster, body);
-        return found(
-            owner,
-            Rule::Scratch,
-            Some(&format!(".mnemorph/tmp/{body}/")),
-        );
+        let nest = if body.is_empty() {
+            ".mnemorph/tmp/".to_owned()
+        } else {
+            format!(".mnemorph/tmp/{body}/")
+        };
+        return found(owner, Rule::Scratch, Some(&nest));
     }
     if let Some(c) = roster
         .living()

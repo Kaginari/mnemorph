@@ -5,7 +5,7 @@
 use mnemorph_races::Race;
 
 use crate::doc::covers;
-use crate::own::{Owner, Rule, WORKSPACE, explain};
+use crate::own::{HARNESS, HUMAN, Owner, PROVING_GROUND, Rule, THRONE, WORKSPACE, explain};
 use crate::roster::Roster;
 
 /// What a body may write.
@@ -53,36 +53,25 @@ pub fn soil(roster: &Roster, name: &str) -> Option<Soil> {
         _ => {}
     }
     // The compiled soils this creature holds: asked of `own`, so the two never disagree.
-    for compiled in [
-        ".mnemorph/plan.md",
-        ".mnemorph/dimension.toml",
-        ".mnemorph/dark-elf/",
-        "tools/",
-    ] {
+    for compiled in THRONE.iter().chain(&[PROVING_GROUND, "tools/"]) {
         if held(roster, name, compiled) {
-            write.push(compiled.to_owned());
+            write.push((*compiled).to_owned());
         }
     }
     let root_files = name == WORKSPACE;
     // Every claim in the world that ranks before this creature's, inside its own claims.
-    let mut anchors: Vec<String> = [
-        ".mnemorph/log.md",
-        ".mnemorph/shared/",
-        ".mnemorph/instruments/",
-        ".mnemorph/memory/",
-        ".mnemorph/ontology/",
-        ".mnemorph/index/",
-        ".mnemorph/tmp/",
-        ".mnemorph/law.md",
-        ".mnemorph/config.toml",
-        ".mnemorph/config.local.toml",
-        ".mnemorph/plan.md",
-        ".mnemorph/dimension.toml",
-        ".mnemorph/dark-elf/",
-        "tools/",
-    ]
-    .map(str::to_owned)
-    .to_vec();
+    let mut anchors: Vec<String> = HARNESS
+        .iter()
+        .chain(HUMAN)
+        .chain(THRONE)
+        .chain(&[
+            ".mnemorph/log.md",
+            ".mnemorph/tmp/",
+            PROVING_GROUND,
+            "tools/",
+        ])
+        .map(|a| (*a).to_owned())
+        .collect();
     for other in roster.living() {
         anchors.push(other.seat.clone());
         anchors.push(format!(".mnemorph/tmp/{}/", other.name));
