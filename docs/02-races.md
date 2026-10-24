@@ -169,7 +169,7 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
-zone covers falls to the nearest zone above it, else it is reported as unowned soil and Rimuru must route its birth.
+Slime's zone covers falls to the Orc whose domain covers it, else it is reported as unowned soil and Rimuru must route its birth.
 The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
 
 ---

@@ -202,7 +202,7 @@ build Mnemorph in solo mode.
 ### M7 — The world · L
 
 - Creatures as data, territory and ontology (who owns a path), dispatch with every rule of the
-  flowchart, Courts with fresh contexts, the return path, the end gate (all six checks), the
+  flowchart, Courts with fresh contexts, the return path, the end gate (all its checks), the
   append-only `log.md` writer, the council (its keys, forced escalation after three warrants) and
   relief (split by prefixes or by tree, retire, `relief` rows); self-heal: the roster rebuilt from
   the docs' fingerprint, the clock-death memo, one live court per seat, `housekeep --heal`; the
@@ -212,21 +212,23 @@ build Mnemorph in solo mode.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
   revisioned snapshots, the rank law, relay-hold, the `queue` tool, `merge=union`.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
-  1. the graph derived from the docs' Territory, chain and Minds fields; inference to its fixed
-     point; the shapes; rebuilt on the docs' fingerprint;
+  1. the graph derived from the docs' Territory, Domain, chain and Minds fields, and inference to
+     its fixed point, rebuilt on the docs' fingerprint;
   2. ownership as one function, called by the gate, the policy, the dispatch card and
      `onto owner`;
-  3. findings with codes and severities; the gate blocking on critical and high in the landing's
-     territory;
-  4. territory facts as events — `by`, source, counters, settles — and the `contested-fact`
-     finding; `@ONTO` showing both sides;
+  3. the shapes as findings with codes and severities; *right author* failing on critical and
+     high ones that touch the landing;
+  4. territory facts as events — `by`, source, support, counter, settle — with their status and
+     the `contested-fact` finding; `@ONTO` showing both sides;
   5. relation sightings, the named-twice proposal with its synonym check and expiry, and
      `onto check --dimension`.
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
-gate; every refusal names its lawful route; an ontology fixture with an overlap, a loop in the
-chain, a contested fact, one relation sighted twice and one dimension obstruction reports each
-with its code and severity, and the gate blocks only the critical and high ones.
+gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,
+the queue or scratch; an ontology fixture with an overlap, a loop in the chain, a contested fact
+and one dimension obstruction reports each with its code and severity, and the gate blocks only
+the critical and high ones; one relation sighted twice by two bodies produces exactly one manifest
+diff proposal and writes nothing.
 
 ### M8 — Memory and toolbox · L
 

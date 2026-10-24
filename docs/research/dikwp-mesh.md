@@ -32,7 +32,7 @@ flowchart LR
     end
     subgraph onto["Mnemorph's ontology — one answer where it must"]
       OWN["ownership<br/>exactly one owner"]
-      FACT["facts<br/>by · source · stance"]
+      FACT["facts<br/>by · source · support · counter"]
       REL["relations<br/>between worlds"]
     end
     OB -->|"contested-fact finding"| FACT
@@ -140,9 +140,10 @@ $$
 | $D \to W$ (salience-evaluate) | 0.511 | 0.420 | 0.350 | 0.550 |
 | $D \to I \to W$ (differentiate, consequence-map) | 0.644 | 0.454 | 0.328 | 0.769 |
 
-The longer path loses slightly more and is less reversible, but generates far more. Because the
-cost is a sum, the router always prefers the short path unless a purpose preference pays for the
-detour — a design choice worth knowing before reusing it.
+The longer path loses slightly more and is less reversible, but generates far more, and here the
+short path wins on cost. A detour wins only when the direct operator is itself costly: Data to
+Purpose costs 0.638 directly (purpose-infer) and 0.580 through Information (differentiate,
+question-form). The cost never rewards generativity, which is worth knowing before reusing it.
 
 ### 3. Alignment between observers [code]
 
@@ -207,10 +208,13 @@ $$
 Over all alignment edges $\mathcal{E}$ (similarity $\ge 0.10$):
 
 $$
-\mathrm{obs} = \min\!\Big(1,\ \frac{\sum_{e \in \mathcal{E}} \big(1 - \mathrm{comp}(e)\big) + 0.25\,|\text{conflicts}(e)|}{1.25\,|\mathcal{E}|}\Big)
+\mathrm{obs} = \min\!\Big(1,\ \frac{\sum_{e \in \mathcal{E}} \big[(1 - \mathrm{comp}(e)) + 0.25\,|\text{conflicts}(e)|\big]}{1.25\,|\mathcal{E}|}\Big), \qquad \mathrm{obs} = 1 \text{ if } \mathcal{E} = \emptyset
 $$
 
-and a partial global section exists iff some tag is shared and $\mathrm{obs} < 0.72$.
+and a partial global section exists iff some tag is shared and $\mathrm{obs} < 0.72$. The 0.10
+floor filters nothing: two atoms of different observers with no shared tag still score at least
+$0.12 \cdot 0.55 + 0.15 \cdot 0.65 = 0.164$, and any pair sharing a tag is admitted regardless, so
+$\mathcal{E}$ is every cross-observer pair.
 
 Note the threshold's meaning: $c \le 0.35$ means one dissenter among three still glues
 ($c = 1/3$); two against two never does ($c = 1/2$). That is a majority rule with a tolerance,
@@ -254,7 +258,8 @@ rollback condition.
 The audit reads a graph over the five types and emits coded findings with severities
 (critical 1.0, high 0.7, medium 0.4, low 0.2): `LINEAR_PIPELINE`, `NO_FEEDBACK_CYCLES`,
 `POOR_TRANSFORMATION_COVERAGE` (15 or more of 25 pairs missing), `PRIVILEGED_TYPE` (PageRank share
-$> 0.55$), `PURPOSE_MONARCHY`, `SINGLE_OBSERVER_DEFINITION`, `PURPOSE_CANNOT_BE_REVISED`. It then
+$> 0.55$), `PURPOSE_MONARCHY`, `SINGLE_OBSERVER_DEFINITION`, `PURPOSE_CANNOT_GENERATE_OTHER_TYPES`,
+`PURPOSE_CANNOT_BE_REVISED` and `PURPOSE_REVISION_BOTTLENECK`. It then
 sums them into one score, $\min(1, \sum w / 4)$, with bands at 0.30 and 0.65.
 
 ### 8. The ontology's own mathematics
@@ -268,7 +273,7 @@ Mnemorph's ontology inherits isekai's: a set of triples, rules and shapes.
 - **Shapes** are constraints checked on $\mathcal{G}^{*}$: a Slime has exactly one `truth` edge;
   territories are disjoint; every `above` target has a doc.
 - **Ownership** is a total function $\mathrm{own} : \text{Path} \to \text{Creature} \cup
-  \{\bot\}$, a lexicographic rule over soil kinds and prefix length (see
+  \{\bot\}$, a lexicographic rule over soil kinds and prefix length, ties broken by creature name (see
   [the ontology](../09-ontology.md#ownership-one-function)). It must be deterministic: two
   answers would let two bodies write one file, or none judge it.
 - **`above` must be acyclic** — a tree from Slime to the throne. MESH's audit treats a missing
@@ -278,8 +283,8 @@ Mnemorph's ontology inherits isekai's: a set of triples, rules and shapes.
 
 | MESH idea | Where in MESH | In Mnemorph |
 |---|---|---|
-| Claims indexed by observer, with stance and source | `SemanticAtom`, $\kappa_a$ | territory facts carry `by`, `source`, a stance per key ([ontology](../09-ontology.md#facts-who-said-what)) |
-| Contradictions kept as obstructions, decided by the counting rule | `gluing.py` | the `contested-fact` finding: $p, q > 0$ from distinct creatures and $c > 0.35$; recall shows both sides |
+| Claims indexed by observer, with stance and source | `SemanticAtom`, $\kappa_a$ | territory facts carry `by` and `source`, and creatures support or counter them ([ontology](../09-ontology.md#facts-who-said-what)) |
+| Contradictions kept as obstructions, decided by the counting rule | `gluing.py` | the `contested-fact` finding, with the 0.35 tolerance measured on the losing side; the projection shows both sides |
 | Local sections glued on overlaps | §4 | worlds of a dimension as local sections: a relation two worlds state differently is an obstruction reported to Rimuru |
 | The install protocol for a new axis | formal model §6 | learning a relation: a sightings ledger, named twice, a no-synonym check, the human's yes, a rollback by expiry |
 | Coded findings with severities | `audit.py` | every `onto check` finding has a code and a severity; the gate blocks on critical and high in the landing's territory |

@@ -994,8 +994,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   docs/04-communication.md (`@U territory <about>` and its counter form), docs/05-architecture.md,
   docs/08-memory.md, docs/lessons.md (one ownership function), docs/README.md, site sidebar,
   tools/check-diagrams.mjs (now reads docs/ recursively).
-- **Gate:** n/a. Instruments: diagram check 21 parse (18 before the check read research/); site
-  build green; 0 MathJax errors on pages 8, 9 and the research page.
+- **Gate:** n/a. A fresh Fable review: 17 findings, all fixed here (rule 6 was rule 5 again —
+  now the Orc's domain, as guards resolves it; fact statuses rebuilt so more counters never mean
+  less contested; a synonym check that can fire; obstruction defined on inverse-read sets; the
+  ontology rule placed inside *right author*; seat, tie and retirement rules; a false router claim
+  and a misplaced bracket in the research math). Instruments: diagram check 21 parse (18 before
+  the check read research/); site build green; 0 MathJax errors on pages 8, 9 and the research
+  page.
 - **Result:** in review as a pull request, stacked on the memory one.
 - **Learned:**
   - DIKWP-MESH cannot own ownership: it keeps many answers on purpose, and ownership must have
