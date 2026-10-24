@@ -16,8 +16,8 @@ pub struct Left {
 }
 
 /// The budget left under `caps` at `now` for `session`, given what `rows` already spent and the
-/// weight assumed for lines the ledger cannot read (`unseen`, against every cap); `None` when the
-/// human set no cap.
+/// weight assumed for lines the ledger cannot read (`unseen`, against every cap, as far as its
+/// hidden reserve); `None` when the human set no cap.
 #[must_use]
 pub fn left(
     caps: Caps,
@@ -30,7 +30,7 @@ pub fn left(
     let spent = |pick: &dyn Fn(&UsageRow) -> bool| -> u64 {
         rows.iter()
             .filter(|r| pick(r))
-            .fold(unseen, |sum, r| sum.saturating_add(r.wt))
+            .fold(0, |sum, r| sum.saturating_add(r.wt))
     };
     let month = spent(&|r| {
         let d = r.ts.day();
@@ -46,7 +46,7 @@ pub fn left(
     .into_iter()
     .filter_map(|(cap, limit, used)| {
         limit.map(|of| Left {
-            wt: of.saturating_sub(used),
+            wt: of.saturating_sub(used.saturating_add(mnemorph_ledger::unseen_against(unseen, of))),
             cap,
         })
     })

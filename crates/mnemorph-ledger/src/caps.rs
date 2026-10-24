@@ -59,9 +59,22 @@ pub fn unseen_wt(rows: &[UsageRow], lines: usize) -> u64 {
     each.saturating_mul(u64::try_from(lines).unwrap_or(u64::MAX))
 }
 
+/// The share of every cap held back, out of sight, for spend the ledger cannot read.
+pub const UNSEEN_RESERVE_PCT: u64 = 15;
+
+/// What `unseen` weighs against a cap of `of`: never more than [`UNSEEN_RESERVE_PCT`] of it, so
+/// a line the ledger cannot read is counted high but never stops a session by itself.
+#[must_use]
+pub fn unseen_against(unseen: u64, of: u64) -> u64 {
+    let reserve =
+        u64::try_from(u128::from(of) * u128::from(UNSEEN_RESERVE_PCT) / 100).unwrap_or(of);
+    unseen.min(reserve)
+}
+
 /// Reads the caps against the journal's rows at `now`, for `session`. `unseen` — the weight
 /// assumed for lines that cannot be read ([`unseen_wt`]) — counts against every cap, since a
-/// line that cannot be read cannot say its day or its session.
+/// line that cannot be read cannot say its day or its session, and against each only as far as
+/// its hidden reserve ([`unseen_against`]).
 #[must_use]
 pub fn check_caps(
     rows: &[UsageRow],
@@ -74,7 +87,7 @@ pub fn check_caps(
     let used = |pick: &dyn Fn(&UsageRow) -> bool| {
         rows.iter()
             .filter(|r| pick(r))
-            .fold(unseen, |sum, r| sum.saturating_add(r.wt))
+            .fold(0_u64, |sum, r| sum.saturating_add(r.wt))
     };
     let readings = [
         (
@@ -91,6 +104,7 @@ pub fn check_caps(
     let mut worst = CapReading::Ok;
     for (cap, limit, used) in readings {
         let Some(of) = limit else { continue };
+        let used = used.saturating_add(unseen_against(unseen, of));
         if used >= of {
             return CapReading::Stop { cap, used, of };
         }
@@ -115,7 +129,7 @@ mod tests {
         assert_eq!(unseen_wt(&[row(NOW, "s", 50_000)], 2), 100_000);
         assert!(matches!(
             check_caps(
-                &[],
+                &[row(NOW, "s", 17_000)],
                 "s",
                 Timestamp(NOW),
                 Caps {
@@ -124,24 +138,38 @@ mod tests {
                 },
                 unseen_wt(&[], 1),
             ),
-            CapReading::Stop { cap: "day", .. }
+            CapReading::Stop {
+                cap: "day",
+                used: 20_000,
+                ..
+            }
         ));
+        // Against a cap, unseen spend weighs at most the hidden reserve: alone, it never stops.
         let caps = Caps {
-            session: Some(24_000),
+            session: Some(100_000),
             ..Caps::default()
         };
+        assert_eq!(unseen_against(unseen_wt(&[], 1), 100_000), 15_000);
+        assert_eq!(unseen_against(1_000, 100_000), 1_000);
         assert_eq!(
-            check_caps(&[], "s", Timestamp(NOW), caps, unseen_wt(&[], 1)),
+            check_caps(&[], "s", Timestamp(NOW), caps, unseen_wt(&[], 9)),
+            CapReading::Ok
+        );
+        // With real spend, the reserve is part of what is used: 70 000 + 15 000 passes 80%.
+        assert_eq!(
+            check_caps(
+                &[row(NOW, "s", 70_000)],
+                "s",
+                Timestamp(NOW),
+                caps,
+                unseen_wt(&[], 1)
+            ),
             CapReading::Warn {
                 cap: "session",
-                used: 20_000,
-                of: 24_000
+                used: 85_000,
+                of: 100_000
             }
         );
-        assert!(matches!(
-            check_caps(&[], "s", Timestamp(NOW), caps, unseen_wt(&[], 2)),
-            CapReading::Stop { .. }
-        ));
     }
     use crate::Usage;
 

@@ -982,9 +982,10 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
     )
     .await;
     assert!(matches!(e, Ending::Answered(_)), "{e:?}");
-    // Under a day cap smaller than what the torn line is taken to have cost, it stops.
+    // Under a cap smaller than what the torn line is taken to have cost, it weighs only the
+    // cap's hidden reserve, so by itself it stops nothing.
     std::fs::write(&path, "{\"torn\n").unwrap();
-    let m = Arc::new(ScriptedModel::new([answer("never")]));
+    let m = Arc::new(ScriptedModel::new([answer("small cap")]));
     let e = ask(
         &mut w.run(m.clone(), limits()).with_caps(mnemorph_ledger::Caps {
             day: Some(mnemorph_ledger::UNSEEN_FLOOR_WT),
@@ -993,11 +994,8 @@ async fn a_cap_warns_at_eighty_percent_and_an_unreadable_ledger_stops() {
         "go",
     )
     .await;
-    assert!(
-        matches!(&e, Ending::Checkpoint { why, .. } if why.contains("the day cap is spent")),
-        "{e:?}"
-    );
-    assert_eq!(m.requests(), [] as [mnemorph_provider::Request; 0]);
+    assert!(matches!(e, Ending::Answered(_)), "{e:?}");
+    assert_eq!(m.requests().len(), 1);
 }
 
 /// A line sent while the body works reaches it after its next tool step, marked as the human's.
