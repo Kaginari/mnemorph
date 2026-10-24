@@ -2,6 +2,7 @@
 //! answers, or stops honestly at a meter or an instrument.
 
 pub mod beats;
+pub mod compact;
 pub mod gate;
 pub mod model;
 pub mod run;

@@ -106,7 +106,7 @@ Before every model call the loop reads four meters from the core, never from the
 |---|---|---|
 | steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40) | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
-| context | stress at 90% of the model's window | checkpoint (compaction drain arrives with long runs, M5b) |
+| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
@@ -118,6 +118,14 @@ note the loop added, the ending. Resume rebuilds the conversation from it and co
 already taken. A tool call the journal shows no result for may not have run: it is answered
 with an error saying so, and the body asks again if it still needs it. Each answered model call
 also writes a priced row to the usage ledger, and the cost meter reads that sum.
+
+**Replay compaction** is a pure function over a copy of the conversation: old tool outputs fold
+to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
+it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every
+small result and the last four exchanges stay whole. It folds in one batch when the context
+crosses 60% of the stress line, not a little each turn, so the cached prefix holds between
+folds. The journal is never touched: compaction shapes only what is sent. A 40-step run whose
+history would be 150 KB sends at most about 53 KB a turn.
 
 **A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The

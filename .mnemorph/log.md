@@ -895,3 +895,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** no thread rework was needed: bash already polled its child every 10 ms, so the
   same atomic the interface fires on Esc, read in that poll, is the whole mechanism.
+
+---
+
+### [2026-10-24T10:30:37+02:00] rimuru — M5b: replay compaction and the absolute stress line
+- **Task:** long runs stop re-sending their history; stress becomes an absolute, configurable
+  token line with its acts.
+- **Files:** crates/mnemorph-loop/src/compact.rs (`fold`, `fold_point`), src/run.rs
+  (`stress_tokens`; `ease_context`: fold in one batch at 60% of the line, tell the body to write
+  down what is not durable at 75%, checkpoint at the line), mnemorph-config
+  (`stress.context_tokens`), tests/compact.rs (the exit run; what folding keeps),
+  docs/03-loop.md.
+- **Gate:** n/a. Instruments: a 40-step run whose model reports what it was sent: 41 requests,
+  the largest 53 KB against an 80 KB line (unfolded, the history would be ~150 KB); finished
+  instead of checkpointing. `just check` (237).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - Folding a little each turn would move the cached prefix every turn and cost more than it
+    saves; one batch at a threshold keeps the prefix still between folds.
+  - The exit run first ended in `stall: actBudget` — forty turns that only read are the thrash
+    the guard exists for. A real long run lands work as it goes; the script now does too.
+  - The fresh-body act needs dispatch (M7); until then the line's act is to tell the human.

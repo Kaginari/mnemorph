@@ -12,6 +12,7 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
+use crate::compact::{fold, fold_point};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
 use crate::sequence::validate;
@@ -37,8 +38,11 @@ pub struct Limits {
     pub steps: u32,
     /// Wall clock.
     pub deadline: Duration,
-    /// The model's context window, in tokens; the run stops at 90% of it.
+    /// The model's context window, in tokens.
     pub window: u64,
+    /// The context, in tokens, at which the run stops: absolute, so it means the same whatever
+    /// the model; never past 90% of the window.
+    pub stress_tokens: u64,
     /// The most a turn may write.
     pub max_tokens: u32,
     /// The carved budget, in weighted tokens, if any.
@@ -59,6 +63,7 @@ impl Limits {
             steps,
             deadline: Duration::from_hours(1),
             window: 200_000,
+            stress_tokens: STRESS_TOKENS,
             max_tokens: 8192,
             budget_wt: None,
         }
@@ -147,8 +152,14 @@ enum Stop {
 
 /// The tokens a clock death's salvage turn may write.
 pub const SALVAGE_TOKENS: u32 = 4096;
-/// The share of context at which the run stops (percent).
+/// The share of the window the stress line may never pass (percent).
 pub const CONTEXT_STRESS_PCT: u64 = 90;
+/// The stress line, in tokens, by default.
+pub const STRESS_TOKENS: u64 = 150_000;
+/// The share of the stress line at which the body is told to write down what is not durable.
+pub const NOTICE_PCT: u64 = 75;
+/// The share of the stress line at which old tool outputs fold.
+pub const COMPACT_PCT: u64 = 60;
 
 /// One body's run.
 pub struct Run {
@@ -171,6 +182,8 @@ pub struct Run {
     gate: Option<EndGate>,
     before: Option<Tree>,
     interrupt: Arc<Interrupt>,
+    folded_upto: usize,
+    noticed: bool,
 }
 
 /// What a run needs that is not the body itself.
@@ -216,6 +229,8 @@ impl Run {
             gate: None,
             before: None,
             interrupt,
+            folded_upto: 0,
+            noticed: false,
         }
     }
 
@@ -317,7 +332,7 @@ impl Run {
                 cache: true,
             }],
             tools,
-            messages: self.messages.clone(),
+            messages: fold(&self.messages, self.folded_upto),
             max_tokens,
             effort: None,
         }
@@ -342,6 +357,7 @@ impl Run {
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
         self.stress = Stress::default();
+        self.noticed = false;
         // Only an Esc fired during this ask counts.
         self.interrupt.take();
         let mut gate_retried = false;
@@ -361,6 +377,7 @@ impl Run {
                     "the conversation is malformed: {e}"
                 )));
             }
+            self.ease_context();
             let request = self.request(self.limits.max_tokens);
             let left = self.limits.deadline.saturating_sub(self.started.elapsed());
             let interrupt = Arc::clone(&self.interrupt);
@@ -482,6 +499,33 @@ impl Run {
         None
     }
 
+    /// The stress line: the configured tokens, never past 90% of the window.
+    fn stress_line(&self) -> u64 {
+        self.limits
+            .stress_tokens
+            .min(self.limits.window * CONTEXT_STRESS_PCT / 100)
+    }
+
+    /// Before a request, as the context fills: fold old tool outputs in one batch (so the cached
+    /// prefix holds between folds), and once per ask tell the body to write down what is not
+    /// durable while there is room.
+    fn ease_context(&mut self) {
+        let line = self.stress_line();
+        if self.last_occupancy * 100 >= line * COMPACT_PCT {
+            let point = fold_point(&self.messages);
+            if point > self.folded_upto {
+                self.folded_upto = point;
+                self.record(&Beat::Warning {
+                    text: format!("compacted: tool outputs before message {point} are sent folded"),
+                });
+            }
+        }
+        if !self.noticed && self.last_occupancy * 100 >= line * NOTICE_PCT {
+            self.noticed = true;
+            self.nudge("[context] The context is filling. Write down now what is not durable — decisions, findings, what is left — so it survives a fresh start.");
+        }
+    }
+
     /// The meters, before a model call: a reason to stop, or none.
     fn perceive(&mut self) -> Option<Stop> {
         let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
@@ -491,10 +535,11 @@ impl Run {
         if self.started.elapsed() >= self.limits.deadline {
             return Some(Stop::Salvage("clock: the deadline passed between turns"));
         }
-        if self.last_occupancy * 100 >= self.limits.window * CONTEXT_STRESS_PCT {
+        let line = self.stress_line();
+        if self.last_occupancy >= line {
             return checkpoint(format!(
-                "context: {} of {} tokens",
-                self.last_occupancy, self.limits.window
+                "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
+                self.last_occupancy
             ));
         }
         if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {

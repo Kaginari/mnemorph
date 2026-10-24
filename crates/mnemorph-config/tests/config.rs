@@ -374,3 +374,11 @@ fn the_attic_limits_default_and_can_be_set_anywhere() {
         "a tighter attic is not a looser gate"
     );
 }
+
+#[test]
+fn the_context_stress_line_defaults_and_can_be_set() {
+    let g = Ground::new("stress-line");
+    assert_eq!(g.load().unwrap().context_stress_tokens(), 150_000);
+    g.local("[stress]\ncontext_tokens = 90000\n");
+    assert_eq!(g.load().unwrap().context_stress_tokens(), 90_000);
+}
