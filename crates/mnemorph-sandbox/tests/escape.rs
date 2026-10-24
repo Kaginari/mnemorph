@@ -285,7 +285,7 @@ fn the_home_is_closed_beyond_the_toolchains() {
     assert!(!ok && !out.contains("dear diary"), "{out}");
 }
 
-/// Through LaunchServices a command could start an application outside the sandbox.
+/// Through `LaunchServices` a command could start an application outside the sandbox.
 #[cfg(target_os = "macos")]
 #[test]
 fn no_application_is_launched_from_inside() {
