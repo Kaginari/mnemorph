@@ -1,5 +1,6 @@
 //! The tools: read, write, edit, glob, grep, bash, git; the shell classifier; secret injection.
 
+mod beneath;
 pub mod classify;
 pub mod files;
 pub mod gate;

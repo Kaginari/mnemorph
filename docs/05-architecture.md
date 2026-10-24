@@ -196,6 +196,11 @@ flowchart LR
   them; once its process group is dead, every change is put back and the body is told. The
   file tools refuse those paths outright. `.mnemorph/shared/` (the work queue), `tmp/` and
   `intel/` stay writable; a repository the command itself creates is its own.
+- **The file tools** run in the harness, not the sandbox, so they guard their own opens: a path
+  is resolved and checked inside the world (and the soil, for writes), then opened again one
+  component at a time from the world's root following no symlink, and written through a
+  temporary sibling renamed inside the same directory handle. A directory swapped for a symlink
+  between the check and the open fails the open instead of leading out.
 - **The guard's rules have names** (`in-place-edit`, `secret-store`, `credential`,
   `not-literal`, `remote-code`, `unreadable`, …). The human's configuration may turn a rule into
   a question — the command then waits on the gate with the class it would have had — except
