@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -115,6 +115,7 @@ const daemon = resolve(__dirname, '../../../target/debug/mnemorphd');
 let dir: string | undefined;
 afterEach(() => {
   if (dir) rmSync(dir, { recursive: true, force: true });
+  dir = undefined;
 });
 
 test.runIf(existsSync(daemon))('speaks to the real mnemorphd over stdio', async () => {
@@ -136,4 +137,42 @@ test.runIf(existsSync(daemon))('speaks to the real mnemorphd over stdio', async 
   expect(hello.model).toBe('m');
   expect(hello.provider).toBe('local');
   await c.shutdown();
+  // After shutdown nothing is written: a request is refused, never a crash.
+  await expect(c.prompt('after')).rejects.toThrow('shut down');
+});
+
+/** A stand-in core: a shell script given as the command. */
+function core(name: string, script: string): string {
+  dir ??= mkdtempSync(join(tmpdir(), 'mnemorph-sdk-'));
+  const path = join(dir, name);
+  writeFileSync(path, `#!/bin/sh\n${script}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
+test('the last line a core writes before it exits is never lost', async () => {
+  const quick = core(
+    'quick',
+    `read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocol":1,"session":"s"}}'`,
+  );
+  for (let i = 0; i < 50; i++) {
+    const c = new Client(stdio({ command: quick }));
+    await expect(c.initialize({ name: 'quick' })).resolves.toMatchObject({ protocol: 1 });
+  }
+});
+
+test('a core whose input is gone fails the request, never the host', async () => {
+  const crashes: unknown[] = [];
+  const count = (e: unknown) => crashes.push(e);
+  process.on('uncaughtException', count);
+  try {
+    const deaf = core('deaf', 'exec 0<&-; sleep 1');
+    const c = new Client(stdio({ command: deaf }));
+    await new Promise((r) => setTimeout(r, 100));
+    await expect(c.prompt('hello')).rejects.toThrow();
+    await new Promise((r) => setTimeout(r, 100));
+  } finally {
+    process.off('uncaughtException', count);
+  }
+  expect(crashes).toEqual([]);
 });

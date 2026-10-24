@@ -50,7 +50,10 @@ export function stdio(
     for (const c of closers) c(why);
   };
   child.on('error', (e: Error) => close(`mnemorphd could not start: ${e.message}`));
-  child.on('exit', (code: number | null, signal: NodeJS.Signals | null) =>
+  // A write on a dead pipe is an error event, never a crash of the host.
+  child.stdin.on('error', (e: Error) => close(`mnemorphd's input closed: ${e.message}`));
+  // 'close', not 'exit': it fires once the core's output is drained, so its last lines arrive.
+  child.on('close', (code: number | null, signal: NodeJS.Signals | null) =>
     close(
       stderr.trim() ||
         (signal ? `mnemorphd was stopped by ${signal}` : `mnemorphd exited with ${code ?? 0}`),
@@ -62,7 +65,10 @@ export function stdio(
     },
     onLine: (listener) => lines.on('line', listener),
     onClose: (listener) => closers.push(listener),
-    close: () => child.stdin.end(),
+    close: () => {
+      if (!closed) child.stdin.end();
+      close('the client closed the connection');
+    },
   };
 }
 
@@ -91,11 +97,12 @@ export class Client {
   private closedWhy: string | undefined;
   /** The highest `seq` seen: replay asks from here. */
   lastSeq = 0;
+  private session: string | undefined;
 
   constructor(private readonly transport: Transport) {
     transport.onLine((line) => this.receive(line));
     transport.onClose((why) => {
-      this.closedWhy = why;
+      this.closedWhy ??= why;
       for (const p of this.pending.values()) p.reject(new Error(why));
       this.pending.clear();
     });
@@ -104,6 +111,11 @@ export class Client {
   /** Open the session; refuses a core that speaks another protocol. */
   async initialize(clientInfo: { name: string; version?: string }): Promise<Hello> {
     const hello = (await this.request('initialize', { clientInfo })) as Hello;
+    // A new session numbers its events from 1 again.
+    if (hello.session !== this.session) {
+      this.session = hello.session;
+      this.lastSeq = 0;
+    }
     if (hello.protocol !== PROTOCOL) {
       throw new Error(
         `mnemorphd speaks protocol ${hello.protocol}; this client speaks ${PROTOCOL}: update one of them`,
@@ -132,6 +144,7 @@ export class Client {
   /** Close the session; the core exits once its output is written. */
   async shutdown(): Promise<void> {
     await this.request('shutdown', {});
+    this.closedWhy ??= 'the session was shut down';
     this.transport.close();
   }
 
@@ -181,8 +194,9 @@ export class Client {
     const type = msg.method ? eventType(msg.method) : undefined;
     if (type) {
       const event = { ...(msg.params ?? {}), type } as Arrived;
-      // Once each, in order: a replayed event already seen is dropped.
-      if (event.seq <= this.lastSeq) return;
+      // Once each, in order: a replayed event already seen is dropped; one with no number is
+      // not an event of this protocol.
+      if (typeof event.seq !== 'number' || event.seq <= this.lastSeq) return;
       this.lastSeq = event.seq;
       for (const l of this.listeners) l(event);
       return;

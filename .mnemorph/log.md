@@ -1409,3 +1409,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - pnpm rewrote 4 975 lockfile lines — its quoting, not its content — to add one workspace
     link; the link went in by hand, six lines, and the frozen install accepts it.
   - A test that runs only when the binary exists runs nowhere unless something builds it.
+
+---
+
+### [2026-10-24T17:35:18+02:00] rimuru — the SDK, after its review
+- **Task:** the review of #133: a write on a dead or ended stdin crashed the host; `'exit'`
+  dropped the core's last lines; `reason` required in TS; an event with no `seq` disarmed the
+  dedup; a removed Rust type left its TS behind.
+- **Files:** packages/sdk/src/index.ts (stdin errors close the connection; `'close'` not
+  `'exit'`; nothing written after `close` or `shutdown`; the first close reason kept; `lastSeq`
+  reset for a new session; events with no `seq` ignored), protocol.rs (`reason` optional),
+  justfile (the generated TS removed before it is regenerated), tests (a core that answers and
+  exits, 50 times; a core with no input; a request after shutdown).
+- **Gate:** n/a. Instruments: the SDK suite three times; the last-line test fails with `'exit'`
+  put back; `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a child's `'exit'` is when it died, `'close'` is when it finished speaking; a
+  client reads speech.

@@ -221,6 +221,7 @@ pub struct GateReply {
     pub allow: bool,
     /// Why not, for the body.
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub reason: Option<String>,
 }
 

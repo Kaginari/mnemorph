@@ -11,4 +11,4 @@ allow: boolean,
 /**
  * Why not, for the body.
  */
-reason: string | null, };
+reason?: string | null, };

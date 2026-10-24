@@ -22,6 +22,8 @@ check:
 rust:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
+    # The protocol's TypeScript is regenerated whole, so a type removed from the Rust goes too.
+    rm -rf packages/protocol/src/generated
     cargo nextest run --workspace --no-tests=pass
     cargo deny check
 
