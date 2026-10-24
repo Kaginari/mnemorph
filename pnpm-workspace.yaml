@@ -5,3 +5,7 @@ packages:
 # Dependencies allowed to run install scripts. esbuild (tsup, vite) fetches its platform binary.
 allowBuilds:
   esbuild: true
+
+# markdown-it-mathjax3 (the book's formulas) pins an xmldom release npm marks as having critical issues.
+overrides:
+  "@xmldom/xmldom": ^0.9.12

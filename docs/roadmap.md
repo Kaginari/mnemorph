@@ -215,13 +215,47 @@ build Mnemorph in solo mode.
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route.
 
-### M8 — Memory and toolbox · M
+### M8 — Memory and toolbox · L
 
-- The handoff's gathered facts and its offer at the stress zone and at checkpoints.
-- Short / long / shared tiers, BM25 recall ranked by relation, notes, `@U` landing, the toolbox's
-  two levels with priced manifests, compaction drain.
+Memory follows [its page](08-memory.md): the archive is never rewritten, notes are traces that
+point at it, and only a route's proof grounds a note. Rungs, lowest first:
 
-**Exit:** recall quality fixtures; a stress-zone run drains instead of dying.
+1. **Notes as events.** The trace schema (polarity, salience, confidence, status, source), the
+   append-only event log with its fold, a tolerant reader, `merge=union`. Short, personal and
+   shared tiers on top; personal notes follow their creature through split and retirement.
+2. **Recall.** tantivy BM25 ranked by relation, the priors, the dissent seat and the declared
+   omissions; silent on queries with no content words; never rebuilt inline, healed once at boot.
+3. **The write rule.** `Note<Proposed>` and `Note<Grounded>` as types; `@U` landing personal and
+   proposed; promotion to shared by the four routes (checked, accepted, corroborated, confirmed),
+   each carrying its proof; the turn's journal row carries the anchors it recalled.
+4. **Reconsolidation.** A run-ending failure writes one revise event per failed act, 0.9 to the
+   anchors it cited and 0.4 to those only recalled, never to a dissenting note; a first failure
+   writes nothing; a human's correction lands grounded; confidence gained on repeated passes.
+5. **Consolidation and forgetting.** The desk's distillation, dissent exempt; `dormant`,
+   `abstract`, and `tombstone` on machine-local tiers only.
+6. **Pathologies.** `mnemorph memory status`: the replay loop, lock-in and the unproven write
+   (the fold checks every event's `by` and proof), each with its act.
+7. **Session start, handoff, toolbox, drain.** Session start injects the law and the recent log
+   through the harness itself; the handoff's gathered facts and its offer at the stress zone and
+   at checkpoints; the toolbox's two levels with priced manifests; the compaction drain, whose
+   `@U` lines land as proposed notes.
+
+**Exit:**
+
+- recall fixtures, among them one where the only correcting note ranks below $k$ and is still
+  recalled, and one where the best hit's meaning is a poor match and stays under $\theta$ however
+  high its priors;
+- a 50-turn run whose scripted model makes one wrong claim in five about the diff (10 of 50), and
+  whose scripted verify lines catch nine of those ten: no note reaches shared memory without a
+  route's proof, and exactly one of the 41 grounded notes is wrong
+  ($\Pr[\text{wrong} \mid \text{pass}] = 1/41 \approx 2.4\%$), and none of its claims about the
+  world beyond the diff grounds through **checked**;
+- a findings-only commission's accepted claims reach shared memory with no test run, and its
+  rejected ones stay personal;
+- a fresh session after a clear carries the last journal entries in its first prompt;
+- the toolbox meters each entry in tokens of exactly what is injected, and every command a prompt
+  or hint names exists in the build;
+- a stress-zone run drains instead of dying.
 
 ### M9 — Kijin · M
 

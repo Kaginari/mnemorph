@@ -1007,6 +1007,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-24T15:40:00+02:00] rimuru — the book: memory (page 8), M8 replanned around it
+- **Task:** Veldora: use DIKWP MNEMORPH-85 as Mnemorph's memory system — is it possible, and the
+  plan, in the book.
+- **Files:** docs/08-memory.md (new: archive and traces, recall with priors, a dissent seat and
+  declared omissions, the write rule, reconsolidation, dissent-exempt distillation, three
+  pathologies), docs/roadmap.md (M8 · L, seven rungs, a measurable exit), docs/README.md,
+  docs/03-loop.md, docs/05-architecture.md, site (math on, page in the sidebar,
+  markdown-it-mathjax3).
+- **Gate:** n/a. A fresh Fable review: 16 findings, all fixed here (a no-write pass is not a
+  check; one revise event per run-ending failure; 04's `@U` landing; fold order and precedence;
+  proofs the fold can resolve; saturating BM25; stated defaults; a measurable exit). Instruments:
+  diagram check 17 parse; site build green; 0 MathJax errors; `--frozen-lockfile` install clean;
+  xmldom pinned past its deprecated releases.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - The rules port; the code does not: MNEMORPH-85 is Python with token-overlap recall and
+    concatenation as synthesis. Its rules (model output never writes memory, a seat for dissent,
+    correction priors, replay detection, dissent-exempt summaries) fit M8 with BM25 underneath.
+  - Mnemorph already owns the hard part MNEMORPH-85 leaves abstract: the "observed world effect"
+    is the verify line and the end gate.
+  - "Proposed until checked" alone would have kept research and failed runs' lessons private
+    forever (a side agent's catch); scope (personal · shared) is now its own axis, with four
+    routes to shared: checked, accepted, corroborated, confirmed.
+  - Open (@?): the weights are untuned until the recall fixtures exist; the corroboration
+    match (what makes two claims "the same") needs its own fixture.
 ### [2026-10-24T12:40:00+02:00] rimuru — an envelope's longest life is the human's to set (#88)
 - **Task:** Veldora: a cap of 30 days, "i want a cap configurable". After #108 an explicit
   `expires` could be any date after `signed`, so `expires = 2099-01-01` lasted for decades.
@@ -1163,6 +1188,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** an expired record still fails the load past a lowered limit: config has no clock,
   and reading one there would make loading depend on the day. The error now says to delete it.
+
+---
+
+### [2026-10-24T15:36:48+02:00] rimuru — page 8, as its review asked
+- **Task:** the review of #87: what grounds a note, a relevance floor nothing could undercut,
+  machine-local proofs, δ as a joint probability, a gate that never reads a claim, a fold that
+  could not demote, `c` defined on fixtures, BM25 "already" there, and the port's details.
+- **Files:** docs/08-memory.md (the rule scoped to what stands behind a note; θ on the meaning term;
+  tracked proofs, "unresolved here" apart from unproven; latest event wins; δ conditional and per
+  route, accepted and corroborated at a lower κ; claims about the diff apart from claims about the
+  world; per-link weights; the port's numbers as MNEMORPH-85 has them), docs/roadmap.md (a route's
+  proof grounds; the exit as an exact count), crates/mnemorph-memory (personal, not long).
+- **Gate:** n/a. Instruments: `just docs`.
+- **Result:** in review as a pull request.
+- **Learned:** a floor applied to a sum of priors and a match measures the priors; it has to sit
+  on the term it means to bound.
 ### [2026-10-24T15:33:25+02:00] rimuru — decisions bounded, and confident the provider's way
 - **Task:** #115 (from the review of #112): the decider sent any size of state, ignored the
   provider's own confidence, and its score confidence was blind to adjacency; a dead model-id

@@ -39,7 +39,7 @@ answer:
 1. **Perceive** — check the fuel gauge: how much budget, time and context is left. If it is
    running out, save what matters and stop cleanly instead of crashing.
 2. **Recall** — pull in the few memories and tools that fit the question, as pointers, not
-   pasted text.
+   pasted text, always including one that disagrees if any does ([memory](08-memory.md)).
 3. **Plan** — ask the model what to do next.
 4. **Act** — run one tool the model asked for, after checking that this race may use it and,
    for anything that leaves the machine or destroys something, after asking you.

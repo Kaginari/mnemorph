@@ -14,6 +14,22 @@ export default withMermaid(
     // Local-only notes (ignored by git) never reach the site.
     srcExclude: ['study-maki.md'],
     cleanUrls: true,
+    // Formulas are written as ```math fences: GitHub renders those untouched (a `$$` block is
+    // parsed as Markdown first, so `\,` loses its backslash and a line starting with `+` becomes a
+    // list). Here each fence goes to the same MathJax renderer `$$` uses.
+    markdown: {
+      math: true,
+      config(md) {
+        const fence = md.renderer.rules.fence;
+        const mathBlock = md.renderer.rules.math_block;
+        md.renderer.rules.fence = (tokens, idx, options, env, self) =>
+          tokens[idx].info.trim() === 'math' && mathBlock
+            ? mathBlock(tokens, idx, options, env, self)
+            : fence
+              ? fence(tokens, idx, options, env, self)
+              : self.renderToken(tokens, idx, options);
+      },
+    },
     // The brand's files are the site's public files: the emblem is the logo and the favicon.
     vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
     head: [
@@ -49,6 +65,7 @@ export default withMermaid(
             { text: 'Architecture', link: '/05-architecture' },
             { text: 'Consumption', link: '/06-consumption' },
             { text: 'MCP', link: '/07-mcp' },
+            { text: 'Memory', link: '/08-memory' },
             { text: 'Roadmap', link: '/roadmap' },
           ],
         },
