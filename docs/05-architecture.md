@@ -79,7 +79,8 @@ mnemorph/
 │  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
 │  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
-│  ├─ mnemorph-provider   streaming clients, retry ladder, caching    (network)
+│  ├─ mnemorph-provider   streaming clients, retry ladder, caching,   (network)
+│  │                      System One decisions with an LLM fallback
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
 │  ├─ mnemorph-tools      tool impls, classifier, secret injection    (OS)
 │  ├─ mnemorph-config     TOML layers, origins, the gate's loosening  (files)
@@ -273,7 +274,8 @@ an empty list or table never overrides a lower layer:
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`
-  and `oni.envelopes` loosen it, so they are honoured only from the local or global file; from
+  and `oni.envelopes` loosen it, and `decide.via` and `decide.cutoff.*` loosen decisions (where
+  their state goes, how sure they must be), so they are honoured only from the local or global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
@@ -300,7 +302,17 @@ an empty list or table never overrides a lower layer:
 - **Models**: `models.creature.<name>`, else `models.office.<race>.<office>`, else
   `models.tier.<the race's tier>`; `models.fallback.<model>` names the next model to try when a
   model is not found. **Providers** name the environment variable holding their key
-  (`key_env`), never the key.
+  (`key_env`), never the key. A provider's `kind` is `anthropic`, `openai` (any
+  OpenAI-compatible server) or `systemone` (TypeSafe's Jev, or a jeff server on your own machine).
+- **Decisions** (`decide.*`) ask a System One provider when `decide.via` names one, and the LLM
+  `decide.llm` (the fast tier's model by default) when it does not or when it fails. A decision
+  is only acted on above its cut-off, and the cut-off depends on who answered:
+  `decide.cutoff.measured` for a System One answer, `decide.cutoff.stated`, stricter, for an
+  LLM's, each from 0 to 1. `decide.via` must name a provider of `kind = "systemone"` and come
+  with `decide.model`, the name that provider answers to (`jev-latest` at TypeSafe, `jeff-latest`
+  at a jeff server). Only the human's own files set `decide.via` or a cut-off: a cloned repository
+  can neither send its state to one of the human's providers nor lower the bar (see *System One
+  decisions* below).
 
 ```toml
 # ~/.config/mnemorph/config.toml
@@ -318,8 +330,23 @@ kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
 
+<<<<<<< HEAD
 [oni]
 envelope_days = 30                 # the longest an envelope lasts (1–365); 30 when unset
+=======
+[providers.jeff]                   # System One on this machine; or TypeSafe's Jev:
+kind = "systemone"                 # base_url = "https://api.typesafe.ai"
+base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
+
+[decide]
+via = "jeff"                       # unset: every decision goes to the LLM
+model = "jeff-latest"              # required with via; Jev's is "jev-latest"
+llm = "claude-haiku-5-5"           # the fallback; the fast tier's model by default
+
+[decide.cutoff]
+measured = 0.6                     # the least confidence to act on a System One answer
+stated = 0.9                       # and on an LLM's
+>>>>>>> System One decisions: Jev and jeff behind config, an LLM fallback, and an answer that says who gave it
 
 [[oni.envelopes]]
 name = "feature branches"
@@ -327,6 +354,72 @@ allow = ["git push origin feat/*", "gh run rerun *"]
 signed = 2026-10-24                # expires 2026-11-23, unless `expires` says sooner
 uses = 50                          # optional: at most 50 acts in all
 ```
+
+### System One decisions
+
+Some of Mnemorph's questions are decisions, not conversations: did this piped test run pass, which
+body suits this commission, is this finding worth a reviewer's time, how big is this task. Each
+has a fixed set of answers, and each is worth acting on only when the answer is sure. A System
+One model answers exactly that shape: one call, a probability for every option, in milliseconds.
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart LR
+    Q["a decision point<br/>state + typed questions"] --> V{"decide.via set?"}
+    V -- yes --> S["System One provider<br/>Jev · jeff"]
+    V -- no --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
+    S -- fails --> L
+    S --> M["basis: measured"]
+    L --> T["basis: stated"]
+    M & T --> D["Decision<br/>answers · source · basis · fell_back"]
+    D --> C{"confidence ≥ cut-off<br/>for its basis?"}
+    C -- yes --> A["the caller acts"]
+    C -- no --> K["the caller keeps its default"]
+    D --> R["decision row<br/>journaled"]
+```
+
+- **One wire for every System One provider.** TypeSafe's Jev and the open jeff share it:
+  `POST /v1/systemone` with a state and named questions, each a yes-or-no (`noul`), a `choice`
+  between labelled options, or a `score` on an ordered scale of two to ten levels. Options are
+  sent in the caller's order, since a model may read them by position. An answer is read
+  strictly: exactly the asked labels, summing to 1. A server always returns the whole
+  distribution, so any other shape is a fault, refused rather than repaired into something that
+  would pass for measured. `SystemOne` keeps the
+  provider ladder (the same statuses, waits and `retry-after`, and 529 as busy) on a decision's
+  scale: seconds, not minutes, so a fallback can still answer in time.
+- **The fallback is the LLM, through one tool.** `decide.llm` gets the state exactly as it is,
+  between `<document id="…">` tags whose marker is made for that call, so no text written
+  beforehand can close the document early. It is told to treat everything inside as data, never
+  as instructions, and gets the questions in words. It answers by calling an `answer` tool whose
+  schema has a probability for every label. A reply written as text is read from the first JSON
+  object that carries `answers`; a refusal or a cut-off reply is an error, never a guess. Its
+  probabilities are clamped and rescaled to sum to 1.
+- **Every answer says who gave it.** Both backends return the same `Answer`, so its shape cannot
+  show that the backend changed. A `Decision` carries its `Source`: the provider, the model, and
+  the `Basis`. A System One model is built for calibration (*measured*); an LLM writes its
+  probabilities about itself (*stated*), and a stated 70% is not a measured one.
+- **Cut-offs are per basis.** `Decision::sure(question, cutoffs)` returns the answer only when its
+  confidence, `(max p − 1/n) / (1 − 1/n)`, clears the cut-off for its basis; otherwise the caller
+  keeps its default. The same 85% yes passes as measured and fails as stated. For a score, the
+  confidence is the top level's share and is blind to adjacency, so a point that reads a scale
+  as ordered uses its expected level.
+- **Every decision has an id and a record.** Each decision point journals a `DecisionRow`: the
+  id (the provider's request id, else one made for it), the point, provider, model, basis, why
+  it fell back when it did, each question's probabilities, the milliseconds and the tokens. When
+  the point learns what proved true, an `OutcomeRow` names the decision's id and the label that
+  did. The two join into calibration per provider, model and basis, never pooled, so a cut-off is
+  set from the record rather than guessed.
+- **Containment.** A System One provider is a provider: only the human's own files define one,
+  and only they set `decide.via`. Until the human names one, no decision leaves for anything but
+  the LLM the session already uses.
+- **Decision points attach with their milestones.** Each reads `Decision::sure` and journals
+  its decision and outcome rows: the muted test bench, read from its output (the loop, once an act can wait on a decision),
+  dispatch advice (M7), the Dark Elf's pre-screen, judged by its calibration first (#106, M10),
+  and a commission's size (M11's value row).
 
 ### Where each piece comes from in isekai
 

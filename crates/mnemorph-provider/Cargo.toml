@@ -1,6 +1,6 @@
 [package]
 name = "mnemorph-provider"
-description = "Model providers: Anthropic and OpenAI-compatible streaming clients, retries, cache breakpoints."
+description = "Model providers: Anthropic and OpenAI-compatible streaming clients, retries, cache breakpoints; System One decisions with an LLM fallback."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

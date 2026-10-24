@@ -1022,3 +1022,38 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The limit is a loosening key: raising it is the same act as signing a longer envelope, so it
     lives where envelopes live. A compiled ceiling of a year keeps any setting from bringing back
     an envelope that never ends.
+
+---
+
+### [2026-10-24T13:06:19+02:00] rimuru — System One decisions, with an LLM fallback
+- **Task:** Veldora's ask, from the research: make Jev-like models (TypeSafe's Jev, the open
+  jeff) a decision source switched on by config, falling back to the LLM when none is set. A
+  side note sharpened it: an LLM's stated probability is not a calibrated one, so the answer must
+  say who gave it and cut-offs must differ by backend.
+- **Files:** crates/mnemorph-provider/src/systemone.rs (the shared `/v1/systemone` wire: noul,
+  choice, score; order-preserving encoding; reading against the ask; the ladder on a decision's
+  scale), src/decide.rs (`Decider`: System One first, the LLM through an `answer` tool; `Decision`
+  with its `Source` and `Basis`; per-basis `Cutoffs`; the journal row), mnemorph-ledger row.rs
+  (`DecisionRow`), mnemorph-config (`decide.via`, `decide.model`, `decide.llm`,
+  `decide.cutoff.measured`, `decide.cutoff.stated`; `Config::decide`; `kind = "systemone"`),
+  tests (TypeSafe's recorded exchange, jeff's 529, the fallback and its reason, the same 85% sure
+  as measured and not as stated, a tracked file that cannot add a provider), docs/05-architecture.md
+  (*System One decisions*), clippy.toml (TypeSafe is a name).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No decision point calls it yet: each attaches with its
+  milestone.
+- **Learned:**
+  - Jeff answers Jev's protocol on the same path with the same shapes, so one client serves both;
+    jeff adds `orders`, drops `box`, rejects unknown fields and answers 529 when busy.
+  - A JSON map sorts option labels, and a System One model may read options by position: the
+    request is written in the caller's order by hand.
+  - One answer shape for two backends hides the switch. The basis, not the shape, says what a
+    probability is worth.
+  - A fresh Fable review, ten findings, all fixed: a negative cut-off made every answer sure; a
+    tracked file could still send the state to the human's own provider, or lower the bar
+    (`decide.via` and the cut-offs are now the human's alone); a measured answer of the wrong
+    shape was repaired into one that passed for measured (now refused, and the LLM answers);
+    the text parser took the first `{` to the last `}`; escaping the state changed it (now it
+    goes as it is, between markers made for the call); no id joined a decision to its outcome
+    (now `DecisionRow.id` and `OutcomeRow`); `jev-latest` was assumed for jeff (`decide.model` is
+    required with `via`).
