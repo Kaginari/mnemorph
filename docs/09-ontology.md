@@ -104,7 +104,7 @@ of its ontology; a field cannot be misread.
 
 ### Ownership: one function
 
-$\mathrm{own} : \text{Path} \to \text{Creature} \cup \{\bot\}$ takes the first rule that matches:
+$\mathrm{own} : \text{Path} \to \text{Creature} \cup \lbrace \bot\rbrace $ takes the first rule that matches:
 
 1. **Harness soil** — the shared queue, instruments, memory and ontology event files: no body;
    only the harness writes them.
@@ -137,9 +137,9 @@ creature never collide.
 
 A territory fact is
 
-$$
+```math
 f = (\text{about},\ \text{text},\ \text{by},\ \text{source},\ \text{status})
-$$
+```
 
 where `about` is the path it is about, `by` the creature whose body said it, and `source` the
 evidence anchor (a `file:line`, a journal entry, a commit). A fact's id is the hash of its path

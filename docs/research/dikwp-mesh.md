@@ -72,9 +72,9 @@ between neighbouring worlds. Those have no conflict model today. That is where M
 
 Each observer $a$ contributes a local section
 
-$$
+```math
 G_a = (V_a,\ E_a,\ H_a,\ \mu_a,\ \kappa_a)
-$$
+```
 
 - $V_a$ — semantic atoms (claims, observations, values), each with tags and a **stance**
   $\sigma_a(t) \in [-1, 1]$ per tag $t$;
@@ -82,9 +82,9 @@ $$
 - $H_a$ — n-ary relations, stored as relation nodes joined to every member;
 - $\mu_a(v) \in \Delta^4$ — the atom's **type membership**, a point on the 4-simplex:
 
-$$
+```math
 \mu(v) = (\mu_D, \mu_I, \mu_K, \mu_W, \mu_P), \qquad \mu_x \ge 0, \quad \textstyle\sum_x \mu_x = 1
-$$
+```
 
   An atom can be 60% Knowledge and 40% Purpose; nothing forces one type.
 - $\kappa_a$ — observer, context, time, modality, scale, source and confidence.
@@ -93,7 +93,7 @@ The whole mesh is a multigraph over the union $\bigcup_a V_a$, with relation nod
 
 ### 2. The operator alphabet and path algebra [code]
 
-The 25 ordered pairs $T_{xy} : S_x \to S_y$, $x, y \in \{D, I, K, W, P\}$, are the primitive
+The 25 ordered pairs $T_{xy} : S_x \to S_y$, $x, y \in \lbrace D, I, K, W, P\rbrace $, are the primitive
 operators; five are self-loops (re-observe, re-segment, model-revise, value-negotiate,
 purpose-transform).
 
@@ -121,17 +121,17 @@ flowchart LR
 Each operator carries a base loss $\ell$, an evidence need $e$, a reversibility $r$ and a
 generativity $g$, all in $[0,1]$. A path composes them as independent events:
 
-$$
+```math
 \ell_{\text{path}} = 1 - \prod_i (1 - \ell_i), \qquad
 r_{\text{path}} = \prod_i r_i, \qquad
 g_{\text{path}} = 1 - \prod_i (1 - g_i)
-$$
+```
 
 and is ranked by an additive cost, with an optional purpose preference $\rho \in [0,1]$:
 
-$$
+```math
 \mathrm{cost} = \sum_i \max\!\big(0.01,\ 0.52\,\ell_i + 0.28\,e_i + 0.20\,(1 - r_i) - 0.25\,\rho_i\big)
-$$
+```
 
 *Worked example*, Data to Wisdom:
 
@@ -149,24 +149,24 @@ question-form). The cost never rewards generativity, which is worth knowing befo
 
 For atoms $u$ (observer $a$) and $v$ (observer $b \ne a$):
 
-$$
+```math
 \mathrm{sim}(u,v) = 0.48\,J(\text{tags}) + 0.25\,\cos(\mu_u, \mu_v) + 0.12\,\gamma + 0.15\,\bar{s}
-$$
+```
 
 - $J(X,Y) = |X \cap Y| / |X \cup Y|$, the Jaccard index of the tag sets;
 - $\gamma = 1$ in the same context, $0.55$ otherwise;
 - $\bar{s}$ = mean over shared stance keys of $1 - |\sigma_u - \sigma_v|/2$ (0.65 if none).
 
-A **conflict** on tag $t$ is a sign clash: $\sigma_u(t)\,\sigma_v(t) < -0.12$. Compatibility
+A **conflict** on tag $t$ is a sign clash: $\sigma_u(t)\ \sigma_v(t) < -0.12$. Compatibility
 discounts similarity by up to 20% for conflicts:
 
-$$
+```math
 \mathrm{comp}(u,v) = \mathrm{sim}(u,v)\,\big(1 - 0.2\,\min(1, |\text{conflicts}|/2)\big)
-$$
+```
 
 ### 4. Gluing: the idea, and what the code does
 
-**The idea [model].** In sheaf theory, a cover of a space by open sets $\{U_a\}$ carries local
+**The idea [model].** In sheaf theory, a cover of a space by open sets $\lbrace U_a\rbrace $ carries local
 data $s_a$ on each $U_a$. If every pair agrees on its overlap,
 $s_a|_{U_a \cap U_b} = s_b|_{U_a \cap U_b}$, the pieces **glue** into one global section. If some
 pair disagrees, no global section exists, and the disagreement is an **obstruction**: real
@@ -192,12 +192,12 @@ flowchart LR
 ```
 
 **The code [code]** is a counting rule per tag, not a cohomology computation. With $n$ observers,
-a tag $t$ has support $\mathrm{supp}(t) = |\{a : t \in \text{tags}_a\}| / n$, positive count
-$p(t) = |\{\sigma > 0.15\}|$, negative count $q(t) = |\{\sigma < -0.15\}|$, and contradiction
+a tag $t$ has support $\mathrm{supp}(t) = |\lbrace a : t \in \text{tags}_a\rbrace | / n$, positive count
+$p(t) = |\lbrace \sigma > 0.15\rbrace |$, negative count $q(t) = |\lbrace \sigma < -0.15\rbrace |$, and contradiction
 
-$$
+```math
 c(t) = \frac{\min(p, q)}{\max(1,\ p + q)} \in [0, \tfrac12]
-$$
+```
 
 | Section | Rule |
 |---|---|
@@ -207,9 +207,9 @@ $$
 
 Over all alignment edges $\mathcal{E}$ (similarity $\ge 0.10$):
 
-$$
+```math
 \mathrm{obs} = \min\!\Big(1,\ \frac{\sum_{e \in \mathcal{E}} \big[(1 - \mathrm{comp}(e)) + 0.25\,|\text{conflicts}(e)|\big]}{1.25\,|\mathcal{E}|}\Big), \qquad \mathrm{obs} = 1 \text{ if } \mathcal{E} = \emptyset
-$$
+```
 
 and a partial global section exists iff some tag is shared and $\mathrm{obs} < 0.72$. The 0.10
 floor filters nothing: two atoms of different observers with no shared tag still score at least
@@ -224,10 +224,10 @@ not unanimity.
 
 Per tag, with the stance mean $\bar\sigma$:
 
-$$
+```math
 \mathrm{dis}(t) = \frac{1}{|\sigma|}\sum (\sigma_i - \bar\sigma)^2, \qquad
 H(t) = -\sum_{x} \pi_x(t) \log_2 \pi_x(t)
-$$
+```
 
 where $\pi(t)$ is the tag's type mass over D/I/K/W/P, so $H \in [0, \log_2 5 \approx 2.32]$
 measures how many kinds of meaning the tag spans.
@@ -243,9 +243,9 @@ measures how many kinds of meaning the tag spans.
 
 When residuals keep piling up, MESH proposes a new dimension. Each catalogued candidate scores
 
-$$
+```math
 \mathrm{need} = \min\!\big(1,\ 0.45\,\mathrm{supp} + 0.35\,\tfrac{|\text{types spanned}|}{5} + 0.20\,\min(1, \overline{\mathrm{dis}})\big)
-$$
+```
 
 The catalogue is six hard-coded axes about the definition of life, so in code this is a lookup,
 not discovery. The valuable part is the **install protocol** in its formal model: a proposed axis
