@@ -111,6 +111,21 @@ mod tests {
     #[test]
     fn unseen_lines_count_high_against_every_cap() {
         assert_eq!(unseen_wt(&[], 2), 2 * UNSEEN_FLOOR_WT);
+        // A readable call larger than the floor sets the weight of each unseen line.
+        assert_eq!(unseen_wt(&[row(NOW, "s", 50_000)], 2), 100_000);
+        assert!(matches!(
+            check_caps(
+                &[],
+                "s",
+                Timestamp(NOW),
+                Caps {
+                    day: Some(UNSEEN_FLOOR_WT),
+                    ..Caps::default()
+                },
+                unseen_wt(&[], 1),
+            ),
+            CapReading::Stop { cap: "day", .. }
+        ));
         let caps = Caps {
             session: Some(24_000),
             ..Caps::default()
