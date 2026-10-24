@@ -767,3 +767,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the gate finds writes by snapshotting the tree, not by trusting the write tool's
   metadata: a `rm` through bash is caught the same as an edit — the first test that would have
   slipped past metadata alone.
+
+---
+
+### [2026-10-24T04:54:44+02:00] rimuru — M5 rung 3: the session, its queue and Esc
+- **Task:** the session's queue lane and interrupt, and the message-sequence validator.
+- **Files:** crates/mnemorph-loop/src/session.rs (`Session`: a run and its queue; `drive` asks
+  each queued line in turn), src/run.rs (`Interrupt`: fired from any thread, seen during the
+  model call through `select!` and between tool calls; `Ending::Interrupted`; validation before
+  each request; the step budget per ask), src/sequence.rs (`validate`), tests/session.rs (4 and
+  a 200-case proptest), docs/03-loop.md (the session section).
+- **Gate:** n/a. Instruments: 26 loop tests; `just check` (211).
+- **Result:** in review as a pull request.
+- **Learned:**
+  - A validator inside the run makes a proptest over requests vacuous: a broken conversation
+    never reaches the model, it ends the run. The property must also say no run ended that way.
+  - The step budget belongs to a commission, not to the run: a session of many asks would
+    otherwise run out of steps across them.
+
+---
+
+### [2026-10-24T04:58:09+02:00] rimuru — Esc and an answer arriving together
+- **Task:** CI on macOS failed `esc_before_the_acts_runs_none_of_them`; Linux passed.
+- **Files:** crates/mnemorph-loop/src/run.rs (`select!` is `biased`, the call first), docs/03-loop.md.
+- **Gate:** n/a. Instruments: the loop tests five times running.
+- **Result:** pushed to the session pull request.
+- **Learned:** `tokio::select!` breaks ties between ready branches at random — the two OSes simply drew differently. A tie needs a rule: an answer already arrived is kept, Esc is honoured before its acts.
