@@ -181,12 +181,14 @@ greens and muted runs. A run that hides its exit status (`cargo test | tail`,
 test-driven work; twelve with nothing landed stop the run, and so do eight muted runs in a row,
 however much landed between them: the body that ran one bench 63 times in twenty minutes, every
 run piped, is the reason. A run built with decisions (`decisions()`, `Run::with_decisions`) reads
-a piped run's output instead of muting it. That is on when `decide.via` names a System One
+a piped run's output instead of muting it — only when the shell saw it finish with a zero exit: a
+non-zero exit or a kill at the deadline is never read, so no printed summary turns a seen failure
+green. That is on when `decide.via` names a System One
 provider, or when `decide.bench = true` asks the LLM `decide.llm`; no LLM is asked unless the
 human chose it. The decider answers green, red or unknown, and a sure green or red counts in the
 tally as if the exit status had been seen. A read moves only the tally: a read red is not a failed
 act, so the guts and escalation are untouched. An unsure answer, a failed decision, output the
-shell cut short (its summary is in the part dropped), an Esc during the command or the decision,
+shell cut short, stdout or stderr (its summary is in the part dropped), an Esc during the command or the decision,
 or the run's clock running out leaves the run muted, as it was. Each decision is journaled in
 `.mnemorph/instruments/decisions.jsonl`, priced into the usage ledger, and named in a warning in
 the beat journal (for the human, never replayed to the model).

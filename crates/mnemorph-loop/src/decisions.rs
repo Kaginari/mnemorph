@@ -114,7 +114,10 @@ pub fn bench_ask(command: &str, output: &str) -> Ask {
             Question::Choice {
                 instructions: "How did this test run end, judged only from its output?".into(),
                 options: vec![
-                    ("green".into(), "Every test that ran passed.".into()),
+                    (
+                        "green".into(),
+                        "The run finished and every test passed.".into(),
+                    ),
                     ("red".into(), "At least one test failed or errored.".into()),
                     (
                         "unknown".into(),

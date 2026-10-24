@@ -145,13 +145,13 @@ fn answer(text: &str) -> Result<Response, Error> {
 
 /// Nine piped test runs with a fix landing between each: without a read, a muted bench stalls.
 fn piped_runs(then_answer: bool) -> Arc<ScriptedModel> {
+    runs_of("pytest -q | tail -1", then_answer)
+}
+
+fn runs_of(command: &str, then_answer: bool) -> Arc<ScriptedModel> {
     let mut script = Vec::new();
     for i in 0..9 {
-        script.push(tool(
-            &format!("b{i}"),
-            "bash",
-            json!({"command": "pytest -q | tail -1"}),
-        ));
+        script.push(tool(&format!("b{i}"), "bash", json!({"command": command})));
         script.push(tool(
             &format!("w{i}"),
             "write",
@@ -495,4 +495,34 @@ fn decisions_are_built_from_the_humans_configuration() {
     assert!(err.contains("TYPESAFE_API_KEY is not set"), "{err}");
     let key = |v: &str| (v == "TYPESAFE_API_KEY").then(|| "k".to_owned());
     assert!(decisions(&jev, &world, model, key).unwrap().is_some());
+}
+
+/// A run the shell saw fail is never read: a decider that would say green is not asked, and the
+/// muted runs still stall.
+#[tokio::test]
+async fn a_failed_run_is_never_read_green() {
+    let w = World::new("seen-red");
+    let jeff = Arc::new(Scripted::new(
+        (0..9).map(|_| Reply::ok(&green_from_system_one())),
+    ));
+    let client = SystemOne::new(
+        jeff.clone(),
+        "http://127.0.0.1:8765",
+        None,
+        SystemOne::policy(),
+    );
+    let llm = Arc::new(Llm::default());
+    let mut run = w
+        .run(runs_of("pytest -q; echo '42 passed'; false", false))
+        .with_decisions(with(&w, Some(client), &llm));
+    let e = ask(&mut run).await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: bench"),
+        "{e:?}"
+    );
+    assert!(
+        jeff.sent().is_empty(),
+        "a seen failure is not sent to be read"
+    );
+    assert_eq!(*llm.asked.lock().unwrap(), 0);
 }
