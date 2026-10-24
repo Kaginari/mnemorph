@@ -6,8 +6,9 @@
 //! hang the call. The environment reaches the command with its secrets removed.
 
 use std::fmt::Write as _;
+use std::fs;
 use std::os::unix::process::CommandExt as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -152,11 +153,23 @@ impl Tool for Bash {
                 "could not prepare the command's temporary directory: {e}"
             ));
         }
+        let made = match make_approved(&opened) {
+            Ok(m) => m,
+            Err(e) => return Outcome::error(e),
+        };
         let before = Snapshot::take(cx.world());
         let ran = match run(&a.command, cx, timeout, network, &opened) {
             Ok(r) => r,
             Err(e) => return Outcome::error(format!("could not start bash: {e}")),
         };
+        // A command that failed leaves no empty file behind it.
+        if ran.timed_out || ran.code != Some(0) {
+            for path in &made {
+                if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
         // The command's whole process group is dead: nothing can race the restore.
         let tripped = before.restore();
         let mut out = Outcome::ok(ran.render(timeout), class);
@@ -170,6 +183,29 @@ impl Tool for Bash {
         }
         out
     }
+}
+
+/// The sandbox can only name what exists, and opening a new file's folder would open everything
+/// beside it: an approved file that does not exist yet is made here, empty, so that file alone
+/// is opened. Returns the files it made.
+fn make_approved(opened: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+    let mut made = Vec::new();
+    for path in opened {
+        if fs::symlink_metadata(path).is_err() {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .map_err(|e| {
+                    format!(
+                        "could not prepare the approved path `{}`: {e}; nothing ran",
+                        path.display()
+                    )
+                })?;
+            made.push(path.clone());
+        }
+    }
+    Ok(made)
 }
 
 struct Ran {
@@ -243,14 +279,8 @@ fn run(
     let tmp = cx.world().join(".mnemorph/tmp");
     std::fs::create_dir_all(&tmp)?;
     let mut policy = Policy::new(cx.world(), cx.home(), &tmp, network);
-    // A file that exists opens itself; one still to be made opens its directory.
-    policy.write.extend(opened.iter().map(|p| {
-        if p.exists() {
-            p.clone()
-        } else {
-            p.parent().map_or_else(|| p.clone(), Path::to_path_buf)
-        }
-    }));
+    // Each approved path exists by now and opens alone: never its folder.
+    policy.write.extend(opened.iter().cloned());
     let mut cmd = cx
         .sandbox()
         .command(&policy, "bash", &["--noprofile", "--norc", "-c", command]);

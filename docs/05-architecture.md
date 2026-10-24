@@ -177,6 +177,10 @@ flowchart LR
   - **The network** opens only for an outward or destructive command the gate approved. An
     approval also opens the paths outside the world that the classifier located in the command
     — listed on the approval card — and nothing else: a path known only at run time stays shut.
+    Each path opens alone, never its folder: a new file is first made, empty, by the harness so
+    the sandbox can name it (and removed again if the command fails). An approved delete
+    outside the world stays refused: the kernel ties deletion to the folder, and the folder is
+    not opened.
   - **Limits** — no core dumps, files up to 4 GiB, at most 8192 processes for the user; and no
     new namespaces: `unshare` and a `clone` carrying a namespace flag fail, `clone3` reports
     itself missing so the C library falls back to `clone`.

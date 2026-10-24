@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::Policy;
 
 /// The system services a command may reach: name lookups, logging, notifications, preferences,
-/// certificate trust. Not LaunchServices: through it a command could start an application
+/// certificate trust. Not `LaunchServices`: through it a command could start an application
 /// outside the sandbox (`open -a Terminal`).
 const SERVICES: &[&str] = &[
     "com.apple.system.opendirectoryd.libinfo",

@@ -239,6 +239,30 @@ fn bash_runs_inside_the_jail() {
     assert_eq!(fs::read_to_string(&marker).unwrap(), "hi\n");
     assert_eq!(gate.asked()[0].outside, vec![marker.clone()]);
 
+    // A new file opens alone — never its folder: a sibling written in the same command stays shut.
+    let fresh = w.outside().join("fresh.txt");
+    let sibling = w.outside().join("sibling.txt");
+    let o = bash(
+        &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
+        &format!(
+            "echo new > {}; f={}; echo sneaky > \"$f\"",
+            fresh.display(),
+            sibling.display()
+        ),
+    );
+    assert!(o.content.contains("Permission denied"), "{o:?}");
+    assert_eq!(fs::read_to_string(&fresh).unwrap(), "new\n");
+    assert!(!sibling.exists(), "approving a new file opened its folder");
+
+    // A failed command leaves no empty file behind.
+    let ghost = w.outside().join("ghost.txt");
+    let o = bash(
+        &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
+        &format!("false > {}", ghost.display()),
+    );
+    assert!(o.is_error);
+    assert!(!ghost.exists());
+
     // Approval opens what was named, nothing beside it: a path the words hide stays shut.
     let hidden = w.outside().join("hidden");
     let o = bash(

@@ -627,3 +627,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     that belongs to the command, and `.mnemorph/tmp` must exist before the first snapshot.
   - Twice an edit silently missed rustfmt's layout and a test caught it (the macOS unused
     import; the uncalled limits). Edits now assert the anchor matched.
+
+---
+
+### [2026-10-24T03:35:49+02:00] rimuru — an approved new file opens alone
+- **Task:** a side review found that approving a new file outside the world opened its whole folder (the sandbox can only name what exists): approving `~/notes.txt` opened the home, so a hidden second write to `~/.bashrc` would pass. Veldora asked for a smart fix.
+- **Files:** crates/mnemorph-tools/src/shell.rs (`make_approved`: the harness makes the approved file, empty, then only that file opens; a failed command leaves no empty file), tests/shell.rs (a sibling write in the same command is refused), docs/05-architecture.md; `LaunchServices` in backticks for clippy on macOS.
+- **Gate:** n/a. Instruments: `just check` (168 tests).
+- **Result:** pushed to the hardening pull request.
+- **Learned:** never widen to a parent to name a child: make the child, then name it. An approved delete outside the world stays refused, since the kernel ties deletion to the folder.
