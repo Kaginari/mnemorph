@@ -70,6 +70,8 @@ pub(crate) struct Snapshot {
     queue: Option<Vec<u8>>,
     /// Where the queue's witness is.
     witness: Option<PathBuf>,
+    /// How long the witness was then: what it gains after is the harness's and the human's.
+    witness_len: usize,
 }
 
 impl Snapshot {
@@ -88,7 +90,13 @@ impl Snapshot {
             entries: BTreeMap::new(),
             queue: fs::read(world.join(QUEUE)).ok(),
             witness: queue_witness(world),
+            witness_len: 0,
         };
+        s.witness_len = s
+            .witness
+            .as_ref()
+            .and_then(|w| fs::metadata(w).ok())
+            .map_or(0, |m| usize::try_from(m.len()).unwrap_or(usize::MAX));
         let mut kept = 0usize;
         for root in watched {
             s.walk(root, &mut kept);
@@ -151,7 +159,7 @@ impl Snapshot {
     /// change that could not be undone says so.
     pub(crate) fn restore(&self) -> Vec<String> {
         let now = Self::of(&self.world, &self.watched);
-        let mut notes: Vec<String> = self.restore_queue().into_iter().collect();
+        let mut notes = Vec::new();
         let shown = |p: &Path| {
             p.strip_prefix(&self.world)
                 .unwrap_or(p)
@@ -202,6 +210,8 @@ impl Snapshot {
                 Err(e) => format!("could not restore `{}`: {e}", shown(path)),
             });
         }
+        // Last: `shared/` stands again, whatever the command made of it.
+        notes.extend(self.restore_queue());
         notes
     }
 }
@@ -210,55 +220,63 @@ impl Snapshot {
 const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
 
 impl Snapshot {
-    /// Put the queue back line by line: what it held, and the added lines its witness holds.
+    /// Rebuild the queue from what it held and what its witness gained since the snapshot, in the
+    /// witness's order: whatever the command did to the file — a forged line, a deletion, a link
+    /// in its place — never counts.
     fn restore_queue(&self) -> Option<String> {
         let path = self.world.join(QUEUE);
-        let now = fs::read(&path).ok();
-        if now == self.queue {
-            return None;
-        }
-        let witness: std::collections::HashSet<Vec<u8>> = self
+        let gained = self
             .witness
             .as_ref()
             .and_then(|w| fs::read(w).ok())
-            .map(|b| lines(&b).map(<[u8]>::to_vec).collect())
+            .map(|w| w.get(self.witness_len..).unwrap_or_default().to_vec())
             .unwrap_or_default();
-        let old = self.queue.clone().unwrap_or_default();
-        let held: std::collections::HashSet<&[u8]> = lines(&old).collect();
-        let mut kept = old.clone();
-        let (mut added, mut forged) = (0, 0);
-        for line in lines(now.as_deref().unwrap_or_default()).filter(|l| !held.contains(l)) {
-            if witness.contains(line) {
-                if !kept.is_empty() && !kept.ends_with(b"\n") {
-                    kept.push(b'\n');
-                }
-                kept.extend_from_slice(line);
-                kept.push(b'\n');
-                added += 1;
-            } else {
-                forged += 1;
-            }
+        let mut want = self.queue.clone().unwrap_or_default();
+        if !want.is_empty() && !gained.is_empty() && !want.ends_with(b"\n") {
+            want.push(b'\n');
         }
-        if now.as_deref() == Some(kept.as_slice()) {
+        want.extend_from_slice(&gained);
+        let absent = self.queue.is_none() && want.is_empty();
+        let meta = fs::symlink_metadata(&path);
+        let unchanged = match &meta {
+            Ok(m) if m.file_type().is_file() => fs::read(&path).is_ok_and(|now| now == want),
+            Ok(_) => false,
+            Err(_) => absent,
+        };
+        if unchanged {
             return None;
         }
-        let done = if kept.is_empty() && self.queue.is_none() {
-            fs::remove_file(&path)
-        } else {
-            fs::write(&path, &kept)
-        };
-        Some(match done {
-            Ok(()) => format!(
-                "put back the work queue: {forged} line(s) its witness does not hold dropped, {added} kept"
-            ),
+        Some(match write_queue(&path, &want, absent) {
+            Ok(()) => "put back the work queue: only the harness and the human move it".to_owned(),
             Err(e) => format!("could not put back the work queue: {e}"),
         })
     }
 }
 
-/// The non-empty lines of `bytes`.
-fn lines(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
-    bytes.split(|b| *b == b'\n').filter(|l| !l.is_empty())
+/// Write the queue afresh: whatever stands at `path` — a link, a directory, a file — is removed
+/// first, and the new file is created new (never through a link), under a real `shared/`.
+fn write_queue(path: &Path, bytes: &[u8], absent: bool) -> std::io::Result<()> {
+    if let Ok(m) = fs::symlink_metadata(path) {
+        if m.is_dir() {
+            fs::remove_dir_all(path)?;
+        } else {
+            fs::remove_file(path)?;
+        }
+    }
+    if absent {
+        return Ok(());
+    }
+    if let Some(dir) = path.parent() {
+        if fs::symlink_metadata(dir).is_ok_and(|m| !m.is_dir()) {
+            fs::remove_file(dir)?;
+        }
+        fs::create_dir_all(dir)?;
+    }
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    std::io::Write::write_all(&mut f, bytes)
 }
 
 /// Where the queue's witness lives: `$XDG_STATE_HOME/mnemorph/queue/<world>-<fnv64a>.jsonl`,
@@ -323,43 +341,71 @@ fn hash(bytes: &[u8]) -> u64 {
 mod queue_tests {
     use super::*;
 
-    /// A body's command added a forged line and the human's `q` added a witnessed one while it
-    /// ran: the forged line goes, the human's stays, the old lines are untouched.
+    /// Whatever a body's command does to the queue, it comes back as what it held plus what its
+    /// witness gained since, in the witness's order.
     #[test]
-    fn the_queue_is_put_back_by_its_witness() {
+    fn the_queue_is_rebuilt_from_its_witness() {
         let root = std::env::temp_dir().join(format!("mnemorph-witness-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let world = root.join("w");
         fs::create_dir_all(world.join(".mnemorph/shared")).unwrap();
         let witness = root.join("witness.jsonl");
-        fs::write(world.join(QUEUE), "old\n").unwrap();
-        fs::write(&witness, "old\n").unwrap();
-        let take = || Snapshot {
-            witness: Some(witness.clone()),
-            ..Snapshot::take(&world)
+        let queue = world.join(QUEUE);
+        let take = || {
+            let mut s = Snapshot::take(&world);
+            s.witness = Some(witness.clone());
+            s.witness_len = fs::read(&witness).map_or(0, |w| w.len());
+            s
         };
+        fs::write(&queue, "old\n").unwrap();
+        fs::write(&witness, "old\n").unwrap();
+
+        // A forged line, the human's two moves reversed, one of them deleted.
         let before = take();
-        fs::write(world.join(QUEUE), "old\nforged\nhuman\n").unwrap();
-        fs::write(&witness, "old\nhuman\n").unwrap();
+        fs::write(&witness, "old\nhuman-1\nhuman-2\n").unwrap();
+        fs::write(&queue, "old\nforged\nhuman-2\n").unwrap();
         let notes = before.restore();
         assert_eq!(
-            fs::read_to_string(world.join(QUEUE)).unwrap(),
-            "old\nhuman\n"
+            fs::read_to_string(&queue).unwrap(),
+            "old\nhuman-1\nhuman-2\n"
         );
         assert!(
-            notes
-                .iter()
-                .any(|n| n.contains("1 line(s) its witness does not hold dropped")),
+            notes.iter().any(|n| n.contains("put back the work queue")),
             "{notes:?}"
         );
-        // A history rewritten by the command comes back whole.
+
+        // A link in the queue's place, pointing outside: the target is never written.
+        let outside = root.join("outside");
+        fs::write(&outside, "mine\n").unwrap();
         let before = take();
-        fs::write(world.join(QUEUE), "rewritten\n").unwrap();
+        fs::remove_file(&queue).unwrap();
+        std::os::unix::fs::symlink(&outside, &queue).unwrap();
         before.restore();
+        assert!(fs::symlink_metadata(&queue).unwrap().file_type().is_file());
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "mine\n");
         assert_eq!(
-            fs::read_to_string(world.join(QUEUE)).unwrap(),
-            "old\nhuman\n"
+            fs::read_to_string(&queue).unwrap(),
+            "old\nhuman-1\nhuman-2\n"
         );
+
+        // The shelf deleted, or a link in its place.
+        let before = take();
+        fs::remove_dir_all(world.join(".mnemorph/shared")).unwrap();
+        std::os::unix::fs::symlink(&root, world.join(".mnemorph/shared")).unwrap();
+        before.restore();
+        assert!(
+            fs::symlink_metadata(world.join(".mnemorph/shared"))
+                .unwrap()
+                .is_dir()
+        );
+        assert_eq!(
+            fs::read_to_string(&queue).unwrap(),
+            "old\nhuman-1\nhuman-2\n"
+        );
+        assert!(!root.join("queue.jsonl").exists());
+
+        // Untouched, nothing is said.
+        assert_eq!(take().restore(), Vec::<String>::new());
         let _ = fs::remove_dir_all(&root);
     }
 }

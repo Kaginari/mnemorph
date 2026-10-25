@@ -256,13 +256,13 @@ flowchart LR
   group ends everything the command started. A tool that insists on its own session or group
   (Python's `start_new_session`, Go's `Setsid`, a pty) fails there with `EPERM`, and coreutils
   `timeout` signals the whole command when it fires. Seatbelt has no such rule on macOS. The shared
-  work queue is put back line by line: what it held stays, and of the added lines only those its
-  witness holds — the witness, under the human's state directory, keeps every line the harness and
-  the human's `mnemorph q` wrote — so a forged move is dropped and the human's concurrent moves are
-  kept. A body's own `mnemorph q` refuses (every command carries `MNEMORPH_BODY`, a courtesy; the
-  tripwire is the border). `tmp/` and `intel/` stay writable; a repository the command itself
-  creates is its own. The snapshot keeps up to 16 MiB of content; a change to a protected file
-  beyond that is reported, not undone.
+  work queue is rebuilt from what it held and what its witness gained since — the witness, under the
+  human's state directory, keeps every line the harness and the human's `mnemorph q` wrote — so
+  nothing the command did to the file counts, a link in its place included, and the human's
+  concurrent moves are kept. A body's own `mnemorph q` refuses (every command carries
+  `MNEMORPH_BODY`, a courtesy; the tripwire is the border). `tmp/` and `intel/` stay writable; a
+  repository the command itself creates is its own. The snapshot keeps up to 16 MiB of content; a
+  change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard
   lets no command reach. Before every command and every file write, the working tree is
   snapshotted into the attic's own git object store — only changed files are hashed again.

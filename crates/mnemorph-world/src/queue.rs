@@ -362,6 +362,18 @@ impl Queue {
 
     /// Append a snapshot and read it back: the fold decides whether it landed.
     fn land(&self, item: Item) -> Result<Item, Refusal> {
+        // A link at the queue or its shelf would carry the harness's write elsewhere.
+        for p in [Some(self.path.as_path()), self.path.parent()]
+            .into_iter()
+            .flatten()
+        {
+            if std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()) {
+                return Err(Refusal::Io(format!(
+                    "{} is a link: the queue is not written through it",
+                    p.display()
+                )));
+            }
+        }
         // The witness first: a line the queue holds and its witness does not would be dropped by
         // the next command's tripwire.
         if let Some(w) = &self.witness {

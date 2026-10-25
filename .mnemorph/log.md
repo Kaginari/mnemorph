@@ -2357,3 +2357,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     together.
 - **Open (`@?`):** a race window remains while the tripwire rewrites the queue. A move landing
   within that write is lost; it is narrow, and the witness still holds the line.
+
+---
+
+### [2026-10-25T10:51:33+01:00] rimuru — the queue rebuilt from its witness
+- **Task:** Opus verified the witness design and found four holes:
+  - a symlink at the queue's path survived and was written through (into the world, or out of
+    it);
+  - deleting or relinking `shared/` lost the queue;
+  - a command could drop or reorder the human's concurrent moves;
+  - `open.rs` passed a non-canonical world.
+- **Fixed:**
+  - the tripwire records the witness's length at the snapshot, and rebuilds the queue as the old
+    bytes plus the witness's gain since, in the witness's order, never reading the command's file;
+  - the rebuild runs after the generic restore, so `shared/` stands again;
+  - whatever is at the path is removed and the file is created new;
+  - `Queue::land` refuses a link at the queue or its shelf;
+  - `Queue::of(cx.world())`.
+- **Learned:** a restore that consults the tampered file inherits the tamper. Rebuild only from
+  what the command could not reach.

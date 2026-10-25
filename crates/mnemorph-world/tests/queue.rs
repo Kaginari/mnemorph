@@ -246,3 +246,18 @@ fn the_human_and_the_harness_are_reserved_names() {
         r.problems
     );
 }
+
+/// A link in the queue's place is never written through.
+#[test]
+fn the_queue_is_not_written_through_a_link() {
+    let w = World::new("link");
+    let r = Roster::load(&w.0);
+    let target = w.0.join("elsewhere.jsonl");
+    std::os::unix::fs::symlink(&target, w.0.join("queue.jsonl")).unwrap();
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    assert!(matches!(
+        q.add(&r, None, "human", "x", 0),
+        Err(Refusal::Io(_))
+    ));
+    assert!(!target.exists());
+}
