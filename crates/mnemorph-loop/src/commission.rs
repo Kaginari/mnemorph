@@ -285,6 +285,133 @@ fn file_facts(world: &Path, ending: &Ending, by: &str) {
     }
 }
 
+/// Who can carry out a held order, if anyone: the body it is for must be able to — the body it
+/// reports to may lawfully commission it, and every path the order names lies on its ground.
+/// `Ok` names the dispatcher; `Err` says why the order stays held.
+pub(crate) fn carrier(
+    world: &Path,
+    roster: &Roster,
+    item: &mnemorph_world::queue::Item,
+    left: Option<u64>,
+) -> Result<String, String> {
+    let Some(to) = item.to.as_deref() else {
+        return Err("the throne's work waits for the human's turn".into());
+    };
+    let Some(parent) = roster.chain(to).into_iter().next() else {
+        return Err(format!("{to} reports to no one: the human dispatches it"));
+    };
+    let plan = plan_items(world, roster, &parent);
+    let left_wt = left.unwrap_or(u64::MAX);
+    let ask = Ask {
+        plan: &plan,
+        slice_wt: left.map_or(u64::MAX, |l| l / 2),
+        left_wt,
+    };
+    match dispatch(roster, &parent, to, &ask) {
+        Err(why) => return Err(why.to_string()),
+        Ok(Hop::Via { elf, .. }) => {
+            return Err(format!("{to} is in {elf}'s lane: {elf} dispatches it"));
+        }
+        Ok(Hop::Direct(_)) => {}
+    }
+    // Its ground is its own and that of every body below it: an Orc carries an order through
+    // its Slimes.
+    let below: Vec<String> = roster
+        .living()
+        .filter(|c| c.name == to || roster.chain(&c.name).iter().any(|n| n == to))
+        .map(|c| c.name.clone())
+        .collect();
+    let grounds: Vec<_> = below.iter().filter_map(|n| soil(roster, n)).collect();
+    for word in item.ask.split_whitespace() {
+        let Some((path, inside)) = named_path(world, word) else {
+            continue;
+        };
+        if !inside || !grounds.iter().any(|g| g.admits(&path)) {
+            return Err(format!(
+                "`{path}` is not on the ground of {to} or any body below it: it waits for a body that can carry it"
+            ));
+        }
+    }
+    Ok(parent)
+}
+
+/// The world path a word of an order names, when it names one that exists: quotes and
+/// punctuation trimmed, a `:line` suffix dropped, an absolute path inside the world made
+/// relative. A path that climbs (`..`) or leaves the world is named but on no ground: the flag
+/// says whether it stays inside.
+fn named_path(world: &Path, said: &str) -> Option<(String, bool)> {
+    use std::path::Component;
+    let mut path = said.trim_matches(|c: char| "`'\",.;()[]".contains(c));
+    while let Some((head, tail)) = path.rsplit_once(':') {
+        if tail.is_empty() || tail.bytes().all(|b| b.is_ascii_digit()) {
+            path = head;
+        } else {
+            break;
+        }
+    }
+    if path.is_empty() || !(path.contains('/') || path.contains('.')) {
+        return None;
+    }
+    let p = Path::new(path);
+    let rel = if p.is_absolute() {
+        p.strip_prefix(world)
+            .map_or_else(|_| p.to_path_buf(), Path::to_path_buf)
+    } else {
+        p.to_path_buf()
+    };
+    let climbs = rel
+        .components()
+        .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
+    let shown = rel.display().to_string();
+    if climbs || rel.is_absolute() {
+        return (rel.is_absolute() || world.join(&rel).exists()).then_some((shown, false));
+    }
+    world.join(&rel).exists().then_some((shown, true))
+}
+
+/// Book what a woken order came to: `DONE` closes it, any other report leaves it claimed with the
+/// exit noted, and a refused commission goes back on hold. The line says so, for the human and
+/// the next turn.
+pub(crate) fn settle(
+    q: &mnemorph_world::Queue,
+    roster: &Roster,
+    item: &mnemorph_world::queue::Item,
+    outcome: &Outcome,
+) -> String {
+    use mnemorph_world::queue::{HARNESS, Move};
+    let to = item.holder();
+    let note = |n: String| {
+        // Said once: an order that keeps coming back does not grow a note every turn.
+        if item.notes.last() != Some(&format!("{HARNESS}: {n}")) {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Touch { note: n });
+        }
+    };
+    if outcome.is_error {
+        let _ = q.move_item(roster, HARNESS, &item.id, &Move::Requeue);
+        note(outcome.content.clone());
+        return format!(
+            "queue {}: {to} was not commissioned — {}",
+            item.id, outcome.content
+        );
+    }
+    let status = Report::parse(&outcome.content)
+        .map(|r| r.status)
+        .unwrap_or_default();
+    match status.split_whitespace().next() {
+        Some("DONE") => {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Close { drop: false });
+        }
+        // Stopped by the clock, the budget, the context or the human: nothing the body did wrong,
+        // so the order waits again.
+        Some("INTERRUPTED" | "CHECKPOINT") => {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Requeue);
+            note(format!("waits again: {status}"));
+        }
+        _ => note(format!("exit: {status}")),
+    }
+    format!("queue {}: {to} reported {status}", item.id)
+}
+
 /// Relay-hold: an answering child's `@$ <body>: <ask>` orders are held on the shared queue in its
 /// name; nothing dispatches them mid-turn.
 fn hold_orders(q: &mnemorph_world::Queue, world: &Path, ending: &Ending, by: &str) {

@@ -2391,3 +2391,44 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:** the first move ever creates the witness. A rebuild that finds no witness takes no
   lock, so the very first move can still race it. The window is once per machine and
   microseconds wide.
+
+---
+
+### [2026-10-25T11:07:43+01:00] rimuru — M7: the wake
+- **Task:** the human said "merge and continue after fix if needed": #154 was merged, and the
+  next rung is the wake.
+- **Files:**
+  - mnemorph-loop:
+    - commission.rs — `carrier`: the body it reports to may lawfully commission it, and every
+      path the order names that exists lies on its ground;
+    - commission.rs — `settle`: DONE closes, another word notes the exit, a refusal requeues;
+    - run.rs — `Run::wake`, `woken` opening the next ask;
+    - session.rs — `drive` wakes after each turn.
+  - Tests:
+    - the wake runs what its body can carry, leaves the rest held with one note, and opens the
+      next turn;
+    - an off-wire answer files no facts and holds no orders (the loose end from #151).
+  - docs/04 relay-hold.
+- **Decided:** a held order is commissioned by the body its target reports to, whoever ordered
+  it. `Queue::add` already refused orders up the ranks, so that body acts in the orderer's stead,
+  and the dispatch law is checked again in `order`. The wake's reports reach the next turn as a
+  preface, at no extra model call.
+- **Open:** the bodies' `queue` tool; the status line's "N held"; a wake that runs while the human
+  is away (it now runs only after a turn).
+
+---
+
+### [2026-10-25T11:16:07+01:00] rimuru — #155 review fixes
+- **Task:** fix Fable's review of the wake.
+- **Fixed:**
+  - the ground check counts the target's ground and that of every body below it, so an Orc
+    carries orders through its Slimes;
+  - a turn the human interrupted wakes nothing: an Esc and a departed client both end the turn
+    `Interrupted`;
+  - a spent budget stops the wake, so there is no claim/refuse churn;
+  - `INTERRUPTED` and `CHECKPOINT` put an order back on hold, and every settle note is said once;
+  - `named_path` drops `:line`, makes absolute paths inside the world relative, and holds a `..`
+    or outside path;
+  - the docs say "every existing path".
+- **Open:** the ledger row of a woken commission names its dispatcher as the parent body. A
+  `queue <id>` marker on the row would name the wake.
