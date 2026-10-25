@@ -2497,3 +2497,53 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the file is opened with `O_NOFOLLOW` (`libc`).
 - **Open:** a concurrent session's tripwire can put back an entry. Append-only is checkable, so a
   put-back could keep growth whose prefix matches the snapshot, given a witness for what grew.
+
+---
+
+### [2026-10-25T12:18:54+01:00] rimuru — M7: grants from the giver's own budget, bounded by worth
+- **Task:** the human's design: a shared budget, handed down the ranks. Each giver judges what a
+  child is worth and gives from its own budget: "rimuru can judge to give budget from shared
+  budget to an elf, the elf decide for an orc and orc decide for slime", and "each one deciding
+  can give from his budget too".
+- **Files:**
+  - world worth.rs:
+    - `Card` (spent wt from the usage ledger, gate passes and fails from the journal), counted
+      for a body and every body below it;
+    - worth `0.5 + 0.5 × (passes+1)/(passes+fails+2)`;
+    - `share_pct` (page 06's compiled shares);
+    - `ceiling = left × 90% × share × worth`;
+  - loop:
+    - commission.rs — `grant()` clamps the asked slice, and the report says when it was cut;
+    - commission.rs — `cards_below` in every dispatching child's prompt;
+    - open.rs — the cards in Rimuru's prompt;
+    - run.rs — the wake draws at most a quarter of the pool and runs at most 3 orders;
+  - tests:
+    - a card counts the body and its subtree; a handed-back failure is not a verdict;
+    - the ceiling keeps reserve, share and worth, and a chain of grants shrinks;
+    - a bounded grant is told to the dispatcher;
+    - a wake runs at most three orders;
+  - docs/06.
+- **Decided:** the giver judges, and the harness bounds it. A child's record counts in its
+  parent's card, so funding failing children costs the parent. The learned value model (M11)
+  replaces the worth score; the card and the clamp stay.
+- **Next:** top-ups. A child out of budget asks its parent, and the parent gives from its own
+  envelope.
+
+---
+
+### [2026-10-25T12:27:03+01:00] rimuru — #158 review fixes
+- **Task:** fix Fable's review of grants and cards.
+- **Fixed:**
+  - the dispatcher is told whenever it gets less than asked, including the default half, which
+    always exceeds the ceiling;
+  - a handed-back failure counts half, so worth no longer drifts to 1;
+  - only entries the end gate wrote count (`- **By:** the end gate`), so a hand entry is ignored;
+  - `Records` is read once per prompt;
+  - spend on cards is rounded to the thousand, so a card changes with the record, not every call;
+  - a refused order no longer counts toward the wake's three;
+  - the tool text and page 06 say "half, within the ceiling", and the plan weights are marked as
+    to come.
+- **Open:**
+  - a creature reborn under a retired name inherits the old record;
+  - cards in a child's system prompt make a second commission of the same child miss the cache.
+    Moving them to the first user turn would keep the system fixed.

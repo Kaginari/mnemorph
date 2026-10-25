@@ -32,7 +32,7 @@ impl Tool for CommissionTool {
     }
 
     fn description(&self) -> &'static str {
-        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` carves its slice of your envelope (default: half of what is left)."
+        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less."
     }
 
     fn schema(&self) -> Value {
@@ -150,7 +150,51 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),
+    ) + &cards_below(world, roster, name)
+}
+
+/// The cards of the bodies reporting to `name`, for it to read before it funds one; empty when
+/// none reports to it.
+pub(crate) fn cards_below(world: &Path, roster: &Roster, name: &str) -> String {
+    let records = mnemorph_world::worth::Records::load(world);
+    let lines: Vec<String> = roster
+        .living()
+        .filter(|c| c.reports_to.as_deref() == Some(name))
+        .map(|c| format!("- {}", records.card(roster, &c.name).line()))
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\nWhat you give a body comes out of your own budget, and what it spends counts as yours: \
+read its card before you fund it, and set `budget_wt` by what it is worth to the work. The harness \
+grants at most your reserve-kept share for its race, scaled by its worth. The cards:\n{}",
+        lines.join("\n")
     )
+}
+
+/// The slice a commission carries, and a line for the dispatcher when it got less than it asked.
+/// The grant is the dispatcher's judgment, bounded: its reserve kept, the child's race share, the
+/// child's worth from its card.
+fn grant(
+    c: &Commissioner,
+    roster: &Roster,
+    a: &CommissionArgs,
+    left: Option<u64>,
+) -> (u64, Option<String>) {
+    let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
+    let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
+        let card = mnemorph_world::worth::card(&c.world, roster, &a.to);
+        mnemorph_world::worth::ceiling(l, child.race, &card)
+    });
+    let slice = ceiling.map_or(asked, |cap| asked.min(cap));
+    let granted = (slice < asked).then(|| {
+        format!(
+            "[granted {slice} wt of the {asked} asked: the ceiling for {} out of what you had left]",
+            a.to
+        )
+    });
+    (slice, granted)
 }
 
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
@@ -177,7 +221,7 @@ pub(crate) async fn order(
     };
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
-    let slice = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
+    let (slice, granted) = grant(c, &roster, &a, left);
     if slice == 0 {
         return refused(format!(
             "no budget left to carve for {}: @? budget to your commander",
@@ -248,7 +292,7 @@ pub(crate) async fn order(
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, &ending, &a.to);
     }
-    let report = report_of(&ending, &landed, &put_back);
+    let report = report_of(&ending, &landed, &put_back, granted.as_deref());
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
@@ -553,7 +597,12 @@ fn child_run(
 /// The child's report as its dispatcher reads it: its own wire answer — an answer off the wire is
 /// a FAIL, never a DONE — or its ending in words; its written paths as the world shows them; what
 /// was put back after it.
-fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[(PathBuf, bool)]) -> String {
+fn report_of(
+    ending: &Ending,
+    landed: &[PathBuf],
+    put_back: &[(PathBuf, bool)],
+    granted: Option<&str>,
+) -> String {
     let mut report = match ending {
         Ending::Answered(text) => Report::parse(text).unwrap_or_else(|| Report {
             status: "FAIL off the wire: the answer opened with no @S".into(),
@@ -592,6 +641,7 @@ fn report_of(ending: &Ending, landed: &[PathBuf], put_back: &[(PathBuf, bool)]) 
             shown.join(", ")
         ));
     }
+    report.other.extend(granted.map(str::to_owned));
     report.emit(DEFAULT_CAP, None)
 }
 
