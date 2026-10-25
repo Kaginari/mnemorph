@@ -218,7 +218,16 @@ The world repairs itself in small, mechanical steps, each one written to the led
 - **Relief** splits a strained creature's zone in two young of the same race — by its prefixes,
   or by the directory tree under a one-prefix zone — or, when the zone cannot split, retires the
   seat: it keeps its memory, claims no files, and stays visible. A `relief` row records the act.
-  Relief is skipped for a body that just evolved.
+  Relief is skipped for a body that just evolved. It relieves Slimes and Orcs: the two young are
+  `<name>-a` and `<name>-b`, of the old one's base race, seated beside it, reporting to the same
+  parent, with the same verify lines and Minds, each taking half the claims sorted — a claim
+  another covers set aside — or half the entries under a one-directory ground, descending while
+  that directory holds one entry (hidden entries go with the first, a link counts as a file). An
+  Orc's living Slimes report to the young whose ground covers theirs. The old seat gains one
+  `Retired: yes` line and nothing else changes; its open queue orders are named, to re-route.
+  Every check runs before any write, and a failed write is undone. The
+  human can act it with `mnemorph relief <name> [--apply]` — without `--apply` it says what it
+  would do; never from a body's command.
 - **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
   its lane goes into the ledger as a `death` row and the next-fit lane is suggested on the wire —
   advice to the parent, never a change on its own.
@@ -227,7 +236,14 @@ The world repairs itself in small, mechanical steps, each one written to the led
   next dispatch, so no court is created for a retired seat. A heal never moves trust: a body's
   verify lines change only through its own gate.
 - **`mnemorph housekeep --heal`** fixes what is mechanical — a creature without a doc, a broken
-  *Reports to* link — and reports everything else.
+  *Reports to* link — and reports everything else. A seat with no doc gets a retired stub, so its
+  memory stays visible and it claims nothing; a *Reports to* that names no living creature is
+  relinked to the nearest living ancestor of the race that may command it (an Orc for a Slime, an
+  Elf for an Orc) — never past the race law; with none above, it is left. Each repair is one journal
+  entry; only the field's own line changes, and nothing is written through a link. A doc that
+  cannot be read, two seats with one name, a loop in the chain are said and left to judgment.
+  Without `--heal` it says what it would fix. It exits 0 when the roster is whole, 1 while anything
+  is left or a repair waits for `--heal`, 2 on an error or inside a body's command.
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
 ### The end gate

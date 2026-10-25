@@ -10,6 +10,8 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 Usage: mnemorphd [--world <dir>]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--world <dir>]
+       mnemorphd housekeep [--heal] [--world <dir>]
+       mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -56,6 +58,12 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("q") {
         return queue(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("housekeep") {
+        return housekeep(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("relief") {
+        return relief(&all[1..]);
     }
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
@@ -228,6 +236,106 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// `relief <name> [--apply]`: what relief would do to a strained creature — split its ground in
+/// two young, or retire its seat — and with `--apply`, done and journaled. Exits 0 when done or
+/// planned, 2 on an error or inside a body's command.
+fn relief(args: &[String]) -> ExitCode {
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: relief is the human's or the council's, never a body's command"
+        ));
+    }
+    let mut world = None;
+    let mut apply = false;
+    let mut name = None;
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--apply" => apply = true,
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            other if other.starts_with("--") => {
+                return refused(&format!("unknown argument `{other}`; see --help"));
+            }
+            other if name.is_none() => name = Some(other.to_owned()),
+            other => return refused(&format!("one creature at a time, not `{other}` too")),
+        }
+    }
+    let Some(name) = name else {
+        return refused(&"relief needs the creature's name");
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    match mnemorph_server::world::relief::relieve(&world, &name, apply) {
+        Ok(r) => {
+            let verb = if apply {
+                "done"
+            } else {
+                "would do (run with --apply)"
+            };
+            println!("{verb}: {}", r.line());
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `housekeep [--heal]`: what is broken in the world's roster; with `--heal`, the mechanical
+/// repairs made and journaled. Exits 0 when the roster is whole, 1 while anything is left to
+/// judgment or a repair waits for `--heal`, 2 on an error or inside a body's command.
+fn housekeep(args: &[String]) -> ExitCode {
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: the roster is healed by the human, never by a body's command"
+        ));
+    }
+    let mut world = None;
+    let mut apply = false;
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--heal" => apply = true,
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let found = match mnemorph_server::world::heal::heal(&world, apply) {
+        Ok(found) => found,
+        Err(e) => return refused(&format!("the heal could not write: {e}")),
+    };
+    let mut out = std::io::stdout().lock();
+    let verb = if apply {
+        "fixed"
+    } else {
+        "would fix (run with --heal)"
+    };
+    for fix in &found.fixes {
+        let _ = writeln!(out, "{verb}: {}", fix.line());
+    }
+    for left in &found.left {
+        let _ = writeln!(out, "left: {left}");
+    }
+    if found.fixes.is_empty() && found.left.is_empty() {
+        let _ = writeln!(out, "the roster is whole");
+    }
+    if found.left.is_empty() && (apply || found.fixes.is_empty()) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }
 

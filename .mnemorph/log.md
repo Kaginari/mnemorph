@@ -2657,7 +2657,76 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
-### [2026-10-25T11:30:00+02:00] rimuru — a slice that runs out is never a failure on the card
+### [2026-10-25T13:50:59+01:00] rimuru — M7: housekeep --heal
+- **Task:** the human said "go". Next M7 rung is self-heal's `housekeep --heal`. The clock-death
+  memo waits, because its code is in commission.rs, which another session is changing (Thompson
+  worth, in its own worktree).
+- **Files:**
+  - world heal.rs — `heal(world, apply)`: a retired stub for a seat with no doc; a broken
+    *Reports to* relinked to the nearest living ancestor or the throne; problems and loops left;
+    one journal entry per repair;
+  - mnemorphd — `housekeep [--heal]`, exit 1 while anything is left;
+  - CLI — `mnemorph housekeep` passes through like `q`;
+  - tests: tests/heal.rs (dry run, three repairs, the rest of a doc untouched, journaled, idempotent),
+    and the CLI route;
+  - docs/03.
+
+---
+
+### [2026-10-25T13:57:55+01:00] rimuru — #163 review fixes
+- **Task:** fix Fable's review of `housekeep --heal`.
+- **Fixed:**
+  - a relink goes only to a living ancestor of the race that may command the body (an Orc for a
+    Slime, an Elf for an Orc); with none, it is left. Before, a Slime relinked to its Elf broke the
+    race law;
+  - no write through a link: race dir, seat and doc are checked, and a stub is created new;
+  - the relink splices only the field's own line, keeping CRLF, the trailing newline and prose
+    field-looking lines;
+  - inside a body's command `housekeep` refuses (exit 2);
+  - exits: 0 when whole, 1 when anything is left or a repair waits for `--heal`, 2 on errors;
+  - a journal write that fails is left as a finding, not swallowed;
+  - the stub name check also covers names the roster refused.
+
+---
+
+### [2026-10-25T14:16:45+01:00] rimuru — M7: relief
+- **Task:** the human said "yes cargo clean and continue". `cargo clean` freed 39.5 GB (the disk
+  had filled). Next M7 rung, clear of the other session's commission work: relief.
+- **Files:**
+  - world relief.rs — `relieve(world, name, apply)`:
+    - a split in halves by claims, or by the tree under a one-directory ground;
+    - otherwise the seat retires;
+    - the young get docs (created new, never through a link), the old seat gains one `Retired`
+      line, and one journal entry is written;
+  - mnemorphd — `relief <name> [--apply]`, refused in a body's command;
+  - CLI — passes it through;
+  - tests: a split by prefixes (CRLF doc, memory kept, no overlap), a split by tree, a retire,
+    an Elf refused;
+  - docs/03.
+- **Next:** the council — strain counted per body, `@INSTRUCT`/`@SPLIT`/`@ESCALATE` at 5, relief
+  at 7, forced escalation after three warrants.
+
+---
+
+### [2026-10-25T14:25:29+01:00] rimuru — #164 review fixes
+- **Task:** fix Fable's review of relief.
+- **Fixed:**
+  - an Orc's living Slimes are relinked to the young that covers their zone; before, they were
+    orphaned with High findings;
+  - a root-file claim is written `./FILE`, so the young parse;
+  - preflight checks both seats and the old doc before any write, and a failed young write is
+    undone; the dry run checks too;
+  - the tree split descends through a lone directory, a link is a file, and hidden entries go to
+    `-a`;
+  - an ascended race gives young of the base race, seated beside the old;
+  - Minds are copied;
+  - nested claims are deduplicated;
+  - the old seat's open queue orders are named, to re-route;
+  - `heal::splice` is shared.
+- **Open:** moving queue orders to the young automatically, and relief's automatic trigger (the
+  council).
+
+### [2026-10-25T14:45:30+01:00] rimuru — a slice that runs out is never a failure on the card
 - **Task:** Veldora asked what Mnemorph gained from the value studies, then "do both": pin the
   rule the budget-loop study found worth keeping, and build the instruments the real runs showed
   missing (the second, as its own pull request).
