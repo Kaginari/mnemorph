@@ -914,9 +914,13 @@ impl Run {
     /// The wake, at a turn's end: each held order on the shared queue that its body can carry out
     /// is claimed in that body's name and commissioned by the body it reports to, the law checked
     /// again; an order its body cannot carry out stays held, the reason noted. What each one came
-    /// to is said now and opens the next turn. An Esc stops the wake.
-    pub async fn wake(&mut self) {
+    /// to is said now and opens the next turn. A turn the human interrupted wakes nothing, an Esc
+    /// during the wake stops it, and a spent budget leaves every order waiting.
+    pub async fn wake(&mut self, after: &Ending) {
         use mnemorph_world::queue::{HARNESS, Move, State};
+        if matches!(after, Ending::Interrupted) {
+            return;
+        }
         let Some(c) = self.commissioner.clone() else {
             return;
         };
@@ -932,6 +936,9 @@ impl Run {
                 .limits
                 .budget_wt
                 .map(|b| b.saturating_sub(self.spent_wt));
+            if left == Some(0) {
+                break;
+            }
             let parent = match crate::commission::carrier(&c.world, &roster, &item, left) {
                 Ok(parent) => parent,
                 Err(why) => {

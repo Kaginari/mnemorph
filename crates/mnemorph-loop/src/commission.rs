@@ -314,19 +314,59 @@ pub(crate) fn carrier(
         }
         Ok(Hop::Direct(_)) => {}
     }
-    let Some(ground) = soil(roster, to) else {
-        return Err(format!("{to} has no ground"));
-    };
+    // Its ground is its own and that of every body below it: an Orc carries an order through
+    // its Slimes.
+    let below: Vec<String> = roster
+        .living()
+        .filter(|c| c.name == to || roster.chain(&c.name).iter().any(|n| n == to))
+        .map(|c| c.name.clone())
+        .collect();
+    let grounds: Vec<_> = below.iter().filter_map(|n| soil(roster, n)).collect();
     for word in item.ask.split_whitespace() {
-        let path = word.trim_matches(|c: char| "`'\",.;:()[]".contains(c));
-        let named = path.contains('/') || path.contains('.');
-        if named && !path.is_empty() && world.join(path).exists() && !ground.admits(path) {
+        let Some((path, inside)) = named_path(world, word) else {
+            continue;
+        };
+        if !inside || !grounds.iter().any(|g| g.admits(&path)) {
             return Err(format!(
-                "`{path}` is not on {to}'s ground: it waits for a body that can carry it"
+                "`{path}` is not on the ground of {to} or any body below it: it waits for a body that can carry it"
             ));
         }
     }
     Ok(parent)
+}
+
+/// The world path a word of an order names, when it names one that exists: quotes and
+/// punctuation trimmed, a `:line` suffix dropped, an absolute path inside the world made
+/// relative. A path that climbs (`..`) or leaves the world is named but on no ground: the flag
+/// says whether it stays inside.
+fn named_path(world: &Path, said: &str) -> Option<(String, bool)> {
+    use std::path::Component;
+    let mut path = said.trim_matches(|c: char| "`'\",.;()[]".contains(c));
+    while let Some((head, tail)) = path.rsplit_once(':') {
+        if tail.is_empty() || tail.bytes().all(|b| b.is_ascii_digit()) {
+            path = head;
+        } else {
+            break;
+        }
+    }
+    if path.is_empty() || !(path.contains('/') || path.contains('.')) {
+        return None;
+    }
+    let p = Path::new(path);
+    let rel = if p.is_absolute() {
+        p.strip_prefix(world)
+            .map_or_else(|_| p.to_path_buf(), Path::to_path_buf)
+    } else {
+        p.to_path_buf()
+    };
+    let climbs = rel
+        .components()
+        .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
+    let shown = rel.display().to_string();
+    if climbs || rel.is_absolute() {
+        return (rel.is_absolute() || world.join(&rel).exists()).then_some((shown, false));
+    }
+    world.join(&rel).exists().then_some((shown, true))
 }
 
 /// Book what a woken order came to: `DONE` closes it, any other report leaves it claimed with the
@@ -340,16 +380,15 @@ pub(crate) fn settle(
 ) -> String {
     use mnemorph_world::queue::{HARNESS, Move};
     let to = item.holder();
+    let note = |n: String| {
+        // Said once: an order that keeps coming back does not grow a note every turn.
+        if item.notes.last() != Some(&format!("{HARNESS}: {n}")) {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Touch { note: n });
+        }
+    };
     if outcome.is_error {
         let _ = q.move_item(roster, HARNESS, &item.id, &Move::Requeue);
-        let _ = q.move_item(
-            roster,
-            HARNESS,
-            &item.id,
-            &Move::Touch {
-                note: outcome.content.clone(),
-            },
-        );
+        note(outcome.content.clone());
         return format!(
             "queue {}: {to} was not commissioned — {}",
             item.id, outcome.content
@@ -358,17 +397,17 @@ pub(crate) fn settle(
     let status = Report::parse(&outcome.content)
         .map(|r| r.status)
         .unwrap_or_default();
-    if status.split_whitespace().next() == Some("DONE") {
-        let _ = q.move_item(roster, HARNESS, &item.id, &Move::Close { drop: false });
-    } else {
-        let _ = q.move_item(
-            roster,
-            HARNESS,
-            &item.id,
-            &Move::Touch {
-                note: format!("exit: {status}"),
-            },
-        );
+    match status.split_whitespace().next() {
+        Some("DONE") => {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Close { drop: false });
+        }
+        // Stopped by the clock, the budget, the context or the human: nothing the body did wrong,
+        // so the order waits again.
+        Some("INTERRUPTED" | "CHECKPOINT") => {
+            let _ = q.move_item(roster, HARNESS, &item.id, &Move::Requeue);
+            note(format!("waits again: {status}"));
+        }
+        _ => note(format!("exit: {status}")),
     }
     format!("queue {}: {to} reported {status}", item.id)
 }

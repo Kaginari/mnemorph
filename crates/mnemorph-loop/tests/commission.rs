@@ -695,7 +695,7 @@ async fn the_wake_runs_what_its_body_can_carry() {
         ScriptedModel::text("Seen."),
     ]));
     let mut run = w.rimuru(model.clone());
-    run.wake().await;
+    run.wake(&Ending::Answered(String::new())).await;
     assert_eq!(
         fs::read_to_string(w.0.join("src/tab.txt")).unwrap(),
         "tab\n"
@@ -708,11 +708,11 @@ async fn the_wake_runs_what_its_body_can_carry() {
         held.notes
             .last()
             .unwrap()
-            .contains("`lib/x.rs` is not on slime-s's ground"),
+            .contains("`lib/x.rs` is not on the ground of slime-s"),
         "{held:?}"
     );
     // A second wake leaves the waiting order's notes as they were.
-    run.wake().await;
+    run.wake(&Ending::Answered(String::new())).await;
     assert_eq!(q.items()[&cannot.id].notes, held.notes);
     // The next turn opens with what the wake ran.
     run.ask("anything new?", &mut |_| {}).await;
@@ -724,5 +724,63 @@ async fn the_wake_runs_what_its_body_can_carry() {
     assert!(
         last.contains(&format!("queue {}: slime-s reported DONE", can.id)),
         "{last}"
+    );
+}
+
+/// An Orc carries an order on its Slimes' ground; an interrupted turn wakes nothing; a path that
+/// climbs out is on no ground; an order stopped short waits again.
+#[tokio::test]
+async fn the_wake_reads_ground_below_and_stops_for_the_human() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("wake-below");
+    fs::write(w.0.join("src/done.txt"), "done\n").unwrap();
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let orc = q
+        .add(&roster, Some("orc-o"), "elf-e", "check src/done.txt:3", 0)
+        .unwrap();
+    let climbs = q
+        .add(&roster, Some("slime-s"), "orc-o", "edit src/../lib", 1)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("@S DONE\n@E")]));
+    let mut run = w.rimuru(model.clone());
+    // The human's Esc ended the turn: nothing runs.
+    run.wake(&Ending::Interrupted).await;
+    assert_eq!(model.requests().len(), 0);
+    assert_eq!(q.items()[&orc.id].state, State::Held);
+    run.wake(&Ending::Answered(String::new())).await;
+    let items = q.items();
+    assert_eq!(items[&orc.id].state, State::Done, "{:?}", items[&orc.id]);
+    let held = &items[&climbs.id];
+    assert_eq!(held.state, State::Held);
+    assert!(
+        held.notes.last().unwrap().contains("is not on the ground"),
+        "{held:?}"
+    );
+}
+
+/// An order stopped by the human mid-run waits again, its note said once.
+#[tokio::test]
+async fn an_interrupted_order_waits_again() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("wake-again");
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let item = q
+        .add(&roster, Some("orc-o"), "elf-e", "look around", 0)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text(
+        "@S CHECKPOINT clock\n@E",
+    )]));
+    let mut run = w.rimuru(model);
+    run.wake(&Ending::Answered(String::new())).await;
+    let now = &q.items()[&item.id];
+    assert_eq!(now.state, State::Held, "{now:?}");
+    assert!(
+        now.notes
+            .last()
+            .unwrap()
+            .contains("waits again: CHECKPOINT clock"),
+        "{now:?}"
     );
 }

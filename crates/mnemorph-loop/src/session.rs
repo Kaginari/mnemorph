@@ -56,8 +56,9 @@ impl Session {
         let mut endings = Vec::new();
         let mut next = Some(line.to_owned());
         while let Some(line) = next {
-            endings.push(self.run.ask(&line, on).await);
-            Box::pin(self.run.wake()).await;
+            let ending = self.run.ask(&line, on).await;
+            Box::pin(self.run.wake(&ending)).await;
+            endings.push(ending);
             next = self
                 .queue
                 .lock()

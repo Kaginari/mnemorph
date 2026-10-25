@@ -2415,3 +2415,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   preface, at no extra model call.
 - **Open:** the bodies' `queue` tool; the status line's "N held"; a wake that runs while the human
   is away (it now runs only after a turn).
+
+---
+
+### [2026-10-25T11:16:07+01:00] rimuru — #155 review fixes
+- **Task:** fix Fable's review of the wake.
+- **Fixed:**
+  - the ground check counts the target's ground and that of every body below it, so an Orc
+    carries orders through its Slimes;
+  - a turn the human interrupted wakes nothing: an Esc and a departed client both end the turn
+    `Interrupted`;
+  - a spent budget stops the wake, so there is no claim/refuse churn;
+  - `INTERRUPTED` and `CHECKPOINT` put an order back on hold, and every settle note is said once;
+  - `named_path` drops `:line`, makes absolute paths inside the world relative, and holds a `..`
+    or outside path;
+  - the docs say "every existing path".
+- **Open:** the ledger row of a woken commission names its dispatcher as the parent body. A
+  `queue <id>` marker on the row would name the wake.

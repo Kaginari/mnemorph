@@ -292,14 +292,16 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   too; work held by no one is the throne's. The human stands over every body.
 - **Relay-hold.** A report's `@$` orders are held on the queue; nothing dispatches a held row
   mid-turn. At the session's turn boundary the wake takes the held rows, lowest rank first. Each
-  one its body can carry out — the body it reports to may lawfully commission it, and every path
-  the order names lies on its ground — is claimed in that body's name and commissioned by the body
+  one its body can carry out — the body it reports to may lawfully commission it, and every
+  existing path the order names lies on its ground or the ground of a body below it — is claimed in that body's name and commissioned by the body
   it reports to, the queue id and who ordered it named in the ask, the dispatch rules checking it
-  again. Its report settles the claim: `DONE` closes it, any other word leaves it claimed with the
-  exit noted, and a commission the law refuses goes back on hold. An order its body cannot carry
+  again. Its report settles the claim: `DONE` closes it, `INTERRUPTED` or `CHECKPOINT` puts it back on
+  hold, any other word leaves it claimed with the exit noted, and a commission the law refuses
+  goes back on hold. An order its body cannot carry
   out stays held, the reason noted once, for the human or a body that can. What the wake ran is
   said as it runs and opens the session's next turn. The throne's own work waits for the human's
-  turn, and an Esc stops the wake.
+  turn; a turn the human interrupted wakes nothing, an Esc during the wake stops it, and a spent
+  budget leaves every order waiting.
 - **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
