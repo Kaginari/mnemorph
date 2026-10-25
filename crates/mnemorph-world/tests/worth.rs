@@ -1,0 +1,119 @@
+//! Cards, worth and the ceiling of a grant: a body's record counts with every body below it.
+
+use std::fs;
+
+use mnemorph_ledger::{Journal, UsageRow};
+use mnemorph_races::Race;
+use mnemorph_world::Roster;
+use mnemorph_world::log::{Entry, append};
+use mnemorph_world::worth::{Card, USAGE, card, ceiling};
+
+fn doc(world: &std::path::Path, race: &str, short: &str, body: &str) {
+    let dir = world.join(".mnemorph").join(race).join(short);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("README.md"), body).unwrap();
+}
+
+fn verdict(world: &std::path::Path, body: &str, said: &str) {
+    let entry = Entry {
+        body: body.into(),
+        title: format!("gate: {said}"),
+        lines: Vec::new(),
+    };
+    append(world, &entry).unwrap();
+}
+
+#[test]
+fn a_card_counts_the_body_and_every_body_below_it() {
+    let w = std::env::temp_dir().join(format!("mnemorph-worth-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        &w,
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+    );
+    doc(
+        &w,
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
+    );
+    doc(
+        &w,
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
+    );
+    doc(
+        &w,
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
+    );
+    let roster = Roster::load(&w);
+    // No record yet: worth 0.75.
+    assert_eq!(card(&w, &roster, "slime-s").worth_milli(), 750);
+    verdict(&w, "slime-s", "PASS");
+    verdict(&w, "slime-s", "PASS");
+    verdict(&w, "slime-t", "FAIL");
+    verdict(&w, "slime-t", "FAIL, handed back");
+    verdict(&w, "orc-o", "PASS");
+    let row = |body: &str, wt: u64| UsageRow {
+        ts: mnemorph_ledger::Timestamp(0),
+        session: "s".into(),
+        run: "r".into(),
+        body: body.into(),
+        race: "slime".into(),
+        commission: None,
+        model: "m".into(),
+        provider: "p".into(),
+        usage: mnemorph_ledger::Usage::default(),
+        prefix: 0,
+        wt,
+        usd: None,
+        envelope: None,
+    };
+    let ledger = Journal::<UsageRow>::new(w.join(USAGE));
+    ledger.append(&row("slime-s", 100)).unwrap();
+    ledger.append(&row("slime-t", 50)).unwrap();
+    ledger.append(&row("elf-e", 7)).unwrap();
+    let s = card(&w, &roster, "slime-s");
+    assert_eq!((s.passes, s.fails, s.spent_wt), (2, 0, 100));
+    let t = card(&w, &roster, "slime-t");
+    assert_eq!(
+        (t.passes, t.fails),
+        (0, 1),
+        "a failure handed back is not yet a verdict"
+    );
+    // The Orc answers for its Slimes: their records are in its card.
+    let o = card(&w, &roster, "orc-o");
+    assert_eq!((o.passes, o.fails, o.spent_wt), (3, 1, 150));
+    assert!(s.worth_milli() > o.worth_milli() && o.worth_milli() > t.worth_milli());
+    let _ = fs::remove_dir_all(&w);
+}
+
+#[test]
+fn the_ceiling_keeps_the_reserve_the_share_and_the_worth() {
+    let fresh = Card {
+        body: "slime-s".into(),
+        spent_wt: 0,
+        passes: 0,
+        fails: 0,
+    };
+    // 1000 left: 90% kept for grants, a Slime's 70%, worth 0.75.
+    assert_eq!(ceiling(1000, Race::Slime, &fresh), 472);
+    let failing = Card {
+        fails: 8,
+        ..fresh.clone()
+    };
+    assert!(ceiling(1000, Race::Slime, &failing) < 472);
+    // A chain of grants shrinks: each generation gets at most a share of what its giver had.
+    let mut left = 1_000_000;
+    for race in [Race::Elf, Race::Orc, Race::Slime] {
+        let next = ceiling(left, race, &fresh);
+        assert!(next * 2 < left, "{race:?}: {next} of {left}");
+        left = next;
+    }
+}

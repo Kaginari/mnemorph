@@ -161,6 +161,9 @@ pub fn open_with(
     let lanes = lanes(world);
     if !lanes.is_empty() {
         body.system.push_str(&dispatch_prompt(&lanes));
+        let roster = mnemorph_world::Roster::load(world);
+        body.system
+            .push_str(&crate::commission::cards_below(world, &roster, &body.name));
     }
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     if let Some(dir) = attic {

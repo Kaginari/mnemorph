@@ -64,11 +64,11 @@ impl World {
 
     /// Rimuru's run, able to commission, every body riding `model`.
     fn rimuru(&self, model: Arc<ScriptedModel>) -> Run {
-        self.rimuru_with(model, true)
+        self.rimuru_with(model, true, None)
     }
 
     /// As [`World::rimuru`], with or without an attic to put strays back from.
-    fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool) -> Run {
+    fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
         let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
             .with_unguarded(true);
@@ -116,8 +116,9 @@ impl World {
             model: "claude-sonnet-5-5".into(),
             system: "You are Rimuru.".into(),
         };
-        Run::new(body, Limits::for_race(Race::Rimuru), setup)
-            .with_commissioner(Arc::new(commissioner))
+        let mut limits = Limits::for_race(Race::Rimuru);
+        limits.budget_wt = budget;
+        Run::new(body, limits, setup).with_commissioner(Arc::new(commissioner))
     }
 
     fn results(&self) -> Vec<String> {
@@ -476,7 +477,7 @@ async fn a_stray_that_cannot_be_put_back_is_refused_above() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("It failed."),
     ]));
-    let mut run = w.rimuru_with(model.clone(), false);
+    let mut run = w.rimuru_with(model.clone(), false, None);
     run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -846,4 +847,59 @@ async fn the_queue_tool_follows_the_rank_law() {
         "the Slime is told why"
     );
     assert!(seen.contains("queue has no `claim`"), "a body never claims");
+}
+
+/// A dispatcher asks; the harness grants at most its reserve-kept share for the child's race,
+/// scaled by the child's worth, and says so in the report.
+#[tokio::test]
+async fn a_grant_is_bounded_and_the_dispatcher_is_told() {
+    let w = World::new("grant");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "budget_wt": 900_000}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru_with(model, true, Some(1_000_000));
+    run.ask("go", &mut |_| {}).await;
+    // About 1 000 000 left (less Rimuru's own call): 90% kept for grants, an Elf's 60%, worth
+    // 0.75 with no record — just under 405 000.
+    let result = &w.results()[0];
+    let granted: u64 = result
+        .split("[granted ")
+        .nth(1)
+        .and_then(|r| r.split(' ').next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("{result}"));
+    assert!((400_000..=405_000).contains(&granted), "{result}");
+    assert!(
+        result.contains("of the 900000 asked: the ceiling for elf-e"),
+        "{result}"
+    );
+}
+
+/// One wake runs at most three orders; the rest wait for the next.
+#[tokio::test]
+async fn a_wake_runs_at_most_three_orders() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("wake-three");
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let ids: Vec<String> = (0..4)
+        .map(|n| {
+            q.add(&roster, Some("orc-o"), "elf-e", &format!("look {n}"), 0)
+                .unwrap()
+                .id
+        })
+        .collect();
+    let done = || ScriptedModel::text("@S DONE\n@E");
+    let model = Arc::new(ScriptedModel::new([done(), done(), done()]));
+    let mut run = w.rimuru(model);
+    run.wake(&Ending::Answered(String::new())).await;
+    let items = q.items();
+    let states: Vec<State> = ids.iter().map(|id| items[id].state).collect();
+    assert_eq!(states, [State::Done, State::Done, State::Done, State::Held]);
 }

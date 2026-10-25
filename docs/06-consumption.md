@@ -146,6 +146,23 @@ Currency caps convert through the same table; a model with no known price is sti
   compiled **maximum** share of what the parent has left when it carves (Elf 60%, Orc 60%,
   Slime 70%, Kijin 30%, Dark Elf 40%) — a ceiling, never a default — and the slices together
   never exceed what the parent holds.
+- **Who gives.** Every slice comes out of the giver's own envelope: what a parent gives a child it
+  can no longer spend itself, and what the child spends counts as the parent's. Work no body owns
+  — an order the wake runs, one the human added with `mnemorph q` — draws from the session's
+  shared pool, the envelope itself, under the same clamps.
+- **The grant is the giver's judgment, inside the harness's bounds.** The parent proposes its
+  child's slice (`budget_wt`, default half of what it has left); the harness grants at most
+  `left × 90% × share(race) × worth` — the parent's reserve kept, the race's maximum share, the
+  child's worth — and the child's report tells the parent when it granted less than asked.
+- **Worth, from the child's card.** Before it decides, a dispatching body reads one card per body
+  below it: that body's record and the record of every body below it — weighted tokens spent
+  (the usage ledger), gate passes and fails (the journal). Worth is
+  `0.5 + 0.5 × (passes + 1) / (passes + fails + 2)`: a body with no record starts at 0.75, a clean
+  record nears 1, a failing one nears 0.5. A child's record counts in its parent's card, so a
+  parent that funds failing children reads worse to the body above it. The learned value model
+  ([M11](roadmap.md)) replaces this score; the card and the clamp stay.
+- **The wake's draw.** One wake draws at most 25% of what the pool has left, and runs at most 3
+  orders; with no cap set there is no pool to share, and the order count alone holds.
 - **The challenge reserve.** 10% of the session envelope is reserved for the automatic Dark Elf
   challenges; it cannot be carved for anything else. Each challenge draws a quarter of the
   reserve's full size (or what remains), and what it does not spend goes back to the reserve.

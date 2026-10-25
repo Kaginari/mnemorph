@@ -33,6 +33,9 @@ pub struct Body {
     pub system: String,
 }
 
+/// The most orders one wake runs.
+const WAKE_ORDERS: usize = 3;
+
 /// The meters a run reads before every model call.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
@@ -969,7 +972,8 @@ impl Run {
     /// is claimed in that body's name and commissioned by the body it reports to, the law checked
     /// again; an order its body cannot carry out stays held, the reason noted. What each one came
     /// to is said now and opens the next turn. A turn the human interrupted wakes nothing, an Esc
-    /// during the wake stops it, and a spent budget leaves every order waiting.
+    /// during the wake stops it, and a spent budget leaves every order waiting. One wake draws at
+    /// most a quarter of what the pool has left and runs at most three orders.
     pub async fn wake(&mut self, after: &Ending) {
         use mnemorph_world::queue::{HARNESS, Move, State};
         if matches!(after, Ending::Interrupted) {
@@ -982,14 +986,22 @@ impl Run {
             return;
         };
         let roster = mnemorph_world::Roster::load(&c.world);
+        // One wake draws at most a quarter of what the pool has left, and runs at most three
+        // orders.
+        let pool = self
+            .limits
+            .budget_wt
+            .map(|b| b.saturating_sub(self.spent_wt) / 4);
+        let start = self.spent_wt;
+        let mut ran = 0;
         for item in q.open().into_iter().filter(|i| i.state == State::Held) {
+            if ran == WAKE_ORDERS {
+                break;
+            }
             if self.interrupt.flag().load(Ordering::SeqCst) {
                 break;
             }
-            let left = self
-                .limits
-                .budget_wt
-                .map(|b| b.saturating_sub(self.spent_wt));
+            let left = pool.map(|p| p.saturating_sub(self.spent_wt - start));
             if left == Some(0) {
                 break;
             }
@@ -1024,6 +1036,7 @@ impl Run {
             let interrupt = Arc::clone(&self.interrupt);
             let order =
                 crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+            ran += 1;
             self.spent_wt = self.spent_wt.saturating_add(order.spent);
             self.landed.extend(order.landed);
             let line = crate::commission::settle(q, &roster, &item, &order.outcome);
