@@ -3391,3 +3391,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Refinements made:**
   - hide only Hugging Face's `token` and `stored_tokens`, not its model cache;
   - name the legacy `~/.git-credential-cache/`.
+
+---
+
+### [2026-10-26T00:18:14+01:00] rimuru — the attic and the stress jump (#86)
+- **Task:** the M7 tail, #86's four bugs.
+- **Files:**
+  - attic.rs:
+    - `holds` is false for a gitlink, so a nested repository is never promised as kept;
+    - a `.git` file (worktree, submodule) is kept as `dotgit-file` and put back by `repair_git`;
+    - an exclusive lock (`File::lock`) around every snapshot and restore;
+  - run.rs `fold_under`: at the stress line, fold first whatever the batch if that brings the
+    next request under the line. This covers a jump from under 60%, and a resume above the line;
+  - docs 03 and 05.
+- **Tests:**
+  - attic: a nested repository, a git file, four concurrent snapshotters;
+  - loop: `a_jump_past_the_stress_line_folds_before_it_checkpoints`, with a scripted-usage
+    model. It fails with the fold taken out.
+
+---
+
+### [2026-10-26T00:23:45+01:00] rimuru — #185's review: Fable
+- **Fable found:**
+  - the shell path still promised a nested repository: `deleted_since` listed gitlinks, so
+    `rm -rf vendor/sub` read "kept in the attic";
+  - a stale `dotgit-file` could win over the mirror, and the reverse flip failed;
+  - a resume double-counted fold savings.
+- **Fixed:**
+  - `gone_since` reads modes: `deleted_since` gives kept files only, and `lost_since` gives
+    gitlinks, which the shell reports as NOT kept;
+  - `keep_git` keeps only `.git`'s current form;
+  - a resume past the fold mark starts folded. No dedicated test: it is the same check as
+    `ease_context`'s.
+- **Tests:** `a_deleted_nested_repository_is_reported_lost`, `only_the_current_form_of_git_is_kept`.

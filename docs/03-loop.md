@@ -124,7 +124,9 @@ to a one-line caption — "folded: 100 lines of earlier output, call the tool ag
 it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every
 small result and the last four exchanges stay whole. A fold rewrites the cached conversation
 from its first folded message on, so it comes in rare, large batches: past 60% of the stress
-line, and only when it takes out a fifth of the line or more. Between folds the conversation
+line, and only when it takes out a fifth of the line or more. A jump past the line from under
+60% — one huge output — or a resume above it folds first, whatever the batch: the checkpoint comes
+only when folding cannot bring the next request under the line. Between folds the conversation
 sent only grows, and each turn reads it from the provider's cache
 ([Consumption](06-consumption.md)). The journal is never touched: compaction shapes only what is sent. A 40-step run whose
 history would be 150 KB sends at most about 55 KB a turn, and with the cache it is billed a third of its input.
