@@ -284,6 +284,8 @@ pub struct Stress {
     repeats: u32,
     benches: BTreeMap<String, Bench>,
     last: Reading,
+    /// Turns with nothing landed before `actBudget` stalls the run; 0 reads as [`ACT_BUDGET`].
+    act_budget: u32,
 }
 
 impl Stress {
@@ -447,9 +449,24 @@ impl Stress {
         &self.benches
     }
 
+    /// The instruments for a run of `steps` steps: `actBudget` never stalls it before its steps
+    /// could be spent — a run given more steps than [`ACT_BUDGET`] may use them before landing.
+    #[must_use]
+    pub fn for_steps(steps: u32) -> Self {
+        Self {
+            act_budget: steps.max(ACT_BUDGET),
+            ..Self::default()
+        }
+    }
+
     /// Count one model turn.
     pub fn turn(&mut self) -> Option<Signal> {
         self.turns += 1;
-        (self.turns > ACT_BUDGET).then_some(Signal::Stall("actBudget"))
+        let budget = if self.act_budget == 0 {
+            ACT_BUDGET
+        } else {
+            self.act_budget
+        };
+        (self.turns > budget).then_some(Signal::Stall("actBudget"))
     }
 }

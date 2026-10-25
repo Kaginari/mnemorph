@@ -753,7 +753,8 @@ impl Config {
 
     /// The steps of the session's own body, working solo: it does the work of the shortest chain
     /// it stands for — an Elf, an Orc and a Slime, 30 + 30 + 40 — so it is given their steps, not
-    /// one body's. The budget's caps stop it whatever steps are left.
+    /// one body's. Spend is capped only by the `budget.*` caps the human sets; without them, the
+    /// steps, the clock, the context line and the stall guards are what stop it.
     #[must_use]
     pub fn solo_steps(&self) -> u32 {
         self.int("steps.solo")
