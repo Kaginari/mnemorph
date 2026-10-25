@@ -959,3 +959,93 @@ async fn a_topup_is_bounded_by_worth() {
         .unwrap_or_else(|| panic!("{result}"));
     assert!((800_000..=810_000).contains(&set), "{result}");
 }
+
+/// An order that names again the files its body failed on three runs in a row is refused with the
+/// lawful next acts; a rewritten order goes through.
+#[tokio::test]
+async fn three_fails_harden_into_the_lawful_next_acts() {
+    let w = World::new("stuck");
+    for _ in 0..3 {
+        let entry = mnemorph_loop::world::log::Entry {
+            body: "elf-e".into(),
+            title: "gate: FAIL".into(),
+            lines: vec![
+                ("Changed".into(), "`src/x.rs`".into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        mnemorph_loop::world::log::append(&w.0, &entry).unwrap();
+    }
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "fix src/x.rs again"}),
+        ),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "elf-e", "ask": "plan the parser work"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].contains("elf-e failed its last 3 runs on `src/x.rs`: rewrite the order"),
+        "{results:?}"
+    );
+    assert!(results[1].starts_with("@S DONE"), "{results:?}");
+}
+
+/// A held order on a stuck file stays held through the wake, its reason noted, never claimed.
+#[tokio::test]
+async fn a_stuck_order_waits_on_the_queue() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("stuck-queue");
+    for _ in 0..3 {
+        let entry = mnemorph_loop::world::log::Entry {
+            body: "orc-o".into(),
+            title: "gate: FAIL".into(),
+            lines: vec![
+                ("Changed".into(), "`src/x.rs`".into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        mnemorph_loop::world::log::append(&w.0, &entry).unwrap();
+    }
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let item = q
+        .add(&roster, Some("orc-o"), "elf-e", "fix src/x.rs", 0)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([]));
+    let mut run = w.rimuru(model.clone());
+    run.wake(&Ending::Answered(String::new())).await;
+    let now = &q.items()[&item.id];
+    assert_eq!((now.state, now.rev), (State::Held, 2), "{now:?}");
+    assert!(
+        now.notes[0].contains("failed its last 3 runs on `src/x.rs`"),
+        "{now:?}"
+    );
+    assert_eq!(model.requests().len(), 0);
+}
+
+/// `./src/…` is a path inside the world, never an absolute one off every ground.
+#[tokio::test]
+async fn a_dot_slash_path_is_inside_the_world() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("dot-slash");
+    fs::write(w.0.join("src/done.txt"), "done\n").unwrap();
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let item = q
+        .add(&roster, Some("orc-o"), "elf-e", "check ./src/done.txt.", 0)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("@S DONE\n@E")]));
+    let mut run = w.rimuru(model);
+    run.wake(&Ending::Answered(String::new())).await;
+    assert_eq!(q.items()[&item.id].state, State::Done);
+}

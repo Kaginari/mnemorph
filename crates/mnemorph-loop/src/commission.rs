@@ -181,15 +181,14 @@ grants at most your reserve-kept share for its race, scaled by its worth. The ca
 /// reserve kept, the child's race share, the child's worth from its card; a top-up is the
 /// dispatcher's own further trust, bounded by what it may give at all and by twice the ceiling.
 fn grant(
-    c: &Commissioner,
+    records: &mnemorph_world::worth::Records,
     roster: &Roster,
     a: &CommissionArgs,
     left: Option<u64>,
 ) -> (u64, Option<u64>, Option<String>) {
     let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
     let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
-        let card = mnemorph_world::worth::card(&c.world, roster, &a.to);
-        mnemorph_world::worth::ceiling(l, child.race, &card)
+        mnemorph_world::worth::ceiling(l, child.race, &records.card(roster, &a.to))
     });
     let slice = ceiling.map_or(asked, |cap| asked.min(cap));
     // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
@@ -222,6 +221,47 @@ fn grant(
     (slice, topup, (!said.is_empty()).then(|| said.join("\n")))
 }
 
+/// The law on one commission: the dispatch rules, and no order that names again the files its
+/// body failed on three runs in a row.
+fn lawful(
+    records: &mnemorph_world::worth::Records,
+    roster: &Roster,
+    parent: &str,
+    a: &CommissionArgs,
+    plan: &[String],
+    slice: u64,
+    left: Option<u64>,
+) -> Result<(), String> {
+    let ask = Ask {
+        plan,
+        slice_wt: slice,
+        left_wt: left.unwrap_or(u64::MAX),
+    };
+    match dispatch(roster, parent, &a.to, &ask) {
+        Err(why) => return Err(why.to_string()),
+        Ok(Hop::Via { elf, target }) => {
+            return Err(format!(
+                "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
+            ));
+        }
+        Ok(Hop::Direct(_)) => {}
+    }
+    // Three failed runs in a row on the same files harden into the lawful next acts: an order
+    // that names them again is refused.
+    let stuck = records.stuck(&a.to);
+    if let Some(path) = stuck
+        .iter()
+        .find(|p| mnemorph_world::worth::names(&a.ask, p))
+    {
+        return Err(format!(
+            "{} failed its last {} runs on `{path}`: rewrite the order without it, split the work to another body, or escalate with @? to your commander",
+            a.to,
+            mnemorph_world::worth::STUCK_AFTER
+        ));
+    }
+    Ok(())
+}
+
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
 /// and its report.
 pub(crate) async fn order(
@@ -246,26 +286,16 @@ pub(crate) async fn order(
     };
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
-    let (slice, topup, granted) = grant(c, &roster, &a, left);
+    let records = mnemorph_world::worth::Records::load(&c.world);
+    let (slice, topup, granted) = grant(&records, &roster, &a, left);
     if slice == 0 {
         return refused(format!(
             "no budget left to carve for {}: @? budget to your commander",
             a.to
         ));
     }
-    let ask = Ask {
-        plan: &plan,
-        slice_wt: slice,
-        left_wt: left.unwrap_or(u64::MAX),
-    };
-    match dispatch(&roster, &parent.name, &a.to, &ask) {
-        Err(why) => return refused(why.to_string()),
-        Ok(Hop::Via { elf, target }) => {
-            return refused(format!(
-                "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
-            ));
-        }
-        Ok(Hop::Direct(_)) => {}
+    if let Err(why) = lawful(&records, &roster, &parent.name, &a, &plan, slice, left) {
+        return refused(why);
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
     let seat = (a.to != parent.name)
@@ -384,6 +414,16 @@ pub(crate) fn carrier(
         }
         Ok(Hop::Direct(_)) => {}
     }
+    let stuck = mnemorph_world::worth::Records::load(world).stuck(to);
+    if let Some(path) = stuck
+        .iter()
+        .find(|p| mnemorph_world::worth::names(&item.ask, p))
+    {
+        return Err(format!(
+            "{to} failed its last {} runs on `{path}`: the order waits to be rewritten, split or escalated",
+            mnemorph_world::worth::STUCK_AFTER
+        ));
+    }
     // Its ground is its own and that of every body below it: an Orc carries an order through
     // its Slimes.
     let below: Vec<String> = roster
@@ -411,7 +451,10 @@ pub(crate) fn carrier(
 /// says whether it stays inside.
 fn named_path(world: &Path, said: &str) -> Option<(String, bool)> {
     use std::path::Component;
-    let mut path = said.trim_matches(|c: char| "`'\",.;()[]".contains(c));
+    // Quotes and brackets go at both ends, punctuation only at the end: `./src` keeps its dot.
+    let mut path = said
+        .trim_start_matches(|c: char| "`'\"([".contains(c))
+        .trim_end_matches(|c: char| "`'\",.;)]".contains(c));
     while let Some((head, tail)) = path.rsplit_once(':') {
         if tail.is_empty() || tail.bytes().all(|b| b.is_ascii_digit()) {
             path = head;
@@ -432,6 +475,14 @@ fn named_path(world: &Path, said: &str) -> Option<(String, bool)> {
     let climbs = rel
         .components()
         .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
+    // `./src/a.rs` is `src/a.rs`: the ground reads paths without their `.` steps.
+    let rel: PathBuf = if climbs || rel.is_absolute() {
+        rel
+    } else {
+        rel.components()
+            .filter(|c| matches!(c, Component::Normal(_)))
+            .collect()
+    };
     let shown = rel.display().to_string();
     if climbs || rel.is_absolute() {
         return (rel.is_absolute() || world.join(&rel).exists()).then_some((shown, false));
