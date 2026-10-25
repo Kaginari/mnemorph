@@ -784,3 +784,56 @@ async fn an_interrupted_order_waits_again() {
         "{now:?}"
     );
 }
+
+/// Bodies read the queue for free and move only what they hold or stand over; there is no claim.
+#[tokio::test]
+async fn the_queue_tool_follows_the_rank_law() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("queue-tool");
+    fs::write(w.0.join("src/done.txt"), "done\n").unwrap();
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let low = q
+        .add(&roster, Some("slime-s"), "orc-o", "tidy src/", 0)
+        .unwrap();
+    let high = q
+        .add(&roster, Some("orc-o"), "elf-e", "plan the lane", 0)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool("q1", "queue", json!({"action": "list"})),
+        ScriptedModel::tool("q2", "queue", json!({"action": "close", "id": low.id})),
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool("q3", "queue", json!({"action": "drop", "id": high.id})),
+        ScriptedModel::tool("q4", "queue", json!({"action": "claim", "id": high.id})),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].contains(&low.id) && results[0].contains(&high.id),
+        "{results:?}"
+    );
+    let items = q.items();
+    assert_eq!(
+        items[&low.id].state,
+        State::Done,
+        "Rimuru stands over every body"
+    );
+    assert_eq!(
+        items[&high.id].state,
+        State::Held,
+        "a Slime does not stand over its Orc"
+    );
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("refused: orc-o holds it"),
+        "the Slime is told why"
+    );
+    assert!(seen.contains("queue has no `claim`"), "a body never claims");
+}

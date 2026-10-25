@@ -2432,3 +2432,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the docs say "every existing path".
 - **Open:** the ledger row of a woken commission names its dispatcher as the parent body. A
   `queue <id>` marker on the row would name the wake.
+
+---
+
+### [2026-10-25T11:27:38+01:00] rimuru — M7: the bodies' queue tool, and "N held"
+- **Task:** continue M7 after #155: the `queue` tool for bodies, and the status line's held count.
+- **Files:**
+  - mnemorph-loop:
+    - queue_tool.rs — `QueueTool`: list and show are free; touch, requeue, close and drop follow
+      the rank law; there is no claim and no add;
+    - run.rs — a `queue_keeper` on every commissioned run; `call_one` routes `queue` through it;
+    - commission.rs and open.rs — register the tool.
+  - mnemorph-server — `Event::Held` after each drive, `Hello.held`.
+  - CLI:
+    - transcript.ts — `held` state, `status(…, held)`;
+    - app.tsx;
+    - fixtures.
+  - Tests: the queue tool follows the rank law (Rimuru closes, a Slime is refused, a claim
+    is unknown); the held count reaches the status line.
+  - docs/04.
+- **Learned:** a Slime has no commissioner, because it cannot dispatch. Giving it one would let
+  `commission`, called by name, run below the shelf check, so the queue is reached through its
+  own keeper instead.

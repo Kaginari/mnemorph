@@ -54,4 +54,8 @@ sandbox: string,
 /**
  * The session's own body: events under any other body come from the bodies it commissioned.
  */
-body: string, };
+body: string, 
+/**
+ * The orders held on the shared work queue as the session opens.
+ */
+held: number, };

@@ -352,7 +352,7 @@ sequenceDiagram
 |---|---|---|
 | requests (client → core) | `initialize`, `session/prompt`, `session/send`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/resume`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
 | requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on | |
-| events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded` | `dispatch`, `report`, `held`, `ascension`, `evolution` |
+| events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded`, `held` | `dispatch`, `report`, `ascension`, `evolution` |
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
 world, model, provider, session, run, holes, budget}`; a client that speaks another `protocol` stops
@@ -361,7 +361,10 @@ envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while 
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
 `{race, class, act, why, outside}`, and the client answers `{allow, reason?}`. A `usage` event
 carries the turn's tokens, cache reads and writes, its price, and the run's spend and context
-against its stress line, for the status line. A `toolResult` carries at most 16 000 bytes and
+against its stress line, for the status line. A `held` event, sent once the session's queued
+lines and their wake are done, carries how many orders the shared work queue holds; the hello
+carries the same count as the session opens, and the status line reads "N held" while it is not
+zero. A `toolResult` carries at most 16 000 bytes and
 says how many it cut; the journal keeps the whole.
 
 `mnemorphd` serves it: `mnemorphd [--world <dir>]` speaks on stdin and stdout, opens the solo

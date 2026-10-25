@@ -18,6 +18,7 @@ const hello = {
   key: 'K, named by providers.p.key_env in human (/h)',
   sandbox: 'landlock ABI 1 + seccomp, network off',
   body: 'rimuru',
+  held: 0,
 };
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 

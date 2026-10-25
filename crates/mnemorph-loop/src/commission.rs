@@ -494,6 +494,9 @@ fn child_run(
     if dispatches {
         tools.push(Box::new(CommissionTool));
     }
+    if c.queue.is_some() {
+        tools.push(Box::new(crate::queue_tool::QueueTool));
+    }
     let setup = Setup {
         model: Arc::clone(&c.model),
         tools,
@@ -535,6 +538,9 @@ fn child_run(
     }
     if dispatches {
         child = child.with_commissioner(Arc::clone(c));
+    }
+    if c.queue.is_some() {
+        child = child.with_queue(Arc::clone(c));
     }
     child
 }
