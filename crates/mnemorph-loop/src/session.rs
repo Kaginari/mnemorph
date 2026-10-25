@@ -50,12 +50,14 @@ impl Session {
     }
 
     /// Ask `line`, then every queued line in turn, until the queue is empty. An interrupted turn
-    /// pivots to the next queued line, as a finished one does.
+    /// pivots to the next queued line, as a finished one does. After each turn the wake runs the
+    /// shared work queue's held orders that their bodies can carry out.
     pub async fn drive(&mut self, line: &str, on: &mut (dyn FnMut(Event) + Send)) -> Vec<Ending> {
         let mut endings = Vec::new();
         let mut next = Some(line.to_owned());
         while let Some(line) = next {
             endings.push(self.run.ask(&line, on).await);
+            Box::pin(self.run.wake()).await;
             next = self
                 .queue
                 .lock()

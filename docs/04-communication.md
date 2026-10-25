@@ -291,17 +291,20 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 - **Rank law.** A body moves the work it holds; anyone up the holder's reporting chain may move it
   too; work held by no one is the throne's. The human stands over every body.
 - **Relay-hold.** A report's `@$` orders are held on the queue; nothing dispatches a held row
-  mid-turn. At the turn boundary the wake claims each held row in the name of the body it is
-  ordered to and opens the next turn with its dispatch — the queue id named, the body's earlier
-  report as thread — and the dispatch rules check it again. The body's report settles its oldest
-  claim: `DONE` closes it, any other word leaves it claimed with the exit noted. An order a
-  commission expected and the report did not book is a hole for the parent.
+  mid-turn. At the session's turn boundary the wake takes the held rows, lowest rank first. Each
+  one its body can carry out — the body it reports to may lawfully commission it, and every path
+  the order names lies on its ground — is claimed in that body's name and commissioned by the body
+  it reports to, the queue id and who ordered it named in the ask, the dispatch rules checking it
+  again. Its report settles the claim: `DONE` closes it, any other word leaves it claimed with the
+  exit noted, and a commission the law refuses goes back on hold. An order its body cannot carry
+  out stays held, the reason noted once, for the human or a body that can. What the wake ran is
+  said as it runs and opens the session's next turn. The throne's own work waits for the human's
+  turn, and an Esc stops the wake.
 - **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
   body never claims: only the human and the harness's wake do, so work reaches a body claimed in
-  its name. The wake claims only an order its body can carry out: the dispatch rules hold, and
-  what the order touches lies on that body's ground. The status line reads "N held".
+  its name. The status line reads "N held".
 - The queue does not travel with the repository. Orders that must reach another machine travel
   as what made them — a commission's report in the journal, a `@?` the human answers.
 

@@ -391,7 +391,9 @@ async fn an_answer_off_the_wire_is_a_fail() {
     let w = World::new("prose");
     let model = Arc::new(ScriptedModel::new([
         order("c1", "elf-e"),
-        ScriptedModel::text("I could not find anything to do."),
+        ScriptedModel::text(
+            "I could not find anything to do.\n@U territory src/ build=guess\n@$ orc-o: try again",
+        ),
         ScriptedModel::text("ok"),
     ]));
     let mut run = w.rimuru(model);
@@ -400,6 +402,13 @@ async fn an_answer_off_the_wire_is_a_fail() {
         w.results()[0].starts_with("@S FAIL off the wire"),
         "{:?}",
         w.results()
+    );
+    // Lines that look like the wire inside prose are not the wire: nothing is filed or held.
+    assert_eq!(mnemorph_loop::world::Facts::load(&w.0).live().count(), 0);
+    assert!(
+        mnemorph_loop::world::Queue::at(&queue_of(&w.0))
+            .items()
+            .is_empty()
     );
 }
 
@@ -656,5 +665,64 @@ fn the_queue_witness_is_one_place() {
     assert_eq!(
         mnemorph_loop::world::queue::witness_of(world),
         mnemorph_tools::queue_witness(world)
+    );
+}
+
+/// At a turn's end the wake runs each held order its body can carry out — claimed in its name,
+/// commissioned by the body it reports to — closes it on DONE, leaves an order off its body's
+/// ground held with the reason, and opens the next turn with what it ran.
+#[tokio::test]
+async fn the_wake_runs_what_its_body_can_carry() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("wake");
+    fs::write(w.0.join("src/done.txt"), "done\n").unwrap();
+    fs::write(w.0.join("lib/x.rs"), "x\n").unwrap();
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let can = q
+        .add(&roster, Some("slime-s"), "orc-o", "write src/tab.txt", 0)
+        .unwrap();
+    let cannot = q
+        .add(&roster, Some("slime-s"), "orc-o", "fix lib/x.rs", 1)
+        .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/tab.txt", "content": "tab\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W src/tab.txt\n@E"),
+        ScriptedModel::text("Seen."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.wake().await;
+    assert_eq!(
+        fs::read_to_string(w.0.join("src/tab.txt")).unwrap(),
+        "tab\n"
+    );
+    let items = q.items();
+    assert_eq!(items[&can.id].state, State::Done, "{:?}", items[&can.id]);
+    let held = &items[&cannot.id];
+    assert_eq!(held.state, State::Held);
+    assert!(
+        held.notes
+            .last()
+            .unwrap()
+            .contains("`lib/x.rs` is not on slime-s's ground"),
+        "{held:?}"
+    );
+    // A second wake leaves the waiting order's notes as they were.
+    run.wake().await;
+    assert_eq!(q.items()[&cannot.id].notes, held.notes);
+    // The next turn opens with what the wake ran.
+    run.ask("anything new?", &mut |_| {}).await;
+    let last = format!("{:?}", model.requests().last().unwrap());
+    assert!(
+        last.contains("While you waited, the shared queue ran"),
+        "{last}"
+    );
+    assert!(
+        last.contains(&format!("queue {}: slime-s reported DONE", can.id)),
+        "{last}"
     );
 }

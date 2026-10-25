@@ -238,6 +238,8 @@ pub struct Run {
     landed: Vec<PathBuf>,
     /// The interrupt is its dispatcher's.
     shared_interrupt: bool,
+    /// What the wake ran since the last turn, for the next one.
+    woken: Vec<String>,
 }
 
 /// What a run needs that is not the body itself.
@@ -293,6 +295,7 @@ impl Run {
             commissioner: None,
             landed: Vec::new(),
             shared_interrupt: false,
+            woken: Vec::new(),
         }
     }
 
@@ -591,6 +594,7 @@ impl Run {
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
+        let text = &self.preface(text);
         self.record(&Beat::Ask {
             text: text.to_owned(),
         });
@@ -892,6 +896,82 @@ impl Run {
             content: content.clone(),
         });
         content
+    }
+
+    /// What the wake ran while the body waited opens its next turn.
+    fn preface(&mut self, text: &str) -> String {
+        let woken = std::mem::take(&mut self.woken);
+        if woken.is_empty() {
+            text.to_owned()
+        } else {
+            format!(
+                "While you waited, the shared queue ran:\n- {}\n\n{text}",
+                woken.join("\n- ")
+            )
+        }
+    }
+
+    /// The wake, at a turn's end: each held order on the shared queue that its body can carry out
+    /// is claimed in that body's name and commissioned by the body it reports to, the law checked
+    /// again; an order its body cannot carry out stays held, the reason noted. What each one came
+    /// to is said now and opens the next turn. An Esc stops the wake.
+    pub async fn wake(&mut self) {
+        use mnemorph_world::queue::{HARNESS, Move, State};
+        let Some(c) = self.commissioner.clone() else {
+            return;
+        };
+        let Some(q) = c.queue.as_ref() else {
+            return;
+        };
+        let roster = mnemorph_world::Roster::load(&c.world);
+        for item in q.open().into_iter().filter(|i| i.state == State::Held) {
+            if self.interrupt.flag().load(Ordering::SeqCst) {
+                break;
+            }
+            let left = self
+                .limits
+                .budget_wt
+                .map(|b| b.saturating_sub(self.spent_wt));
+            let parent = match crate::commission::carrier(&c.world, &roster, &item, left) {
+                Ok(parent) => parent,
+                Err(why) => {
+                    // Said once: an order that keeps waiting does not grow a note every turn.
+                    if item.notes.last() != Some(&format!("{HARNESS}: {why}")) {
+                        let _ = q.move_item(&roster, HARNESS, &item.id, &Move::Touch { note: why });
+                    }
+                    continue;
+                }
+            };
+            let claim = Move::Claim { as_body: None };
+            if q.move_item(&roster, HARNESS, &item.id, &claim).is_err() {
+                continue;
+            }
+            let Some(race) = roster.creatures.get(&parent).map(|p| p.race) else {
+                continue;
+            };
+            let body = Body {
+                name: parent,
+                race,
+                model: self.body.model.clone(),
+                system: String::new(),
+            };
+            let input = serde_json::json!({
+                "to": item.holder(),
+                "ask": format!("{}\n\n(queue item {}, ordered by {})", item.ask, item.id, item.by),
+            })
+            .to_string();
+            let interrupt = Arc::clone(&self.interrupt);
+            let order =
+                crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+            self.spent_wt = self.spent_wt.saturating_add(order.spent);
+            self.landed.extend(order.landed);
+            let line = crate::commission::settle(q, &roster, &item, &order.outcome);
+            self.record(&Beat::Note { text: line.clone() });
+            self.woken.push(line);
+            if order.interrupted {
+                break;
+            }
+        }
     }
 
     /// One call: a commission the loop runs, anything else the tool runs.
