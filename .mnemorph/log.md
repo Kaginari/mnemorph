@@ -3219,3 +3219,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - mnemorphd adds the code to housekeep's findings;
   - docs 09.
 - **Test:** `a_path_named_in_prose_and_not_claimed_is_a_prose_claim`.
+
+---
+
+### [2026-10-25T21:09:41+01:00] rimuru — #179's review: Fable
+- **Correction:** the previous entry said housekeep reports `prose-claim`. It is `onto check`
+  (mnemorphd's `check` command); housekeep reports no findings.
+- **Fable found:**
+  - a directory named without its slash read as unclaimed;
+  - paths no Slime can claim (workspace, throne, harness, human soil) still fired, with wrong
+    advice.
+- **Fixed:**
+  - a directory gets its slash;
+  - only soil `explain` rules Zone, Domain or Unclaimed counts, which subsumes the `.mnemorph/`
+    check;
+  - docs 09.
+- **Test:** extended with `src/a` and `./Cargo.toml`.

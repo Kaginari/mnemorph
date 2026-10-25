@@ -171,11 +171,13 @@ fn a_path_named_in_prose_and_not_claimed_is_a_prose_claim() {
         std::fs::create_dir_all(w.join(dir)).unwrap();
     }
     std::fs::write(w.join("lib/util.rs"), "").unwrap();
+    std::fs::write(w.join("Cargo.toml"), "").unwrap();
     std::fs::write(
         w.join(".mnemorph/slime/s/README.md"),
         "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n\n## Notes\n\
-         Mine: `src/a/`. Not mine: `lib/util.rs`, and again `lib/util.rs`.\n\
-         Gone: `old/x.rs`. A word: `cargo test`, `true`. Memory: `.mnemorph/slime/s/`.\n",
+         Mine: `src/a/`, `src/a`. Not mine: `lib/util.rs`, and again `lib/util.rs`.\n\
+         Gone: `old/x.rs`. A word: `cargo test`, `true`. Memory: `.mnemorph/slime/s/`.\n\
+         The workspace's: `./Cargo.toml`.\n",
     )
     .unwrap();
     let roster = mnemorph_world::Roster::load(&w);
