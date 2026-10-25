@@ -361,7 +361,7 @@ blocking. Findings are never summed into a score.
 | `above-cycle` | critical | the chain of command loops |
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
 | `dead-bond` | high | an `above` target with no doc, or retired |
-| `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs |
+| `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` |

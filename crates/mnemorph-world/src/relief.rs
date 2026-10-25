@@ -332,7 +332,17 @@ fn retire(world: &Path, c: &Creature, heirs: &[String]) -> Result<(), String> {
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let mut said = String::from("- **Retired:** yes");
     if !heirs.is_empty() {
-        let ending = if text.contains("\r\n") { "\r\n" } else { "\n" };
+        // The ending of the line the heirs follow: the Retired line's own, else the last field's.
+        let at = c
+            .lines
+            .get("Retired")
+            .copied()
+            .unwrap_or_else(|| c.lines.values().copied().max().unwrap_or(1));
+        let crlf = text
+            .split_inclusive('\n')
+            .nth(at.saturating_sub(1))
+            .is_some_and(|l| l.ends_with("\r\n"));
+        let ending = if crlf { "\r\n" } else { "\n" };
         said.push_str(ending);
         said.push_str("- **Heirs:** ");
         said.push_str(&heirs.join(", "));

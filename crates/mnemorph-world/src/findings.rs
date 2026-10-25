@@ -189,7 +189,11 @@ fn bonds(roster: &Roster, out: &mut Vec<Finding>) {
 }
 
 /// `heir-dead`: a retired creature names an heir that is missing, or retired with no living line
-/// below it — an heir relieved in turn lives on in its own heirs. Its ground has no living keeper.
+/// below it — an heir relieved in turn lives on in its own heirs. The finding points only at
+/// ground no living creature keeps now: the dead heir's own claims, or — its doc gone, its ground
+/// unknown — the old ground's claims that hold no living claim. A healthy sibling's half and ground
+/// re-granted by hand are never touched. High while some ground is unkept; low, a stale line to
+/// tidy, once every path has a keeper.
 fn heirs(roster: &Roster, out: &mut Vec<Finding>) {
     fn lives(roster: &Roster, name: &str, seen: &mut BTreeSet<String>) -> bool {
         if !seen.insert(name.to_owned()) {
@@ -200,33 +204,46 @@ fn heirs(roster: &Roster, out: &mut Vec<Finding>) {
             .get(name)
             .is_some_and(|h| !h.retired || h.heirs.iter().any(|g| lives(roster, g, seen)))
     }
+    let ground = |c: &crate::doc::Creature| -> Vec<String> {
+        c.zone
+            .iter()
+            .chain(&c.domain)
+            .chain(&c.post)
+            .cloned()
+            .collect()
+    };
+    let living_claims: Vec<String> = roster.living().flat_map(&ground).collect();
+    // A claim nobody alive owns, and inside which nobody alive claims.
+    let unkept = |claim: &String| {
+        !matches!(explain(roster, claim).owner, Owner::Creature(_))
+            && !living_claims.iter().any(|l| covers(claim, l))
+    };
     for c in roster.creatures.values().filter(|c| c.retired) {
         for heir in &c.heirs {
             let mut seen = BTreeSet::from([c.name.clone()]);
             if lives(roster, heir, &mut seen) {
                 continue;
             }
-            let why = if roster.creatures.contains_key(heir) {
-                "is retired, and no heir of its lives"
+            let (why, claims) = match roster.creatures.get(heir) {
+                Some(h) => ("is retired, and no heir of its lives", ground(h)),
+                None => ("has no doc", ground(c)),
+            };
+            let paths: Vec<String> = claims.into_iter().filter(|p| unkept(p)).collect();
+            let (severity, tail) = if paths.is_empty() {
+                (
+                    Severity::Low,
+                    "every path of its ground has a keeper: tidy the Heirs line",
+                )
             } else {
-                "has no doc"
+                (Severity::High, "this ground has no living keeper")
             };
             out.push(Finding {
                 code: "heir-dead",
-                severity: Severity::High,
+                severity,
                 at: c.at("Heirs"),
-                paths: c
-                    .zone
-                    .iter()
-                    .chain(&c.domain)
-                    .chain(&c.post)
-                    .cloned()
-                    .collect(),
+                message: format!("{}'s heir `{heir}` {why}: {tail}", c.name),
+                paths,
                 creatures: vec![c.name.clone()],
-                message: format!(
-                    "{}'s heir `{heir}` {why}: its ground has no living keeper",
-                    c.name
-                ),
             });
         }
     }
@@ -404,7 +421,8 @@ pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
             } else {
                 (file.strip_suffix(".md")?.to_owned(), path.clone())
             };
-            if name.starts_with('.') || worn.contains(name.as_str()) {
+            // A README at the root indexes the Minds; it is none of them.
+            if name.starts_with('.') || name == "README" || worn.contains(name.as_str()) {
                 return None;
             }
             let shared = std::fs::read_to_string(&doc).is_ok_and(|t| {

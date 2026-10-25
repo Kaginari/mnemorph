@@ -226,15 +226,63 @@ fn a_dead_line_of_heirs_is_heir_dead() {
         ),
     );
     doc("t-a", &slime("slime-t-a", "- **Retired:** yes\n"));
+    // u split in two: u-a lives, u-b retired with nobody after it. Only u-b's half is unkept.
+    doc(
+        "u",
+        "# slime-u\n\n- **Race:** slime\n- **Territory:** src/u/\n- **Retired:** yes\n- **Heirs:** slime-u-a, slime-u-b\n",
+    );
+    doc(
+        "u-a",
+        "# slime-u-a\n\n- **Race:** slime\n- **Territory:** src/u/a/\n",
+    );
+    doc(
+        "u-b",
+        "# slime-u-b\n\n- **Race:** slime\n- **Territory:** src/u/b/\n- **Retired:** yes\n",
+    );
+    // v's dead heir's ground was re-granted by hand to the living w: a stale line, low.
+    doc(
+        "v",
+        "# slime-v\n\n- **Race:** slime\n- **Territory:** src/v/\n- **Retired:** yes\n- **Heirs:** slime-v-a\n",
+    );
+    doc(
+        "v-a",
+        "# slime-v-a\n\n- **Race:** slime\n- **Territory:** src/v/\n- **Retired:** yes\n",
+    );
+    doc(
+        "w",
+        "# slime-w\n\n- **Race:** slime\n- **Territory:** src/v/\n",
+    );
     let roster = Roster::load(&w);
-    let dead: Vec<_> = check(&roster, &[])
+    let all: Vec<_> = check(&roster, &[])
         .into_iter()
         .filter(|f| f.code == "heir-dead")
         .collect();
+    let of = |name: &str| -> Vec<_> {
+        all.iter()
+            .filter(|f| f.creatures == [name])
+            .cloned()
+            .collect()
+    };
+    let u = of("slime-u");
+    assert_eq!(u.len(), 1, "{u:?}");
+    assert_eq!(
+        (u[0].severity, u[0].paths.clone()),
+        (Severity::High, vec!["src/u/b/".to_owned()])
+    );
+    let v = of("slime-v");
+    assert_eq!(v.len(), 1, "{v:?}");
+    assert_eq!((v[0].severity, v[0].paths.len()), (Severity::Low, 0));
+    assert!(v[0].message.contains("has a keeper"), "{v:?}");
+    let dead = of("slime-t");
     assert_eq!(dead.len(), 2, "{dead:?}");
     assert!(dead.iter().all(|f| f.severity == Severity::High
         && f.creatures == ["slime-t"]
         && f.at == ".mnemorph/slime/t/README.md:6"));
+    assert!(
+        dead.iter().any(|f| f.paths == ["src/slime-t-a/"]),
+        "{dead:?}"
+    );
+    assert!(dead.iter().any(|f| f.paths == ["src/slime-t/"]), "{dead:?}");
     assert!(
         dead.iter()
             .any(|f| f.message.contains("`slime-gone` has no doc"))

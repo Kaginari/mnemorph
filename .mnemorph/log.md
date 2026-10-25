@@ -3256,3 +3256,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - relief's fields round-trip;
   - `a_dead_line_of_heirs_is_heir_dead`;
   - `a_mind_nobody_wears_and_not_shared_is_an_orphan`.
+
+---
+
+### [2026-10-25T22:00:19+01:00] rimuru — #180's review: Fable, and a side note
+- **Found:** Fable, and a side note to the human, both found that `heir-dead` pointed at the
+  retired creature's whole old ground. High blocks landings under its paths, so a healthy
+  sibling's half, or ground the human re-granted, would fail for a dead line not its own. Fable
+  also found the heirs line's ending was taken from the whole doc, and a `minds/README.md` index
+  read as an orphan.
+- **Fixed** (the human: "do it in a smart way and effective way"):
+  - the finding's paths are only unkept ground: the dead heir's own claims, or, with its doc gone,
+    the old ground's claims that no living creature owns or claims inside;
+  - high while some ground is unkept, which blocks only paths nobody owns; low once all are kept;
+  - the inner ending comes from the line the heirs follow;
+  - the index is skipped;
+  - docs 09.
+- **Test:** a sibling's half untouched (`src/u/b/` only); re-granted ground gives low; the
+  missing-heir fallback.
