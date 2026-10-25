@@ -192,6 +192,8 @@ pub fn open_with(
     if !lanes.is_empty() {
         limits.budget_wt = budget.map(|b| b.wt);
     }
+    // One decider for the session's run and its commissioner's routes.
+    let decided = decisions(config, world, model.clone(), env)?;
     let commissioner = (!lanes.is_empty()).then(|| crate::commission::Commissioner {
         world: cx.world().to_path_buf(),
         model: model.clone(),
@@ -204,7 +206,7 @@ pub fn open_with(
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),
-        router: Some(router(config, world, model.clone(), &env, &body.model)),
+        router: Some(router(config, decided.clone(), model.provider())),
         council: crate::council::Thresholds {
             escalate_at: config.stress("escalate_at").unwrap_or(5),
             relieve_at: config.stress("relieve_at").unwrap_or(7),
@@ -234,7 +236,7 @@ pub fn open_with(
     if capped {
         run = run.with_caps(caps);
     }
-    if let Some(d) = decisions(config, world, model.clone(), env)? {
+    if let Some(d) = decided {
         run = run.with_decisions(d);
     }
     Ok(Opened {
@@ -307,23 +309,16 @@ an Elf's new fact resembles older ones: label it in your answer, on a line of it
 }
 
 /// What chooses each court's model: the configuration, Metis's decider when routing is on, and
-/// the session's provider.
+/// the session's provider, as its client names it.
 fn router(
     config: &Config,
-    world: &Path,
-    model: Arc<dyn crate::model::Model>,
-    env: impl Fn(&str) -> Option<String>,
-    session_model: &str,
+    decisions: Option<crate::decisions::Decisions>,
+    provider: &str,
 ) -> crate::commission::Router {
     crate::commission::Router {
         config: Arc::new(config.clone()),
-        decisions: crate::decisions::decisions(config, world, model, env)
-            .ok()
-            .flatten(),
-        provider: config
-            .backend(session_model)
-            .map(|b| b.provider_name)
-            .unwrap_or_default(),
+        decisions,
+        provider: provider.to_owned(),
     }
 }
 

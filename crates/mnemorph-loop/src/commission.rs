@@ -311,7 +311,8 @@ async fn route_child(
         run: format!("{}-route", a.to),
         body: a.to.clone(),
         race: child.race.name().to_owned(),
-        commission: None,
+        // The route is the dispatcher's act: its row is booked in the dispatcher's name.
+        commission: Some(parent.name.clone()),
         prefix: 0,
     };
     let routed = crate::route::route(
@@ -336,23 +337,27 @@ async fn route_child(
     let cost = routed.decision.as_ref().map_or(0, |d| {
         crate::decisions::decision_usage(d, &caller, &c.prices).wt
     });
-    let here = chooser
-        .config
-        .backend(&routed.model)
-        .is_ok_and(|b| b.provider_name == chooser.provider);
-    if !here {
+    let backend = match chooser.config.backend(&routed.model) {
+        Ok(b) => b,
+        Err(why) => {
+            let note = format!(
+                "[{} was routed to {}, which cannot ride: {why}; it rode {}]",
+                a.to, routed.model, parent.model
+            );
+            return (parent.model.clone(), Some(note), cost);
+        }
+    };
+    if backend.provider_name != chooser.provider {
         let note = format!(
-            "[{} was routed to {} on another provider: it rode {}, this session's]",
-            a.to, routed.model, parent.model
+            "[{} was routed to {} on {}, another provider than this session's: it rode {}]",
+            a.to, routed.model, backend.provider_name, parent.model
         );
         return (parent.model.clone(), Some(note), cost);
     }
-    let model = chooser
-        .config
-        .backend(&routed.model)
-        .map_or(routed.model.clone(), |b| b.model);
-    let note = format!("[{} rode {} — {:?}]", a.to, model, routed.reason);
-    (model, Some(note), cost)
+    // Nothing routed and nothing changed: nothing to say.
+    let note = (backend.model != parent.model || routed.reason != crate::route::Reason::Off)
+        .then(|| format!("[{} rode {} — {}]", a.to, backend.model, routed.reason));
+    (backend.model, note, cost)
 }
 
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
@@ -379,6 +384,13 @@ pub(crate) async fn order(
     };
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
+    let office = match a.office.as_deref().map(office_of).transpose() {
+        Ok(office) => office,
+        Err(why) => return refused(why),
+    };
+    let (model, rode, route_wt) = route_child(c, &roster, &a, office, parent, interrupt).await;
+    // Routing comes first: what Metis costs comes out of what the dispatcher has left to give.
+    let left = left.map(|l| l.saturating_sub(route_wt));
     let records = mnemorph_world::worth::Records::load(&c.world);
     let (slice, topup, granted) = grant(&records, &roster, &a, left);
     if slice == 0 {
@@ -403,11 +415,6 @@ pub(crate) async fn order(
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
-    let office = match a.office.as_deref().map(office_of).transpose() {
-        Ok(office) => office,
-        Err(why) => return refused(why),
-    };
-    let (model, rode, route_wt) = route_child(c, &roster, &a, office, parent, interrupt).await;
     let mut child = child_run(
         c,
         &roster,

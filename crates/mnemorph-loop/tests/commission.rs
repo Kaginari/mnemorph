@@ -1300,7 +1300,7 @@ async fn an_office_chooses_the_courts_model() {
     );
     let results = w.results();
     assert!(
-        results[0].contains("[elf-e rode judge-model — Pinned]"),
+        results[0].contains("[elf-e rode judge-model — the human's pin]"),
         "{results:?}"
     );
     assert!(
