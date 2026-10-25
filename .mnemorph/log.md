@@ -3070,3 +3070,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 02/03; tests (a sneaky write fails the gate, built output passes; add-only; control
     characters).
 - **Next:** Fable reviews Opus's report.
+
+---
+
+### [2026-10-25T20:10:39+01:00] rimuru — the report folder
+- **Task:** the human, on the side note that checks may no longer write: "can we do it in init
+  inside the harness, or create folders .nmem_report… and gitignore them?" Also Fable's follow-ups
+  on #174.
+- **Files:**
+  - world report.rs — `prepare` makes `.mnemorph/report/`, and adds it and the common test
+    leftovers to `.git/info/exclude` (local, never committed, idempotent, never through a link);
+    called when a session opens;
+  - tools — the tripwire, the file tools and the classifier treat `report/` like `tmp/`;
+  - run.rs — a "check never writes" failure fails the landing whole, with no retry;
+  - gate.rs — the refusal says where to put a check's output;
+  - verify.rs — a link anywhere on the doc's path is refused;
+  - tests: report.rs (made, ignored once, no git), and a check writing the report folder passes;
+  - docs 03/05.

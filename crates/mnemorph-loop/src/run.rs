@@ -785,7 +785,14 @@ impl Run {
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
-        if *retried {
+        // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
+        // wrote would pass as the body's. The landing fails whole.
+        if *retried
+            || verdict
+                .failures
+                .iter()
+                .any(|f| f.contains("a check never writes"))
+        {
             return Some(Ending::Failed(format!(
                 "the end gate failed twice: {}",
                 verdict.failures.join("; ")

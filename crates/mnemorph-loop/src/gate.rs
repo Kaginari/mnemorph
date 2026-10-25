@@ -322,7 +322,8 @@ impl EndGate {
             .collect();
         if !wrote.is_empty() {
             failures.push(format!(
-                "traits hold: a verify line changed {} — a check never writes",
+                "traits hold: a verify line changed {} — a check never writes; point its output at \
+`.mnemorph/report/`, or have git ignore it",
                 wrote.join(", ")
             ));
         }

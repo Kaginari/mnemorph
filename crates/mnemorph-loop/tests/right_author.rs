@@ -212,4 +212,7 @@ fn a_verify_line_that_writes_fails_the_gate() {
     );
     let built = judge("mkdir -p build && echo out > build/cache");
     assert_eq!(built, Vec::<String>::new());
+    // The report folder is a check's to write.
+    let report = judge("mkdir -p .mnemorph/report && echo ok > .mnemorph/report/junit.xml");
+    assert_eq!(report, Vec::<String>::new());
 }

@@ -10,6 +10,7 @@ pub mod log;
 pub mod own;
 pub mod queue;
 pub mod relief;
+pub mod report;
 pub mod roster;
 pub mod soil;
 pub mod verify;
