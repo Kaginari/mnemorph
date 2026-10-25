@@ -2707,3 +2707,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The test caught an inline check whose script holds a `;` (`from run import f; assert …`):
     the tally cuts a command at its first `;` to find the runner, which dropped the `assert`. The
     interpreter is read from the cut command, the `assert` from the whole one.
+  - Fable's review found the same `;` muting the checks: the tally read any `;` or `|` as hiding
+    the exit status, so a passing `python3 -c "import m; assert …"` was never green, a failing one
+    never red, and eight of them stopped the run. An inline check's script is now found (its quoted
+    argument, or a heredoc's body): `assert` is looked for inside it, `|` and `;` outside it.

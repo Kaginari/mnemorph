@@ -783,15 +783,21 @@ async fn red_runs_with_fixes_between_them_do_not_stall() {
 
 #[test]
 fn verification_scripts_count_as_test_runs() {
-    use mnemorph_loop::bench_of;
+    use mnemorph_loop::{bench_of, muted};
     // Bodies often check their work with a script, not a test runner: those runs are tests too.
+    let inline = r#"python3 -c "from run import f; assert f(2) == 4""#;
     assert_eq!(
-        bench_of(r#"python3 -c "from run import f; assert f(2) == 4""#).as_deref(),
-        Some("python3 -c (an inline check)")
+        bench_of(inline).as_deref(),
+        Some("python3 (an inline check)")
     );
     assert_eq!(
-        bench_of("node -e \"const a = require('assert'); a.equal(1, 1)\"").as_deref(),
-        Some("node -e (an inline check)")
+        bench_of("node -e \"const a = require('assert'); a.equal(1, 1); assert(true)\"").as_deref(),
+        Some("node (an inline check)")
+    );
+    let heredoc = "python3 - <<'EOF'\nimport run; assert run.f(2) == 4\nEOF";
+    assert_eq!(
+        bench_of(heredoc).as_deref(),
+        Some("python3 (an inline check)")
     );
     assert_eq!(
         bench_of("python3 tests/check_run.py").as_deref(),
@@ -801,10 +807,62 @@ fn verification_scripts_count_as_test_runs() {
         bench_of("bash ./verify.sh").as_deref(),
         Some("bash ./verify.sh")
     );
+    // A script's own `;` and `|` are not the shell's: its exit status is seen.
+    assert!(!muted(inline) && !muted(heredoc));
+    assert!(muted(&format!("{inline} | tail -1")));
+    assert!(muted("python3 - <<'EOF' | tail -1\nassert True\nEOF"));
     // A script that asserts nothing, or one not named for checking, is not a test run.
     assert_eq!(bench_of(r#"python3 -c "print(1)""#), None);
+    assert_eq!(bench_of(r#"python3 -c "print('assert')""#), None);
+    assert_eq!(bench_of(r#"python3 -c "import assertions""#), None);
     assert_eq!(bench_of("python3 run.py"), None);
     assert_eq!(bench_of("node build.js"), None);
+    // A test runner wrapped in a shell is still not read through its wrapper.
+    assert_eq!(bench_of(r#"bash -c "cargo test""#), None);
+}
+
+/// A body that checks with a one-liner after every fix is testing, not stalling: a passing check
+/// is green, a failing one red, and the stall rules read them as they read any test run.
+#[tokio::test]
+async fn inline_checks_count_green_and_red_and_do_not_stall() {
+    let w = World::new("inline-checks");
+    let mut script = Vec::new();
+    for i in 0..9 {
+        script.push(tool(
+            &format!("c{i}"),
+            "bash",
+            json!({"command": format!("python3 -c \"import os; assert {i} == {i}\"")}),
+        ));
+    }
+    script.push(tool(
+        "red",
+        "bash",
+        json!({"command": "python3 -c \"import os; assert os.sep == '?'\""}),
+    ));
+    script.push(answer("checked"));
+    let mut run = w.run(
+        Arc::new(ScriptedModel::new(script)),
+        Limits {
+            steps: 30,
+            ..limits()
+        },
+    );
+    let e = ask(&mut run, "check it").await;
+    assert!(matches!(e, Ending::Answered(_)), "{e:?}");
+    let outcomes: Vec<String> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Guts { bench_outcome, .. } => bench_outcome,
+            _ => None,
+        })
+        .collect();
+    let mut want = vec!["green".to_owned(); 9];
+    want.push("red".into());
+    assert_eq!(outcomes, want);
 }
 
 #[test]
@@ -1167,8 +1225,12 @@ async fn every_act_journals_its_guts_reading_and_instruments() {
     else {
         unreachable!()
     };
-    assert_eq!(bench.as_deref(), Some("python3 -c (an inline check)"));
-    assert!(bench_outcome.is_some(), "the check counted as a test run");
+    assert_eq!(bench.as_deref(), Some("python3 (an inline check)"));
+    assert_eq!(
+        bench_outcome.as_deref(),
+        Some("green"),
+        "the check counted as a test run"
+    );
     // The readings never reach the model: the rebuilt conversation is the run's own.
     assert_eq!(conversation(&rows), run.messages());
 }

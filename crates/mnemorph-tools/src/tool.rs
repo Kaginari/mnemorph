@@ -80,7 +80,8 @@ pub struct Meta {
     pub lines_added: u32,
     /// Lines the call removed from the files it wrote, counted the same way.
     pub lines_removed: u32,
-    /// An edit whose `old_string` does not occur in the file: the body edited text it had not read.
+    /// An edit whose `old_string` does not occur in the file: the body edited text it had not read,
+    /// or, in a multiedit, text an earlier edit of the same call had already changed.
     pub edit_miss: bool,
 }
 

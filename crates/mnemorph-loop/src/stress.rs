@@ -147,10 +147,11 @@ const CHECKERS: &[(&str, &str)] = &[
 ];
 
 /// A command that checks work without being a test runner: an inline script that asserts
-/// (`python3 -c "…assert…"`), or a script file named for testing, checking or verifying
-/// (`python3 check_run.py`, `bash verify.sh`). Bodies often verify this way, and a tally that
-/// knew only test runners would read such a run as no test at all. Every inline check of one
-/// interpreter is one bench, since its text changes from run to run; a named script is its own.
+/// (`python3 -c "…assert…"`, or a heredoc `python3 - <<'EOF'`), or a script file named for
+/// testing, checking or verifying (`python3 check_run.py`, `bash verify.sh`). Bodies often verify
+/// this way, and a tally that knew only test runners would read such a run as no test at all.
+/// Every inline check of one interpreter is one bench, since its text changes from run to run; a
+/// named script is its own.
 ///
 /// `c` is the command cut before its first pipe or `;`; `whole` is the command as given, since an
 /// inline script's own `;` is no separator, and its `assert` may come after one.
@@ -159,10 +160,9 @@ fn check_script(c: &str, whole: &str) -> Option<String> {
     let interp = words.next()?;
     let (_, flag) = CHECKERS.iter().find(|(i, _)| *i == interp)?;
     let next = words.next()?;
-    if next == *flag {
-        return whole
-            .contains("assert")
-            .then(|| format!("{interp} {flag} (an inline check)"));
+    if next == *flag || next == "-" || next.starts_with("<<") {
+        let (script, _) = inline_script(whole)?;
+        return asserts(script).then(|| format!("{interp} (an inline check)"));
     }
     let file = next.rsplit('/').next().unwrap_or(next).to_ascii_lowercase();
     let named = ["test", "check", "verify"].iter().any(|w| file.contains(w));
@@ -170,6 +170,67 @@ fn check_script(c: &str, whole: &str) -> Option<String> {
         .iter()
         .any(|e| file.ends_with(e));
     (named && script).then(|| format!("{interp} {next}"))
+}
+
+/// The script of an inline check in `command`, and the command with the script taken out: the
+/// quoted argument of `-c` or `-e`, or a heredoc's body (`python3 - <<'EOF'`, `node <<EOF`).
+fn inline_script(command: &str) -> Option<(&str, String)> {
+    for (interp, flag) in CHECKERS {
+        for (at, _) in command.match_indices(interp) {
+            // The interpreter as a word of its own: not the `sh` of `bash`, nor `python` of `python3`.
+            let starts = command[..at]
+                .chars()
+                .last()
+                .is_none_or(|c| c.is_whitespace() || "&;|(".contains(c));
+            let after = &command[at + interp.len()..];
+            if !starts || !after.starts_with(' ') {
+                continue;
+            }
+            let rest = after.trim_start();
+            if let Some(arg) = rest.strip_prefix(flag).and_then(|r| r.strip_prefix(' ')) {
+                let arg = arg.trim_start();
+                let Some(q) = arg.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+                    continue;
+                };
+                let open = command.len() - arg.len();
+                let body = &command[open + 1..];
+                let end = closing(body, q)?;
+                let outside = format!("{}{}", &command[..open], &command[open + 2 + end..]);
+                return Some((&body[..end], outside));
+            }
+            if rest.starts_with("- <<") || rest.starts_with("<<") {
+                let line_end = at + command[at..].find('\n')?;
+                return Some((&command[line_end + 1..], command[..line_end].to_owned()));
+            }
+        }
+    }
+    None
+}
+
+/// Where the quote `q` that opened `body` closes; a `"` escaped with a backslash does not close.
+fn closing(body: &str, q: char) -> Option<usize> {
+    let mut escaped = false;
+    for (i, c) in body.char_indices() {
+        match c {
+            '\\' if q == '"' && !escaped => escaped = true,
+            c if c == q && !escaped => return Some(i),
+            _ => escaped = false,
+        }
+    }
+    None
+}
+
+/// The script asserts: `assert` as a word, followed by a space, `(` or `.` (`assert x`,
+/// `assert(x)`, `assert.equal`), never `assert` inside a longer name or a quoted word.
+fn asserts(script: &str) -> bool {
+    script.match_indices("assert").any(|(i, w)| {
+        let before = script[..i]
+            .chars()
+            .last()
+            .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '\'' || c == '"'));
+        let after = script[i + w.len()..].chars().next();
+        before && matches!(after, Some(' ' | '(' | '.' | '\n'))
+    })
 }
 
 /// What the guts read from the last act: the instruments a learned value model trains on.
@@ -190,7 +251,11 @@ pub struct Reading {
 /// Whether a bench run hides its exit status: piped, or followed by `;` or `||`.
 #[must_use]
 pub fn muted(command: &str) -> bool {
-    command.contains('|') || command.contains(';')
+    // An inline check's own `|` and `;` are its script's, not the shell's: its exit status is the
+    // script's, hidden only by what comes outside it.
+    let outside = inline_script(command).map(|(_, rest)| rest);
+    let c = outside.as_deref().unwrap_or(command);
+    c.contains('|') || c.contains(';')
 }
 
 /// What an instrument says after an act or a turn.

@@ -59,7 +59,8 @@ pub enum Beat {
         score: i32,
         /// The guts window's sum after the act.
         window: i32,
-        /// The guts warned on this act.
+        /// The guts window fell below its floor on this act: a warning, or the stop that follows the
+        /// last one.
         warned: bool,
         /// The act failed.
         failed: bool,

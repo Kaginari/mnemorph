@@ -219,8 +219,9 @@ impl Tool for Write {
             format!("wrote `{}` ({lines} lines)", cx.shown(&path)),
             ToolClass::Write,
         );
+        // A file that was not text had no lines to remove: counting its bytes as lines is noise.
         let old = before
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .and_then(|b| String::from_utf8(b).ok())
             .unwrap_or_default();
         (o.meta.lines_added, o.meta.lines_removed) = line_delta(&old, &a.content);
         o.meta.wrote.push(path);
