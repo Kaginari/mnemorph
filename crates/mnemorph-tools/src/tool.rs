@@ -75,6 +75,8 @@ pub struct Meta {
     pub wrote: Vec<PathBuf>,
     /// The exit code of a command; `None` for other tools, or a command killed by a signal.
     pub exit: Option<i32>,
+    /// The human gate denied the act: the human's choice, never the body's failure.
+    pub denied: bool,
 }
 
 impl Outcome {
