@@ -170,7 +170,7 @@ Currency caps convert through the same table; a model with no known price is sti
   below it: that body's record and the record of every body below it — weighted tokens spent
   (the usage ledger, rounded to the thousand), gate passes and fails (only the entries the end
   gate wrote in the journal; a `NOT_VERIFIED` counts as a fail, so not verifying never buys
-  worth). Worth is `0.5 + 0.5 × (passes + 1) / (passes + fails + handed
+  worth; one the machine would not run, `NOT_VERIFIED, unrun`, counts neither way). Worth is `0.5 + 0.5 × (passes + 1) / (passes + fails + handed
   back / 2 + 2)`: a failure handed back to be fixed counts half; a body with no record starts at
   0.75, a clean record nears 1, a failing one nears 0.5. **A slice that runs out is never a failure
   on the card:** a budget checkpoint ends the run before its body answers, and only an answer reaches

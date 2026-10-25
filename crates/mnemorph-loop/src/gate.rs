@@ -218,6 +218,10 @@ pub struct GateVerdict {
     /// The checks that gave no result — a verify line that did not run, or was killed before it
     /// finished: neither a pass nor a failure.
     pub unverified: Vec<String>,
+    /// A verify line was killed at its deadline: the body's tests hung. Without one, every
+    /// unverified line simply did not run — no kernel guard, a refused command — which is the
+    /// machine's doing, never the body's.
+    pub timed_out: bool,
     /// A verify run changed the tree: a check never writes, and the landing fails whole.
     pub wrote: bool,
 }
@@ -250,6 +254,13 @@ impl GateVerdict {
     #[must_use]
     pub fn passed(&self) -> bool {
         self.verdict() == Verdict::Pass
+    }
+
+    /// Not verified, and by the machine alone: every check that gave no result did not run. It
+    /// says nothing about the body — neither a pass nor a fail on its record.
+    #[must_use]
+    pub fn unrun(&self) -> bool {
+        self.verdict() == Verdict::NotVerified && !self.timed_out
     }
 
     /// The gate's word: a failure outweighs a check that gave no result.
@@ -319,6 +330,7 @@ impl EndGate {
                 changed,
                 failures,
                 unverified: Vec::new(),
+                timed_out: false,
                 wrote: false,
             };
         }
@@ -329,12 +341,15 @@ impl EndGate {
             failures.extend(right_author(author, &changed, cx.world()));
         }
         let mut unverified = Vec::new();
-        let (verify_failures, wrote) = self.run_verify(tools, cx, &after, &mut unverified);
+        let mut timed_out = false;
+        let (verify_failures, wrote) =
+            self.run_verify(tools, cx, &after, &mut unverified, &mut timed_out);
         failures.extend(verify_failures);
         GateVerdict {
             changed,
             failures,
             unverified,
+            timed_out,
             wrote,
         }
     }
@@ -348,6 +363,7 @@ impl EndGate {
         cx: &mut Context,
         judged: &Tree,
         unverified: &mut Vec<String>,
+        timed_out: &mut bool,
     ) -> (Vec<String>, bool) {
         let mut failures = Vec::new();
         for command in &self.verify {
@@ -356,6 +372,7 @@ impl EndGate {
             // A line that did not run, or was killed at its deadline, said nothing either way; a
             // crash is a failure.
             if o.is_error && (o.meta.class.is_none() || o.meta.timed_out) {
+                *timed_out |= o.meta.timed_out;
                 let why = o
                     .content
                     .lines()

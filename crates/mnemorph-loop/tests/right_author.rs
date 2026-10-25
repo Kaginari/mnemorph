@@ -256,6 +256,7 @@ fn a_check_that_gave_no_result_is_not_verified() {
     };
     let unrun = judge(vec!["true".into()], false);
     assert_eq!(unrun.verdict(), Verdict::NotVerified, "{unrun:?}");
+    assert!(unrun.unrun(), "the machine's doing, not the body's");
     assert!(!unrun.passed());
     assert_eq!(unrun.failures, Vec::<String>::new());
     assert!(
@@ -264,6 +265,7 @@ fn a_check_that_gave_no_result_is_not_verified() {
     );
     let ran = judge(vec!["true".into()], true);
     assert_eq!(ran.verdict(), Verdict::Pass, "{ran:?}");
+    assert!(!ran.unrun());
     let failed = judge(vec!["false".into()], true);
     assert_eq!(failed.verdict(), Verdict::Fail, "{failed:?}");
     // A crash is a failure, not a missing result.

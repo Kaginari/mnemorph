@@ -3178,3 +3178,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `tier_of` returns `Option`; an unknown model caps nothing (a pin is a choice, not a tier);
   - docs: the cap applies in every office and outranks the Dark Elf's floor.
 - **Test:** a pinned parent leaves hard work at frontier.
+
+---
+
+### [2026-10-25T20:53:25+01:00] rimuru — unrun checks are blameless
+- **Task:** a side note: on a machine without the sandbox, every verify line goes unrun. #176
+  counted that NOT_VERIFIED as a fail, so every body would be marked failing and stuck, and the
+  council could split or retire it, for the machine's fault.
+- **Files:**
+  - gate.rs: `GateVerdict.timed_out` and `unrun()`: NOT_VERIFIED with no timeout;
+  - run.rs: an unrun landing ends at once, with no retry, journaled `NOT_VERIFIED, unrun`, and
+    tells the human to make the sandbox work or set `sandbox.allow_unguarded`;
+  - worth.rs: `, unrun` counts neither way and breaks no streak. A timeout still counts as a fail;
+  - docs 03/06.
+- **Tests:** right_author (`unrun()`) and worth (unrun entries leave the streak and the card as
+  they were).
