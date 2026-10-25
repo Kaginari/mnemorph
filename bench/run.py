@@ -29,6 +29,7 @@ REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 HANDOFF = "Hand this whole ask to elf-e with the commission tool, then answer with its report:\n\n"
 LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|free-models-per-day", re.I)
+DAILY = re.compile(r"free-models-per-day|daily limit", re.I)
 
 
 def tasks(only):
@@ -136,6 +137,7 @@ def run_one(task, mode, model, secret, timeout, keep=False):
     seconds = round(time.time() - start, 1)
     # A rate limit reaches stderr when the throne's call dies, stdout when a body's does.
     limited = bool(LIMITED.search(err or "") or LIMITED.search(stdout or ""))
+    daily = bool(DAILY.search(err or "") or DAILY.search(stdout or ""))
     calls, wt, usd, below = ledger(world)
     scrubbed = (err or "").replace(secret, "[key]")
     result = {
@@ -146,6 +148,7 @@ def run_one(task, mode, model, secret, timeout, keep=False):
         # A hierarchy run where no body below the throne made a call did not run as one.
         "valid": mode != "hierarchy" or below > 0,
         "limited": limited,
+        "daily": daily,
         "stderr": scrubbed[-400:],
     }
     if keep:
@@ -187,16 +190,27 @@ def main():
                 continue
             if a.limit and ran >= a.limit:
                 return 0
-            # A per-minute limit passes: wait it out a few times. One that stays is the daily cap.
+            # A per-minute limit passes: wait it out a few times. The daily cap, or a limit that
+            # stays, stops the run; what the limited attempts spent is counted in the one recorded.
+            spent = {"calls": 0, "wt": 0, "usd": 0.0}
+            attempts = 0
             for wait in (70, 140, 280, None):
                 r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
+                attempts += 1
                 if not r["limited"]:
                     break
-                if wait is None:
+                for k in spent:
+                    spent[k] += r[k]
+                if r.get("world"):
+                    print("a limited attempt's world is kept at %s" % r["world"])
+                if r["daily"] or wait is None:
                     print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
                     return 3
                 print("rate-limited at %s %s: waiting %ds" % (t.name, mode, wait))
                 time.sleep(wait)
+            for k in spent:
+                r[k] += spent[k]
+            r["attempts"] = attempts
             with out.open("a") as f:
                 f.write(json.dumps(r) + "\n")
             ran += 1

@@ -3016,3 +3016,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (its plan) → Orc → Slime (it wrote, its gate passed).
 - **Open (design):** an Orc has no tool to code its Slimes' verify lines (the docs are
   protected); the bench seeds one.
+
+---
+
+### [2026-10-25T19:47:27+01:00] rimuru — #173 review fixes, the measurement running
+- **Task:** fix Fable's review of #173 while the measurement runs. It measures commit `9d17040`;
+  the source is built into a separate target, so the measured binary is never rebuilt mid-run.
+- **Fixed:**
+  - `grant()` works on a plain `u64` after the no-cap return (the dead `Option` plumbing is gone);
+  - the commission tool says `budget_wt` is not read with no cap;
+  - the runner stops at once on the daily cap, counts a limited attempt's spend into the row it
+    records (with `attempts`), and names a kept limited world;
+  - a nested test: under no cap, `budget_wt` limits neither the Elf nor the Orc it commissions.

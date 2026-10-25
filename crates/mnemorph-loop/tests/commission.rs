@@ -1425,3 +1425,34 @@ fn a_linked_plan_is_no_plan() {
         Vec::<String>::new()
     );
 }
+
+/// With no cap set there is nothing to carve: a `budget_wt` is not read, and the whole chain runs
+/// unbounded — the Elf past its first call, and the Orc it commissions with an ask of its own.
+#[tokio::test]
+async fn under_no_cap_a_budget_is_not_read() {
+    let w = World::new("no-cap");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "budget_wt": 1}),
+        ),
+        ScriptedModel::tool("g1", "glob", json!({"pattern": "*"})),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "orc-o", "ask": "look", "budget_wt": 1}),
+        ),
+        ScriptedModel::tool("g2", "glob", json!({"pattern": "*"})),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].starts_with("@S DONE"),
+        "both bodies ran past one call: {results:?}"
+    );
+}
