@@ -65,3 +65,11 @@ test('q is a command only as the first word that is not a flag value', () => {
     words: ['q', 'add', 'x', '--world', 'elsewhere'],
   });
 });
+
+test('housekeep hands its words to the core whole', () => {
+  expect(parse(['housekeep', '--heal'])).toMatchObject({
+    kind: 'onto',
+    words: ['housekeep', '--heal'],
+    raw: true,
+  });
+});
