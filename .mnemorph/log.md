@@ -2781,3 +2781,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs/03.
 - **Next in M7:** Courts per office (fresh contexts); Metis attached to dispatch; solo escalation
   measured on 30 tasks (costs live runs: ask first).
+
+---
+
+### [2026-10-25T14:53:09+01:00] rimuru — #168 review fixes
+- **Task:** fix Fable's review of the clock-death memo.
+- **Fixed:**
+  - the memo keys on the clock's own checkpoint, so a salvage turn that wrote nothing is still a
+    death;
+  - the memo is a hole, never cut;
+  - a sibling stuck on its files is not named;
+  - a tie goes to the sibling that spent least, then by name;
+  - the death row names the body suggested;
+  - docs: instruments, not the ledger, and the same base race.

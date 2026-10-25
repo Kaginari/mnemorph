@@ -655,7 +655,8 @@ fn report_for(
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, ending, to);
     }
-    notes.extend(clock_memo(&c.world, roster, to, ending));
+    // A clock death's memo is a hole: never cut from the report.
+    triage.extend(clock_memo(&c.world, roster, to, ending));
     let forced = council(c, to, ending, failed, &mut notes, &mut triage);
     report_of(ending, landed, put_back, &notes, &triage, forced.as_deref())
 }
@@ -672,42 +673,58 @@ pub struct Death {
     pub body: String,
     /// The instrument's words.
     pub why: String,
+    /// The body named to the parent as the next fit, if any.
+    pub next: Option<String>,
 }
 
 /// A clock death leaves a memo: a `death` row, and the next-fit body named to the parent — the
-/// living sibling of the same race under the same parent with the best worth. Advice, never a
-/// change on its own.
+/// living sibling of the same base race under the same parent, not stuck, with the best worth.
+/// Advice, never a change on its own.
 fn clock_memo(world: &Path, roster: &Roster, to: &str, ending: &Ending) -> Option<String> {
-    let Ending::Checkpoint {
-        why,
-        salvage: Some(_),
-    } = ending
-    else {
+    // The clock's own checkpoint — whether or not its salvage turn wrote anything.
+    let Ending::Checkpoint { why, .. } = ending else {
         return None;
     };
+    if !why.starts_with("clock") {
+        return None;
+    }
+    let me = roster.creatures.get(to);
+    let records = mnemorph_world::worth::Records::load(world);
+    // The best worth wins; a tie goes to the sibling that spent least, then by name.
+    let next = me.and_then(|me| {
+        roster
+            .living()
+            .filter(|k| {
+                k.name != to
+                    && k.reports_to == me.reports_to
+                    && k.race.base() == me.race.base()
+                    && records.stuck(&k.name).is_empty()
+            })
+            .map(|k| {
+                let card = records.card(roster, &k.name);
+                (
+                    std::cmp::Reverse(card.worth_milli()),
+                    card.spent_wt,
+                    k.name.clone(),
+                )
+            })
+            .min()
+    });
     let death = Death {
         ts: mnemorph_ledger::Timestamp::now(),
         body: to.to_owned(),
         why: why.clone(),
+        next: next.as_ref().map(|(_, _, n)| n.clone()),
     };
     if let Err(e) = Journal::<Death>::new(world.join(DEATHS)).append(&death) {
         eprintln!("mnemorph: {to}'s clock death could not be recorded: {e}");
     }
-    let me = roster.creatures.get(to)?;
-    let records = mnemorph_world::worth::Records::load(world);
-    let next = roster
-        .living()
-        .filter(|k| {
-            k.name != to && k.reports_to == me.reports_to && k.race.base() == me.race.base()
-        })
-        .map(|k| (records.card(roster, &k.name).worth_milli(), k.name.clone()))
-        .max();
     Some(match next {
-        Some((worth, name)) => format!(
-            "[clock death: {to}'s clock ran out ({why}); next fit: {name}, worth 0.{worth:03} — advice, never a change]"
+        Some((std::cmp::Reverse(worth), _, name)) => format!(
+            "clock death: {to}'s clock ran out ({why}); next fit: {name}, worth 0.{worth:03} — advice, never a change"
         ),
         None => format!(
-            "[clock death: {to}'s clock ran out ({why}); no sibling fits: give a smaller order, or a longer clock]"
+            "clock death: {to}'s clock ran out ({why}); no sibling fits: give a smaller order, or a longer clock"
         ),
     })
 }
@@ -1069,6 +1086,12 @@ mod clock_tests {
         assert!(memo.contains("next fit: slime-t, worth 0.750"), "{memo}");
         let rows = Journal::<Death>::new(w.join(DEATHS)).read().unwrap().rows;
         assert_eq!((rows.len(), rows[0].body.as_str()), (1, "slime-s"));
+        // A salvage turn that wrote nothing is still a clock death.
+        let failed_salvage = Ending::Checkpoint {
+            why: "clock: the deadline passed during the model call".into(),
+            salvage: None,
+        };
+        assert!(clock_memo(&w, &roster, "slime-t", &failed_salvage).is_some());
         let stopped = Ending::Checkpoint {
             why: "budget: spent".into(),
             salvage: None,
