@@ -187,13 +187,17 @@ Escalation is one-way within a run; the next ask starts solo again.
 
 In a world whose docs have a living throne with Elves reporting to it, Rimuru's session holds the
 `commission` tool beside the solo tools, its prompt names each Elf and its lane, and Rimuru may
-hand an ask down itself. Two of the signals are read by code at the end of each solo turn: a
-context checkpoint, and an outward act or a seal the shelf refused (its class kept on the tool's
-result). On either, the throne hands the ask down — an outward act to its Kijin, a seal to its
-Dark Elf, else to the Elf whose lane the ask names, or the first — with a handoff: the signal and
-the ask as the human gave it; the turn's answer is that body's report. A signal with no body to
-take it keeps the turn's ending. The boundary signal waits for solo's zone to narrow to the
-territory an ask touches: while solo's zone is the whole repository, no write falls outside it.
+hand an ask down itself. Two of the signals are read by code at the end of each solo turn. An
+outward act the shelf refused (its class kept on the tool's result) goes to the throne's Kijin —
+the race that holds it takes the act, the act itself handed down — and solo's own answer stands,
+the Kijin's report beside it. A context checkpoint hands the ask to the Elf whose lane the ask
+names, or the first, and the turn stays a checkpoint — the session is full and must start fresh —
+with that Elf's report as its salvage. An interrupted or failed turn, a signal with no body to
+take it (no Kijin for an outward act, no Elf for a full context), or a commission the law refuses
+keeps the turn's ending. Escalation needs the throne's commissioner, which a world has once Elves
+report to it. The boundary signal waits for solo's zone to narrow to the territory an ask
+touches: while solo's zone is the whole repository, no write falls outside it. Seals are the Dark
+Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
