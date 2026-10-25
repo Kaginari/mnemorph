@@ -408,7 +408,8 @@ fn protected_files_are_not_written_by_tools() {
         "write",
         r#"{"path": ".mnemorph/shared/queue.jsonl", "content": "{}\n"}"#,
     );
-    assert!(!o.is_error, "shared is writable: {o:?}");
+    // The shared work queue moves only through the harness, never by a body's tool.
+    assert!(o.is_error && o.content.contains("is protected"), "{o:?}");
 }
 
 fn use_tool(cx: &mut Context, name: &str, args: &serde_json::Value) -> Outcome {

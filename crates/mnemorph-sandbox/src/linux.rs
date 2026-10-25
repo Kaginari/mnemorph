@@ -29,7 +29,8 @@ pub struct Rules {
 
 /// Syscalls no sandboxed command may make: debugging or reading other processes, changing
 /// mounts or namespaces, loading code into the kernel, the kernel's own keyring, `io_uring`
-/// (which would bypass the socket rule).
+/// (which would bypass the socket rule), and leaving the command's process group (`setsid`,
+/// `setpgid`), so that killing the group ends every process the command started.
 const ALWAYS_DENIED: &[libc::c_long] = &[
     libc::SYS_ptrace,
     libc::SYS_process_vm_readv,
@@ -60,6 +61,8 @@ const ALWAYS_DENIED: &[libc::c_long] = &[
     libc::SYS_io_uring_register,
     libc::SYS_acct,
     libc::SYS_quotactl,
+    libc::SYS_setsid,
+    libc::SYS_setpgid,
 ];
 
 /// Processes the user may run while a command is in the guard: bounds a fork bomb. The kernel

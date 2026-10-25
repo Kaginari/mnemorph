@@ -91,6 +91,7 @@ impl World {
             stress_tokens: None,
             busy: std::sync::Mutex::default(),
             observer: None,
+            queue: Some(mnemorph_loop::world::Queue::at(&queue_of(&self.0))),
         };
         let setup = Setup {
             model,
@@ -159,7 +160,7 @@ async fn one_order_down_and_back() {
             json!({"path": "src/done.txt", "content": "done\n"}),
         ),
         ScriptedModel::text("@S DONE\n@W src/done.txt\n@U territory src/ build=cargo test\n@E"),
-        ScriptedModel::text("@S DONE\n@V the landing holds\n@E"),
+        ScriptedModel::text("@S DONE\n@V the landing holds\n@$ slime-s: add the tab test next\n@E"),
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done: src/done.txt is there."),
     ]));
@@ -185,6 +186,13 @@ async fn one_order_down_and_back() {
         .expect("the Slime's fact was filed");
     assert_eq!(f.text, "build=cargo test");
     assert!(f.supporters.contains("slime-s"), "{f:?}");
+    // The Orc's order for its Slime is held on the shared queue, in the Orc's name.
+    let held = mnemorph_loop::world::Queue::at(&queue_of(&w.0)).open();
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(
+        (held[0].holder(), held[0].by.as_str(), held[0].ask.as_str()),
+        ("slime-s", "orc-o", "add the tab test next")
+    );
 }
 
 #[tokio::test]
@@ -632,4 +640,21 @@ async fn a_world_without_creatures_stays_solo() {
     assert_eq!(journals.len(), 1, "no child ran");
     let _ = fs::remove_dir_all(&bare);
     let _ = fs::remove_dir_all(&attic);
+}
+
+/// Each test world's queue, beside it: tests never write the human's state directory.
+fn queue_of(world: &std::path::Path) -> std::path::PathBuf {
+    let mut q = world.as_os_str().to_owned();
+    q.push("-queue.jsonl");
+    std::path::PathBuf::from(q)
+}
+
+/// The world writes the queue's witness where the tripwire reads it.
+#[test]
+fn the_queue_witness_is_one_place() {
+    let world = std::path::Path::new("/some/world");
+    assert_eq!(
+        mnemorph_loop::world::queue::witness_of(world),
+        mnemorph_tools::queue_witness(world)
+    );
 }

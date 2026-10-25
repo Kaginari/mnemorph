@@ -14,7 +14,8 @@ import { chooseTheme } from './theme.js';
 /** `onto …`: the core answers from the creature docs, with no session and no key. */
 function onto(cmd: Extract<ReturnType<typeof parse>, { kind: 'onto' }>): number {
   const core = findCore(cmd.core);
-  const args = ['onto', ...cmd.words, ...(cmd.world ? ['--world', cmd.world] : [])];
+  const head = cmd.raw ? [] : ['onto'];
+  const args = [...head, ...cmd.words, ...(cmd.world ? ['--world', cmd.world] : [])];
   const ran = spawnSync(core, args, { stdio: 'inherit' });
   if (ran.error) {
     process.stderr.write(`mnemorph: the core ${core} did not start: ${ran.error.message}\n`);

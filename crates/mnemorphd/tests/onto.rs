@@ -8,6 +8,7 @@ fn onto(args: &[&str], cwd: &std::path::Path) -> (bool, String, String) {
         .args(args)
         .current_dir(cwd)
         .env_remove("ANTHROPIC_API_KEY")
+        .env("XDG_STATE_HOME", state())
         .output()
         .unwrap();
     (
@@ -63,6 +64,11 @@ fn owner_names_the_owner_the_rule_and_the_claim() {
         out.trim(),
         "src/lib.rs\tslime-wire\tzone crates/mnemorph-wire/"
     );
+}
+
+/// Where these tests' queues live: never the human's state directory.
+fn state() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("mnemorph-q-state-{}", std::process::id()))
 }
 
 #[test]
@@ -122,4 +128,63 @@ fn check_reads_names_git_would_quote() {
     let (_, out, _) = onto(&["onto", "check"], &dir);
     let _ = std::fs::remove_dir_all(&dir);
     assert!(!out.contains("src/"), "the Slime owns src/café.rs: {out}");
+}
+
+/// The queue's door: add, list, claim, and a refusal that exits 2 saying why.
+#[test]
+fn the_queue_door() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-q-door-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph/slime/s")).unwrap();
+    std::fs::write(
+        dir.join(".mnemorph/slime/s/README.md"),
+        "# slime-s\n\n- **Race:** slime\n",
+    )
+    .unwrap();
+    let q = |args: &[&str]| {
+        let mut all = vec!["q"];
+        all.extend_from_slice(args);
+        onto(&all, &dir)
+    };
+    let (ok, out, _) = q(&[
+        "add", "tidy", "the", "test", "--for", "slime-s", "--rank", "1",
+    ]);
+    assert!(ok, "{out}");
+    let id = out.split('\t').next().unwrap().to_owned();
+    assert!(out.contains("\theld\tslime-s\t1\ttidy the test"), "{out}");
+    let (ok, out, _) = q(&["claim", &id]);
+    assert!(ok && out.contains("\tclaimed\t"), "{out}");
+    let (ok, out, _) = q(&["list"]);
+    assert!(ok && out.lines().count() == 1, "{out}");
+    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["q", "close", "nope"])
+        .env("XDG_STATE_HOME", state())
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("refused: no item `nope`"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A body's command never reaches the queue as the human.
+#[test]
+fn a_bodys_command_reads_the_queue_but_never_moves_it() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-q-body-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph")).unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            .args(args)
+            .current_dir(&dir)
+            .env("MNEMORPH_BODY", "slime-s")
+            .env("XDG_STATE_HOME", state())
+            .output()
+            .unwrap()
+    };
+    assert_eq!(run(&["q", "list"]).status.code(), Some(2));
+    let out = run(&["q", "add", "sneak", "in"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("slime-s runs this"));
+    let _ = std::fs::remove_dir_all(&dir);
 }

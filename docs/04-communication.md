@@ -271,13 +271,23 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 **The shared work queue** is the durable form of the order book.
 
-- One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf (harness soil: no body writes it by
-  hand, and a move made during a body's turn is never billed to that body). Every move appends the
-  item's whole snapshot as one line with its revision; the queue is a fold over the lines. A line
-  that does not follow its item's last revision is a typed refusal — two sessions claiming one item
-  both append, the first wins, the second reads back refused. No lock file, no database.
-- States: `held → claimed → done | dropped`. An item names the body it is ordered to, its rank and
-  priority, the order that made it, and its notes.
+- One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf: harness soil, ignored by git, so
+  the queue belongs to one machine. It moves only through the harness and the human's `mnemorph q`;
+  each line they write is written again to a witness under the human's state directory
+  (`$XDG_STATE_HOME/mnemorph/queue/`), out of every command's reach. A body's command that touches
+  the queue has it rebuilt from what it held and what the witness gained since, in the witness's
+  order — whatever the command did to the file, a forged line, a deletion or a link in its place,
+  never counts, and the human's moves made while the command ran are kept. The harness, the human's
+  `q` and the tripwire take the witness's lock, so no move lands between the tripwire's read and its
+  write. With no home directory there is no witness, and a move made during a body's command is put
+  back with it. A move made during a body's turn is never billed to that body. Every move appends
+  the item's whole snapshot as one line with its revision; the queue is a fold over the lines. A
+  line that does not follow its item's last revision is a typed refusal — two sessions claiming one
+  item both append, the first wins, the second reads back refused. No lock file, no database.
+- States: `held → claimed → done | dropped`. An item names the body it is ordered to — a living
+  body of the roster, or the throne — its rank (lower runs first; ties run in order of arrival),
+  who ordered it, the order, and its notes. Orders go down the ranks: a body orders only bodies
+  below it, and only the human orders the throne's work.
 - **Rank law.** A body moves the work it holds; anyone up the holder's reporting chain may move it
   too; work held by no one is the throne's. The human stands over every body.
 - **Relay-hold.** A report's `@$` orders are held on the queue; nothing dispatches a held row
@@ -289,9 +299,11 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 - **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
-  body never claims (work reaches it claimed in its name). The status line reads "N held".
-- The file is tracked and merges with `merge=union` (`.gitattributes`): append-only lines travel
-  between machines like the journal.
+  body never claims: only the human and the harness's wake do, so work reaches a body claimed in
+  its name. The wake claims only an order its body can carry out: the dispatch rules hold, and
+  what the order touches lies on that body's ground. The status line reads "N held".
+- The queue does not travel with the repository. Orders that must reach another machine travel
+  as what made them — a commission's report in the journal, a `@?` the human answers.
 
 ### The client protocol
 

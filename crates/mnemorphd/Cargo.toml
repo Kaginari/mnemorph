@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 mnemorph-server = { path = "../mnemorph-server" }
+serde_json = "1"
 
 [lints]
 workspace = true

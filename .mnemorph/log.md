@@ -2244,3 +2244,150 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - An approval is the one moment the human acts, so it must name who asks.
   - My earlier entry said a child's beats are "wrapped once per rank". Every rank shares the
     session's commissioner, so each beat is wrapped once, in its own name.
+
+---
+
+### [2026-10-25T10:14:28+01:00] rimuru — M7: the shared work queue, and its door
+- **Task:** the human said "go". The shared work queue's store, its rank law, the human's door
+  `mnemorph q`, and relay-hold of a report's `@$` orders.
+- **Files:**
+  - crates/mnemorph-world queue.rs — `Item` snapshots with revisions, a fold that refuses a line
+    that does not follow, `State` held/claimed/done/dropped, `Move`, the rank law, `add`,
+    `move_item`, `open`;
+  - tests/queue.rs;
+  - mnemorphd — `q` list/show/add/claim/touch/requeue/close, `--json`, a refusal exits 2;
+    tests/onto.rs;
+  - mnemorph-loop commission.rs — `hold_orders`;
+  - packages/cli args.ts and cli.tsx — `mnemorph q`, words passed whole.
+- **Gate:** n/a. Instruments:
+  - states, the rank law, a race won by the first line;
+  - the door by hand and in a test;
+  - an Orc's `@$` held in its name;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Open, next rung:** the wake, which claims a held row at the turn boundary in the name of the
+  body it is ordered to and dispatches it; the `queue` tool on bodies' shelves; the status line's
+  "N held"; a report settling its oldest claim.
+
+---
+
+### [2026-10-25T10:18:15+01:00] rimuru — the queue, closed to bodies' hands
+- **Task:** a side note warned that `mnemorph q` counted whoever ran it as the human, and that
+  the tripwire left `.mnemorph/shared/` writable, so a body's command could move the queue as the
+  human. The human added: "agent should pick only a job they can do".
+- **Files:**
+  - tools:
+    - tripwire.rs — `shared/` is no longer spared: a body's command or tool editing the queue is
+      put back or refused;
+    - shell.rs — every command carries `MNEMORPH_BODY`;
+  - world queue.rs — a body never claims in another's name;
+  - mnemorphd — `q` under `MNEMORPH_BODY` reads but never moves; `q_args`, `print_items` and
+    `refused` split out;
+  - tests: the claim rule, a body's `q` refused, and the two old "shared is writable" tests
+    flipped;
+  - docs/04, docs/05.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** an environment variable is courtesy, the file is the border. A body could unset
+  `MNEMORPH_BODY`, but the tripwire puts back any change its command makes to the queue. The
+  queue moves only through the harness's own process.
+- **For the wake (next rung):** it claims only an order its body can carry out. The dispatch law
+  must hold, and every path the order touches must be on the body's ground.
+
+---
+
+### [2026-10-25T10:32:17+01:00] rimuru — #154 review fixes: the queue moves out of the world; no process leaves its group
+- **Task:** fix #154's review: Opus reviewed the code, then a fresh Fable reviewed Opus's report.
+- **Decided:**
+  - **The queue's store moves outside the world**, beside the attic
+    (`$XDG_STATE_HOME/mnemorph/queue/<world>-<hash>.jsonl`). The tripwire put back the human's
+    concurrent moves, and an escaped process could forge lines; this place fixes both. The cost is
+    that the queue is machine-local and no longer travels with `merge=union`.
+  - **seccomp refuses `setsid` and `setpgid`**: killing the group ends everything a command
+    started. This held for every protected record, not only the queue.
+- **Also fixed:**
+  - 12-hex ids, regenerated while taken;
+  - ties run in order of arrival;
+  - only the human and the harness claim;
+  - `--as`/`--for` must name living bodies;
+  - orders go only down the ranks;
+  - `touch` needs a note;
+  - the classifier no longer spares `shared/`;
+  - `mnemorph q` is a command only as the first non-flag word.
+- **Open (`@?`):** whether the queue should travel between machines. Doing that safely needs a
+  per-user key or a human-run `q pull`.
+- **Open (`@?`):** a parent hash in each line, so that union-merged lineages cannot interleave.
+  This matters only if the queue travels.
+- **Learned:** an environment variable is courtesy; a file's place is a border. If a guarantee
+  depends on what a body's command might do after it is "dead", check that the kill is real.
+
+---
+
+### [2026-10-25T10:37:07+01:00] rimuru — #154 verification fixes
+- **Task:** Opus checked the review fixes.
+- **Fixed:**
+  - `human` and `harness` are reserved creature names: a doc taking one is a roster problem, not
+    a body that stands over all;
+  - the queue's file name uses `fnv64a`, which is stable across toolchains;
+  - a body's `mnemorph q` refuses outright (the landlock read denial had shown it an empty queue);
+  - page 05 names what refusing `setsid` breaks (Python `start_new_session`, Go `Setsid`, ptys,
+    `timeout` signalling the whole command) and that macOS has no such rule;
+  - `.gitattributes` is gone: its only line was for the queue's old place.
+- **Open (`@?`):** whether a pty-using tool (pexpect, `script`) is needed often enough that
+  refusing `setsid` must be relaxed, e.g. by moving to a cgroup kill instead.
+
+---
+
+### [2026-10-25T10:45:15+01:00] rimuru — the queue back in the world, gitignored, witnessed
+- **Task:** the human chose to keep the queue in the world at `.mnemorph/shared/queue.jsonl`, but
+  ignored by git: "no keep and add in git ignore its better".
+- **Decided:** the queue stays machine-local. A witness under the state directory holds every line
+  the harness or the human's `q` wrote. The tripwire puts the queue back line by line: the old
+  lines stay, and of the added lines only those the witness holds are kept. A forged move is
+  dropped, and the human's concurrent moves are kept.
+- **Files:**
+  - world queue.rs — `Queue::of` is in the world and witnessed; `witness_of`; `land` writes the
+    witness first;
+  - tools tripwire.rs — `restore_queue`, `queue_witness`, the queue kept apart from the 16 MiB
+    budget;
+  - shell.rs — `.mnemorph/shared/` is made before the snapshot;
+  - .gitignore;
+  - docs/04, docs/05, the roadmap.
+  - Tests: the witness restore; a loop test that holds the world's and the tripwire's witness path
+    together.
+- **Open (`@?`):** a race window remains while the tripwire rewrites the queue. A move landing
+  within that write is lost; it is narrow, and the witness still holds the line.
+
+---
+
+### [2026-10-25T10:51:33+01:00] rimuru — the queue rebuilt from its witness
+- **Task:** Opus verified the witness design and found four holes:
+  - a symlink at the queue's path survived and was written through (into the world, or out of
+    it);
+  - deleting or relinking `shared/` lost the queue;
+  - a command could drop or reorder the human's concurrent moves;
+  - `open.rs` passed a non-canonical world.
+- **Fixed:**
+  - the tripwire records the witness's length at the snapshot, and rebuilds the queue as the old
+    bytes plus the witness's gain since, in the witness's order, never reading the command's file;
+  - the rebuild runs after the generic restore, so `shared/` stands again;
+  - whatever is at the path is removed and the file is created new;
+  - `Queue::land` refuses a link at the queue or its shelf;
+  - `Queue::of(cx.world())`.
+- **Learned:** a restore that consults the tampered file inherits the tamper. Rebuild only from
+  what the command could not reach.
+
+---
+
+### [2026-10-25T10:57:07+01:00] rimuru — the witness's lock
+- **Task:** Fable checked the rebuild. All four holes are fixed. One real loss remained: a move
+  landing between the tripwire's read of the witness and its write of the queue was overwritten
+  for good.
+- **Fixed:**
+  - `Queue::land`, the snapshot and the rebuild all hold the witness's file lock (`File::lock`),
+    so none of them can interleave;
+  - the snapshot reads the queue and the witness's length under that lock;
+  - page 04 says that with no home there is no witness.
+- **Open:** the first move ever creates the witness. A rebuild that finds no witness takes no
+  lock, so the very first move can still race it. The window is once per machine and
+  microseconds wide.

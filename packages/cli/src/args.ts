@@ -18,7 +18,14 @@ export type Command =
       json: boolean;
     }
   | { kind: 'status'; world?: string | undefined; core?: string | undefined }
-  | { kind: 'onto'; words: string[]; world?: string | undefined; core?: string | undefined }
+  | {
+      kind: 'onto';
+      words: string[];
+      world?: string | undefined;
+      core?: string | undefined;
+      /** The words are a whole core command (`q …`), not `onto …`'s. */
+      raw?: boolean | undefined;
+    }
   | { kind: 'error'; message: string };
 
 export const HELP = `mnemorph — talk to a Mnemorph body in your terminal
@@ -29,6 +36,7 @@ Usage:
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [options]          the build, the core, the key's origin, the sandbox
   mnemorph onto owner <path>...      who owns each path, by which rule and claim
+  mnemorph q list|show|add|claim|touch|requeue|close …   the shared work queue
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -55,6 +63,41 @@ export function parse(argv: string[]): Command {
   // Help and the version win wherever they appear: nothing else is read.
   if (argv.some((a) => a === '-h' || a === '--help')) return { kind: 'help' };
   if (argv.some((a) => a === '-V' || a === '--version')) return { kind: 'version' };
+  // The queue's words are the core's. `q` is a command only as the first word that is not a flag
+  // or a flag's value; what comes after it goes to the core untouched, and what comes before it is
+  // this CLI's (`--world`, `--core`; `--json` rides along to the core).
+  const valued = new Set(['--world', '--core', '--theme']);
+  let first = -1;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i] as string;
+    if (valued.has(a)) i++;
+    else if (!a.startsWith('--')) {
+      first = i;
+      break;
+    }
+  }
+  if (first !== -1 && argv[first] === 'q') {
+    let qWorld: string | undefined;
+    let qCore: string | undefined;
+    const before: string[] = [];
+    for (let i = 0; i < first; i++) {
+      const a = argv[i] as string;
+      if (valued.has(a)) {
+        const value = argv[i + 1] as string;
+        if (a === '--world') qWorld = value;
+        else if (a === '--core') qCore = value;
+        i++;
+      } else if (a === '--json') before.push(a);
+      else return { kind: 'error', message: `${a} does not go with q` };
+    }
+    return {
+      kind: 'onto',
+      words: ['q', ...argv.slice(first + 1), ...before],
+      world: qWorld,
+      core: qCore,
+      raw: true,
+    };
+  }
   let world: string | undefined;
   let core: string | undefined;
   let json = false;

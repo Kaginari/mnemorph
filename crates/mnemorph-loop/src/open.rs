@@ -199,6 +199,7 @@ pub fn open_with(
         stress_tokens: Some(config.context_stress_tokens()),
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
+        queue: Some(mnemorph_world::Queue::of(cx.world())),
     });
     let setup = Setup {
         model: model.clone(),

@@ -1180,6 +1180,7 @@ dependencies = [
  "mnemorph-races",
  "mnemorph-wire",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1187,6 +1188,7 @@ name = "mnemorphd"
 version = "0.0.0"
 dependencies = [
  "mnemorph-server",
+ "serde_json",
 ]
 
 [[package]]

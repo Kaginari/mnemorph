@@ -93,6 +93,8 @@ pub struct Commissioner {
     pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// Who watches the session: every commissioned body's beats reach it, labelled.
     pub observer: Option<crate::run::Observer>,
+    /// The shared work queue a report's `@$` orders are held on; `None` holds none.
+    pub queue: Option<mnemorph_world::Queue>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -243,6 +245,9 @@ pub(crate) async fn order(
     landed.sort();
     landed.dedup();
     file_facts(&c.world, &ending, &a.to);
+    if let Some(q) = &c.queue {
+        hold_orders(q, &c.world, &ending, &a.to);
+    }
     let report = report_of(&ending, &landed, &put_back);
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
@@ -276,6 +281,26 @@ fn file_facts(world: &Path, ending: &Ending, by: &str) {
             if let Err(e) = mnemorph_world::Facts::record(world, &event) {
                 eprintln!("mnemorph: {by}'s fact could not be filed: {e}");
             }
+        }
+    }
+}
+
+/// Relay-hold: an answering child's `@$ <body>: <ask>` orders are held on the shared queue in its
+/// name; nothing dispatches them mid-turn.
+fn hold_orders(q: &mnemorph_world::Queue, world: &Path, ending: &Ending, by: &str) {
+    let Ending::Answered(text) = ending else {
+        return;
+    };
+    let Some(report) = Report::parse(text) else {
+        return;
+    };
+    let roster = mnemorph_world::Roster::load(world);
+    for order in &report.enqueues {
+        if let Err(e) = q.add(&roster, Some(&order.body), by, &order.ask, 0) {
+            eprintln!(
+                "mnemorph: {by}'s order for {} could not be held: {e}",
+                order.body
+            );
         }
     }
 }
