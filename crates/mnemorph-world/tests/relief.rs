@@ -65,17 +65,23 @@ fn a_ground_of_prefixes_splits_in_halves() {
         (a.reports_to.as_deref(), a.verify.clone()),
         (Some("orc-o"), vec!["cargo test".to_owned()])
     );
+    assert_eq!(a.heir_of.as_deref(), Some("slime-s"));
+    assert_eq!(
+        roster.creatures["slime-s"].heirs,
+        ["slime-s-a", "slime-s-b"]
+    );
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     assert!(
         mnemorph_world::findings::check(&roster, &[])
             .iter()
             .all(|f| f.code != "overlap")
     );
-    // The old doc gained one line; its memory and prose are untouched.
+    // The old doc gained two lines — retired, and its heirs — in its own line endings; its memory
+    // and prose are untouched. Each young names the creature whose ground it took.
     let old = fs::read_to_string(w.join(".mnemorph/slime/s/README.md")).unwrap();
     assert!(
         old.contains(
-            "- **Verify:** `cargo test`\r\n- **Retired:** yes\r\n\r\n## Notes\r\nkept as written"
+            "- **Verify:** `cargo test`\r\n- **Retired:** yes\r\n- **Heirs:** slime-s-a, slime-s-b\r\n\r\n## Notes\r\nkept as written"
         ),
         "{old:?}"
     );

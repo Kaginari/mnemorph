@@ -3235,3 +3235,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     check;
   - docs 09.
 - **Test:** extended with `src/a` and `./Cargo.toml`.
+
+---
+
+### [2026-10-25T21:54:57+01:00] rimuru — heirs and shared Minds: #131 whole
+- **Task:** the human: "add the fields now and continue".
+- **Files:**
+  - doc.rs: the `Heirs` and `Heir of` fields;
+  - relief.rs: the retired doc gains `Heirs` beside `Retired` (in its own line endings), and each
+    young carries `Heir of` instead of a prose line;
+  - findings.rs:
+    - `heir-dead` (high): an heir with no doc, or retired with no living line below it. A
+      relieved heir lives on in its own heirs; cycle-safe;
+    - `mind_findings` gives `orphan-mind` (medium): an entry of `.mnemorph/minds/` (a directory
+      with a README, or a `.md` file) that no living creature wears and whose header does not
+      say `- **Shared:** yes`;
+  - mnemorphd adds both to `onto check`;
+  - docs 03 and 09.
+- **Tests:**
+  - relief's fields round-trip;
+  - `a_dead_line_of_heirs_is_heir_dead`;
+  - `a_mind_nobody_wears_and_not_shared_is_an_orphan`.

@@ -30,6 +30,10 @@ pub struct Creature {
     pub minds: Vec<String>,
     /// Retired creatures own nothing; their seats and prefixes are skipped.
     pub retired: bool,
+    /// A retired creature's heirs, by name: the young that took its ground.
+    pub heirs: Vec<String>,
+    /// The creature whose ground this one took, by name.
+    pub heir_of: Option<String>,
     /// The line each field first stands on, for a finding's `file:line`.
     pub lines: BTreeMap<String, usize>,
 }
@@ -147,6 +151,8 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         verify: Vec::new(),
         minds: Vec::new(),
         retired: false,
+        heirs: Vec::new(),
+        heir_of: None,
         lines: BTreeMap::new(),
     };
     let mut territory = Vec::new();
@@ -165,6 +171,8 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
             "Verify",
             "Minds",
             "Retired",
+            "Heirs",
+            "Heir of",
         ] {
             if field(line, name).is_some() {
                 c.lines.entry(name.to_owned()).or_insert(n + 1);
@@ -193,6 +201,11 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
             c.minds.extend(words(v));
         } else if let Some(v) = field(line, "Retired") {
             c.retired = matches!(v.to_ascii_lowercase().as_str(), "yes" | "true");
+        } else if let Some(v) = field(line, "Heirs") {
+            c.heirs
+                .extend(words(v).into_iter().map(|w| w.trim_matches('`').to_owned()));
+        } else if let Some(v) = field(line, "Heir of") {
+            c.heir_of = Some(v.trim_matches('`').to_owned()).filter(|v| !v.is_empty());
         }
     }
     c.race = race.ok_or_else(|| format!("{}: the doc has no `Race` field", seat.display()))?;

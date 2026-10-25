@@ -189,3 +189,106 @@ fn a_path_named_in_prose_and_not_claimed_is_a_prose_claim() {
     assert_eq!(found[0].paths, ["lib/util.rs"]);
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// `heir-dead`: a retired creature's heir that is missing, or retired with no living line below
+/// it. An heir relieved in turn lives on in its own living heirs.
+#[test]
+fn a_dead_line_of_heirs_is_heir_dead() {
+    let w = std::env::temp_dir().join(format!("mnemorph-heirs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    let doc = |short: &str, body: &str| {
+        let dir = w.join(".mnemorph/slime").join(short);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), body).unwrap();
+    };
+    let slime = |name: &str, extra: &str| {
+        format!("# {name}\n\n- **Race:** slime\n- **Territory:** src/{name}/\n{extra}")
+    };
+    // s's line lives through s-a, retired, whose heir s-a-a lives.
+    doc(
+        "s",
+        &slime("slime-s", "- **Retired:** yes\n- **Heirs:** slime-s-a\n"),
+    );
+    doc(
+        "s-a",
+        &slime(
+            "slime-s-a",
+            "- **Retired:** yes\n- **Heirs:** slime-s-a-a\n",
+        ),
+    );
+    doc("s-a-a", &slime("slime-s-a-a", "- **Heir of:** slime-s-a\n"));
+    // t's heirs: one retired with none, one with no doc.
+    doc(
+        "t",
+        &slime(
+            "slime-t",
+            "- **Retired:** yes\n- **Heirs:** slime-t-a, slime-gone\n",
+        ),
+    );
+    doc("t-a", &slime("slime-t-a", "- **Retired:** yes\n"));
+    let roster = Roster::load(&w);
+    let dead: Vec<_> = check(&roster, &[])
+        .into_iter()
+        .filter(|f| f.code == "heir-dead")
+        .collect();
+    assert_eq!(dead.len(), 2, "{dead:?}");
+    assert!(dead.iter().all(|f| f.severity == Severity::High
+        && f.creatures == ["slime-t"]
+        && f.at == ".mnemorph/slime/t/README.md:6"));
+    assert!(
+        dead.iter()
+            .any(|f| f.message.contains("`slime-gone` has no doc"))
+    );
+    assert!(
+        dead.iter()
+            .any(|f| f.message.contains("`slime-t-a` is retired"))
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}
+
+/// `orphan-mind`: a Mind no living creature wears and not marked shared — a directory with a
+/// README or a `.md` file. A worn Mind, a shared one, and one worn only by a retired creature
+/// (an orphan) are told apart.
+#[test]
+fn a_mind_nobody_wears_and_not_shared_is_an_orphan() {
+    let w = std::env::temp_dir().join(format!("mnemorph-minds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    let minds = w.join(".mnemorph/minds");
+    std::fs::create_dir_all(minds.join("worn")).unwrap();
+    std::fs::create_dir_all(minds.join("shared")).unwrap();
+    std::fs::write(minds.join("worn/README.md"), "# worn\n").unwrap();
+    std::fs::write(
+        minds.join("shared/README.md"),
+        "# shared\n\n- **Shared:** yes\n",
+    )
+    .unwrap();
+    std::fs::write(minds.join("lonely.md"), "# lonely\n").unwrap();
+    std::fs::write(minds.join("old.md"), "# old\n").unwrap();
+    for (short, body) in [
+        (
+            "s",
+            "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n- **Minds:** `worn`\n",
+        ),
+        (
+            "r",
+            "# slime-r\n\n- **Race:** slime\n- **Territory:** lib/\n- **Minds:** old\n- **Retired:** yes\n",
+        ),
+    ] {
+        let dir = w.join(".mnemorph/slime").join(short);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), body).unwrap();
+    }
+    let found = mnemorph_world::mind_findings(&Roster::load(&w), &w);
+    let at: Vec<&str> = found.iter().map(|f| f.at.as_str()).collect();
+    assert_eq!(
+        at,
+        [".mnemorph/minds/lonely.md", ".mnemorph/minds/old.md"],
+        "{found:?}"
+    );
+    assert!(
+        found
+            .iter()
+            .all(|f| f.code == "orphan-mind" && f.severity == Severity::Medium)
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}

@@ -261,7 +261,11 @@ fn carry_out(
         fs::write(&path, splice(&text, at, &format!("- **Reports to:** {to}")))
             .map_err(|e| e.to_string())?;
     }
-    retire(world, c)?;
+    let heirs: Vec<String> = match &relief.act {
+        Act::Split { young } => young.iter().map(|(n, _)| n.clone()).collect(),
+        Act::Retire => Vec::new(),
+    };
+    retire(world, c, &heirs)?;
     let entry = Entry {
         body: c.name.clone(),
         title: "relief".into(),
@@ -305,9 +309,11 @@ fn write_young(
             text.push_str(&c.minds.join(", "));
             text.push('\n');
         }
-        text.push_str("\nHeir of ");
+        text.push_str("- **Heir of:** ");
         text.push_str(&c.name);
-        text.push_str(": relief split its ground.\n");
+        text.push_str("\n\nRelief split ");
+        text.push_str(&c.name);
+        text.push_str("'s ground.\n");
         fs::create_dir_all(seat).map_err(|e| e.to_string())?;
         fs::OpenOptions::new()
             .write(true)
@@ -319,13 +325,20 @@ fn write_young(
     Ok(())
 }
 
-/// Mark `c`'s seat retired: its `Retired` line set, or one added after its last header field.
-fn retire(world: &Path, c: &Creature) -> Result<(), String> {
+/// Mark `c`'s seat retired, naming its heirs when it has some: its `Retired` line set, or one added
+/// after its last header field, with a `Heirs` line beside it.
+fn retire(world: &Path, c: &Creature, heirs: &[String]) -> Result<(), String> {
     let path = world.join(c.doc());
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut said = String::from("- **Retired:** yes");
+    if !heirs.is_empty() {
+        let ending = if text.contains("\r\n") { "\r\n" } else { "\n" };
+        said.push_str(ending);
+        said.push_str("- **Heirs:** ");
+        said.push_str(&heirs.join(", "));
+    }
     if let Some(&at) = c.lines.get("Retired") {
-        return fs::write(&path, splice(&text, at, "- **Retired:** yes"))
-            .map_err(|e| e.to_string());
+        return fs::write(&path, splice(&text, at, &said)).map_err(|e| e.to_string());
     }
     let after = c.lines.values().copied().max().unwrap_or(1);
     let mut out = String::with_capacity(text.len() + 24);
@@ -336,7 +349,7 @@ fn retire(world: &Path, c: &Creature) -> Result<(), String> {
             if !line.ends_with('\n') {
                 out.push_str(ending);
             }
-            out.push_str("- **Retired:** yes");
+            out.push_str(&said);
             out.push_str(ending);
         }
     }

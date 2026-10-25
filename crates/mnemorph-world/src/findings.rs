@@ -67,6 +67,7 @@ pub fn check(roster: &Roster, tracked: &[String]) -> Vec<Finding> {
     overlaps(roster, &mut out);
     cycles(roster, &mut out);
     bonds(roster, &mut out);
+    heirs(roster, &mut out);
     unowned(roster, tracked, &mut out);
     out.sort_by(|a, b| {
         b.severity
@@ -182,6 +183,50 @@ fn bonds(roster: &Roster, out: &mut Vec<Finding>) {
                 paths: c.zone.clone(),
                 creatures: vec![c.name.clone()],
                 message: format!("{} reports its truth to no living Orc", c.name),
+            });
+        }
+    }
+}
+
+/// `heir-dead`: a retired creature names an heir that is missing, or retired with no living line
+/// below it — an heir relieved in turn lives on in its own heirs. Its ground has no living keeper.
+fn heirs(roster: &Roster, out: &mut Vec<Finding>) {
+    fn lives(roster: &Roster, name: &str, seen: &mut BTreeSet<String>) -> bool {
+        if !seen.insert(name.to_owned()) {
+            return false;
+        }
+        roster
+            .creatures
+            .get(name)
+            .is_some_and(|h| !h.retired || h.heirs.iter().any(|g| lives(roster, g, seen)))
+    }
+    for c in roster.creatures.values().filter(|c| c.retired) {
+        for heir in &c.heirs {
+            let mut seen = BTreeSet::from([c.name.clone()]);
+            if lives(roster, heir, &mut seen) {
+                continue;
+            }
+            let why = if roster.creatures.contains_key(heir) {
+                "is retired, and no heir of its lives"
+            } else {
+                "has no doc"
+            };
+            out.push(Finding {
+                code: "heir-dead",
+                severity: Severity::High,
+                at: c.at("Heirs"),
+                paths: c
+                    .zone
+                    .iter()
+                    .chain(&c.domain)
+                    .chain(&c.post)
+                    .cloned()
+                    .collect(),
+                creatures: vec![c.name.clone()],
+                message: format!(
+                    "{}'s heir `{heir}` {why}: its ground has no living keeper",
+                    c.name
+                ),
             });
         }
     }
@@ -334,4 +379,53 @@ never a claim — claim it in the field, or say whose it is",
         }
     }
     out
+}
+
+/// `orphan-mind`: a Mind under `.mnemorph/minds/` — a directory with a `README.md`, or a
+/// `<name>.md` file, named for the entry — that no living creature wears, and whose doc is not
+/// marked `- **Shared:** yes`.
+#[must_use]
+pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
+    let dir = world.join(".mnemorph").join("minds");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let worn: BTreeSet<&str> = roster
+        .living()
+        .flat_map(|c| c.minds.iter().map(|m| m.trim_matches('`')))
+        .collect();
+    let mut found: Vec<Finding> = entries
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let file = e.file_name().to_string_lossy().into_owned();
+            let path = e.path();
+            let (name, doc) = if path.is_dir() {
+                (file.clone(), path.join("README.md"))
+            } else {
+                (file.strip_suffix(".md")?.to_owned(), path.clone())
+            };
+            if name.starts_with('.') || worn.contains(name.as_str()) {
+                return None;
+            }
+            let shared = std::fs::read_to_string(&doc).is_ok_and(|t| {
+                t.lines()
+                    .take_while(|l| !l.starts_with("##"))
+                    .filter_map(|l| l.trim().strip_prefix("- **Shared:**"))
+                    .any(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "yes" | "true"))
+            });
+            (!shared).then(|| Finding {
+                code: "orphan-mind",
+                severity: Severity::Medium,
+                at: format!(".mnemorph/minds/{file}"),
+                paths: Vec::new(),
+                creatures: Vec::new(),
+                message: format!(
+                    "the Mind `{name}` is worn by no living creature and not marked shared: give \
+it to one in its Minds field, mark it `- **Shared:** yes`, or retire it"
+                ),
+            })
+        })
+        .collect();
+    found.sort_by(|a, b| a.at.cmp(&b.at));
+    found
 }
