@@ -113,6 +113,8 @@ pub struct Context {
     except: Vec<PathBuf>,
     /// Whether the world's root files are the body's (the workspace).
     root_files: bool,
+    /// The body working here, by name: what an approval card names.
+    body: String,
     /// Whether the soil was handed by the world (a commissioned creature): then commands are
     /// granted exactly what it admits, not the whole world.
     narrowed: bool,
@@ -166,6 +168,7 @@ impl Context {
             except: Vec::new(),
             root_files: false,
             narrowed: false,
+            body: String::new(),
             build: Vec::new(),
             nest: None,
             home,
@@ -334,6 +337,19 @@ impl Context {
             (Some(_), None) => true,
             (None, _) => false,
         }
+    }
+
+    /// The body working here, by name.
+    #[must_use]
+    pub fn with_body(mut self, name: &str) -> Self {
+        name.clone_into(&mut self.body);
+        self
+    }
+
+    /// The body working here, by name; empty when none was named.
+    #[must_use]
+    pub fn body(&self) -> &str {
+        &self.body
     }
 
     /// What a commissioned body takes from the one that commissioned it: the human's gate, the

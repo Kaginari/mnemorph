@@ -90,6 +90,7 @@ impl World {
             caps: None,
             stress_tokens: None,
             busy: std::sync::Mutex::default(),
+            observer: None,
         };
         let setup = Setup {
             model,
@@ -532,6 +533,7 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
+    let bodies: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>> = Arc::default();
     let config = Config::load(&Paths::with_global(w.attic().join("no-global.toml"), &w.0)).unwrap();
     let attic = w.attic();
     let mut opened = open_with(
@@ -543,7 +545,20 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
             attic: Some(&attic),
         },
         Arc::new(mnemorph_tools::NoHuman),
-        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        {
+            let seen = Arc::clone(&bodies);
+            Arc::new(move |s: &mnemorph_loop::Seen| {
+                let mut at = s;
+                let mut who = None;
+                while let mnemorph_loop::Seen::From { body, seen, .. } = at {
+                    who = Some(body.clone());
+                    at = seen;
+                }
+                if let Some(w) = who {
+                    seen.lock().unwrap().insert(w);
+                }
+            })
+        },
         |_| None,
     )
     .unwrap();
@@ -558,6 +573,9 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         "done\n"
     );
     assert_eq!(model.requests().len(), 8);
+    // The human sees every body working below, under its own name.
+    let seen: Vec<String> = bodies.lock().unwrap().iter().cloned().collect();
+    assert_eq!(seen, ["elf-e", "orc-o", "slime-s"]);
     // The model was offered the tool and told the lanes.
     let first = &model.requests()[0];
     assert!(
@@ -569,7 +587,13 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         system.contains("elf-e: src/"),
         "the lanes are named: {system}"
     );
+}
 
+/// A world with no throne and no Elves stays solo: `commission` is no tool there.
+#[tokio::test]
+async fn a_world_without_creatures_stays_solo() {
+    use mnemorph_loop::open::{Bound, open_with};
+    use mnemorph_loop::{Config, Paths};
     // No throne, no Elves: solo, and `commission` is no tool here.
     let bare =
         std::env::temp_dir().join(format!("mnemorph-commission-bare-{}", std::process::id()));

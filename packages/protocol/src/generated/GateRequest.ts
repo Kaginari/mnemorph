@@ -5,7 +5,11 @@
  */
 export type GateRequest = { 
 /**
- * The body asking.
+ * The body asking, by name.
+ */
+body: string, 
+/**
+ * Its race.
  */
 race: string, 
 /**

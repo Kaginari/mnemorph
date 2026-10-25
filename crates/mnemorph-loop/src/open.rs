@@ -198,6 +198,7 @@ pub fn open_with(
         caps: capped.then_some(caps),
         stress_tokens: Some(config.context_stress_tokens()),
         busy: std::sync::Mutex::default(),
+        observer: Some(Arc::clone(&observer)),
     });
     let setup = Setup {
         model: model.clone(),

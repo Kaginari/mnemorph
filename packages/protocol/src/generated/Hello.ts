@@ -50,4 +50,8 @@ key: string | null,
 /**
  * The sandbox actually in force for the session's commands, or `none — <reason>`.
  */
-sandbox: string, };
+sandbox: string, 
+/**
+ * The session's own body: events under any other body come from the bodies it commissioned.
+ */
+body: string, };

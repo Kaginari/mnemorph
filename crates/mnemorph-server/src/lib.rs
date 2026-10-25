@@ -91,11 +91,20 @@ impl Core {
     /// Number the event, keep it for a reconnect, and send it — all under one lock, so `seq`
     /// reaches the wire in the order it was given.
     fn emit(&self, event: &Event) {
-        let (session, run, body) = self
+        self.emit_as(event, None);
+    }
+
+    /// As [`Core::emit`], for a commissioned body below the session: its own body and run.
+    fn emit_as(&self, event: &Event, below: Option<(&str, &str)>) {
+        let (session, mut run, mut body) = self
             .ids
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
+        if let Some((b, r)) = below {
+            b.clone_into(&mut body);
+            r.clone_into(&mut run);
+        }
         let mut params = serde_json::to_value(event).unwrap_or(Value::Null);
         if let Some(o) = params.as_object_mut() {
             o.remove("type");
@@ -117,8 +126,15 @@ impl Core {
     }
 
     fn see(&self, seen: &Seen) {
-        for event in events(seen) {
-            self.emit(&event);
+        // A commissioned body's beat comes wrapped once per rank: the innermost names who.
+        let mut below = None;
+        let mut inner = seen;
+        while let Seen::From { body, run, seen } = inner {
+            below = Some((body.as_str(), run.as_str()));
+            inner = seen;
+        }
+        for event in events(inner) {
+            self.emit_as(&event, below);
         }
     }
 
@@ -144,6 +160,9 @@ impl Core {
     }
 }
 
+/// The session's own body: the throne's voice.
+pub const SESSION_BODY: &str = "rimuru";
+
 /// The gate a client answers: `gate/ask`, sent as a request; silence denies.
 struct ClientGate(Arc<Core>);
 
@@ -161,6 +180,11 @@ impl Gate for ClientGate {
             asks.insert(id, tx);
         }
         let request = GateRequest {
+            body: if ask.body.is_empty() {
+                SESSION_BODY.to_owned()
+            } else {
+                ask.body.clone()
+            },
             race: ask.race.name().to_owned(),
             class: ask.class.to_string(),
             act: ask.act.clone(),
@@ -206,6 +230,7 @@ pub fn events(seen: &Seen) -> Vec<Event> {
             stress_line: *stress_line,
         }],
         Seen::Beat(beat) => beat_events(beat),
+        Seen::From { seen, .. } => events(seen),
     }
 }
 
@@ -293,7 +318,7 @@ pub fn serve(
     let core = Arc::new(Core {
         out,
         replay: Mutex::new((0, VecDeque::new())),
-        ids: Mutex::new((String::new(), String::new(), "rimuru".into())),
+        ids: Mutex::new((String::new(), String::new(), SESSION_BODY.into())),
         asks: Mutex::new(HashMap::new()),
         next_ask: AtomicU64::new(0),
         outstanding: AtomicUsize::new(0),
@@ -398,7 +423,7 @@ async fn main_lane(
                         *core.ids.lock().unwrap_or_else(PoisonError::into_inner) = (
                             opened.session_id.clone(),
                             opened.run_id.clone(),
-                            "rimuru".into(),
+                            SESSION_BODY.into(),
                         );
                         interrupt = Some(opened.session.interrupt());
                         steer = Some(opened.session.steer());
@@ -512,6 +537,7 @@ fn hello(opened: &Opened, version: &str) -> Value {
         }),
         key: opened.key.clone(),
         sandbox: opened.sandbox.clone(),
+        body: SESSION_BODY.into(),
     })
     .unwrap_or(Value::Null)
 }
