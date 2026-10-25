@@ -235,7 +235,16 @@ fn grant(
     left: Option<u64>,
     floor: u64,
 ) -> (u64, Option<u64>, Option<String>) {
-    let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
+    // An ask of nothing is refused, cap or none.
+    if a.budget_wt == Some(0) {
+        return (0, None, None);
+    }
+    // With no cap set there is no envelope to carve: the slice is unbounded, whatever was asked.
+    let Some(left) = left else {
+        return (u64::MAX, None, None);
+    };
+    let left = Some(left);
+    let asked = a.budget_wt.unwrap_or(left.map_or(u64::MAX, |l| l / 2));
     let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
         mnemorph_world::worth::ceiling(l, child.race, &records.card(roster, &a.to))
     });

@@ -1225,7 +1225,8 @@ async fn a_slice_that_runs_out_is_never_a_failure_on_the_card() {
         ScriptedModel::text("@S ESCALATE\n@E"),
         ScriptedModel::text("The Slime's slice ran out before it could answer."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    // A cap: under no cap there is nothing to carve, and a slice never runs out.
+    let mut run = w.rimuru_with(model.clone(), true, Some(1_000_000));
     let _ = run.ask("leave a done marker", &mut |_| {}).await;
 
     // The Slime's run ended at its budget checkpoint, before any answer: not vacuous.
@@ -1390,7 +1391,7 @@ async fn a_slice_is_at_least_one_call() {
     let mut run = w.rimuru_full(
         model,
         true,
-        None,
+        Some(1_000_000),
         None,
         mnemorph_loop::commission::SLICE_FLOOR,
     );

@@ -187,10 +187,16 @@ def main():
                 continue
             if a.limit and ran >= a.limit:
                 return 0
-            r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
-            if r["limited"]:
-                print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
-                return 3
+            # A per-minute limit passes: wait it out a few times. One that stays is the daily cap.
+            for wait in (70, 140, 280, None):
+                r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
+                if not r["limited"]:
+                    break
+                if wait is None:
+                    print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
+                    return 3
+                print("rate-limited at %s %s: waiting %ds" % (t.name, mode, wait))
+                time.sleep(wait)
             with out.open("a") as f:
                 f.write(json.dumps(r) + "\n")
             ran += 1
