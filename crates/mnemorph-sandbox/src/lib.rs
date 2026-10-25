@@ -60,6 +60,10 @@ const HOME_TOOLCHAINS: &[&str] = &[
     ".pnpm-store",
     ".cache",
     ".pyenv",
+    // uv's interpreters and installed tools — the targets behind `.local/bin`'s links — but not
+    // `.local/share/uv` whole: its `credentials/` holds the logins `uv auth` keeps.
+    ".local/share/uv/python",
+    ".local/share/uv/tools",
     ".bun",
     ".deno",
     ".gitconfig",

@@ -184,8 +184,8 @@ flowchart LR
   `sandbox.allow_unguarded = true` in their local or global file (never the tracked one); the
   status line then reads `none — <reason>`.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
-    (`.cargo`, `.rustup`, `.local/bin`, …); never a credential path (`.ssh`, `.aws`, `.gnupg`,
-    keyrings, …), which no rule names. Writes: the world, the command's temporary directory
+    (`.cargo`, `.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
+    (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names. Writes: the world, the command's temporary directory
     inside it, and a few devices — for solo. A commissioned creature's commands are granted
     exactly what its soil admits, and the rest of the world is read-only to them: landlock can
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a

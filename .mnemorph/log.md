@@ -3353,3 +3353,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - tests; the README.
 - **Lesson:** a cause prefix shared by a machine stop and a body stop is a dodge. Match the exact
   phrase, and test both.
+
+---
+
+### [2026-10-25T23:51:36+01:00] rimuru — the sandbox reads uv's interpreters and tools
+- **Found by:** the large bench's smoke run on sqlglot. It needs Python 3.9+, and the bench puts
+  uv's 3.12 first on PATH. Landlock refused to execute it (`Permission denied`, exit 126): uv's
+  interpreters under `~/.local/share/uv/python` are named by no rule. `uv tool` binaries, which
+  `.local/bin` links to, failed the same way.
+- **Fixed:** `HOME_TOOLCHAINS` gains `.local/share/uv/python` and `.local/share/uv/tools`, never
+  `.local/share/uv` whole, since its `credentials/` holds `uv auth` logins. Docs 05.
+- **Test:** sandbox `tests/policy.rs`: both are read, and no rule names a directory above the
+  credentials, or the credentials themselves.
