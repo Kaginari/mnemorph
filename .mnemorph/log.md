@@ -2904,3 +2904,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     rimuru's;
   - docs/02.
 - **Open:** the stress path's test needs a real context fill; the boundary signal.
+
+---
+
+### [2026-10-25T15:47:13+01:00] rimuru — M7: the solo-against-hierarchy bench
+- **Task:** the human said "run measurement" and has $25 of OpenRouter credit, so free models get
+  the higher daily cap. Step 2 of 3: the bench and its runner.
+- **Files:**
+  - bench/tasks — 30 stdlib-Python tasks (starter, ask, verify outside the world);
+  - bench/world — the creatures (throne, Elf, Orc, Slime);
+  - bench/run.py:
+    - `--check` (every task fails untouched);
+    - fresh worlds, solo and hierarchy modes;
+    - the key only in the child's environment;
+    - results per run, resume, a stop on rate limits;
+  - bench/README.md.
+- **Checks:**
+  - `run.py --check`: 30 tasks, none passes untouched;
+  - `onto check` on the bench world: PASS, 0 findings.
+- **Next:** the live run (the key from the human), then the write-up.
+
+---
+
+### [2026-10-25T15:54:40+01:00] rimuru — #171 review fixes
+- **Task:** fix Fable's review of the bench.
+- **Fixed:**
+  - rate limits are read on stdout as well as stderr (a body's 429 is a tool result), with a
+    narrower pattern, and any limit stops the run;
+  - hierarchy runs are verified: `below` counts the calls of bodies under the throne, and a
+    hierarchy run with none is `valid: false`;
+  - a timeout kills the run's whole process group, and the timeout is 30 minutes;
+  - stderr is scrubbed before it is cut, and a key file others can read is refused;
+  - task 25: `arith.py` (no shadowing of the stdlib `numbers`), and any `math` import is caught;
+  - the README: results are tracked; the guard helper is needed.
