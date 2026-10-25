@@ -2547,3 +2547,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a creature reborn under a retired name inherits the old record;
   - cards in a child's system prompt make a second commission of the same child miss the cache.
     Moving them to the first user turn would keep the system fixed.
+
+---
+
+### [2026-10-25T12:32:07+01:00] rimuru — M7: the top-up
+- **Task:** the second half of the human's grant design: a giver gives from its own budget, once
+  more when the child runs out.
+- **Files:**
+  - commission.rs — `topup_wt` in the args and schema; `grant()` bounds it by what the parent may
+    still give (90% of left, less the slice) and says when it is cut;
+  - run.rs — `with_topup`; `perceive` gives it once when the slice runs out, then reads the caps;
+  - tests: a top-up carries a child past its slice, and without one it stops at the checkpoint;
+  - docs/06.
+
+---
+
+### [2026-10-25T12:37:35+01:00] rimuru — #159 review fixes
+- **Task:** fix Fable's review of the top-up.
+- **Fixed:**
+  - slice and top-up together stay within twice the child's ceiling; before, a 1 wt slice with a
+    huge top-up made worth decorative;
+  - the child is nudged when the top-up is given;
+  - with no cap there is no top-up.

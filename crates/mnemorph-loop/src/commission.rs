@@ -32,7 +32,7 @@ impl Tool for CommissionTool {
     }
 
     fn description(&self) -> &'static str {
-        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less."
+        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less. `topup_wt` sets aside more from your envelope, given to it once if its slice runs out."
     }
 
     fn schema(&self) -> Value {
@@ -41,7 +41,8 @@ impl Tool for CommissionTool {
             "properties": {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
                 "ask": {"type": "string", "description": "The order: what is wanted, in a few lines."},
-                "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."}
+                "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
+                "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."}
             },
             "required": ["to", "ask"],
             "additionalProperties": false
@@ -68,6 +69,8 @@ struct CommissionArgs {
     ask: String,
     #[serde(default)]
     budget_wt: Option<u64>,
+    #[serde(default)]
+    topup_wt: Option<u64>,
 }
 
 /// What every commission of one session shares: the world, the model, where spend and beats are
@@ -173,28 +176,50 @@ grants at most your reserve-kept share for its race, scaled by its worth. The ca
     )
 }
 
-/// The slice a commission carries, and a line for the dispatcher when it got less than it asked.
-/// The grant is the dispatcher's judgment, bounded: its reserve kept, the child's race share, the
-/// child's worth from its card.
+/// The slice a commission carries, the top-up set aside for it, and a line for the dispatcher
+/// when either is less than it asked. The grant is the dispatcher's judgment, bounded: its
+/// reserve kept, the child's race share, the child's worth from its card; a top-up is the
+/// dispatcher's own further trust, bounded by what it may give at all and by twice the ceiling.
 fn grant(
     c: &Commissioner,
     roster: &Roster,
     a: &CommissionArgs,
     left: Option<u64>,
-) -> (u64, Option<String>) {
+) -> (u64, Option<u64>, Option<String>) {
     let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
     let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
         let card = mnemorph_world::worth::card(&c.world, roster, &a.to);
         mnemorph_world::worth::ceiling(l, child.race, &card)
     });
     let slice = ceiling.map_or(asked, |cap| asked.min(cap));
-    let granted = (slice < asked).then(|| {
-        format!(
+    // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
+    // may give at all, and within twice the child's ceiling — worth still counts.
+    let givable = left.map(|l| {
+        let most = ceiling.map_or(l / 10 * 9, |cap| (l / 10 * 9).min(cap.saturating_mul(2)));
+        most.saturating_sub(slice)
+    });
+    // With no cap there is no slice to run out, and nothing to top up.
+    let topup = left
+        .and(a.topup_wt)
+        .map(|t| givable.map_or(t, |g| t.min(g)))
+        .filter(|t| *t > 0);
+    let mut said = Vec::new();
+    if slice < asked {
+        said.push(format!(
             "[granted {slice} wt of the {asked} asked: the ceiling for {} out of what you had left]",
             a.to
-        )
-    });
-    (slice, granted)
+        ));
+    }
+    if let Some(wanted) = a
+        .topup_wt
+        .filter(|w| left.is_some() && topup.is_none_or(|t| t < *w))
+    {
+        said.push(format!(
+            "[set aside {} wt of the {wanted} top-up asked: what you could still give]",
+            topup.unwrap_or(0)
+        ));
+    }
+    (slice, topup, (!said.is_empty()).then(|| said.join("\n")))
 }
 
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
@@ -221,7 +246,7 @@ pub(crate) async fn order(
     };
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
-    let (slice, granted) = grant(c, &roster, &a, left);
+    let (slice, topup, granted) = grant(c, &roster, &a, left);
     if slice == 0 {
         return refused(format!(
             "no budget left to carve for {}: @? budget to your commander",
@@ -263,7 +288,8 @@ pub(crate) async fn order(
         slice,
         child_cx.inherit(cx).with_body(&a.to),
     )
-    .with_interrupt(Arc::clone(interrupt));
+    .with_interrupt(Arc::clone(interrupt))
+    .with_topup(topup);
     // What the world held before the child, to put back what it changes off its ground.
     let held = cx
         .attic()
