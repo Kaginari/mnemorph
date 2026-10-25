@@ -28,7 +28,6 @@ BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 HANDOFF = "Hand this whole ask to elf-e with the commission tool, then answer with its report:\n\n"
-KEEP = "--keep" in sys.argv
 LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|free-models-per-day", re.I)
 
 
@@ -115,7 +114,7 @@ def escalations(world):
     return n
 
 
-def run_one(task, mode, model, secret, timeout):
+def run_one(task, mode, model, secret, timeout, keep=False):
     world = world_for(task, model)
     ask = (task / "ask.md").read_text().strip()
     if mode == "hierarchy":
@@ -149,7 +148,7 @@ def run_one(task, mode, model, secret, timeout):
         "limited": limited,
         "stderr": scrubbed[-400:],
     }
-    if KEEP:
+    if keep:
         result["world"] = str(world)
     else:
         shutil.rmtree(world, ignore_errors=True)
@@ -188,7 +187,7 @@ def main():
                 continue
             if a.limit and ran >= a.limit:
                 return 0
-            r = run_one(t, mode, a.model, secret, a.timeout)
+            r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
             if r["limited"]:
                 print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
                 return 3

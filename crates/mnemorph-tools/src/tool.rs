@@ -562,7 +562,14 @@ impl Context {
     /// The soil's judgement on a resolved path: git's files and the records are never a
     /// tool's, and the rest must be admitted.
     fn in_soil(&self, path: PathBuf) -> Result<PathBuf, String> {
-        if crate::tripwire::protects(&self.world, &path) {
+        // One record is a body's to write: the plan in its own seat, which the dispatch law reads.
+        // Only `plan.md`, directly inside a seat that is itself one of the body's soil roots.
+        let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
+            && path.parent().is_some_and(|seat| {
+                seat.starts_with(self.world.join(".mnemorph"))
+                    && self.soil.iter().any(|s| s.as_path() == seat)
+            });
+        if crate::tripwire::protects(&self.world, &path) && !own_plan {
             return Err(format!(
                 "`{}` is protected: git's executable configuration and the world's records are not written by tools",
                 self.shown(&path)

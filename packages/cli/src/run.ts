@@ -48,7 +48,15 @@ export async function runOnce(
       if (cmd.json) {
         io.stdout.write(`${JSON.stringify(e)}\n`);
       } else if (!mine(e)) {
-        // Below the session: its work shows in the answer it reports.
+        // Below the session: its text shows in the answer it reports; its acts and warnings show
+        // here, under its name.
+        if (e.type === 'toolCall') {
+          io.stderr.write(`  ${e.body} ⏺ ${e.name} ${summary(e.name, e.input)}\n`);
+        } else if (e.type === 'toolResult' && e.isError) {
+          io.stderr.write(`  ${e.body} ✗ ${e.content.split('\n')[0]}\n`);
+        } else if (e.type === 'warning') {
+          io.stderr.write(`  ${e.body} ! ${e.text}\n`);
+        }
       } else if (e.type === 'textDelta') {
         io.stdout.write(e.text);
         last = e.text.at(-1) ?? last;

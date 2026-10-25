@@ -929,3 +929,34 @@ fn writes_count_their_lines_and_a_missed_edit_is_marked() {
     );
     assert_eq!((o.meta.lines_added, o.meta.lines_removed), (1, 1));
 }
+
+/// An Elf writes the plan in its own seat — the one record a body may write — and nothing else
+/// there: not its doc, not another's plan.
+#[test]
+fn a_body_writes_its_own_plan_and_no_other_record() {
+    let w = World::new("own-plan");
+    w.put(".mnemorph/elf/e/README.md", "# elf-e\n");
+    w.put(".mnemorph/elf/f/README.md", "# elf-f\n");
+    let mut cx = Context::new(Race::Elf, w.world(), &[".mnemorph/elf/e"]);
+    let plan = run(
+        &mut cx,
+        "write",
+        r#"{"path": ".mnemorph/elf/e/plan.md", "content": "- [ ] orc-o: the parser\n"}"#,
+    );
+    assert!(!plan.is_error, "{plan:?}");
+    let doc = run(
+        &mut cx,
+        "write",
+        r##"{"path": ".mnemorph/elf/e/README.md", "content": "# elf-e\n- **Verify:** `true`\n"}"##,
+    );
+    assert!(
+        doc.is_error && doc.content.contains("is protected"),
+        "{doc:?}"
+    );
+    let other = run(
+        &mut cx,
+        "write",
+        r#"{"path": ".mnemorph/elf/f/plan.md", "content": "x\n"}"#,
+    );
+    assert!(other.is_error, "{other:?}");
+}

@@ -2959,3 +2959,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 02/06, the bench README.
 - **Learned:** run the smoke before the sixty. Each of these would have turned every hierarchy
   result into noise.
+
+---
+
+### [2026-10-25T19:22:19+01:00] rimuru — the second smoke run, and #172's review
+- **Task:** the second smoke run (on #172's build) and Fable's review of #172.
+- **Found by the smoke:**
+  - the Elf now tried to commission its Orc, and the dispatch law refused it (no plan item);
+  - the Elf could not write its own `plan.md`, since the file tools protect all of `.mnemorph`;
+  - the CLI's `dist` predated the run.ts fix (`just check` tests the source, not the build).
+- **Fixed:**
+  - the file tools allow a body's own `plan.md`, directly in a seat that is one of its soil roots,
+    and nothing else in `.mnemorph`; the Elf's race card says to write the plan item first;
+  - the review:
+    - the pre-fix smoke results are dropped;
+    - the slice law is written whole (the floor outranks worth, never the reserve);
+    - the note names the bound applied;
+    - run.ts keeps children's acts and warnings on stderr, under their names;
+    - the race cards use the law's words;
+    - the bench's `--keep` goes through argparse;
+  - docs 05/06.
+- **Security note:** the plan exemption relaxes a protection, so Opus reviews it.

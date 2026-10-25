@@ -172,22 +172,29 @@ fn race_card(race: mnemorph_races::Race) -> &'static str {
     use mnemorph_races::Race;
     match race.base() {
         Race::Elf => {
-            "As an Elf you plan and route across your lane; you write no code. Hand the work down with \
-the commission tool to the Orc whose domain holds it, read its report, and answer with yours."
+            "As an Elf you plan and route across your lane; you write no code. First write the plan \
+item in your own seat's plan.md — a line `- [ ] <orc>: <what it does>` — then hand the work down \
+with the commission tool to that Orc, read its report, and answer with yours."
         }
         Race::Orc => {
-            "As an Orc you judge and route your domain; you write no code. Hand the writing with the \
-commission tool to the Slime whose territory holds the files, judge its report against the ask, \
-and answer with yours."
+            "As an Orc you own a domain: you write no code (only your tests' verify lines on your \
+Slimes' docs). Hand the writing with the commission tool to the Slime whose zone holds the files, \
+judge its report against the ask, and answer with yours."
         }
-        Race::Slime => "As a Slime you write the code in your territory, check it, and answer.",
+        Race::Slime => "As a Slime you change the code of your one zone, check it, and answer.",
         Race::Kijin => {
             "As a Kijin you do the outward acts of your post — what leaves the machine — and answer."
         }
         Race::DarkElf => {
             "As a Dark Elf you challenge what landed: find what is wrong, with evidence."
         }
-        _ => "",
+        // The throne is never commissioned; ascended forms read their base race's card.
+        Race::Rimuru
+        | Race::HighElf
+        | Race::HighOrc
+        | Race::NamedSlime
+        | Race::Oni
+        | Race::ArchDarkElf => "",
     }
 }
 
@@ -228,12 +235,12 @@ fn grant(
     });
     // A slice too small for one call is no grant: it is raised to the floor, within what the
     // dispatcher may give at all.
-    let floor = if asked == 0 {
+    let least = if asked == 0 {
         0
     } else {
         floor.min(left.map_or(u64::MAX, |l| l / 10 * 9))
     };
-    let slice = ceiling.map_or(asked, |cap| asked.min(cap)).max(floor);
+    let slice = ceiling.map_or(asked, |cap| asked.min(cap)).max(least);
     // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
     // may give at all, and within twice the child's ceiling — worth still counts.
     let givable = left.map(|l| {
@@ -247,8 +254,13 @@ fn grant(
         .filter(|t| *t > 0);
     let mut said = Vec::new();
     if slice > asked {
+        let why = if least < floor {
+            "a slice is at least one call's worth, held within 90% of what you had left"
+        } else {
+            "a slice is at least one call's worth"
+        };
         said.push(format!(
-            "[granted {slice} wt, not the {asked} asked: a slice is at least one call's worth]"
+            "[granted {slice} wt, not the {asked} asked: {why}]"
         ));
     }
     if slice < asked {
