@@ -2293,3 +2293,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   queue moves only through the harness's own process.
 - **For the wake (next rung):** it claims only an order its body can carry out. The dispatch law
   must hold, and every path the order touches must be on the body's ground.
+
+---
+
+### [2026-10-25T10:32:17+01:00] rimuru — #154 review fixes: the queue moves out of the world; no process leaves its group
+- **Task:** fix #154's review: Opus reviewed the code, then a fresh Fable reviewed Opus's report.
+- **Decided:**
+  - **The queue's store moves outside the world**, beside the attic
+    (`$XDG_STATE_HOME/mnemorph/queue/<world>-<hash>.jsonl`). The tripwire put back the human's
+    concurrent moves, and an escaped process could forge lines; this place fixes both. The cost is
+    that the queue is machine-local and no longer travels with `merge=union`.
+  - **seccomp refuses `setsid` and `setpgid`**: killing the group ends everything a command
+    started. This held for every protected record, not only the queue.
+- **Also fixed:**
+  - 12-hex ids, regenerated while taken;
+  - ties run in order of arrival;
+  - only the human and the harness claim;
+  - `--as`/`--for` must name living bodies;
+  - orders go only down the ranks;
+  - `touch` needs a note;
+  - the classifier no longer spares `shared/`;
+  - `mnemorph q` is a command only as the first non-flag word.
+- **Open (`@?`):** whether the queue should travel between machines. Doing that safely needs a
+  per-user key or a human-run `q pull`.
+- **Open (`@?`):** a parent hash in each line, so that union-merged lineages cannot interleave.
+  This matters only if the queue travels.
+- **Learned:** an environment variable is courtesy; a file's place is a border. If a guarantee
+  depends on what a body's command might do after it is "dead", check that the kill is real.

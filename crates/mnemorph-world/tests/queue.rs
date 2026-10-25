@@ -56,17 +56,23 @@ impl Drop for World {
 fn an_item_moves_held_claimed_done() {
     let w = World::new("states");
     let r = Roster::load(&w.0);
-    let q = Queue::of(&w.0);
+    let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q
-        .add(Some("slime-s"), "orc-o", "add the tab test", 0)
+        .add(
+            &Roster::load(&w.0),
+            Some("slime-s"),
+            "orc-o",
+            "add the tab test",
+            0,
+        )
         .unwrap();
     assert_eq!((item.state, item.rev), (State::Held, 1));
     let claimed = q
-        .move_item(&r, "slime-s", &item.id, &Move::Claim { as_body: None })
+        .move_item(&r, "harness", &item.id, &Move::Claim { as_body: None })
         .unwrap();
     assert_eq!((claimed.state, claimed.rev), (State::Claimed, 2));
     assert_eq!(
-        q.move_item(&r, "slime-s", &item.id, &Move::Claim { as_body: None }),
+        q.move_item(&r, "harness", &item.id, &Move::Claim { as_body: None }),
         Err(Refusal::State {
             now: State::Claimed,
             wanted: "be claimed"
@@ -74,7 +80,7 @@ fn an_item_moves_held_claimed_done() {
     );
     q.move_item(&r, "slime-s", &item.id, &Move::Requeue)
         .unwrap();
-    q.move_item(&r, "slime-s", &item.id, &Move::Claim { as_body: None })
+    q.move_item(&r, "harness", &item.id, &Move::Claim { as_body: None })
         .unwrap();
     let done = q
         .move_item(&r, "slime-s", &item.id, &Move::Close { drop: false })
@@ -90,8 +96,10 @@ fn an_item_moves_held_claimed_done() {
 fn the_rank_law() {
     let w = World::new("rank");
     let r = Roster::load(&w.0);
-    let q = Queue::of(&w.0);
-    let item = q.add(Some("slime-s"), "orc-o", "x", 0).unwrap();
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    let item = q
+        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .unwrap();
     let touch = || Move::Touch {
         note: "seen".into(),
     };
@@ -107,7 +115,7 @@ fn the_rank_law() {
             holder: "slime-s".into()
         })
     );
-    let throne = q.add(None, "human", "y", 0).unwrap();
+    let throne = q.add(&Roster::load(&w.0), None, "human", "y", 0).unwrap();
     assert!(
         q.move_item(&r, "elf-e", &throne.id, &touch()).is_err(),
         "unheld work is the throne's"
@@ -120,8 +128,10 @@ fn the_rank_law() {
 #[test]
 fn a_race_is_won_by_the_first_line() {
     let w = World::new("race");
-    let q = Queue::of(&w.0);
-    let item = q.add(Some("slime-s"), "orc-o", "x", 0).unwrap();
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    let item = q
+        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .unwrap();
     // Another session lands rev 2 first.
     let other = Item {
         rev: 2,
@@ -149,7 +159,7 @@ fn a_race_is_won_by_the_first_line() {
         "the first rev 2 stands"
     );
     assert!(matches!(
-        q.move_item(&r, "slime-s", &item.id, &Move::Claim { as_body: None }),
+        q.move_item(&r, "harness", &item.id, &Move::Claim { as_body: None }),
         Err(Refusal::State {
             now: State::Dropped,
             ..
@@ -162,8 +172,10 @@ fn a_race_is_won_by_the_first_line() {
 fn a_body_never_claims_for_another() {
     let w = World::new("claim-as");
     let r = Roster::load(&w.0);
-    let q = Queue::of(&w.0);
-    let item = q.add(Some("slime-s"), "orc-o", "x", 0).unwrap();
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    let item = q
+        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .unwrap();
     let as_orc = Move::Claim {
         as_body: Some("orc-p".into()),
     };
@@ -172,4 +184,47 @@ fn a_body_never_claims_for_another() {
         q.move_item(&r, "human", &item.id, &as_orc).is_ok(),
         "the human gives work to any body"
     );
+}
+
+/// Ties of rank run in order of arrival, whatever their ids.
+#[test]
+fn ties_run_in_order_of_arrival() {
+    let w = World::new("arrival");
+    let r = Roster::load(&w.0);
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    let ids: Vec<String> = (0..6)
+        .map(|n| q.add(&r, None, "human", &format!("job {n}"), 0).unwrap().id)
+        .collect();
+    let late = q.add(&r, None, "human", "urgent", -1).unwrap().id;
+    let open: Vec<String> = q.open().into_iter().map(|i| i.id).collect();
+    assert_eq!(open[0], late);
+    assert_eq!(open[1..], ids[..]);
+}
+
+/// Orders go down the ranks: a body orders only bodies below it; the human orders anyone.
+#[test]
+fn orders_go_down_the_ranks() {
+    let w = World::new("down");
+    let r = Roster::load(&w.0);
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    assert!(
+        q.add(&r, Some("slime-s"), "elf-e", "x", 0).is_ok(),
+        "an elf over its slime"
+    );
+    assert_eq!(
+        q.add(&r, Some("elf-e"), "slime-s", "x", 0),
+        Err(Refusal::Upward {
+            by: "slime-s".into(),
+            to: "elf-e".into()
+        })
+    );
+    assert!(
+        q.add(&r, Some("orc-p"), "orc-o", "x", 0).is_err(),
+        "a sibling"
+    );
+    assert!(
+        q.add(&r, None, "orc-o", "x", 0).is_err(),
+        "the throne's work is the human's to add"
+    );
+    assert!(q.add(&r, Some("elf-e"), "human", "x", 0).is_ok());
 }

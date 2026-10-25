@@ -237,6 +237,23 @@ fn escape_syscalls_are_denied() {
     }
 }
 
+/// No process leaves the command's group: `setsid` and `setpgid` are refused, so killing the
+/// group ends everything the command started; a plain background job still runs.
+#[cfg(target_os = "linux")]
+#[test]
+fn nothing_leaves_the_process_group() {
+    let g = Ground::new("pgroup");
+    for script in ["setsid true", "setsid -f sh -c 'echo escaped'; sleep 0.2"] {
+        let (_, out) = g.run(&g.policy(false), script);
+        assert!(
+            out.contains("not permitted") && !out.contains("escaped"),
+            "{script}: {out}"
+        );
+    }
+    let (ok, out) = g.run(&g.policy(false), "(echo bg) & wait");
+    assert!(ok && out.contains("bg"), "{out}");
+}
+
 /// A fork bomb is bounded, a crash leaves no core, a file cannot fill the disk.
 #[cfg(target_os = "linux")]
 #[test]

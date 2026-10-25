@@ -235,7 +235,7 @@ flowchart LR
     H(["🐉 you"]) -->|"typed while a turn runs"| Q["queue<br/>next turn, in order"]
     H -->|"/send body: text"| S["send<br/>the body's next tool step"]
     BG["background body<br/>reports"] --> W["wake<br/>its own parent's next turn"]
-    R["a report's @$ orders"] --> SQ[("shared work queue<br/>.mnemorph/shared/queue.jsonl")]
+    R["a report's @$ orders"] --> SQ[("shared work queue<br/>beside the attic, outside the world")]
     SQ -->|"the wake claims each<br/>for the body it names"| T["the parent's next turn:<br/>dispatch, re-checked"]
     Q --> T
     W --> T
@@ -271,13 +271,19 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 **The shared work queue** is the durable form of the order book.
 
-- One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf (harness soil: no body writes it by
-  hand, and a move made during a body's turn is never billed to that body). Every move appends the
+- One file per world, beside the attic under the human's state directory
+  (`$XDG_STATE_HOME/mnemorph/queue/`, else `~/.local/state/mnemorph/queue/`), outside the world:
+  no body's command reads or writes it, so the queue moves only through the harness and the
+  human's `mnemorph q`, and the human's moves during a body's command are never put back with
+  that command's changes. A move made during a body's turn is never billed to that body. Every
+  move appends the
   item's whole snapshot as one line with its revision; the queue is a fold over the lines. A line
   that does not follow its item's last revision is a typed refusal — two sessions claiming one item
   both append, the first wins, the second reads back refused. No lock file, no database.
-- States: `held → claimed → done | dropped`. An item names the body it is ordered to, its rank and
-  priority, the order that made it, and its notes.
+- States: `held → claimed → done | dropped`. An item names the body it is ordered to — a living
+  body of the roster, or the throne — its rank (lower runs first; ties run in order of arrival),
+  who ordered it, the order, and its notes. Orders go down the ranks: a body orders only bodies
+  below it, and only the human orders the throne's work.
 - **Rank law.** A body moves the work it holds; anyone up the holder's reporting chain may move it
   too; work held by no one is the throne's. The human stands over every body.
 - **Relay-hold.** A report's `@$` orders are held on the queue; nothing dispatches a held row
@@ -289,11 +295,12 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 - **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
-  body never claims (work reaches it claimed in its name), and only the human claims in another
-  body's name. The wake claims only an order its body can carry out: the dispatch rules hold, and
+  body never claims: only the human and the harness's wake do, so work reaches a body claimed in
+  its name. The wake claims only an order its body can carry out: the dispatch rules hold, and
   what the order touches lies on that body's ground. The status line reads "N held".
-- The file is tracked and merges with `merge=union` (`.gitattributes`): append-only lines travel
-  between machines like the journal.
+- The queue belongs to one machine: it does not travel with the repository. Orders that must
+  reach another machine travel as what made them — a commission's report in the journal, a
+  `@?` the human answers.
 
 ### The client protocol
 

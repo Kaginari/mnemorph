@@ -8,6 +8,7 @@ fn onto(args: &[&str], cwd: &std::path::Path) -> (bool, String, String) {
         .args(args)
         .current_dir(cwd)
         .env_remove("ANTHROPIC_API_KEY")
+        .env("XDG_STATE_HOME", state())
         .output()
         .unwrap();
     (
@@ -63,6 +64,11 @@ fn owner_names_the_owner_the_rule_and_the_claim() {
         out.trim(),
         "src/lib.rs\tslime-wire\tzone crates/mnemorph-wire/"
     );
+}
+
+/// Where these tests' queues live: never the human's state directory.
+fn state() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("mnemorph-q-state-{}", std::process::id()))
 }
 
 #[test]
@@ -129,7 +135,12 @@ fn check_reads_names_git_would_quote() {
 fn the_queue_door() {
     let dir = std::env::temp_dir().join(format!("mnemorph-q-door-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".mnemorph")).unwrap();
+    std::fs::create_dir_all(dir.join(".mnemorph/slime/s")).unwrap();
+    std::fs::write(
+        dir.join(".mnemorph/slime/s/README.md"),
+        "# slime-s\n\n- **Race:** slime\n",
+    )
+    .unwrap();
     let q = |args: &[&str]| {
         let mut all = vec!["q"];
         all.extend_from_slice(args);
@@ -147,6 +158,7 @@ fn the_queue_door() {
     assert!(ok && out.lines().count() == 1, "{out}");
     let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(["q", "close", "nope"])
+        .env("XDG_STATE_HOME", state())
         .current_dir(&dir)
         .output()
         .unwrap();
@@ -166,6 +178,7 @@ fn a_bodys_command_reads_the_queue_but_never_moves_it() {
             .args(args)
             .current_dir(&dir)
             .env("MNEMORPH_BODY", "slime-s")
+            .env("XDG_STATE_HOME", state())
             .output()
             .unwrap()
     };

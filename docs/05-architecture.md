@@ -124,7 +124,7 @@ mnemorph/
 | shared notes | `.mnemorph/memory/shared/notes.jsonl` — append-only note events ([memory](08-memory.md)) | yes |
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
-| shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots, `merge=union` | yes |
+| shared work queue | `$XDG_STATE_HOME/mnemorph/queue/<world>.jsonl` — append-only snapshots, outside the world | no — machine-local |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
@@ -156,7 +156,7 @@ flowchart LR
     P --> NET{"network?"}
     NET -- "approved outward act" --> ALLOW["sockets open"]
     NET -- "anything else" --> DENY["seccomp: no socket()"]
-    P --> SC["seccomp: no ptrace, mount,<br/>unshare, bpf, io_uring"]
+    P --> SC["seccomp: no ptrace, mount,<br/>unshare, bpf, io_uring, setsid"]
     P --> ENV["env: secrets by name,<br/>outputs redacted"]
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
     class T,P,NET step
@@ -246,17 +246,18 @@ flowchart LR
   - **Limits** — no core dumps, files up to 4 GiB, at most 8192 processes for the user; and no
     new namespaces: `unshare` and a `clone` carrying a namespace flag fail, `clone3` reports
     itself missing so the C library falls back to `clone`.
-- **The tripwire** covers what landlock cannot: landlock only adds access, so no read-only
-  corner can be carved out of the writable world. Git's executable configuration
-  (`.git/config` — `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`,
-  `.git/info`, a `.git` file) would run code outside any sandbox the next time the human runs
-  git, and `.mnemorph/` holds the world's records. Each command runs between two snapshots of
-  them; once its process group is dead, every change is put back and the body is told. The
-  file tools refuse those paths outright. The shared work queue is among them: it moves only
-  through the harness, so a body's command that edits it is put back, and a body's own
-  `mnemorph q` — every command carries `MNEMORPH_BODY` — reads the queue but never moves it as the
-  human. `tmp/` and `intel/` stay writable; a repository the command itself creates is its own. The snapshot keeps
-  up to 16 MiB of content; a change to a protected file beyond that is reported, not undone.
+- **The tripwire** covers what landlock cannot: landlock only adds access, so no read-only corner
+  can be carved out of the writable world. Git's executable configuration (`.git/config` —
+  `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`, `.git/info`, a `.git` file)
+  would run code outside any sandbox the next time the human runs git, and `.mnemorph/` holds the
+  world's records. Each command runs between two snapshots of them; once its process group is dead,
+  every change is put back and the body is told. The file tools refuse those paths outright. No
+  process escapes the snapshot: seccomp refuses `setsid` and `setpgid`, so killing the group ends
+  everything the command started. The shared work queue lives outside the world, out of every
+  command's reach; a body's own `mnemorph q` reads it and never moves it as the human (every command
+  carries `MNEMORPH_BODY`, a courtesy the file's place makes a border). `tmp/` and `intel/` stay
+  writable; a repository the command itself creates is its own. The snapshot keeps up to 16 MiB of
+  content; a change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard
   lets no command reach. Before every command and every file write, the working tree is
   snapshotted into the attic's own git object store — only changed files are hashed again.

@@ -51,3 +51,17 @@ test('q hands its words to the core whole, --json with them', () => {
     raw: true,
   });
 });
+
+test('q is a command only as the first word that is not a flag value', () => {
+  expect(parse(['--world', 'q', 'status']).kind).not.toBe('onto');
+  expect(parse(['--world', 'w', '--theme', 'dark', 'q', 'list'])).toEqual({
+    kind: 'onto',
+    words: ['q', 'list'],
+    world: 'w',
+    core: undefined,
+    raw: true,
+  });
+  expect(parse(['q', 'add', 'x', '--world', 'elsewhere'])).toMatchObject({
+    words: ['q', 'add', 'x', '--world', 'elsewhere'],
+  });
+});

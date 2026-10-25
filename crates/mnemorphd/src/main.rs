@@ -318,7 +318,9 @@ fn queue(args: &[String]) -> ExitCode {
         .clone()
         .map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
     let world = world.canonicalize().unwrap_or(world);
-    let q = Queue::of(&world);
+    let Some(q) = Queue::of(&world) else {
+        return fail("the queue has no home: set HOME or XDG_STATE_HOME");
+    };
     let roster = mnemorph_server::world::Roster::load(&world);
     let json = a.json;
     let print = |items: &[Item]| print_items(items, json);
@@ -370,7 +372,7 @@ fn queue(args: &[String]) -> ExitCode {
             if ask.is_empty() {
                 return fail("q add needs the order's words");
             }
-            match q.add(a.to.as_deref(), HUMAN, &ask, a.rank) {
+            match q.add(&roster, a.to.as_deref(), HUMAN, &ask, a.rank) {
                 Ok(i) => {
                     print(&[i]);
                     ExitCode::SUCCESS
@@ -384,6 +386,7 @@ fn queue(args: &[String]) -> ExitCode {
                 as_body: a.as_body.clone(),
             },
         ),
+        Some("touch") if a.words.len() < 3 => fail("q touch needs the item's id and a note"),
         Some("touch") => moved(
             nth(1),
             Move::Touch {

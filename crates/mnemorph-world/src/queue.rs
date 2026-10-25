@@ -2,8 +2,13 @@
 //! with its revision; the queue is their fold. A line that does not follow its item's last
 //! revision is refused on read, so two sessions racing for one move both append and the first
 //! wins — no lock file, no database.
+//!
+//! The file lives beside the attic, under the human's state directory, outside the world: no
+//! body's command can read or write it, so it moves only through the harness and the human's own
+//! `mnemorph q`.
 
 use std::collections::BTreeMap;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::path::{Path, PathBuf};
 
 use mnemorph_ledger::Journal;
@@ -12,14 +17,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::roster::Roster;
 
-/// Where the queue lives: the shared shelf, harness soil.
-pub const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
-
 /// The human, as a mover: they stand over every body.
 pub const HUMAN: &str = "human";
 
 /// The throne: work held by no one is its.
 pub const THRONE: &str = "rimuru";
+
+/// The harness itself, as a mover: the wake claims in the name of the body an order is for.
+pub const HARNESS: &str = "harness";
 
 /// An item's state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +90,13 @@ impl Item {
 pub enum Refusal {
     /// No item has that id.
     Unknown(String),
+    /// An order may go only down the ranks: `by` does not stand over `to`.
+    Upward {
+        /// Who ordered.
+        by: String,
+        /// The body ordered.
+        to: String,
+    },
     /// The mover does not hold the item and does not stand over its holder.
     NotYours {
         /// The holder.
@@ -99,6 +111,10 @@ pub enum Refusal {
     },
     /// Another move landed first.
     Raced,
+    /// Only the human and the harness claim: work reaches a body claimed in its name.
+    NotAClaimer(String),
+    /// No living body has that name.
+    NoSuchBody(String),
     /// The queue file cannot be written.
     Io(String),
 }
@@ -112,7 +128,15 @@ impl std::fmt::Display for Refusal {
                 "{holder} holds it: it moves by {holder} or by anyone up {holder}'s chain"
             ),
             Refusal::State { now, wanted } => write!(f, "it is {}: it cannot {wanted}", now.word()),
+            Refusal::Upward { by, to } => {
+                write!(f, "{by} does not stand over {to}: orders go down the ranks")
+            }
             Refusal::Raced => f.write_str("another move landed first: read the queue again"),
+            Refusal::NotAClaimer(who) => write!(
+                f,
+                "{who} cannot claim: work reaches a body claimed in its name, by the human or the harness"
+            ),
+            Refusal::NoSuchBody(name) => write!(f, "no living body is named `{name}`"),
             Refusal::Io(e) => write!(f, "the queue cannot be written: {e}"),
         }
     }
@@ -121,16 +145,38 @@ impl std::fmt::Display for Refusal {
 /// The queue of one world.
 pub struct Queue {
     journal: Journal<Item>,
-    world: PathBuf,
+    path: PathBuf,
 }
 
 impl Queue {
-    /// The queue of `world`.
+    /// The queue of `world`, under the human's state directory
+    /// (`$XDG_STATE_HOME/mnemorph/queue/<world>.jsonl`, else `~/.local/state/…`); `None` when
+    /// there is no home.
     #[must_use]
-    pub fn of(world: &Path) -> Queue {
+    pub fn of(world: &Path) -> Option<Queue> {
+        let state = std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
+        let mut h = DefaultHasher::new();
+        world.hash(&mut h);
+        let name = world
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Some(Queue::at(
+            &state
+                .join("mnemorph/queue")
+                .join(format!("{name}-{:016x}.jsonl", h.finish())),
+        ))
+    }
+
+    /// The queue kept in `file`.
+    #[must_use]
+    pub fn at(file: &Path) -> Queue {
         Queue {
-            journal: Journal::new(world.join(QUEUE)),
-            world: world.to_path_buf(),
+            journal: Journal::new(file.to_path_buf()),
+            path: file.to_path_buf(),
         }
     }
 
@@ -138,49 +184,74 @@ impl Queue {
     /// refused.
     #[must_use]
     pub fn items(&self) -> BTreeMap<String, Item> {
+        self.fold().0
+    }
+
+    /// The fold, and each item's place of arrival.
+    fn fold(&self) -> (BTreeMap<String, Item>, BTreeMap<String, usize>) {
         let mut items: BTreeMap<String, Item> = BTreeMap::new();
-        for line in self.journal.read().map(|r| r.rows).unwrap_or_default() {
+        let mut arrival = BTreeMap::new();
+        let lines = self.journal.read().map(|r| r.rows).unwrap_or_default();
+        for (n, line) in lines.into_iter().enumerate() {
             let follows = items
                 .get(&line.id)
                 .map_or(line.rev == 1, |now| line.rev == now.rev + 1);
             if follows {
+                arrival.entry(line.id.clone()).or_insert(n);
                 items.insert(line.id.clone(), line);
             }
         }
-        items
+        (items, arrival)
     }
 
     /// The open items — held or claimed — by rank, then by order of arrival.
     #[must_use]
     pub fn open(&self) -> Vec<Item> {
-        let mut open: Vec<Item> = self
-            .items()
+        let (items, arrival) = self.fold();
+        let mut open: Vec<Item> = items
             .into_values()
             .filter(|i| matches!(i.state, State::Held | State::Claimed))
             .collect();
-        open.sort_by(|a, b| a.rank.cmp(&b.rank).then_with(|| a.id.cmp(&b.id)));
+        open.sort_by_key(|i| (i.rank, arrival.get(&i.id).copied()));
         open
     }
 
-    /// Add an order, held, for `to` (`None`: the throne's), by `by`.
+    /// Add an order, held, for `to` (`None`: the throne's), by `by`. `to` must be a living body
+    /// of `roster`, and below `by` unless the human or the harness orders.
     ///
     /// # Errors
     ///
-    /// The queue cannot be written, or another add took the id first.
-    pub fn add(&self, to: Option<&str>, by: &str, ask: &str, rank: i64) -> Result<Item, Refusal> {
-        let n = self
-            .journal
-            .read()
-            .map(|r| r.rows.len())
-            .unwrap_or_default();
+    /// No such body, an order up the ranks, the queue cannot be written, or another add took the id first.
+    pub fn add(
+        &self,
+        roster: &Roster,
+        to: Option<&str>,
+        by: &str,
+        ask: &str,
+        rank: i64,
+    ) -> Result<Item, Refusal> {
+        if let Some(to) = to.filter(|t| !living(roster, t)) {
+            return Err(Refusal::NoSuchBody(to.to_owned()));
+        }
+        let over_all = by == HUMAN || by == HARNESS;
+        let down = to.is_some_and(|t| roster.is_above(by, t));
+        if !over_all && !down {
+            return Err(Refusal::Upward {
+                by: by.to_owned(),
+                to: to.unwrap_or(THRONE).to_owned(),
+            });
+        }
+        let taken = self.items();
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
-        let id = format!(
-            "{:016x}",
-            fnv64a(format!("{stamp}\0{n}\0{by}\0{ask}").as_bytes())
-        )[..8]
-            .to_owned();
+        let id = (0..u32::MAX)
+            .map(|salt| {
+                let h = fnv64a(format!("{stamp}\0{salt}\0{by}\0{ask}").as_bytes());
+                format!("{h:016x}")[..12].to_owned()
+            })
+            .find(|id| !taken.contains_key(id))
+            .unwrap_or_default();
         let item = Item {
             id,
             rev: 1,
@@ -195,7 +266,7 @@ impl Queue {
     }
 
     /// Move an item: `mover` must hold it or stand over its holder in `roster`'s chain (the
-    /// human stands over every body); the move must follow its state.
+    /// human and the harness stand over every body); the move must follow its state.
     ///
     /// # Errors
     ///
@@ -212,20 +283,20 @@ impl Queue {
             .remove(id)
             .ok_or_else(|| Refusal::Unknown(id.to_owned()))?;
         let holder = now.holder().to_owned();
-        let stands = mover == HUMAN || mover == holder || roster.is_above(mover, &holder);
+        let stands = mover == HUMAN
+            || mover == HARNESS
+            || mover == holder
+            || roster.is_above(mover, &holder);
         if !stands {
             return Err(Refusal::NotYours { holder });
         }
-        // A body never claims in another's name: only the human gives work to a body.
-        if let Move::Claim {
-            as_body: Some(other),
-        } = mv
-            && mover != HUMAN
-            && *other != holder
-        {
-            return Err(Refusal::NotYours {
-                holder: other.clone(),
-            });
+        if let Move::Claim { as_body } = mv {
+            if mover != HUMAN && mover != HARNESS {
+                return Err(Refusal::NotAClaimer(mover.to_owned()));
+            }
+            if let Some(body) = as_body.as_deref().filter(|b| !living(roster, b)) {
+                return Err(Refusal::NoSuchBody(body.to_owned()));
+            }
         }
         let mut next = now.clone();
         next.rev += 1;
@@ -282,8 +353,13 @@ impl Queue {
     /// Where the queue is.
     #[must_use]
     pub fn path(&self) -> PathBuf {
-        self.world.join(QUEUE)
+        self.path.clone()
     }
+}
+
+/// Whether `name` is a living body of `roster`, or the throne.
+fn living(roster: &Roster, name: &str) -> bool {
+    name == THRONE || roster.living().any(|c| c.name == name)
 }
 
 /// A move on an item.

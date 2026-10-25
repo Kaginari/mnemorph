@@ -63,30 +63,40 @@ export function parse(argv: string[]): Command {
   // Help and the version win wherever they appear: nothing else is read.
   if (argv.some((a) => a === '-h' || a === '--help')) return { kind: 'help' };
   if (argv.some((a) => a === '-V' || a === '--version')) return { kind: 'version' };
-  // The queue's words are the core's: everything after `q` goes to it untouched, but `--world`
-  // and `--core`, which are this CLI's.
-  const at = argv.indexOf('q');
-  if (
-    at !== -1 &&
-    argv.slice(0, at).every((a, i, all) => a.startsWith('--') || all[i - 1]?.startsWith('--'))
-  ) {
-    const words: string[] = [];
+  // The queue's words are the core's. `q` is a command only as the first word that is not a flag
+  // or a flag's value; what comes after it goes to the core untouched, and what comes before it is
+  // this CLI's (`--world`, `--core`; `--json` rides along to the core).
+  const valued = new Set(['--world', '--core', '--theme']);
+  let first = -1;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i] as string;
+    if (valued.has(a)) i++;
+    else if (!a.startsWith('--')) {
+      first = i;
+      break;
+    }
+  }
+  if (first !== -1 && argv[first] === 'q') {
     let qWorld: string | undefined;
     let qCore: string | undefined;
-    const all = [...argv.slice(0, at), ...argv.slice(at + 1)];
-    for (let i = 0; i < all.length; i++) {
-      const a = all[i] as string;
-      if (a === '--world' || a === '--core') {
-        const value = all[i + 1];
-        if (value === undefined) return { kind: 'error', message: `${a} needs a value` };
+    const before: string[] = [];
+    for (let i = 0; i < first; i++) {
+      const a = argv[i] as string;
+      if (valued.has(a)) {
+        const value = argv[i + 1] as string;
         if (a === '--world') qWorld = value;
-        else qCore = value;
+        else if (a === '--core') qCore = value;
         i++;
-      } else {
-        words.push(a);
-      }
+      } else if (a === '--json') before.push(a);
+      else return { kind: 'error', message: `${a} does not go with q` };
     }
-    return { kind: 'onto', words: ['q', ...words], world: qWorld, core: qCore, raw: true };
+    return {
+      kind: 'onto',
+      words: ['q', ...argv.slice(first + 1), ...before],
+      world: qWorld,
+      core: qCore,
+      raw: true,
+    };
   }
   let world: string | undefined;
   let core: string | undefined;
