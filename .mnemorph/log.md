@@ -2179,3 +2179,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   its guard.
 - **Open:** the client sees only the commission's report, not the bodies working below.
   Surfacing their beats, labelled by body, is the next rung.
+
+---
+
+### [2026-10-25T09:13:51+01:00] rimuru — the dispatching session, after its review
+- **Task:** fix what the review of #152 found (verdict: merge after fixes).
+- **Files:**
+  - open.rs:
+    - the dispatching session's envelope is what the caps leave, so slices carve from it;
+    - prices parsed once;
+    - the commissioner's world is the canonical one;
+    - the prompt no longer says "alone" then "commission";
+  - tests — the model is offered the tool and told the lanes, and the bare world is not;
+  - docs/02, docs/03, solo.rs — solo may hand down in a world with Elves, the model choosing,
+    until the three code-read signals land.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** without an envelope, every slice was "all of it". The caps still held, but the
+  budget law the docs promise never ran. An envelope is what lets the first Elf leave something
+  for the second.

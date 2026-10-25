@@ -1,5 +1,6 @@
-//! Solo mode: Rimuru's voice and a Slime's hands over the whole repository, under the end gate,
-//! with no dispatch — the default for small asks and for headless and benchmark runs.
+//! Solo mode: Rimuru's voice and a Slime's hands over the whole repository, under the end gate —
+//! the default for small asks and for headless and benchmark runs. In a world with Elves under a
+//! living throne the session also holds the `commission` tool (see `open`).
 
 use std::path::Path;
 

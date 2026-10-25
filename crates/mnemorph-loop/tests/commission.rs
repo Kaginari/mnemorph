@@ -558,6 +558,17 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         "done\n"
     );
     assert_eq!(model.requests().len(), 8);
+    // The model was offered the tool and told the lanes.
+    let first = &model.requests()[0];
+    assert!(
+        first.tools.iter().any(|t| t.name == "commission"),
+        "the session offers commission"
+    );
+    let system = format!("{:?}", first.system);
+    assert!(
+        system.contains("elf-e: src/"),
+        "the lanes are named: {system}"
+    );
 
     // No throne, no Elves: solo, and `commission` is no tool here.
     let bare =
@@ -584,6 +595,12 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
     )
     .unwrap();
     opened.session.run().ask("go", &mut |_| {}).await;
+    assert!(
+        !model.requests()[0]
+            .tools
+            .iter()
+            .any(|t| t.name == "commission")
+    );
     let journals: Vec<_> = fs::read_dir(bare.join(".mnemorph/instruments/loop"))
         .unwrap()
         .filter_map(Result::ok)

@@ -162,7 +162,7 @@ pub fn open_with(
     if !lanes.is_empty() {
         body.system.push_str(&dispatch_prompt(&lanes));
     }
-    let (mut cx, limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
+    let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     if let Some(dir) = attic {
         let (keep_days, max_mb) = config.attic_limits();
         let kept = mnemorph_tools::Attic::at(dir, world)
@@ -183,15 +183,21 @@ pub fn open_with(
     if !lanes.is_empty() {
         tools.push(Box::new(crate::commission::CommissionTool));
     }
-    let commissioner = (!lanes.is_empty()).then(|| {
-        commissioner(
-            world,
-            config,
-            model.clone(),
-            &usage,
-            &session_id,
-            capped.then_some(caps),
-        )
+    let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
+    // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
+    if !lanes.is_empty() {
+        limits.budget_wt = budget.map(|b| b.wt);
+    }
+    let commissioner = (!lanes.is_empty()).then(|| crate::commission::Commissioner {
+        world: cx.world().to_path_buf(),
+        model: model.clone(),
+        prices: prices.clone(),
+        ledger: Some(usage.clone()),
+        journals: instruments.join("loop"),
+        session: session_id.clone(),
+        caps: capped.then_some(caps),
+        stress_tokens: Some(config.context_stress_tokens()),
+        busy: std::sync::Mutex::default(),
     });
     let setup = Setup {
         model: model.clone(),
@@ -199,7 +205,7 @@ pub fn open_with(
         cx,
         journal: Journal::new(instruments.join("loop").join(format!("{run_id}.jsonl"))),
         ledger: Some(usage),
-        prices: anthropic_prices().map_err(|e| format!("prices: {e}"))?,
+        prices,
         caller: Caller {
             session: session_id.clone(),
             run: run_id.clone(),
@@ -278,34 +284,12 @@ fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
         })
         .collect();
     format!(
-        "\n\nThis world has creatures. Work that belongs to a lane goes to its Elf with the commission \
+        "\n\nYou are not alone here: this world has creatures. Work that belongs to a lane goes to its \
+Elf with the commission \
 tool: it plans, its Orcs judge, its Slimes write, each under its own gate, and the report comes back \
 as the tool's result. Small asks you may still do yourself. The lanes:\n{}",
         list.join("\n")
     )
-}
-
-/// What runs the session's commissions: the world, the model, the session's ledger, caps and
-/// stress line.
-fn commissioner(
-    world: &Path,
-    config: &Config,
-    model: Arc<dyn Model>,
-    usage: &Journal<mnemorph_ledger::UsageRow>,
-    session: &str,
-    caps: Option<crate::budget::Caps>,
-) -> crate::commission::Commissioner {
-    crate::commission::Commissioner {
-        world: world.to_path_buf(),
-        model,
-        prices: anthropic_prices().unwrap_or_default(),
-        ledger: Some(usage.clone()),
-        journals: world.join(".mnemorph/instruments/loop"),
-        session: session.to_owned(),
-        caps,
-        stress_tokens: Some(config.context_stress_tokens()),
-        busy: std::sync::Mutex::default(),
-    }
 }
 
 /// The human's caps, and what this world already spent against them: whether any is set, the
