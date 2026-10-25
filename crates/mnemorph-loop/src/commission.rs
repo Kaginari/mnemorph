@@ -91,6 +91,8 @@ pub struct Commissioner {
     pub stress_tokens: Option<u64>,
     /// Seats with a live court: one court per seat.
     pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
+    /// Who watches the session: every commissioned body's beats reach it, labelled.
+    pub observer: Option<crate::run::Observer>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -352,11 +354,23 @@ fn child_run(
     let gate = EndGate {
         verify: creature.verify.clone(),
         author: Some(Author {
-            name,
+            name: name.clone(),
             roster: roster.clone(),
         }),
     };
+    let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup).with_gate(gate);
+    // What the child sees reaches the session's watcher, under the child's own name.
+    if let Some(watch) = c.observer.clone() {
+        let body_name = name.clone();
+        child = child.with_observer(Arc::new(move |seen: &crate::run::Seen| {
+            watch(&crate::run::Seen::From {
+                body: body_name.clone(),
+                run: run_name.clone(),
+                seen: Box::new(seen.clone()),
+            });
+        }));
+    }
     if let Some(caps) = c.caps {
         child = child.with_caps(caps);
     }

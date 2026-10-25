@@ -53,6 +53,9 @@ export interface State {
   /** The act waiting for the human, if any. */
   gate?: { id: number; request: GateRequest } | undefined;
   next: number;
+  /** The session's own body, learned from the first turn the human starts; any other body is
+   * one the session commissioned, working below it. */
+  me?: string | undefined;
 }
 
 export function initial(): State {
@@ -75,8 +78,42 @@ function push(s: State, item: Unnumbered): State {
   return { ...s, items: [...s.items, { ...item, id: s.next } as Item], next: s.next + 1 };
 }
 
+/** A commissioned body's event: a short line under its name, never the session's own state. */
+function below(s: State, e: Arrived): State {
+  const who = e.body;
+  switch (e.type) {
+    case 'turnStarted':
+      return push(s, { kind: 'info', text: `  ${who} is working on: ${firstLine(e.text)}` });
+    case 'toolCall':
+      return push(s, {
+        kind: 'info',
+        text: `  ${who} · ${e.name} ${summary(e.name, e.input)}`.trimEnd(),
+      });
+    case 'toolResult':
+      return e.isError ? push(s, { kind: 'info', text: `  ${who} ✗ ${firstLine(e.content)}` }) : s;
+    case 'warning':
+      return push(s, { kind: 'warning', text: `${who}: ${e.text}` });
+    case 'gateVerdict':
+      return e.passed
+        ? s
+        : push(s, { kind: 'info', text: `  ${who}'s gate: ${e.failures[0] ?? 'failed'}` });
+    case 'turnEnded':
+      return push(s, { kind: 'info', text: `  ${who}: ${e.ending}` });
+    default:
+      return s;
+  }
+}
+
+function firstLine(text: string): string {
+  const line = text.split('\n')[0] ?? '';
+  return line.length > 100 ? `${line.slice(0, 97)}…` : line;
+}
+
 /** Fold one event in. */
-export function fold(s: State, e: Arrived): State {
+export function fold(s0: State, e: Arrived): State {
+  // The first turn the human starts names the session's body; any other body works below it.
+  const s = s0.me === undefined && e.type === 'turnStarted' && e.body ? { ...s0, me: e.body } : s0;
+  if (s.me !== undefined && e.body && e.body !== s.me) return below(s, e);
   switch (e.type) {
     case 'turnStarted': {
       const queued = s.queued[0] === e.text ? s.queued.slice(1) : s.queued;

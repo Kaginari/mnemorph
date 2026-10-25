@@ -127,3 +127,25 @@ test('the budget left is the cap less what the session spent', () => {
 test('before the first call the status says nothing about spend', () => {
   expect(status(initial().usage)).toEqual([]);
 });
+
+test('a commissioned body works below the session: short lines under its name, the session still busy', () => {
+  const at = (body: string, event: object) =>
+    ({ session: 's', run: 'r', seq: 1, body, ...event }) as Arrived;
+  let s = initial();
+  s = fold(s, at('rimuru', { type: 'turnStarted', text: 'leave a marker' }));
+  s = fold(s, at('elf-e', { type: 'turnStarted', text: 'leave src/done.txt\nmore' }));
+  s = fold(
+    s,
+    at('slime-s', { type: 'toolCall', id: 't', name: 'write', input: { path: 'src/done.txt' } }),
+  );
+  s = fold(s, at('slime-s', { type: 'turnEnded', ending: 'answered' }));
+  expect(s.busy).toBe(true);
+  const texts = s.items.filter((i) => i.kind === 'info').map((i) => (i as { text: string }).text);
+  expect(texts).toEqual([
+    '  elf-e is working on: leave src/done.txt',
+    '  slime-s · write src/done.txt',
+    '  slime-s: answered',
+  ]);
+  s = fold(s, at('rimuru', { type: 'turnEnded', ending: 'answered' }));
+  expect(s.busy).toBe(false);
+});

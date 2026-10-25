@@ -2198,3 +2198,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** without an envelope, every slice was "all of it". The caps still held, but the
   budget law the docs promise never ran. An envelope is what lets the first Elf leave something
   for the second.
+
+---
+
+### [2026-10-25T09:21:21+01:00] rimuru — the human sees the order at work
+- **Task:** the gap #152 left. The client saw only a commission's report, not the bodies working
+  below.
+- **Files:**
+  - loop:
+    - run.rs — `Seen::From { body, run, seen }`;
+    - commission.rs — `Commissioner.observer`, each child's beats wrapped in its name;
+    - open.rs — the session's observer handed to the commissioner;
+  - server lib.rs — `emit_as`; a wrapped beat is emitted under the innermost body and run;
+  - cli transcript.ts — `me` learned from the first turn the human starts; other bodies' events
+    become short lines under their names (`below`);
+  - tests: the session sees elf-e, orc-o and slime-s; the CLI keeps the session busy while a
+    child turns;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** a child's `turnEnded` folded as the session's would have ended the human's turn
+  in the terminal. Children's events must never touch the session's own state.

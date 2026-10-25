@@ -91,11 +91,20 @@ impl Core {
     /// Number the event, keep it for a reconnect, and send it — all under one lock, so `seq`
     /// reaches the wire in the order it was given.
     fn emit(&self, event: &Event) {
-        let (session, run, body) = self
+        self.emit_as(event, None);
+    }
+
+    /// As [`Core::emit`], for a commissioned body below the session: its own body and run.
+    fn emit_as(&self, event: &Event, below: Option<(&str, &str)>) {
+        let (session, mut run, mut body) = self
             .ids
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
+        if let Some((b, r)) = below {
+            b.clone_into(&mut body);
+            r.clone_into(&mut run);
+        }
         let mut params = serde_json::to_value(event).unwrap_or(Value::Null);
         if let Some(o) = params.as_object_mut() {
             o.remove("type");
@@ -117,8 +126,15 @@ impl Core {
     }
 
     fn see(&self, seen: &Seen) {
-        for event in events(seen) {
-            self.emit(&event);
+        // A commissioned body's beat comes wrapped once per rank: the innermost names who.
+        let mut below = None;
+        let mut inner = seen;
+        while let Seen::From { body, run, seen } = inner {
+            below = Some((body.as_str(), run.as_str()));
+            inner = seen;
+        }
+        for event in events(inner) {
+            self.emit_as(&event, below);
         }
     }
 
@@ -206,6 +222,7 @@ pub fn events(seen: &Seen) -> Vec<Event> {
             stress_line: *stress_line,
         }],
         Seen::Beat(beat) => beat_events(beat),
+        Seen::From { seen, .. } => events(seen),
     }
 }
 

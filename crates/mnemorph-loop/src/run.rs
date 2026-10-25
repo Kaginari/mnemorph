@@ -92,6 +92,15 @@ pub enum Seen {
         /// The stress line the context is measured against.
         stress_line: u64,
     },
+    /// What a commissioned body saw, below the run: its name, its run, and what it saw.
+    From {
+        /// The body.
+        body: String,
+        /// Its run.
+        run: String,
+        /// What it saw.
+        seen: Box<Seen>,
+    },
 }
 
 /// The send lane: lines the human sends a running body, delivered at its next tool step —

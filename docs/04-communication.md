@@ -403,6 +403,10 @@ Rules:
   the wire, so a client that reconnects asks `session/events {since: seq}` and loses nothing. The
   core keeps the last 10 000: the answer says the oldest it kept (`oldest`), and `complete: false`
   when the client asked from further back, so a gap is never silent.
+- An event from a body the session commissioned carries that body and its run, at any depth: the
+  client sees the whole order at work. The terminal shows such events as short lines under the
+  body's name — what it started on, each tool call, a gate that refused it, how it ended — and
+  never lets them touch the session's own turn.
 - Leaving ends everything at once: on `shutdown`, or when the client's end closes, every act
   waiting at the gate is denied, the turn in flight stops, lines still queued never run, and the
   core exits once its output is written. Esc (`session/interrupt`) denies an act waiting at the
