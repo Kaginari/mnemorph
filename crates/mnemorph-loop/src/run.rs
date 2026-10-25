@@ -13,7 +13,7 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
-use crate::compact::{fold, fold_point, foldable, mark_cache};
+use crate::compact::{fingerprints, fold, fold_point, foldable, mark_cache, moved};
 use crate::decisions::{BENCH_POINT, Decisions, bench_ask, bench_read};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
@@ -229,6 +229,9 @@ pub struct Run {
     before: Option<Tree>,
     interrupt: Arc<Interrupt>,
     folded_upto: usize,
+    /// The fingerprints of the last request's messages, and the fold it was sent under: the next
+    /// request must only append to them, unless a fold moved.
+    sent: (Vec<u64>, usize),
     noticed: bool,
     decisions: Option<Decisions>,
     observer: Option<Observer>,
@@ -299,6 +302,7 @@ impl Run {
             before: None,
             interrupt,
             folded_upto: 0,
+            sent: (Vec::new(), 0),
             noticed: false,
             decisions: None,
             observer: None,
@@ -607,6 +611,31 @@ impl Run {
         ending
     }
 
+    /// Every request only appends to the one before, between folds: the system prompt and the
+    /// tools are built once, and a change rides as a new message. A request that rewrote what was
+    /// sent, with no fold to explain it, is said loudly — the provider rebuilds its cache from
+    /// there, and the bill shows it.
+    fn next_request(&mut self) -> Request {
+        let request = self.request(self.limits.max_tokens);
+        self.watch_prefix(&request);
+        request
+    }
+
+    fn watch_prefix(&mut self, request: &Request) {
+        let now = fingerprints(&request.messages);
+        let (before, folded) = &self.sent;
+        if *folded == self.folded_upto
+            && let Some(at) = moved(before, &now)
+        {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "the cached prefix moved at block {at} with no fold: the provider rebuilds its cache from there"
+                ),
+            });
+        }
+        self.sent = (now, self.folded_upto);
+    }
+
     /// The request for the next turn: the system prompt and the tools as the cached prefix.
     fn request(&self, max_tokens: u32) -> Request {
         let count = self.tools.len();
@@ -686,7 +715,7 @@ impl Run {
                 )));
             }
             self.ease_context();
-            let request = self.request(self.limits.max_tokens);
+            let request = self.next_request();
             let left = self.limits.deadline.saturating_sub(self.started.elapsed());
             let interrupt = Arc::clone(&self.interrupt);
             let call = tokio::time::timeout(left, self.model.complete(&request, on));

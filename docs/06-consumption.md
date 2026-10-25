@@ -222,6 +222,11 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
   lookback of the entry the last one wrote.
 - Compaction rewrites the conversation from its first folded message on, so it folds only in
   rare, large batches ([The loop](03-loop.md)): between folds, the history is read, not resent.
+- Every request only appends to the one before, between folds. The system prompt and the tools
+  are built once, when the session opens, and anything new rides as a new message — never a
+  rebuilt prefix. The run checks it each turn, block by block, its moving breakpoints aside: a
+  request that rewrote what was sent, with no fold to explain it, is said in a warning, since the
+  provider rebuilds its cache from there.
 - Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
   the gateway's one automatic breakpoint, which moves with the conversation. The other models
   there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.

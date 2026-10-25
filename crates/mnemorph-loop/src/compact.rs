@@ -95,3 +95,54 @@ pub fn mark_cache(messages: &mut [Message], budget: usize) {
         }
     }
 }
+
+/// A conversation as the provider's prefix cache sees it: for each message a mark of its role,
+/// then each block — its breakpoints aside, which move every turn and change no byte the cache
+/// compares. Blocks added to the last message read as appended, as the cache reads them.
+#[must_use]
+pub fn fingerprints(messages: &[Message]) -> Vec<u64> {
+    use std::hash::{Hash, Hasher};
+    let hash = |what: String| {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        what.hash(&mut h);
+        h.finish()
+    };
+    let mut out = Vec::new();
+    for m in messages {
+        out.push(hash(format!("role {:?}", m.role)));
+        for b in &m.content {
+            let bare = match b {
+                Block::Text { text, .. } => Block::Text {
+                    text: text.clone(),
+                    cache: false,
+                },
+                Block::ToolResult {
+                    tool_use_id,
+                    content,
+                    is_error,
+                    ..
+                } => Block::ToolResult {
+                    tool_use_id: tool_use_id.clone(),
+                    content: content.clone(),
+                    is_error: *is_error,
+                    cache: false,
+                },
+                other => other.clone(),
+            };
+            out.push(hash(format!("{bare:?}")));
+        }
+    }
+    out
+}
+
+/// Where the request `now` first changed what the request `before` sent — an index into their
+/// [`fingerprints`] — or `None` when `now` only appends to it: a request is append-only between
+/// folds.
+#[must_use]
+pub fn moved(before: &[u64], now: &[u64]) -> Option<usize> {
+    before
+        .iter()
+        .zip(now)
+        .position(|(a, b)| a != b)
+        .or_else(|| (now.len() < before.len()).then_some(now.len()))
+}

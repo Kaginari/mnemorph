@@ -3424,3 +3424,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a resume past the fold mark starts folded. No dedicated test: it is the same check as
     `ease_context`'s.
 - **Tests:** `a_deleted_nested_repository_is_reported_lost`, `only_the_current_form_of_git_is_kept`.
+
+---
+
+### [2026-10-26T00:58:33+01:00] rimuru — append-only requests (#38)
+- **Task:** the M7 tail, #38.
+- **Finding:** nothing moves the prefix today. The system prompt is built once, the model is
+  fixed per session, no date sits in the prompt, and asks, wakes and nudges append.
+- **Files:**
+  - compact.rs `fingerprints` (per block, role marks, breakpoints aside) and `moved`;
+  - run.rs `watch_prefix` (via `next_request`) warns when a request rewrote what the last one
+    sent with no fold;
+  - docs 06.
+- **Tests:**
+  - `every_request_only_appends_to_the_one_before`: two asks, four tools, system and tools
+    identical, no warning;
+  - `a_rewritten_or_dropped_message_moves_the_prefix`: an appended message and an extended last
+    message are fine; a rewritten or dropped one moved.
+- **Left open on #38:** the thinking-strip recovery has no trigger until a mid-session model
+  switch exists.
