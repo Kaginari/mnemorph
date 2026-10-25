@@ -919,6 +919,29 @@ impl Run {
         }
     }
 
+    /// Fold now, whatever the batch size, if that brings the next request under `line` — about
+    /// four bytes to a token. Says whether it did.
+    fn fold_under(&mut self, line: u64) -> bool {
+        let point = fold_point(&self.messages);
+        if point <= self.folded_upto {
+            return false;
+        }
+        let saved = u64::try_from(foldable(&self.messages, self.folded_upto, point) / 4)
+            .unwrap_or(u64::MAX);
+        let estimate = self.last_occupancy.saturating_sub(saved);
+        if saved == 0 || estimate >= line {
+            return false;
+        }
+        self.folded_upto = point;
+        self.last_occupancy = estimate;
+        self.record(&Beat::Warning {
+            text: format!(
+                "compacted at the stress line: tool outputs before message {point} are sent folded"
+            ),
+        });
+        true
+    }
+
     /// The meters, before a model call: a reason to stop, or none.
     fn perceive(&mut self) -> Option<Stop> {
         let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
@@ -929,7 +952,9 @@ impl Run {
             return Some(Stop::Salvage("clock: the deadline passed between turns"));
         }
         let line = self.stress_line();
-        if self.last_occupancy >= line {
+        // A jump past the line from under the fold mark, or a resume above it, folds first: the
+        // checkpoint comes only when folding cannot bring the next request under the line.
+        if self.last_occupancy >= line && !self.fold_under(line) {
             return checkpoint(format!(
                 "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
                 self.last_occupancy

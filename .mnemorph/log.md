@@ -3391,3 +3391,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Refinements made:**
   - hide only Hugging Face's `token` and `stored_tokens`, not its model cache;
   - name the legacy `~/.git-credential-cache/`.
+
+---
+
+### [2026-10-26T00:18:14+01:00] rimuru — the attic and the stress jump (#86)
+- **Task:** the M7 tail, #86's four bugs.
+- **Files:**
+  - attic.rs:
+    - `holds` is false for a gitlink, so a nested repository is never promised as kept;
+    - a `.git` file (worktree, submodule) is kept as `dotgit-file` and put back by `repair_git`;
+    - an exclusive lock (`File::lock`) around every snapshot and restore;
+  - run.rs `fold_under`: at the stress line, fold first whatever the batch if that brings the
+    next request under the line. This covers a jump from under 60%, and a resume above the line;
+  - docs 03 and 05.
+- **Tests:**
+  - attic: a nested repository, a git file, four concurrent snapshotters;
+  - loop: `a_jump_past_the_stress_line_folds_before_it_checkpoints`, with a scripted-usage
+    model. It fails with the fold taken out.

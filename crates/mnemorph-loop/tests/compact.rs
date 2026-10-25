@@ -301,3 +301,144 @@ fn folding_keeps_meaning_and_the_recent_results() {
         }
     }
 }
+
+/// A model whose reported occupancy follows a script — a provider's usage after a tool output
+/// far larger than the ones before — and that notes whether a request went folded.
+struct Jump {
+    script: Mutex<VecDeque<(Vec<Block>, u64)>>,
+    folded_seen: Mutex<bool>,
+}
+
+impl Model for Jump {
+    fn provider(&self) -> &'static str {
+        "jump"
+    }
+
+    fn complete<'a>(
+        &'a self,
+        request: &'a Request,
+        _on: &'a mut (dyn FnMut(Event) + Send),
+    ) -> Completion<'a> {
+        let folded = request.messages.iter().flat_map(|m| &m.content).any(
+            |b| matches!(b, Block::ToolResult { content, .. } if content.starts_with("[folded")),
+        );
+        *self.folded_seen.lock().unwrap() |= folded;
+        let (content, occupied) = self.script.lock().unwrap().pop_front().unwrap_or_else(|| {
+            (
+                vec![Block::Text {
+                    text: "done".into(),
+                    cache: false,
+                }],
+                1_000,
+            )
+        });
+        let stop = if content.iter().any(|b| matches!(b, Block::ToolUse { .. })) {
+            StopReason::ToolUse
+        } else {
+            StopReason::EndTurn
+        };
+        Box::pin(async move {
+            Ok(Response {
+                id: "m".into(),
+                model: "m".into(),
+                content,
+                stop,
+                stop_details: None,
+                usage: Usage {
+                    input: occupied,
+                    output: 20,
+                    cache_read: 0,
+                    cache_write: 0,
+                },
+                warnings: vec![],
+            })
+        })
+    }
+}
+
+/// A jump from under the fold mark straight past the stress line folds before it checkpoints:
+/// folding the older outputs brings the next request back under the line, and the run finishes.
+#[tokio::test]
+async fn a_jump_past_the_stress_line_folds_before_it_checkpoints() {
+    let root = std::env::temp_dir().join(format!("mnemorph-jump-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("world")).unwrap();
+    for i in 0..7 {
+        fs::write(
+            root.join(format!("world/f{i}.txt")),
+            "y".repeat(60).repeat(100) + "\n",
+        )
+        .unwrap();
+    }
+    // Under 60% of an 8000-token line for six turns, then a jump past it; then under again.
+    let occupied = [2_000, 2_500, 3_000, 3_500, 4_000, 4_500, 9_000];
+    let script: VecDeque<(Vec<Block>, u64)> = occupied
+        .iter()
+        .enumerate()
+        .map(|(i, &o)| {
+            let call = Block::ToolUse {
+                id: format!("t{i}"),
+                name: "read".into(),
+                input: json!({"path": format!("f{i}.txt")}),
+            };
+            (vec![call], o)
+        })
+        .collect();
+    let model = Arc::new(Jump {
+        script: Mutex::new(script),
+        folded_seen: Mutex::new(false),
+    });
+    let (body, cx) = solo(&root.join("world"), "m");
+    let cx = cx
+        .with_sandbox(Sandbox::None("compaction test".into()))
+        .with_unguarded(true)
+        .with_attic(
+            mnemorph_tools::Attic::at(&root.join("attic"), &root.join("world")).expect("git"),
+        );
+    let setup = Setup {
+        model: model.clone(),
+        tools: registry(),
+        cx,
+        journal: Journal::new(root.join("run.jsonl")),
+        ledger: None,
+        prices: anthropic_prices().unwrap(),
+        caller: Caller {
+            session: "s".into(),
+            run: "r".into(),
+            body: "rimuru".into(),
+            race: "rimuru".into(),
+            commission: None,
+            prefix: 0,
+        },
+    };
+    let limits = Limits {
+        steps: 20,
+        stress_tokens: 8_000,
+        ..Limits::for_race(Race::Rimuru)
+    };
+    let mut run = Run::new(body, limits, setup);
+    let mut quiet = |_| {};
+    let ending = run.ask("read them all", &mut quiet).await;
+    let warnings: Vec<String> = Journal::<mnemorph_loop::Beat>::new(root.join("run.jsonl"))
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            mnemorph_loop::Beat::Warning { text } => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ending, Ending::Answered("done".into()), "{warnings:?}");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.starts_with("compacted at the stress line")),
+        "{warnings:?}"
+    );
+    assert!(
+        *model.folded_seen.lock().unwrap(),
+        "the next request went folded"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

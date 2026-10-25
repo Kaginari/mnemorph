@@ -280,8 +280,13 @@ flowchart LR
   deletes or breaks `.git` finds it put back after it ends. A hard link shares the file, so it
   survives a deletion, not a write in place: deleting or changing `.git` or the world's records
   outright is `destructive`, so it asks first — and what the human approved, the attic keeps but
-  does not undo. The attic's git runs deaf to every configuration but its own: no hooks, no
-  filters, no attributes, no fsmonitor from the world or the human's files.
+  does not undo. A world whose `.git` is a file — a worktree's, a submodule's — has its
+  repository elsewhere: that file is kept, and put back when a command deletes it. A nested
+  repository is kept as git keeps one, by its commit's name and none of its files, so the attic
+  never says it holds one: a delete of it is told so. Two runs on one world take the attic in
+  turn — a lock around every snapshot and restore — never colliding on its index. The attic's
+  git runs deaf to every configuration but its own: no hooks, no filters, no attributes, no
+  fsmonitor from the world or the human's files.
   It prunes itself at most once a day: snapshots older than `attic.keep_days` (14) go, then the
   oldest while the snapshot store is over `attic.max_mb` (2048) — the newest always stays — and
   `git gc` packs what remains; a kept `.git` object ages out with the same window only once the

@@ -120,6 +120,20 @@ impl Attic {
         &self.dir
     }
 
+    /// The attic's lock, held while its index is in use: two runs on one world take their
+    /// snapshots and restores in turn, never at once. Released when dropped.
+    fn lock(&self) -> Result<fs::File, String> {
+        fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.dir.join("lock"))
+            .map_err(|e| format!("attic lock: {e}"))?;
+        file.lock().map_err(|e| format!("attic lock: {e}"))?;
+        Ok(file)
+    }
+
     /// Git, pointed at the attic's store and the world's tree, deaf to every configuration but
     /// its own: no hooks, no filters, no fsmonitor from the world or the human's files.
     fn git(&self, args: &[&str]) -> std::io::Result<Output> {
@@ -180,6 +194,7 @@ impl Attic {
     /// The attic cannot be written or git fails; the caller decides whether to go on.
     pub fn snapshot(&self, why: &str) -> Result<Snapshot, String> {
         fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
+        let _held = self.lock()?;
         if !self.dir.join("store.git/HEAD").exists() {
             let out = Command::new("git")
                 .args(["init", "--bare", "-q"])
@@ -331,9 +346,18 @@ impl Attic {
     /// Whether `snap` holds the file `rel` (relative to the world): what a delete must know
     /// before it may say a copy is kept.
     #[must_use]
+    ///
+    /// A nested repository is held as a gitlink — its commit's name, none of its files — so it
+    /// is never held: a delete says so, instead of promising a copy that restores empty.
     pub fn holds(&self, snap: &Snapshot, rel: &str) -> bool {
-        self.git(&["ls-tree", "--name-only", snap.tree.as_str(), "--", rel])
-            .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == rel)
+        self.git(&["ls-tree", snap.tree.as_str(), "--", rel])
+            .is_ok_and(|o| {
+                let line = String::from_utf8_lossy(&o.stdout);
+                let line = line.trim();
+                o.status.success()
+                    && !line.starts_with("160000 ")
+                    && line.split_once('\t').is_some_and(|(_, name)| name == rel)
+            })
     }
 
     /// Put `paths` back as they were in `snap` (all of them when `paths` is empty).
@@ -342,6 +366,7 @@ impl Attic {
     ///
     /// Git fails, or a path was not in the snapshot.
     pub fn restore(&self, snap: &Snapshot, paths: &[&str]) -> Result<(), String> {
+        let _held = self.lock()?;
         let mut args = vec!["checkout", snap.tree.as_str(), "--"];
         if paths.is_empty() {
             args.push(".");
@@ -354,6 +379,14 @@ impl Attic {
     /// Keep the world's repository: hard links to its objects (immutable), copies of its refs.
     fn keep_git(&self) -> Result<(), String> {
         let git = self.world.join(".git");
+        // A worktree's or a submodule's `.git` is a file naming the repository elsewhere: only
+        // that file is the world's to lose, and it is kept.
+        if fs::symlink_metadata(&git).is_ok_and(|m| m.is_file()) {
+            fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
+            return fs::copy(&git, self.dir.join("dotgit-file"))
+                .map(|_| ())
+                .map_err(|e| format!("attic .git file: {e}"));
+        }
         if !git.is_dir() {
             return Ok(());
         }
@@ -376,6 +409,13 @@ impl Attic {
     pub fn repair_git(&self) -> Option<String> {
         let mirror = self.dir.join("dotgit");
         let git = self.world.join(".git");
+        let kept_file = self.dir.join("dotgit-file");
+        if kept_file.is_file() && fs::symlink_metadata(&git).is_err() {
+            return Some(match fs::copy(&kept_file, &git) {
+                Ok(_) => "the repository's .git file (a worktree's or a submodule's) was deleted; it was put back from the attic".into(),
+                Err(e) => format!("the repository's .git file was deleted, and the attic could not put it back: {e}"),
+            });
+        }
         if !mirror.join("HEAD").is_file() {
             return None;
         }
