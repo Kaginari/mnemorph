@@ -126,6 +126,14 @@ Helicon, the first Muses in Pausanias (9.29.2), before the nine:
 | `verdict` | **Melete** | practice, care | judges: a verdict with its evidence |
 | `draft` | **Aoede** | song | writes: the work, or the world's words |
 
+The `commission` tool carries the office as `office` (`findings`, `verdict` or `draft`); any other
+word is refused. Before the court runs, its model is chosen by the rule below — the human's pin
+for the creature or for (race, office), else its tier, Metis routing within the office's band
+when `decide.route` is on — and the report names the model it rode and why. A model served by
+another provider than the session's cannot ride the session's client: the dispatcher's model
+rides instead, and the report says so. Metis's decision is priced into the usage ledger and
+counted in the commission's spend, so routing is never free of the budget it routes.
+
 The throne has no office. A configuration names an office by its Muse or by what it does
 (`melete` or `judge`), and one spelling per office: any other word, or both spellings for one
 office, is an error. The key names the race as written, so an ascended form (`high-orc`) is

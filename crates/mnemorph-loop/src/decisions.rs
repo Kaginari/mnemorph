@@ -24,6 +24,7 @@ pub const BENCH_POINT: &str = "bench.outcome";
 const BENCH_TAIL: usize = 12_000;
 
 /// A run's decisions: who decides, how sure they must be, and where each decision is kept.
+#[derive(Clone)]
 pub struct Decisions {
     /// The decider.
     pub decider: Arc<Decider>,

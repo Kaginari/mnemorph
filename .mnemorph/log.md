@@ -2832,3 +2832,37 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a tie goes to the sibling that spent least, then by name;
   - the death row names the body suggested;
   - docs: instruments, not the ledger, and the same base race.
+
+---
+
+### [2026-10-25T15:12:12+01:00] rimuru — M7: offices, and Metis attached to dispatch
+- **Task:** the human chose "offices": per-commission model choice by office, with Metis's
+  routing attached to dispatch.
+- **Files:**
+  - loop commission.rs:
+    - `office` on the commission args and schema, validated (`office_of`);
+    - `Router` (config, Metis's decisions, the session's provider);
+    - `route_child` calls `route::route` before the court runs; the court rides the routed model,
+      or the dispatcher's when the model is on another provider, said in the report;
+    - Metis's decision wt is added to the commission's spend;
+  - open.rs — `router()`, the commissioner's own decisions;
+  - tests: a (race, office) pin rides and is named in the report; an unknown office is refused;
+  - docs/02.
+- **Open:** a court on another provider needs its own client (multi-provider sessions).
+
+---
+
+### [2026-10-25T15:19:13+01:00] rimuru — #169 review fixes
+- **Task:** fix Fable's review of offices and routing.
+- **Fixed:**
+  - the session's provider is the client's own (`model.provider()`). Before, it came from the
+    stripped model id, so a vLLM session looked like Anthropic;
+  - routing runs first, and Metis's cost comes out of `left` before the grant, so the parent's
+    envelope is never overshot; the route row names the dispatcher (`commission`);
+  - a model that cannot ride says why, never "another provider";
+  - `Decisions` is Clone, and one decider serves the run and the commissioner;
+  - `Reason` reads in words, and nothing is said when nothing was routed;
+  - the route doc's office comes from the commission's `office`.
+- **Open:**
+  - `Stop.left` is a fixed 60 s, though the decider's own policy clamps it to its turn;
+  - a refusal after routing drops Metis's cost from the in-memory envelope; the ledger keeps it.

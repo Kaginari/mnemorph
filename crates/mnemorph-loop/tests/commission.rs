@@ -69,6 +69,17 @@ impl World {
 
     /// As [`World::rimuru`], with or without an attic to put strays back from.
     fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
+        self.rimuru_full(model, attic, budget, None)
+    }
+
+    /// As [`World::rimuru_with`], each court's model chosen by `router`.
+    fn rimuru_full(
+        &self,
+        model: Arc<ScriptedModel>,
+        attic: bool,
+        budget: Option<u64>,
+        router: Option<mnemorph_loop::commission::Router>,
+    ) -> Run {
         let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
             .with_unguarded(true);
@@ -93,6 +104,7 @@ impl World {
             busy: std::sync::Mutex::default(),
             observer: None,
             council: mnemorph_loop::council::Thresholds::default(),
+            router,
             queue: Some(mnemorph_loop::world::Queue::at(&queue_of(&self.0))),
         };
         let setup = Setup {
@@ -1242,5 +1254,57 @@ async fn a_slice_that_runs_out_is_never_a_failure_on_the_card() {
         card.worth_milli(),
         750,
         "a body that only ran out still reads as a newcomer"
+    );
+}
+
+/// A commission's office chooses its court's model: the human's pin for (race, office) rides; an
+/// office that is none of the three is refused.
+#[tokio::test]
+async fn an_office_chooses_the_courts_model() {
+    let w = World::new("office");
+    fs::write(
+        w.0.join(".mnemorph/config.local.toml"),
+        "[models.office.elf]\nmelete = \"judge-model\"\n",
+    )
+    .unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("none.toml"),
+        &w.0,
+    ))
+    .unwrap();
+    let router = mnemorph_loop::commission::Router {
+        config: Arc::new(config),
+        decisions: None,
+        provider: "anthropic".into(),
+    };
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "is the plan sound?", "office": "verdict"}),
+        ),
+        ScriptedModel::text("@S DONE\n@V the plan holds\n@E"),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "elf-e", "ask": "x", "office": "chant"}),
+        ),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru_full(model.clone(), true, None, Some(router));
+    run.ask("go", &mut |_| {}).await;
+    let requests = model.requests();
+    assert_eq!(
+        requests[1].model, "judge-model",
+        "the Elf's court rode the pin"
+    );
+    let results = w.results();
+    assert!(
+        results[0].contains("[elf-e rode judge-model — the human's pin]"),
+        "{results:?}"
+    );
+    assert!(
+        results[1].contains("the offices are findings, verdict and draft, not `chant`"),
+        "{results:?}"
     );
 }

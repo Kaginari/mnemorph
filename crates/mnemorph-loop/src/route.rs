@@ -41,6 +41,20 @@ pub enum Reason {
     Interrupted,
 }
 
+impl std::fmt::Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Reason::Pinned => "the human's pin",
+            Reason::Off => "routing off: the race's tier",
+            Reason::Decided => "Metis decided",
+            Reason::Unsure => "Metis unsure: the race's tier",
+            Reason::Unconfigured(_) => "no model for the tier Metis picked: the race's tier",
+            Reason::Failed(_) => "Metis failed: the race's tier",
+            Reason::Interrupted => "Esc during the route: the race's tier",
+        })
+    }
+}
+
 /// A route: the model, its tier (none when pinned), why, and the decision when one was made —
 /// journaled and priced already.
 #[derive(Debug, Clone)]
@@ -60,7 +74,7 @@ pub struct Routed {
 pub struct Work<'a> {
     /// The body's race.
     pub race: Race,
-    /// Its office, from the commission's `@ASK`.
+    /// Its office, from the commission's `office`.
     pub office: Option<Office>,
     /// The commission, as sent.
     pub commission: &'a str,

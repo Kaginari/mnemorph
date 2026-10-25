@@ -42,7 +42,8 @@ impl Tool for CommissionTool {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
                 "ask": {"type": "string", "description": "The order: what is wanted, in a few lines."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
-                "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."}
+                "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
+                "office": {"type": "string", "enum": ["findings", "verdict", "draft"], "description": "What the work is: findings (read wide, thin facts), verdict (judge, with evidence) or draft (write). It chooses the court's model."}
             },
             "required": ["to", "ask"],
             "additionalProperties": false
@@ -71,6 +72,8 @@ struct CommissionArgs {
     budget_wt: Option<u64>,
     #[serde(default)]
     topup_wt: Option<u64>,
+    #[serde(default)]
+    office: Option<String>,
 }
 
 /// What every commission of one session shares: the world, the model, where spend and beats are
@@ -98,6 +101,8 @@ pub struct Commissioner {
     pub observer: Option<crate::run::Observer>,
     /// The council's keys.
     pub council: crate::council::Thresholds,
+    /// What chooses each court's model; `None` rides the dispatcher's.
+    pub router: Option<Router>,
     /// The shared work queue a report's `@$` orders are held on; `None` holds none.
     pub queue: Option<mnemorph_world::Queue>,
 }
@@ -264,6 +269,97 @@ fn lawful(
     Ok(())
 }
 
+/// What chooses a court's model: the human's pins and tiers, and Metis when routing is on. A
+/// model on another provider than the session's cannot ride this session's client: the
+/// dispatcher's model rides instead, and the report says so.
+pub struct Router {
+    /// The configuration: pins, tiers, bands.
+    pub config: Arc<mnemorph_config::Config>,
+    /// Metis's decider, when routing is on.
+    pub decisions: Option<crate::decisions::Decisions>,
+    /// The session's provider.
+    pub provider: String,
+}
+
+/// The office an `office` argument names, or why it names none.
+fn office_of(word: &str) -> Result<mnemorph_wire::Office, String> {
+    [
+        mnemorph_wire::Office::Findings,
+        mnemorph_wire::Office::Verdict,
+        mnemorph_wire::Office::Draft,
+    ]
+    .into_iter()
+    .find(|o| o.word() == word)
+    .ok_or_else(|| format!("commission: the offices are findings, verdict and draft, not `{word}`"))
+}
+
+/// The model a court rides, a line for the report, and what Metis's decision cost — booked
+/// against the commission, as a bench read is against its run.
+async fn route_child(
+    c: &Commissioner,
+    roster: &Roster,
+    a: &CommissionArgs,
+    office: Option<mnemorph_wire::Office>,
+    parent: &Body,
+    interrupt: &crate::run::Interrupt,
+) -> (String, Option<String>, u64) {
+    let (Some(chooser), Some(child)) = (&c.router, roster.creatures.get(&a.to)) else {
+        return (parent.model.clone(), None, 0);
+    };
+    let caller = Caller {
+        session: c.session.clone(),
+        run: format!("{}-route", a.to),
+        body: a.to.clone(),
+        race: child.race.name().to_owned(),
+        // The route is the dispatcher's act: its row is booked in the dispatcher's name.
+        commission: Some(parent.name.clone()),
+        prefix: 0,
+    };
+    let routed = crate::route::route(
+        &chooser.config,
+        chooser.decisions.as_ref(),
+        &caller,
+        crate::route::Work {
+            race: child.race,
+            office,
+            commission: &a.ask,
+        },
+        Some(crate::route::Stop {
+            interrupt,
+            left: std::time::Duration::from_secs(60),
+        }),
+        crate::route::Meter {
+            prices: &c.prices,
+            ledger: c.ledger.as_ref(),
+        },
+    )
+    .await;
+    let cost = routed.decision.as_ref().map_or(0, |d| {
+        crate::decisions::decision_usage(d, &caller, &c.prices).wt
+    });
+    let backend = match chooser.config.backend(&routed.model) {
+        Ok(b) => b,
+        Err(why) => {
+            let note = format!(
+                "[{} was routed to {}, which cannot ride: {why}; it rode {}]",
+                a.to, routed.model, parent.model
+            );
+            return (parent.model.clone(), Some(note), cost);
+        }
+    };
+    if backend.provider_name != chooser.provider {
+        let note = format!(
+            "[{} was routed to {} on {}, another provider than this session's: it rode {}]",
+            a.to, routed.model, backend.provider_name, parent.model
+        );
+        return (parent.model.clone(), Some(note), cost);
+    }
+    // Nothing routed and nothing changed: nothing to say.
+    let note = (backend.model != parent.model || routed.reason != crate::route::Reason::Off)
+        .then(|| format!("[{} rode {} — {}]", a.to, backend.model, routed.reason));
+    (backend.model, note, cost)
+}
+
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
 /// and its report.
 pub(crate) async fn order(
@@ -288,6 +384,13 @@ pub(crate) async fn order(
     };
     let roster = Roster::load(&c.world);
     let plan = plan_items(&c.world, &roster, &parent.name);
+    let office = match a.office.as_deref().map(office_of).transpose() {
+        Ok(office) => office,
+        Err(why) => return refused(why),
+    };
+    let (model, rode, route_wt) = route_child(c, &roster, &a, office, parent, interrupt).await;
+    // Routing comes first: what Metis costs comes out of what the dispatcher has left to give.
+    let left = left.map(|l| l.saturating_sub(route_wt));
     let records = mnemorph_world::worth::Records::load(&c.world);
     let (slice, topup, granted) = grant(&records, &roster, &a, left);
     if slice == 0 {
@@ -319,6 +422,7 @@ pub(crate) async fn order(
         parent,
         slice,
         child_cx.inherit(cx).with_body(&a.to),
+        model,
     )
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
@@ -329,7 +433,8 @@ pub(crate) async fn order(
     let before = snapshot(&c.world);
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
     drop(seat);
-    let spent = child.spent_wt();
+    // Metis's decision is booked against the commission, as a bench read is against its run.
+    let spent = child.spent_wt().saturating_add(route_wt);
     // Court work counts only when the child answered: a failed landing is put back whole.
     let answered = matches!(ending, Ending::Answered(_));
     let courts = if answered { child.courts() } else { Vec::new() };
@@ -347,8 +452,9 @@ pub(crate) async fn order(
     landed.sort();
     landed.dedup();
     let failed = child.failed_acts();
+    let notes: Vec<String> = granted.into_iter().chain(rode).collect();
     let report = report_for(
-        c, &roster, &a.to, &ending, failed, granted, &landed, &put_back,
+        c, &roster, &a.to, &ending, failed, notes, &landed, &put_back,
     );
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
@@ -644,11 +750,11 @@ fn report_for(
     to: &str,
     ending: &Ending,
     failed: u32,
-    granted: Option<String>,
+    notes: Vec<String>,
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
 ) -> String {
-    let mut notes: Vec<String> = granted.into_iter().collect();
+    let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
     file_labels(&c.world, roster, ending, to);
@@ -821,6 +927,7 @@ fn child_run(
     parent: &Body,
     slice: u64,
     cx: Context,
+    model: String,
 ) -> Run {
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
@@ -833,7 +940,7 @@ fn child_run(
     let body = Body {
         name: name.clone(),
         race: creature.race,
-        model: parent.model.clone(),
+        model,
         system: prompt(&c.world, roster, &name, &parent.name),
     };
     // A creature that may dispatch is handed the same commissioner: the order goes on down.
