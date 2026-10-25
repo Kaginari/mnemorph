@@ -332,3 +332,115 @@ fn an_approved_deletion_of_the_repository_stays_done() {
     assert!(!o.content.contains("put back"), "{o:?}");
     assert!(!g.world().join(".git").exists());
 }
+
+/// A nested repository is a gitlink in a snapshot — its commit's name, none of its files — so
+/// the attic never says it holds it, nor any file inside it.
+#[test]
+fn a_nested_repository_is_never_said_to_be_held() {
+    let g = Ground::new("nested");
+    let sub = g.world().join("vendor/sub");
+    fs::create_dir_all(&sub).unwrap();
+    fs::write(sub.join("lib.rs"), "fn lib() {}\n").unwrap();
+    let git = |dir: &Path, args: &[&str]| {
+        Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+    };
+    git(&sub, &["init", "-q"]);
+    git(&sub, &["add", "-A"]);
+    git(&sub, &["commit", "-qm", "sub"]);
+    let snap = g.attic().snapshot("before").unwrap();
+    assert!(g.attic().holds(&snap, "src/a.rs"));
+    assert!(
+        !g.attic().holds(&snap, "vendor/sub"),
+        "a gitlink is not a copy"
+    );
+    assert!(!g.attic().holds(&snap, "vendor/sub/lib.rs"));
+}
+
+/// A worktree's or a submodule's `.git` is a file: the attic keeps it and puts it back.
+#[test]
+fn a_git_file_is_kept_and_put_back() {
+    let g = Ground::new("gitfile");
+    let pointer = "gitdir: /somewhere/else/.git/worktrees/w\n";
+    fs::write(g.world().join(".git"), pointer).unwrap();
+    g.attic().snapshot("before").unwrap();
+    fs::remove_file(g.world().join(".git")).unwrap();
+    let said = g.attic().repair_git().expect("it repairs");
+    assert!(said.contains("put back"), "{said}");
+    assert_eq!(fs::read_to_string(g.world().join(".git")).unwrap(), pointer);
+    assert_eq!(g.attic().repair_git(), None, "nothing more to repair");
+}
+
+/// Two runs on one world snapshot in turn, never colliding on the attic's index.
+#[test]
+fn concurrent_snapshots_take_turns() {
+    let g = Arc::new(Ground::new("concurrent"));
+    let threads: Vec<_> = (0..4)
+        .map(|t| {
+            let g = Arc::clone(&g);
+            std::thread::spawn(move || {
+                for i in 0..5 {
+                    fs::write(g.world().join(format!("src/t{t}-{i}.rs")), "x\n").unwrap();
+                    g.attic().snapshot(&format!("run {t}, act {i}")).unwrap();
+                }
+            })
+        })
+        .collect();
+    for t in threads {
+        t.join().unwrap();
+    }
+    let last = g.attic().snapshot("after").unwrap();
+    for t in 0..4 {
+        assert!(g.attic().holds(&last, &format!("src/t{t}-4.rs")));
+    }
+}
+
+/// `rm -rf` of a nested repository: the command is told it was not kept, never that it was.
+#[test]
+fn a_deleted_nested_repository_is_reported_lost() {
+    let g = Ground::new("nested-lost");
+    let sub = g.world().join("vendor/sub");
+    fs::create_dir_all(&sub).unwrap();
+    fs::write(sub.join("lib.rs"), "fn lib() {}\n").unwrap();
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .current_dir(&sub)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "sub"]);
+    let snap = g.attic().snapshot("before").unwrap();
+    fs::remove_dir_all(g.world().join("vendor")).unwrap();
+    fs::remove_file(g.world().join("src/a.rs")).unwrap();
+    assert_eq!(g.attic().lost_since(&snap), ["vendor/sub"]);
+    assert_eq!(g.attic().deleted_since(&snap), ["src/a.rs"]);
+}
+
+/// A world that turned its `.git` file into a directory is never repaired back to the old file.
+#[test]
+fn only_the_current_form_of_git_is_kept() {
+    let g = Ground::new("git-forms");
+    fs::write(g.world().join(".git"), "gitdir: /elsewhere\n").unwrap();
+    g.attic().snapshot("a file").unwrap();
+    fs::remove_file(g.world().join(".git")).unwrap();
+    Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(g.world())
+        .output()
+        .unwrap();
+    g.attic().snapshot("a directory").unwrap();
+    fs::remove_dir_all(g.world().join(".git")).unwrap();
+    g.attic().repair_git().expect("it repairs");
+    assert!(
+        g.world().join(".git").is_dir(),
+        "the directory came back, not the old file"
+    );
+}
