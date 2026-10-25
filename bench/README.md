@@ -38,3 +38,32 @@ on stdout — stops the run with exit 3, unrecorded, and the next run resumes fr
 model's daily cap may take the sixty runs over a few days. A run past its timeout (30 minutes) is
 killed with every process it started, and recorded as a fail. `just check` also builds
 `target/debug/mnemorph-guard`, the sandbox's helper: without it every shell act is refused.
+
+## Reading it
+
+```sh
+python3 bench/report.py results/<model>.jsonl            # the whole matrix, or an error
+python3 bench/report.py results/<model>.jsonl --partial  # a run still in progress, its gaps named
+```
+
+The matrix is fixed up front: every task in every mode, exactly once. A run that is missing,
+extra or recorded twice is an error, never dropped; `--partial` reports a run still in progress
+and names what is missing, but an extra or doubled run is an error even then. A task succeeds
+only when its verify passed *and* the run ended answered: the CLI exited 0 — not a checkpoint,
+an escalation, a failure or a timeout — and a hierarchy run ran below the throne. A correct file
+left by a run that did not end answered counts as a failed task, and the report says how many
+there were. A gate refusal the body recovered from leaves the exit at 0, so this reads how the run
+ended, not every rule it met on the way.
+
+The estimand is the difference in task success rate, hierarchy minus solo, over the same tasks.
+Its 95% interval is a paired bootstrap that resamples tasks — the groups — never rows: 10 000
+resamples, seeded, so the same rows give the same interval. The report states the estimand and the
+group count beside it, and the discordant tasks — won by one arm only — the interval rests on;
+with fewer than ten, a percentile bootstrap under-covers, and the report says so. There is no
+single aggregate score: each arm's success, verify-alone rate,
+median calls, weighted tokens and seconds, escalations and dollars stand side by side.
+
+`just bench` — part of `just check` — runs the report's tests and `run.py --check`, with no model:
+every task's verify fails on its untouched starter, and no task hands its worker the answer (its
+`verify.py`, or a file named `answer`, `expected` or `solution`, inside its world). `--json`
+prints the report as data.
