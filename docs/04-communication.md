@@ -302,11 +302,12 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   said as it runs and opens the session's next turn. The throne's own work waits for the human's
   turn; a turn the human interrupted wakes nothing, an Esc during the wake stops it, and a spent
   budget leaves every order waiting.
-- **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
-  requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
-  shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
-  body never claims: only the human and the harness's wake do, so work reaches a body claimed in
-  its name. The status line reads "N held".
+- **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch | requeue
+  | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every shelf for
+  bodies — reading is free, moving takes only what the body holds or stands over — and a body never
+  closes or drops its own order: its report settles what it ran, and only a body above it discharges
+  what it holds — and a body never claims: only the human and the harness's wake do, so work reaches
+  a body claimed in its name. The status line reads "N held".
 - The queue does not travel with the repository. Orders that must reach another machine travel
   as what made them — a commission's report in the journal, a `@?` the human answers.
 

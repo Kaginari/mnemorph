@@ -999,6 +999,10 @@ impl Run {
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
         // The shared queue is the harness's: the loop moves it in this body's name.
         if name == crate::queue_tool::QUEUE
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::queue_tool::QUEUE)
             && let Some(k) = &self.queue_keeper
             && let Some(q) = &k.queue
         {

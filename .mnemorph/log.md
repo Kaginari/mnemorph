@@ -2454,3 +2454,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a Slime has no commissioner, because it cannot dispatch. Giving it one would let
   `commission`, called by name, run below the shelf check, so the queue is reached through its
   own keeper instead.
+
+---
+
+### [2026-10-25T11:36:19+01:00] rimuru — #156 review fixes
+- **Task:** fix Fable's review of the queue tool.
+- **Fixed:**
+  - a body never closes or drops its own order (`move_item`): only a body above it, the human or
+    the harness discharges it. A body could otherwise close work it never ran and report DONE;
+  - `settle` says the order's real state;
+  - `queue` is intercepted only when the run offers the tool;
+  - the test helper registers `QueueTool`, as `open.rs` does.
+- **Open:** the status line's count is refreshed only after a turn, so a `q add` from another
+  terminal shows at the next turn.

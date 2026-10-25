@@ -409,7 +409,12 @@ pub(crate) fn settle(
         }
         _ => note(format!("exit: {status}")),
     }
-    format!("queue {}: {to} reported {status}", item.id)
+    // Said as the queue now reads, whatever the body did to the order meanwhile.
+    let now = q.items().get(&item.id).map_or("gone", |i| i.state.word());
+    format!(
+        "queue {}: {to} reported {status}; the order is {now}",
+        item.id
+    )
 }
 
 /// Relay-hold: an answering child's `@$ <body>: <ask>` orders are held on the shared queue in its

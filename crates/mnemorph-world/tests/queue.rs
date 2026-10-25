@@ -83,11 +83,11 @@ fn an_item_moves_held_claimed_done() {
     q.move_item(&r, "harness", &item.id, &Move::Claim { as_body: None })
         .unwrap();
     let done = q
-        .move_item(&r, "slime-s", &item.id, &Move::Close { drop: false })
+        .move_item(&r, "orc-o", &item.id, &Move::Close { drop: false })
         .unwrap();
     assert_eq!((done.state, done.rev), (State::Done, 5));
     assert_eq!(q.open(), Vec::new());
-    assert_eq!(done.notes.last().unwrap(), "done, closed by slime-s");
+    assert_eq!(done.notes.last().unwrap(), "done, closed by orc-o");
 }
 
 /// A body moves the work it holds; anyone up the holder's chain may too; a sibling may not; the
@@ -260,4 +260,36 @@ fn the_queue_is_not_written_through_a_link() {
         Err(Refusal::Io(_))
     ));
     assert!(!target.exists());
+}
+
+/// A body never closes or drops its own order; a body above it may.
+#[test]
+fn a_body_does_not_close_its_own_order() {
+    let w = World::new("own-close");
+    let r = Roster::load(&w.0);
+    let q = Queue::at(&w.0.join("queue.jsonl"));
+    let item = q.add(&r, Some("slime-s"), "orc-o", "x", 0).unwrap();
+    for drop in [false, true] {
+        assert_eq!(
+            q.move_item(&r, "slime-s", &item.id, &Move::Close { drop }),
+            Err(Refusal::NotYours {
+                holder: "slime-s".into()
+            })
+        );
+    }
+    assert!(
+        q.move_item(
+            &r,
+            "slime-s",
+            &item.id,
+            &Move::Touch {
+                note: "seen".into()
+            }
+        )
+        .is_ok()
+    );
+    assert!(
+        q.move_item(&r, "orc-o", &item.id, &Move::Close { drop: true })
+            .is_ok()
+    );
 }

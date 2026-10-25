@@ -79,6 +79,7 @@ impl World {
         }
         let mut tools = registry();
         tools.push(Box::new(CommissionTool) as Box<dyn Tool>);
+        tools.push(Box::new(mnemorph_loop::QueueTool) as Box<dyn Tool>);
         let journals = self.0.join(".mnemorph/instruments/loop");
         let commissioner = Commissioner {
             world: self.0.canonicalize().unwrap(),
@@ -722,7 +723,10 @@ async fn the_wake_runs_what_its_body_can_carry() {
         "{last}"
     );
     assert!(
-        last.contains(&format!("queue {}: slime-s reported DONE", can.id)),
+        last.contains(&format!(
+            "queue {}: slime-s reported DONE; the order is done",
+            can.id
+        )),
         "{last}"
     );
 }
