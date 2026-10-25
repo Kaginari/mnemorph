@@ -160,6 +160,9 @@ impl Core {
     }
 }
 
+/// The session's own body: the throne's voice.
+pub const SESSION_BODY: &str = "rimuru";
+
 /// The gate a client answers: `gate/ask`, sent as a request; silence denies.
 struct ClientGate(Arc<Core>);
 
@@ -177,6 +180,11 @@ impl Gate for ClientGate {
             asks.insert(id, tx);
         }
         let request = GateRequest {
+            body: if ask.body.is_empty() {
+                SESSION_BODY.to_owned()
+            } else {
+                ask.body.clone()
+            },
             race: ask.race.name().to_owned(),
             class: ask.class.to_string(),
             act: ask.act.clone(),
@@ -310,7 +318,7 @@ pub fn serve(
     let core = Arc::new(Core {
         out,
         replay: Mutex::new((0, VecDeque::new())),
-        ids: Mutex::new((String::new(), String::new(), "rimuru".into())),
+        ids: Mutex::new((String::new(), String::new(), SESSION_BODY.into())),
         asks: Mutex::new(HashMap::new()),
         next_ask: AtomicU64::new(0),
         outstanding: AtomicUsize::new(0),
@@ -415,7 +423,7 @@ async fn main_lane(
                         *core.ids.lock().unwrap_or_else(PoisonError::into_inner) = (
                             opened.session_id.clone(),
                             opened.run_id.clone(),
-                            "rimuru".into(),
+                            SESSION_BODY.into(),
                         );
                         interrupt = Some(opened.session.interrupt());
                         steer = Some(opened.session.steer());
@@ -529,6 +537,7 @@ fn hello(opened: &Opened, version: &str) -> Value {
         }),
         key: opened.key.clone(),
         sandbox: opened.sandbox.clone(),
+        body: SESSION_BODY.into(),
     })
     .unwrap_or(Value::Null)
 }

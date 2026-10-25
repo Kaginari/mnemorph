@@ -209,8 +209,15 @@ pub(crate) async fn order(
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
-    let mut child = child_run(c, &roster, &a.to, parent, slice, child_cx.inherit(cx))
-        .with_interrupt(Arc::clone(interrupt));
+    let mut child = child_run(
+        c,
+        &roster,
+        &a.to,
+        parent,
+        slice,
+        child_cx.inherit(cx).with_body(&a.to),
+    )
+    .with_interrupt(Arc::clone(interrupt));
     // What the world held before the child, to put back what it changes off its ground.
     let held = cx
         .attic()

@@ -17,6 +17,7 @@ const hello = {
   budget: null,
   key: 'K, named by providers.p.key_env in human (/h)',
   sandbox: 'landlock ABI 1 + seccomp, network off',
+  body: 'rimuru',
 };
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
@@ -74,6 +75,7 @@ test('an approval is chosen, then confirmed: a stray y or Enter approves nothing
     id: 'gate-1',
     method: 'gate/ask',
     params: {
+      body: 'rimuru',
       class: 'destructive',
       act: 'rm -rf build',
       race: 'slime',
@@ -82,7 +84,7 @@ test('an approval is chosen, then confirmed: a stray y or Enter approves nothing
     },
   });
   await tick();
-  expect(ui.lastFrame()).toContain('Approve this destructive act?');
+  expect(ui.lastFrame()).toContain('rimuru asks: approve this destructive act?');
   ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toBeUndefined();
@@ -97,7 +99,7 @@ test('an approval is chosen, then confirmed: a stray y or Enter approves nothing
   ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toMatchObject({ result: { allow: true } });
-  expect(ui.lastFrame()).not.toContain('Approve this');
+  expect(ui.lastFrame()).not.toContain('approve this');
   ui.unmount();
 });
 
@@ -108,7 +110,14 @@ test('n denies an approval, with a reason for the body', async () => {
     jsonrpc: '2.0',
     id: 'gate-2',
     method: 'gate/ask',
-    params: { class: 'write', act: 'sed -i x f', race: 'slime', why: [], outside: [] },
+    params: {
+      body: 'rimuru',
+      class: 'write',
+      act: 'sed -i x f',
+      race: 'slime',
+      why: [],
+      outside: [],
+    },
   });
   await tick();
   ui.stdin.write('n');
@@ -181,19 +190,33 @@ test('an approval the turn left behind is denied, and Ctrl+C at an approval deni
     jsonrpc: '2.0',
     id: 'gate-1',
     method: 'gate/ask',
-    params: { class: 'write', act: 'sed -i x f', race: 'slime', why: [], outside: [] },
+    params: {
+      body: 'rimuru',
+      class: 'write',
+      act: 'sed -i x f',
+      race: 'slime',
+      why: [],
+      outside: [],
+    },
   });
   await tick();
   core.event('turnEnded', { ending: 'interrupted' });
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toMatchObject({ result: { allow: false } });
-  expect(ui.lastFrame()).not.toContain('Approve this');
+  expect(ui.lastFrame()).not.toContain('approve this');
   core.event('turnStarted', { text: 'again' });
   core.say({
     jsonrpc: '2.0',
     id: 'gate-2',
     method: 'gate/ask',
-    params: { class: 'write', act: 'sed -i y f', race: 'slime', why: [], outside: [] },
+    params: {
+      body: 'rimuru',
+      class: 'write',
+      act: 'sed -i y f',
+      race: 'slime',
+      why: [],
+      outside: [],
+    },
   });
   await tick();
   ui.stdin.write('\u0003');
@@ -275,7 +298,14 @@ test('a choice never carries over to the next approval', async () => {
       jsonrpc: '2.0',
       id,
       method: 'gate/ask',
-      params: { class: 'write', act: `sed -i ${id} f`, race: 'slime', why: [], outside: [] },
+      params: {
+        body: 'rimuru',
+        class: 'write',
+        act: `sed -i ${id} f`,
+        race: 'slime',
+        why: [],
+        outside: [],
+      },
     });
   core.event('turnStarted', { text: 'go' });
   ask('gate-a');
@@ -303,7 +333,14 @@ test('a letter and the Enter right after it, before any render, still decide', a
     jsonrpc: '2.0',
     id: 'gate-fast',
     method: 'gate/ask',
-    params: { class: 'write', act: 'sed -i x f', race: 'slime', why: [], outside: [] },
+    params: {
+      body: 'rimuru',
+      class: 'write',
+      act: 'sed -i x f',
+      race: 'slime',
+      why: [],
+      outside: [],
+    },
   });
   await tick();
   ui.stdin.write('n');

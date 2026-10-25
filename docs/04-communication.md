@@ -312,7 +312,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox}
+    D-->>CLI: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox, body}
     CLI->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -322,7 +322,7 @@ sequenceDiagram
     D--)CLI: event/usage {tokens, cacheRead, usd, spentWt}
     end
     rect rgba(212,175,55,0.22)
-    D->>CLI: gate/ask {race, class, act, why, outside}
+    D->>CLI: gate/ask {body, race, class, act, why, outside}
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
@@ -406,7 +406,9 @@ Rules:
 - An event from a body the session commissioned carries that body and its run, at any depth: the
   client sees the whole order at work. The terminal shows such events as short lines under the
   body's name — what it started on, each tool call, a gate that refused it, how it ended — and
-  never lets them touch the session's own turn.
+  never lets them touch the session's own turn; the hello names the session's own body, so even a
+  replay that opens mid-commission tells them apart. An approval names the body asking, and a
+  body's dollars below count in the session's spend.
 - Leaving ends everything at once: on `shutdown`, or when the client's end closes, every act
   waiting at the gate is denied, the turn in flight stops, lines still queued never run, and the
   core exits once its output is written. Esc (`session/interrupt`) denies an act waiting at the

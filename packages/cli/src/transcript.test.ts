@@ -99,7 +99,10 @@ test('an approval still open when its turn ends is cleared', () => {
   let s = fold(initial(), ev('turnStarted', { text: 'go' }));
   s = {
     ...s,
-    gate: { id: 1, request: { race: 'slime', class: 'write', act: 'x', why: [], outside: [] } },
+    gate: {
+      id: 1,
+      request: { body: 'rimuru', race: 'slime', class: 'write', act: 'x', why: [], outside: [] },
+    },
   };
   s = fold(s, ev('turnEnded', { ending: 'interrupted' }));
   expect(s.gate).toBeUndefined();
@@ -148,4 +151,32 @@ test('a commissioned body works below the session: short lines under its name, t
   ]);
   s = fold(s, at('rimuru', { type: 'turnEnded', ending: 'answered' }));
   expect(s.busy).toBe(false);
+});
+
+test('the session knows its body from the hello, so a replay that opens below never takes a child for it', () => {
+  const at = (body: string, event: object) =>
+    ({ session: 's', run: 'r', seq: 1, body, ...event }) as Arrived;
+  let s = initial('rimuru');
+  s = fold(s, at('elf-e', { type: 'turnStarted', text: 'mid-commission' }));
+  expect(s.busy).toBe(false);
+  s = fold(s, at('rimuru', { type: 'turnStarted', text: 'mine' }));
+  expect(s.busy).toBe(true);
+  // A child's price is the session's spend; its tokens are already in the session's total.
+  s = fold(
+    s,
+    at('elf-e', {
+      type: 'usage',
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      usd: 0.4,
+      wt: 9,
+      spentWt: 9,
+      occupancy: 5,
+      stressLine: 10,
+    }),
+  );
+  expect(s.usage.usd).toBeCloseTo(0.4);
+  expect(s.usage.spentWt).toBe(0);
 });

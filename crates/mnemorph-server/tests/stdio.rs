@@ -478,3 +478,80 @@ fn a_send_with_nothing_running_is_refused() {
     let id = c.request("session/send", &json!({"text": "faster"}));
     assert_eq!(c.response(id)["error"]["code"], -32003);
 }
+
+/// A session in a world with creatures streams every commissioned body's events under that body's
+/// own name and run, and its hello names the session's own body.
+#[test]
+fn a_commissioned_body_reaches_the_wire_under_its_own_name() {
+    let tool = |id: &str, to: &str| {
+        ScriptedModel::tool(
+            id,
+            "commission",
+            json!({"to": to, "ask": "leave src/done.txt"}),
+        )
+    };
+    let mut c = Client::start(
+        "below",
+        UNGUARDED,
+        vec![
+            tool("c1", "elf-e"),
+            tool("c2", "orc-o"),
+            tool("c3", "slime-s"),
+            ScriptedModel::tool(
+                "w1",
+                "write",
+                json!({"path": "src/done.txt", "content": "done\n"}),
+            ),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("Done."),
+        ],
+    );
+    let world = c.root.join("world");
+    let doc = |race: &str, short: &str, body: &str| {
+        let dir = world.join(".mnemorph").join(race).join(short);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), body).unwrap();
+    };
+    doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+    );
+    std::fs::write(
+        world.join(".mnemorph/elf/e/plan.md"),
+        "- [ ] orc-o: the marker\n",
+    )
+    .unwrap();
+    doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/\n",
+    );
+    doc(
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n- **Verify:** `true`\n",
+    );
+    std::fs::create_dir_all(world.join("src")).unwrap();
+    let id = c.request("initialize", &json!({}));
+    let hello = c.response(id);
+    assert_eq!(hello["result"]["body"], "rimuru", "{hello}");
+    let session_run = hello["result"]["run"].clone();
+    c.request("session/prompt", &json!({"text": "leave a marker"}));
+    let mut seen = Vec::new();
+    c.until(&mut seen, |l| {
+        method(l) == "event/turnEnded" && l["params"]["body"] == "rimuru"
+    });
+    let wrote = seen
+        .iter()
+        .find(|l| method(l) == "event/toolCall" && l["params"]["name"] == "write")
+        .expect("the Slime's write reached the wire");
+    assert_eq!(wrote["params"]["body"], "slime-s", "{wrote}");
+    assert_ne!(
+        wrote["params"]["run"], session_run,
+        "a child's run is its own"
+    );
+}

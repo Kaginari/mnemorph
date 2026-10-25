@@ -19,6 +19,7 @@ export class FakeCore implements Transport {
       budget: null,
       key: null,
       sandbox: 'none — the guard helper is missing (/x)',
+      body: 'rimuru',
     },
     'session/prompt': { queued: false },
     'session/interrupt': {},

@@ -64,6 +64,8 @@ pub struct Hello {
     pub key: Option<String>,
     /// The sandbox actually in force for the session's commands, or `none — <reason>`.
     pub sandbox: String,
+    /// The session's own body: events under any other body come from the bodies it commissioned.
+    pub body: String,
 }
 
 /// A session's budget under the human's caps.
@@ -220,7 +222,9 @@ impl Event {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct GateRequest {
-    /// The body asking.
+    /// The body asking, by name.
+    pub body: String,
+    /// Its race.
     pub race: String,
     /// The act's class: `write`, `destructive`, `outward`, ….
     pub class: String,

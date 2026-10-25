@@ -162,7 +162,7 @@ function Gate({ request, choice }: { request: GateRequest; choice: 'y' | 'n' | u
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={p.gold} paddingX={1}>
       <Text color={p.gold} bold>
-        {`Approve this ${request.class} act?`}
+        {`${request.body} asks: approve this ${request.class} act?`}
       </Text>
       <Text>{request.act}</Text>
       {request.why.map((w) => (
@@ -211,7 +211,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   const { write } = useStdout();
   const { columns, rows } = useWindowSize();
   const [state, dispatch] = useReducer(reduce, undefined, () => {
-    let s = initial();
+    let s = initial(hello.body);
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
     for (const h of hello.holes) s = info(s, `  config hole: ${h}`);
     if (hello.budget && hello.budget.leftWt === 0) {

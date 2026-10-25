@@ -2219,3 +2219,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Result:** in review as a pull request.
 - **Learned:** a child's `turnEnded` folded as the session's would have ended the human's turn
   in the terminal. Children's events must never touch the session's own state.
+
+---
+
+### [2026-10-25T09:33:30+01:00] rimuru — the order at work, after its review
+- **Task:** fix what the review of #153 found (verdict: merge after fixes).
+- **Files:**
+  - tools — `Ask.body`, `Context::with_body`;
+  - loop:
+    - commission — each child names its context;
+    - solo — `rimuru`;
+  - server:
+    - `GateRequest.body`, `Hello.body`, `SESSION_BODY`;
+    - stdio test — a Slime's write on the wire under `slime-s` and its own run;
+  - cli:
+    - `initial(hello.body)`;
+    - the card says who asks;
+    - a body's dollars below count in the session's spend;
+  - protocol types regenerated;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:**
+  - An approval is the one moment the human acts, so it must name who asks.
+  - My earlier entry said a child's beats are "wrapped once per rank". Every rank shares the
+    session's commissioner, so each beat is wrapped once, in its own name.

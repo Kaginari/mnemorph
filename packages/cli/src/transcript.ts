@@ -58,8 +58,10 @@ export interface State {
   me?: string | undefined;
 }
 
-export function initial(): State {
+/** A fresh transcript; `me` is the session's own body, as the hello names it. */
+export function initial(me?: string): State {
   return {
+    me,
     items: [],
     streaming: '',
     flushed: '',
@@ -99,6 +101,17 @@ function below(s: State, e: Arrived): State {
         : push(s, { kind: 'info', text: `  ${who}'s gate: ${e.failures[0] ?? 'failed'}` });
     case 'turnEnded':
       return push(s, { kind: 'info', text: `  ${who}: ${e.ending}` });
+    case 'usage':
+      // What a body below spends in dollars is the session's spend too; its tokens are already
+      // in the session's running total, so only the price is added.
+      return {
+        ...s,
+        usage: {
+          ...s.usage,
+          usd: s.usage.usd + (e.usd ?? 0),
+          unpriced: s.usage.unpriced || e.usd === null,
+        },
+      };
     default:
       return s;
   }
