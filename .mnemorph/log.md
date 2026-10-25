@@ -2654,3 +2654,35 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `@V` lines inside a code block are quoted, never said, and label nothing; the test puts a
     conflicting fenced label before the real one;
   - the prompt wording is clearer, and the doc comment says only an answered turn is read.
+
+---
+
+### [2026-10-25T13:50:59+01:00] rimuru — M7: housekeep --heal
+- **Task:** the human said "go". Next M7 rung is self-heal's `housekeep --heal`. The clock-death
+  memo waits, because its code is in commission.rs, which another session is changing (Thompson
+  worth, in its own worktree).
+- **Files:**
+  - world heal.rs — `heal(world, apply)`: a retired stub for a seat with no doc; a broken
+    *Reports to* relinked to the nearest living ancestor or the throne; problems and loops left;
+    one journal entry per repair;
+  - mnemorphd — `housekeep [--heal]`, exit 1 while anything is left;
+  - CLI — `mnemorph housekeep` passes through like `q`;
+  - tests: tests/heal.rs (dry run, three repairs, the rest of a doc untouched, journaled, idempotent),
+    and the CLI route;
+  - docs/03.
+
+---
+
+### [2026-10-25T13:57:55+01:00] rimuru — #163 review fixes
+- **Task:** fix Fable's review of `housekeep --heal`.
+- **Fixed:**
+  - a relink goes only to a living ancestor of the race that may command the body (an Orc for a
+    Slime, an Elf for an Orc); with none, it is left. Before, a Slime relinked to its Elf broke the
+    race law;
+  - no write through a link: race dir, seat and doc are checked, and a stub is created new;
+  - the relink splices only the field's own line, keeping CRLF, the trailing newline and prose
+    field-looking lines;
+  - inside a body's command `housekeep` refuses (exit 2);
+  - exits: 0 when whole, 1 when anything is left or a repair waits for `--heal`, 2 on errors;
+  - a journal write that fails is left as a finding, not swallowed;
+  - the stub name check also covers names the roster refused.
