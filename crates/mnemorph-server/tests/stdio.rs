@@ -217,13 +217,19 @@ fn a_session_streams_its_turn_and_numbers_every_event() {
     // A client that reconnects asks for what it missed and loses nothing.
     let id = c.request("session/events", &json!({"since": seqs[2]}));
     let replay = c.response(id);
-    let got: Vec<u64> = replay["result"]["events"]
-        .as_array()
-        .unwrap()
+    let events = replay["result"]["events"].as_array().unwrap();
+    let got: Vec<u64> = events
         .iter()
         .map(|e| e["params"]["seq"].as_u64().unwrap())
         .collect();
-    assert_eq!(got, seqs[3..].to_vec());
+    // What came after the turn ended — the queue's held count — may already be there too.
+    assert_eq!(got[..seqs.len() - 3], seqs[3..]);
+    assert!(
+        events[seqs.len() - 3..]
+            .iter()
+            .all(|e| method(e) == "event/held"),
+        "{events:?}"
+    );
 }
 
 /// The human gate is a request to the client; its answer is the gate's, and a denial's reason

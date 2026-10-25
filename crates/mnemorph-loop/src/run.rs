@@ -754,6 +754,7 @@ impl Run {
                 .collect(),
             failures: verdict.failures.clone(),
         });
+        self.log_verdict(&verdict, *retried);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
@@ -777,6 +778,45 @@ impl Run {
             }],
         );
         None
+    }
+
+    /// Every verdict goes to the world's journal through its append-only writer.
+    fn log_verdict(&self, verdict: &crate::gate::GateVerdict, retried: bool) {
+        // An answer that changed nothing passed untouched: there is nothing to journal.
+        if verdict.changed.is_empty() && verdict.failures.is_empty() {
+            return;
+        }
+        let word = match (verdict.passed(), retried) {
+            (true, _) => "PASS",
+            (false, false) => "FAIL, handed back",
+            (false, true) => "FAIL",
+        };
+        let changed: Vec<String> = verdict
+            .changed
+            .iter()
+            .map(|p| format!("`{}`", p.display()))
+            .collect();
+        let mut lines = vec![(
+            "Changed".to_owned(),
+            if changed.is_empty() {
+                "nothing".to_owned()
+            } else {
+                changed.join(", ")
+            },
+        )];
+        if !verdict.failures.is_empty() {
+            lines.push(("Failures".to_owned(), verdict.failures.join("; ")));
+        }
+        let entry = mnemorph_world::log::Entry {
+            body: self.body.name.clone(),
+            title: format!("gate: {word}"),
+            lines,
+        };
+        if let Err(e) = mnemorph_world::log::append(self.cx.world(), &entry) {
+            self.record(&Beat::Warning {
+                text: format!("the gate's verdict could not reach the journal: {e}"),
+            });
+        }
     }
 
     /// The stress line: the configured tokens, never past 90% of the window.

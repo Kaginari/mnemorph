@@ -12,6 +12,7 @@ mnemorph-wire = { path = "../mnemorph-wire" }
 mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-ledger = { path = "../mnemorph-ledger" }
 mnemorph-memory = { path = "../mnemorph-memory" }
+libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

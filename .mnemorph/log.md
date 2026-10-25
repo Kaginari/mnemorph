@@ -2467,3 +2467,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the test helper registers `QueueTool`, as `open.rs` does.
 - **Open:** the status line's count is refreshed only after a turn, so a `q add` from another
   terminal shows at the next turn.
+
+---
+
+### [2026-10-25T11:43:55+01:00] rimuru — M7: the journal's writer
+- **Task:** continue M7: the append-only `log.md` writer, and the gate's verdicts through it.
+- **Files:**
+  - world log.rs — `Entry`, `render`, `append`: whole entries, append only, refused through a
+    link;
+  - loop run.rs — `log_verdict` on every verdict: `PASS`, `FAIL, handed back`, `FAIL`, with the
+    changed paths and the failures;
+  - tests: tests/log.rs, and the down-and-back test reads the Slime's PASS from the journal;
+  - docs/03; the roadmap line reflowed.
+- **Open:**
+  - three fails running for one body on the same files harden into the lawful next acts
+    (rewrite, split, escalate);
+  - a concurrent session's command can still have its tripwire put back a journal entry written
+    meanwhile. This is the same class as the ledgers under `instruments/`.
+
+---
+
+### [2026-10-25T11:50:45+01:00] rimuru — #157 review fixes
+- **Task:** fix Fable's review of the journal's writer.
+- **Fixed:**
+  - `clean` turns every control character and line separator into a space in every field;
+    before this, a `\r` in a verify command's output could forge an entry;
+  - a pass that changed nothing is not journaled;
+  - a world without `.mnemorph/` gets no journal;
+  - the file is opened with `O_NOFOLLOW` (`libc`).
+- **Open:** a concurrent session's tripwire can put back an entry. Append-only is checkable, so a
+  put-back could keep growth whose prefix matches the snapshot, given a witness for what grew.
