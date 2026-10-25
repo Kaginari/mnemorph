@@ -256,6 +256,7 @@ fn a_check_that_gave_no_result_is_not_verified() {
     };
     let unrun = judge(vec!["true".into()], false);
     assert_eq!(unrun.verdict(), Verdict::NotVerified, "{unrun:?}");
+    assert!(unrun.unrun(), "the machine's doing, not the body's");
     assert!(!unrun.passed());
     assert_eq!(unrun.failures, Vec::<String>::new());
     assert!(
@@ -264,8 +265,16 @@ fn a_check_that_gave_no_result_is_not_verified() {
     );
     let ran = judge(vec!["true".into()], true);
     assert_eq!(ran.verdict(), Verdict::Pass, "{ran:?}");
+    assert!(!ran.unrun());
     let failed = judge(vec!["false".into()], true);
     assert_eq!(failed.verdict(), Verdict::Fail, "{failed:?}");
+    // Commands may run: a line that failed beside one refused (a credential read) is a failure,
+    // and a refusal is never the machine's doing.
+    let mixed = judge(vec!["false".into(), "cat ~/.ssh/id_rsa".into()], true);
+    assert_eq!(mixed.verdict(), Verdict::Fail, "{mixed:?}");
+    assert!(!mixed.unrun(), "{mixed:?}");
+    let refused = judge(vec!["cat ~/.ssh/id_rsa".into()], true);
+    assert!(!refused.unrun(), "{refused:?}");
     // A crash is a failure, not a missing result.
     let crashed = judge(vec!["kill -SEGV $$".into()], true);
     assert_eq!(crashed.verdict(), Verdict::Fail, "{crashed:?}");

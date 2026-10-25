@@ -218,6 +218,9 @@ pub struct GateVerdict {
     /// The checks that gave no result — a verify line that did not run, or was killed before it
     /// finished: neither a pass nor a failure.
     pub unverified: Vec<String>,
+    /// No kernel guard was in force and none allowed unguarded: no verify line could run. That is
+    /// the machine's doing, never the body's. A line refused or killed on a guarded machine is not.
+    pub unguarded: bool,
     /// A verify run changed the tree: a check never writes, and the landing fails whole.
     pub wrote: bool,
 }
@@ -250,6 +253,13 @@ impl GateVerdict {
     #[must_use]
     pub fn passed(&self) -> bool {
         self.verdict() == Verdict::Pass
+    }
+
+    /// Not verified, and by the machine alone: no kernel guard, so no check could run. It says
+    /// nothing about the body — neither a pass nor a fail on its record.
+    #[must_use]
+    pub fn unrun(&self) -> bool {
+        self.verdict() == Verdict::NotVerified && self.unguarded
     }
 
     /// The gate's word: a failure outweighs a check that gave no result.
@@ -319,6 +329,7 @@ impl EndGate {
                 changed,
                 failures,
                 unverified: Vec::new(),
+                unguarded: false,
                 wrote: false,
             };
         }
@@ -329,12 +340,16 @@ impl EndGate {
             failures.extend(right_author(author, &changed, cx.world()));
         }
         let mut unverified = Vec::new();
+        let unguarded = matches!(cx.sandbox(), mnemorph_tools::Sandbox::None(_))
+            && !cx.allows_unguarded()
+            && !self.verify.is_empty();
         let (verify_failures, wrote) = self.run_verify(tools, cx, &after, &mut unverified);
         failures.extend(verify_failures);
         GateVerdict {
             changed,
             failures,
             unverified,
+            unguarded,
             wrote,
         }
     }

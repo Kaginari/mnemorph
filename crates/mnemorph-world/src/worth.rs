@@ -130,7 +130,8 @@ impl Records {
         };
         for (_, verdict, _) in self.verdicts.iter().filter(|(b, _, _)| mine(b)) {
             // A check that gave no result is no pass: it counts as a failure, so not verifying
-            // never buys a body worth.
+            // never buys a body worth — unless it never ran, which is the machine's doing
+            // ("NOT_VERIFIED, unrun"), and counts neither way.
             match verdict.as_str() {
                 "PASS" => card.passes += 1,
                 "FAIL" | "NOT_VERIFIED" => card.fails += 1,
@@ -151,7 +152,9 @@ impl Records {
             .verdicts
             .iter()
             .rev()
-            .filter(|(b, v, _)| b == name && !v.ends_with(", handed back"))
+            .filter(|(b, v, _)| {
+                b == name && !v.ends_with(", handed back") && !v.ends_with(", unrun")
+            })
             .take(STUCK_AFTER)
             .collect();
         let failed = |v: &str| v == "FAIL" || v == "NOT_VERIFIED";

@@ -795,6 +795,15 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
+        // No kernel guard, so no check could run: a retry cannot change the machine, and the body
+        // is not to blame. The human is told how to let them run.
+        if verdict.unrun() {
+            return Some(Ending::Failed(format!(
+                "the end gate could not verify: {} — make the sandbox work on this machine, or set \
+`sandbox.allow_unguarded = true` in your local config",
+                verdict.unverified.join("; ")
+            )));
+        }
         let said: Vec<&str> = verdict
             .failures
             .iter()
@@ -835,7 +844,9 @@ impl Run {
             return;
         }
         let word = verdict.verdict().word();
-        let word = if !verdict.passed() && !retried {
+        let word = if verdict.unrun() {
+            format!("{word}, unrun")
+        } else if !verdict.passed() && !retried {
             format!("{word}, handed back")
         } else {
             word.to_owned()

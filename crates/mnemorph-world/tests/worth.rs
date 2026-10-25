@@ -200,7 +200,8 @@ fn a_path_with_a_comma_is_read_whole() {
 }
 
 /// Not verifying never buys a body anything: a `NOT_VERIFIED` counts as a fail on its card and in
-/// its streak, and one handed back is skipped like a failure handed back.
+/// its streak, and one handed back is skipped like a failure handed back. One the machine would not
+/// run — `NOT_VERIFIED, unrun` — counts neither way.
 #[test]
 fn a_check_that_gave_no_result_counts_as_a_fail() {
     let w = std::env::temp_dir().join(format!("mnemorph-unverified-{}", std::process::id()));
@@ -226,7 +227,10 @@ fn a_check_that_gave_no_result_counts_as_a_fail() {
     said("FAIL");
     said("NOT_VERIFIED, handed back");
     said("NOT_VERIFIED");
+    // A check the machine would not run is no mark either way, and breaks no streak.
+    said("NOT_VERIFIED, unrun");
     said("FAIL");
+    said("NOT_VERIFIED, unrun");
     let records = mnemorph_world::worth::Records::load(&w);
     assert_eq!(records.stuck("slime-s"), ["src/a.rs"]);
     let card = records.card(&mnemorph_world::Roster::load(&w), "slime-s");
