@@ -252,7 +252,8 @@ flowchart LR
   would run code outside any sandbox the next time the human runs git, and `.mnemorph/` holds the
   world's records. Each command runs between two snapshots of them; once its process group is dead,
   every change is put back and the body is told. The file tools refuse those paths outright, but
-  one: a body's own `plan.md`, directly in its own seat, which the dispatch law reads — written
+  one: a body's own `plan.md`, directly in its own seat, which the dispatch law reads (an Orc's
+  verify lines on its Slimes' docs are written by the harness, through the `verify` tool) — written
   with the file tools; a command's write there is put back, and a plan that is a link is no plan. On
   Linux no process escapes the snapshot: seccomp refuses `setsid` and `setpgid`, so killing the
   group ends everything the command started. A tool that insists on its own session or group

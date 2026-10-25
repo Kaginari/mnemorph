@@ -183,9 +183,10 @@ back) — a line `- [ ] <orc>: <what it does>` — then hand the work down \
 with the commission tool to that Orc, read its report, and answer with yours."
         }
         Race::Orc => {
-            "As an Orc you own a domain: you write no code (only your tests' verify lines on your \
-Slimes' docs). Hand the writing with the commission tool to the Slime whose zone holds the files, \
-judge its report against the ask, and answer with yours."
+            "As an Orc you own a domain: you write no code. First code the Slime's verify line with \
+the verify tool — one command that passes once the work is done — then hand the writing with the \
+commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
+answer with yours."
         }
         Race::Slime => "As a Slime you change the code of your one zone, check it, and answer.",
         Race::Kijin => {
@@ -1009,6 +1010,10 @@ fn child_run(
     let mut tools = registry();
     if dispatches {
         tools.push(Box::new(CommissionTool));
+    }
+    // An Orc codes its Slimes' verify lines before it commissions them.
+    if creature.race.base() == mnemorph_races::Race::Orc {
+        tools.push(Box::new(crate::verify_tool::VerifyTool));
     }
     if c.queue.is_some() {
         tools.push(Box::new(crate::queue_tool::QueueTool));

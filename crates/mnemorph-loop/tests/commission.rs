@@ -1456,3 +1456,37 @@ async fn under_no_cap_a_budget_is_not_read() {
         "both bodies ran past one call: {results:?}"
     );
 }
+
+/// An Orc refused a Slime with no verify line codes one with the verify tool, and the commission
+/// then goes through.
+#[tokio::test]
+async fn an_orc_codes_the_verify_line_then_commissions() {
+    let w = World::new("verify-tool");
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/t/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-t"),
+        ScriptedModel::tool("v1", "verify", json!({"to": "slime-t", "command": "true"})),
+        order("c4", "slime-t"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(seen.contains("code its verify line first"), "refused first");
+    assert!(
+        seen.contains("slime-t's doc now reads - **Verify:** `true`"),
+        "coded"
+    );
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    assert_eq!(roster.creatures["slime-t"].verify, ["true"]);
+    assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
+}

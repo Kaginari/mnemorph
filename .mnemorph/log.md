@@ -3028,3 +3028,45 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the runner stops at once on the daily cap, counts a limited attempt's spend into the row it
     records (with `attempts`), and names a kept limited world;
   - a nested test: under no cap, `budget_wt` limits neither the Elf nor the Orc it commissions.
+
+---
+
+### [2026-10-25T19:55:49+01:00] rimuru — M7: the verify tool
+- **Task:** the human asked to fix the gap a side note named: outside the bench, an Orc could not
+  code its Slime's verify line (docs are protected), so the chain stalled at the Orc.
+- **Files:**
+  - world verify.rs — `code(world, orc, slime, command)`:
+    - only a living Orc, on a living Slime reporting to it;
+    - one line of 1 to 300 characters, no backtick, never through a link;
+    - the line is set or added, other bytes kept, and journaled;
+  - loop verify_tool.rs — `VerifyTool` (class dispatch), offered to Orcs, routed in `call_one`;
+  - the Orc's race card names it;
+  - docs 02/05;
+  - tests: world tests/verify.rs; the loop round trip (refused, coded, then commissioned).
+- **Security:** it writes a creature doc for a body, so Opus reviews it and Fable reviews the
+  review.
+- **Built and tested** in a separate target (`../tempest-review-target`): the measurement runs on
+  the main target's binary.
+
+---
+
+### [2026-10-25T20:03:53+01:00] rimuru — #174's security review: Opus
+- **Task:** Opus reviewed the verify tool.
+- **Opus found:**
+  - HIGH: verify commands ran after the gate's judgement, so a verify line could write code
+    unjudged. This was true for any verify line, not only the Orc's;
+  - MEDIUM: the tool replaced the first verify line, so an Orc could weaken a human's check;
+  - LOW: a gap between reading and writing the doc, a linked seat unchecked, and `fs::write`
+    following links;
+  - LOW: control characters got through.
+- **Fixed:**
+  - the gate's `run_verify` snapshots around the verify runs and fails on any change beyond
+    git-ignored output ("a check never writes");
+  - the tool only adds (never replaces, once);
+  - it parses the text it read, refuses a linked seat or doc, and writes a new file renamed over
+    the doc;
+  - control characters and line separators are refused;
+  - the bench worlds ignore `__pycache__/`;
+  - docs 02/03; tests (a sneaky write fails the gate, built output passes; add-only; control
+    characters).
+- **Next:** Fable reviews Opus's report.

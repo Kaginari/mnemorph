@@ -1225,6 +1225,15 @@ impl Run {
 
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
+        // A Slime's verify line is the harness's to write, for the Orc it reports to.
+        if name == crate::verify_tool::VERIFY
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::verify_tool::VERIFY)
+        {
+            return crate::verify_tool::run(self.cx.world(), &self.body.name, input);
+        }
         // The shared queue is the harness's: the loop moves it in this body's name.
         if name == crate::queue_tool::QUEUE
             && self

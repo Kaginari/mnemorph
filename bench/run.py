@@ -51,7 +51,7 @@ def world_for(task, model):
         'provider = "openrouter"\n'
         'default = "%s"\n' % model
     )
-    (w / ".gitignore").write_text(".mnemorph/instruments/\n.mnemorph/tmp/\n.mnemorph/config.local.toml\n")
+    (w / ".gitignore").write_text(".mnemorph/instruments/\n.mnemorph/tmp/\n.mnemorph/config.local.toml\n__pycache__/\n")
     git = ["git", "-c", "user.name=bench", "-c", "user.email=bench@localhost"]
     subprocess.run(["git", "init", "-q"], cwd=w, check=True)
     subprocess.run(git + ["add", "-A"], cwd=w, check=True)
