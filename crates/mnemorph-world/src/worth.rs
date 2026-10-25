@@ -92,12 +92,9 @@ impl Records {
             let changed: Vec<String> = rest
                 .iter()
                 .find_map(|l| l.strip_prefix("- **Changed:** "))
-                .map(|c| {
-                    c.split(", ")
-                        .filter_map(|p| p.strip_prefix('`').and_then(|p| p.strip_suffix('`')))
-                        .map(str::to_owned)
-                        .collect()
-                })
+                .and_then(|c| c.strip_prefix('`').and_then(|c| c.strip_suffix('`')))
+                // Split on the backticks' own boundaries: a path may hold ", " itself.
+                .map(|c| c.split("`, `").map(str::to_owned).collect())
                 .unwrap_or_default();
             let Some((_, rest)) = head.split_once("] ") else {
                 continue;
@@ -162,6 +159,26 @@ impl Records {
         shared.retain(|p| last.iter().all(|(_, _, c)| c.contains(p)));
         shared
     }
+}
+
+/// Whether an order's text names `path`: a word of it, its quotes and punctuation trimmed, a
+/// `:line` suffix and a leading `./` dropped, is the path itself.
+#[must_use]
+pub fn names(text: &str, path: &str) -> bool {
+    text.split_whitespace().any(|word| {
+        // Quotes and brackets go at both ends, punctuation only at the end: `./src` keeps its dot.
+        let mut w = word
+            .trim_start_matches(|c: char| "`'\"([".contains(c))
+            .trim_end_matches(|c: char| "`'\",.;)]".contains(c));
+        while let Some((head, tail)) = w.rsplit_once(':') {
+            if tail.is_empty() || tail.bytes().all(|b| b.is_ascii_digit()) {
+                w = head;
+            } else {
+                break;
+            }
+        }
+        w.strip_prefix("./").unwrap_or(w) == path
+    })
 }
 
 /// How many failed runs in a row on the same files make a body stuck on them.

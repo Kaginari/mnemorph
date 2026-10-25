@@ -2587,3 +2587,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs/03.
 - **Open:** "names a file" is a substring match on the order's text; a split or rename of the
   stuck file escapes it.
+
+---
+
+### [2026-10-25T13:01:35+01:00] rimuru — #160 review fixes
+- **Task:** fix Fable's review of the three-fails rule.
+- **Fixed:**
+  - the wake's `carrier` checks stuck files, so a held order on one waits, noted once, instead of
+    being claimed and refused every turn;
+  - `worth::names` matches a whole word (`src/a.rsx` no longer matches `src/a.rs`);
+  - changed paths are split on the backtick boundaries, so a path with ", " is read whole;
+  - the records are loaded once per commission (`grant` and `lawful` share them);
+  - a leading `./` no longer loses its dot to the trim in either path reader. Before this,
+    `named_path` (#155) read `./src/x` as `/src/x`, an absolute path off every ground;
+  - `./` steps are dropped before the ground check.

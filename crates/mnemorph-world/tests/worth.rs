@@ -165,3 +165,36 @@ fn three_fails_on_the_same_files_make_a_body_stuck() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// An order names a path as a word of its own, never as part of another.
+#[test]
+fn an_order_names_a_path_as_a_word() {
+    use mnemorph_world::worth::names;
+    assert!(names("fix `./src/a.rs:12` again", "src/a.rs"));
+    assert!(!names("fix src/a.rsx", "src/a.rs"));
+    assert!(!names("fix tests/src/a.rs", "src/a.rs"));
+}
+
+/// A changed path holding ", " is read whole.
+#[test]
+fn a_path_with_a_comma_is_read_whole() {
+    let w = std::env::temp_dir().join(format!("mnemorph-comma-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    for _ in 0..3 {
+        let entry = Entry {
+            body: "slime-s".into(),
+            title: "gate: FAIL".into(),
+            lines: vec![
+                ("Changed".into(), "`docs/a, b.md`, `src/c.rs`".into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        append(&w, &entry).unwrap();
+    }
+    assert_eq!(
+        mnemorph_world::worth::Records::load(&w).stuck("slime-s"),
+        ["docs/a, b.md", "src/c.rs"]
+    );
+    let _ = fs::remove_dir_all(&w);
+}
