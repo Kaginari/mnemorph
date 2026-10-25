@@ -945,7 +945,7 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[gate]\nask_rules = [\"in-place-edit\"]\n",
+        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n",
     )
     .unwrap();
     let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
@@ -957,6 +957,29 @@ fn the_configuration_reaches_the_run() {
     let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
     assert_eq!(limits.stress_tokens, 90_000);
     assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
+    // The solo body's steps: the human's, else the shortest chain's — an Elf's, an Orc's, a
+    // Slime's. The session sets them when it has no Elf to dispatch to.
+    assert_eq!(config.solo_steps(), 150);
+    let bare = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        root.join("none.toml"),
+        &root.join("nowhere"),
+    ))
+    .unwrap();
+    assert_eq!(bare.solo_steps(), mnemorph_config::SOLO_STEPS);
+    assert_eq!(mnemorph_config::SOLO_STEPS, 30 + 30 + 40);
+    // Its steps can be spent: the stall guard waits for them, never stopping it at 40.
+    let mut stress = mnemorph_loop::Stress::for_steps(100);
+    for turn in 1..=100 {
+        assert_eq!(stress.turn(), None, "turn {turn}");
+    }
+    assert_eq!(
+        stress.turn(),
+        Some(mnemorph_loop::Signal::Stall("actBudget"))
+    );
+    // A body with fewer steps keeps the guard's own 40.
+    let mut short = mnemorph_loop::Stress::for_steps(30);
+    assert!((1..=40).all(|_| short.turn().is_none()));
+    assert!(short.turn().is_some());
 }
 
 /// Fire Esc once the command has started — marked by the file it touches — not on a timer that

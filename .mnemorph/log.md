@@ -3424,3 +3424,38 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a resume past the fold mark starts folded. No dedicated test: it is the same check as
     `ease_context`'s.
 - **Tests:** `a_deleted_nested_repository_is_reported_lost`, `only_the_current_form_of_git_is_kept`.
+### [2026-10-26T00:22:00+01:00] rimuru — solo gets the chain's steps
+- **Task:** a side note: on the large bench, solo stops at 40 steps while a hierarchy's bodies
+  each bring their own. The human: "adding number of steps seems right, you should add it to
+  solo mode".
+- **Files:**
+  - config: `steps.solo` and `solo_steps()`, defaulting to `SOLO_STEPS` = 100 (Elf 30 + Orc 30 +
+    Slime 40, the shortest chain solo stands for); the budget's caps stop it whatever steps are
+    left;
+  - solo.rs `configure` sets the session body's steps; commissioned children keep their race's;
+  - docs 03.
+- **Test:** `the_configuration_reaches_the_run`: 150 from the config; 100 unset.
+- **Order agreed:** the human asked whether to finish Mnemorph before the bench. Agreed. The
+  running large and small runs finish as a "before" baseline; no new suites until memory (M8) and
+  the ontology's mesh land; then the campaign suite and an OpenCode adapter, before and after.
+
+---
+
+### [2026-10-26T00:34:33+01:00] rimuru — #186's review: Fable
+- **Fable found:**
+  - a dispatching Rimuru got 100 steps too;
+  - `actBudget` (40 turns with nothing landed) would still stall solo at 41, leaving the raise dead
+    for the read-heavy work that needs it;
+  - "the budget's caps stop it" was false without `budget.*`.
+- **Fixed:**
+  - open.rs `session_steps` sets `steps.solo` only with no lanes; `configure` no longer touches
+    steps;
+  - `Stress::for_steps`: the act budget is the run's steps when it has more than 40, and runs
+    reset with it;
+  - honest wording: without `budget.*`, steps, the clock, the context line and the stall guards
+    stop it;
+  - docs 03;
+  - `ids()` was extracted to keep `open_with` under 100 lines.
+- **Tests:** `solo_steps` 150 and 100; `Stress::for_steps(100)` takes 100 turns and stalls at
+  101; a 30-step body keeps 40. The lanes condition has no end-to-end test (Session hides its
+  limits).

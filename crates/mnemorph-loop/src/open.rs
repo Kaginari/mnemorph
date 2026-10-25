@@ -170,17 +170,14 @@ pub fn open_with(
             .push_str(&crate::commission::cards_below(world, &roster, &body.name));
     }
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
+    limits.steps = session_steps(config, &lanes, limits.steps);
     if let Some(dir) = attic {
         let (keep_days, max_mb) = config.attic_limits();
         let kept = mnemorph_tools::Attic::at(dir, world)
             .ok_or_else(|| format!("{}: the attic needs git", dir.display()))?;
         cx = cx.with_attic(kept.with_limits(keep_days, max_mb));
     }
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis());
-    let session_id = format!("s{stamp}-{}", std::process::id());
-    let run_id = format!("r{stamp}-{}", std::process::id());
+    let (session_id, run_id) = ids();
     let instruments = world.join(".mnemorph/instruments");
     // The caps against what this world already spent. A cap that cannot be read opens no
     // session: spend it cannot see would be spend it cannot stop.
@@ -376,4 +373,23 @@ fn read_caps(
         unseen,
     );
     Ok((caps, capped, unread, budget))
+}
+
+/// The session body's steps: working solo — no Elf to dispatch to — the throne does the chain's
+/// work and gets the chain's steps; dispatching, it keeps its own.
+fn session_steps<T>(config: &Config, lanes: &[T], own: u32) -> u32 {
+    if lanes.is_empty() {
+        config.solo_steps()
+    } else {
+        own
+    }
+}
+
+/// A new session's id and its first run's: the clock in milliseconds and the process.
+fn ids() -> (String, String) {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    let pid = std::process::id();
+    (format!("s{stamp}-{pid}"), format!("r{stamp}-{pid}"))
 }
