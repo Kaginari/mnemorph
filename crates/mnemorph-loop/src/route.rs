@@ -78,6 +78,8 @@ pub struct Work<'a> {
     pub office: Option<Office>,
     /// The commission, as sent.
     pub commission: &'a str,
+    /// The tier of the body that commissions it: a body is never routed above its parent.
+    pub ceiling: Option<ModelTier>,
 }
 
 /// What can stop a route: the human's Esc, and the time the caller has left.
@@ -129,6 +131,31 @@ pub fn band(race: Race, office: Option<Office>) -> (ModelTier, ModelTier, ModelT
         lowest(office_floor, default)
     };
     (floor, default, ModelTier::Frontier)
+}
+
+/// `band` held at or under `ceiling`, the parent's tier: a body never rides above the body that
+/// commissioned it, its floor and default included.
+#[must_use]
+pub fn capped(
+    band: (ModelTier, ModelTier, ModelTier),
+    ceiling: Option<ModelTier>,
+) -> (ModelTier, ModelTier, ModelTier) {
+    let Some(cap) = ceiling else { return band };
+    (
+        lowest(band.0, cap),
+        lowest(band.1, cap),
+        lowest(band.2, cap),
+    )
+}
+
+/// The tier `model` rides at for `race`: the highest whose model it is, else the race's default —
+/// a model outside the tier table reads as the tier the race would ride.
+#[must_use]
+pub fn tier_of(config: &mnemorph_config::Config, race: Race, model: &str) -> ModelTier {
+    [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast]
+        .into_iter()
+        .find(|t| config.model_at(race, *t) == model)
+        .unwrap_or_else(|| race.default_tier())
 }
 
 /// The questions a commission puts to Metis.
@@ -211,6 +238,7 @@ pub async fn route(
         race,
         office,
         commission,
+        ceiling,
     } = work;
     if let Some(model) = config.model_pinned(&caller.body, race, office.map(Office::name)) {
         return Routed {
@@ -220,7 +248,7 @@ pub async fn route(
             decision: None,
         };
     }
-    let b = band(race, office);
+    let b = capped(band(race, office), ceiling);
     let default = |reason: Reason, decision: Option<Decision>| Routed {
         model: config.model_at(race, b.1),
         tier: Some(b.1),

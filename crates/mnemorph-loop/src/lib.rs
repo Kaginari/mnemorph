@@ -34,7 +34,9 @@ pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use open::{Bound, Opened, open, open_with};
 pub use queue_tool::{QUEUE, QueueTool};
-pub use route::{Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, pick, route, route_ask};
+pub use route::{
+    Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, capped, pick, route, route_ask, tier_of,
+};
 pub use run::{Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup, Steer};
 pub use sequence::validate;
 pub use session::{Queue, Session};

@@ -168,6 +168,12 @@ choose its own horse. A band with no room asks nothing. An unsure, failed or int
 or a tier with no model configured, keeps the default, and a model the human configured for a
 creature or an office is never routed.
 
+**Never above the parent.** A commissioned body is never routed above the body that
+commissioned it: the whole band — floor, default and ceiling — is held at or under the parent's
+tier, the highest tier whose model the parent rides (a model outside the tier table reads as the
+parent race's default tier). So a Slime that Mneme sends to read may ride fast, and never a tier
+its Orc does not ride. A model the human pinned for the child stands as pinned.
+
 **Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
 Slime's shelf (`read`, `write`; nothing outward) — under the shelves,
 the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole repository, or in

@@ -3154,3 +3154,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 03 and 06;
   - the server derives the word for old beats.
 - **Test:** `a_check_that_gave_no_result_counts_as_a_fail`.
+
+---
+
+### [2026-10-25T20:40:06+01:00] rimuru — never routed above the parent (#42)
+- **Task:** the M7 tail. #42: a child may never be routed above its parent's tier.
+- **Files:**
+  - route.rs: `Work.ceiling`; `capped` holds floor, default and ceiling at or under it;
+    `tier_of` reads a model's tier back (the highest tier riding it, else the race's default);
+  - commission.rs `route_child` passes the parent's tier;
+  - docs 02.
+- **Test:** `a_body_is_never_routed_above_its_parent`: hard work stops at strong, then at fast;
+  plus `tier_of`.
