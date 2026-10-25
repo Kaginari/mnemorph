@@ -66,6 +66,8 @@ pub struct Hello {
     pub sandbox: String,
     /// The session's own body: events under any other body come from the bodies it commissioned.
     pub body: String,
+    /// The orders held on the shared work queue as the session opens.
+    pub held: u32,
 }
 
 /// A session's budget under the human's caps.
@@ -194,6 +196,11 @@ pub enum Event {
         /// How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
         ending: String,
     },
+    /// The orders held on the shared work queue, once the session's turns and their wake are done.
+    Held {
+        /// How many.
+        held: u32,
+    },
 }
 
 impl Event {
@@ -213,6 +220,7 @@ impl Event {
             Event::Warning { .. } => "warning",
             Event::GateVerdict { .. } => "gateVerdict",
             Event::TurnEnded { .. } => "turnEnded",
+            Event::Held { .. } => "held",
         }
     }
 }

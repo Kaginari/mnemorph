@@ -240,6 +240,9 @@ pub struct Run {
     shared_interrupt: bool,
     /// What the wake ran since the last turn, for the next one.
     woken: Vec<String>,
+    /// Whose shared queue this body's `queue` calls move: every commissioned body has one, a
+    /// dispatching one or not.
+    queue_keeper: Option<Arc<crate::commission::Commissioner>>,
 }
 
 /// What a run needs that is not the body itself.
@@ -296,13 +299,24 @@ impl Run {
             landed: Vec::new(),
             shared_interrupt: false,
             woken: Vec::new(),
+            queue_keeper: None,
         }
     }
 
     /// The run may commission: its `commission` calls run a child body under `commissioner`.
     #[must_use]
     pub fn with_commissioner(mut self, commissioner: Arc<crate::commission::Commissioner>) -> Self {
+        if self.queue_keeper.is_none() {
+            self.queue_keeper = Some(Arc::clone(&commissioner));
+        }
         self.commissioner = Some(commissioner);
+        self
+    }
+
+    /// The body's `queue` calls move `keeper`'s shared queue in its name.
+    #[must_use]
+    pub fn with_queue(mut self, keeper: Arc<crate::commission::Commissioner>) -> Self {
+        self.queue_keeper = Some(keeper);
         self
     }
 
@@ -983,6 +997,17 @@ impl Run {
 
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
+        // The shared queue is the harness's: the loop moves it in this body's name.
+        if name == crate::queue_tool::QUEUE
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::queue_tool::QUEUE)
+            && let Some(k) = &self.queue_keeper
+            && let Some(q) = &k.queue
+        {
+            return crate::queue_tool::run(q, &k.world, &self.body.name, input);
+        }
         match self.commissioner.clone() {
             // A commission runs a whole child body: the loop runs it, not the tool.
             Some(c) if name == crate::commission::COMMISSION => {

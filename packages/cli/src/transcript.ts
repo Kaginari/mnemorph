@@ -56,12 +56,16 @@ export interface State {
   /** The session's own body, learned from the first turn the human starts; any other body is
    * one the session commissioned, working below it. */
   me?: string | undefined;
+  /** The orders held on the shared work queue, as the core last said. */
+  held: number;
 }
 
-/** A fresh transcript; `me` is the session's own body, as the hello names it. */
-export function initial(me?: string): State {
+/** A fresh transcript; `me` is the session's own body and `held` the queue's held orders, as the
+ * hello names them. */
+export function initial(me?: string, held = 0): State {
   return {
     me,
+    held,
     items: [],
     streaming: '',
     flushed: '',
@@ -198,6 +202,8 @@ export function fold(s0: State, e: Arrived): State {
         },
       };
     }
+    case 'held':
+      return { ...s, held: e.held };
     case 'note':
       return push(s, { kind: 'note', text: e.text });
     case 'warning':
@@ -252,7 +258,11 @@ export function wt(n: number): string {
 }
 
 /** The status line's reading of the usage, and of the budget the session opened with. */
-export function status(u: Usage, budget?: { leftWt: number; cap: string } | null): string[] {
+export function status(
+  u: Usage,
+  budget?: { leftWt: number; cap: string } | null,
+  held = 0,
+): string[] {
   const parts: string[] = [];
   // Before the first call there is no spend to price.
   if (u.spentWt > 0 || u.usd > 0) {
@@ -265,5 +275,6 @@ export function status(u: Usage, budget?: { leftWt: number; cap: string } | null
   }
   if (u.occupancy > 0) parts.push(`cache ${Math.round(100 * u.cacheShare)}%`);
   if (budget) parts.push(`left ${wt(Math.max(0, budget.leftWt - u.spentWt))} wt (${budget.cap})`);
+  if (held > 0) parts.push(`${held} held`);
   return parts;
 }

@@ -180,3 +180,10 @@ test('the session knows its body from the hello, so a replay that opens below ne
   expect(s.usage.usd).toBeCloseTo(0.4);
   expect(s.usage.spentWt).toBe(0);
 });
+
+test('the held orders the core names reach the status line, and none is said when none is held', () => {
+  let s = initial('rimuru', 2);
+  expect(status(s.usage, null, s.held)).toEqual(['2 held']);
+  s = fold(s, ev('held', { held: 0 }));
+  expect(status(s.usage, null, s.held)).toEqual([]);
+});

@@ -538,8 +538,16 @@ fn hello(opened: &Opened, version: &str) -> Value {
         key: opened.key.clone(),
         sandbox: opened.sandbox.clone(),
         body: SESSION_BODY.into(),
+        held: held(&opened.world),
     })
     .unwrap_or(Value::Null)
+}
+
+/// The orders held on `world`'s shared work queue.
+fn held(world: &std::path::Path) -> u32 {
+    use mnemorph_loop::world::queue::State;
+    let open = mnemorph_loop::world::Queue::of(world).open();
+    u32::try_from(open.iter().filter(|i| i.state == State::Held).count()).unwrap_or(u32::MAX)
 }
 
 /// The session's lane: one line at a time, in the order they came, until the client leaves.
@@ -548,6 +556,7 @@ async fn drive(
     mut lines: tokio::sync::mpsc::UnboundedReceiver<String>,
     core: Arc<Core>,
 ) {
+    let world = opened.world.clone();
     let mut session = opened.session;
     while let Some(line) = lines.recv().await {
         if core.closed.load(Ordering::SeqCst) {
@@ -559,6 +568,7 @@ async fn drive(
             StreamEvent::ToolStart { id, name } => streaming.emit(&Event::ToolStart { id, name }),
         };
         session.drive(&line, &mut on).await;
+        core.emit(&Event::Held { held: held(&world) });
         core.outstanding.fetch_sub(1, Ordering::SeqCst);
     }
 }

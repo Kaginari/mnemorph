@@ -121,4 +121,8 @@ failures: Array<string>, } | { "type": "turnEnded",
 /**
  * How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
  */
-ending: string, };
+ending: string, } | { "type": "held", 
+/**
+ * How many.
+ */
+held: number, };

@@ -211,7 +211,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   const { write } = useStdout();
   const { columns, rows } = useWindowSize();
   const [state, dispatch] = useReducer(reduce, undefined, () => {
-    let s = initial(hello.body);
+    let s = initial(hello.body, hello.held);
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
     for (const h of hello.holes) s = info(s, `  config hole: ${h}`);
     if (hello.budget && hello.budget.leftWt === 0) {
@@ -318,7 +318,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
           text: [
             `${hello.model} via ${hello.provider} · ${hello.world} · session ${hello.session}`,
             `core ${hello.version} · key ${hello.key ?? 'none'} · sandbox ${hello.sandbox}`,
-            status(state.usage, hello.budget).join(' · '),
+            status(state.usage, hello.budget, state.held).join(' · '),
           ]
             .filter(Boolean)
             .join('\n'),
@@ -408,7 +408,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
   });
 
   const running = [...state.running.values()];
-  const parts = [hello.model, ...status(state.usage, hello.budget)];
+  const parts = [hello.model, ...status(state.usage, hello.budget, state.held)];
   if (state.queued.length > 0) parts.push(`${state.queued.length} queued`);
   // What streams gets the rows the input, the status line and the calls leave, and no more.
   const room = Math.max(3, rows - 6 - running.length - state.queued.length - (state.gate ? 6 : 0));

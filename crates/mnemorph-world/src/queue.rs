@@ -311,6 +311,15 @@ impl Queue {
         if !stands {
             return Err(Refusal::NotYours { holder });
         }
+        // A body never closes or drops its own order: its report settles what it ran, and only a
+        // body above it may discharge what it holds.
+        if matches!(mv, Move::Close { .. })
+            && mover != HUMAN
+            && mover != HARNESS
+            && !roster.is_above(mover, &holder)
+        {
+            return Err(Refusal::NotYours { holder });
+        }
         if let Move::Claim { as_body } = mv {
             if mover != HUMAN && mover != HARNESS {
                 return Err(Refusal::NotAClaimer(mover.to_owned()));

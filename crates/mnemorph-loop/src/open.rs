@@ -182,6 +182,7 @@ pub fn open_with(
     let mut tools = registry();
     if !lanes.is_empty() {
         tools.push(Box::new(crate::commission::CommissionTool));
+        tools.push(Box::new(crate::queue_tool::QueueTool));
     }
     let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
     // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
