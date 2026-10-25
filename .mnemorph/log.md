@@ -3316,3 +3316,40 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the recipe moved; the README.
 - **Follow-up on #96:** record each run's `turnEnded` ending and gate events from `--json`, so a
   rule broken on the way is judged, not only how the run ended.
+
+---
+
+### [2026-10-25T23:05:06+01:00] rimuru — the bench reads why a run ended
+- **Task:** a side note: the report read only the exit code, so a provider or machine error with
+  a correct file would count as a failed task. The human: "can you fix".
+- **Files:**
+  - report.py `cause()` reads the recorded `ending`, or for older rows the CLI's
+    `mnemorph: <ending>` stderr line:
+    - escalated, checkpoint, gate, timeout and never-delegated are failed tasks;
+    - machine (no kernel guard), provider and interrupted measured nothing: they are listed to
+      rerun, never counted, and a later row stands in for them;
+    - a per-arm "not a success" breakdown;
+  - run.py records `ending` and takes `--redo-invalid`;
+  - tests; the README.
+- **On the data:** the one solo failure is `escalate: more than two failed acts in a row`, the
+  harness's own three-fails rule, so it rightly counts as a failure. Hierarchy's two are wrong
+  answers. Nothing is infrastructure so far.
+
+---
+
+### [2026-10-25T23:10:05+01:00] rimuru — #182's review: Fable
+- **Fable found:**
+  - "could not verify twice" (a body's check hanging) matched the no-guard prefix, so it was rerun
+    and never counted;
+  - a model refusal fell to provider, so a refusal was rerun until the model complied;
+  - the bench's 30-minute kill could not tell slow work from a stall;
+  - a misleading `ending` on a kill.
+- **Fixed:**
+  - the exact no-guard phrase (with its colon);
+  - `refused` counts;
+  - a malformed conversation is a "harness bug", rerun but flagged loudly;
+  - the bench kills at 65 minutes, past the core's one-hour clock, so slow work ends as
+    `checkpoint` (counted) and a kill is a hang (rerun);
+  - tests; the README.
+- **Lesson:** a cause prefix shared by a machine stop and a body stop is a dodge. Match the exact
+  phrase, and test both.

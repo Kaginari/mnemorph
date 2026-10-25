@@ -35,8 +35,8 @@ tokens and dollars (from the world's usage ledger), and how many times solo esca
 run in which no body below the throne made a call did not run as one: it is marked `valid: false`.
 A rerun skips what is there. A rate limit or a daily cap — seen on stderr, or in a body's result
 on stdout — stops the run with exit 3, unrecorded, and the next run resumes from it; a free
-model's daily cap may take the sixty runs over a few days. A run past its timeout (30 minutes) is
-killed with every process it started, and recorded as a fail. `just check` also builds
+model's daily cap may take the sixty runs over a few days. A run past its timeout (65 minutes, beyond the core's one-hour clock) is
+killed with every process it started; the report reads it as a hang, to rerun. `just check` also builds
 `target/debug/mnemorph-guard`, the sandbox's helper: without it every shell act is refused.
 
 ## Reading it
@@ -49,11 +49,26 @@ python3 bench/report.py results/<model>.jsonl --partial  # a run still in progre
 The matrix is fixed up front: every task in every mode, exactly once. A run that is missing,
 extra or recorded twice is an error, never dropped; `--partial` reports a run still in progress
 and names what is missing, but an extra or doubled run is an error even then. A task succeeds
-only when its verify passed *and* the run ended answered: the CLI exited 0 — not a checkpoint,
-an escalation, a failure or a timeout — and a hierarchy run ran below the throne. A correct file
-left by a run that did not end answered counts as a failed task, and the report says how many
-there were. A gate refusal the body recovered from leaves the exit at 0, so this reads how the run
-ended, not every rule it met on the way.
+only when its verify passed *and* the run ended answered, and a hierarchy run ran below the
+throne. Every other run is told by why it ended — its `ending`, recorded by `run.py`, or for an
+older row the `mnemorph: <ending>` line the CLI writes to stderr:
+
+| Cause | Ending | Counts |
+|---|---|---|
+| escalated, checkpoint | `escalate: …`, `checkpoint: …` — the core's one-hour clock included | a failed task |
+| gate | `failed: the end gate …`, a check that hung included | a failed task |
+| refused | `failed: the model refused …` | a failed task |
+| never delegated | a hierarchy run with no call below the throne | a failed task |
+| machine | `failed: the end gate could not verify: …` — no kernel guard | not counted: rerun |
+| hang | killed at the bench's limit, 65 minutes, past the core's own clock | not counted: rerun |
+| harness bug | `failed: the conversation is malformed …` — flagged loudly | not counted: rerun |
+| provider, interrupted | any other `failed: …`, `interrupted` | not counted: rerun |
+
+A correct file left by a stop the harness made is a failed task, and the report says how many
+there were and, per arm, what each failure was. A stop the task does not own measured nothing: the
+report lists it to rerun and never counts it, and `run.py --redo-invalid` runs it again — the new
+row stands in for it. A gate refusal the body recovered from leaves the run answered, so this
+reads how the run ended, not every rule it met on the way.
 
 The estimand is the difference in task success rate, hierarchy minus solo, over the same tasks.
 Its 95% interval is a paired bootstrap that resamples tasks — the groups — never rows: 10 000
