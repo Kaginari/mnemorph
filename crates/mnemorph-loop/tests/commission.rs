@@ -1405,3 +1405,22 @@ async fn a_slice_is_at_least_one_call() {
         "{result}"
     );
 }
+
+/// The dispatch law reads a plan that stands in the seat; a plan that is a link is no plan.
+#[test]
+fn a_linked_plan_is_no_plan() {
+    let w = World::new("plan-link");
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let plan = w.0.join(".mnemorph/elf/e/plan.md");
+    assert_eq!(
+        mnemorph_loop::commission::plan_items(&w.0, &roster, "elf-e"),
+        ["orc-o"]
+    );
+    let elsewhere = w.0.join("src/plan.md");
+    fs::rename(&plan, &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &plan).unwrap();
+    assert_eq!(
+        mnemorph_loop::commission::plan_items(&w.0, &roster, "elf-e"),
+        Vec::<String>::new()
+    );
+}

@@ -2980,3 +2980,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     - the bench's `--keep` goes through argparse;
   - docs 05/06.
 - **Security note:** the plan exemption relaxes a protection, so Opus reviews it.
+
+---
+
+### [2026-10-25T19:30:49+01:00] rimuru — #172's security review: Opus, then Fable on Opus's report
+- **Task:** the plan exemption relaxes a protection, so Opus reviewed it and Fable reviewed
+  Opus's report.
+- **Opus:** no escalation. Two low findings: the exemption keyed on any soil root under
+  `.mnemorph`, and `plan_items` followed links. Also a docs asymmetry.
+- **Fixed:**
+  - `Context.seat` (`with_seat` from `context_for`), compared exactly;
+  - a `plan.md` that is a link is no plan;
+  - the Elf's card and docs/05 say a plan is written with the file tools, and a command's write
+    is put back.
+- **Fable:** confirmed each fix; nothing missed escalates (inherit keeps the seat; a symlinked
+  seat is still refused by `admits`; `beneath` closes the TOCTOU). Safe to merge. Its suggested
+  test for a linked plan is added.

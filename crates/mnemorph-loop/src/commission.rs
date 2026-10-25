@@ -134,7 +134,12 @@ pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
     let Some(c) = roster.creatures.get(name) else {
         return Vec::new();
     };
-    std::fs::read_to_string(world.join(&c.seat).join("plan.md"))
+    // A plan that is a link is no plan: the law reads only what stands in the seat.
+    let plan = world.join(&c.seat).join("plan.md");
+    if std::fs::symlink_metadata(&plan).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Vec::new();
+    }
+    std::fs::read_to_string(plan)
         .unwrap_or_default()
         .lines()
         .filter_map(|l| l.trim().strip_prefix("- [ ] "))
@@ -173,7 +178,8 @@ fn race_card(race: mnemorph_races::Race) -> &'static str {
     match race.base() {
         Race::Elf => {
             "As an Elf you plan and route across your lane; you write no code. First write the plan \
-item in your own seat's plan.md — a line `- [ ] <orc>: <what it does>` — then hand the work down \
+item in your own seat's plan.md with the write or edit tool (a shell command's write there is put \
+back) — a line `- [ ] <orc>: <what it does>` — then hand the work down \
 with the commission tool to that Orc, read its report, and answer with yours."
         }
         Race::Orc => {
@@ -1199,7 +1205,8 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
     Some(
         Context::new(creature.race, world, &none)
             .with_soil(&s.write, &s.except, s.root_files)
-            .with_build(&build),
+            .with_build(&build)
+            .with_seat(&creature.seat),
     )
 }
 

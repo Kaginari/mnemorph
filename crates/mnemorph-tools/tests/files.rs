@@ -937,7 +937,8 @@ fn a_body_writes_its_own_plan_and_no_other_record() {
     let w = World::new("own-plan");
     w.put(".mnemorph/elf/e/README.md", "# elf-e\n");
     w.put(".mnemorph/elf/f/README.md", "# elf-f\n");
-    let mut cx = Context::new(Race::Elf, w.world(), &[".mnemorph/elf/e"]);
+    let mut cx =
+        Context::new(Race::Elf, w.world(), &[".mnemorph/elf/e"]).with_seat(".mnemorph/elf/e");
     let plan = run(
         &mut cx,
         "write",

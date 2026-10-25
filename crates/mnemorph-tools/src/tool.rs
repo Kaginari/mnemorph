@@ -128,6 +128,8 @@ pub struct Context {
     race: Race,
     world: PathBuf,
     soil: Vec<PathBuf>,
+    /// The body's own seat, absolute: the one place under `.mnemorph` its plan is written.
+    seat: Option<PathBuf>,
     /// Claims inside the soil that are not the body's: the longest claim that covers a path
     /// decides, and on a tie the exclusion wins.
     except: Vec<PathBuf>,
@@ -185,6 +187,7 @@ impl Context {
             race,
             world,
             soil,
+            seat: None,
             except: Vec::new(),
             root_files: false,
             narrowed: false,
@@ -357,6 +360,14 @@ impl Context {
             (Some(_), None) => true,
             (None, _) => false,
         }
+    }
+
+    /// The body's own seat, relative to the world: its `plan.md` there is the one record the
+    /// file tools let it write.
+    #[must_use]
+    pub fn with_seat(mut self, seat: impl AsRef<Path>) -> Self {
+        self.seat = Some(real(&self.world.join(seat.as_ref())));
+        self
     }
 
     /// The body working here, by name.
@@ -563,12 +574,10 @@ impl Context {
     /// tool's, and the rest must be admitted.
     fn in_soil(&self, path: PathBuf) -> Result<PathBuf, String> {
         // One record is a body's to write: the plan in its own seat, which the dispatch law reads.
-        // Only `plan.md`, directly inside a seat that is itself one of the body's soil roots.
+        // Only `plan.md`, directly inside the seat the body was given.
         let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
-            && path.parent().is_some_and(|seat| {
-                seat.starts_with(self.world.join(".mnemorph"))
-                    && self.soil.iter().any(|s| s.as_path() == seat)
-            });
+            && self.seat.is_some()
+            && path.parent() == self.seat.as_deref();
         if crate::tripwire::protects(&self.world, &path) && !own_plan {
             return Err(format!(
                 "`{}` is protected: git's executable configuration and the world's records are not written by tools",
