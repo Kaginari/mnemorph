@@ -2645,3 +2645,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - open.rs — the dispatch prompt says how to label;
   - test: an Elf's fact is triaged by the throne in prose, and its label is filed;
   - docs/09.
+
+---
+
+### [2026-10-25T13:37:12+01:00] rimuru — #162 review fixes
+- **Task:** fix Fable's review of the throne's triage.
+- **Fixed:**
+  - `@V` lines inside a code block are quoted, never said, and label nothing; the test puts a
+    conflicting fenced label before the real one;
+  - the prompt wording is clearer, and the doc comment says only an answered turn is read.

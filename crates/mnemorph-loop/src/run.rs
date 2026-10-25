@@ -1074,13 +1074,23 @@ impl Run {
     }
 
     /// The throne's triage: its answer is no wire report, so its `@V` lines are read where they
-    /// stand, and filed as the labels of the facts its Elves said.
+    /// stand — outside code blocks — and filed as the labels of the facts its Elves said. Only an
+    /// answered turn is read.
     pub fn file_triage(&self, ending: &Ending) {
         let (Some(c), Ending::Answered(text)) = (&self.commissioner, ending) else {
             return;
         };
+        // A line in a code block is quoted, never said: it labels nothing.
+        let mut fenced = false;
         let verdicts: Vec<String> = text
             .lines()
+            .filter(|l| {
+                if l.trim().starts_with("```") {
+                    fenced = !fenced;
+                    return false;
+                }
+                !fenced
+            })
             .filter_map(|l| l.trim().strip_prefix("@V "))
             .map(str::to_owned)
             .collect();

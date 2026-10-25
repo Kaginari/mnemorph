@@ -1136,7 +1136,7 @@ async fn the_throne_triages_in_its_answer() {
         ),
         ScriptedModel::text("@S DONE\n@U territory src/ build runs cargo test\n@E"),
         ScriptedModel::text(&format!(
-            "The build moved to cargo.\n@V #{new} counter #{old}"
+            "The build moved to cargo.\n```\n@V #{new} support #{old}\n```\n@V #{new} counter #{old}"
         )),
     ]));
     let mut run = w.rimuru(model.clone());
