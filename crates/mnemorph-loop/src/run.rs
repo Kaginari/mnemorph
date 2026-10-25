@@ -1155,6 +1155,26 @@ impl Run {
 
     /// Run each call in order, give every result back, and read the instruments: a reason to
     /// stop, or none.
+    /// Journal what the guts read from one act, with the act's instruments: the record a learned
+    /// value model will train on.
+    fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
+        let reading = self.stress.last().clone();
+        self.record(&Beat::Guts {
+            tool_use_id: id.to_owned(),
+            tool: name.to_owned(),
+            score: reading.score,
+            window: reading.window,
+            warned: reading.warned,
+            failed: o.is_error,
+            wrote: u32::try_from(o.meta.wrote.len()).unwrap_or(u32::MAX),
+            lines_added: o.meta.lines_added,
+            lines_removed: o.meta.lines_removed,
+            edit_miss: o.meta.edit_miss,
+            bench: reading.bench,
+            bench_outcome: reading.bench_outcome.map(str::to_owned),
+        });
+    }
+
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
@@ -1219,6 +1239,7 @@ impl Run {
                 &o,
                 read,
             ));
+            self.record_guts(&id, &name, &o);
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,

@@ -279,6 +279,8 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             changed: changed.clone(),
             failures: failures.clone(),
         }],
+        // The guts' readings are for the record and the value model, not for the surfaces.
+        Beat::Guts { .. } => vec![],
         Beat::End { ending } => vec![Event::TurnEnded {
             ending: ending.clone(),
         }],

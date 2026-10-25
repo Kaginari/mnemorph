@@ -2767,6 +2767,44 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     it;
   - the tally is never compacted.
 
+### [2026-10-25T14:45:30+01:00] rimuru — a slice that runs out is never a failure on the card
+- **Task:** Veldora asked what Mnemorph gained from the value studies, then "do both": pin the
+  rule the budget-loop study found worth keeping, and build the instruments the real runs showed
+  missing (the second, as its own pull request).
+- **Files:** crates/mnemorph-loop/tests/commission.rs (a Slime funded one weighted token writes,
+  checkpoints on budget before answering, and its card reads 0 passes, 0 fails, worth 0.750; no
+  `gate:` verdict in the journal), docs/06-consumption.md (the rule, beside worth).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No behaviour changes: the test holds what the code
+  already does.
+- **Learned:**
+  - The research simulated a Thompson draw for the worth that sizes a slice and found it no better
+    than the mean (−0.001 landed): the owner works every order it owns, so its record is observed
+    whatever its slice, and there is no exploration to buy. What mattered was the rule this test
+    pins: counting a run that ran out as a failure cost 2 to 10 landing points.
+
+### [2026-10-25T14:45:30+01:00] rimuru — the instruments a value model needs, journaled per act
+- **Task:** Veldora: "do both" — after the guard test, the four instruments the real Terminal-Bench
+  runs showed missing: lines changed per write, edit misses, verification scripts counted as
+  tests, and a guts reading journaled for every act.
+- **Files:** mnemorph-tools tool.rs (`Meta.lines_added`, `lines_removed`, `edit_miss`), files.rs
+  (`line_delta`, a multiset count; write, edit and multiedit set it; a missing `old_string` is a
+  typed refusal, marked a miss), mnemorph-loop stress.rs (verification scripts are benches;
+  `Reading`, the last act as the guts read it; the bench tally in its own method), beats.rs
+  (`Beat::Guts`, ignored by the rebuilt conversation), run.rs (`record_guts` per act),
+  mnemorph-server (the beat reaches no surface), tests (tools, the check-script detector, a run's
+  guts beats), docs/03-loop.md (the bench tally, the guts journal).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No behaviour changes but one: a verification script now
+  counts in the bench tally, so its stall rules apply to it.
+- **Learned:**
+  - The test caught an inline check whose script holds a `;` (`from run import f; assert …`):
+    the tally cuts a command at its first `;` to find the runner, which dropped the `assert`. The
+    interpreter is read from the cut command, the `assert` from the whole one.
+  - Fable's review found the same `;` muting the checks: the tally read any `;` or `|` as hiding
+    the exit status, so a passing `python3 -c "import m; assert …"` was never green, a failing one
+    never red, and eight of them stopped the run. An inline check's script is now found (its quoted
+    argument, or a heredoc's body): `assert` is looked for inside it, `|` and `;` outside it.
 ---
 
 ### [2026-10-25T14:47:59+01:00] rimuru — M7: the clock-death memo

@@ -38,4 +38,4 @@ pub use run::{Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup,
 pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};
-pub use stress::{Bench, Read, Signal, Stress, bench_of, muted};
+pub use stress::{Bench, Read, Reading, Signal, Stress, bench_of, muted};
