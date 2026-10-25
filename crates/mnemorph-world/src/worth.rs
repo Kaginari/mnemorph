@@ -63,7 +63,8 @@ impl Card {
 #[derive(Debug, Default)]
 pub struct Records {
     spent: Vec<(String, u64)>,
-    verdicts: Vec<(String, String)>,
+    /// The gate's verdicts in order: the body, the verdict, the paths it changed.
+    verdicts: Vec<(String, String, Vec<String>)>,
 }
 
 impl Records {
@@ -84,14 +85,25 @@ impl Records {
             let Some(head) = lines.next() else {
                 continue;
             };
-            if !lines.any(|l| l == BY_THE_GATE) {
+            let rest: Vec<&str> = lines.collect();
+            if !rest.contains(&BY_THE_GATE) {
                 continue;
             }
+            let changed: Vec<String> = rest
+                .iter()
+                .find_map(|l| l.strip_prefix("- **Changed:** "))
+                .map(|c| {
+                    c.split(", ")
+                        .filter_map(|p| p.strip_prefix('`').and_then(|p| p.strip_suffix('`')))
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
             let Some((_, rest)) = head.split_once("] ") else {
                 continue;
             };
             if let Some((body, verdict)) = rest.split_once(" — gate: ") {
-                verdicts.push((body.to_owned(), verdict.trim().to_owned()));
+                verdicts.push((body.to_owned(), verdict.trim().to_owned(), changed));
             }
         }
         Records { spent, verdicts }
@@ -119,7 +131,7 @@ impl Records {
             fails: 0,
             handed_back: 0,
         };
-        for (_, verdict) in self.verdicts.iter().filter(|(b, _)| mine(b)) {
+        for (_, verdict, _) in self.verdicts.iter().filter(|(b, _, _)| mine(b)) {
             match verdict.as_str() {
                 "PASS" => card.passes += 1,
                 "FAIL" => card.fails += 1,
@@ -130,6 +142,30 @@ impl Records {
         card
     }
 }
+
+impl Records {
+    /// The files `name` is stuck on: its last three verdicts all failed, and these paths were in
+    /// every one of them. Empty when it is not stuck.
+    #[must_use]
+    pub fn stuck(&self, name: &str) -> Vec<String> {
+        let last: Vec<&(String, String, Vec<String>)> = self
+            .verdicts
+            .iter()
+            .rev()
+            .filter(|(b, v, _)| b == name && v != "FAIL, handed back")
+            .take(STUCK_AFTER)
+            .collect();
+        if last.len() < STUCK_AFTER || last.iter().any(|(_, v, _)| v != "FAIL") {
+            return Vec::new();
+        }
+        let mut shared = last[0].2.clone();
+        shared.retain(|p| last.iter().all(|(_, _, c)| c.contains(p)));
+        shared
+    }
+}
+
+/// How many failed runs in a row on the same files make a body stuck on them.
+pub const STUCK_AFTER: usize = 3;
 
 /// `name`'s card in `world`, read fresh.
 #[must_use]

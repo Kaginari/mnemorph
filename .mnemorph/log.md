@@ -2569,3 +2569,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     huge top-up made worth decorative;
   - the child is nudged when the top-up is given;
   - with no cap there is no top-up.
+
+---
+
+### [2026-10-25T12:54:25+01:00] rimuru — M7: three fails harden into the lawful next acts
+- **Task:** the human said "ok merge and continue". Research PR #6 was merged, and the next M7
+  rung is page 03's three-fails rule.
+- **Files:**
+  - world worth.rs:
+    - `Records` keeps each verdict's changed paths;
+    - `stuck(name)`: the last three final verdicts are all FAIL, and the paths shared by all
+      three;
+    - `STUCK_AFTER`;
+  - loop commission.rs — `lawful()` (the dispatch law plus the stuck check) refuses an order that
+    names a stuck file, with the three routes;
+  - tests: stuck needs three and a pass clears it; a refused order and a rewritten one;
+  - docs/03.
+- **Open:** "names a file" is a substring match on the order's text; a split or rename of the
+  stuck file escapes it.

@@ -959,3 +959,43 @@ async fn a_topup_is_bounded_by_worth() {
         .unwrap_or_else(|| panic!("{result}"));
     assert!((800_000..=810_000).contains(&set), "{result}");
 }
+
+/// An order that names again the files its body failed on three runs in a row is refused with the
+/// lawful next acts; a rewritten order goes through.
+#[tokio::test]
+async fn three_fails_harden_into_the_lawful_next_acts() {
+    let w = World::new("stuck");
+    for _ in 0..3 {
+        let entry = mnemorph_loop::world::log::Entry {
+            body: "elf-e".into(),
+            title: "gate: FAIL".into(),
+            lines: vec![
+                ("Changed".into(), "`src/x.rs`".into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        mnemorph_loop::world::log::append(&w.0, &entry).unwrap();
+    }
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "fix src/x.rs again"}),
+        ),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "elf-e", "ask": "plan the parser work"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].contains("elf-e failed its last 3 runs on `src/x.rs`: rewrite the order"),
+        "{results:?}"
+    );
+    assert!(results[1].starts_with("@S DONE"), "{results:?}");
+}

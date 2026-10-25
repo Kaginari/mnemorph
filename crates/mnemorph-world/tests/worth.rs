@@ -125,3 +125,43 @@ fn the_ceiling_keeps_the_reserve_the_share_and_the_worth() {
         left = next;
     }
 }
+
+/// Three failed runs in a row on the same files make a body stuck on them; a pass clears it.
+#[test]
+fn three_fails_on_the_same_files_make_a_body_stuck() {
+    let w = std::env::temp_dir().join(format!("mnemorph-stuck-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    let fail = |changed: &str| {
+        let entry = Entry {
+            body: "slime-s".into(),
+            title: "gate: FAIL".into(),
+            lines: vec![
+                ("Changed".into(), changed.into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        append(&w, &entry).unwrap();
+    };
+    fail("`src/a.rs`, `src/b.rs`");
+    fail("`src/a.rs`");
+    assert!(
+        mnemorph_world::worth::Records::load(&w)
+            .stuck("slime-s")
+            .is_empty(),
+        "two is not three"
+    );
+    fail("`src/a.rs`, `src/c.rs`");
+    assert_eq!(
+        mnemorph_world::worth::Records::load(&w).stuck("slime-s"),
+        ["src/a.rs"]
+    );
+    verdict(&w, "slime-s", "PASS");
+    assert!(
+        mnemorph_world::worth::Records::load(&w)
+            .stuck("slime-s")
+            .is_empty(),
+        "a pass clears it"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

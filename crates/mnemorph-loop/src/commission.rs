@@ -222,6 +222,44 @@ fn grant(
     (slice, topup, (!said.is_empty()).then(|| said.join("\n")))
 }
 
+/// The law on one commission: the dispatch rules, and no order that names again the files its
+/// body failed on three runs in a row.
+fn lawful(
+    c: &Commissioner,
+    roster: &Roster,
+    parent: &str,
+    a: &CommissionArgs,
+    plan: &[String],
+    slice: u64,
+    left: Option<u64>,
+) -> Result<(), String> {
+    let ask = Ask {
+        plan,
+        slice_wt: slice,
+        left_wt: left.unwrap_or(u64::MAX),
+    };
+    match dispatch(roster, parent, &a.to, &ask) {
+        Err(why) => return Err(why.to_string()),
+        Ok(Hop::Via { elf, target }) => {
+            return Err(format!(
+                "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
+            ));
+        }
+        Ok(Hop::Direct(_)) => {}
+    }
+    // Three failed runs in a row on the same files harden into the lawful next acts: an order
+    // that names them again is refused.
+    let stuck = mnemorph_world::worth::Records::load(&c.world).stuck(&a.to);
+    if let Some(path) = stuck.iter().find(|p| a.ask.contains(p.as_str())) {
+        return Err(format!(
+            "{} failed its last {} runs on `{path}`: rewrite the order without it, split the work to another body, or escalate with @? to your commander",
+            a.to,
+            mnemorph_world::worth::STUCK_AFTER
+        ));
+    }
+    Ok(())
+}
+
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
 /// and its report.
 pub(crate) async fn order(
@@ -253,19 +291,8 @@ pub(crate) async fn order(
             a.to
         ));
     }
-    let ask = Ask {
-        plan: &plan,
-        slice_wt: slice,
-        left_wt: left.unwrap_or(u64::MAX),
-    };
-    match dispatch(&roster, &parent.name, &a.to, &ask) {
-        Err(why) => return refused(why.to_string()),
-        Ok(Hop::Via { elf, target }) => {
-            return refused(format!(
-                "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
-            ));
-        }
-        Ok(Hop::Direct(_)) => {}
+    if let Err(why) = lawful(c, &roster, &parent.name, &a, &plan, slice, left) {
+        return refused(why);
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
     let seat = (a.to != parent.name)

@@ -274,3 +274,7 @@ only appends, whole entries in one write, each on lines of its own — a control
 command's output or a file name becomes a space — and never writes through a link; a world
 without `.mnemorph/` has no journal. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.
+The journal is the record — the body's last three verdicts all `FAIL` (a failure handed back to
+be fixed does not count), and the files every one of them changed — and an order that names one of
+those files again is refused with the three routes; an order rewritten without them goes through,
+and one `PASS` clears the streak.
