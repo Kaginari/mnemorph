@@ -167,7 +167,12 @@ Currency caps convert through the same table; a model with no known price is sti
   (the usage ledger, rounded to the thousand), gate passes and fails (only the entries the end
   gate wrote in the journal). Worth is `0.5 + 0.5 × (passes + 1) / (passes + fails + handed
   back / 2 + 2)`: a failure handed back to be fixed counts half; a body with no record starts at
-  0.75, a clean record nears 1, a failing one nears 0.5. A child's record counts in its parent's card, so a
+  0.75, a clean record nears 1, a failing one nears 0.5. **A slice that runs out is never a failure
+  on the card:** a budget checkpoint ends the run before its body answers, and only an answer reaches
+  the end gate, which alone writes the verdicts a card is read from. Counting it would let a thinly
+  funded body fail for want of budget, lose worth, get a thinner slice and fail again; in
+  [the research's simulation](https://github.com/Kaginari/mnemorph-research/blob/main/experience-value.md)
+  that loop cost 2 to 10 landing points. A test holds the rule. A child's record counts in its parent's card, so a
   parent that funds failing children reads worse to the body above it. The learned value model
   ([M11](roadmap.md)) replaces this score; the card and the clamp stay.
 - **The wake's draw.** One wake draws at most 25% of what the pool has left, and runs at most 3
