@@ -281,7 +281,16 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             verdict,
         } => vec![Event::GateVerdict {
             passed: failures.is_empty() && unverified.is_empty(),
-            verdict: verdict.clone(),
+            // A journal from before the word: it is read from the lists.
+            verdict: if !verdict.is_empty() {
+                verdict.clone()
+            } else if !failures.is_empty() {
+                "FAIL".into()
+            } else if !unverified.is_empty() {
+                "NOT_VERIFIED".into()
+            } else {
+                "PASS".into()
+            },
             changed: changed.clone(),
             failures: failures.clone(),
             unverified: unverified.clone(),

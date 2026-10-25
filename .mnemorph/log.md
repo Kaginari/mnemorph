@@ -3139,3 +3139,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Test:** `a_check_that_gave_no_result_is_not_verified`: unrun gives NOT_VERIFIED, true gives
   PASS, false gives FAIL, SIGSEGV gives FAIL.
 - **Check:** after the scripted edits, each anchor was confirmed to land.
+
+---
+
+### [2026-10-25T20:34:14+01:00] rimuru — #176's review: Fable
+- **Fable found:**
+  - the worth card and the stuck streak (worth.rs) ignored `NOT_VERIFIED`, so a "NOT_VERIFIED,
+    handed back" reset a FAIL streak: a body with hanging tests dodged the three-fails rule;
+  - docs 03 left out the new journal words and the refused-line case;
+  - a beat from an old journal showed an empty word in the CLI.
+- **Fixed:**
+  - `NOT_VERIFIED` counts as a fail on the card and in the streak, and any ", handed back" is
+    skipped;
+  - docs 03 and 06;
+  - the server derives the word for old beats.
+- **Test:** `a_check_that_gave_no_result_counts_as_a_fail`.

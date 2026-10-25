@@ -198,3 +198,38 @@ fn a_path_with_a_comma_is_read_whole() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// Not verifying never buys a body anything: a `NOT_VERIFIED` counts as a fail on its card and in
+/// its streak, and one handed back is skipped like a failure handed back.
+#[test]
+fn a_check_that_gave_no_result_counts_as_a_fail() {
+    let w = std::env::temp_dir().join(format!("mnemorph-unverified-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    doc(
+        &w,
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n",
+    );
+    let said = |word: &str| {
+        let entry = Entry {
+            body: "slime-s".into(),
+            title: format!("gate: {word}"),
+            lines: vec![
+                ("Changed".into(), "`src/a.rs`".into()),
+                ("By".into(), "the end gate".into()),
+            ],
+        };
+        append(&w, &entry).unwrap();
+    };
+    said("FAIL");
+    said("NOT_VERIFIED, handed back");
+    said("NOT_VERIFIED");
+    said("FAIL");
+    let records = mnemorph_world::worth::Records::load(&w);
+    assert_eq!(records.stuck("slime-s"), ["src/a.rs"]);
+    let card = records.card(&mnemorph_world::Roster::load(&w), "slime-s");
+    assert_eq!((card.passes, card.fails, card.handed_back), (0, 3, 1));
+    let _ = fs::remove_dir_all(&w);
+}
