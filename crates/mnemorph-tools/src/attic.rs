@@ -329,15 +329,30 @@ impl Attic {
         Ok(dir_size(&self.dir.join("store.git")))
     }
 
-    /// Files present in `snap` and gone from the world now.
+    /// Files present in `snap` and gone from the world now: each one kept, so restorable.
     #[must_use]
     pub fn deleted_since(&self, snap: &Snapshot) -> Vec<String> {
-        let Ok(out) = self.git(&["ls-tree", "-r", "-z", "--name-only", &snap.tree]) else {
+        self.gone_since(snap, false)
+    }
+
+    /// Nested repositories present in `snap` and gone now: held only as gitlinks, so lost — a
+    /// delete says so, never that they are kept.
+    #[must_use]
+    pub fn lost_since(&self, snap: &Snapshot) -> Vec<String> {
+        self.gone_since(snap, true)
+    }
+
+    /// The entries of `snap` gone from the world: its gitlinks, or everything else.
+    fn gone_since(&self, snap: &Snapshot, gitlinks: bool) -> Vec<String> {
+        let Ok(out) = self.git(&["ls-tree", "-r", "-z", &snap.tree]) else {
             return Vec::new();
         };
         String::from_utf8_lossy(&out.stdout)
             .split('\0')
-            .filter(|p| !p.is_empty())
+            .filter_map(|line| {
+                let (meta, path) = line.split_once('\t')?;
+                (meta.starts_with("160000 ") == gitlinks).then_some(path)
+            })
             .filter(|p| fs::symlink_metadata(self.world.join(p)).is_err())
             .map(str::to_owned)
             .collect()
@@ -380,9 +395,11 @@ impl Attic {
     fn keep_git(&self) -> Result<(), String> {
         let git = self.world.join(".git");
         // A worktree's or a submodule's `.git` is a file naming the repository elsewhere: only
-        // that file is the world's to lose, and it is kept.
+        // that file is the world's to lose, and it is kept. Only the form `.git` has now is kept:
+        // a world that turned one into the other is never repaired back to the old one.
         if fs::symlink_metadata(&git).is_ok_and(|m| m.is_file()) {
             fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
+            let _ = fs::remove_dir_all(self.dir.join("dotgit"));
             return fs::copy(&git, self.dir.join("dotgit-file"))
                 .map(|_| ())
                 .map_err(|e| format!("attic .git file: {e}"));
@@ -390,6 +407,7 @@ impl Attic {
         if !git.is_dir() {
             return Ok(());
         }
+        let _ = fs::remove_file(self.dir.join("dotgit-file"));
         let mirror = self.dir.join("dotgit");
         link_tree(&git.join("objects"), &mirror.join("objects"))?;
         for small in ["HEAD", "packed-refs", "config", "description"] {

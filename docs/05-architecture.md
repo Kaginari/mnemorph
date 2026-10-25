@@ -283,7 +283,7 @@ flowchart LR
   does not undo. A world whose `.git` is a file — a worktree's, a submodule's — has its
   repository elsewhere: that file is kept, and put back when a command deletes it. A nested
   repository is kept as git keeps one, by its commit's name and none of its files, so the attic
-  never says it holds one: a delete of it is told so. Two runs on one world take the attic in
+  never says it holds one: a delete of it is told it was not kept. Two runs on one world take the attic in
   turn — a lock around every snapshot and restore — never colliding on its index. The attic's
   git runs deaf to every configuration but its own: no hooks, no filters, no attributes, no
   fsmonitor from the world or the human's files.

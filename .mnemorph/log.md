@@ -3408,3 +3408,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - attic: a nested repository, a git file, four concurrent snapshotters;
   - loop: `a_jump_past_the_stress_line_folds_before_it_checkpoints`, with a scripted-usage
     model. It fails with the fold taken out.
+
+---
+
+### [2026-10-26T00:23:45+01:00] rimuru — #185's review: Fable
+- **Fable found:**
+  - the shell path still promised a nested repository: `deleted_since` listed gitlinks, so
+    `rm -rf vendor/sub` read "kept in the attic";
+  - a stale `dotgit-file` could win over the mirror, and the reverse flip failed;
+  - a resume double-counted fold savings.
+- **Fixed:**
+  - `gone_since` reads modes: `deleted_since` gives kept files only, and `lost_since` gives
+    gitlinks, which the shell reports as NOT kept;
+  - `keep_git` keeps only `.git`'s current form;
+  - a resume past the fold mark starts folded. No dedicated test: it is the same check as
+    `ease_context`'s.
+- **Tests:** `a_deleted_nested_repository_is_reported_lost`, `only_the_current_form_of_git_is_kept`.

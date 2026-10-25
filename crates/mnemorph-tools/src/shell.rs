@@ -228,6 +228,15 @@ fn attic_note(
     match kept? {
         Ok(snap) => {
             let mut notes = Vec::new();
+            let lost = attic.lost_since(snap);
+            if !lost.is_empty() {
+                notes.push(format!(
+                    "deleted {} nested repositor{} — NOT kept in the attic, which holds only their commit's name: {}",
+                    lost.len(),
+                    if lost.len() == 1 { "y" } else { "ies" },
+                    lost.join(", ")
+                ));
+            }
             let gone = attic.deleted_since(snap);
             if !gone.is_empty() {
                 let first: Vec<&str> = gone.iter().take(5).map(String::as_str).collect();

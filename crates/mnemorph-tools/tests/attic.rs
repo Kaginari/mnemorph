@@ -398,3 +398,49 @@ fn concurrent_snapshots_take_turns() {
         assert!(g.attic().holds(&last, &format!("src/t{t}-4.rs")));
     }
 }
+
+/// `rm -rf` of a nested repository: the command is told it was not kept, never that it was.
+#[test]
+fn a_deleted_nested_repository_is_reported_lost() {
+    let g = Ground::new("nested-lost");
+    let sub = g.world().join("vendor/sub");
+    fs::create_dir_all(&sub).unwrap();
+    fs::write(sub.join("lib.rs"), "fn lib() {}\n").unwrap();
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .current_dir(&sub)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "sub"]);
+    let snap = g.attic().snapshot("before").unwrap();
+    fs::remove_dir_all(g.world().join("vendor")).unwrap();
+    fs::remove_file(g.world().join("src/a.rs")).unwrap();
+    assert_eq!(g.attic().lost_since(&snap), ["vendor/sub"]);
+    assert_eq!(g.attic().deleted_since(&snap), ["src/a.rs"]);
+}
+
+/// A world that turned its `.git` file into a directory is never repaired back to the old file.
+#[test]
+fn only_the_current_form_of_git_is_kept() {
+    let g = Ground::new("git-forms");
+    fs::write(g.world().join(".git"), "gitdir: /elsewhere\n").unwrap();
+    g.attic().snapshot("a file").unwrap();
+    fs::remove_file(g.world().join(".git")).unwrap();
+    Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(g.world())
+        .output()
+        .unwrap();
+    g.attic().snapshot("a directory").unwrap();
+    fs::remove_dir_all(g.world().join(".git")).unwrap();
+    g.attic().repair_git().expect("it repairs");
+    assert!(
+        g.world().join(".git").is_dir(),
+        "the directory came back, not the old file"
+    );
+}

@@ -500,6 +500,11 @@ impl Run {
             run.spent_wt = rows.iter().map(|r| r.wt).sum();
             run.last_occupancy = rows.last().map_or(0, |r| occupancy(r.usage));
         }
+        // A conversation already past the fold mark was sent folded before the stop: it resumes
+        // folded, and the occupancy read back is never counted as savings a second time.
+        if run.last_occupancy * 100 >= run.stress_line() * COMPACT_PCT {
+            run.folded_upto = fold_point(&run.messages);
+        }
         Ok(run)
     }
 
