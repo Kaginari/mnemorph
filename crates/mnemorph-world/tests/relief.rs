@@ -112,7 +112,10 @@ fn a_one_directory_ground_splits_by_its_tree_and_one_file_retires() {
         t.act,
         Act::Split {
             young: [
-                ("slime-t-a".into(), vec!["lib/x/".into(), "lib/y/".into()]),
+                (
+                    "slime-t-a".into(),
+                    vec!["lib/x/".into(), "lib/y/".into(), "lib/.hidden".into()]
+                ),
                 ("slime-t-b".into(), vec!["lib/z.rs".into()]),
             ]
         }
@@ -125,6 +128,98 @@ fn a_one_directory_ground_splits_by_its_tree_and_one_file_retires() {
         relieve(&w, "elf-e", false)
             .unwrap_err()
             .contains("splits Slimes and Orcs")
+    );
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// An Orc's relief relinks its living Slimes to the young that routes their ground.
+#[test]
+fn an_orc_relief_relinks_its_slimes() {
+    let w = world("orc");
+    doc(
+        &w,
+        "slime",
+        "l",
+        "# slime-l\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/x/\n",
+    );
+    doc(
+        &w,
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/a/\n",
+    );
+    let done = relieve(&w, "orc-o", true).unwrap();
+    // Sorted: lib/ to the first young, src/ to the second.
+    assert_eq!(
+        done.children,
+        vec![
+            ("slime-l".into(), "orc-o-a".into()),
+            ("slime-s".into(), "orc-o-b".into())
+        ]
+    );
+    let roster = Roster::load(&w);
+    assert_eq!(
+        roster.creatures["slime-s"].reports_to.as_deref(),
+        Some("orc-o-b")
+    );
+    assert!(roster.problems.is_empty(), "{:?}", roster.problems);
+    let findings = mnemorph_world::findings::check(&roster, &[]);
+    assert!(
+        findings
+            .iter()
+            .all(|f| f.code != "dead-bond" && f.code != "overlap"),
+        "{findings:?}"
+    );
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// A root file stays a claim in the young; a seat already taken stops the relief before any write;
+/// a lone directory is descended.
+#[test]
+fn relief_checks_first_and_keeps_every_claim_readable() {
+    let w = world("checks");
+    doc(
+        &w,
+        "slime",
+        "r",
+        "# slime-r\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** ./CHANGELOG.md, ./README.md\n",
+    );
+    relieve(&w, "slime-r", true).unwrap();
+    let roster = Roster::load(&w);
+    assert!(roster.problems.is_empty(), "{:?}", roster.problems);
+    assert_eq!(roster.creatures["slime-r-a"].zone, ["CHANGELOG.md"]);
+
+    doc(
+        &w,
+        "slime",
+        "q",
+        "# slime-q\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/p/, src/q/\n",
+    );
+    fs::create_dir_all(w.join(".mnemorph/slime/q-b")).unwrap();
+    assert!(relieve(&w, "slime-q", true).is_err());
+    assert!(
+        !w.join(".mnemorph/slime/q-a").exists(),
+        "nothing written before the check failed"
+    );
+    assert!(!Roster::load(&w).creatures["slime-q"].retired);
+
+    fs::create_dir_all(w.join("deep/only/x")).unwrap();
+    fs::create_dir_all(w.join("deep/only/y")).unwrap();
+    doc(
+        &w,
+        "slime",
+        "d",
+        "# slime-d\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** deep/\n",
+    );
+    let d = relieve(&w, "slime-d", false).unwrap();
+    assert_eq!(
+        d.act,
+        Act::Split {
+            young: [
+                ("slime-d-a".into(), vec!["deep/only/x/".into()]),
+                ("slime-d-b".into(), vec!["deep/only/y/".into()]),
+            ]
+        }
     );
     let _ = fs::remove_dir_all(&w);
 }

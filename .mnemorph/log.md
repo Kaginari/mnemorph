@@ -2705,3 +2705,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs/03.
 - **Next:** the council — strain counted per body, `@INSTRUCT`/`@SPLIT`/`@ESCALATE` at 5, relief
   at 7, forced escalation after three warrants.
+
+---
+
+### [2026-10-25T14:25:29+01:00] rimuru — #164 review fixes
+- **Task:** fix Fable's review of relief.
+- **Fixed:**
+  - an Orc's living Slimes are relinked to the young that covers their zone; before, they were
+    orphaned with High findings;
+  - a root-file claim is written `./FILE`, so the young parse;
+  - preflight checks both seats and the old doc before any write, and a failed young write is
+    undone; the dry run checks too;
+  - the tree split descends through a lone directory, a link is a file, and hidden entries go to
+    `-a`;
+  - an ascended race gives young of the base race, seated beside the old;
+  - Minds are copied;
+  - nested claims are deduplicated;
+  - the old seat's open queue orders are named, to re-route;
+  - `heal::splice` is shared.
+- **Open:** moving queue orders to the young automatically, and relief's automatic trigger (the
+  council).
