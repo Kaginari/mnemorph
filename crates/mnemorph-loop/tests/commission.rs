@@ -1155,3 +1155,66 @@ async fn the_throne_triages_in_its_answer() {
         facts.facts[&old]
     );
 }
+
+/// Lesson (mnemorph-research, budget-loop): a run that runs out of its slice is hardship, never a
+/// failure on the card. Counted as one, a body funded thinly fails for want of budget, its worth
+/// falls, its next slice is thinner, and it fails again: in the study that loop cost strong bodies
+/// 2 to 10 landing points and trapped a third of them at a low worth. A budget checkpoint ends the
+/// run before its body answers, so the end gate never judges it and writes no verdict.
+#[tokio::test]
+async fn a_slice_that_runs_out_is_never_a_failure_on_the_card() {
+    let w = World::new("ran-out");
+    let order = |id: &str, to: &str, budget: Option<u64>| {
+        let mut args = json!({"to": to, "ask": "leave src/done.txt"});
+        if let Some(b) = budget {
+            args["budget_wt"] = json!(b);
+        }
+        ScriptedModel::tool(id, "commission", args)
+    };
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e", None),
+        order("c2", "orc-o", None),
+        // A slice of one weighted token: spent by the Slime's first call.
+        order("c3", "slime-s", Some(1)),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S ESCALATE\n@? the Slime's slice ran out\n@E"),
+        ScriptedModel::text("@S ESCALATE\n@E"),
+        ScriptedModel::text("The Slime's slice ran out before it could answer."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let _ = run.ask("leave a done marker", &mut |_| {}).await;
+
+    // The Slime's run ended at its budget checkpoint, before any answer: not vacuous.
+    let loops = w.0.join(".mnemorph/instruments/loop");
+    let slime_end = fs::read_dir(&loops)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().starts_with("slime-s"))
+        .flat_map(|e| Journal::<Beat>::new(e.path()).read().unwrap().rows)
+        .find_map(|b| match b {
+            Beat::End { ending } => Some(ending),
+            _ => None,
+        })
+        .expect("the Slime's run ended");
+    assert!(slime_end.contains("budget"), "{slime_end}");
+
+    // No verdict reached the journal for it, so its card holds no failure.
+    let log = fs::read_to_string(w.0.join(".mnemorph/log.md")).unwrap_or_default();
+    assert!(!log.contains("slime-s — gate:"), "{log}");
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let card = mnemorph_loop::world::worth::card(&w.0, &roster, "slime-s");
+    assert_eq!(
+        (card.passes, card.fails, card.handed_back),
+        (0, 0, 0),
+        "{card:?}"
+    );
+    assert_eq!(
+        card.worth_milli(),
+        750,
+        "a body that only ran out still reads as a newcomer"
+    );
+}
