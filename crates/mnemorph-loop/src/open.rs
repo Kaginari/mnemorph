@@ -204,6 +204,11 @@ pub fn open_with(
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),
+        council: crate::council::Thresholds {
+            escalate_at: config.stress("escalate_at").unwrap_or(5),
+            relieve_at: config.stress("relieve_at").unwrap_or(7),
+            max_consults: config.stress("max_consults").unwrap_or(3),
+        },
     });
     let setup = Setup {
         model: model.clone(),

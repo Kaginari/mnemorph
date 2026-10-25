@@ -204,12 +204,17 @@ the beat journal (for the human, never replayed to the model).
 The human's configuration reaches a run through `configure`: the attic's limits, the stress
 line, the guard rules that ask instead of refusing, and whether commands may run unguarded.
 
-The council's keys are `stress.escalateAt` (5), `stress.relieveAt` (7) and `stress.maxConsults`
+The council's keys are `stress.escalate_at` (5), `stress.relieve_at` (7) and `stress.max_consults`
 (3): after three warrants the report is forced to `@S ESCALATE` and reaches the human. Strain is
 read from the body's own first `@S`, never from how the loop ended — a court that reports
 `@S FAIL` still finishes its loop cleanly. A clean landing clears it; the human's denials and
 interrupted or dry runs never add to it. Every relief resets its own trigger, or the next run dies
-on its first act.
+on its first act. The tally is `.mnemorph/instruments/council.jsonl`, sat after every commission that answered: a
+run whose report did not say `DONE` adds its failed acts and one more — a gate denial is the
+human's, never a failed act — and a `DONE` clears it. Relief acts only after a warrant, and a
+relief that cannot act escalates instead, the tally kept; re-asks are not counted yet. The warrant reaches the parent as a hole in the child's report —
+`@? council: <body> strain <n> — answer as its manager: @INSTRUCT …, @SPLIT …, or @ESCALATE` — the
+last warrant forces the report's `@S` to `ESCALATE`, the body's own status kept beside it, and relief's act is a note in the report.
 
 ### Self-heal
 
