@@ -2996,3 +2996,35 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Fable:** confirmed each fix; nothing missed escalates (inherit keeps the seat; a symlinked
   seat is still refused by `admits`; `beneath` closes the TOCTOU). Safe to merge. Its suggested
   test for a linked plan is added.
+
+---
+
+### [2026-10-25T19:40:57+01:00] rimuru — the fourth smoke passes the hierarchy end to end
+- **Task:** fix what the third smoke found.
+- **Found:**
+  - children starved at the 20 000 floor (the bench sets no cap);
+  - the Orc could not code its Slime's verify line, since docs are protected;
+  - a per-minute rate limit stopped the run.
+- **Fixed:**
+  - with no cap there is nothing to carve: a commission's `budget_wt` is not read and the slice
+    is unbounded (an ask of 0 is still refused);
+  - the bench Slime's doc carries `python3 -m compileall -q src` as its verify line;
+  - the runner waits out rate limits (70/140/280 s) before calling it the daily cap;
+  - two tests now set a cap to keep their meaning;
+  - docs/06.
+- **Result:** task 01 hierarchy PASS, 125.9 s, 29 calls (26 below), 109 525 wt: throne → Elf
+  (its plan) → Orc → Slime (it wrote, its gate passed).
+- **Open (design):** an Orc has no tool to code its Slimes' verify lines (the docs are
+  protected); the bench seeds one.
+
+---
+
+### [2026-10-25T19:47:27+01:00] rimuru — #173 review fixes, the measurement running
+- **Task:** fix Fable's review of #173 while the measurement runs. It measures commit `9d17040`;
+  the source is built into a separate target, so the measured binary is never rebuilt mid-run.
+- **Fixed:**
+  - `grant()` works on a plain `u64` after the no-cap return (the dead `Option` plumbing is gone);
+  - the commission tool says `budget_wt` is not read with no cap;
+  - the runner stops at once on the daily cap, counts a limited attempt's spend into the row it
+    records (with `attempts`), and names a kept limited world;
+  - a nested test: under no cap, `budget_wt` limits neither the Elf nor the Orc it commissions.

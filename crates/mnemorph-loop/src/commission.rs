@@ -32,7 +32,7 @@ impl Tool for CommissionTool {
     }
 
     fn description(&self) -> &'static str {
-        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less. `topup_wt` sets aside more from your envelope, given to it once if its slice runs out."
+        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left; with no cap set there is no envelope, and it is not read); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less. `topup_wt` sets aside more from your envelope, given to it once if its slice runs out."
     }
 
     fn schema(&self) -> Value {
@@ -235,28 +235,30 @@ fn grant(
     left: Option<u64>,
     floor: u64,
 ) -> (u64, Option<u64>, Option<String>) {
-    let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
-    let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
-        mnemorph_world::worth::ceiling(l, child.race, &records.card(roster, &a.to))
+    // An ask of nothing is refused, cap or none.
+    if a.budget_wt == Some(0) {
+        return (0, None, None);
+    }
+    // With no cap set there is no envelope to carve: the slice is unbounded, whatever was asked.
+    let Some(left) = left else {
+        return (u64::MAX, None, None);
+    };
+    // What the dispatcher may give at all: its envelope, less a tenth kept.
+    let givable_all = left / 10 * 9;
+    let asked = a.budget_wt.unwrap_or(left / 2);
+    let ceiling = roster.creatures.get(&a.to).map(|child| {
+        mnemorph_world::worth::ceiling(left, child.race, &records.card(roster, &a.to))
     });
     // A slice too small for one call is no grant: it is raised to the floor, within what the
     // dispatcher may give at all.
-    let least = if asked == 0 {
-        0
-    } else {
-        floor.min(left.map_or(u64::MAX, |l| l / 10 * 9))
-    };
+    let least = floor.min(givable_all);
     let slice = ceiling.map_or(asked, |cap| asked.min(cap)).max(least);
     // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
     // may give at all, and within twice the child's ceiling — worth still counts.
-    let givable = left.map(|l| {
-        let most = ceiling.map_or(l / 10 * 9, |cap| (l / 10 * 9).min(cap.saturating_mul(2)));
-        most.saturating_sub(slice)
-    });
-    // With no cap there is no slice to run out, and nothing to top up.
-    let topup = left
-        .and(a.topup_wt)
-        .map(|t| givable.map_or(t, |g| t.min(g)))
+    let most = ceiling.map_or(givable_all, |cap| givable_all.min(cap.saturating_mul(2)));
+    let topup = a
+        .topup_wt
+        .map(|t| t.min(most.saturating_sub(slice)))
         .filter(|t| *t > 0);
     let mut said = Vec::new();
     if slice > asked {
@@ -275,10 +277,7 @@ fn grant(
             a.to
         ));
     }
-    if let Some(wanted) = a
-        .topup_wt
-        .filter(|w| left.is_some() && topup.is_none_or(|t| t < *w))
-    {
+    if let Some(wanted) = a.topup_wt.filter(|w| topup.is_none_or(|t| t < *w)) {
         said.push(format!(
             "[set aside {} wt of the {wanted} top-up asked: what you could still give]",
             topup.unwrap_or(0)

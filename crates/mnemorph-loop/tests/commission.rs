@@ -1225,7 +1225,8 @@ async fn a_slice_that_runs_out_is_never_a_failure_on_the_card() {
         ScriptedModel::text("@S ESCALATE\n@E"),
         ScriptedModel::text("The Slime's slice ran out before it could answer."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    // A cap: under no cap there is nothing to carve, and a slice never runs out.
+    let mut run = w.rimuru_with(model.clone(), true, Some(1_000_000));
     let _ = run.ask("leave a done marker", &mut |_| {}).await;
 
     // The Slime's run ended at its budget checkpoint, before any answer: not vacuous.
@@ -1390,7 +1391,7 @@ async fn a_slice_is_at_least_one_call() {
     let mut run = w.rimuru_full(
         model,
         true,
-        None,
+        Some(1_000_000),
         None,
         mnemorph_loop::commission::SLICE_FLOOR,
     );
@@ -1422,5 +1423,36 @@ fn a_linked_plan_is_no_plan() {
     assert_eq!(
         mnemorph_loop::commission::plan_items(&w.0, &roster, "elf-e"),
         Vec::<String>::new()
+    );
+}
+
+/// With no cap set there is nothing to carve: a `budget_wt` is not read, and the whole chain runs
+/// unbounded — the Elf past its first call, and the Orc it commissions with an ask of its own.
+#[tokio::test]
+async fn under_no_cap_a_budget_is_not_read() {
+    let w = World::new("no-cap");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "budget_wt": 1}),
+        ),
+        ScriptedModel::tool("g1", "glob", json!({"pattern": "*"})),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "orc-o", "ask": "look", "budget_wt": 1}),
+        ),
+        ScriptedModel::tool("g2", "glob", json!({"pattern": "*"})),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].starts_with("@S DONE"),
+        "both bodies ran past one call: {results:?}"
     );
 }
