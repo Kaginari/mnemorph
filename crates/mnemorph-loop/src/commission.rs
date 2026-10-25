@@ -655,8 +655,61 @@ fn report_for(
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, ending, to);
     }
+    notes.extend(clock_memo(&c.world, roster, to, ending));
     let forced = council(c, to, ending, failed, &mut notes, &mut triage);
     report_of(ending, landed, put_back, &notes, &triage, forced.as_deref())
+}
+
+/// Where clock deaths are kept, under the world.
+pub const DEATHS: &str = ".mnemorph/instruments/deaths.jsonl";
+
+/// One clock death.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Death {
+    /// When.
+    pub ts: mnemorph_ledger::Timestamp,
+    /// The body whose clock ran out.
+    pub body: String,
+    /// The instrument's words.
+    pub why: String,
+}
+
+/// A clock death leaves a memo: a `death` row, and the next-fit body named to the parent — the
+/// living sibling of the same race under the same parent with the best worth. Advice, never a
+/// change on its own.
+fn clock_memo(world: &Path, roster: &Roster, to: &str, ending: &Ending) -> Option<String> {
+    let Ending::Checkpoint {
+        why,
+        salvage: Some(_),
+    } = ending
+    else {
+        return None;
+    };
+    let death = Death {
+        ts: mnemorph_ledger::Timestamp::now(),
+        body: to.to_owned(),
+        why: why.clone(),
+    };
+    if let Err(e) = Journal::<Death>::new(world.join(DEATHS)).append(&death) {
+        eprintln!("mnemorph: {to}'s clock death could not be recorded: {e}");
+    }
+    let me = roster.creatures.get(to)?;
+    let records = mnemorph_world::worth::Records::load(world);
+    let next = roster
+        .living()
+        .filter(|k| {
+            k.name != to && k.reports_to == me.reports_to && k.race.base() == me.race.base()
+        })
+        .map(|k| (records.card(roster, &k.name).worth_milli(), k.name.clone()))
+        .max();
+    Some(match next {
+        Some((worth, name)) => format!(
+            "[clock death: {to}'s clock ran out ({why}); next fit: {name}, worth 0.{worth:03} — advice, never a change]"
+        ),
+        None => format!(
+            "[clock death: {to}'s clock ran out ({why}); no sibling fits: give a smaller order, or a longer clock]"
+        ),
+    })
 }
 
 /// Sit the council after a child's run: a warrant becomes a hole for the parent, relief a note,
@@ -968,4 +1021,61 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
             .with_soil(&s.write, &s.except, s.root_files)
             .with_build(&build),
     )
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+
+    /// A clock death leaves a `death` row and names the next-fit sibling; another checkpoint
+    /// leaves no memo.
+    #[test]
+    fn a_clock_death_leaves_a_memo() {
+        let w = std::env::temp_dir().join(format!("mnemorph-clock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&w);
+        for (race, short, body) in [
+            ("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            (
+                "elf",
+                "e",
+                "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+            ),
+            (
+                "orc",
+                "o",
+                "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
+            ),
+            (
+                "slime",
+                "s",
+                "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/a/\n",
+            ),
+            (
+                "slime",
+                "t",
+                "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/b/\n",
+            ),
+        ] {
+            let dir = w.join(".mnemorph").join(race).join(short);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("README.md"), body).unwrap();
+        }
+        let roster = Roster::load(&w);
+        let died = Ending::Checkpoint {
+            why: "clock: the deadline passed".into(),
+            salvage: Some("I wrote half of it".into()),
+        };
+        let memo = clock_memo(&w, &roster, "slime-s", &died).unwrap();
+        assert!(memo.contains("next fit: slime-t, worth 0.750"), "{memo}");
+        let rows = Journal::<Death>::new(w.join(DEATHS)).read().unwrap().rows;
+        assert_eq!((rows.len(), rows[0].body.as_str()), (1, "slime-s"));
+        let stopped = Ending::Checkpoint {
+            why: "budget: spent".into(),
+            salvage: None,
+        };
+        assert_eq!(clock_memo(&w, &roster, "slime-s", &stopped), None);
+        let alone = clock_memo(&w, &roster, "orc-o", &died).unwrap();
+        assert!(alone.contains("no sibling fits"), "{alone}");
+        let _ = std::fs::remove_dir_all(&w);
+    }
 }

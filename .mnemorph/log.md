@@ -2766,3 +2766,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a parent's loop does not act on a council-forced ESCALATE in a child's report beyond relaying
     it;
   - the tally is never compacted.
+
+---
+
+### [2026-10-25T14:47:59+01:00] rimuru — M7: the clock-death memo
+- **Task:** the human said "merge and continue after fix if needed". #167 (the council) was merged;
+  the next rung is the last self-heal piece, the clock-death memo.
+- **Files:**
+  - commission.rs:
+    - `Death` rows in `instruments/deaths.jsonl`;
+    - `clock_memo`: on a salvaged checkpoint, the next-fit sibling (same race, same parent, best
+      worth) or "a smaller order, or a longer clock", as a note in the report;
+    - a unit test;
+  - docs/03.
+- **Next in M7:** Courts per office (fresh contexts); Metis attached to dispatch; solo escalation
+  measured on 30 tasks (costs live runs: ask first).
