@@ -319,6 +319,12 @@ impl Run {
         self
     }
 
+    /// The failed acts of this run's last ask, for the council.
+    #[must_use]
+    pub fn failed_acts(&self) -> u32 {
+        self.stress.failed()
+    }
+
     /// What its dispatcher set aside for it out of its own envelope: given once, when its slice
     /// runs out.
     #[must_use]

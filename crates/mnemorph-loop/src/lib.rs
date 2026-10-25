@@ -5,6 +5,7 @@ pub mod beats;
 pub mod budget;
 pub mod commission;
 pub mod compact;
+pub mod council;
 pub mod decisions;
 pub mod gate;
 pub mod model;

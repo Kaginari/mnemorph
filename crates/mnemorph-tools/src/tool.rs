@@ -83,6 +83,8 @@ pub struct Meta {
     /// An edit whose `old_string` does not occur in the file: the body edited text it had not read,
     /// or, in a multiedit, text an earlier edit of the same call had already changed.
     pub edit_miss: bool,
+    /// The human gate denied the act: the human's choice, never the body's failure.
+    pub denied: bool,
 }
 
 impl Outcome {
