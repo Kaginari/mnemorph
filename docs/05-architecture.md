@@ -263,7 +263,7 @@ flowchart LR
   human's state directory, keeps every line the harness and the human's `mnemorph q` wrote — so
   nothing the command did to the file counts, a link in its place included, and the human's
   concurrent moves are kept. A body's own `mnemorph q` refuses (every command carries
-  `MNEMORPH_BODY`, a courtesy; the tripwire is the border). `tmp/` and `intel/` stay writable; a
+  `MNEMORPH_BODY`, a courtesy; the tripwire is the border). `tmp/`, `intel/` and `report/` (where a check writes what it leaves) stay writable; a
   repository the command itself creates is its own. The snapshot keeps up to 16 MiB of content; a
   change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard

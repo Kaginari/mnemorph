@@ -21,7 +21,7 @@ pub(crate) enum Spot {
     Inside {
         /// The world's root itself, or all of its contents.
         root: bool,
-        /// Inside `.git` or the world's records in `.mnemorph` (but `tmp/` and `intel/`).
+        /// Inside `.git` or the world's records in `.mnemorph` (but `tmp/`, `intel/` and `report/`).
         records: bool,
     },
     /// A device file.
@@ -121,6 +121,7 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
         let records = rel.starts_with(".git")
             || (rel.starts_with(".mnemorph")
                 && !rel.starts_with(".mnemorph/tmp")
+                && !rel.starts_with(".mnemorph/report")
                 && !rel.starts_with(".mnemorph/intel"));
         return Spot::Inside {
             root: path == world,

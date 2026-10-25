@@ -41,7 +41,7 @@ pub(crate) fn protects(world: &Path, path: &Path) -> bool {
 }
 
 fn skipped(world: &Path, path: &Path) -> bool {
-    ["tmp", "intel"]
+    ["tmp", "intel", "report"]
         .iter()
         .any(|d| path.starts_with(world.join(".mnemorph").join(d)))
 }

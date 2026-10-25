@@ -58,7 +58,14 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
     let seat = world.join(&s.seat);
     let path = seat.join("README.md");
     let linked = |p: &Path| fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
-    if linked(&seat) || linked(&path) {
+    // Every step from the world down to the doc: a link anywhere is refused.
+    let rel = Path::new(&s.seat).join("README.md");
+    let mut at = world.to_path_buf();
+    let through_link = rel.components().any(|c| {
+        at.push(c);
+        linked(&at)
+    });
+    if through_link || linked(&seat) || linked(&path) {
         return Err(format!(
             "{} is, or sits in, a link: its verify line is set by hand",
             s.doc()

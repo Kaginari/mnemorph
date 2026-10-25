@@ -156,6 +156,10 @@ pub fn open_with(
         model_id,
         attic,
     } = bound;
+    // The report folder a check writes into, ignored locally: a check never writes the tree.
+    if let Err(e) = mnemorph_world::report::prepare(world) {
+        eprintln!("mnemorph: the report folder could not be prepared: {e}");
+    }
     let (mut body, cx) = solo(world, model_id);
     // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
     let lanes = lanes(world);
