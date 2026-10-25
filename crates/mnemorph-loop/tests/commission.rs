@@ -179,6 +179,12 @@ async fn one_order_down_and_back() {
         "the Elf's report is Rimuru's tool result: {results:?}"
     );
     assert_eq!(model.requests().len(), 8);
+    // Every gate verdict reached the journal through its writer.
+    let log = fs::read_to_string(w.0.join(".mnemorph/log.md")).unwrap();
+    assert!(
+        log.contains("] slime-s — gate: PASS\n- **Changed:** `src/done.txt`"),
+        "{log}"
+    );
     // What the Slime learned about its territory is a fact, in its name.
     let facts = mnemorph_loop::world::Facts::load(&w.0);
     let f = facts

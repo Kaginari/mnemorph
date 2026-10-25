@@ -267,5 +267,8 @@ the body as a note; a second ends the run as FAIL, every verdict journaled.
 A landing on a risk surface passes as `PASS (challenge pending)` and opens a Dark Elf commission
 automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 
-The verdict goes to `log.md` through the append-only writer. Three fails running for the same
+The verdict goes to `log.md` through the append-only writer: one entry per verdict, stamped,
+naming the body and the verdict — `PASS`, `FAIL, handed back` on a first failure, `FAIL` — with
+the paths it changed and what failed. The writer only appends, whole entries in one write, and
+never writes through a link. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.
