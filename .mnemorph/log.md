@@ -3391,3 +3391,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Refinements made:**
   - hide only Hugging Face's `token` and `stored_tokens`, not its model cache;
   - name the legacy `~/.git-credential-cache/`.
+
+---
+
+### [2026-10-26T00:22:00+01:00] rimuru — solo gets the chain's steps
+- **Task:** a side note: on the large bench, solo stops at 40 steps while a hierarchy's bodies
+  each bring their own. The human: "adding number of steps seems right, you should add it to
+  solo mode".
+- **Files:**
+  - config: `steps.solo` and `solo_steps()`, defaulting to `SOLO_STEPS` = 100 (Elf 30 + Orc 30 +
+    Slime 40, the shortest chain solo stands for); the budget's caps stop it whatever steps are
+    left;
+  - solo.rs `configure` sets the session body's steps; commissioned children keep their race's;
+  - docs 03.
+- **Test:** `the_configuration_reaches_the_run`: 150 from the config; 100 unset.
+- **Order agreed:** the human asked whether to finish Mnemorph before the bench. Agreed. The
+  running large and small runs finish as a "before" baseline; no new suites until memory (M8) and
+  the ontology's mesh land; then the campaign suite and an OpenCode adapter, before and after.

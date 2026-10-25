@@ -69,5 +69,6 @@ pub fn configure(
         .with_asked_rules(config.asked_rules())
         .with_unguarded(config.allow_unguarded());
     limits.stress_tokens = config.context_stress_tokens();
+    limits.steps = config.solo_steps();
     (cx, limits)
 }
