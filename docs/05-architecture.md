@@ -124,7 +124,7 @@ mnemorph/
 | shared notes | `.mnemorph/memory/shared/notes.jsonl` — append-only note events ([memory](08-memory.md)) | yes |
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
-| shared work queue | `$XDG_STATE_HOME/mnemorph/queue/<world>.jsonl` — append-only snapshots, outside the world | no — machine-local |
+| shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
@@ -256,11 +256,13 @@ flowchart LR
   group ends everything the command started. A tool that insists on its own session or group
   (Python's `start_new_session`, Go's `Setsid`, a pty) fails there with `EPERM`, and coreutils
   `timeout` signals the whole command when it fires. Seatbelt has no such rule on macOS. The shared
-  work queue lives outside the world, out of every command's reach; a body's own `mnemorph q`
-  refuses (every command carries `MNEMORPH_BODY`, a courtesy the file's place makes a border).
-  `tmp/` and `intel/` stay
-  writable; a repository the command itself creates is its own. The snapshot keeps up to 16 MiB of
-  content; a change to a protected file beyond that is reported, not undone.
+  work queue is put back line by line: what it held stays, and of the added lines only those its
+  witness holds — the witness, under the human's state directory, keeps every line the harness and
+  the human's `mnemorph q` wrote — so a forged move is dropped and the human's concurrent moves are
+  kept. A body's own `mnemorph q` refuses (every command carries `MNEMORPH_BODY`, a courtesy; the
+  tripwire is the border). `tmp/` and `intel/` stay writable; a repository the command itself
+  creates is its own. The snapshot keeps up to 16 MiB of content; a change to a protected file
+  beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard
   lets no command reach. Before every command and every file write, the working tree is
   snapshotted into the attic's own git object store — only changed files are hashed again.

@@ -648,3 +648,13 @@ fn queue_of(world: &std::path::Path) -> std::path::PathBuf {
     q.push("-queue.jsonl");
     std::path::PathBuf::from(q)
 }
+
+/// The world writes the queue's witness where the tripwire reads it.
+#[test]
+fn the_queue_witness_is_one_place() {
+    let world = std::path::Path::new("/some/world");
+    assert_eq!(
+        mnemorph_loop::world::queue::witness_of(world),
+        mnemorph_tools::queue_witness(world)
+    );
+}

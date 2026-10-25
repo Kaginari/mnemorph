@@ -235,7 +235,7 @@ flowchart LR
     H(["🐉 you"]) -->|"typed while a turn runs"| Q["queue<br/>next turn, in order"]
     H -->|"/send body: text"| S["send<br/>the body's next tool step"]
     BG["background body<br/>reports"] --> W["wake<br/>its own parent's next turn"]
-    R["a report's @$ orders"] --> SQ[("shared work queue<br/>beside the attic, outside the world")]
+    R["a report's @$ orders"] --> SQ[("shared work queue<br/>.mnemorph/shared/queue.jsonl")]
     SQ -->|"the wake claims each<br/>for the body it names"| T["the parent's next turn:<br/>dispatch, re-checked"]
     Q --> T
     W --> T
@@ -271,13 +271,14 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 **The shared work queue** is the durable form of the order book.
 
-- One file per world, beside the attic under the human's state directory
-  (`$XDG_STATE_HOME/mnemorph/queue/`, else `~/.local/state/mnemorph/queue/`), outside the world:
-  no body's command reads or writes it, so the queue moves only through the harness and the
-  human's `mnemorph q`, and the human's moves during a body's command are never put back with
-  that command's changes. A move made during a body's turn is never billed to that body. Every
-  move appends the
-  item's whole snapshot as one line with its revision; the queue is a fold over the lines. A line
+- One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf: harness soil, ignored by git, so
+  the queue belongs to one machine. It moves only through the harness and the human's `mnemorph q`;
+  each line they write is written again to a witness under the human's state directory
+  (`$XDG_STATE_HOME/mnemorph/queue/`), out of every command's reach. A body's command that touches
+  the queue has it put back line by line — what it held, and of the added lines only those the
+  witness holds — so a forged move is dropped and the human's moves made while the command ran are
+  kept. A move made during a body's turn is never billed to that body. Every move appends the item's
+  whole snapshot as one line with its revision; the queue is a fold over the lines. A line
   that does not follow its item's last revision is a typed refusal — two sessions claiming one item
   both append, the first wins, the second reads back refused. No lock file, no database.
 - States: `held → claimed → done | dropped`. An item names the body it is ordered to — a living
@@ -298,9 +299,8 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   body never claims: only the human and the harness's wake do, so work reaches a body claimed in
   its name. The wake claims only an order its body can carry out: the dispatch rules hold, and
   what the order touches lies on that body's ground. The status line reads "N held".
-- The queue belongs to one machine: it does not travel with the repository. Orders that must
-  reach another machine travel as what made them — a commission's report in the journal, a
-  `@?` the human answers.
+- The queue does not travel with the repository. Orders that must reach another machine travel
+  as what made them — a commission's report in the journal, a `@?` the human answers.
 
 ### The client protocol
 

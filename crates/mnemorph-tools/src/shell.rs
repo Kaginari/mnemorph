@@ -105,6 +105,9 @@ impl Tool for Bash {
         let network = matches!(class, ToolClass::Outward | ToolClass::Destructive);
         // An approved act may write the outside paths it named; an unapproved one never has any.
         let opened = if network { outside } else { Vec::new() };
+        // The shared shelf exists before the snapshot, so a queue the human starts while the
+        // command runs is not taken for a directory the command made.
+        let _ = std::fs::create_dir_all(cx.world().join(".mnemorph/shared"));
         if let Err(e) = std::fs::create_dir_all(cx.world().join(".mnemorph/tmp")) {
             return Outcome::error(format!(
                 "could not prepare the command's temporary directory: {e}"

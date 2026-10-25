@@ -213,7 +213,7 @@ build Mnemorph in solo mode.
 - Metis attached to dispatch: a route's priced decision is booked against the commission's slice,
   as a bench read is against its run, so routing is never free of the budget it routes.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
-  revisioned snapshots outside the world, the rank law, relay-hold, the `queue` tool — and its door
+  revisioned snapshots with a witness out of reach, the rank law, relay-hold, the `queue` tool — and its door
   in the terminal, `mnemorph q`.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
   1. the graph derived from the docs' Territory, Domain, chain and Minds fields, and inference to

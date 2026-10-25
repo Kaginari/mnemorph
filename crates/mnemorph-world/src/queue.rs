@@ -3,9 +3,10 @@
 //! revision is refused on read, so two sessions racing for one move both append and the first
 //! wins — no lock file, no database.
 //!
-//! The file lives beside the attic, under the human's state directory, outside the world: no
-//! body's command can read or write it, so it moves only through the harness and the human's own
-//! `mnemorph q`.
+//! The file is `.mnemorph/shared/queue.jsonl`, harness soil, ignored by git: the queue belongs to
+//! one machine. Every line the harness or the human's `mnemorph q` writes is written again to a
+//! witness under the human's state directory, out of every command's reach; when a body's command
+//! has touched the queue, the tripwire puts it back keeping only the lines the witness holds.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,30 @@ use mnemorph_wire::fnv64a;
 use serde::{Deserialize, Serialize};
 
 use crate::roster::Roster;
+
+/// Where the queue lives in a world.
+pub const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
+
+/// Where the queue's witness lives: `$XDG_STATE_HOME/mnemorph/queue/<world>-<fnv64a>.jsonl`,
+/// else under `~/.local/state`; `None` when there is no home. The tripwire reads it at the same
+/// place (`mnemorph_tools::queue_witness`).
+#[must_use]
+pub fn witness_of(world: &Path) -> Option<PathBuf> {
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
+    let h = fnv64a(world.as_os_str().as_encoded_bytes());
+    let name = world
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Some(
+        state
+            .join("mnemorph/queue")
+            .join(format!("{name}-{h:016x}.jsonl")),
+    )
+}
 
 /// The human, as a mover: they stand over every body.
 pub const HUMAN: &str = "human";
@@ -145,37 +170,35 @@ impl std::fmt::Display for Refusal {
 pub struct Queue {
     journal: Journal<Item>,
     path: PathBuf,
+    witness: Option<Journal<Item>>,
 }
 
 impl Queue {
-    /// The queue of `world`, under the human's state directory
-    /// (`$XDG_STATE_HOME/mnemorph/queue/<world>.jsonl`, else `~/.local/state/…`); `None` when
-    /// there is no home.
+    /// The queue of `world`, witnessed under the human's state directory when there is one.
     #[must_use]
-    pub fn of(world: &Path) -> Option<Queue> {
-        let state = std::env::var_os("XDG_STATE_HOME")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
-        let h = fnv64a(world.as_os_str().as_encoded_bytes());
-        let name = world
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        Some(Queue::at(
-            &state
-                .join("mnemorph/queue")
-                .join(format!("{name}-{h:016x}.jsonl")),
-        ))
+    pub fn of(world: &Path) -> Queue {
+        let queue = Queue::at(&world.join(QUEUE));
+        match witness_of(world) {
+            Some(w) => queue.witnessed_at(&w),
+            None => queue,
+        }
     }
 
-    /// The queue kept in `file`.
+    /// The queue kept in `file`, unwitnessed.
     #[must_use]
     pub fn at(file: &Path) -> Queue {
         Queue {
             journal: Journal::new(file.to_path_buf()),
             path: file.to_path_buf(),
+            witness: None,
         }
+    }
+
+    /// The same queue, every line it writes witnessed in `file` too.
+    #[must_use]
+    pub fn witnessed_at(mut self, file: &Path) -> Queue {
+        self.witness = Some(Journal::new(file.to_path_buf()));
+        self
     }
 
     /// Every item as the fold reads it: a line that does not follow its item's last revision is
@@ -339,6 +362,11 @@ impl Queue {
 
     /// Append a snapshot and read it back: the fold decides whether it landed.
     fn land(&self, item: Item) -> Result<Item, Refusal> {
+        // The witness first: a line the queue holds and its witness does not would be dropped by
+        // the next command's tripwire.
+        if let Some(w) = &self.witness {
+            w.append(&item).map_err(|e| Refusal::Io(e.to_string()))?;
+        }
         self.journal
             .append(&item)
             .map_err(|e| Refusal::Io(e.to_string()))?;

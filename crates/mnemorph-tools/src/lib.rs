@@ -16,3 +16,4 @@ pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 /// The sandbox a context runs commands in, as the context takes it.
 pub use mnemorph_sandbox::Sandbox;
 pub use tool::{Context, Meta, Outcome, Tool, call, ignored, registry};
+pub use tripwire::queue_witness;

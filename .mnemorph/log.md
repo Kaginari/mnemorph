@@ -2335,3 +2335,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `.gitattributes` is gone: its only line was for the queue's old place.
 - **Open (`@?`):** whether a pty-using tool (pexpect, `script`) is needed often enough that
   refusing `setsid` must be relaxed, e.g. by moving to a cgroup kill instead.
+
+---
+
+### [2026-10-25T10:45:15+01:00] rimuru — the queue back in the world, gitignored, witnessed
+- **Task:** the human chose to keep the queue in the world at `.mnemorph/shared/queue.jsonl`, but
+  ignored by git: "no keep and add in git ignore its better".
+- **Decided:** the queue stays machine-local. A witness under the state directory holds every line
+  the harness or the human's `q` wrote. The tripwire puts the queue back line by line: the old
+  lines stay, and of the added lines only those the witness holds are kept. A forged move is
+  dropped, and the human's concurrent moves are kept.
+- **Files:**
+  - world queue.rs — `Queue::of` is in the world and witnessed; `witness_of`; `land` writes the
+    witness first;
+  - tools tripwire.rs — `restore_queue`, `queue_witness`, the queue kept apart from the 16 MiB
+    budget;
+  - shell.rs — `.mnemorph/shared/` is made before the snapshot;
+  - .gitignore;
+  - docs/04, docs/05, the roadmap.
+  - Tests: the witness restore; a loop test that holds the world's and the tripwire's witness path
+    together.
+- **Open (`@?`):** a race window remains while the tripwire rewrites the queue. A move landing
+  within that write is lost; it is narrow, and the witness still holds the line.
