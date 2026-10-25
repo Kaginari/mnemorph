@@ -272,3 +272,66 @@ pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Ve
     }
     out
 }
+
+/// `prose-claim`: a Slime's doc names, in its prose, a path of the world its Territory does not
+/// claim. Prose is never a claim, so the field and the prose disagree: one low finding per path, at
+/// the line that names it. A mention is a backticked word read as a claim would be — with a `/`,
+/// relative, no `..` — that exists in the world, on soil a Slime could claim (a zone, a domain,
+/// or no one's), a directory read as one with or without its slash.
+#[must_use]
+pub fn prose_claims(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for c in roster.living().filter(|c| c.race.base() == Race::Slime) {
+        let Ok(text) = std::fs::read_to_string(world.join(c.doc())) else {
+            continue;
+        };
+        let fields: BTreeSet<usize> = c.lines.values().copied().collect();
+        let mut seen = BTreeSet::new();
+        for (n, line) in text.lines().enumerate() {
+            if fields.contains(&(n + 1)) || line.starts_with("# ") {
+                continue;
+            }
+            for word in line.split('`').skip(1).step_by(2) {
+                if word.contains(char::is_whitespace) {
+                    continue;
+                }
+                let Some(mut path) = crate::doc::claim(word) else {
+                    continue;
+                };
+                let on_disk = world.join(path.trim_end_matches('/'));
+                if !on_disk.exists() {
+                    continue;
+                }
+                // A directory named without its slash is still the directory.
+                if on_disk.is_dir() && !path.ends_with('/') {
+                    path.push('/');
+                }
+                // Only soil a Slime could claim: the workspace, the throne's, the harness's and
+                // the human's outrank any zone, so naming them asks nothing of the field.
+                let claimable = matches!(
+                    explain(roster, &path).rule,
+                    Rule::Zone | Rule::Domain | Rule::Unclaimed
+                );
+                if !claimable
+                    || c.zone.iter().any(|z| covers(z, &path))
+                    || !seen.insert(path.clone())
+                {
+                    continue;
+                }
+                out.push(Finding {
+                    code: "prose-claim",
+                    severity: Severity::Low,
+                    at: format!("{}:{}", c.doc(), n + 1),
+                    paths: vec![path.clone()],
+                    creatures: vec![c.name.clone()],
+                    message: format!(
+                        "{}'s prose names `{path}`, which its Territory does not claim: prose is \
+never a claim — claim it in the field, or say whose it is",
+                        c.name
+                    ),
+                });
+            }
+        }
+    }
+    out
+}

@@ -159,3 +159,33 @@ fn compiled_soil_without_its_keeper_and_retired_parents() {
     assert!(found[1].message.ends_with("which is retired"));
     assert_eq!(found[2].paths, ["Cargo.toml", "README.md"]);
 }
+
+/// Prose is never a claim: a Slime's doc that names, in its prose, a path of the world its
+/// Territory does not claim raises one low `prose-claim`, at that line. What it claims, what does
+/// not exist, words that are no path, the harness's own `.mnemorph/` and its own fields raise none.
+#[test]
+fn a_path_named_in_prose_and_not_claimed_is_a_prose_claim() {
+    let w = std::env::temp_dir().join(format!("mnemorph-prose-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    for dir in ["src/a", "lib", ".mnemorph/slime/s"] {
+        std::fs::create_dir_all(w.join(dir)).unwrap();
+    }
+    std::fs::write(w.join("lib/util.rs"), "").unwrap();
+    std::fs::write(w.join("Cargo.toml"), "").unwrap();
+    std::fs::write(
+        w.join(".mnemorph/slime/s/README.md"),
+        "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n\n## Notes\n\
+         Mine: `src/a/`, `src/a`. Not mine: `lib/util.rs`, and again `lib/util.rs`.\n\
+         Gone: `old/x.rs`. A word: `cargo test`, `true`. Memory: `.mnemorph/slime/s/`.\n\
+         The workspace's: `./Cargo.toml`.\n",
+    )
+    .unwrap();
+    let roster = mnemorph_world::Roster::load(&w);
+    let found = mnemorph_world::prose_claims(&roster, &w);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].code, "prose-claim");
+    assert_eq!(found[0].severity, mnemorph_world::Severity::Low);
+    assert_eq!(found[0].at, ".mnemorph/slime/s/README.md:7");
+    assert_eq!(found[0].paths, ["lib/util.rs"]);
+    let _ = std::fs::remove_dir_all(&w);
+}
