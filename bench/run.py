@@ -70,7 +70,8 @@ def check():
     bad, leaks = [], []
     for t in tasks(None):
         shown = [p for p in (t / "world").rglob("*")
-                 if p.name == "verify.py" or re.search(r"answer|expected|solution", p.name, re.I)]
+                 if p.name == "verify.py"
+                 or re.fullmatch(r"(answers?|expected|solutions?)(\..*)?", p.name, re.I)]
         leaks += ["%s hands the worker %s" % (t.name, p.relative_to(t)) for p in shown]
         w = world_for(t, DEFAULT_MODEL)
         if verify(t, w):

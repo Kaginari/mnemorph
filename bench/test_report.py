@@ -33,7 +33,7 @@ class Matrix(unittest.TestCase):
 
 
 class Success(unittest.TestCase):
-    def test_a_correct_answer_that_broke_the_rules_is_a_failed_task(self):
+    def test_a_correct_file_from_a_run_that_did_not_end_answered_is_a_failed_task(self):
         for broke in ({"exit": 1}, {"exit": None}, {"valid": False}):
             self.assertFalse(report.succeeded(row("t", "hierarchy", **broke)), broke)
         self.assertTrue(report.succeeded(row("t", "solo")))
@@ -51,6 +51,7 @@ class Estimand(unittest.TestCase):
         lo, hi = e["interval_95"]
         self.assertTrue(lo <= e["difference"] <= hi < 0, e)
         self.assertIn("hierarchy minus solo", e["what"])
+        self.assertEqual(e["discordant"], [0, 6])
         # Seeded: the same rows give the same interval.
         self.assertEqual(report.report(full(lose), ["solo", "hierarchy"], False)[0]["estimand"], e)
         self.assertNotIn("score", out)

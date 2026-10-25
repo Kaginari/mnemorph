@@ -5,9 +5,9 @@
 
 The matrix is fixed up front — every task in every mode, exactly once. A run missing, extra or
 recorded twice is an error, never dropped; --partial reports a run still in progress and names
-the gaps. A task succeeds only when its verify passed *and* the run kept the rules: the CLI exited
-0 (the gate passed, nothing was refused, no envelope broke), it did not time out, and a hierarchy
-run ran below the throne. A correct answer from a run that broke them is a failed task.
+the gaps. A task succeeds only when its verify passed *and* the run ended answered: the CLI exited
+0 — not a checkpoint, an escalation, a failure or a timeout — and a hierarchy run ran below the
+throne. A correct file left by a run that did not end answered is a failed task.
 
 The estimand is the difference in task success rate, hierarchy minus solo, over the same tasks.
 Its interval is a paired bootstrap that resamples tasks — the groups — never rows, and the report
@@ -32,7 +32,7 @@ def expected_tasks():
 
 
 def succeeded(r):
-    """Verify passed, and the run kept the rules."""
+    """Verify passed, and the run ended answered."""
     return bool(r["passed"]) and r.get("exit") == 0 and r.get("valid", True)
 
 
@@ -69,7 +69,7 @@ def arm(cells, tasks, mode):
         "runs": len(rs),
         "success": sum(succeeded(r) for r in rs) / len(rs),
         "verify_only": sum(bool(r["passed"]) for r in rs) / len(rs),
-        "broke_rules": sum(bool(r["passed"]) and not succeeded(r) for r in rs),
+        "unanswered": sum(bool(r["passed"]) and not succeeded(r) for r in rs),
         "median_calls": med("calls"),
         "median_wt": med("wt"),
         "median_seconds": med("seconds"),
@@ -91,11 +91,14 @@ def report(rows, modes, partial):
         diffs = [succeeded(cells[(t, b)]) - succeeded(cells[(t, a)]) for t in paired]
         if paired:
             lo, hi = bootstrap(diffs)
+            discordant = [sum(d == 1 for d in diffs), sum(d == -1 for d in diffs)]
             out["estimand"] = {
                 "what": "task success rate, %s minus %s, over the same tasks" % (b, a),
                 "groups": len(paired),
                 "difference": sum(diffs) / len(paired),
                 "interval_95": [lo, hi],
+                # Tasks only the second arm won, and only the first: the interval rests on these.
+                "discordant": discordant,
                 "resamples": RESAMPLES,
                 "seed": SEED,
             }
@@ -114,15 +117,20 @@ def show(out, partial):
     for m, s in (out.get("arms") or {}).items():
         if s:
             lines.append(
-                "%-9s %2d runs  success %3.0f%% (verify alone %3.0f%%, %d broke the rules)  "
+                "%-9s %2d runs  success %3.0f%% (verify alone %3.0f%%, %d correct but unanswered)  "
                 "median %s calls, %s wt, %ss  escalations %d  $%s" % (
-                    m, s["runs"], 100 * s["success"], 100 * s["verify_only"], s["broke_rules"],
+                    m, s["runs"], 100 * s["success"], 100 * s["verify_only"], s["unanswered"],
                     s["median_calls"], s["median_wt"], s["median_seconds"], s["escalations"], s["usd"]))
     e = out.get("estimand")
     if e:
         lines.append("estimand: %s — %+.3f, 95%% interval [%+.3f, %+.3f], %d task groups, "
                      "%d resamples (seed %d)" % (e["what"], e["difference"], *e["interval_95"],
                                                  e["groups"], e["resamples"], e["seed"]))
+        won, lost = e["discordant"]
+        lines.append("discordant tasks: %d won only by %s, %d only by %s%s" % (
+            won, out["modes"][1], lost, out["modes"][0],
+            " — a percentile bootstrap under-covers with this few; read the interval as rough"
+            if won + lost < 10 else ""))
     print("\n".join(lines))
 
 

@@ -42,13 +42,13 @@ ts:
     pnpm test
 
 # Every crate depends only on lower layers (docs/05-architecture.md).
+layers:
+    node tools/check-layers.mjs
+
 # The bench, with no model: its report's rules, and every task real and answer-free.
 bench:
     PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s bench -p 'test_*.py' -q
     PYTHONDONTWRITEBYTECODE=1 python3 bench/run.py --check
-
-layers:
-    node tools/check-layers.mjs
 
 # The GitHub workflows parse and hold together.
 workflows:

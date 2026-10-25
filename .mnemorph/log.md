@@ -3298,3 +3298,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - success: solo 94% (one broke the rules), hierarchy 88%;
   - hierarchy costs about 4.6× the calls, 5.4× the wt and 10× the time;
   - the difference is −0.06, interval [−0.25, +0.125], 16 groups.
+
+---
+
+### [2026-10-25T22:50:46+01:00] rimuru — #181's review: Fable
+- **Fable found:**
+  - exit 0 means "ended answered", not "kept every rule": a checkpoint, an escalation and a
+    failure all exit 1, and a gate refusal the body recovered from leaves 0. The real case was an
+    `11-max-of-bug` solo run that escalated after three failed acts with a correct file;
+  - the bootstrap is thin with few discordant pairs;
+  - the leak regex was too broad;
+  - the justfile's `layers` comment was displaced.
+- **Fixed:**
+  - the wording is now "ended answered", with the column "correct but unanswered";
+  - discordant pairs are reported, with a warning under ten;
+  - the leak guard uses a full-name match;
+  - the recipe moved; the README.
+- **Follow-up on #96:** record each run's `turnEnded` ending and gate events from `--json`, so a
+  rule broken on the way is judged, not only how the run ended.
