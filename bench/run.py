@@ -28,6 +28,7 @@ BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 HANDOFF = "Hand this whole ask to elf-e with the commission tool, then answer with its report:\n\n"
+KEEP = "--keep" in sys.argv
 LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|free-models-per-day", re.I)
 
 
@@ -148,7 +149,10 @@ def run_one(task, mode, model, secret, timeout):
         "limited": limited,
         "stderr": scrubbed[-400:],
     }
-    shutil.rmtree(world, ignore_errors=True)
+    if KEEP:
+        result["world"] = str(world)
+    else:
+        shutil.rmtree(world, ignore_errors=True)
     return result
 
 
@@ -160,6 +164,8 @@ def main():
     p.add_argument("--modes", default="solo,hierarchy")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
     p.add_argument("--timeout", type=int, default=1800)
+    p.add_argument("--keep", action="store_true", help="keep each run's world, for a post-mortem")
+    p.add_argument("--out", default="", help="a results file other than the model's")
     a = p.parse_args()
     if a.check:
         return check()
@@ -167,7 +173,7 @@ def main():
     if not secret:
         print("no key: set OPENROUTER_API_KEY, or write ~/.config/mnemorph/openrouter.key (mode 600)")
         return 2
-    out = BENCH / "results" / (re.sub(r"[^A-Za-z0-9._-]", "_", a.model) + ".jsonl")
+    out = Path(a.out) if a.out else BENCH / "results" / (re.sub(r"[^A-Za-z0-9._-]", "_", a.model) + ".jsonl")
     out.parent.mkdir(exist_ok=True)
     done = set()
     if out.exists():

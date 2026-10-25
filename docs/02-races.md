@@ -200,6 +200,11 @@ touches: while solo's zone is the whole repository, no write falls outside it. S
 Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
+Every commissioned body's prompt carries its race card — what its race does, in a sentence: an
+Elf plans and routes and an Orc judges and routes, neither writing code, each handing the writing
+down with `commission` to the body whose ground holds it; a Slime writes in its territory; a
+Kijin does the outward acts of its post; a Dark Elf challenges what landed.
+
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
 `seal` are harness tools, never shell commands.
 

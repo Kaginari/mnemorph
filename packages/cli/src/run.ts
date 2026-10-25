@@ -39,10 +39,16 @@ export async function runOnce(
   });
   // The answer's last character: a final newline is added only where the answer had none.
   let last = '\n';
+  // The session's own body, from the hello: a commissioned body's events are its children's work,
+  // and its turn's end is not the ask's.
+  let me: string | undefined;
+  const mine = (e: { body?: string | undefined }) => me === undefined || !e.body || e.body === me;
   const ended = new Promise<string>((resolve) => {
     client.on((e) => {
       if (cmd.json) {
         io.stdout.write(`${JSON.stringify(e)}\n`);
+      } else if (!mine(e)) {
+        // Below the session: its work shows in the answer it reports.
       } else if (e.type === 'textDelta') {
         io.stdout.write(e.text);
         last = e.text.at(-1) ?? last;
@@ -58,11 +64,11 @@ export async function runOnce(
       } else if (e.type === 'warning') {
         io.stderr.write(`! ${e.text}\n`);
       }
-      if (e.type === 'turnEnded') resolve(e.ending);
+      if (e.type === 'turnEnded' && mine(e)) resolve(e.ending);
     });
   });
   try {
-    await client.initialize({ name: 'mnemorph run', version: RELEASE });
+    me = (await client.initialize({ name: 'mnemorph run', version: RELEASE })).body;
     await client.prompt(ask);
   } catch (e) {
     io.stderr.write(`mnemorph: ${(e as Error).message}\n`);

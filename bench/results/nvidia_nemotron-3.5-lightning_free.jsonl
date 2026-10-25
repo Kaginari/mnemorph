@@ -1,0 +1,2 @@
+{"task": "01-fizzbuzz", "mode": "solo", "model": "nvidia/nemotron-3.5-lightning:free", "passed": true, "exit": 0, "seconds": 51.7, "calls": 6, "wt": 22202, "usd": 0.0, "escalations": 0, "below": 0, "valid": true, "limited": false, "stderr": ""}
+{"task": "01-fizzbuzz", "mode": "hierarchy", "model": "nvidia/nemotron-3.5-lightning:free", "passed": false, "exit": 1, "seconds": 60.1, "calls": 17, "wt": 62957, "usd": 0.0, "escalations": 0, "below": 16, "valid": true, "limited": false, "stderr": "mnemorph: escalate: more than two failed acts in a row\n"}

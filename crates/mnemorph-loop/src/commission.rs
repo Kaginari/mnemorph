@@ -103,6 +103,8 @@ pub struct Commissioner {
     pub council: crate::council::Thresholds,
     /// What chooses each court's model; `None` rides the dispatcher's.
     pub router: Option<Router>,
+    /// The least slice a commission carries ([`SLICE_FLOOR`] in a session).
+    pub slice_floor: u64,
     /// The shared work queue a report's `@$` orders are held on; `None` holds none.
     pub queue: Option<mnemorph_world::Queue>,
 }
@@ -152,6 +154,7 @@ fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) -> String {
     format!(
         "You are {name}, a {race} of Mnemorph, commissioned by {parent}. You work only on your own \
 soil: {ground}. A refusal names its reason and the lawful route; never work around it.\n\n\
+{card}\n\n\
 Your doc:\n{doc}\n\
 When the work is done, answer without calling a tool, on the wire, one tag per line:\n\
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
@@ -160,7 +163,32 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),
+        card = race_card(c.race),
     ) + &cards_below(world, roster, name)
+}
+
+/// What a race does, in the words its body reads first: who writes, who hands work down.
+fn race_card(race: mnemorph_races::Race) -> &'static str {
+    use mnemorph_races::Race;
+    match race.base() {
+        Race::Elf => {
+            "As an Elf you plan and route across your lane; you write no code. Hand the work down with \
+the commission tool to the Orc whose domain holds it, read its report, and answer with yours."
+        }
+        Race::Orc => {
+            "As an Orc you judge and route your domain; you write no code. Hand the writing with the \
+commission tool to the Slime whose territory holds the files, judge its report against the ask, \
+and answer with yours."
+        }
+        Race::Slime => "As a Slime you write the code in your territory, check it, and answer.",
+        Race::Kijin => {
+            "As a Kijin you do the outward acts of your post — what leaves the machine — and answer."
+        }
+        Race::DarkElf => {
+            "As a Dark Elf you challenge what landed: find what is wrong, with evidence."
+        }
+        _ => "",
+    }
 }
 
 /// The cards of the bodies reporting to `name`, for it to read before it funds one; empty when
@@ -192,12 +220,20 @@ fn grant(
     roster: &Roster,
     a: &CommissionArgs,
     left: Option<u64>,
+    floor: u64,
 ) -> (u64, Option<u64>, Option<String>) {
     let asked = a.budget_wt.or(left.map(|l| l / 2)).unwrap_or(u64::MAX);
     let ceiling = left.zip(roster.creatures.get(&a.to)).map(|(l, child)| {
         mnemorph_world::worth::ceiling(l, child.race, &records.card(roster, &a.to))
     });
-    let slice = ceiling.map_or(asked, |cap| asked.min(cap));
+    // A slice too small for one call is no grant: it is raised to the floor, within what the
+    // dispatcher may give at all.
+    let floor = if asked == 0 {
+        0
+    } else {
+        floor.min(left.map_or(u64::MAX, |l| l / 10 * 9))
+    };
+    let slice = ceiling.map_or(asked, |cap| asked.min(cap)).max(floor);
     // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
     // may give at all, and within twice the child's ceiling — worth still counts.
     let givable = left.map(|l| {
@@ -210,6 +246,11 @@ fn grant(
         .map(|t| givable.map_or(t, |g| t.min(g)))
         .filter(|t| *t > 0);
     let mut said = Vec::new();
+    if slice > asked {
+        said.push(format!(
+            "[granted {slice} wt, not the {asked} asked: a slice is at least one call's worth]"
+        ));
+    }
     if slice < asked {
         said.push(format!(
             "[granted {slice} wt of the {asked} asked: the ceiling for {} out of what you had left]",
@@ -268,6 +309,9 @@ fn lawful(
     }
     Ok(())
 }
+
+/// The least slice a commission carries, in weighted tokens: about one model call.
+pub const SLICE_FLOOR: u64 = 20_000;
 
 /// What chooses a court's model: the human's pins and tiers, and Metis when routing is on. A
 /// model on another provider than the session's cannot ride this session's client: the
@@ -392,7 +436,7 @@ pub(crate) async fn order(
     // Routing comes first: what Metis costs comes out of what the dispatcher has left to give.
     let left = left.map(|l| l.saturating_sub(route_wt));
     let records = mnemorph_world::worth::Records::load(&c.world);
-    let (slice, topup, granted) = grant(&records, &roster, &a, left);
+    let (slice, topup, granted) = grant(&records, &roster, &a, left, c.slice_floor);
     if slice == 0 {
         return refused(format!(
             "no budget left to carve for {}: @? budget to your commander",

@@ -154,7 +154,9 @@ Currency caps convert through the same table; a model with no known price is sti
   child's slice (`budget_wt`, default half of what it has left, within the ceiling); the harness
   grants at most
   `left × 90% × share(race) × worth` — the parent's reserve kept, the race's maximum share, the
-  child's worth — and the child's report tells the parent when it granted less than asked.
+  child's worth — and the child's report tells the parent when it granted less than asked. A slice
+  is never below 20 000 wt, about one call (or 90% of what the parent has left, if less): an ask
+  under it is raised, and the report says so.
 - **The top-up.** A parent may also set aside a top-up out of its own envelope (`topup_wt`): its
   further trust, so slice and top-up together stay within what it may give at all (90% of what it
   has left) and within twice the child's ceiling — a parent can stretch its trust, never ignore

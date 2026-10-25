@@ -2937,3 +2937,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - stderr is scrubbed before it is cut, and a key file others can read is refused;
   - task 25: `arith.py` (no shadowing of the stdlib `numbers`), and any `math` import is caught;
   - the README: results are tracked; the guard helper is needed.
+
+---
+
+### [2026-10-25T19:16:21+01:00] rimuru — the bench's smoke run, and what it found
+- **Task:** the human gave the OpenRouter key (pasted in chat; it was passed only in the run's
+  environment, never written). The smoke run on task 01 found three faults before any real
+  measurement.
+- **Found:**
+  - an Elf tried to write the code itself, and was rightly refused: no race card told it to hand
+    the writing down;
+  - Rimuru gave the Elf `budget_wt: 1`, so the Elf stopped after one call;
+  - `mnemorph run` ended at the first `turnEnded`, which was the Elf's (children's beats reach
+    the client since #153), so the throne's turn was killed as "interrupted".
+- **Fixed:**
+  - `race_card` in every commissioned body's prompt;
+  - `SLICE_FLOOR` (20 000 wt, a commissioner setting, 0 in the test helper): a slice is raised
+    to at least one call, and the dispatcher is told; a deliberate 0 is still refused;
+  - run.ts waits for the session body's own turn end, and prints only its text;
+  - bench `--keep` and `--out`;
+  - docs 02/06, the bench README.
+- **Learned:** run the smoke before the sixty. Each of these would have turned every hierarchy
+  result into noise.
