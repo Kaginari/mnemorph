@@ -67,6 +67,7 @@ pub fn check(roster: &Roster, tracked: &[String]) -> Vec<Finding> {
     overlaps(roster, &mut out);
     cycles(roster, &mut out);
     bonds(roster, &mut out);
+    heirs(roster, &mut out);
     unowned(roster, tracked, &mut out);
     out.sort_by(|a, b| {
         b.severity
@@ -182,6 +183,67 @@ fn bonds(roster: &Roster, out: &mut Vec<Finding>) {
                 paths: c.zone.clone(),
                 creatures: vec![c.name.clone()],
                 message: format!("{} reports its truth to no living Orc", c.name),
+            });
+        }
+    }
+}
+
+/// `heir-dead`: a retired creature names an heir that is missing, or retired with no living line
+/// below it — an heir relieved in turn lives on in its own heirs. The finding points only at
+/// ground no living creature keeps now: the dead heir's own claims, or — its doc gone, its ground
+/// unknown — the old ground's claims that hold no living claim. A healthy sibling's half and ground
+/// re-granted by hand are never touched. High while some ground is unkept; low, a stale line to
+/// tidy, once every path has a keeper.
+fn heirs(roster: &Roster, out: &mut Vec<Finding>) {
+    fn lives(roster: &Roster, name: &str, seen: &mut BTreeSet<String>) -> bool {
+        if !seen.insert(name.to_owned()) {
+            return false;
+        }
+        roster
+            .creatures
+            .get(name)
+            .is_some_and(|h| !h.retired || h.heirs.iter().any(|g| lives(roster, g, seen)))
+    }
+    let ground = |c: &crate::doc::Creature| -> Vec<String> {
+        c.zone
+            .iter()
+            .chain(&c.domain)
+            .chain(&c.post)
+            .cloned()
+            .collect()
+    };
+    let living_claims: Vec<String> = roster.living().flat_map(&ground).collect();
+    // A claim nobody alive owns, and inside which nobody alive claims.
+    let unkept = |claim: &String| {
+        !matches!(explain(roster, claim).owner, Owner::Creature(_))
+            && !living_claims.iter().any(|l| covers(claim, l))
+    };
+    for c in roster.creatures.values().filter(|c| c.retired) {
+        for heir in &c.heirs {
+            let mut seen = BTreeSet::from([c.name.clone()]);
+            if lives(roster, heir, &mut seen) {
+                continue;
+            }
+            let (why, claims) = match roster.creatures.get(heir) {
+                Some(h) => ("is retired, and no heir of its lives", ground(h)),
+                None => ("has no doc", ground(c)),
+            };
+            let paths: Vec<String> = claims.into_iter().filter(|p| unkept(p)).collect();
+            let (severity, tail) = if paths.is_empty() {
+                (
+                    Severity::Low,
+                    "every path of its ground has a keeper: tidy the Heirs line",
+                )
+            } else {
+                (Severity::High, "this ground has no living keeper")
+            };
+            out.push(Finding {
+                code: "heir-dead",
+                severity,
+                at: c.at("Heirs"),
+                message: format!("{}'s heir `{heir}` {why}: {tail}", c.name),
+                paths,
+                creatures: vec![c.name.clone()],
             });
         }
     }
@@ -334,4 +396,54 @@ never a claim — claim it in the field, or say whose it is",
         }
     }
     out
+}
+
+/// `orphan-mind`: a Mind under `.mnemorph/minds/` — a directory with a `README.md`, or a
+/// `<name>.md` file, named for the entry — that no living creature wears, and whose doc is not
+/// marked `- **Shared:** yes`.
+#[must_use]
+pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
+    let dir = world.join(".mnemorph").join("minds");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let worn: BTreeSet<&str> = roster
+        .living()
+        .flat_map(|c| c.minds.iter().map(|m| m.trim_matches('`')))
+        .collect();
+    let mut found: Vec<Finding> = entries
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let file = e.file_name().to_string_lossy().into_owned();
+            let path = e.path();
+            let (name, doc) = if path.is_dir() {
+                (file.clone(), path.join("README.md"))
+            } else {
+                (file.strip_suffix(".md")?.to_owned(), path.clone())
+            };
+            // A README at the root indexes the Minds; it is none of them.
+            if name.starts_with('.') || name == "README" || worn.contains(name.as_str()) {
+                return None;
+            }
+            let shared = std::fs::read_to_string(&doc).is_ok_and(|t| {
+                t.lines()
+                    .take_while(|l| !l.starts_with("##"))
+                    .filter_map(|l| l.trim().strip_prefix("- **Shared:**"))
+                    .any(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "yes" | "true"))
+            });
+            (!shared).then(|| Finding {
+                code: "orphan-mind",
+                severity: Severity::Medium,
+                at: format!(".mnemorph/minds/{file}"),
+                paths: Vec::new(),
+                creatures: Vec::new(),
+                message: format!(
+                    "the Mind `{name}` is worn by no living creature and not marked shared: give \
+it to one in its Minds field, mark it `- **Shared:** yes`, or retire it"
+                ),
+            })
+        })
+        .collect();
+    found.sort_by(|a, b| a.at.cmp(&b.at));
+    found
 }

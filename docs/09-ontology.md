@@ -75,7 +75,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | Class | What | Read from |
 |---|---|---|
 | a race (`Slime`, `Orc`, `Elf`, `Kijin`, `DarkElf`, the throne and the ascended) | a creature | its doc under `.mnemorph/<race>/<name>/` |
-| `Mind` | worn know-how | `.mnemorph/minds/`, and a doc's Minds field |
+| `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes` — and a doc's Minds field |
 | `Doc` | a creature's document | the file itself |
 | `Fact` (`Territory`) | something learned about a path | `@U territory` lines, as events |
 | `World` | this world and its neighbours | `.mnemorph/dimension.toml` |
@@ -85,7 +85,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | `above` | creature → creature | transitive; `truth` (Slime → Orc), `verdict` (Orc → Elf) and `reports` (→ throne) are sub-bonds; `below` is its inverse |
 | `owns` · `routes` · `posts` | creature → claim | a Slime's Territory, an Orc's Domain, a Kijin's Post — the doc's fields only |
 | `wears` / `wornBy` | creature ↔ Mind | inverse pair |
-| `heir` · `retired` | creature → creature · flag | relief and evolution |
+| `heir` · `retired` | creature → creature · flag | the `Heirs` and `Heir of` fields, which relief writes, and the `Retired` field |
 | `about` · `by` · `counters` | fact → path · creature · fact | see *Facts* |
 | `relates` | world → world | typed: `deploys`, `provisions`, `reads-secrets-from`, `depends-on`, or a learned type |
 
@@ -116,6 +116,8 @@ reads every creature.
 | `Verify` | a creature with a gate | one verify line per field |
 | `Minds` | any | the Minds it wears |
 | `Retired` | any | `yes`: it owns and commands nothing; its seat and claims are skipped |
+| `Heirs` | a retired creature | the young that took its ground, by name — relief writes it |
+| `Heir of` | a young | the creature whose ground it took — relief writes it |
 
 A ground field is a list of paths inside the world: a directory written with its trailing `/`
 (`src/`, `.github/workflows/`), covering what lies under it, or a file written with a `/` in it
@@ -359,10 +361,10 @@ blocking. Findings are never summed into a score.
 | `above-cycle` | critical | the chain of command loops |
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
 | `dead-bond` | high | an `above` target with no doc, or retired |
-| `heir-dead` | high | an heir that is retired or missing |
+| `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
-| `orphan-mind` | medium | a Mind nobody wears and not marked shared |
+| `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
 | `prose-claim` | low | a Slime's doc names, in prose, a path of the world its Territory field does not claim: a backticked word read as a claim would be, that exists, on soil a Slime could claim (a zone, a domain, or no one's) — one per path, at its line, in `onto check` |

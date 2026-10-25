@@ -244,11 +244,13 @@ The world repairs itself in small, mechanical steps, each one written to the led
   seat: it keeps its memory, claims no files, and stays visible. A `relief` row records the act.
   Relief is skipped for a body that just evolved. It relieves Slimes and Orcs: the two young are
   `<name>-a` and `<name>-b`, of the old one's base race, seated beside it, reporting to the same
-  parent, with the same verify lines and Minds, each taking half the claims sorted — a claim
+  parent, with the same verify lines and Minds and a `Heir of` line naming the old one, each
+  taking half the claims sorted — a claim
   another covers set aside — or half the entries under a one-directory ground, descending while
   that directory holds one entry (hidden entries go with the first, a link counts as a file). An
-  Orc's living Slimes report to the young whose ground covers theirs. The old seat gains one
-  `Retired: yes` line and nothing else changes; its open queue orders are named, to re-route.
+  Orc's living Slimes report to the young whose ground covers theirs. The old seat gains a
+  `Retired: yes` line, and on a split a `Heirs` line naming its young, and nothing else changes;
+  its open queue orders are named, to re-route.
   Every check runs before any write, and a failed write is undone. The
   human can act it with `mnemorph relief <name> [--apply]` — without `--apply` it says what it
   would do; never from a body's command.
