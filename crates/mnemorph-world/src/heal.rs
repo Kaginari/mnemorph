@@ -1,7 +1,8 @@
 //! `housekeep --heal`: the world repairs what is mechanical and says everything else. A seat with
 //! no doc gets a retired stub — its memory stays visible, it claims nothing; a *Reports to* that
-//! names no living creature is relinked to the named creature's nearest living ancestor, or the
-//! throne. Each repair is one journal entry; nothing that needs judgment is touched.
+//! names no living creature is relinked to the nearest living ancestor of the race that may
+//! command it. Each repair is one journal entry; nothing that needs judgment is touched, and
+//! nothing is written through a link.
 
 use std::fs;
 use std::path::Path;
@@ -37,16 +38,12 @@ impl Fix {
     #[must_use]
     pub fn line(&self) -> String {
         match self {
-            Fix::Stub { seat, name } => {
-                format!(
-                    "{seat} has no doc: a retired stub names it {name}, its memory kept, claiming nothing"
-                )
-            }
-            Fix::Relink { body, from, to } => {
-                format!(
-                    "{body} reported to {from}, who is no living creature: it reports to {to} now"
-                )
-            }
+            Fix::Stub { seat, name } => format!(
+                "{seat} has no doc: a retired stub names it {name}, its memory kept, claiming nothing"
+            ),
+            Fix::Relink { body, from, to } => format!(
+                "{body} reported to {from}, who is no living creature: it reports to {to} now"
+            ),
         }
     }
 }
@@ -82,36 +79,52 @@ pub fn heal(world: &Path, apply: bool) -> std::io::Result<Heal> {
     Ok(found)
 }
 
+/// Whether `path` is a link: a heal never writes through one.
+fn linked(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+}
+
 /// Every seat with no doc: a retired stub.
 fn stubs(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::io::Result<()> {
     for race in Race::ALL {
         let dir = world.join(".mnemorph").join(race.name());
+        if linked(&dir) {
+            found
+                .left
+                .push(format!("{} is a link: heal it by hand", dir.display()));
+            continue;
+        }
         let Ok(seats) = fs::read_dir(&dir) else {
             continue;
         };
         let mut seats: Vec<_> = seats.filter_map(Result::ok).map(|e| e.path()).collect();
         seats.sort();
-        for seat in seats
-            .into_iter()
-            .filter(|s| s.is_dir() && !s.join("README.md").exists())
-        {
-            let short = seat
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let name = if race == Race::Rimuru {
-                "rimuru".to_owned()
-            } else {
-                format!("{}-{short}", race.name())
-            };
+        for seat in seats {
             let rel = seat
                 .strip_prefix(world)
                 .unwrap_or(&seat)
                 .display()
                 .to_string();
-            if roster.creatures.contains_key(&name) {
+            let doc = seat.join("README.md");
+            if linked(&seat) || linked(&doc) {
+                found
+                    .left
+                    .push(format!("{rel} is, or holds, a link: heal it by hand"));
+                continue;
+            }
+            if !seat.is_dir() || fs::symlink_metadata(&doc).is_ok() {
+                continue;
+            }
+            let name = stub_name(race, &seat);
+            // A name another doc holds — living, retired, or refused by the roster — is not free.
+            let taken = roster.creatures.contains_key(&name)
+                || roster
+                    .problems
+                    .iter()
+                    .any(|p| p.contains(&format!("`{name}`")));
+            if taken {
                 found.left.push(format!(
-                    "{rel} has no doc, and `{name}` is already another seat's: name it by hand"
+                    "{rel} has no doc, and `{name}` is already another doc's: name it by hand"
                 ));
                 continue;
             }
@@ -125,14 +138,17 @@ fn stubs(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::i
                 } else {
                     "- **Reports to:** rimuru\n".to_owned()
                 };
-                fs::write(
-                    seat.join("README.md"),
-                    format!(
-                        "# {name}\n\n- **Race:** {}\n{parent}- **Retired:** yes\n",
-                        race.name()
-                    ),
-                )?;
-                journal(world, &fix);
+                let text = format!(
+                    "# {name}\n\n- **Race:** {}\n{parent}- **Retired:** yes\n",
+                    race.name()
+                );
+                // Created new: a link put in its place since the check is refused.
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&doc)
+                    .and_then(|mut f| std::io::Write::write_all(&mut f, text.as_bytes()))?;
+                journal(world, &fix, found);
             }
             found.fixes.push(fix);
         }
@@ -140,7 +156,20 @@ fn stubs(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::i
     Ok(())
 }
 
-/// Every living creature whose *Reports to* names no living creature: relinked.
+/// The name a stub gives the seat at `seat` of `race`.
+fn stub_name(race: Race, seat: &Path) -> String {
+    if race == Race::Rimuru {
+        return "rimuru".to_owned();
+    }
+    let short = seat
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    format!("{}-{short}", race.name())
+}
+
+/// Every living creature whose *Reports to* names no living creature: relinked to the nearest
+/// living ancestor of the race that may command it, never past the race law.
 fn relinks(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::io::Result<()> {
     for c in roster.living() {
         let Some(from) = c.reports_to.as_deref() else {
@@ -149,61 +178,87 @@ fn relinks(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std:
         if roster.creatures.get(from).is_some_and(|p| !p.retired) {
             continue;
         }
-        // The named creature's nearest living ancestor, or the throne.
-        let to = roster
-            .chain(from)
-            .into_iter()
-            .find(|n| {
-                roster
-                    .creatures
-                    .get(n)
-                    .is_some_and(|p| !p.retired && *n != c.name)
+        let commands = |n: &String| {
+            roster.creatures.get(n).is_some_and(|p| {
+                !p.retired && *n != c.name && p.race.commands().contains(&c.race.base())
             })
-            .or_else(|| {
-                roster
-                    .creatures
-                    .get("rimuru")
-                    .filter(|r| !r.retired)
-                    .map(|_| "rimuru".to_owned())
-            });
-        let Some(to) = to.filter(|t| *t != c.name) else {
-            found.left.push(format!("{} reports to {from}, who is no living creature, and no living ancestor or throne stands above: relink it by hand", c.name));
+        };
+        let to = roster.chain(from).into_iter().find(commands).or_else(|| {
+            let throne = "rimuru".to_owned();
+            commands(&throne).then_some(throne)
+        });
+        let Some(to) = to else {
+            found.left.push(format!(
+                "{} reports to {from}, who is no living creature, and no living {} stands above it: relink it by hand",
+                c.name,
+                commander(c.race)
+            ));
             continue;
         };
+        let path = world.join(c.doc());
+        if linked(&path) {
+            found
+                .left
+                .push(format!("{} is a link: relink {} by hand", c.doc(), c.name));
+            continue;
+        }
         let fix = Fix::Relink {
             body: c.name.clone(),
             from: from.to_owned(),
             to: to.clone(),
         };
         if apply {
-            let path = world.join(c.doc());
+            let Some(&at) = c.lines.get("Reports to") else {
+                continue;
+            };
             let text = fs::read_to_string(&path)?;
-            let relinked: Vec<String> = text
-                .lines()
-                .map(|l| {
-                    if l.trim().starts_with("- **Reports to:**") {
-                        format!("- **Reports to:** {to}")
-                    } else {
-                        l.to_owned()
-                    }
-                })
-                .collect();
-            fs::write(&path, relinked.join("\n") + "\n")?;
-            journal(world, &fix);
+            fs::write(&path, splice(&text, at, &format!("- **Reports to:** {to}")))?;
+            journal(world, &fix, found);
         }
         found.fixes.push(fix);
     }
     Ok(())
 }
 
-/// One repair, one journal entry.
-fn journal(world: &Path, fix: &Fix) {
+/// The race that may command `race`, in words.
+fn commander(race: Race) -> &'static str {
+    match race.base() {
+        Race::Slime => "orc",
+        Race::Orc => "elf",
+        _ => "rimuru",
+    }
+}
+
+/// `text` with its line `at` (from 1) replaced by `with`, its own line ending kept, every other
+/// byte as it was.
+fn splice(text: &str, at: usize, with: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (n, line) in text.split_inclusive('\n').enumerate() {
+        if n + 1 != at {
+            out.push_str(line);
+            continue;
+        }
+        out.push_str(with);
+        if line.ends_with("\r\n") {
+            out.push_str("\r\n");
+        } else if line.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// One repair, one journal entry; an entry that cannot be written is said.
+fn journal(world: &Path, fix: &Fix, found: &mut Heal) {
     let entry = Entry {
         body: "housekeep".into(),
         title: "heal".into(),
         lines: vec![("Fixed".into(), fix.line())],
     };
     if let Err(e) = append(world, &entry) {
-        eprintln!("mnemorph: the heal could not reach the journal: {e}");
+        found.left.push(format!(
+            "{}: the journal could not record it: {e}",
+            fix.line()
+        ));
     }
 }

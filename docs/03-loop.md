@@ -229,9 +229,12 @@ The world repairs itself in small, mechanical steps, each one written to the led
 - **`mnemorph housekeep --heal`** fixes what is mechanical — a creature without a doc, a broken
   *Reports to* link — and reports everything else. A seat with no doc gets a retired stub, so its
   memory stays visible and it claims nothing; a *Reports to* that names no living creature is
-  relinked to that creature's nearest living ancestor, or the throne. Each repair is one journal
-  entry. A doc that cannot be read, two seats with one name, a loop in the chain are said and left
-  to judgment, and the command exits 1 while any is. Without `--heal` it says what it would fix.
+  relinked to the nearest living ancestor of the race that may command it (an Orc for a Slime, an
+  Elf for an Orc) — never past the race law; with none above, it is left. Each repair is one journal
+  entry; only the field's own line changes, and nothing is written through a link. A doc that
+  cannot be read, two seats with one name, a loop in the chain are said and left to judgment.
+  Without `--heal` it says what it would fix. It exits 0 when the roster is whole, 1 while anything
+  is left or a repair waits for `--heal`, 2 on an error or inside a body's command.
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
 ### The end gate

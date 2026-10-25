@@ -236,8 +236,14 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
 }
 
 /// `housekeep [--heal]`: what is broken in the world's roster; with `--heal`, the mechanical
-/// repairs made and journaled. Exits 1 while anything is left to judgment.
+/// repairs made and journaled. Exits 0 when the roster is whole, 1 while anything is left to
+/// judgment or a repair waits for `--heal`, 2 on an error or inside a body's command.
 fn housekeep(args: &[String]) -> ExitCode {
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: the roster is healed by the human, never by a body's command"
+        ));
+    }
     let mut world = None;
     let mut apply = false;
     let mut it = args.iter();
@@ -246,18 +252,18 @@ fn housekeep(args: &[String]) -> ExitCode {
             "--heal" => apply = true,
             "--world" => match it.next() {
                 Some(v) => world = Some(PathBuf::from(v)),
-                None => return fail("--world needs a value"),
+                None => return refused(&"--world needs a value"),
             },
-            other => return fail(&format!("unknown argument `{other}`; see --help")),
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
         }
     }
     let Ok(cwd) = std::env::current_dir() else {
-        return fail("the current directory cannot be read");
+        return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
     let found = match mnemorph_server::world::heal::heal(&world, apply) {
         Ok(found) => found,
-        Err(e) => return fail(&format!("the heal could not write: {e}")),
+        Err(e) => return refused(&format!("the heal could not write: {e}")),
     };
     let mut out = std::io::stdout().lock();
     let verb = if apply {
@@ -274,7 +280,7 @@ fn housekeep(args: &[String]) -> ExitCode {
     if found.fixes.is_empty() && found.left.is_empty() {
         let _ = writeln!(out, "the roster is whole");
     }
-    if found.left.is_empty() {
+    if found.left.is_empty() && (apply || found.fixes.is_empty()) {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)

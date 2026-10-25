@@ -188,3 +188,35 @@ fn a_bodys_command_reads_the_queue_but_never_moves_it() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("slime-s runs this"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Housekeep refuses inside a body's command, and says the roster is whole when it is.
+#[test]
+fn housekeep_refuses_a_body_and_reads_a_whole_roster() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-housekeep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph/rimuru/rimuru")).unwrap();
+    std::fs::write(
+        dir.join(".mnemorph/rimuru/rimuru/README.md"),
+        "# rimuru\n\n- **Race:** rimuru\n",
+    )
+    .unwrap();
+    let run = |body: Option<&str>| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        c.args(["housekeep", "--heal"]).current_dir(&dir);
+        if let Some(b) = body {
+            c.env("MNEMORPH_BODY", b);
+        }
+        c.output().unwrap()
+    };
+    let out = run(Some("slime-s"));
+    assert_eq!(out.status.code(), Some(2));
+    let out = run(None);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("the roster is whole"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
