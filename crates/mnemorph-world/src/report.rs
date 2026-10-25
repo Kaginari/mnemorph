@@ -9,15 +9,17 @@ use std::path::Path;
 /// The report folder, relative to the world.
 pub const REPORT: &str = ".mnemorph/report";
 
-/// What a check run commonly leaves behind, ignored for the gate's judgement.
+/// What a check run commonly leaves behind: a verify run may write these. The gate's view of a
+/// body's own changes does not read the exclude file, so these hide nothing a body writes.
 pub const LEFTOVERS: &[&str] = &[
     ".mnemorph/report/",
     "__pycache__/",
     ".pytest_cache/",
-    ".coverage",
-    "htmlcov/",
-    "coverage/",
-    ".nyc_output/",
+    // Anchored at the root: a source directory named `coverage` deeper down stays the project's.
+    "/.coverage",
+    "/htmlcov/",
+    "/coverage/",
+    "/.nyc_output/",
     ".mypy_cache/",
     ".ruff_cache/",
 ];
@@ -41,6 +43,9 @@ pub fn prepare(world: &Path) -> std::io::Result<()> {
         return Ok(());
     }
     fs::create_dir_all(&info)?;
+    if linked(&info) {
+        return Ok(());
+    }
     let had = fs::read_to_string(&exclude).unwrap_or_default();
     let missing: Vec<&str> = LEFTOVERS
         .iter()
@@ -59,5 +64,14 @@ pub fn prepare(world: &Path) -> std::io::Result<()> {
         next.push_str(l);
         next.push('\n');
     }
-    fs::write(&exclude, next)
+    // Written new beside it, then renamed over it: a link put in its place is replaced, never
+    // followed.
+    let temp = info.join(".exclude.mnemorph");
+    let _ = fs::remove_file(&temp);
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, next.as_bytes()))
+        .and_then(|()| fs::rename(&temp, &exclude))
 }

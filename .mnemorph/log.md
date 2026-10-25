@@ -3105,3 +3105,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:**
   - a solo run's FAIL does not put back its writes (only a commissioned child's landing is);
   - a self-ignoring `newdir/.gitignore` hides a new directory from the gate.
+
+---
+
+### [2026-10-25T20:19:58+01:00] rimuru — #175: the fixes the last entry claimed
+- **Task:** Fable's check of Opus's review found that the previous entry claimed fixes the code
+  did not hold. The edit script had stopped at a missed anchor after rustfmt reflowed run.rs, so
+  run.rs and report.rs were never written. Only `snapshot`'s `.git_exclude(false)` had landed.
+- **Landed now:**
+  - run.rs fails the landing whole on `verdict.wrote`, not on text;
+  - report.rs anchors `/.coverage`, `/htmlcov/`, `/coverage/`, `/.nyc_output/`, and writes
+    `exclude` as a new file renamed over it;
+  - the LEFTOVERS doc no longer claims the patterns hide anything from the gate.
+- **Tests:** a check that prints "a check never writes" passes; a write to `lib/coverage/` under a
+  local `coverage/` exclude is still judged. With `.git_exclude(false)` removed, that test fails.
+- **Lesson:** after a scripted edit, grep for each change, rather than trusting that the build and
+  tests passed.

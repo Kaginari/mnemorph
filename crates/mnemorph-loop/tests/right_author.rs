@@ -212,6 +212,20 @@ fn a_verify_line_that_writes_fails_the_gate() {
     );
     let built = judge("mkdir -p build && echo out > build/cache");
     assert_eq!(built, Vec::<String>::new());
+    // Printing the words is no write.
+    let said = judge("echo 'a check never writes'");
+    assert_eq!(said, Vec::<String>::new());
+    // The local exclude file never hides a body's change from the gate.
+    fs::write(w.0.join(".git/info/exclude"), "coverage/\n").unwrap();
+    let before = snapshot(&w.0);
+    fs::create_dir_all(w.0.join("lib/coverage")).unwrap();
+    fs::write(w.0.join("lib/coverage/m.rs"), "m\n").unwrap();
+    let seen = w.judge(&before, &roster);
+    assert!(
+        seen.iter().any(|f| f.contains("lib/coverage/m.rs")),
+        "{seen:?}"
+    );
+    fs::remove_dir_all(w.0.join("lib/coverage")).unwrap();
     // The report folder is a check's to write.
     let report = judge("mkdir -p .mnemorph/report && echo ok > .mnemorph/report/junit.xml");
     assert_eq!(report, Vec::<String>::new());
