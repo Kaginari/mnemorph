@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use mnemorph_config::{Config, Paths};
 use mnemorph_ledger::{DecisionRow, Journal, Usage, UsageRow};
-use mnemorph_loop::{Decisions, Interrupt, Meter, Reason, Stop, Work, band, route, route_ask};
+use mnemorph_loop::{
+    Decisions, Interrupt, Meter, Reason, Stop, Work, band, route, route_ask, tier_of,
+};
 use mnemorph_provider::{
     ANSWER_TOOL, Block, Caller, Complete, Completion, Cutoffs, Decider, Error, Fallback, Primary,
     Reply, Request, Response, Scripted, StopReason, SystemOne, anthropic_prices,
@@ -131,6 +133,7 @@ fn work(race: Race, office: Option<Office>) -> Work<'static> {
         race,
         office,
         commission: "the commission",
+        ceiling: None,
     }
 }
 
@@ -586,5 +589,45 @@ async fn one_model_leaves_no_room_and_a_race_model_is_a_default() {
     assert_eq!(
         r.model, "big",
         "a hard, irreversible commission rides the band's ceiling"
+    );
+}
+
+/// A body is never routed above the body that commissioned it: hard work that would rise to
+/// frontier stops at the parent's tier, and a parent below the child's default holds the default
+/// down too.
+#[tokio::test]
+async fn a_body_is_never_routed_above_its_parent() {
+    let ground = Ground::new("ceiling");
+    let config = ground.config(TIERS);
+    for (ceiling, want) in [(ModelTier::Strong, "mid"), (ModelTier::Fast, "small")] {
+        let (_, dec) = deciders(
+            &ground,
+            vec![measured([0.0, 0.05, 0.95], 0.1)],
+            Llm::default(),
+            true,
+        );
+        let w = Work {
+            ceiling: Some(ceiling),
+            ..work(Race::Orc, Some(Office::Verdict))
+        };
+        let r = routed(&config, Some(&dec), &ground, w).await;
+        assert_eq!(r.model, want, "{ceiling:?}");
+    }
+    assert_eq!(tier_of(&config, Race::Orc, "mid"), Some(ModelTier::Strong));
+    // A model outside the tier table — a human's pin — caps nothing.
+    assert_eq!(tier_of(&config, Race::Orc, "pinned-by-hand"), None);
+    let (_, dec) = deciders(
+        &ground,
+        vec![measured([0.0, 0.05, 0.95], 0.1)],
+        Llm::default(),
+        true,
+    );
+    let free = Work {
+        ceiling: tier_of(&config, Race::Elf, "pinned-by-hand"),
+        ..work(Race::Orc, Some(Office::Verdict))
+    };
+    assert_eq!(
+        routed(&config, Some(&dec), &ground, free).await.model,
+        "big"
     );
 }
