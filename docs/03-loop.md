@@ -253,8 +253,12 @@ The world repairs itself in small, mechanical steps, each one written to the led
   human can act it with `mnemorph relief <name> [--apply]` — without `--apply` it says what it
   would do; never from a body's command.
 - **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
-  its lane goes into the ledger as a `death` row and the next-fit lane is suggested on the wire —
-  advice to the parent, never a change on its own.
+  its lane goes into the instruments as a `death` row (`.mnemorph/instruments/deaths.jsonl`, with
+  the body named next) and the next-fit lane is suggested on the wire, as a hole — the living
+  sibling of the same base race under the same parent, not stuck on its files, with the best
+  worth (a tie to the one that spent least), or, with none, a smaller order or a longer clock —
+  advice to the parent, never a change on its own. A salvage turn that wrote nothing is still a
+  clock death.
 - **The roster heals from the docs**: the world fingerprints its creature docs, and when the
   fingerprint moves — another session's relief, a hand edit — the roster is rebuilt before the
   next dispatch, so no court is created for a retired seat. A heal never moves trust: a body's
