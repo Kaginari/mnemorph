@@ -3383,3 +3383,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     can;
   - the comment says Linux cannot hide them.
 - **Open:** narrow `.cargo` and `.cache` on Linux to what builds need (issue).
+
+---
+
+### [2026-10-25T23:59:50+01:00] rimuru — #183: Fable checked Opus
+- **Fable confirmed Opus's review:** safe to merge.
+- **Refinements made:**
+  - hide only Hugging Face's `token` and `stored_tokens`, not its model cache;
+  - name the legacy `~/.git-credential-cache/`.

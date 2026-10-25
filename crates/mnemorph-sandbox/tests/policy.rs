@@ -48,7 +48,8 @@ fn no_rule_holds_a_credential_and_no_toolchain_is_written() {
         let inside = [
             ".cargo/credentials",
             ".cargo/credentials.toml",
-            ".cache/huggingface",
+            ".cache/huggingface/token",
+            ".cache/huggingface/stored_tokens",
             ".cache/git",
         ];
         if inside.contains(c) {
