@@ -107,9 +107,13 @@ text: string, } | { "type": "warning",
  */
 text: string, } | { "type": "gateVerdict", 
 /**
- * Whether it passed.
+ * Whether it passed: every check ran and held.
  */
 passed: boolean, 
+/**
+ * PASS, FAIL or `NOT_VERIFIED`: a check that gave no result is never a pass.
+ */
+verdict: string, 
 /**
  * The paths the run changed.
  */
@@ -117,7 +121,11 @@ changed: Array<string>,
 /**
  * What failed.
  */
-failures: Array<string>, } | { "type": "turnEnded", 
+failures: Array<string>, 
+/**
+ * The checks that gave no result.
+ */
+unverified: Array<string>, } | { "type": "turnEnded", 
 /**
  * How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
  */

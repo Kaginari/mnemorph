@@ -129,10 +129,12 @@ impl Records {
             handed_back: 0,
         };
         for (_, verdict, _) in self.verdicts.iter().filter(|(b, _, _)| mine(b)) {
+            // A check that gave no result is no pass: it counts as a failure, so not verifying
+            // never buys a body worth.
             match verdict.as_str() {
                 "PASS" => card.passes += 1,
-                "FAIL" => card.fails += 1,
-                "FAIL, handed back" => card.handed_back += 1,
+                "FAIL" | "NOT_VERIFIED" => card.fails += 1,
+                v if v.ends_with(", handed back") => card.handed_back += 1,
                 _ => {}
             }
         }
@@ -149,10 +151,11 @@ impl Records {
             .verdicts
             .iter()
             .rev()
-            .filter(|(b, v, _)| b == name && v != "FAIL, handed back")
+            .filter(|(b, v, _)| b == name && !v.ends_with(", handed back"))
             .take(STUCK_AFTER)
             .collect();
-        if last.len() < STUCK_AFTER || last.iter().any(|(_, v, _)| v != "FAIL") {
+        let failed = |v: &str| v == "FAIL" || v == "NOT_VERIFIED";
+        if last.len() < STUCK_AFTER || last.iter().any(|(_, v, _)| !failed(v)) {
             return Vec::new();
         }
         let mut shared = last[0].2.clone();

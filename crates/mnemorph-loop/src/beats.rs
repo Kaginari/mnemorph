@@ -47,6 +47,12 @@ pub enum Beat {
         changed: Vec<String>,
         /// What failed; empty when it passed.
         failures: Vec<String>,
+        /// The checks that gave no result.
+        #[serde(default)]
+        unverified: Vec<String>,
+        /// PASS, FAIL or `NOT_VERIFIED`.
+        #[serde(default)]
+        verdict: String,
     },
     /// One act as the guts read it, with the instruments a learned value model will train on.
     /// Journaled for the record, never fed back to the model.

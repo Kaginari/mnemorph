@@ -780,6 +780,8 @@ impl Run {
                 .map(|p| p.display().to_string())
                 .collect(),
             failures: verdict.failures.clone(),
+            unverified: verdict.unverified.clone(),
+            verdict: verdict.verdict().word().to_owned(),
         });
         self.log_verdict(&verdict, *retried);
         if verdict.passed() {
@@ -793,16 +795,27 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
+        let said: Vec<&str> = verdict
+            .failures
+            .iter()
+            .chain(&verdict.unverified)
+            .map(String::as_str)
+            .collect();
+        let how = if verdict.verdict() == crate::gate::Verdict::NotVerified {
+            "could not verify"
+        } else {
+            "failed"
+        };
         if *retried {
             return Some(Ending::Failed(format!(
-                "the end gate failed twice: {}",
-                verdict.failures.join("; ")
+                "the end gate {how} twice: {}",
+                said.join("; ")
             )));
         }
         *retried = true;
         let note = format!(
-            "The end gate failed:\n- {}\nFix it, then answer again.",
-            verdict.failures.join("\n- ")
+            "The end gate {how}:\n- {}\nFix it, then answer again.",
+            said.join("\n- ")
         );
         self.record(&Beat::Note { text: note.clone() });
         push_user(
@@ -821,10 +834,11 @@ impl Run {
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
             return;
         }
-        let word = match (verdict.passed(), retried) {
-            (true, _) => "PASS",
-            (false, false) => "FAIL, handed back",
-            (false, true) => "FAIL",
+        let word = verdict.verdict().word();
+        let word = if !verdict.passed() && !retried {
+            format!("{word}, handed back")
+        } else {
+            word.to_owned()
         };
         let changed: Vec<String> = verdict
             .changed
@@ -841,6 +855,9 @@ impl Run {
         )];
         if !verdict.failures.is_empty() {
             lines.push(("Failures".to_owned(), verdict.failures.join("; ")));
+        }
+        if !verdict.unverified.is_empty() {
+            lines.push(("Unverified".to_owned(), verdict.unverified.join("; ")));
         }
         lines.push(("By".to_owned(), "the end gate".to_owned()));
         let entry = mnemorph_world::log::Entry {

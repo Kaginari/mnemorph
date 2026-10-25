@@ -184,12 +184,16 @@ pub enum Event {
     },
     /// The end gate's verdict on an answer.
     GateVerdict {
-        /// Whether it passed.
+        /// Whether it passed: every check ran and held.
         passed: bool,
+        /// PASS, FAIL or `NOT_VERIFIED`: a check that gave no result is never a pass.
+        verdict: String,
         /// The paths the run changed.
         changed: Vec<String>,
         /// What failed.
         failures: Vec<String>,
+        /// The checks that gave no result.
+        unverified: Vec<String>,
     },
     /// A turn ended.
     TurnEnded {

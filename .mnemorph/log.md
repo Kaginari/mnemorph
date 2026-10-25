@@ -3121,3 +3121,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   local `coverage/` exclude is still judged. With `.git_exclude(false)` removed, that test fails.
 - **Lesson:** after a scripted edit, grep for each change, rather than trusting that the build and
   tests passed.
+
+---
+
+### [2026-10-25T20:28:03+01:00] rimuru — PASS / FAIL / NOT_VERIFIED (#102)
+- **Task:** the M7 tail, after the triage. Each end-gate check says PASS, FAIL or NOT_VERIFIED.
+- **Files:**
+  - gate.rs: `Verdict` and its `word()`; `GateVerdict.unverified`; `passed()` means PASS only.
+    A verify line that did not run (`Meta.class` is `None`) or timed out (the new
+    `Meta.timed_out`) is unverified; a crash is a failure;
+  - run.rs: "could not verify" in the note and the ending; an `Unverified` line in the journal;
+  - beats.rs: `Beat::Gate` gains `unverified` and `verdict` (both serde default);
+  - the server's `Event::GateVerdict` gains `verdict` and `unverified`; the protocol TS is
+    regenerated;
+  - the CLI says "not verified";
+  - docs 03 and 04.
+- **Test:** `a_check_that_gave_no_result_is_not_verified`: unrun gives NOT_VERIFIED, true gives
+  PASS, false gives FAIL, SIGSEGV gives FAIL.
+- **Check:** after the scripted edits, each anchor was confirmed to land.
+
+---
+
+### [2026-10-25T20:34:14+01:00] rimuru — #176's review: Fable
+- **Fable found:**
+  - the worth card and the stuck streak (worth.rs) ignored `NOT_VERIFIED`, so a "NOT_VERIFIED,
+    handed back" reset a FAIL streak: a body with hanging tests dodged the three-fails rule;
+  - docs 03 left out the new journal words and the refused-line case;
+  - a beat from an old journal showed an empty word in the CLI.
+- **Fixed:**
+  - `NOT_VERIFIED` counts as a fail on the card and in the streak, and any ", handed back" is
+    skipped;
+  - docs 03 and 06;
+  - the server derives the word for old beats.
+- **Test:** `a_check_that_gave_no_result_counts_as_a_fail`.

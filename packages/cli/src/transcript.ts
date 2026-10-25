@@ -18,7 +18,7 @@ export type Item =
     }
   | { kind: 'note'; id: number; text: string }
   | { kind: 'warning'; id: number; text: string }
-  | { kind: 'verdict'; id: number; passed: boolean; failures: string[] }
+  | { kind: 'verdict'; id: number; passed: boolean; verdict: string; failures: string[] }
   | { kind: 'ending'; id: number; ending: string }
   | { kind: 'info'; id: number; text: string };
 
@@ -102,7 +102,10 @@ function below(s: State, e: Arrived): State {
     case 'gateVerdict':
       return e.passed
         ? s
-        : push(s, { kind: 'info', text: `  ${who}'s gate: ${e.failures[0] ?? 'failed'}` });
+        : push(s, {
+            kind: 'info',
+            text: `  ${who}'s gate, ${e.verdict}: ${e.failures[0] ?? e.unverified[0] ?? 'failed'}`,
+          });
     case 'turnEnded':
       return push(s, { kind: 'info', text: `  ${who}: ${e.ending}` });
     case 'usage':
@@ -209,7 +212,12 @@ export function fold(s0: State, e: Arrived): State {
     case 'warning':
       return push(s, { kind: 'warning', text: e.text });
     case 'gateVerdict':
-      return push(s, { kind: 'verdict', passed: e.passed, failures: e.failures });
+      return push(s, {
+        kind: 'verdict',
+        passed: e.passed,
+        verdict: e.verdict,
+        failures: [...e.failures, ...e.unverified],
+      });
     case 'turnEnded': {
       // A turn that ends with text still streaming keeps what was said.
       const kept = s.streaming.trim()

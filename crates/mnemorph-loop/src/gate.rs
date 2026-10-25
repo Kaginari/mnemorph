@@ -215,15 +215,53 @@ pub struct GateVerdict {
     pub changed: Vec<PathBuf>,
     /// What failed, one line each; empty when the gate passes.
     pub failures: Vec<String>,
+    /// The checks that gave no result — a verify line that did not run, or was killed before it
+    /// finished: neither a pass nor a failure.
+    pub unverified: Vec<String>,
     /// A verify run changed the tree: a check never writes, and the landing fails whole.
     pub wrote: bool,
 }
 
+/// The gate's word on a landing: three, never more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// Every check ran and held.
+    Pass,
+    /// A check ran and did not hold.
+    Fail,
+    /// Nothing failed, but a check gave no result: a partial pass, never read as a full one.
+    NotVerified,
+}
+
+impl Verdict {
+    /// The word as reports, the journal and the protocol write it.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Verdict::Pass => "PASS",
+            Verdict::Fail => "FAIL",
+            Verdict::NotVerified => "NOT_VERIFIED",
+        }
+    }
+}
+
 impl GateVerdict {
-    /// The gate passed.
+    /// The gate passed: every check ran and held.
     #[must_use]
     pub fn passed(&self) -> bool {
-        self.failures.is_empty()
+        self.verdict() == Verdict::Pass
+    }
+
+    /// The gate's word: a failure outweighs a check that gave no result.
+    #[must_use]
+    pub fn verdict(&self) -> Verdict {
+        if !self.failures.is_empty() {
+            Verdict::Fail
+        } else if !self.unverified.is_empty() {
+            Verdict::NotVerified
+        } else {
+            Verdict::Pass
+        }
     }
 }
 
@@ -280,6 +318,7 @@ impl EndGate {
             return GateVerdict {
                 changed,
                 failures,
+                unverified: Vec::new(),
                 wrote: false,
             };
         }
@@ -289,11 +328,13 @@ impl EndGate {
         if let Some(author) = &self.author {
             failures.extend(right_author(author, &changed, cx.world()));
         }
-        let (verify_failures, wrote) = self.run_verify(tools, cx, &after);
+        let mut unverified = Vec::new();
+        let (verify_failures, wrote) = self.run_verify(tools, cx, &after, &mut unverified);
         failures.extend(verify_failures);
         GateVerdict {
             changed,
             failures,
+            unverified,
             wrote,
         }
     }
@@ -306,12 +347,25 @@ impl EndGate {
         tools: &[Box<dyn Tool>],
         cx: &mut Context,
         judged: &Tree,
+        unverified: &mut Vec<String>,
     ) -> (Vec<String>, bool) {
         let mut failures = Vec::new();
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();
             let o = call(tools, "bash", &args, cx);
-            if o.is_error {
+            // A line that did not run, or was killed at its deadline, said nothing either way; a
+            // crash is a failure.
+            if o.is_error && (o.meta.class.is_none() || o.meta.timed_out) {
+                let why = o
+                    .content
+                    .lines()
+                    .last()
+                    .unwrap_or("it did not finish")
+                    .trim();
+                unverified.push(format!(
+                    "traits unverified: `{command}` gave no result: {why}"
+                ));
+            } else if o.is_error {
                 let tail: String = o
                     .content
                     .chars()
