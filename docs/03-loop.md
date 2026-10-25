@@ -290,7 +290,8 @@ Runs on the body's own writes (minus what its Courts already landed on their own
    landing that ends a finding is not blocked by it ([ontology](09-ontology.md#findings)).
 2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, 120 s
    each. A line changed this turn is a hole and runs from the next turn (a Named Slime's own
-   additions excepted).
+   additions excepted). A check never writes: a verify run that changes the tree beyond what
+   git ignores — a test run's build output — fails the gate, naming what it changed.
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
 5. **Tests intact** — no test deleted or skipped.

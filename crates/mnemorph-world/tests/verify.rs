@@ -61,11 +61,13 @@ fn an_orc_codes_its_own_slimes_verify_line() {
         ),
         "{s}"
     );
+    // A line someone else set stays: the Orc's is added, never in its place, and only once.
+    code(&w, "orc-o", "slime-t", "true").unwrap();
     code(&w, "orc-o", "slime-t", "true").unwrap();
     let t = fs::read_to_string(w.join(".mnemorph/slime/t/README.md")).unwrap();
     assert_eq!(
         t,
-        "# slime-t\r\n\r\n- **Race:** slime\r\n- **Reports to:** orc-o\r\n- **Verify:** `true`\r\n- **Territory:** src/b/\r\n"
+        "# slime-t\r\n\r\n- **Race:** slime\r\n- **Reports to:** orc-o\r\n- **Verify:** `old`\r\n- **Territory:** src/b/\r\n- **Verify:** `true`\r\n"
     );
     let roster = Roster::load(&w);
     assert_eq!(
@@ -85,7 +87,8 @@ fn only_its_own_orc_with_one_clean_line_never_through_a_link() {
         ("elf-e", "slime-s", "true", "no living Orc"),
         ("orc-o", "orc-p", "true", "no living Slime"),
         ("orc-o", "slime-s", "true\nrm -rf /", "one line"),
-        ("orc-o", "slime-s", "echo `id`", "without a backtick"),
+        ("orc-o", "slime-s", "echo `id`", "a backtick"),
+        ("orc-o", "slime-s", "true\u{1b}[2J", "control character"),
         ("orc-o", "slime-s", "  ", "1 to 300"),
     ] {
         let e = code(&w, by, to, cmd).unwrap_err();
@@ -102,7 +105,7 @@ fn only_its_own_orc_with_one_clean_line_never_through_a_link() {
     assert!(
         code(&w, "orc-o", "slime-s", "true")
             .unwrap_err()
-            .contains("is a link")
+            .contains("a link")
     );
     assert!(!fs::read_to_string(&outside).unwrap().contains("Verify"));
     let _ = fs::remove_file(&outside);

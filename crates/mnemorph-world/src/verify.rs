@@ -8,20 +8,22 @@ use std::path::Path;
 
 use mnemorph_races::Race;
 
-use crate::heal::splice;
+use crate::doc::parse;
 use crate::log::{Entry, append};
 use crate::roster::Roster;
 
 /// The longest verify command, in characters.
 pub const MAX_VERIFY: usize = 300;
 
-/// Code `slime`'s verify line as `command`, for `orc`: the line set if the doc has one, else
-/// added after its last header field. Returns the line as written.
+/// Add `command` to `slime`'s verify lines, for `orc`: added after the doc's last header field,
+/// never replacing one — a line someone else set stays — and nothing at all when the doc already
+/// carries it. Returns the line.
 ///
 /// # Errors
 ///
 /// `orc` is no living Orc, `slime` no living Slime reporting to it, the command is empty, too long,
-/// or spans lines or holds a backtick, the doc is a link, or it cannot be written.
+/// or holds a control character or a backtick, the seat or the doc is a link, or the doc cannot be
+/// read, parsed or written.
 pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<String, String> {
     let roster = Roster::load(world);
     let o = roster
@@ -47,37 +49,55 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
             "a verify line is one command of 1 to {MAX_VERIFY} characters"
         ));
     }
-    if command.contains(['\n', '\r', '`']) {
-        return Err("a verify line is one line, without a backtick".into());
+    if command
+        .chars()
+        .any(|c| c.is_control() || matches!(c, '`' | '\u{2028}' | '\u{2029}' | '\u{85}'))
+    {
+        return Err("a verify line is one line, without a control character or a backtick".into());
     }
-    let path = world.join(s.doc());
-    if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+    let seat = world.join(&s.seat);
+    let path = seat.join("README.md");
+    let linked = |p: &Path| fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
+    if linked(&seat) || linked(&path) {
         return Err(format!(
-            "{} is a link: its verify line is set by hand",
+            "{} is, or sits in, a link: its verify line is set by hand",
             s.doc()
         ));
     }
+    // The doc as read now, parsed now: the line goes after the fields this text holds.
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let read = parse(&text, Path::new(&s.seat))?;
+    if read.verify.iter().any(|v| v == command) {
+        return Ok(format!("- **Verify:** `{command}`"));
+    }
     let line = format!("- **Verify:** `{command}`");
-    let next = if let Some(&at) = s.lines.get("Verify") {
-        splice(&text, at, &line)
-    } else {
-        let after = s.lines.values().copied().max().unwrap_or(1);
-        let mut out = String::with_capacity(text.len() + line.len() + 1);
-        for (n, l) in text.split_inclusive('\n').enumerate() {
-            out.push_str(l);
-            if n + 1 == after {
-                let ending = if l.ends_with("\r\n") { "\r\n" } else { "\n" };
-                if !l.ends_with('\n') {
-                    out.push_str(ending);
-                }
-                out.push_str(&line);
-                out.push_str(ending);
+    let after = read.lines.values().copied().max().unwrap_or(1);
+    let mut next = String::with_capacity(text.len() + line.len() + 2);
+    for (n, l) in text.split_inclusive('\n').enumerate() {
+        next.push_str(l);
+        if n + 1 == after {
+            let ending = if l.ends_with("\r\n") { "\r\n" } else { "\n" };
+            if !l.ends_with('\n') {
+                next.push_str(ending);
             }
+            next.push_str(&line);
+            next.push_str(ending);
         }
-        out
-    };
-    fs::write(&path, next).map_err(|e| e.to_string())?;
+    }
+    // Written new beside the doc, then renamed over it: a link put in its place is replaced, never
+    // followed.
+    let temp = seat.join(".README.md.verify");
+    let _ = fs::remove_file(&temp);
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, next.as_bytes()))
+        .and_then(|()| fs::rename(&temp, &path))
+        .map_err(|e| {
+            let _ = fs::remove_file(&temp);
+            e.to_string()
+        })?;
     let entry = Entry {
         body: orc.to_owned(),
         title: "verify".into(),

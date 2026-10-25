@@ -280,6 +280,15 @@ impl EndGate {
         if let Some(author) = &self.author {
             failures.extend(right_author(author, &changed, cx.world()));
         }
+        failures.extend(self.run_verify(tools, cx, &after));
+        GateVerdict { changed, failures }
+    }
+
+    /// Run the verify lines. A check never writes: what a verify run changes in the tree — beyond
+    /// what git ignores, the build output a test run leaves — fails the gate, so no verify line
+    /// lands work past the judgement above.
+    fn run_verify(&self, tools: &[Box<dyn Tool>], cx: &mut Context, judged: &Tree) -> Vec<String> {
+        let mut failures = Vec::new();
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();
             let o = call(tools, "bash", &args, cx);
@@ -296,7 +305,28 @@ impl EndGate {
                 failures.push(format!("traits hold: `{command}` failed:\n{tail}"));
             }
         }
-        GateVerdict { changed, failures }
+        if self.verify.is_empty() {
+            return failures;
+        }
+        let after = snapshot(cx.world());
+        let ignored = mnemorph_tools::ignored(cx.world());
+        let wrote: Vec<String> = judged
+            .files
+            .keys()
+            .chain(after.files.keys())
+            .filter(|p| judged.files.get(*p) != after.files.get(*p))
+            .filter(|p| !ignored.iter().any(|i| p.starts_with(i)))
+            .map(|p| format!("`{}`", p.display()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        if !wrote.is_empty() {
+            failures.push(format!(
+                "traits hold: a verify line changed {} — a check never writes",
+                wrote.join(", ")
+            ));
+        }
+        failures
     }
 }
 

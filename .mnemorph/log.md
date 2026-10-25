@@ -3047,3 +3047,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   review.
 - **Built and tested** in a separate target (`../tempest-review-target`): the measurement runs on
   the main target's binary.
+
+---
+
+### [2026-10-25T20:03:53+01:00] rimuru — #174's security review: Opus
+- **Task:** Opus reviewed the verify tool.
+- **Opus found:**
+  - HIGH: verify commands ran after the gate's judgement, so a verify line could write code
+    unjudged. This was true for any verify line, not only the Orc's;
+  - MEDIUM: the tool replaced the first verify line, so an Orc could weaken a human's check;
+  - LOW: a gap between reading and writing the doc, a linked seat unchecked, and `fs::write`
+    following links;
+  - LOW: control characters got through.
+- **Fixed:**
+  - the gate's `run_verify` snapshots around the verify runs and fails on any change beyond
+    git-ignored output ("a check never writes");
+  - the tool only adds (never replaces, once);
+  - it parses the text it read, refuses a linked seat or doc, and writes a new file renamed over
+    the doc;
+  - control characters and line separators are refused;
+  - the bench worlds ignore `__pycache__/`;
+  - docs 02/03; tests (a sneaky write fails the gate, built output passes; add-only; control
+    characters).
+- **Next:** Fable reviews Opus's report.

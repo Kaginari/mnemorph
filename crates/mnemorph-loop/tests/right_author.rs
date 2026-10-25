@@ -171,3 +171,45 @@ fn a_rewrite_in_its_old_clothes_is_still_seen() {
         "{failures:?}"
     );
 }
+
+/// A check never writes: a verify line that writes a file git tracks fails the gate, naming it;
+/// one that writes only what git ignores — a test run's build output — passes.
+#[test]
+fn a_verify_line_that_writes_fails_the_gate() {
+    let w = World::new("verify-writes");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&w.0)
+            .output()
+            .unwrap()
+    };
+    git(&["init", "-q"]);
+    fs::write(w.0.join(".gitignore"), "build/\n").unwrap();
+    let roster = Roster::load(&w.0);
+    let judge = |verify: &str| {
+        let before = snapshot(&w.0);
+        fs::write(w.0.join("src/mine.rs"), format!("{verify}\n")).unwrap();
+        let gate = EndGate {
+            verify: vec![verify.to_owned()],
+            author: Some(Author {
+                name: "slime-a".into(),
+                roster: roster.clone(),
+            }),
+        };
+        let mut cx = context_for(&w.0, &roster, "slime-a")
+            .unwrap()
+            .with_sandbox(Sandbox::None("the gate's judgement is under test".into()))
+            .with_unguarded(true);
+        gate.judge(&before, "done", &registry(), &mut cx).failures
+    };
+    let sneaky = judge("printf 'landed past the gate' > src/sneak.rs");
+    assert!(
+        sneaky
+            .iter()
+            .any(|f| f.contains("a verify line changed `src/sneak.rs` — a check never writes")),
+        "{sneaky:?}"
+    );
+    let built = judge("mkdir -p build && echo out > build/cache");
+    assert_eq!(built, Vec::<String>::new());
+}
