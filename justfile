@@ -10,7 +10,7 @@ check:
     #!/usr/bin/env bash
     set -euo pipefail
     before=$(git status --porcelain --untracked-files=all)
-    just rust law ts layers docs workflows
+    just rust law ts layers docs workflows bench
     after=$(git status --porcelain --untracked-files=all)
     if [ "$before" != "$after" ]; then
         echo "the check changed the tree:"
@@ -42,6 +42,11 @@ ts:
     pnpm test
 
 # Every crate depends only on lower layers (docs/05-architecture.md).
+# The bench, with no model: its report's rules, and every task real and answer-free.
+bench:
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s bench -p 'test_*.py' -q
+    PYTHONDONTWRITEBYTECODE=1 python3 bench/run.py --check
+
 layers:
     node tools/check-layers.mjs
 

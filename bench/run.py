@@ -65,17 +65,24 @@ def verify(task, world):
 
 
 def check():
-    """Every task is real: its verify fails on the untouched starter."""
-    bad = []
+    """Every task is real: its verify fails on the untouched starter. And no task hands its
+    worker the answer: its verify, and anything named for an answer, stay outside the world."""
+    bad, leaks = [], []
     for t in tasks(None):
+        shown = [p for p in (t / "world").rglob("*")
+                 if p.name == "verify.py" or re.search(r"answer|expected|solution", p.name, re.I)]
+        leaks += ["%s hands the worker %s" % (t.name, p.relative_to(t)) for p in shown]
         w = world_for(t, DEFAULT_MODEL)
         if verify(t, w):
             bad.append(t.name)
         shutil.rmtree(w, ignore_errors=True)
     for name in bad:
         print("passes untouched:", name)
-    print("%d tasks, %d already pass untouched" % (len(tasks(None)), len(bad)))
-    return 1 if bad else 0
+    for leak in leaks:
+        print(leak)
+    print("%d tasks, %d already pass untouched, %d hand over an answer" % (
+        len(tasks(None)), len(bad), len(leaks)))
+    return 1 if bad or leaks else 0
 
 
 def key():

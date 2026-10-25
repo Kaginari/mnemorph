@@ -38,3 +38,28 @@ on stdout — stops the run with exit 3, unrecorded, and the next run resumes fr
 model's daily cap may take the sixty runs over a few days. A run past its timeout (30 minutes) is
 killed with every process it started, and recorded as a fail. `just check` also builds
 `target/debug/mnemorph-guard`, the sandbox's helper: without it every shell act is refused.
+
+## Reading it
+
+```sh
+python3 bench/report.py results/<model>.jsonl            # the whole matrix, or an error
+python3 bench/report.py results/<model>.jsonl --partial  # a run still in progress, its gaps named
+```
+
+The matrix is fixed up front: every task in every mode, exactly once. A run that is missing,
+extra or recorded twice is an error, never dropped; `--partial` reports a run still in progress
+and names what is missing, but an extra or doubled run is an error even then. A task succeeds
+only when its verify passed *and* the run kept the rules: the CLI exited 0 — the gate passed,
+nothing was refused, no envelope broke — it did not time out, and a hierarchy run ran below the
+throne. A correct answer from a run that broke them counts as a failed task, and the report says
+how many did.
+
+The estimand is the difference in task success rate, hierarchy minus solo, over the same tasks.
+Its 95% interval is a paired bootstrap that resamples tasks — the groups — never rows: 10 000
+resamples, seeded, so the same rows give the same interval. The report states the estimand and the
+group count beside it. There is no single aggregate score: each arm's success, verify-alone rate,
+median calls, weighted tokens and seconds, escalations and dollars stand side by side.
+
+`just bench` — part of `just check` — runs the report's tests and `run.py --check`, with no model:
+every task's verify fails on its untouched starter, and no task hands its worker the answer (its
+`verify.py`, or a file named for an answer, inside its world).

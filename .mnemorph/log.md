@@ -3274,3 +3274,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 09.
 - **Test:** a sibling's half untouched (`src/u/b/` only); re-granted ground gives low; the
   missing-heir fallback.
+
+---
+
+### [2026-10-25T22:45:48+01:00] rimuru — the bench report (#96, in part)
+- **Task:** the human: "ok go on". #96, honest measurement.
+- **Files:**
+  - bench/report.py:
+    - the fixed matrix (missing, extra or doubled is an error; `--partial` names the gaps);
+    - success needs verify plus exit 0, no timeout, and a valid hierarchy;
+    - a paired bootstrap over task groups (10 000, seed 96) for hierarchy minus solo, stating the
+      estimand and the group count;
+    - no aggregate score;
+  - run.py `--check` refuses a task whose world holds its verify or an answer file;
+  - `just bench`, part of `just check`, runs with `PYTHONDONTWRITEBYTECODE=1`, since a check never
+    writes;
+  - bench/test_report.py; the README.
+- **Built in a worktree:** ~/kaginari/tempest-bench, so the queued measurement in the main
+  checkout keeps its own run.py.
+- **Open on #96:** the with/without-law arm needs a harness switch that omits the fixed
+  per-session prompt; that is a design change of its own.
+- **Interim (33 of 60, partial):**
+  - success: solo 94% (one broke the rules), hierarchy 88%;
+  - hierarchy costs about 4.6× the calls, 5.4× the wt and 10× the time;
+  - the difference is −0.06, interval [−0.25, +0.125], 16 groups.
