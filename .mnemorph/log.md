@@ -2767,6 +2767,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     it;
   - the tally is never compacted.
 
+### [2026-10-25T14:45:30+01:00] rimuru — a slice that runs out is never a failure on the card
+- **Task:** Veldora asked what Mnemorph gained from the value studies, then "do both": pin the
+  rule the budget-loop study found worth keeping, and build the instruments the real runs showed
+  missing (the second, as its own pull request).
+- **Files:** crates/mnemorph-loop/tests/commission.rs (a Slime funded one weighted token writes,
+  checkpoints on budget before answering, and its card reads 0 passes, 0 fails, worth 0.750; no
+  `gate:` verdict in the journal), docs/06-consumption.md (the rule, beside worth).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No behaviour changes: the test holds what the code
+  already does.
+- **Learned:**
+  - The research simulated a Thompson draw for the worth that sizes a slice and found it no better
+    than the mean (−0.001 landed): the owner works every order it owns, so its record is observed
+    whatever its slice, and there is no exploration to buy. What mattered was the rule this test
+    pins: counting a run that ran out as a failure cost 2 to 10 landing points.
+
 ### [2026-10-25T14:45:30+01:00] rimuru — the instruments a value model needs, journaled per act
 - **Task:** Veldora: "do both" — after the guard test, the four instruments the real Terminal-Bench
   runs showed missing: lines changed per write, edit misses, verification scripts counted as
