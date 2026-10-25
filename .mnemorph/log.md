@@ -2937,3 +2937,62 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - stderr is scrubbed before it is cut, and a key file others can read is refused;
   - task 25: `arith.py` (no shadowing of the stdlib `numbers`), and any `math` import is caught;
   - the README: results are tracked; the guard helper is needed.
+
+---
+
+### [2026-10-25T19:16:21+01:00] rimuru — the bench's smoke run, and what it found
+- **Task:** the human gave the OpenRouter key (pasted in chat; it was passed only in the run's
+  environment, never written). The smoke run on task 01 found three faults before any real
+  measurement.
+- **Found:**
+  - an Elf tried to write the code itself, and was rightly refused: no race card told it to hand
+    the writing down;
+  - Rimuru gave the Elf `budget_wt: 1`, so the Elf stopped after one call;
+  - `mnemorph run` ended at the first `turnEnded`, which was the Elf's (children's beats reach
+    the client since #153), so the throne's turn was killed as "interrupted".
+- **Fixed:**
+  - `race_card` in every commissioned body's prompt;
+  - `SLICE_FLOOR` (20 000 wt, a commissioner setting, 0 in the test helper): a slice is raised
+    to at least one call, and the dispatcher is told; a deliberate 0 is still refused;
+  - run.ts waits for the session body's own turn end, and prints only its text;
+  - bench `--keep` and `--out`;
+  - docs 02/06, the bench README.
+- **Learned:** run the smoke before the sixty. Each of these would have turned every hierarchy
+  result into noise.
+
+---
+
+### [2026-10-25T19:22:19+01:00] rimuru — the second smoke run, and #172's review
+- **Task:** the second smoke run (on #172's build) and Fable's review of #172.
+- **Found by the smoke:**
+  - the Elf now tried to commission its Orc, and the dispatch law refused it (no plan item);
+  - the Elf could not write its own `plan.md`, since the file tools protect all of `.mnemorph`;
+  - the CLI's `dist` predated the run.ts fix (`just check` tests the source, not the build).
+- **Fixed:**
+  - the file tools allow a body's own `plan.md`, directly in a seat that is one of its soil roots,
+    and nothing else in `.mnemorph`; the Elf's race card says to write the plan item first;
+  - the review:
+    - the pre-fix smoke results are dropped;
+    - the slice law is written whole (the floor outranks worth, never the reserve);
+    - the note names the bound applied;
+    - run.ts keeps children's acts and warnings on stderr, under their names;
+    - the race cards use the law's words;
+    - the bench's `--keep` goes through argparse;
+  - docs 05/06.
+- **Security note:** the plan exemption relaxes a protection, so Opus reviews it.
+
+---
+
+### [2026-10-25T19:30:49+01:00] rimuru — #172's security review: Opus, then Fable on Opus's report
+- **Task:** the plan exemption relaxes a protection, so Opus reviewed it and Fable reviewed
+  Opus's report.
+- **Opus:** no escalation. Two low findings: the exemption keyed on any soil root under
+  `.mnemorph`, and `plan_items` followed links. Also a docs asymmetry.
+- **Fixed:**
+  - `Context.seat` (`with_seat` from `context_for`), compared exactly;
+  - a `plan.md` that is a link is no plan;
+  - the Elf's card and docs/05 say a plan is written with the file tools, and a command's write
+    is put back.
+- **Fable:** confirmed each fix; nothing missed escalates (inherit keeps the seat; a symlinked
+  seat is still refused by `admits`; `beneath` closes the TOCTOU). Safe to merge. Its suggested
+  test for a linked plan is added.

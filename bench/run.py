@@ -114,7 +114,7 @@ def escalations(world):
     return n
 
 
-def run_one(task, mode, model, secret, timeout):
+def run_one(task, mode, model, secret, timeout, keep=False):
     world = world_for(task, model)
     ask = (task / "ask.md").read_text().strip()
     if mode == "hierarchy":
@@ -148,7 +148,10 @@ def run_one(task, mode, model, secret, timeout):
         "limited": limited,
         "stderr": scrubbed[-400:],
     }
-    shutil.rmtree(world, ignore_errors=True)
+    if keep:
+        result["world"] = str(world)
+    else:
+        shutil.rmtree(world, ignore_errors=True)
     return result
 
 
@@ -160,6 +163,8 @@ def main():
     p.add_argument("--modes", default="solo,hierarchy")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
     p.add_argument("--timeout", type=int, default=1800)
+    p.add_argument("--keep", action="store_true", help="keep each run's world, for a post-mortem")
+    p.add_argument("--out", default="", help="a results file other than the model's")
     a = p.parse_args()
     if a.check:
         return check()
@@ -167,7 +172,7 @@ def main():
     if not secret:
         print("no key: set OPENROUTER_API_KEY, or write ~/.config/mnemorph/openrouter.key (mode 600)")
         return 2
-    out = BENCH / "results" / (re.sub(r"[^A-Za-z0-9._-]", "_", a.model) + ".jsonl")
+    out = Path(a.out) if a.out else BENCH / "results" / (re.sub(r"[^A-Za-z0-9._-]", "_", a.model) + ".jsonl")
     out.parent.mkdir(exist_ok=True)
     done = set()
     if out.exists():
@@ -182,7 +187,7 @@ def main():
                 continue
             if a.limit and ran >= a.limit:
                 return 0
-            r = run_one(t, mode, a.model, secret, a.timeout)
+            r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
             if r["limited"]:
                 print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
                 return 3

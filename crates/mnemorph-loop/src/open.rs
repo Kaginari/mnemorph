@@ -207,11 +207,8 @@ pub fn open_with(
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),
         router: Some(router(config, decided.clone(), model.provider())),
-        council: crate::council::Thresholds {
-            escalate_at: config.stress("escalate_at").unwrap_or(5),
-            relieve_at: config.stress("relieve_at").unwrap_or(7),
-            max_consults: config.stress("max_consults").unwrap_or(3),
-        },
+        slice_floor: crate::commission::SLICE_FLOOR,
+        council: council_keys(config),
     });
     let setup = Setup {
         model: model.clone(),
@@ -306,6 +303,16 @@ an Elf's new fact resembles older ones: label it in your answer, on a line of it
 `@V #<new> support|counter|refines #<id>`, or `@V #<new> distinct`. The lanes:\n{}",
         list.join("\n")
     )
+}
+
+/// The council's keys, from the configuration's `stress.*`, else their defaults.
+fn council_keys(config: &Config) -> crate::council::Thresholds {
+    let d = crate::council::Thresholds::default();
+    crate::council::Thresholds {
+        escalate_at: config.stress("escalate_at").unwrap_or(d.escalate_at),
+        relieve_at: config.stress("relieve_at").unwrap_or(d.relieve_at),
+        max_consults: config.stress("max_consults").unwrap_or(d.max_consults),
+    }
 }
 
 /// What chooses each court's model: the configuration, Metis's decider when routing is on, and

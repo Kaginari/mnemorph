@@ -69,7 +69,7 @@ impl World {
 
     /// As [`World::rimuru`], with or without an attic to put strays back from.
     fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
-        self.rimuru_full(model, attic, budget, None)
+        self.rimuru_full(model, attic, budget, None, 0)
     }
 
     /// As [`World::rimuru_with`], each court's model chosen by `router`.
@@ -79,6 +79,7 @@ impl World {
         attic: bool,
         budget: Option<u64>,
         router: Option<mnemorph_loop::commission::Router>,
+        slice_floor: u64,
     ) -> Run {
         let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
@@ -105,6 +106,7 @@ impl World {
             observer: None,
             council: mnemorph_loop::council::Thresholds::default(),
             router,
+            slice_floor,
             queue: Some(mnemorph_loop::world::Queue::at(&queue_of(&self.0))),
         };
         let setup = Setup {
@@ -1291,7 +1293,7 @@ async fn an_office_chooses_the_courts_model() {
         ),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_full(model.clone(), true, None, Some(router));
+    let mut run = w.rimuru_full(model.clone(), true, None, Some(router), 0);
     run.ask("go", &mut |_| {}).await;
     let requests = model.requests();
     assert_eq!(
@@ -1370,4 +1372,55 @@ async fn an_unheld_act_with_no_kijin_stays() {
     let kept = run.escalate(ending.clone()).await;
     assert_eq!(format!("{kept:?}"), format!("{ending:?}"));
     assert_eq!(model.requests().len(), 2, "nothing was commissioned");
+}
+
+/// A slice too small for one call is raised to the floor, and the dispatcher is told.
+#[tokio::test]
+async fn a_slice_is_at_least_one_call() {
+    let w = World::new("floor");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "budget_wt": 1}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru_full(
+        model,
+        true,
+        None,
+        None,
+        mnemorph_loop::commission::SLICE_FLOOR,
+    );
+    run.ask("go", &mut |_| {}).await;
+    let result = &w.results()[0];
+    assert!(
+        result.starts_with("@S DONE"),
+        "the Elf finished on its floor: {result}"
+    );
+    assert!(
+        result.contains("[granted 20000 wt, not the 1 asked"),
+        "{result}"
+    );
+}
+
+/// The dispatch law reads a plan that stands in the seat; a plan that is a link is no plan.
+#[test]
+fn a_linked_plan_is_no_plan() {
+    let w = World::new("plan-link");
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let plan = w.0.join(".mnemorph/elf/e/plan.md");
+    assert_eq!(
+        mnemorph_loop::commission::plan_items(&w.0, &roster, "elf-e"),
+        ["orc-o"]
+    );
+    let elsewhere = w.0.join("src/plan.md");
+    fs::rename(&plan, &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &plan).unwrap();
+    assert_eq!(
+        mnemorph_loop::commission::plan_items(&w.0, &roster, "elf-e"),
+        Vec::<String>::new()
+    );
 }

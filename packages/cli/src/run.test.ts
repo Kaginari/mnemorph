@@ -180,3 +180,22 @@ test.runIf(existsSync(daemon) && existsSync('/proc'))(
     }
   },
 );
+
+test("a commissioned body's turn end is not the ask's: run waits for its own", async () => {
+  const core = new FakeCore();
+  const send = core.send.bind(core);
+  core.send = (line: string) => {
+    send(line);
+    if (JSON.parse(line).method === 'session/prompt') {
+      setTimeout(() => {
+        core.event('textDelta', { text: 'below', body: 'elf-e' });
+        core.event('turnEnded', { ending: 'checkpoint: budget', body: 'elf-e' });
+        core.event('textDelta', { text: 'the answer' });
+        core.event('turnEnded', { ending: 'answered' });
+      }, 5);
+    }
+  };
+  const streams = io();
+  expect(await runOnce(parse(['run', 'x']) as never, streams, core)).toBe(0);
+  expect(streams.text().stdout).toBe('the answer\n');
+});

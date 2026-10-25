@@ -18,7 +18,11 @@ just check                      # builds target/debug/mnemorphd and the CLI
 python3 bench/run.py --check    # every task fails untouched: no model, no key
 python3 bench/run.py            # all 60 runs on the default free model
 python3 bench/run.py --tasks 01,02 --modes solo --limit 2
+python3 bench/run.py --tasks 01 --modes hierarchy --keep --out /tmp/look.jsonl   # a post-mortem
 ```
+
+`--keep` leaves each run's world on disk and names it in the result, to read its journals;
+`--out` writes the results elsewhere than the model's tracked file.
 
 The key is `OPENROUTER_API_KEY` from the environment, else `~/.config/mnemorph/openrouter.key`
 (mode 600 — a key file others can read is refused). It is handed only to each run's own process,
