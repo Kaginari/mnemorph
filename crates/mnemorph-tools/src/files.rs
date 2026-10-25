@@ -202,7 +202,8 @@ impl Tool for Write {
             Ok(p) => p,
             Err(e) => return Outcome::error(e),
         };
-        if crate::beneath::read(cx.world(), &path).is_ok_and(|b| b == a.content.as_bytes()) {
+        let before = crate::beneath::read(cx.world(), &path).ok();
+        if before.as_deref() == Some(a.content.as_bytes()) {
             return Outcome::error(format!(
                 "`{}` already holds exactly that; nothing was written",
                 cx.shown(&path)
@@ -218,9 +219,59 @@ impl Tool for Write {
             format!("wrote `{}` ({lines} lines)", cx.shown(&path)),
             ToolClass::Write,
         );
+        // A file that was not text had no lines to remove: counting its bytes as lines is noise.
+        let old = before
+            .and_then(|b| String::from_utf8(b).ok())
+            .unwrap_or_default();
+        (o.meta.lines_added, o.meta.lines_removed) = line_delta(&old, &a.content);
         o.meta.wrote.push(path);
         o
     }
+}
+
+/// Lines added and removed from `before` to `after`, as a multiset of lines: cheap, and the same
+/// on every run. A line moved within the file counts as neither.
+#[must_use]
+pub fn line_delta(before: &str, after: &str) -> (u32, u32) {
+    let mut count: std::collections::HashMap<&str, i64> = std::collections::HashMap::new();
+    for line in before.lines() {
+        *count.entry(line).or_default() -= 1;
+    }
+    for line in after.lines() {
+        *count.entry(line).or_default() += 1;
+    }
+    let (mut added, mut removed) = (0u32, 0u32);
+    for n in count.values() {
+        let k = u32::try_from(n.unsigned_abs()).unwrap_or(u32::MAX);
+        if *n > 0 {
+            added = added.saturating_add(k);
+        } else {
+            removed = removed.saturating_add(k);
+        }
+    }
+    (added, removed)
+}
+
+/// Why an edit was refused: its words, and whether `old_string` was missing from the file.
+struct Refused {
+    why: String,
+    miss: bool,
+}
+
+impl From<&str> for Refused {
+    fn from(why: &str) -> Refused {
+        Refused {
+            why: why.to_owned(),
+            miss: false,
+        }
+    }
+}
+
+/// An edit's refusal as a call's outcome; a missing `old_string` is marked an edit miss.
+fn refused(r: Refused) -> Outcome {
+    let mut o = Outcome::error(r.why);
+    o.meta.edit_miss = r.miss;
+    o
 }
 
 /// Replace `old` with `new` in `text` under edit's rules: exactly one match, or every match with
@@ -232,7 +283,7 @@ fn replace(
     new: &str,
     all: bool,
     shown: &str,
-) -> Result<(String, usize, usize), String> {
+) -> Result<(String, usize, usize), Refused> {
     if old.is_empty() {
         return Err("`old_string` is empty; to create or replace a whole file, use write".into());
     }
@@ -244,17 +295,22 @@ fn replace(
     match at.len() {
         0 => {
             let (n, line) = closest_line(text, old);
-            return Err(format!(
-                "`old_string` does not occur in `{shown}`; the closest line is {n}: `{}`. Read the file and copy the text exactly.",
-                line.trim()
-            ));
+            return Err(Refused {
+                why: format!(
+                    "`old_string` does not occur in `{shown}`; the closest line is {n}: `{}`. Read the file and copy the text exactly.",
+                    line.trim()
+                ),
+                miss: true,
+            });
         }
         k if k > 1 && !all => {
             let lines: Vec<String> = at.iter().map(|&i| line_of(i).to_string()).collect();
             return Err(format!(
                 "`old_string` occurs {k} times in `{shown}` (lines {}); add context to make it unique, or set replace_all",
                 lines.join(", ")
-            ));
+            )
+            .as_str()
+            .into());
         }
         _ => {}
     }
@@ -337,7 +393,7 @@ impl Tool for Edit {
         let (updated, n, first_line) =
             match replace(&text, &a.old_string, &a.new_string, a.replace_all, &shown) {
                 Ok(r) => r,
-                Err(e) => return Outcome::error(e),
+                Err(e) => return refused(e),
             };
         keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, updated.as_bytes()) {
@@ -348,6 +404,7 @@ impl Tool for Edit {
             format!("edited `{shown}`: {n} replacement(s), from line {first_line}"),
             ToolClass::Write,
         );
+        (o.meta.lines_added, o.meta.lines_removed) = line_delta(&text, &updated);
         o.meta.wrote.push(path);
         o
     }
@@ -487,11 +544,15 @@ impl Tool for MultiEdit {
                     total += n;
                 }
                 Err(why) => {
-                    return Outcome::error(format!(
-                        "edit {} of {}: {why} Nothing was written.",
-                        i + 1,
-                        a.edits.len()
-                    ));
+                    return refused(Refused {
+                        why: format!(
+                            "edit {} of {}: {} Nothing was written.",
+                            i + 1,
+                            a.edits.len(),
+                            why.why
+                        ),
+                        miss: why.miss,
+                    });
                 }
             }
         }
@@ -512,6 +573,8 @@ impl Tool for MultiEdit {
             ),
             ToolClass::Write,
         );
+        (o.meta.lines_added, o.meta.lines_removed) =
+            line_delta(&String::from_utf8_lossy(&original), &text);
         o.meta.wrote.push(path);
         o
     }
