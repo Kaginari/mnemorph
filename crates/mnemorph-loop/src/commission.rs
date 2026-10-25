@@ -96,6 +96,8 @@ pub struct Commissioner {
     pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// Who watches the session: every commissioned body's beats reach it, labelled.
     pub observer: Option<crate::run::Observer>,
+    /// The council's keys.
+    pub council: crate::council::Thresholds,
     /// The shared work queue a report's `@$` orders are held on; `None` holds none.
     pub queue: Option<mnemorph_world::Queue>,
 }
@@ -344,14 +346,10 @@ pub(crate) async fn order(
     landed.extend(courts);
     landed.sort();
     landed.dedup();
-    let notes: Vec<String> = granted.into_iter().collect();
-    // Triage is a hole the parent must settle: holes are never cut from a report.
-    let triage = file_facts(&c.world, &ending, &a.to);
-    file_labels(&c.world, &roster, &ending, &a.to);
-    if let Some(q) = &c.queue {
-        hold_orders(q, &c.world, &ending, &a.to);
-    }
-    let report = report_of(&ending, &landed, &put_back, &notes, &triage);
+    let failed = child.failed_acts();
+    let report = report_for(
+        c, &roster, &a.to, &ending, failed, granted, &landed, &put_back,
+    );
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
@@ -637,6 +635,61 @@ pub(crate) fn settle(
     )
 }
 
+/// What a child's run leaves, after it: its facts filed and its parent's triage owed, its own
+/// triage labels, its `@$` orders held, the council sat — and the report its dispatcher reads.
+#[allow(clippy::too_many_arguments)]
+fn report_for(
+    c: &Commissioner,
+    roster: &Roster,
+    to: &str,
+    ending: &Ending,
+    failed: u32,
+    granted: Option<String>,
+    landed: &[PathBuf],
+    put_back: &[(PathBuf, bool)],
+) -> String {
+    let mut notes: Vec<String> = granted.into_iter().collect();
+    // Triage is a hole the parent must settle: holes are never cut from a report.
+    let mut triage = file_facts(&c.world, ending, to);
+    file_labels(&c.world, roster, ending, to);
+    if let Some(q) = &c.queue {
+        hold_orders(q, &c.world, ending, to);
+    }
+    let forced = council(c, to, ending, failed, &mut notes, &mut triage);
+    report_of(ending, landed, put_back, &notes, &triage, forced.as_deref())
+}
+
+/// Sit the council after a child's run: a warrant becomes a hole for the parent, relief a note,
+/// and too many warrants the escalation its report is forced to. An interrupted run never adds.
+fn council(
+    c: &Commissioner,
+    body: &str,
+    ending: &Ending,
+    failed: u32,
+    notes: &mut Vec<String>,
+    holes: &mut Vec<String>,
+) -> Option<String> {
+    let done = match ending {
+        Ending::Answered(text) => {
+            Report::parse(text).is_some_and(|r| r.status.split_whitespace().next() == Some("DONE"))
+        }
+        _ => false,
+    };
+    let counted = !matches!(ending, Ending::Interrupted);
+    match crate::council::sit(&c.world, c.council, body, u64::from(failed), done, counted) {
+        crate::council::Sitting::Quiet => None,
+        crate::council::Sitting::Warrant(text) => {
+            holes.push(text);
+            None
+        }
+        crate::council::Sitting::Relieved(line) => {
+            notes.push(format!("[council: relief — {line}]"));
+            None
+        }
+        crate::council::Sitting::Escalate(why) => Some(why),
+    }
+}
+
 /// Relay-hold: an answering child's `@$ <body>: <ask>` orders are held on the shared queue in its
 /// name; nothing dispatches them mid-turn.
 fn hold_orders(q: &mnemorph_world::Queue, world: &Path, ending: &Ending, by: &str) {
@@ -779,6 +832,7 @@ fn report_of(
     put_back: &[(PathBuf, bool)],
     notes: &[String],
     triage: &[String],
+    forced: Option<&str>,
 ) -> String {
     let mut report = match ending {
         Ending::Answered(text) => Report::parse(text).unwrap_or_else(|| Report {
@@ -819,6 +873,10 @@ fn report_of(
         ));
     }
     report.other.extend(notes.iter().cloned());
+    // The council's last word: after its warrants, the report escalates to the human.
+    if let Some(why) = forced {
+        report.status = format!("ESCALATE {why}");
+    }
     report
         .holes
         .extend(triage.iter().cloned().map(mnemorph_wire::Hole::Other));

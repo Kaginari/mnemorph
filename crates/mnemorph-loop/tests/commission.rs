@@ -92,6 +92,7 @@ impl World {
             stress_tokens: None,
             busy: std::sync::Mutex::default(),
             observer: None,
+            council: mnemorph_loop::council::Thresholds::default(),
             queue: Some(mnemorph_loop::world::Queue::at(&queue_of(&self.0))),
         };
         let setup = Setup {
@@ -1153,5 +1154,30 @@ async fn the_throne_triages_in_its_answer() {
         facts.facts[&old].counters.contains("elf-e"),
         "{:?}",
         facts.facts[&old]
+    );
+}
+
+/// Five failed runs: the fifth report carries the council's warrant to the parent, as a hole.
+#[tokio::test]
+async fn the_council_warrant_reaches_the_parent() {
+    let w = World::new("council");
+    let mut script = Vec::new();
+    for n in 0..5 {
+        script.push(ScriptedModel::tool(
+            &format!("c{n}"),
+            "commission",
+            json!({"to": "elf-e", "ask": "plan it"}),
+        ));
+        script.push(ScriptedModel::text("@S FAIL no plan holds\n@E"));
+    }
+    script.push(ScriptedModel::text("ok"));
+    let model = Arc::new(ScriptedModel::new(script));
+    let mut run = w.rimuru(model);
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(!results[3].contains("council"), "{results:?}");
+    assert!(
+        results[4].contains("@? council: elf-e strain 5 — answer as its manager"),
+        "{results:?}"
     );
 }

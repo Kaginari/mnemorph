@@ -162,6 +162,7 @@ pub struct Stress {
     window: VecDeque<i32>,
     warnings: u32,
     failed_streak: u32,
+    failed: u32,
     rereads: u32,
     turns: u32,
     last_call: Option<String>,
@@ -170,6 +171,12 @@ pub struct Stress {
 }
 
 impl Stress {
+    /// The run's failed acts, all told.
+    #[must_use]
+    pub fn failed(&self) -> u32 {
+        self.failed
+    }
+
     /// Read one act. Every landing resets the triggers it relieves, so a relieved run is not
     /// stopped by its own past.
     pub fn act(&mut self, call: &str, command: Option<&str>, o: &Outcome) -> Vec<Signal> {
@@ -253,6 +260,7 @@ impl Stress {
             self.rereads = 0;
             self.turns = 0;
         }
+        self.failed += u32::from(o.is_error);
         self.failed_streak = if o.is_error {
             self.failed_streak + 1
         } else {

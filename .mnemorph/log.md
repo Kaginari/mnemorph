@@ -2725,3 +2725,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `heal::splice` is shared.
 - **Open:** moving queue orders to the young automatically, and relief's automatic trigger (the
   council).
+
+---
+
+### [2026-10-25T14:33:32+01:00] rimuru — M7: the council
+- **Task:** continue M7: the council, relief's automatic trigger.
+- **Files:**
+  - loop council.rs — `Thresholds` (`stress.escalate_at`/`relieve_at`/`max_consults`, defaults
+    5/7/3); `tally`; `sit`:
+    - strain is the failed acts, plus one when the report did not answer DONE;
+    - a clean DONE clears it, and an interrupted run adds nothing;
+    - a warrant comes at 5, a forced ESCALATE after 3 warrants, relief at 7, then the trigger
+      resets;
+  - stress.rs — `failed()`; run.rs — `failed_acts()`;
+  - commission.rs:
+    - `report_for` gathers facts, labels, holds and the council;
+    - `council()` turns a warrant into a hole, relief into a note, and the last warrant into the
+      forced status;
+  - open.rs — thresholds from the config;
+  - tests: tests/council.rs (warrants, the escalation, the clearing, an interrupt, relief at 7 and
+    the reset) and the warrant reaching the parent;
+  - docs/03.
+- **Open:**
+  - re-asks are not yet counted;
+  - a gate denial by the human still counts as a failed act (the doc says denials never add).

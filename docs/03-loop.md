@@ -209,7 +209,11 @@ The council's keys are `stress.escalateAt` (5), `stress.relieveAt` (7) and `stre
 read from the body's own first `@S`, never from how the loop ended — a court that reports
 `@S FAIL` still finishes its loop cleanly. A clean landing clears it; the human's denials and
 interrupted or dry runs never add to it. Every relief resets its own trigger, or the next run dies
-on its first act.
+on its first act. The tally is `.mnemorph/instruments/council.jsonl`, sat after every commission: a run adds its
+failed acts and one more when its report did not answer `DONE`; a `DONE` with no failed act clears
+it. The warrant reaches the parent as a hole in the child's report —
+`@? council: <body> strain <n> — answer as its manager: @INSTRUCT …, @SPLIT …, or @ESCALATE` — the
+last warrant forces the report's `@S` to `ESCALATE`, and relief's act is a note in the report.
 
 ### Self-heal
 
