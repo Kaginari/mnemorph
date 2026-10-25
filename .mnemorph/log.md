@@ -2689,7 +2689,44 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
-### [2026-10-25T12:20:00+02:00] rimuru — the instruments a value model needs, journaled per act
+### [2026-10-25T14:16:45+01:00] rimuru — M7: relief
+- **Task:** the human said "yes cargo clean and continue". `cargo clean` freed 39.5 GB (the disk
+  had filled). Next M7 rung, clear of the other session's commission work: relief.
+- **Files:**
+  - world relief.rs — `relieve(world, name, apply)`:
+    - a split in halves by claims, or by the tree under a one-directory ground;
+    - otherwise the seat retires;
+    - the young get docs (created new, never through a link), the old seat gains one `Retired`
+      line, and one journal entry is written;
+  - mnemorphd — `relief <name> [--apply]`, refused in a body's command;
+  - CLI — passes it through;
+  - tests: a split by prefixes (CRLF doc, memory kept, no overlap), a split by tree, a retire,
+    an Elf refused;
+  - docs/03.
+- **Next:** the council — strain counted per body, `@INSTRUCT`/`@SPLIT`/`@ESCALATE` at 5, relief
+  at 7, forced escalation after three warrants.
+
+---
+
+### [2026-10-25T14:25:29+01:00] rimuru — #164 review fixes
+- **Task:** fix Fable's review of relief.
+- **Fixed:**
+  - an Orc's living Slimes are relinked to the young that covers their zone; before, they were
+    orphaned with High findings;
+  - a root-file claim is written `./FILE`, so the young parse;
+  - preflight checks both seats and the old doc before any write, and a failed young write is
+    undone; the dry run checks too;
+  - the tree split descends through a lone directory, a link is a file, and hidden entries go to
+    `-a`;
+  - an ascended race gives young of the base race, seated beside the old;
+  - Minds are copied;
+  - nested claims are deduplicated;
+  - the old seat's open queue orders are named, to re-route;
+  - `heal::splice` is shared.
+- **Open:** moving queue orders to the young automatically, and relief's automatic trigger (the
+  council).
+
+### [2026-10-25T14:45:30+01:00] rimuru — the instruments a value model needs, journaled per act
 - **Task:** Veldora: "do both" — after the guard test, the four instruments the real Terminal-Bench
   runs showed missing: lines changed per write, edit misses, verification scripts counted as
   tests, and a guts reading journaled for every act.

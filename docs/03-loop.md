@@ -237,7 +237,16 @@ The world repairs itself in small, mechanical steps, each one written to the led
 - **Relief** splits a strained creature's zone in two young of the same race — by its prefixes,
   or by the directory tree under a one-prefix zone — or, when the zone cannot split, retires the
   seat: it keeps its memory, claims no files, and stays visible. A `relief` row records the act.
-  Relief is skipped for a body that just evolved.
+  Relief is skipped for a body that just evolved. It relieves Slimes and Orcs: the two young are
+  `<name>-a` and `<name>-b`, of the old one's base race, seated beside it, reporting to the same
+  parent, with the same verify lines and Minds, each taking half the claims sorted — a claim
+  another covers set aside — or half the entries under a one-directory ground, descending while
+  that directory holds one entry (hidden entries go with the first, a link counts as a file). An
+  Orc's living Slimes report to the young whose ground covers theirs. The old seat gains one
+  `Retired: yes` line and nothing else changes; its open queue orders are named, to re-route.
+  Every check runs before any write, and a failed write is undone. The
+  human can act it with `mnemorph relief <name> [--apply]` — without `--apply` it says what it
+  would do; never from a body's command.
 - **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
   its lane goes into the ledger as a `death` row and the next-fit lane is suggested on the wire —
   advice to the parent, never a change on its own.
