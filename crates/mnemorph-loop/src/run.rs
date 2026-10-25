@@ -795,8 +795,8 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
-        // Checks the machine would not run: a retry cannot change the machine, and the body is not
-        // to blame. The human is told how to let them run.
+        // No kernel guard, so no check could run: a retry cannot change the machine, and the body
+        // is not to blame. The human is told how to let them run.
         if verdict.unrun() {
             return Some(Ending::Failed(format!(
                 "the end gate could not verify: {} — make the sandbox work on this machine, or set \

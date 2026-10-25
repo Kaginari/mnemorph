@@ -3193,3 +3193,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 03/06.
 - **Tests:** right_author (`unrun()`) and worth (unrun entries leave the streak and the card as
   they were).
+
+---
+
+### [2026-10-25T20:59:21+01:00] rimuru — #178's review: Fable
+- **Fable found:** `unrun()` fired on any check that did not run, refusals included. A body could
+  symlink a path its check reads to a credential, get the check refused, and end blameless. The
+  "fix the sandbox" hint was then wrong too.
+- **Fixed:** blameless means only that the gate's context had no kernel guard and none allowed
+  unguarded (`GateVerdict.unguarded`). A refused, denied or timed-out line on a guarded machine
+  stays NOT_VERIFIED and counts. The `timed_out` plumbing from this branch is gone. Docs 03.
+- **Test:** a failure beside a refusal is FAIL and not unrun; a refusal alone is not unrun.

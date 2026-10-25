@@ -310,10 +310,11 @@ check ran and did not hold — a crash included. **NOT_VERIFIED**: nothing faile
 no result — a verify line that did not run (no kernel guard and none allowed unguarded, or the
 command refused or denied) or was killed at its deadline. A partial pass never reads as a full one: NOT_VERIFIED is no pass, and the
 journal, the `gateVerdict` event and the transcript carry the word. A line killed at its deadline
-gets the same one chance as a failure — the body's tests hung. Lines that did not run at all are
-the machine's doing: the landing ends at once, journaled `NOT_VERIFIED, unrun`, with no second
-try and no mark on the body's record, and the human is told to make the sandbox work or allow
-commands unguarded.
+gets the same one chance as a failure — the body's tests hung — and so does a line refused or
+denied on a guarded machine. With no kernel guard in force and none allowed unguarded, no line can
+run: that is the machine's doing, so the landing ends at once, journaled `NOT_VERIFIED, unrun`,
+with no second try and no mark on the body's record, and the human is told to make the sandbox
+work or allow commands unguarded.
 
 **In solo mode** the gate judges what the run changed against the tree as it was when the ask
 arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
@@ -331,7 +332,7 @@ automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 
 The verdict goes to `log.md` through the append-only writer: one entry per verdict, stamped,
 naming the body and the verdict — `PASS`, `FAIL` or `NOT_VERIFIED`, with `, handed back` on a
-first one that did not pass and `, unrun` on checks the machine would not run — with
+first one that did not pass and `, unrun` when no kernel guard let any check run — with
 the paths it changed and what failed; a pass that changed nothing is not journaled. The writer
 only appends, whole entries in one write, each on lines of its own — a control character in a
 command's output or a file name becomes a space — and never writes through a link; a world
