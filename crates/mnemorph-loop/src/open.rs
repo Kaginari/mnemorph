@@ -204,6 +204,7 @@ pub fn open_with(
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),
+        router: Some(router(config, world, model.clone(), &env, &body.model)),
         council: crate::council::Thresholds {
             escalate_at: config.stress("escalate_at").unwrap_or(5),
             relieve_at: config.stress("relieve_at").unwrap_or(7),
@@ -303,6 +304,27 @@ an Elf's new fact resembles older ones: label it in your answer, on a line of it
 `@V #<new> support|counter|refines #<id>`, or `@V #<new> distinct`. The lanes:\n{}",
         list.join("\n")
     )
+}
+
+/// What chooses each court's model: the configuration, Metis's decider when routing is on, and
+/// the session's provider.
+fn router(
+    config: &Config,
+    world: &Path,
+    model: Arc<dyn crate::model::Model>,
+    env: impl Fn(&str) -> Option<String>,
+    session_model: &str,
+) -> crate::commission::Router {
+    crate::commission::Router {
+        config: Arc::new(config.clone()),
+        decisions: crate::decisions::decisions(config, world, model, env)
+            .ok()
+            .flatten(),
+        provider: config
+            .backend(session_model)
+            .map(|b| b.provider_name)
+            .unwrap_or_default(),
+    }
 }
 
 /// The human's caps, and what this world already spent against them: whether any is set, the
