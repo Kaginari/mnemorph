@@ -252,8 +252,10 @@ flowchart LR
   `.git/info`, a `.git` file) would run code outside any sandbox the next time the human runs
   git, and `.mnemorph/` holds the world's records. Each command runs between two snapshots of
   them; once its process group is dead, every change is put back and the body is told. The
-  file tools refuse those paths outright. `.mnemorph/shared/` (the work queue), `tmp/` and
-  `intel/` stay writable; a repository the command itself creates is its own. The snapshot keeps
+  file tools refuse those paths outright. The shared work queue is among them: it moves only
+  through the harness, so a body's command that edits it is put back, and a body's own
+  `mnemorph q` — every command carries `MNEMORPH_BODY` — reads the queue but never moves it as the
+  human. `tmp/` and `intel/` stay writable; a repository the command itself creates is its own. The snapshot keeps
   up to 16 MiB of content; a change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard
   lets no command reach. Before every command and every file write, the working tree is

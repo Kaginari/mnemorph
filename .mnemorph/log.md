@@ -2244,3 +2244,52 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - An approval is the one moment the human acts, so it must name who asks.
   - My earlier entry said a child's beats are "wrapped once per rank". Every rank shares the
     session's commissioner, so each beat is wrapped once, in its own name.
+
+---
+
+### [2026-10-25T10:14:28+01:00] rimuru — M7: the shared work queue, and its door
+- **Task:** the human said "go". The shared work queue's store, its rank law, the human's door
+  `mnemorph q`, and relay-hold of a report's `@$` orders.
+- **Files:**
+  - crates/mnemorph-world queue.rs — `Item` snapshots with revisions, a fold that refuses a line
+    that does not follow, `State` held/claimed/done/dropped, `Move`, the rank law, `add`,
+    `move_item`, `open`;
+  - tests/queue.rs;
+  - mnemorphd — `q` list/show/add/claim/touch/requeue/close, `--json`, a refusal exits 2;
+    tests/onto.rs;
+  - mnemorph-loop commission.rs — `hold_orders`;
+  - packages/cli args.ts and cli.tsx — `mnemorph q`, words passed whole.
+- **Gate:** n/a. Instruments:
+  - states, the rank law, a race won by the first line;
+  - the door by hand and in a test;
+  - an Orc's `@$` held in its name;
+  - `just check`.
+- **Result:** in review as a pull request.
+- **Open, next rung:** the wake, which claims a held row at the turn boundary in the name of the
+  body it is ordered to and dispatches it; the `queue` tool on bodies' shelves; the status line's
+  "N held"; a report settling its oldest claim.
+
+---
+
+### [2026-10-25T10:18:15+01:00] rimuru — the queue, closed to bodies' hands
+- **Task:** a side note warned that `mnemorph q` counted whoever ran it as the human, and that
+  the tripwire left `.mnemorph/shared/` writable, so a body's command could move the queue as the
+  human. The human added: "agent should pick only a job they can do".
+- **Files:**
+  - tools:
+    - tripwire.rs — `shared/` is no longer spared: a body's command or tool editing the queue is
+      put back or refused;
+    - shell.rs — every command carries `MNEMORPH_BODY`;
+  - world queue.rs — a body never claims in another's name;
+  - mnemorphd — `q` under `MNEMORPH_BODY` reads but never moves; `q_args`, `print_items` and
+    `refused` split out;
+  - tests: the claim rule, a body's `q` refused, and the two old "shared is writable" tests
+    flipped;
+  - docs/04, docs/05.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** an environment variable is courtesy, the file is the border. A body could unset
+  `MNEMORPH_BODY`, but the tripwire puts back any change its command makes to the queue. The
+  queue moves only through the harness's own process.
+- **For the wake (next rung):** it claims only an order its body can carry out. The dispatch law
+  must hold, and every path the order touches must be on the body's ground.

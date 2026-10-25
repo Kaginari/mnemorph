@@ -243,6 +243,7 @@ pub(crate) async fn order(
     landed.sort();
     landed.dedup();
     file_facts(&c.world, &ending, &a.to);
+    hold_orders(&c.world, &ending, &a.to);
     let report = report_of(&ending, &landed, &put_back);
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
@@ -276,6 +277,26 @@ fn file_facts(world: &Path, ending: &Ending, by: &str) {
             if let Err(e) = mnemorph_world::Facts::record(world, &event) {
                 eprintln!("mnemorph: {by}'s fact could not be filed: {e}");
             }
+        }
+    }
+}
+
+/// Relay-hold: an answering child's `@$ <body>: <ask>` orders are held on the shared queue in its
+/// name; nothing dispatches them mid-turn.
+fn hold_orders(world: &Path, ending: &Ending, by: &str) {
+    let Ending::Answered(text) = ending else {
+        return;
+    };
+    let Some(report) = Report::parse(text) else {
+        return;
+    };
+    let q = mnemorph_world::Queue::of(world);
+    for order in &report.enqueues {
+        if let Err(e) = q.add(Some(&order.body), by, &order.ask, 0) {
+            eprintln!(
+                "mnemorph: {by}'s order for {} could not be held: {e}",
+                order.body
+            );
         }
     }
 }

@@ -10,6 +10,9 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 Usage: mnemorphd [--world <dir>]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--world <dir>]
+       mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
+                 | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
+                 | close <id> [--drop]   [--world <dir>] [--json]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout. The
 `mnemorph` CLI starts it; run it by hand only to test a client.
@@ -19,6 +22,9 @@ from the creature docs; it needs no key and opens no session. A path is relative
 current directory, or absolute. `onto check` prints `@S PASS|FAIL <n> findings`, then each
 finding's severity, code, place and message; it fails on a critical or high finding, or a doc
 that does not read.
+
+`q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
+and says why.
 
 Options:
   --world <dir>   the world to work in (default: the current directory)
@@ -47,6 +53,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("onto") {
         return onto(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("q") {
+        return queue(&all[1..]);
     }
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
@@ -219,6 +228,171 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// What `q` was asked.
+#[derive(Default)]
+struct QArgs {
+    world: Option<PathBuf>,
+    json: bool,
+    all: bool,
+    drop: bool,
+    to: Option<String>,
+    rank: i64,
+    as_body: Option<String>,
+    words: Vec<String>,
+}
+
+/// Read `q`'s arguments.
+fn q_args(args: &[String]) -> Result<QArgs, String> {
+    let mut a = QArgs::default();
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        let mut value = |flag: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{flag} needs a value"))
+        };
+        match w.as_str() {
+            "--world" => a.world = Some(PathBuf::from(value("--world")?)),
+            "--for" => a.to = Some(value("--for")?),
+            "--as" => a.as_body = Some(value("--as")?),
+            "--rank" => {
+                let v = value("--rank")?;
+                a.rank = v
+                    .parse()
+                    .map_err(|_| format!("--rank is a number, not `{v}`"))?;
+            }
+            "--json" => a.json = true,
+            "--all" => a.all = true,
+            "--drop" => a.drop = true,
+            other if other.starts_with("--") => {
+                return Err(format!("unknown argument `{other}`; see --help"));
+            }
+            other => a.words.push(other.to_owned()),
+        }
+    }
+    Ok(a)
+}
+
+/// Print queue items: a tab-separated line each, or JSON lines.
+fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
+    let mut out = std::io::stdout().lock();
+    for i in items {
+        let _ = if json {
+            writeln!(out, "{}", serde_json::to_string(i).unwrap_or_default())
+        } else {
+            writeln!(
+                out,
+                "{}\t{}\t{}\t{}\t{}",
+                i.id,
+                i.state.word(),
+                i.holder(),
+                i.rank,
+                i.ask
+            )
+        };
+    }
+}
+
+/// A queue refusal: said on stderr, exit 2.
+fn refused(e: &dyn std::fmt::Display) -> ExitCode {
+    let _ = writeln!(std::io::stderr(), "mnemorphd: refused: {e}");
+    ExitCode::from(2)
+}
+
+/// `q …`: the shared work queue, for the human. Run inside a body's command it only reads: a body
+/// moves the queue through the harness, never as the human.
+fn queue(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::queue::{HUMAN, Item, Move, Queue};
+    let a = match q_args(args) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = a
+        .world
+        .clone()
+        .map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let q = Queue::of(&world);
+    let roster = mnemorph_server::world::Roster::load(&world);
+    let json = a.json;
+    let print = |items: &[Item]| print_items(items, json);
+    let body = std::env::var("MNEMORPH_BODY").ok();
+    let reading = matches!(
+        a.words.first().map(String::as_str),
+        Some("list" | "show") | None
+    );
+    if let Some(body) = body.filter(|_| !reading) {
+        return refused(&format!(
+            "{body} runs this: a body moves the queue through the harness, never by command as the human"
+        ));
+    }
+    let nth = |n: usize| a.words.get(n).cloned();
+    let moved = |id: Option<String>, mv: Move| match id {
+        None => fail("which item? give its id"),
+        Some(id) => match q.move_item(&roster, HUMAN, &id, &mv) {
+            Ok(i) => {
+                print(&[i]);
+                ExitCode::SUCCESS
+            }
+            Err(e) => refused(&e),
+        },
+    };
+    match a.words.first().map(String::as_str) {
+        Some("list") | None => {
+            let items: Vec<Item> = if a.all {
+                q.items().into_values().collect()
+            } else {
+                q.open()
+            };
+            print(&items);
+            ExitCode::SUCCESS
+        }
+        Some("show") => match nth(1).and_then(|id| q.items().remove(&id)) {
+            Some(i) => {
+                print(std::slice::from_ref(&i));
+                if !json {
+                    for n in &i.notes {
+                        println!("  {n}");
+                    }
+                }
+                ExitCode::SUCCESS
+            }
+            None => refused(&"no such item on the queue"),
+        },
+        Some("add") => {
+            let ask = a.words[1..].join(" ");
+            if ask.is_empty() {
+                return fail("q add needs the order's words");
+            }
+            match q.add(a.to.as_deref(), HUMAN, &ask, a.rank) {
+                Ok(i) => {
+                    print(&[i]);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => refused(&e),
+            }
+        }
+        Some("claim") => moved(
+            nth(1),
+            Move::Claim {
+                as_body: a.as_body.clone(),
+            },
+        ),
+        Some("touch") => moved(
+            nth(1),
+            Move::Touch {
+                note: a.words.get(2..).map(|w| w.join(" ")).unwrap_or_default(),
+            },
+        ),
+        Some("requeue") => moved(nth(1), Move::Requeue),
+        Some("close") => moved(nth(1), Move::Close { drop: a.drop }),
+        Some(other) => fail(&format!("q has no `{other}`; see --help")),
     }
 }
 

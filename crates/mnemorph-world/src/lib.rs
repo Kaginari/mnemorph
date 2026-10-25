@@ -6,6 +6,7 @@ pub mod facts;
 pub mod findings;
 pub mod graph;
 pub mod own;
+pub mod queue;
 pub mod roster;
 pub mod soil;
 
@@ -15,5 +16,6 @@ pub use facts::{Facts, Status as FactStatus};
 pub use findings::{Finding, Severity, check, fact_findings};
 pub use graph::{Bond, Graph};
 pub use own::{Owner, Ownership, Rule, WORKSPACE, explain, own};
+pub use queue::{Queue, Refusal as QueueRefusal};
 pub use roster::Roster;
 pub use soil::{Soil, soil};

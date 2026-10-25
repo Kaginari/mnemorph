@@ -7,8 +7,9 @@
 //! Protected: git's executable configuration — `.git/config` (`core.fsmonitor`,
 //! `core.sshCommand`, filter drivers), `.git/hooks`, `.git/info`, or a `.git` file pointing
 //! elsewhere — which would otherwise run code outside the sandbox the next time the human runs
-//! git; and the world's own records in `.mnemorph/` — except `shared/` (the work queue every
-//! body writes), `tmp/` (each command's scratch) and `intel/` (the scout's mirror).
+//! git; and the world's own records in `.mnemorph/` — the shared work queue included, which only
+//! the harness moves, never a body's command — except `tmp/` (each command's scratch) and `intel/`
+//! (the scout's mirror).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -36,7 +37,7 @@ pub(crate) fn protects(world: &Path, path: &Path) -> bool {
 }
 
 fn skipped(world: &Path, path: &Path) -> bool {
-    ["shared", "tmp", "intel"]
+    ["tmp", "intel"]
         .iter()
         .any(|d| path.starts_with(world.join(".mnemorph").join(d)))
 }

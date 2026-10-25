@@ -123,3 +123,55 @@ fn check_reads_names_git_would_quote() {
     let _ = std::fs::remove_dir_all(&dir);
     assert!(!out.contains("src/"), "the Slime owns src/café.rs: {out}");
 }
+
+/// The queue's door: add, list, claim, and a refusal that exits 2 saying why.
+#[test]
+fn the_queue_door() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-q-door-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph")).unwrap();
+    let q = |args: &[&str]| {
+        let mut all = vec!["q"];
+        all.extend_from_slice(args);
+        onto(&all, &dir)
+    };
+    let (ok, out, _) = q(&[
+        "add", "tidy", "the", "test", "--for", "slime-s", "--rank", "1",
+    ]);
+    assert!(ok, "{out}");
+    let id = out.split('\t').next().unwrap().to_owned();
+    assert!(out.contains("\theld\tslime-s\t1\ttidy the test"), "{out}");
+    let (ok, out, _) = q(&["claim", &id]);
+    assert!(ok && out.contains("\tclaimed\t"), "{out}");
+    let (ok, out, _) = q(&["list"]);
+    assert!(ok && out.lines().count() == 1, "{out}");
+    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["q", "close", "nope"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("refused: no item `nope`"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A body's command reads the queue but never moves it as the human.
+#[test]
+fn a_bodys_command_reads_the_queue_but_never_moves_it() {
+    let dir = std::env::temp_dir().join(format!("mnemorph-q-body-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".mnemorph")).unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            .args(args)
+            .current_dir(&dir)
+            .env("MNEMORPH_BODY", "slime-s")
+            .output()
+            .unwrap()
+    };
+    assert!(run(&["q", "list"]).status.success());
+    let out = run(&["q", "add", "sneak", "in"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("slime-s runs this"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

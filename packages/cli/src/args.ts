@@ -18,7 +18,14 @@ export type Command =
       json: boolean;
     }
   | { kind: 'status'; world?: string | undefined; core?: string | undefined }
-  | { kind: 'onto'; words: string[]; world?: string | undefined; core?: string | undefined }
+  | {
+      kind: 'onto';
+      words: string[];
+      world?: string | undefined;
+      core?: string | undefined;
+      /** The words are a whole core command (`q …`), not `onto …`'s. */
+      raw?: boolean | undefined;
+    }
   | { kind: 'error'; message: string };
 
 export const HELP = `mnemorph — talk to a Mnemorph body in your terminal
@@ -29,6 +36,7 @@ Usage:
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [options]          the build, the core, the key's origin, the sandbox
   mnemorph onto owner <path>...      who owns each path, by which rule and claim
+  mnemorph q list|show|add|claim|touch|requeue|close …   the shared work queue
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -55,6 +63,31 @@ export function parse(argv: string[]): Command {
   // Help and the version win wherever they appear: nothing else is read.
   if (argv.some((a) => a === '-h' || a === '--help')) return { kind: 'help' };
   if (argv.some((a) => a === '-V' || a === '--version')) return { kind: 'version' };
+  // The queue's words are the core's: everything after `q` goes to it untouched, but `--world`
+  // and `--core`, which are this CLI's.
+  const at = argv.indexOf('q');
+  if (
+    at !== -1 &&
+    argv.slice(0, at).every((a, i, all) => a.startsWith('--') || all[i - 1]?.startsWith('--'))
+  ) {
+    const words: string[] = [];
+    let qWorld: string | undefined;
+    let qCore: string | undefined;
+    const all = [...argv.slice(0, at), ...argv.slice(at + 1)];
+    for (let i = 0; i < all.length; i++) {
+      const a = all[i] as string;
+      if (a === '--world' || a === '--core') {
+        const value = all[i + 1];
+        if (value === undefined) return { kind: 'error', message: `${a} needs a value` };
+        if (a === '--world') qWorld = value;
+        else qCore = value;
+        i++;
+      } else {
+        words.push(a);
+      }
+    }
+    return { kind: 'onto', words: ['q', ...words], world: qWorld, core: qCore, raw: true };
+  }
   let world: string | undefined;
   let core: string | undefined;
   let json = false;

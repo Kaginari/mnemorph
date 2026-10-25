@@ -378,6 +378,15 @@ fn run(
         .process_group(0)
         .env_clear()
         .envs(scrubbed_env())
+        // Who runs it: a body's own `mnemorph q` reads the queue but never moves it as the human.
+        .env(
+            "MNEMORPH_BODY",
+            if cx.body().is_empty() {
+                "a body"
+            } else {
+                cx.body()
+            },
+        )
         .env("TMPDIR", &tmp);
     let mut child = cmd.spawn()?;
     let stdout = drain(child.stdout.take());

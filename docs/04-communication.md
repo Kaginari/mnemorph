@@ -289,7 +289,9 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 - **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch |
   requeue | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every
   shelf for bodies — reading is free, moving takes only what the body holds or stands over, and a
-  body never claims (work reaches it claimed in its name). The status line reads "N held".
+  body never claims (work reaches it claimed in its name), and only the human claims in another
+  body's name. The wake claims only an order its body can carry out: the dispatch rules hold, and
+  what the order touches lies on that body's ground. The status line reads "N held".
 - The file is tracked and merges with `merge=union` (`.gitattributes`): append-only lines travel
   between machines like the journal.
 

@@ -14,5 +14,9 @@ mnemorph-ledger = { path = "../mnemorph-ledger" }
 mnemorph-memory = { path = "../mnemorph-memory" }
 serde = { version = "1", features = ["derive"] }
 
+[dev-dependencies]
+serde_json = "1"
+
 [lints]
 workspace = true
+

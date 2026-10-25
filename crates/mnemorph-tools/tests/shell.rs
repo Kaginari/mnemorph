@@ -441,10 +441,13 @@ fn the_tripwire_keeps_the_worlds_records_and_spares_tmp() {
         &mut w.cx(Race::Slime, gate),
         "echo scratch > .mnemorph/tmp/y && mkdir -p .mnemorph/shared && echo '{}' >> .mnemorph/shared/queue.jsonl",
     );
-    assert!(!o.is_error, "{o:?}");
+    // The shared work queue moves only through the harness: a body's command editing it is put
+    // back, while its scratch stays its own.
+    assert!(o.is_error && o.content.contains("queue.jsonl"), "{o:?}");
+    assert!(!w.world().join(".mnemorph/shared/queue.jsonl").exists());
     assert!(
-        w.world().join(".mnemorph/shared/queue.jsonl").exists(),
-        "shared is the bodies' common ground"
+        w.world().join(".mnemorph/tmp/y").exists(),
+        "tmp is the command's own"
     );
 }
 
