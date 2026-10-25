@@ -2686,3 +2686,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - exits: 0 when whole, 1 when anything is left or a repair waits for `--heal`, 2 on errors;
   - a journal write that fails is left as a finding, not swallowed;
   - the stub name check also covers names the roster refused.
+
+---
+
+### [2026-10-25T12:20:00+02:00] rimuru — the instruments a value model needs, journaled per act
+- **Task:** Veldora: "do both" — after the guard test, the four instruments the real Terminal-Bench
+  runs showed missing: lines changed per write, edit misses, verification scripts counted as
+  tests, and a guts reading journaled for every act.
+- **Files:** mnemorph-tools tool.rs (`Meta.lines_added`, `lines_removed`, `edit_miss`), files.rs
+  (`line_delta`, a multiset count; write, edit and multiedit set it; a missing `old_string` is a
+  typed refusal, marked a miss), mnemorph-loop stress.rs (verification scripts are benches;
+  `Reading`, the last act as the guts read it; the bench tally in its own method), beats.rs
+  (`Beat::Guts`, ignored by the rebuilt conversation), run.rs (`record_guts` per act),
+  mnemorph-server (the beat reaches no surface), tests (tools, the check-script detector, a run's
+  guts beats), docs/03-loop.md (the bench tally, the guts journal).
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request. No behaviour changes but one: a verification script now
+  counts in the bench tally, so its stall rules apply to it.
+- **Learned:**
+  - The test caught an inline check whose script holds a `;` (`from run import f; assert …`):
+    the tally cuts a command at its first `;` to find the runner, which dropped the `assert`. The
+    interpreter is read from the cut command, the `assert` from the whole one.

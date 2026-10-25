@@ -185,7 +185,11 @@ All are code. None of them asks the body how it feels.
 
 The **bench tally** keeps, per test command — the command before any pipe or `;`, its
 `VAR=value`, `timeout` and runner words (`uv run`, `npx`, …) set aside — its visits, reds,
-greens and muted runs. A run that hides its exit status (`cargo test | tail`,
+greens and muted runs. A **verification script** counts as a test run too: an inline check that
+asserts (`python3 -c "…assert…"`, `node -e`, `bash -c`), one bench per interpreter since its text
+changes from run to run, or a script named for testing, checking or verifying (`python3
+check_run.py`, `bash verify.sh`). Bodies often check their work this way, and a tally that knew only
+test runners would read them as never testing. A run that hides its exit status (`cargo test | tail`,
 `cargo test; echo ok`) is muted, never green. Red runs with fixes landing between them are
 test-driven work; twelve with nothing landed stop the run, and so do eight muted runs in a row,
 however much landed between them: the body that ran one bench 63 times in twenty minutes, every
@@ -200,6 +204,18 @@ shell cut short, stdout or stderr (its summary is in the part dropped), an Esc d
 or the run's clock running out leaves the run muted, as it was. Each decision is journaled in
 `.mnemorph/instruments/decisions.jsonl`, priced into the usage ledger, and named in a warning in
 the beat journal (for the human, never replayed to the model).
+
+**The guts journal.** Every act writes a `guts` beat to the run's journal: the act's score, the
+guts window's sum and whether it warned, whether the act failed, and its instruments, the readings
+a learned value model ([M11](roadmap.md)) will train on:
+- the files it wrote, and the **lines** it added and removed, counted as a multiset against what
+  the files held before, so a line moved within a file is neither;
+- an **edit miss**: an edit whose `old_string` was not in the file, the body editing text it had
+  not read;
+- the **bench** it ran, if any, and how that run counted: green, red, muted, read green or read red.
+
+The beat is for the record only: the conversation rebuilt from the journal ignores it, and no
+surface shows it.
 
 The human's configuration reaches a run through `configure`: the attic's limits, the stress
 line, the guard rules that ask instead of refusing, and whether commands may run unguarded.

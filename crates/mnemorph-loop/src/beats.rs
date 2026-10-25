@@ -48,6 +48,36 @@ pub enum Beat {
         /// What failed; empty when it passed.
         failures: Vec<String>,
     },
+    /// One act as the guts read it, with the instruments a learned value model will train on.
+    /// Journaled for the record, never fed back to the model.
+    Guts {
+        /// The tool call it reads.
+        tool_use_id: String,
+        /// The tool.
+        tool: String,
+        /// The act's score: +2 a landed write, −1 a failed act or an unchanged re-read, else 0.
+        score: i32,
+        /// The guts window's sum after the act.
+        window: i32,
+        /// The guts warned on this act.
+        warned: bool,
+        /// The act failed.
+        failed: bool,
+        /// Files it wrote.
+        wrote: u32,
+        /// Lines it added to them, as a multiset: a moved line is neither added nor removed.
+        lines_added: u32,
+        /// Lines it removed from them.
+        lines_removed: u32,
+        /// An edit whose `old_string` was not in the file.
+        edit_miss: bool,
+        /// The bench it ran, if any: a test runner or a verification script.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bench: Option<String>,
+        /// How that bench run counted: green, red, muted, read green or read red.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bench_outcome: Option<String>,
+    },
     /// How the run ended.
     End {
         /// The ending, in words.
@@ -167,7 +197,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 );
             }
             Beat::End { .. } => close(&mut messages, &mut pending),
-            Beat::Gate { .. } | Beat::Warning { .. } => {}
+            Beat::Gate { .. } | Beat::Warning { .. } | Beat::Guts { .. } => {}
         }
     }
     close(&mut messages, &mut pending);

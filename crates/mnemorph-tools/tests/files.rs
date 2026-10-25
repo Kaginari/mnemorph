@@ -856,3 +856,76 @@ fn patch_review_held() {
         assert!(o.is_error && o.content.contains(why), "{why}: {o:?}");
     }
 }
+
+/// The instruments a learned value model trains on: lines added and removed by a write, counted
+/// as a multiset (a moved line is neither), and an edit whose text was not in the file.
+#[test]
+fn writes_count_their_lines_and_a_missed_edit_is_marked() {
+    let w = World::new("instruments");
+    let mut cx = w.cx();
+
+    let o = run(
+        &mut cx,
+        "write",
+        r#"{"path": "src/a.txt", "content": "one\ntwo\nthree\n"}"#,
+    );
+    assert!(!o.is_error, "{}", o.content);
+    assert_eq!(
+        (o.meta.lines_added, o.meta.lines_removed),
+        (3, 0),
+        "a new file adds every line"
+    );
+
+    let o = run(
+        &mut cx,
+        "write",
+        r#"{"path": "src/a.txt", "content": "three\none\nfour\n"}"#,
+    );
+    assert_eq!(
+        (o.meta.lines_added, o.meta.lines_removed),
+        (1, 1),
+        "two lines moved, one replaced"
+    );
+
+    let o = run(
+        &mut cx,
+        "edit",
+        r#"{"path": "src/a.txt", "old_string": "four\n", "new_string": "five\nsix\n"}"#,
+    );
+    assert!(!o.is_error, "{}", o.content);
+    assert_eq!((o.meta.lines_added, o.meta.lines_removed), (2, 1));
+    assert!(!o.meta.edit_miss);
+
+    // Text that is not in the file: the body edited what it had not read.
+    let o = run(
+        &mut cx,
+        "edit",
+        r#"{"path": "src/a.txt", "old_string": "seven", "new_string": "eight"}"#,
+    );
+    assert!(o.is_error && o.meta.edit_miss, "{}", o.content);
+
+    // Text that is there twice is refused, but it is no miss.
+    w.put("src/b.txt", "x\nx\n");
+    let o = run(
+        &mut cx,
+        "edit",
+        r#"{"path": "src/b.txt", "old_string": "x", "new_string": "y"}"#,
+    );
+    assert!(o.is_error && !o.meta.edit_miss, "{}", o.content);
+
+    // A multiedit whose second edit misses is marked, and writes nothing.
+    let o = run(
+        &mut cx,
+        "multiedit",
+        r#"{"path": "src/a.txt", "edits": [{"old_string": "one", "new_string": "uno"}, {"old_string": "nine", "new_string": "ten"}]}"#,
+    );
+    assert!(o.is_error && o.meta.edit_miss, "{}", o.content);
+    assert_eq!(w.get("src/a.txt"), "three\none\nfive\nsix\n");
+
+    let o = run(
+        &mut cx,
+        "multiedit",
+        r#"{"path": "src/a.txt", "edits": [{"old_string": "one", "new_string": "uno"}]}"#,
+    );
+    assert_eq!((o.meta.lines_added, o.meta.lines_removed), (1, 1));
+}

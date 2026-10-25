@@ -75,6 +75,13 @@ pub struct Meta {
     pub wrote: Vec<PathBuf>,
     /// The exit code of a command; `None` for other tools, or a command killed by a signal.
     pub exit: Option<i32>,
+    /// Lines the call added to the files it wrote, counted as a multiset against what they held
+    /// before: a line moved within a file is neither added nor removed. Zero for other calls.
+    pub lines_added: u32,
+    /// Lines the call removed from the files it wrote, counted the same way.
+    pub lines_removed: u32,
+    /// An edit whose `old_string` does not occur in the file: the body edited text it had not read.
+    pub edit_miss: bool,
 }
 
 impl Outcome {

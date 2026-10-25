@@ -782,6 +782,32 @@ async fn red_runs_with_fixes_between_them_do_not_stall() {
 }
 
 #[test]
+fn verification_scripts_count_as_test_runs() {
+    use mnemorph_loop::bench_of;
+    // Bodies often check their work with a script, not a test runner: those runs are tests too.
+    assert_eq!(
+        bench_of(r#"python3 -c "from run import f; assert f(2) == 4""#).as_deref(),
+        Some("python3 -c (an inline check)")
+    );
+    assert_eq!(
+        bench_of("node -e \"const a = require('assert'); a.equal(1, 1)\"").as_deref(),
+        Some("node -e (an inline check)")
+    );
+    assert_eq!(
+        bench_of("python3 tests/check_run.py").as_deref(),
+        Some("python3 tests/check_run.py")
+    );
+    assert_eq!(
+        bench_of("bash ./verify.sh").as_deref(),
+        Some("bash ./verify.sh")
+    );
+    // A script that asserts nothing, or one not named for checking, is not a test run.
+    assert_eq!(bench_of(r#"python3 -c "print(1)""#), None);
+    assert_eq!(bench_of("python3 run.py"), None);
+    assert_eq!(bench_of("node build.js"), None);
+}
+
+#[test]
 fn benches_are_known_by_their_command() {
     use mnemorph_loop::bench_of;
     assert!(bench_of("cargo test -p x").is_some());
@@ -1067,4 +1093,82 @@ async fn a_late_line_is_reported_when_its_turn_ends() {
         matches!((warned, ended), (Some(a), Some(b)) if a < b),
         "{beats:?}"
     );
+}
+
+/// Every act is journaled as the guts read it, with its instruments: the record a learned value
+/// model trains on. The readings are for the record only: a resumed conversation is the same.
+#[tokio::test]
+async fn every_act_journals_its_guts_reading_and_instruments() {
+    let w = World::new("guts-beats");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "a.txt", "content": "one\ntwo\n"}),
+        ),
+        tool(
+            "t2",
+            "edit",
+            json!({"path": "a.txt", "old_string": "three", "new_string": "3"}),
+        ),
+        tool(
+            "t3",
+            "bash",
+            json!({"command": "python3 -c \"assert open('a.txt').read().startswith('one')\""}),
+        ),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, limits());
+    assert!(matches!(
+        ask(&mut run, "write a").await,
+        Ending::Answered(_)
+    ));
+    let rows = w.journal().read().unwrap().rows;
+    let guts: Vec<&Beat> = rows
+        .iter()
+        .filter(|b| matches!(b, Beat::Guts { .. }))
+        .collect();
+    assert_eq!(guts.len(), 3, "one reading per act");
+    let Beat::Guts {
+        score,
+        lines_added,
+        lines_removed,
+        wrote,
+        edit_miss,
+        failed,
+        ..
+    } = guts[0]
+    else {
+        unreachable!()
+    };
+    assert_eq!(
+        (*score, *wrote, *lines_added, *lines_removed),
+        (2, 1, 2, 0),
+        "a landed write"
+    );
+    assert!(!edit_miss && !failed);
+    let Beat::Guts {
+        score,
+        edit_miss,
+        failed,
+        window,
+        ..
+    } = guts[1]
+    else {
+        unreachable!()
+    };
+    assert!(*edit_miss && *failed, "the edit missed");
+    assert_eq!((*score, *window), (-1, 1), "+2 then −1");
+    let Beat::Guts {
+        bench,
+        bench_outcome,
+        ..
+    } = guts[2]
+    else {
+        unreachable!()
+    };
+    assert_eq!(bench.as_deref(), Some("python3 -c (an inline check)"));
+    assert!(bench_outcome.is_some(), "the check counted as a test run");
+    // The readings never reach the model: the rebuilt conversation is the run's own.
+    assert_eq!(conversation(&rows), run.messages());
 }

@@ -131,10 +131,60 @@ pub fn bench_of(command: &str) -> Option<String> {
     if let Some((_, after)) = c.rsplit_once("&& ") {
         c = after;
     }
-    BENCHES
+    if BENCHES.iter().any(|b| c.starts_with(b)) {
+        return Some(c.trim().to_owned());
+    }
+    check_script(c, command)
+}
+
+/// Interpreters a verification script runs under, and the flag that passes it inline.
+const CHECKERS: &[(&str, &str)] = &[
+    ("python3", "-c"),
+    ("python", "-c"),
+    ("node", "-e"),
+    ("bash", "-c"),
+    ("sh", "-c"),
+];
+
+/// A command that checks work without being a test runner: an inline script that asserts
+/// (`python3 -c "…assert…"`), or a script file named for testing, checking or verifying
+/// (`python3 check_run.py`, `bash verify.sh`). Bodies often verify this way, and a tally that
+/// knew only test runners would read such a run as no test at all. Every inline check of one
+/// interpreter is one bench, since its text changes from run to run; a named script is its own.
+///
+/// `c` is the command cut before its first pipe or `;`; `whole` is the command as given, since an
+/// inline script's own `;` is no separator, and its `assert` may come after one.
+fn check_script(c: &str, whole: &str) -> Option<String> {
+    let mut words = c.split_whitespace();
+    let interp = words.next()?;
+    let (_, flag) = CHECKERS.iter().find(|(i, _)| *i == interp)?;
+    let next = words.next()?;
+    if next == *flag {
+        return whole
+            .contains("assert")
+            .then(|| format!("{interp} {flag} (an inline check)"));
+    }
+    let file = next.rsplit('/').next().unwrap_or(next).to_ascii_lowercase();
+    let named = ["test", "check", "verify"].iter().any(|w| file.contains(w));
+    let script = [".py", ".js", ".mjs", ".sh"]
         .iter()
-        .any(|b| c.starts_with(b))
-        .then(|| c.trim().to_owned())
+        .any(|e| file.ends_with(e));
+    (named && script).then(|| format!("{interp} {next}"))
+}
+
+/// What the guts read from the last act: the instruments a learned value model trains on.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Reading {
+    /// The act's score: +2 for a landed write, −1 for a failed act or an unchanged re-read, else 0.
+    pub score: i32,
+    /// The guts window's sum after the act, before a warning restarts it.
+    pub window: i32,
+    /// The guts warned on this act.
+    pub warned: bool,
+    /// The bench the act ran, if it ran one.
+    pub bench: Option<String>,
+    /// How the bench run counted: `green`, `red`, `muted`, `read green` or `read red`.
+    pub bench_outcome: Option<&'static str>,
 }
 
 /// Whether a bench run hides its exit status: piped, or followed by `;` or `||`.
@@ -167,6 +217,7 @@ pub struct Stress {
     last_call: Option<String>,
     repeats: u32,
     benches: BTreeMap<String, Bench>,
+    last: Reading,
 }
 
 impl Stress {
@@ -186,6 +237,7 @@ impl Stress {
         read: Option<Read>,
     ) -> Vec<Signal> {
         let mut out = Vec::new();
+        let mut reading = Reading::default();
         // The same call again: its result will not change.
         if self.last_call.as_deref() == Some(call) {
             self.repeats += 1;
@@ -207,39 +259,7 @@ impl Stress {
                 b.since_progress = 0;
             }
         }
-        if let Some(bench) = command.and_then(bench_of) {
-            let hidden = command.is_some_and(muted);
-            let b = self.benches.entry(bench).or_default();
-            b.visits += 1;
-            b.since_progress += 1;
-            if hidden {
-                match read {
-                    Some(Read::Green) => {
-                        b.read += 1;
-                        b.green += 1;
-                        b.since_progress = 0;
-                        b.muted_streak = 0;
-                    }
-                    Some(Read::Red) => {
-                        b.read += 1;
-                        b.red += 1;
-                    }
-                    None => {
-                        b.muted += 1;
-                        b.muted_streak += 1;
-                    }
-                }
-            } else if o.is_error {
-                b.red += 1;
-            } else {
-                b.green += 1;
-                b.since_progress = 0;
-                b.muted_streak = 0;
-            }
-            if b.since_progress >= BENCH_STALL || b.muted_streak >= MUTED_STALL {
-                out.push(Signal::Stall("bench"));
-            }
-        }
+        out.extend(self.tally(command, o, read, &mut reading));
         let landed = !o.meta.wrote.is_empty();
         let score = if o.is_error || o.meta.unchanged {
             -1
@@ -271,6 +291,10 @@ impl Stress {
         if self.window.len() > GUTS_WINDOW {
             self.window.pop_front();
         }
+        reading.score = score;
+        reading.window = self.window.iter().sum();
+        reading.warned = self.window.len() == GUTS_WINDOW && reading.window < GUTS_FLOOR;
+        self.last = reading;
         if self.window.len() == GUTS_WINDOW && self.window.iter().sum::<i32>() < GUTS_FLOOR {
             // A new window starts after each warning: three warnings are three windows.
             self.window.clear();
@@ -285,6 +309,62 @@ impl Stress {
             }
         }
         out
+    }
+
+    /// The bench tally for one act: a run that hides its exit status is muted, never green, and
+    /// a landing resets the honest reds, never the muted runs. The stall, when it comes.
+    fn tally(
+        &mut self,
+        command: Option<&str>,
+        o: &Outcome,
+        read: Option<Read>,
+        reading: &mut Reading,
+    ) -> Option<Signal> {
+        let bench = command.and_then(bench_of)?;
+        let hidden = command.is_some_and(muted);
+        reading.bench_outcome = Some(match (hidden, read) {
+            (true, Some(Read::Green)) => "read green",
+            (true, Some(Read::Red)) => "read red",
+            (true, None) => "muted",
+            (false, _) if o.is_error => "red",
+            (false, _) => "green",
+        });
+        reading.bench = Some(bench.clone());
+        let b = self.benches.entry(bench).or_default();
+        b.visits += 1;
+        b.since_progress += 1;
+        if hidden {
+            match read {
+                Some(Read::Green) => {
+                    b.read += 1;
+                    b.green += 1;
+                    b.since_progress = 0;
+                    b.muted_streak = 0;
+                }
+                Some(Read::Red) => {
+                    b.read += 1;
+                    b.red += 1;
+                }
+                None => {
+                    b.muted += 1;
+                    b.muted_streak += 1;
+                }
+            }
+        } else if o.is_error {
+            b.red += 1;
+        } else {
+            b.green += 1;
+            b.since_progress = 0;
+            b.muted_streak = 0;
+        }
+        (b.since_progress >= BENCH_STALL || b.muted_streak >= MUTED_STALL)
+            .then_some(Signal::Stall("bench"))
+    }
+
+    /// What the guts read from the last act.
+    #[must_use]
+    pub fn last(&self) -> &Reading {
+        &self.last
     }
 
     /// Every bench this ask ran, and its record.
