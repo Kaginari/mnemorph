@@ -231,7 +231,7 @@ fn commander(race: Race) -> &'static str {
 
 /// `text` with its line `at` (from 1) replaced by `with`, its own line ending kept, every other
 /// byte as it was.
-fn splice(text: &str, at: usize, with: &str) -> String {
+pub(crate) fn splice(text: &str, at: usize, with: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for (n, line) in text.split_inclusive('\n').enumerate() {
         if n + 1 != at {
