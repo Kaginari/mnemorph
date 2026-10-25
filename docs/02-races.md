@@ -170,9 +170,11 @@ creature or an office is never routed.
 
 **Never above the parent.** A commissioned body is never routed above the body that
 commissioned it: the whole band — floor, default and ceiling — is held at or under the parent's
-tier, the highest tier whose model the parent rides (a model outside the tier table reads as the
-parent race's default tier). So a Slime that Mneme sends to read may ride fast, and never a tier
-its Orc does not ride. A model the human pinned for the child stands as pinned.
+tier, the highest tier whose model the parent rides, in every office. A parent riding a model
+outside the tier table — one the human pinned — caps nothing: a pin is a choice, not a tier. So a
+Slime that Mneme sends to read may ride fast, and never a tier its Orc does not ride. The cap
+outranks the Dark Elf's floor: a Dark Elf rides no higher than the throne that sends it. A model
+the human pinned for the child stands as pinned.
 
 **Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
 Slime's shelf (`read`, `write`; nothing outward) — under the shelves,

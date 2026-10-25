@@ -148,14 +148,13 @@ pub fn capped(
     )
 }
 
-/// The tier `model` rides at for `race`: the highest whose model it is, else the race's default —
-/// a model outside the tier table reads as the tier the race would ride.
+/// The tier `model` rides at for `race`: the highest whose model it is. `None` for a model outside
+/// the tier table — one the human pinned is their choice, not a tier, and caps nothing.
 #[must_use]
-pub fn tier_of(config: &mnemorph_config::Config, race: Race, model: &str) -> ModelTier {
+pub fn tier_of(config: &mnemorph_config::Config, race: Race, model: &str) -> Option<ModelTier> {
     [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast]
         .into_iter()
         .find(|t| config.model_at(race, *t) == model)
-        .unwrap_or_else(|| race.default_tier())
 }
 
 /// The questions a commission puts to Metis.

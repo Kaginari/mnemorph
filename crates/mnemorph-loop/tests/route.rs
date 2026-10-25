@@ -613,9 +613,21 @@ async fn a_body_is_never_routed_above_its_parent() {
         let r = routed(&config, Some(&dec), &ground, w).await;
         assert_eq!(r.model, want, "{ceiling:?}");
     }
-    assert_eq!(tier_of(&config, Race::Orc, "mid"), ModelTier::Strong);
+    assert_eq!(tier_of(&config, Race::Orc, "mid"), Some(ModelTier::Strong));
+    // A model outside the tier table — a human's pin — caps nothing.
+    assert_eq!(tier_of(&config, Race::Orc, "pinned-by-hand"), None);
+    let (_, dec) = deciders(
+        &ground,
+        vec![measured([0.0, 0.05, 0.95], 0.1)],
+        Llm::default(),
+        true,
+    );
+    let free = Work {
+        ceiling: tier_of(&config, Race::Elf, "pinned-by-hand"),
+        ..work(Race::Orc, Some(Office::Verdict))
+    };
     assert_eq!(
-        tier_of(&config, Race::Orc, "unknown-model"),
-        Race::Orc.default_tier()
+        routed(&config, Some(&dec), &ground, free).await.model,
+        "big"
     );
 }

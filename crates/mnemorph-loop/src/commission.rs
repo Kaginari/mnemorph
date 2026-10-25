@@ -385,11 +385,7 @@ async fn route_child(
             race: child.race,
             office,
             commission: &a.ask,
-            ceiling: Some(crate::route::tier_of(
-                &chooser.config,
-                parent.race,
-                &parent.model,
-            )),
+            ceiling: crate::route::tier_of(&chooser.config, parent.race, &parent.model),
         },
         Some(crate::route::Stop {
             interrupt,

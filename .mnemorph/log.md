@@ -3166,3 +3166,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 02.
 - **Test:** `a_body_is_never_routed_above_its_parent`: hard work stops at strong, then at fast;
   plus `tier_of`.
+
+---
+
+### [2026-10-25T20:45:04+01:00] rimuru — #177's review: Fable
+- **Fable found:**
+  - a parent pinned to a model outside the tier table read as its race default: children could be
+    capped too low, or ride above a cheap pinned parent;
+  - docs 02: the Dark Elf floor and the cap read as if they contradicted each other.
+- **Fixed:**
+  - `tier_of` returns `Option`; an unknown model caps nothing (a pin is a choice, not a tier);
+  - docs: the cap applies in every office and outranks the Dark Elf's floor.
+- **Test:** a pinned parent leaves hard work at frontier.
