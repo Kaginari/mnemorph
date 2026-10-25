@@ -1,0 +1,5 @@
+# Run in the world, src/ on the path; exits non-zero when the task is not done.
+import sys
+sys.path.insert(0, "src")
+from lists import merge
+assert merge([1, 4, 9], [2, 3, 10, 11]) == [1, 2, 3, 4, 9, 10, 11]

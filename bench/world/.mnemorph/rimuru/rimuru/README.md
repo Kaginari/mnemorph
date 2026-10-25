@@ -1,0 +1,3 @@
+# rimuru
+
+- **Race:** rimuru
