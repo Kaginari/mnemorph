@@ -3316,3 +3316,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the recipe moved; the README.
 - **Follow-up on #96:** record each run's `turnEnded` ending and gate events from `--json`, so a
   rule broken on the way is judged, not only how the run ended.
+
+---
+
+### [2026-10-25T23:05:06+01:00] rimuru — the bench reads why a run ended
+- **Task:** a side note: the report read only the exit code, so a provider or machine error with
+  a correct file would count as a failed task. The human: "can you fix".
+- **Files:**
+  - report.py `cause()` reads the recorded `ending`, or for older rows the CLI's
+    `mnemorph: <ending>` stderr line:
+    - escalated, checkpoint, gate, timeout and never-delegated are failed tasks;
+    - machine (no kernel guard), provider and interrupted measured nothing: they are listed to
+      rerun, never counted, and a later row stands in for them;
+    - a per-arm "not a success" breakdown;
+  - run.py records `ending` and takes `--redo-invalid`;
+  - tests; the README.
+- **On the data:** the one solo failure is `escalate: more than two failed acts in a row`, the
+  harness's own three-fails rule, so it rightly counts as a failure. Hierarchy's two are wrong
+  answers. Nothing is infrastructure so far.

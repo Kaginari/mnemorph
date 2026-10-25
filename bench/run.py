@@ -24,6 +24,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import report
+
 BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
@@ -148,9 +150,13 @@ def run_one(task, mode, model, secret, timeout, keep=False):
     daily = bool(DAILY.search(err or "") or DAILY.search(stdout or ""))
     calls, wt, usd, below = ledger(world)
     scrubbed = (err or "").replace(secret, "[key]")
+    # How it ended, as the CLI says for any ending but `answered`: the report reads the cause.
+    said = [l[len("mnemorph: "):] for l in (err or "").splitlines() if l.startswith("mnemorph: ")]
+    ended = "answered" if code == 0 else (said[-1] if said else "timeout" if code is None else "")
     result = {
         "task": task.name, "mode": mode, "model": model,
-        "passed": verify(task, world), "exit": code, "seconds": seconds,
+        "passed": verify(task, world), "exit": code, "ending": ended.replace(secret, "[key]"),
+        "seconds": seconds,
         "calls": calls, "wt": wt, "usd": round(usd, 6),
         "escalations": escalations(world), "below": below,
         # A hierarchy run where no body below the throne made a call did not run as one.
@@ -176,6 +182,8 @@ def main():
     p.add_argument("--timeout", type=int, default=1800)
     p.add_argument("--keep", action="store_true", help="keep each run's world, for a post-mortem")
     p.add_argument("--out", default="", help="a results file other than the model's")
+    p.add_argument("--redo-invalid", action="store_true",
+                   help="run again what the machine or the provider stopped; the new row stands in")
     a = p.parse_args()
     if a.check:
         return check()
@@ -189,6 +197,10 @@ def main():
     if out.exists():
         for line in out.read_text().splitlines():
             r = json.loads(line)
+            # A run the machine or the provider stopped measured nothing: with --redo-invalid it
+            # is run again, unless a later row already stands in for it.
+            if a.redo_invalid and not report.judged(r):
+                continue
             done.add((r["task"], r["mode"]))
     only = set(a.tasks.split(",")) - {""}
     ran = 0

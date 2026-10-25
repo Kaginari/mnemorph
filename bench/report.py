@@ -5,9 +5,12 @@
 
 The matrix is fixed up front — every task in every mode, exactly once. A run missing, extra or
 recorded twice is an error, never dropped; --partial reports a run still in progress and names
-the gaps. A task succeeds only when its verify passed *and* the run ended answered: the CLI exited
-0 — not a checkpoint, an escalation, a failure or a timeout — and a hierarchy run ran below the
-throne. A correct file left by a run that did not end answered is a failed task.
+the gaps. A task succeeds only when its verify passed *and* the run ended answered, and a hierarchy
+run ran below the throne. Every other run is told by why it ended: a stop the harness made — an
+escalation, a checkpoint, the gate, the bench's timeout, a hierarchy that never delegated — is a
+failed task, a correct file left behind included; a stop the task does not own — no kernel guard,
+a provider or model failure, an interrupt — measured nothing, so it is never counted, and is
+listed to rerun.
 
 The estimand is the difference in task success rate, hierarchy minus solo, over the same tasks.
 Its interval is a paired bootstrap that resamples tasks — the groups — never rows, and the report
@@ -19,6 +22,7 @@ import argparse
 import json
 import random
 import statistics
+from collections import Counter
 import sys
 from pathlib import Path
 
@@ -31,25 +35,73 @@ def expected_tasks():
     return sorted(p.name for p in (BENCH / "tasks").iterdir() if p.is_dir())
 
 
+# How a run ended, read from its recorded ending — or, for a run recorded before endings were,
+# from the `mnemorph: <ending>` line the CLI writes to stderr for any ending but `answered`.
+HARNESS = {"escalated", "checkpoint", "gate", "timeout", "never delegated"}
+INFRA = {"machine", "provider", "interrupted"}
+
+
+def ending(r):
+    if r.get("ending"):
+        return r["ending"]
+    if r.get("exit") == 0:
+        return "answered"
+    lines = [l for l in (r.get("stderr") or "").splitlines() if l.startswith("mnemorph: ")]
+    return lines[-1][len("mnemorph: "):] if lines else ""
+
+
+def cause(r):
+    """Why the run ended as it did: `answered`, a stop the harness made and the task owns
+    (escalated, checkpoint, gate, timeout, never delegated), or one the task does not
+    (machine, provider, interrupted) — that run measured nothing and is rerun."""
+    e = ending(r)
+    if r.get("exit") is None:
+        return "timeout"
+    if e == "answered":
+        return "answered" if r.get("valid", True) else "never delegated"
+    if e.startswith("escalate:"):
+        return "escalated"
+    if e.startswith("checkpoint:"):
+        return "checkpoint"
+    if e.startswith("failed: the end gate could not verify"):
+        return "machine"
+    if e.startswith("failed: the end gate"):
+        return "gate"
+    if e == "interrupted":
+        return "interrupted"
+    return "provider"
+
+
+def judged(r):
+    """The run measured the task: it was not stopped by the machine or the provider."""
+    return cause(r) not in INFRA
+
+
 def succeeded(r):
     """Verify passed, and the run ended answered."""
-    return bool(r["passed"]) and r.get("exit") == 0 and r.get("valid", True)
+    return bool(r["passed"]) and cause(r) == "answered"
 
 
 def matrix(rows, tasks, modes):
-    """The rows by (task, mode), and every way they miss the fixed matrix."""
+    """The judged rows by (task, mode), every way they miss the fixed matrix, and the runs the
+    machine or the provider stopped, to rerun. A later row stands in for an earlier unjudged one;
+    two judged rows for one cell are an error."""
     want = {(t, m) for t in tasks for m in modes}
-    cells, errors = {}, []
+    cells, unjudged, errors = {}, {}, []
     for r in rows:
         key = (r["task"], r["mode"])
         if key not in want:
             errors.append("extra run: %s %s" % key)
         elif key in cells:
             errors.append("recorded twice: %s %s" % key)
-        else:
+        elif judged(r):
             cells[key] = r
-    missing = sorted(want - set(cells))
-    return cells, errors, missing
+            unjudged.pop(key, None)
+        else:
+            unjudged[key] = r
+    rerun = sorted(unjudged)
+    missing = sorted(want - set(cells) - set(unjudged))
+    return cells, errors, missing, rerun
 
 
 def bootstrap(diffs):
@@ -70,6 +122,7 @@ def arm(cells, tasks, mode):
         "success": sum(succeeded(r) for r in rs) / len(rs),
         "verify_only": sum(bool(r["passed"]) for r in rs) / len(rs),
         "unanswered": sum(bool(r["passed"]) and not succeeded(r) for r in rs),
+        "failed_by": dict(sorted(Counter(cause(r) for r in rs if not succeeded(r)).items())),
         "median_calls": med("calls"),
         "median_wt": med("wt"),
         "median_seconds": med("seconds"),
@@ -80,9 +133,10 @@ def arm(cells, tasks, mode):
 
 def report(rows, modes, partial):
     tasks = expected_tasks()
-    cells, errors, missing = matrix(rows, tasks, modes)
-    out = {"tasks": len(tasks), "modes": modes, "errors": errors, "missing": missing}
-    if errors or (missing and not partial):
+    cells, errors, missing, rerun = matrix(rows, tasks, modes)
+    out = {"tasks": len(tasks), "modes": modes, "errors": errors, "missing": missing,
+           "rerun": rerun}
+    if errors or ((missing or rerun) and not partial):
         return out, 1
     out["arms"] = {m: arm(cells, tasks, m) for m in modes}
     if len(modes) == 2:
@@ -114,6 +168,11 @@ def show(out, partial):
             "partial —" if partial else "matrix error:", len(out["missing"]),
             out["tasks"] * len(out["modes"]), ", ".join("%s %s" % k for k in out["missing"][:6])
             + (" …" if len(out["missing"]) > 6 else "")))
+    if out["rerun"]:
+        lines.append("%s %d runs the machine or the provider stopped, to rerun "
+                     "(run.py --redo-invalid): %s" % (
+                         "partial —" if partial else "matrix error:", len(out["rerun"]),
+                         ", ".join("%s %s" % k for k in out["rerun"])))
     for m, s in (out.get("arms") or {}).items():
         if s:
             lines.append(
@@ -121,6 +180,10 @@ def show(out, partial):
                 "median %s calls, %s wt, %ss  escalations %d  $%s" % (
                     m, s["runs"], 100 * s["success"], 100 * s["verify_only"], s["unanswered"],
                     s["median_calls"], s["median_wt"], s["median_seconds"], s["escalations"], s["usd"]))
+            if s["failed_by"]:
+                lines.append("          not a success: " + ", ".join(
+                    "%d %s" % (n, c if c != "answered" else "answered wrong")
+                    for c, n in s["failed_by"].items()))
     e = out.get("estimand")
     if e:
         lines.append("estimand: %s — %+.3f, 95%% interval [%+.3f, %+.3f], %d task groups, "
