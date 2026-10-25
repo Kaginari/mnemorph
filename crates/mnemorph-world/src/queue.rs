@@ -374,14 +374,21 @@ impl Queue {
                 )));
             }
         }
-        // The witness first: a line the queue holds and its witness does not would be dropped by
-        // the next command's tripwire.
-        if let Some(w) = &self.witness {
-            w.append(&item).map_err(|e| Refusal::Io(e.to_string()))?;
-        }
+        // The witness first, under its lock: a line the queue holds and its witness does not would
+        // be dropped by the next command's tripwire, and the tripwire rebuilds the queue under the
+        // same lock, so no move lands between its read and its write.
+        let held = match &self.witness {
+            Some(w) => {
+                let lock = lock(w.path()).map_err(|e| Refusal::Io(e.to_string()))?;
+                w.append(&item).map_err(|e| Refusal::Io(e.to_string()))?;
+                Some(lock)
+            }
+            None => None,
+        };
         self.journal
             .append(&item)
             .map_err(|e| Refusal::Io(e.to_string()))?;
+        drop(held);
         match self.items().get(&item.id) {
             Some(now) if *now == item => Ok(item),
             _ => Err(Refusal::Raced),
@@ -393,6 +400,19 @@ impl Queue {
     pub fn path(&self) -> PathBuf {
         self.path.clone()
     }
+}
+
+/// Hold the witness's lock: the file opened (made if need be) and locked whole until dropped.
+fn lock(witness: &Path) -> std::io::Result<std::fs::File> {
+    if let Some(dir) = witness.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(witness)?;
+    f.lock()?;
+    Ok(f)
 }
 
 /// Whether `name` is a living body of `roster`, or the throne.

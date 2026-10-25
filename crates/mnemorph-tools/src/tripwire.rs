@@ -88,15 +88,18 @@ impl Snapshot {
             world: world.to_path_buf(),
             watched: watched.to_vec(),
             entries: BTreeMap::new(),
-            queue: fs::read(world.join(QUEUE)).ok(),
+            queue: None,
             witness: queue_witness(world),
             witness_len: 0,
         };
-        s.witness_len = s
-            .witness
+        // The queue and the witness's length are read together, under the witness's lock.
+        let lock = s.witness.as_deref().and_then(locked);
+        s.queue = fs::read(world.join(QUEUE)).ok();
+        s.witness_len = lock
             .as_ref()
-            .and_then(|w| fs::metadata(w).ok())
+            .and_then(|f| f.metadata().ok())
             .map_or(0, |m| usize::try_from(m.len()).unwrap_or(usize::MAX));
+        drop(lock);
         let mut kept = 0usize;
         for root in watched {
             s.walk(root, &mut kept);
@@ -225,6 +228,8 @@ impl Snapshot {
     /// in its place — never counts.
     fn restore_queue(&self) -> Option<String> {
         let path = self.world.join(QUEUE);
+        // Held until the queue is written: no move lands between the read and the write.
+        let _lock = self.witness.as_deref().and_then(locked);
         let gained = self
             .witness
             .as_ref()
@@ -251,6 +256,13 @@ impl Snapshot {
             Err(e) => format!("could not put back the work queue: {e}"),
         })
     }
+}
+
+/// The witness, locked whole until dropped; `None` when it does not exist (nothing to wait for).
+fn locked(witness: &Path) -> Option<fs::File> {
+    let f = fs::File::open(witness).ok()?;
+    f.lock().ok()?;
+    Some(f)
 }
 
 /// Write the queue afresh: whatever stands at `path` — a link, a directory, a file — is removed

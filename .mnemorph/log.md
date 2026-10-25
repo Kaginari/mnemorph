@@ -2376,3 +2376,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `Queue::of(cx.world())`.
 - **Learned:** a restore that consults the tampered file inherits the tamper. Rebuild only from
   what the command could not reach.
+
+---
+
+### [2026-10-25T10:57:07+01:00] rimuru — the witness's lock
+- **Task:** Fable checked the rebuild. All four holes are fixed. One real loss remained: a move
+  landing between the tripwire's read of the witness and its write of the queue was overwritten
+  for good.
+- **Fixed:**
+  - `Queue::land`, the snapshot and the rebuild all hold the witness's file lock (`File::lock`),
+    so none of them can interleave;
+  - the snapshot reads the queue and the witness's length under that lock;
+  - page 04 says that with no home there is no witness.
+- **Open:** the first move ever creates the witness. A rebuild that finds no witness takes no
+  lock, so the very first move can still race it. The window is once per machine and
+  microseconds wide.

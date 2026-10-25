@@ -277,11 +277,13 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   (`$XDG_STATE_HOME/mnemorph/queue/`), out of every command's reach. A body's command that touches
   the queue has it rebuilt from what it held and what the witness gained since, in the witness's
   order — whatever the command did to the file, a forged line, a deletion or a link in its place,
-  never counts, and the human's moves made while the command ran are kept. A move made during a
-  body's turn is never billed to that body. Every move appends the item's whole snapshot as one line
-  with its revision; the queue is a fold over the lines. A line that does not follow its item's last
-  revision is a typed refusal — two sessions claiming one item both append, the first wins, the
-  second reads back refused. No lock file, no database.
+  never counts, and the human's moves made while the command ran are kept. The harness, the human's
+  `q` and the tripwire take the witness's lock, so no move lands between the tripwire's read and its
+  write. With no home directory there is no witness, and a move made during a body's command is put
+  back with it. A move made during a body's turn is never billed to that body. Every move appends
+  the item's whole snapshot as one line with its revision; the queue is a fold over the lines. A
+  line that does not follow its item's last revision is a typed refusal — two sessions claiming one
+  item both append, the first wins, the second reads back refused. No lock file, no database.
 - States: `held → claimed → done | dropped`. An item names the body it is ordered to — a living
   body of the roster, or the throne — its rank (lower runs first; ties run in order of arrival),
   who ordered it, the order, and its notes. Orders go down the ranks: a body orders only bodies
