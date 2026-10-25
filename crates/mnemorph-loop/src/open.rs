@@ -156,8 +156,13 @@ pub fn open_with(
         model_id,
         attic,
     } = bound;
-    let (body, cx) = solo(world, model_id);
-    let (mut cx, limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
+    let (mut body, cx) = solo(world, model_id);
+    // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
+    let lanes = lanes(world);
+    if !lanes.is_empty() {
+        body.system.push_str(&dispatch_prompt(&lanes));
+    }
+    let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     if let Some(dir) = attic {
         let (keep_days, max_mb) = config.attic_limits();
         let kept = mnemorph_tools::Attic::at(dir, world)
@@ -173,39 +178,34 @@ pub fn open_with(
     // The caps against what this world already spent. A cap that cannot be read opens no
     // session: spend it cannot see would be spend it cannot stop.
     let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
-    let caps = crate::budget::Caps {
-        session: config.budget_wt("session"),
-        day: config.budget_wt("day"),
-        month: config.budget_wt("month"),
-    };
-    let capped = caps != crate::budget::Caps::default();
-    let mut unread = Vec::new();
-    let (spent, unseen) = if capped {
-        let back = usage
-            .read()
-            .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
-        let unseen = mnemorph_ledger::unseen_wt(&back.rows, back.skipped.len());
-        if !back.skipped.is_empty() {
-            unread.push(unreadable_lines(usage.path(), &back.skipped, unseen));
-        }
-        (back.rows, unseen)
-    } else {
-        (Vec::new(), 0)
-    };
-    let budget = crate::budget::left(
-        caps,
-        &spent,
-        &session_id,
-        mnemorph_ledger::Timestamp::now(),
-        unseen,
-    );
+    let (caps, capped, unread, budget) = read_caps(config, &usage, &session_id)?;
+    let mut tools = registry();
+    if !lanes.is_empty() {
+        tools.push(Box::new(crate::commission::CommissionTool));
+    }
+    let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
+    // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
+    if !lanes.is_empty() {
+        limits.budget_wt = budget.map(|b| b.wt);
+    }
+    let commissioner = (!lanes.is_empty()).then(|| crate::commission::Commissioner {
+        world: cx.world().to_path_buf(),
+        model: model.clone(),
+        prices: prices.clone(),
+        ledger: Some(usage.clone()),
+        journals: instruments.join("loop"),
+        session: session_id.clone(),
+        caps: capped.then_some(caps),
+        stress_tokens: Some(config.context_stress_tokens()),
+        busy: std::sync::Mutex::default(),
+    });
     let setup = Setup {
         model: model.clone(),
-        tools: registry(),
+        tools,
         cx,
         journal: Journal::new(instruments.join("loop").join(format!("{run_id}.jsonl"))),
         ledger: Some(usage),
-        prices: anthropic_prices().map_err(|e| format!("prices: {e}"))?,
+        prices,
         caller: Caller {
             session: session_id.clone(),
             run: run_id.clone(),
@@ -216,6 +216,9 @@ pub fn open_with(
         },
     };
     let mut run = Run::new(body, limits, setup).with_observer(observer);
+    if let Some(c) = commissioner {
+        run = run.with_commissioner(Arc::new(c));
+    }
     if capped {
         run = run.with_caps(caps);
     }
@@ -253,4 +256,83 @@ pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> Str
         lines.len(),
         mnemorph_ledger::UNSEEN_RESERVE_PCT
     )
+}
+
+/// The Elves that report to a living throne, with their lanes: whom Rimuru may commission.
+fn lanes(world: &Path) -> Vec<(String, Vec<String>)> {
+    let roster = mnemorph_world::Roster::load(world);
+    if !roster.living().any(|c| c.name == "rimuru") {
+        return Vec::new();
+    }
+    roster
+        .living()
+        .filter(|c| c.race.base() == Race::Elf && c.reports_to.as_deref() == Some("rimuru"))
+        .map(|c| (c.name.clone(), c.lane.clone()))
+        .collect()
+}
+
+/// What Rimuru is told of the lanes it may hand work to.
+fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
+    let list: Vec<String> = lanes
+        .iter()
+        .map(|(elf, lane)| {
+            if lane.is_empty() {
+                format!("- {elf}")
+            } else {
+                format!("- {elf}: {}", lane.join(", "))
+            }
+        })
+        .collect();
+    format!(
+        "\n\nYou are not alone here: this world has creatures. Work that belongs to a lane goes to its \
+Elf with the commission \
+tool: it plans, its Orcs judge, its Slimes write, each under its own gate, and the report comes back \
+as the tool's result. Small asks you may still do yourself. The lanes:\n{}",
+        list.join("\n")
+    )
+}
+
+/// The human's caps, and what this world already spent against them: whether any is set, the
+/// ledger lines that could not be read, and what the session may spend. A ledger that cannot be
+/// read opens no capped session.
+fn read_caps(
+    config: &Config,
+    usage: &Journal<mnemorph_ledger::UsageRow>,
+    session_id: &str,
+) -> Result<
+    (
+        crate::budget::Caps,
+        bool,
+        Vec<String>,
+        Option<crate::budget::Left>,
+    ),
+    String,
+> {
+    let caps = crate::budget::Caps {
+        session: config.budget_wt("session"),
+        day: config.budget_wt("day"),
+        month: config.budget_wt("month"),
+    };
+    let capped = caps != crate::budget::Caps::default();
+    let mut unread = Vec::new();
+    let (spent, unseen) = if capped {
+        let back = usage
+            .read()
+            .map_err(|e| format!("the usage ledger: {e}; the budget caps cannot be read"))?;
+        let unseen = mnemorph_ledger::unseen_wt(&back.rows, back.skipped.len());
+        if !back.skipped.is_empty() {
+            unread.push(unreadable_lines(usage.path(), &back.skipped, unseen));
+        }
+        (back.rows, unseen)
+    } else {
+        (Vec::new(), 0)
+    };
+    let budget = crate::budget::left(
+        caps,
+        &spent,
+        session_id,
+        mnemorph_ledger::Timestamp::now(),
+        unseen,
+    );
+    Ok((caps, capped, unread, budget))
 }

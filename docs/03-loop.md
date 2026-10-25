@@ -154,9 +154,10 @@ A client watches a run through its **observer**: every beat at the moment it is 
 every call's spend — a model turn or a decision — with the run's running total and its context
 against the stress line. It is how the CLI and the board show a run live
 ([the client protocol](04-communication.md#the-client-protocol)) without reading the journal
-back. `open(world, gate, observer, env)` builds the solo session a client talks to: the
-configuration, the model through the human's backend, the tools under the kernel guard, the
-journal, the ledger and the decisions.
+back. `open(world, gate, observer, env)` builds the session a client talks to — solo, and with the
+`commission` tool and an envelope from the human's caps when the world has Elves under a living
+throne: the configuration, the model through the human's backend, the tools under the kernel
+guard, the journal, the ledger and the decisions.
 
 What the model returns is cleaned before it enters the conversation or the journal: empty text
 blocks dropped, a repeated tool call id made unique, an empty reply stated as such. An empty

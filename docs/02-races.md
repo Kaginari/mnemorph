@@ -177,6 +177,11 @@ judged by the model:
 
 Escalation is one-way within a run; the next ask starts solo again.
 
+Until those three signals are read by code, the hand-off is the model's: in a world whose docs
+have a living throne with Elves reporting to it, Rimuru's session holds the `commission` tool
+beside the solo tools, its prompt names each Elf and its lane, and Rimuru chooses which asks to
+hand down. A world with no creatures stays pure solo.
+
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
 `seal` are harness tools, never shell commands.
 

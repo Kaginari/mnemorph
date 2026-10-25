@@ -194,6 +194,9 @@ trusts the chain as the docs write it: a loop or a skipped rank is the findings'
 skipped rank is refused with that said.
 
 A dispatching body (Rimuru, an Elf, an Orc) holds a `commission` tool: `{to, ask, budget_wt}`.
+The human's session holds it when the world's docs have a living throne with Elves reporting to
+it: Rimuru keeps its solo tools for small asks, and its prompt names each Elf and its lane; a
+world with no creatures stays solo.
 The loop runs the call. It asks the law, and a refusal is the tool's result, naming the creature
 the order goes to instead. A lawful order runs the child with a fresh context: its doc and the
 order as its prompt, its soil as its tools' border, its verify lines and *right author* as its
