@@ -246,6 +246,8 @@ pub struct Run {
     /// Whose shared queue this body's `queue` calls move: every commissioned body has one, a
     /// dispatching one or not.
     queue_keeper: Option<Arc<crate::commission::Commissioner>>,
+    /// What its dispatcher set aside for it, given once if its slice runs out.
+    topup_wt: Option<u64>,
 }
 
 /// What a run needs that is not the body itself.
@@ -303,6 +305,7 @@ impl Run {
             shared_interrupt: false,
             woken: Vec::new(),
             queue_keeper: None,
+            topup_wt: None,
         }
     }
 
@@ -313,6 +316,14 @@ impl Run {
             self.queue_keeper = Some(Arc::clone(&commissioner));
         }
         self.commissioner = Some(commissioner);
+        self
+    }
+
+    /// What its dispatcher set aside for it out of its own envelope: given once, when its slice
+    /// runs out.
+    #[must_use]
+    pub fn with_topup(mut self, topup_wt: Option<u64>) -> Self {
+        self.topup_wt = topup_wt;
         self
     }
 
@@ -874,6 +885,16 @@ impl Run {
                 "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
                 self.last_occupancy
             ));
+        }
+        // The slice ran out: what the dispatcher set aside for it is given now, once — and the
+        // human's caps below are read all the same.
+        if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b)
+            && let Some(more) = self.topup_wt.take()
+        {
+            self.limits.budget_wt = Some(budget.saturating_add(more));
+            self.record(&Beat::Note {
+                text: format!("topped up by {more} wt, set aside by its dispatcher"),
+            });
         }
         if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {
             return checkpoint(format!("budget: {} of {budget} spent", self.spent_wt));

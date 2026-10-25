@@ -903,3 +903,33 @@ async fn a_wake_runs_at_most_three_orders() {
     let states: Vec<State> = ids.iter().map(|id| items[id].state).collect();
     assert_eq!(states, [State::Done, State::Done, State::Done, State::Held]);
 }
+
+/// What a dispatcher sets aside from its own envelope is given once, when the child's slice runs
+/// out; without it, the child stops at its budget checkpoint.
+#[tokio::test]
+async fn a_topup_carries_a_child_past_its_slice() {
+    for topup in [Some(100_000), None] {
+        let w = World::new(if topup.is_some() { "topup" } else { "no-topup" });
+        let mut args = json!({"to": "elf-e", "ask": "look", "budget_wt": 1});
+        if let Some(t) = topup {
+            args["topup_wt"] = json!(t);
+        }
+        let model = Arc::new(ScriptedModel::new([
+            ScriptedModel::tool("c1", "commission", args),
+            ScriptedModel::tool("g1", "glob", json!({"pattern": "*"})),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("ok"),
+        ]));
+        let mut run = w.rimuru_with(model, true, Some(1_000_000));
+        run.ask("go", &mut |_| {}).await;
+        let result = &w.results()[0];
+        if topup.is_some() {
+            assert!(
+                result.starts_with("@S DONE"),
+                "the top-up carried it: {result}"
+            );
+        } else {
+            assert!(result.starts_with("@S CHECKPOINT budget"), "{result}");
+        }
+    }
+}
