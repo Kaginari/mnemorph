@@ -148,8 +148,11 @@ pub fn changed(before: &Tree, world: &Path) -> Vec<PathBuf> {
 #[must_use]
 pub fn snapshot(world: &Path) -> Tree {
     let mut files = BTreeMap::new();
+    // git's local exclude file is not read: the ignores the harness adds there for what checks
+    // leave behind never hide a body's change from the gate.
     let walk = WalkBuilder::new(world)
         .hidden(false)
+        .git_exclude(false)
         .filter_entry(|e| e.file_name() != ".git" && e.file_name() != ".mnemorph")
         .build();
     for entry in walk.filter_map(Result::ok) {
@@ -212,6 +215,8 @@ pub struct GateVerdict {
     pub changed: Vec<PathBuf>,
     /// What failed, one line each; empty when the gate passes.
     pub failures: Vec<String>,
+    /// A verify run changed the tree: a check never writes, and the landing fails whole.
+    pub wrote: bool,
 }
 
 impl GateVerdict {
@@ -272,7 +277,11 @@ impl EndGate {
         }
         changed.sort();
         if changed.is_empty() {
-            return GateVerdict { changed, failures };
+            return GateVerdict {
+                changed,
+                failures,
+                wrote: false,
+            };
         }
         if answer.trim().is_empty() {
             failures.push("duties done: the answer is empty; say what was done".into());
@@ -280,14 +289,24 @@ impl EndGate {
         if let Some(author) = &self.author {
             failures.extend(right_author(author, &changed, cx.world()));
         }
-        failures.extend(self.run_verify(tools, cx, &after));
-        GateVerdict { changed, failures }
+        let (verify_failures, wrote) = self.run_verify(tools, cx, &after);
+        failures.extend(verify_failures);
+        GateVerdict {
+            changed,
+            failures,
+            wrote,
+        }
     }
 
     /// Run the verify lines. A check never writes: what a verify run changes in the tree — beyond
     /// what git ignores, the build output a test run leaves — fails the gate, so no verify line
     /// lands work past the judgement above.
-    fn run_verify(&self, tools: &[Box<dyn Tool>], cx: &mut Context, judged: &Tree) -> Vec<String> {
+    fn run_verify(
+        &self,
+        tools: &[Box<dyn Tool>],
+        cx: &mut Context,
+        judged: &Tree,
+    ) -> (Vec<String>, bool) {
         let mut failures = Vec::new();
         for command in &self.verify {
             let args = json!({"command": command, "timeout_ms": 120_000}).to_string();
@@ -306,7 +325,7 @@ impl EndGate {
             }
         }
         if self.verify.is_empty() {
-            return failures;
+            return (failures, false);
         }
         let after = snapshot(cx.world());
         let ignored = mnemorph_tools::ignored(cx.world());
@@ -320,14 +339,15 @@ impl EndGate {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        if !wrote.is_empty() {
+        let changed_tree = !wrote.is_empty();
+        if changed_tree {
             failures.push(format!(
                 "traits hold: a verify line changed {} — a check never writes; point its output at \
 `.mnemorph/report/`, or have git ignore it",
                 wrote.join(", ")
             ));
         }
-        failures
+        (failures, changed_tree)
     }
 }
 

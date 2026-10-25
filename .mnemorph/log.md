@@ -3087,3 +3087,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - verify.rs — a link anywhere on the doc's path is refused;
   - tests: report.rs (made, ignored once, no git), and a check writing the report folder passes;
   - docs 03/05.
+
+---
+
+### [2026-10-25T20:14:06+01:00] rimuru — #175's security review: Opus
+- **Task:** Opus reviewed the report folder.
+- **Opus found:**
+  - MEDIUM: the gate's snapshot honoured `.git/info/exclude`, so an unanchored `coverage/` hid any
+    tracked `src/coverage/` from the whole gate;
+  - LOW: the no-retry rule matched text a test could print;
+  - LOW: a race in `prepare` (`fs::write` follows a link).
+- **Fixed:**
+  - the snapshot does not read the local exclude file;
+  - the coverage patterns are anchored at the root;
+  - `GateVerdict.wrote` is a structured flag, and the run fails whole on it;
+  - `prepare` writes a new file and renames it over `exclude`.
+- **Open:**
+  - a solo run's FAIL does not put back its writes (only a commissioned child's landing is);
+  - a self-ignoring `newdir/.gitignore` hides a new directory from the gate.

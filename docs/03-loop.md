@@ -294,9 +294,11 @@ Runs on the body's own writes (minus what its Courts already landed on their own
    git ignores — a test run's build output — fails the landing whole, naming what it changed, with
    no second try (a retry would write nothing and pass what the first wrote as the body's work).
    What a check leaves behind goes to `.mnemorph/report/`, prepared when a session opens: the
-   folder, and the common test leftovers (`__pycache__/`, `.pytest_cache/`, `.coverage`,
-   `htmlcov/`, `coverage/`, `.nyc_output/`, `.mypy_cache/`, `.ruff_cache/`), are ignored through
-   git's local exclude file, never committed, so the project's `.gitignore` stays the human's.
+   folder, and the common test leftovers (`__pycache__/`, `.pytest_cache/`, `.mypy_cache/`,
+   `.ruff_cache/`, and at the root `/.coverage`, `/htmlcov/`, `/coverage/`, `/.nyc_output/`), are
+   ignored through git's local exclude file, never committed, so the project's `.gitignore` stays
+   the human's. The gate's own view of the tree does not read that file: what the harness ignores
+   for checks never hides a body's change.
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
 5. **Tests intact** — no test deleted or skipped.
