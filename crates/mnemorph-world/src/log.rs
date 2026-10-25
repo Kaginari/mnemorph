@@ -3,6 +3,7 @@
 //! a link.
 
 use std::io::Write as _;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use mnemorph_ledger::Timestamp;
@@ -25,19 +26,38 @@ impl Entry {
     /// The entry as it is written, stamped `at`.
     #[must_use]
     pub fn render(&self, at: Timestamp) -> String {
-        let mut out = format!("\n---\n\n### [{at}] {} — {}\n", self.body, self.title);
+        let mut out = format!(
+            "\n---\n\n### [{at}] {} — {}\n",
+            clean(&self.body),
+            clean(&self.title)
+        );
         for (label, text) in &self.lines {
             out.push_str("- **");
-            out.push_str(label);
+            out.push_str(&clean(label));
             out.push_str(":** ");
-            out.push_str(&text.replace('\n', " "));
+            out.push_str(&clean(text));
             out.push('\n');
         }
         out
     }
 }
 
-/// Append `entry` to `world`'s journal, stamped now.
+/// One line, whatever it was: every control character and line separator becomes a space, so
+/// text from a command or a file name can never open an entry of its own.
+fn clean(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{85}') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// Append `entry` to `world`'s journal, stamped now. A world without `.mnemorph` has no journal:
+/// nothing is written.
 ///
 /// # Errors
 ///
@@ -52,12 +72,14 @@ pub fn append(world: &Path, entry: &Entry) -> std::io::Result<()> {
             )));
         }
     }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+    if !path.parent().is_some_and(Path::is_dir) {
+        return Ok(());
     }
+    // A link put in its place after the check is refused by the kernel.
     let mut f = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
+        .custom_flags(libc::O_NOFOLLOW)
         .open(&path)?;
     f.write_all(entry.render(Timestamp::now()).as_bytes())
 }

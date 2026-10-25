@@ -782,6 +782,10 @@ impl Run {
 
     /// Every verdict goes to the world's journal through its append-only writer.
     fn log_verdict(&self, verdict: &crate::gate::GateVerdict, retried: bool) {
+        // An answer that changed nothing passed untouched: there is nothing to journal.
+        if verdict.changed.is_empty() && verdict.failures.is_empty() {
+            return;
+        }
         let word = match (verdict.passed(), retried) {
             (true, _) => "PASS",
             (false, false) => "FAIL, handed back",

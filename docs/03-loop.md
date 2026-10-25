@@ -269,6 +269,8 @@ automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
 
 The verdict goes to `log.md` through the append-only writer: one entry per verdict, stamped,
 naming the body and the verdict — `PASS`, `FAIL, handed back` on a first failure, `FAIL` — with
-the paths it changed and what failed. The writer only appends, whole entries in one write, and
-never writes through a link. Three fails running for the same
+the paths it changed and what failed; a pass that changed nothing is not journaled. The writer
+only appends, whole entries in one write, each on lines of its own — a control character in a
+command's output or a file name becomes a space — and never writes through a link; a world
+without `.mnemorph/` has no journal. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.

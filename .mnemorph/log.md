@@ -2484,3 +2484,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     (rewrite, split, escalate);
   - a concurrent session's command can still have its tripwire put back a journal entry written
     meanwhile. This is the same class as the ledgers under `instruments/`.
+
+---
+
+### [2026-10-25T11:50:45+01:00] rimuru — #157 review fixes
+- **Task:** fix Fable's review of the journal's writer.
+- **Fixed:**
+  - `clean` turns every control character and line separator into a space in every field;
+    before this, a `\r` in a verify command's output could forge an entry;
+  - a pass that changed nothing is not journaled;
+  - a world without `.mnemorph/` gets no journal;
+  - the file is opened with `O_NOFOLLOW` (`libc`).
+- **Open:** a concurrent session's tripwire can put back an entry. Append-only is checkable, so a
+  put-back could keep growth whose prefix matches the snapshot, given a witness for what grew.
