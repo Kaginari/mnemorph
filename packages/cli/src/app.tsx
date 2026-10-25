@@ -119,7 +119,9 @@ export function ItemView({ item }: { item: Item }) {
         <Text color={races.elf}>{'  ✓ the end gate passed'}</Text>
       ) : (
         <Row prefix="  ✗ " color={p.alarm}>
-          <Text color={p.alarm}>{`the end gate: ${item.failures.join('; ')}`}</Text>
+          <Text color={p.alarm}>
+            {`the end gate, ${item.verdict === 'NOT_VERIFIED' ? 'not verified' : 'failed'}: ${item.failures.join('; ')}`}
+          </Text>
         </Row>
       );
     case 'ending':

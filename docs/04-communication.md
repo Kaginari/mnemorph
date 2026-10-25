@@ -344,7 +344,7 @@ sequenceDiagram
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
-    D--)CLI: event/gateVerdict {passed, changed, failures}
+    D--)CLI: event/gateVerdict {passed, verdict, changed, failures, unverified}
     D--)CLI: event/turnEnded {ending: answered}
     end
 ```

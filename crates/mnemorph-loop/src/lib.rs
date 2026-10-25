@@ -23,7 +23,7 @@ pub use beats::{Beat, conversation};
 pub use budget::{Caps, Left};
 pub use commission::{COMMISSION, CommissionTool, Commissioner};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
-pub use gate::{Author, EndGate, GateVerdict, Tree, snapshot};
+pub use gate::{Author, EndGate, GateVerdict, Tree, Verdict, snapshot};
 /// The configuration, for a client that opens a session from it.
 pub use mnemorph_config::{Config, Paths};
 pub use mnemorph_provider::Event as StreamEvent;

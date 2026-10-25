@@ -274,10 +274,17 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
         }
         Beat::Note { text } => vec![Event::Note { text: text.clone() }],
         Beat::Warning { text } => vec![Event::Warning { text: text.clone() }],
-        Beat::Gate { changed, failures } => vec![Event::GateVerdict {
-            passed: failures.is_empty(),
+        Beat::Gate {
+            changed,
+            failures,
+            unverified,
+            verdict,
+        } => vec![Event::GateVerdict {
+            passed: failures.is_empty() && unverified.is_empty(),
+            verdict: verdict.clone(),
             changed: changed.clone(),
             failures: failures.clone(),
+            unverified: unverified.clone(),
         }],
         // The guts' readings are for the record and the value model, not for the surfaces.
         Beat::Guts { .. } => vec![],

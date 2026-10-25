@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use mnemorph_loop::commission::context_for;
 use mnemorph_loop::world::Roster;
-use mnemorph_loop::{Author, EndGate, snapshot};
+use mnemorph_loop::{Author, EndGate, Verdict, snapshot};
 use mnemorph_tools::{Sandbox, registry};
 
 struct World(PathBuf);
@@ -229,4 +229,45 @@ fn a_verify_line_that_writes_fails_the_gate() {
     // The report folder is a check's to write.
     let report = judge("mkdir -p .mnemorph/report && echo ok > .mnemorph/report/junit.xml");
     assert_eq!(report, Vec::<String>::new());
+}
+
+/// PASS, FAIL or `NOT_VERIFIED`: a verify line that never ran — no kernel guard, none allowed
+/// unguarded — gave no result, so the landing is not verified, never passed; a line that ran and
+/// failed outweighs it.
+#[test]
+fn a_check_that_gave_no_result_is_not_verified() {
+    let w = World::new("not-verified");
+    let roster = Roster::load(&w.0);
+    let judge = |verify: Vec<String>, unguarded: bool| {
+        let before = snapshot(&w.0);
+        fs::write(w.0.join("src/mine.rs"), format!("{verify:?}\n")).unwrap();
+        let gate = EndGate {
+            verify,
+            author: Some(Author {
+                name: "slime-a".into(),
+                roster: roster.clone(),
+            }),
+        };
+        let mut cx = context_for(&w.0, &roster, "slime-a")
+            .unwrap()
+            .with_sandbox(Sandbox::None("the gate's judgement is under test".into()))
+            .with_unguarded(unguarded);
+        gate.judge(&before, "done", &registry(), &mut cx)
+    };
+    let unrun = judge(vec!["true".into()], false);
+    assert_eq!(unrun.verdict(), Verdict::NotVerified, "{unrun:?}");
+    assert!(!unrun.passed());
+    assert_eq!(unrun.failures, Vec::<String>::new());
+    assert!(
+        unrun.unverified[0].contains("`true` gave no result"),
+        "{unrun:?}"
+    );
+    let ran = judge(vec!["true".into()], true);
+    assert_eq!(ran.verdict(), Verdict::Pass, "{ran:?}");
+    let failed = judge(vec!["false".into()], true);
+    assert_eq!(failed.verdict(), Verdict::Fail, "{failed:?}");
+    // A crash is a failure, not a missing result.
+    let crashed = judge(vec!["kill -SEGV $$".into()], true);
+    assert_eq!(crashed.verdict(), Verdict::Fail, "{crashed:?}");
+    assert_eq!(Verdict::NotVerified.word(), "NOT_VERIFIED");
 }

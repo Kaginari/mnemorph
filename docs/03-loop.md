@@ -305,6 +305,13 @@ Runs on the body's own writes (minus what its Courts already landed on their own
 6. **No seal** — the territory is not sealed, or this landing is the fix: it carries the frozen
    witness into the zone's tests, unchanged by hash.
 
+The gate says one of three words, never more. **PASS**: every check ran and held. **FAIL**: a
+check ran and did not hold — a crash included. **NOT_VERIFIED**: nothing failed, but a check gave
+no result — a verify line that did not run (no kernel guard, none allowed unguarded) or was
+killed at its deadline. A partial pass never reads as a full one: NOT_VERIFIED is no pass, gets
+the same one chance as a failure, and the journal, the `gateVerdict` event and the transcript
+carry the word.
+
 **In solo mode** the gate judges what the run changed against the tree as it was when the ask
 arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
 verify commands, through the same classified and guarded `bash`, 120 s each), duties done (a

@@ -65,6 +65,8 @@ pub struct Outcome {
 }
 
 /// Structured facts about a call.
+// Independent facts about one call, each read on its own: no state machine hides in them.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Meta {
     /// The class the call ran at; `None` when it did not run.
@@ -75,6 +77,8 @@ pub struct Meta {
     pub wrote: Vec<PathBuf>,
     /// The exit code of a command; `None` for other tools, or a command killed by a signal.
     pub exit: Option<i32>,
+    /// The command was killed at its deadline.
+    pub timed_out: bool,
     /// Lines the call added to the files it wrote, counted as a multiset against what they held
     /// before: a line moved within a file is neither added nor removed. Zero for other calls.
     pub lines_added: u32,

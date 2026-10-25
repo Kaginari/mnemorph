@@ -145,6 +145,7 @@ impl Tool for Bash {
         let mut out = Outcome::ok(ran.render(), class);
         out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
         out.meta.exit = ran.code;
+        out.meta.timed_out = ran.timed_out;
         if let Some(note) = attic_note {
             let _ = write!(out.content, "\n[{note}]");
         }
