@@ -2866,3 +2866,41 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:**
   - `Stop.left` is a fixed 60 s, though the decider's own policy clamps it to its turn;
   - a refusal after routing drops Metis's cost from the in-memory envelope; the ledger keeps it.
+
+---
+
+### [2026-10-25T15:32:17+01:00] rimuru — M7: solo escalates on signals read by code
+- **Task:** the human said "run measurement". The measurement needs solo's escalation by code
+  first; this PR builds it.
+- **Files:**
+  - tools — `Meta.unheld` and `Outcome::unheld` at both shelf refusals;
+  - loop run.rs:
+    - `note_unheld` records an outward act or a seal the shelf refused;
+    - the ask is kept in `preface`;
+    - `Run::escalate`: on a context checkpoint or an unheld act, hand the ask to the Kijin, the
+      Dark Elf, or the Elf whose lane the ask names (else the first), with a handoff, and answer
+      with its report;
+  - session.rs — escalate after each turn;
+  - test: an outward refusal hands to the Kijin, and a quiet turn stands;
+  - docs/02.
+- **Open:**
+  - the boundary signal waits for solo's zone to narrow;
+  - the stress path is untested (a context checkpoint needs a real fill).
+- **Next:** the 30-task bench and runner, then the live run (the key comes from the human).
+
+---
+
+### [2026-10-25T15:39:17+01:00] rimuru — #170 review fixes
+- **Task:** fix Fable's review of solo escalation.
+- **Fixed:**
+  - a refused commission keeps the turn's ending (noted), never "Escalated";
+  - an interrupted or failed turn never escalates, and an Esc during the escalation is honoured;
+  - an unheld outward act hands the act itself (tool and input) to the Kijin, and solo's answer
+    stands beside the report; with no Kijin it stays;
+  - the stress path stays a checkpoint (the session is full), the Elf's report as its salvage;
+  - the dead seal branch is dropped (no tool yields a seal);
+  - lane choice matches path words component-wise;
+  - the throne's triage is read before escalation, so the Elf's verdicts are not filed as
+    rimuru's;
+  - docs/02.
+- **Open:** the stress path's test needs a real context fill; the boundary signal.

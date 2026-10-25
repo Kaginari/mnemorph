@@ -85,9 +85,19 @@ pub struct Meta {
     pub edit_miss: bool,
     /// The human gate denied the act: the human's choice, never the body's failure.
     pub denied: bool,
+    /// The shelf refused the act: the class the body's race does not hold.
+    pub unheld: Option<ToolClass>,
 }
 
 impl Outcome {
+    /// The shelf's refusal of an act its race does not hold, the class kept for the loop.
+    #[must_use]
+    pub fn unheld(refusal: mnemorph_races::ShelfRefusal) -> Self {
+        let mut o = Self::error(refusal.to_string());
+        o.meta.unheld = Some(refusal.class);
+        o
+    }
+
     /// A result the call produced, of `class`.
     #[must_use]
     pub fn ok(content: impl Into<String>, class: ToolClass) -> Self {
@@ -597,7 +607,7 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
         ));
     };
     if let Err(refusal) = check_class(cx.race, tool.class()) {
-        return Outcome::error(refusal.to_string());
+        return Outcome::unheld(refusal);
     }
     match serde_json::from_str::<Value>(raw_args) {
         Ok(args) => tool.run(args, cx),

@@ -1308,3 +1308,66 @@ async fn an_office_chooses_the_courts_model() {
         "{results:?}"
     );
 }
+
+/// Solo escalates on a signal read by code: an outward act the shelf refused goes to the Kijin, the
+/// act itself handed down, and solo's answer stands beside its report; with no Kijin, or a turn
+/// with no signal, the ending stands.
+#[tokio::test]
+async fn solo_escalates_on_an_act_it_does_not_hold() {
+    let w = World::new("escalate");
+    w.doc(
+        "kijin",
+        "k",
+        "# kijin-k\n\n- **Race:** kijin\n- **Reports to:** rimuru\n- **Post:** .github/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "b1",
+            "bash",
+            json!({"command": "curl -fsS https://example.com/release"}),
+        ),
+        ScriptedModel::text("I cannot reach the network."),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Nothing to hand down."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let ending = run.ask("publish the release notes", &mut |_| {}).await;
+    let ending = run.escalate(ending).await;
+    let Ending::Answered(text) = &ending else {
+        panic!("{ending:?}");
+    };
+    assert!(
+        text.starts_with(
+            "I cannot reach the network.\n\nEscalated to kijin-k (an outward act it does not hold)"
+        ),
+        "{text}"
+    );
+    let handoff = format!("{:?}", model.requests()[2]);
+    assert!(
+        handoff.contains("it is yours to do") && handoff.contains("curl -fsS"),
+        "{handoff}"
+    );
+    // No signal: the ending stands.
+    let quiet = run.ask("say hello", &mut |_| {}).await;
+    let kept = run.escalate(quiet.clone()).await;
+    assert_eq!(format!("{kept:?}"), format!("{quiet:?}"));
+}
+
+/// With no Kijin to take it, an outward act the shelf refused leaves the turn as it ended.
+#[tokio::test]
+async fn an_unheld_act_with_no_kijin_stays() {
+    let w = World::new("escalate-none");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "b1",
+            "bash",
+            json!({"command": "curl -fsS https://example.com"}),
+        ),
+        ScriptedModel::text("I cannot reach the network."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let ending = run.ask("fetch it", &mut |_| {}).await;
+    let kept = run.escalate(ending.clone()).await;
+    assert_eq!(format!("{kept:?}"), format!("{ending:?}"));
+    assert_eq!(model.requests().len(), 2, "nothing was commissioned");
+}

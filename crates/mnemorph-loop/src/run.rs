@@ -248,6 +248,11 @@ pub struct Run {
     queue_keeper: Option<Arc<crate::commission::Commissioner>>,
     /// What its dispatcher set aside for it, given once if its slice runs out.
     topup_wt: Option<u64>,
+    /// The ask in flight, as the human gave it: the handoff if solo escalates.
+    asked: String,
+    /// An outward act this ask was refused because its race does not hold it: the tool, and its
+    /// input as the model sent it.
+    unheld: Option<(String, String)>,
 }
 
 /// What a run needs that is not the body itself.
@@ -306,6 +311,8 @@ impl Run {
             woken: Vec::new(),
             queue_keeper: None,
             topup_wt: None,
+            asked: String::new(),
+            unheld: None,
         }
     }
 
@@ -983,8 +990,11 @@ impl Run {
         content
     }
 
-    /// What the wake ran while the body waited opens its next turn.
+    /// What the wake ran while the body waited opens its next turn; the ask itself is kept, as
+    /// solo's handoff should it escalate, and its signals start clear.
     fn preface(&mut self, text: &str) -> String {
+        text.clone_into(&mut self.asked);
+        self.unheld = None;
         let woken = std::mem::take(&mut self.woken);
         if woken.is_empty() {
             text.to_owned()
@@ -993,6 +1003,113 @@ impl Run {
                 "While you waited, the shared queue ran:\n- {}\n\n{text}",
                 woken.join("\n- ")
             )
+        }
+    }
+
+    /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,
+    /// tool and input, to hand to the race that holds it.
+    fn note_unheld(&mut self, o: &mnemorph_tools::Outcome, name: &str, input: &str) {
+        if o.meta.unheld == Some(mnemorph_races::ToolClass::Outward) {
+            self.unheld
+                .get_or_insert_with(|| (name.to_owned(), input.to_owned()));
+        }
+    }
+
+    /// The body below the throne, of `race`, first by name.
+    fn below(&self, roster: &mnemorph_world::Roster, race: Race) -> Vec<String> {
+        let mut names: Vec<String> = roster
+            .living()
+            .filter(|k| {
+                k.race.base() == race && k.reports_to.as_deref() == Some(self.body.name.as_str())
+            })
+            .map(|k| k.name.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Solo escalates into the hierarchy on a signal read by code, never judged by the model. An
+    /// outward act the shelf refused goes to the throne's Kijin — the race that holds it takes the
+    /// act, and solo's own answer stands beside its report. A context checkpoint hands the ask to
+    /// the Elf whose lane the ask names, or the first, and the ending stays a checkpoint — the
+    /// session is full — with that Elf's report as its salvage. An interrupted or failed turn, a
+    /// signal with no body to take it, or a commission refused, keeps the turn's ending.
+    pub async fn escalate(&mut self, ending: Ending) -> Ending {
+        let Some(c) = self.commissioner.clone() else {
+            return ending;
+        };
+        if matches!(ending, Ending::Interrupted | Ending::Failed(_)) {
+            return ending;
+        }
+        let roster = mnemorph_world::Roster::load(&c.world);
+        let stress =
+            matches!(&ending, Ending::Checkpoint { why, .. } if why.starts_with("context"));
+        let (to, handoff, signal) = if let Some((tool, input)) = self.unheld.clone() {
+            let Some(kijin) = self.below(&roster, Race::Kijin).into_iter().next() else {
+                return ending;
+            };
+            let handoff = format!(
+                "The throne was refused an outward act it does not hold; it is yours to do:\n\n`{tool}` {input}\n\nThe ask it served, as the human gave it:\n\n{}",
+                self.asked
+            );
+            (kijin, handoff, "an outward act it does not hold")
+        } else if stress {
+            let elves = self.below(&roster, Race::Elf);
+            let named = elves.iter().find(|e| {
+                roster.creatures.get(*e).is_some_and(|elf| {
+                    self.asked.split_whitespace().any(|word| {
+                        let word = word.trim_matches(|ch: char| "`'\",.;:()[]".contains(ch));
+                        let word = word.strip_prefix("./").unwrap_or(word);
+                        elf.lane
+                            .iter()
+                            .any(|lane| mnemorph_world::doc::covers(lane, word))
+                    })
+                })
+            });
+            let Some(elf) = named.or(elves.first()).cloned() else {
+                return ending;
+            };
+            let handoff = format!(
+                "Solo escalated to you: its context crossed the stress line. The ask, as the human gave it:\n\n{}\n\nSolo's writes so far stand in the world; begin from it as it is.",
+                self.asked
+            );
+            (elf, handoff, "its context crossed the stress line")
+        } else {
+            return ending;
+        };
+        self.record(&Beat::Note {
+            text: format!("solo escalates to {to}: {signal}"),
+        });
+        let input = serde_json::json!({"to": to, "ask": handoff}).to_string();
+        let left = self
+            .limits
+            .budget_wt
+            .map(|b| b.saturating_sub(self.spent_wt));
+        let interrupt = Arc::clone(&self.interrupt);
+        let body = self.body.clone();
+        let order = crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+        self.spent_wt = self.spent_wt.saturating_add(order.spent);
+        self.landed.extend(order.landed);
+        if order.interrupted {
+            return Ending::Interrupted;
+        }
+        if order.outcome.is_error {
+            self.record(&Beat::Note {
+                text: format!(
+                    "the escalation to {to} was refused: {}",
+                    order.outcome.content
+                ),
+            });
+            return ending;
+        }
+        let report = format!("Escalated to {to} ({signal}).\n\n{}", order.outcome.content);
+        match ending {
+            Ending::Answered(text) => Ending::Answered(format!("{text}\n\n{report}")),
+            Ending::Checkpoint { why, .. } => Ending::Checkpoint {
+                why,
+                salvage: Some(report),
+            },
+            other => other,
         }
     }
 
@@ -1201,6 +1318,7 @@ impl Run {
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             let o = self.call_one(&name, &input).await;
+            self.note_unheld(&o, &name, &input);
             // An Esc that stopped this call stops the calls after it too.
             interrupted |= self.interrupt.take();
             self.record(&Beat::Result {

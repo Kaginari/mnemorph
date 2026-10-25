@@ -57,7 +57,10 @@ impl Session {
         let mut next = Some(line.to_owned());
         while let Some(line) = next {
             let ending = self.run.ask(&line, on).await;
+
+            // The throne's own triage is read from its own answer, before escalation adds a body's.
             self.run.file_triage(&ending);
+            let ending = Box::pin(self.run.escalate(ending)).await;
             Box::pin(self.run.wake(&ending)).await;
             endings.push(ending);
             next = self
