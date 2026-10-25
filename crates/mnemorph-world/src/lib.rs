@@ -9,6 +9,7 @@ pub mod heal;
 pub mod log;
 pub mod own;
 pub mod queue;
+pub mod relief;
 pub mod roster;
 pub mod soil;
 pub mod worth;

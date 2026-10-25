@@ -2686,3 +2686,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - exits: 0 when whole, 1 when anything is left or a repair waits for `--heal`, 2 on errors;
   - a journal write that fails is left as a finding, not swallowed;
   - the stub name check also covers names the roster refused.
+
+---
+
+### [2026-10-25T14:16:45+01:00] rimuru — M7: relief
+- **Task:** the human said "yes cargo clean and continue". `cargo clean` freed 39.5 GB (the disk
+  had filled). Next M7 rung, clear of the other session's commission work: relief.
+- **Files:**
+  - world relief.rs — `relieve(world, name, apply)`:
+    - a split in halves by claims, or by the tree under a one-directory ground;
+    - otherwise the seat retires;
+    - the young get docs (created new, never through a link), the old seat gains one `Retired`
+      line, and one journal entry is written;
+  - mnemorphd — `relief <name> [--apply]`, refused in a body's command;
+  - CLI — passes it through;
+  - tests: a split by prefixes (CRLF doc, memory kept, no overlap), a split by tree, a retire,
+    an Elf refused;
+  - docs/03.
+- **Next:** the council — strain counted per body, `@INSTRUCT`/`@SPLIT`/`@ESCALATE` at 5, relief
+  at 7, forced escalation after three warrants.
