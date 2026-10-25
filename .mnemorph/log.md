@@ -3353,3 +3353,41 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - tests; the README.
 - **Lesson:** a cause prefix shared by a machine stop and a body stop is a dodge. Match the exact
   phrase, and test both.
+
+---
+
+### [2026-10-25T23:51:36+01:00] rimuru — the sandbox reads uv's interpreters and tools
+- **Found by:** the large bench's smoke run on sqlglot. It needs Python 3.9+, and the bench puts
+  uv's 3.12 first on PATH. Landlock refused to execute it (`Permission denied`, exit 126): uv's
+  interpreters under `~/.local/share/uv/python` are named by no rule. `uv tool` binaries, which
+  `.local/bin` links to, failed the same way.
+- **Fixed:** `HOME_TOOLCHAINS` gains `.local/share/uv/python` and `.local/share/uv/tools`, never
+  `.local/share/uv` whole, since its `credentials/` holds `uv auth` logins. Docs 05.
+- **Test:** sandbox `tests/policy.rs`: both are read, and no rule names a directory above the
+  credentials, or the credentials themselves.
+
+---
+
+### [2026-10-25T23:57:12+01:00] rimuru — #183's security review: Opus
+- **Opus found:** the change holds. No secrets in uv's python/tools; read and execute only;
+  symlinks resolve inside.
+  - LOW: uv's credentials were closed only because no rule happened to name them;
+  - LOW: the test checked equality, not containment;
+  - pre-existing: `.cache` (allowed) holds Hugging Face's token and git's credential socket.
+- **Fixed:**
+  - `HOME_CREDENTIALS` gains `.local/share/uv/credentials`, `.cache/huggingface` and
+    `.cache/git`: the classifier refuses them, and Seatbelt hides them;
+  - a containment test showed that `.cargo/credentials*` is likewise held by the readable
+    `.cargo` on Linux, an older gap;
+  - the test names the toolchain-held credentials and requires them hidden where the platform
+    can;
+  - the comment says Linux cannot hide them.
+- **Open:** narrow `.cargo` and `.cache` on Linux to what builds need (issue).
+
+---
+
+### [2026-10-25T23:59:50+01:00] rimuru — #183: Fable checked Opus
+- **Fable confirmed Opus's review:** safe to merge.
+- **Refinements made:**
+  - hide only Hugging Face's `token` and `stored_tokens`, not its model cache;
+  - name the legacy `~/.git-credential-cache/`.
