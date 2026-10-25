@@ -892,9 +892,9 @@ impl Run {
             && let Some(more) = self.topup_wt.take()
         {
             self.limits.budget_wt = Some(budget.saturating_add(more));
-            self.record(&Beat::Note {
-                text: format!("topped up by {more} wt, set aside by its dispatcher"),
-            });
+            self.nudge(&format!(
+                "Your slice ran out; your dispatcher had set aside {more} wt more for you, given now. There is no further top-up: finish, or report what is left."
+            ));
         }
         if let Some(budget) = self.limits.budget_wt.filter(|b| self.spent_wt >= *b) {
             return checkpoint(format!("budget: {} of {budget} spent", self.spent_wt));

@@ -179,7 +179,7 @@ grants at most your reserve-kept share for its race, scaled by its worth. The ca
 /// The slice a commission carries, the top-up set aside for it, and a line for the dispatcher
 /// when either is less than it asked. The grant is the dispatcher's judgment, bounded: its
 /// reserve kept, the child's race share, the child's worth from its card; a top-up is the
-/// dispatcher's own further trust, bounded only by what it may give at all.
+/// dispatcher's own further trust, bounded by what it may give at all and by twice the ceiling.
 fn grant(
     c: &Commissioner,
     roster: &Roster,
@@ -192,9 +192,15 @@ fn grant(
         mnemorph_world::worth::ceiling(l, child.race, &card)
     });
     let slice = ceiling.map_or(asked, |cap| asked.min(cap));
-    let givable = left.map(|l| (l / 10 * 9).saturating_sub(slice));
-    let topup = a
-        .topup_wt
+    // A top-up is the dispatcher's further trust: slice and top-up together stay within what it
+    // may give at all, and within twice the child's ceiling — worth still counts.
+    let givable = left.map(|l| {
+        let most = ceiling.map_or(l / 10 * 9, |cap| (l / 10 * 9).min(cap.saturating_mul(2)));
+        most.saturating_sub(slice)
+    });
+    // With no cap there is no slice to run out, and nothing to top up.
+    let topup = left
+        .and(a.topup_wt)
         .map(|t| givable.map_or(t, |g| t.min(g)))
         .filter(|t| *t > 0);
     let mut said = Vec::new();
@@ -204,7 +210,10 @@ fn grant(
             a.to
         ));
     }
-    if let Some(wanted) = a.topup_wt.filter(|w| topup.is_none_or(|t| t < *w)) {
+    if let Some(wanted) = a
+        .topup_wt
+        .filter(|w| left.is_some() && topup.is_none_or(|t| t < *w))
+    {
         said.push(format!(
             "[set aside {} wt of the {wanted} top-up asked: what you could still give]",
             topup.unwrap_or(0)

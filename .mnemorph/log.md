@@ -2559,3 +2559,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - run.rs — `with_topup`; `perceive` gives it once when the slice runs out, then reads the caps;
   - tests: a top-up carries a child past its slice, and without one it stops at the checkpoint;
   - docs/06.
+
+---
+
+### [2026-10-25T12:37:35+01:00] rimuru — #159 review fixes
+- **Task:** fix Fable's review of the top-up.
+- **Fixed:**
+  - slice and top-up together stay within twice the child's ceiling; before, a 1 wt slice with a
+    huge top-up made worth decorative;
+  - the child is nudged when the top-up is given;
+  - with no cap there is no top-up.

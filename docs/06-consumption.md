@@ -155,10 +155,12 @@ Currency caps convert through the same table; a model with no known price is sti
   grants at most
   `left × 90% × share(race) × worth` — the parent's reserve kept, the race's maximum share, the
   child's worth — and the child's report tells the parent when it granted less than asked.
-- **The top-up.** A parent may also set aside a top-up out of its own envelope (`topup_wt`),
-  bounded by what it may still give at all — 90% of what it has left, less the slice. It is given
-  once, when the child's slice runs out, so the child finishes instead of stopping at its budget
-  checkpoint; the human's caps are read all the same. What the child spends of it counts as the
+- **The top-up.** A parent may also set aside a top-up out of its own envelope (`topup_wt`): its
+  further trust, so slice and top-up together stay within what it may give at all (90% of what it
+  has left) and within twice the child's ceiling — a parent can stretch its trust, never ignore
+  worth. It is given once, when the child's slice runs out, and the child is told; it finishes
+  instead of stopping at its budget checkpoint, and the human's caps are read all the same. With
+  no cap set there is no slice to run out, and no top-up. What the child spends of it counts as the
   parent's, like the slice.
 - **Worth, from the child's card.** Before it decides, a dispatching body reads one card per body
   below it: that body's record and the record of every body below it — weighted tokens spent
