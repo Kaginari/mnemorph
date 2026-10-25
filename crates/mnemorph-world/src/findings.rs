@@ -272,3 +272,53 @@ pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Ve
     }
     out
 }
+
+/// `prose-claim`: a Slime's doc names, in its prose, a path of the world its Territory does not
+/// claim. Prose is never a claim, so the field and the prose disagree: one low finding per path, at
+/// the line that names it. A mention is a backticked word read as a claim would be — with a `/`,
+/// relative, no `..` — that exists in the world; the harness's own `.mnemorph/` is not soil.
+#[must_use]
+pub fn prose_claims(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for c in roster.living().filter(|c| c.race.base() == Race::Slime) {
+        let Ok(text) = std::fs::read_to_string(world.join(c.doc())) else {
+            continue;
+        };
+        let fields: BTreeSet<usize> = c.lines.values().copied().collect();
+        let mut seen = BTreeSet::new();
+        for (n, line) in text.lines().enumerate() {
+            if fields.contains(&(n + 1)) || line.starts_with("# ") {
+                continue;
+            }
+            for word in line.split('`').skip(1).step_by(2) {
+                if word.contains(char::is_whitespace) {
+                    continue;
+                }
+                let Some(path) = crate::doc::claim(word) else {
+                    continue;
+                };
+                let claimed = c.zone.iter().any(|z| covers(z, &path));
+                if claimed
+                    || path.starts_with(".mnemorph/")
+                    || !world.join(path.trim_end_matches('/')).exists()
+                    || !seen.insert(path.clone())
+                {
+                    continue;
+                }
+                out.push(Finding {
+                    code: "prose-claim",
+                    severity: Severity::Low,
+                    at: format!("{}:{}", c.doc(), n + 1),
+                    paths: vec![path.clone()],
+                    creatures: vec![c.name.clone()],
+                    message: format!(
+                        "{}'s prose names `{path}`, which its Territory does not claim: prose is \
+never a claim — claim it in the field, or say whose it is",
+                        c.name
+                    ),
+                });
+            }
+        }
+    }
+    out
+}

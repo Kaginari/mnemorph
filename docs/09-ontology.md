@@ -365,7 +365,7 @@ blocking. Findings are never summed into a score.
 | `orphan-mind` | medium | a Mind nobody wears and not marked shared |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
-| `prose-claim` | low | a doc's prose names a path its Territory field does not claim |
+| `prose-claim` | low | a Slime's doc names, in prose, a path of the world its Territory field does not claim: a backticked word read as a claim would be, that exists, outside `.mnemorph/` — one per path, at its line |
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |
 | `untriaged-fact` | low | a free fact landed beside similar ones without the parent's label |
 

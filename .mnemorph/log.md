@@ -3204,3 +3204,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   unguarded (`GateVerdict.unguarded`). A refused, denied or timed-out line on a guarded machine
   stays NOT_VERIFIED and counts. The `timed_out` plumbing from this branch is gone. Docs 03.
 - **Test:** a failure beside a refusal is FAIL and not unrun; a refusal alone is not unrun.
+
+---
+
+### [2026-10-25T21:04:48+01:00] rimuru — prose-claim (#131, one of three)
+- **Task:** the M7 tail. #131's `prose-claim` is the one fully specified of the three
+  missing codes; `heir-dead` and `orphan-mind` wait on the human, since no heir field and no
+  shared mark exist yet.
+- **Files:**
+  - findings.rs `prose_claims(roster, world)`: backticked path-like words in a living Slime's
+    non-field lines that exist in the world, outside `.mnemorph/`, and are not covered by its
+    Territory. One low finding per path;
+  - `doc::claim` is pub(crate), so mentions read by the claim rule;
+  - mnemorphd adds the code to housekeep's findings;
+  - docs 09.
+- **Test:** `a_path_named_in_prose_and_not_claimed_is_a_prose_claim`.
