@@ -57,6 +57,7 @@ impl Session {
         let mut next = Some(line.to_owned());
         while let Some(line) = next {
             let ending = self.run.ask(&line, on).await;
+            self.run.file_triage(&ending);
             Box::pin(self.run.wake(&ending)).await;
             endings.push(ending);
             next = self

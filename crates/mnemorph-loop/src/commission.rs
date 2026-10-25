@@ -448,14 +448,17 @@ fn file_labels(world: &Path, roster: &Roster, ending: &Ending, by: &str) {
     let Ending::Answered(text) = ending else {
         return;
     };
-    let Some(report) = Report::parse(text) else {
-        return;
-    };
+    if let Some(report) = Report::parse(text) {
+        file_verdicts(world, roster, &report.verdicts, by);
+    }
+}
+
+/// File `by`'s triage labels from its `@V` verdicts, by the rules of [`file_labels`].
+pub(crate) fn file_verdicts(world: &Path, roster: &Roster, verdicts: &[String], by: &str) {
     let facts = mnemorph_world::Facts::load(world);
     // The first label stands, in this report as across reports.
     let mut given = std::collections::BTreeSet::new();
-    for event in report
-        .verdicts
+    for event in verdicts
         .iter()
         .filter_map(|v| mnemorph_world::facts::label_of(v, by))
     {

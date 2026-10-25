@@ -2632,3 +2632,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - quoted fact text is one line of at most 200 characters, with no quote or bracket of its own.
 - **Open:** the throne's triage of an Elf's fact; a re-show of an unlabelled fact on the parent's
   next commission.
+
+---
+
+### [2026-10-25T13:32:57+01:00] rimuru — M7: the throne's triage
+- **Task:** the human said "go". This closes #161's open item: the throne labels its Elves'
+  resembling facts.
+- **Files:**
+  - loop commission.rs — `file_verdicts` shared by a child's wire report and the throne's answer;
+  - run.rs — `file_triage` reads `@V` lines in the throne's plain answer;
+  - session.rs — called after each turn;
+  - open.rs — the dispatch prompt says how to label;
+  - test: an Elf's fact is triaged by the throne in prose, and its label is filed;
+  - docs/09.

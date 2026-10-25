@@ -293,7 +293,9 @@ fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
         "\n\nYou are not alone here: this world has creatures. Work that belongs to a lane goes to its \
 Elf with the commission \
 tool: it plans, its Orcs judge, its Slimes write, each under its own gate, and the report comes back \
-as the tool's result. Small asks you may still do yourself. The lanes:\n{}",
+as the tool's result. Small asks you may still do yourself. When a report carries `@? triage #<new> …`, \
+a fact an Elf said resembles older ones: label it in your answer, on a line of its own — \
+`@V #<new> support|counter|refines #<id>`, or `@V #<new> distinct`. The lanes:\n{}",
         list.join("\n")
     )
 }

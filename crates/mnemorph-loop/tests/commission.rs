@@ -1109,3 +1109,49 @@ async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
         "a label on the Elf's own fact is not the Orc's to give"
     );
 }
+
+/// The throne labels its Elves' resembling facts with `@V` lines in its plain answer.
+#[tokio::test]
+async fn the_throne_triages_in_its_answer() {
+    use mnemorph_loop::world::facts::{Event, fact_id};
+    let w = World::new("throne-triage");
+    let old = fact_id("src", "build runs make");
+    mnemorph_loop::world::Facts::record(
+        &w.0,
+        &Event::Support {
+            id: old.clone(),
+            about: "src".into(),
+            text: "build runs make".into(),
+            by: "orc-o".into(),
+            source: None,
+        },
+    )
+    .unwrap();
+    let new = fact_id("src", "build runs cargo test");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "check the build"}),
+        ),
+        ScriptedModel::text("@S DONE\n@U territory src/ build runs cargo test\n@E"),
+        ScriptedModel::text(&format!(
+            "The build moved to cargo.\n@V #{new} counter #{old}"
+        )),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let ending = run.ask("go", &mut |_| {}).await;
+    assert!(
+        w.results()[0].contains(&format!("@? triage #{new}")),
+        "{:?}",
+        w.results()
+    );
+    run.file_triage(&ending);
+    let facts = mnemorph_loop::world::Facts::load(&w.0);
+    assert!(facts.facts[&new].labelled);
+    assert!(
+        facts.facts[&old].counters.contains("elf-e"),
+        "{:?}",
+        facts.facts[&old]
+    );
+}
