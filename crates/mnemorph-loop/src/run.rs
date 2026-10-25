@@ -248,6 +248,10 @@ pub struct Run {
     queue_keeper: Option<Arc<crate::commission::Commissioner>>,
     /// What its dispatcher set aside for it, given once if its slice runs out.
     topup_wt: Option<u64>,
+    /// The ask in flight, as the human gave it: the handoff if solo escalates.
+    asked: String,
+    /// An act this ask was refused because its race does not hold it.
+    unheld: Option<mnemorph_races::ToolClass>,
 }
 
 /// What a run needs that is not the body itself.
@@ -306,6 +310,8 @@ impl Run {
             woken: Vec::new(),
             queue_keeper: None,
             topup_wt: None,
+            asked: String::new(),
+            unheld: None,
         }
     }
 
@@ -983,8 +989,11 @@ impl Run {
         content
     }
 
-    /// What the wake ran while the body waited opens its next turn.
+    /// What the wake ran while the body waited opens its next turn; the ask itself is kept, as
+    /// solo's handoff should it escalate, and its signals start clear.
     fn preface(&mut self, text: &str) -> String {
+        text.clone_into(&mut self.asked);
+        self.unheld = None;
         let woken = std::mem::take(&mut self.woken);
         if woken.is_empty() {
             text.to_owned()
@@ -994,6 +1003,93 @@ impl Run {
                 woken.join("\n- ")
             )
         }
+    }
+
+    /// An outward act or a seal the shelf refused is an escalation signal, read by code.
+    fn note_unheld(&mut self, o: &mnemorph_tools::Outcome) {
+        if let Some(
+            class @ (mnemorph_races::ToolClass::Outward | mnemorph_races::ToolClass::Seal),
+        ) = o.meta.unheld
+        {
+            self.unheld.get_or_insert(class);
+        }
+    }
+
+    /// Solo escalates into the hierarchy on a signal read by code, never judged by the model: its
+    /// context crossed the stress line (its checkpoint), or the shelf refused it an act it does not
+    /// hold. The throne then hands the ask down — to the Kijin for an outward act, the Dark Elf for
+    /// a seal, else to the Elf whose lane the ask names, or the first — with a handoff, and the
+    /// turn's answer is that body's report. One-way within the ask; a session that does not
+    /// dispatch, or a signal with no body to take it, keeps its ending.
+    pub async fn escalate(&mut self, ending: Ending) -> Ending {
+        let Some(c) = self.commissioner.clone() else {
+            return ending;
+        };
+        let stress =
+            matches!(&ending, Ending::Checkpoint { why, .. } if why.starts_with("context"));
+        let signal = match (self.unheld, stress) {
+            (Some(class), _) => format!("the shelf refused it an act it does not hold ({class})"),
+            (None, true) => "its context crossed the stress line".to_owned(),
+            (None, false) => return ending,
+        };
+        let roster = mnemorph_world::Roster::load(&c.world);
+        let below = |race: Race| {
+            roster
+                .living()
+                .filter(|k| {
+                    k.race.base() == race
+                        && k.reports_to.as_deref() == Some(self.body.name.as_str())
+                })
+                .map(|k| k.name.clone())
+                .min()
+        };
+        let to = match self.unheld {
+            Some(mnemorph_races::ToolClass::Outward) => below(Race::Kijin),
+            Some(mnemorph_races::ToolClass::Seal) => below(Race::DarkElf),
+            _ => None,
+        }
+        .or_else(|| {
+            let elves: Vec<&mnemorph_world::doc::Creature> = roster
+                .living()
+                .filter(|k| {
+                    k.race.base() == Race::Elf
+                        && k.reports_to.as_deref() == Some(self.body.name.as_str())
+                })
+                .collect();
+            elves
+                .iter()
+                .find(|e| {
+                    e.lane
+                        .iter()
+                        .any(|l| self.asked.contains(l.trim_end_matches('/')))
+                })
+                .or(elves.first())
+                .map(|e| e.name.clone())
+        });
+        let Some(to) = to else {
+            return ending;
+        };
+        let handoff = format!(
+            "Solo escalated to you: {signal}. The ask, as the human gave it:\n\n{}\n\nSolo's own steps are in its journal; begin from the world as it stands.",
+            self.asked
+        );
+        let input = serde_json::json!({"to": to, "ask": handoff}).to_string();
+        self.record(&Beat::Note {
+            text: format!("solo escalates to {to}: {signal}"),
+        });
+        let left = self
+            .limits
+            .budget_wt
+            .map(|b| b.saturating_sub(self.spent_wt));
+        let interrupt = Arc::clone(&self.interrupt);
+        let body = self.body.clone();
+        let order = crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+        self.spent_wt = self.spent_wt.saturating_add(order.spent);
+        self.landed.extend(order.landed);
+        Ending::Answered(format!(
+            "Escalated to {to} ({signal}).\n\n{}",
+            order.outcome.content
+        ))
     }
 
     /// The wake, at a turn's end: each held order on the shared queue that its body can carry out
@@ -1201,6 +1297,7 @@ impl Run {
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             let o = self.call_one(&name, &input).await;
+            self.note_unheld(&o);
             // An Esc that stopped this call stops the calls after it too.
             interrupted |= self.interrupt.take();
             self.record(&Beat::Result {

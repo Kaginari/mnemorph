@@ -195,7 +195,7 @@ fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outco
             outside,
         } => (class, why, outside, false),
     };
-    check_class(cx.race(), class).map_err(|refusal| Outcome::error(refusal.to_string()))?;
+    check_class(cx.race(), class).map_err(Outcome::unheld)?;
     if asked || matches!(class, ToolClass::Outward | ToolClass::Destructive) {
         let ask = Ask {
             body: cx.body().to_owned(),

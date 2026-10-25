@@ -185,10 +185,16 @@ judged by the model:
 
 Escalation is one-way within a run; the next ask starts solo again.
 
-Until those three signals are read by code, the hand-off is the model's: in a world whose docs
-have a living throne with Elves reporting to it, Rimuru's session holds the `commission` tool
-beside the solo tools, its prompt names each Elf and its lane, and Rimuru chooses which asks to
-hand down. A world with no creatures stays pure solo.
+In a world whose docs have a living throne with Elves reporting to it, Rimuru's session holds the
+`commission` tool beside the solo tools, its prompt names each Elf and its lane, and Rimuru may
+hand an ask down itself. Two of the signals are read by code at the end of each solo turn: a
+context checkpoint, and an outward act or a seal the shelf refused (its class kept on the tool's
+result). On either, the throne hands the ask down — an outward act to its Kijin, a seal to its
+Dark Elf, else to the Elf whose lane the ask names, or the first — with a handoff: the signal and
+the ask as the human gave it; the turn's answer is that body's report. A signal with no body to
+take it keeps the turn's ending. The boundary signal waits for solo's zone to narrow to the
+territory an ask touches: while solo's zone is the whole repository, no write falls outside it.
+A world with no creatures stays pure solo.
 
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
 `seal` are harness tools, never shell commands.
