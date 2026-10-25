@@ -21,8 +21,11 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
-/// Credential paths under the home, by their first segment (or first two). The sandbox never
-/// lets a command read them; the shell classifier refuses commands that name them.
+/// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
+/// them, Seatbelt hides them even inside a readable tree, and the shell classifier refuses
+/// commands that name them. Landlock cannot hide a path inside a tree it reads: those inside a
+/// toolchain — `.cargo/credentials*`, and the two under `.cache` — stay readable on Linux until
+/// those trees are narrowed to what builds need.
 pub const HOME_CREDENTIALS: &[&str] = &[
     ".ssh",
     ".aws",
@@ -40,6 +43,11 @@ pub const HOME_CREDENTIALS: &[&str] = &[
     ".cargo/credentials",
     ".cargo/credentials.toml",
     "Library/Keychains",
+    // uv's `uv auth` logins, beside the interpreters and tools the toolchains name.
+    ".local/share/uv/credentials",
+    // Hugging Face's login token, and git's credential-cache socket.
+    ".cache/huggingface",
+    ".cache/git",
 ];
 
 /// Credential files anywhere on the system.
