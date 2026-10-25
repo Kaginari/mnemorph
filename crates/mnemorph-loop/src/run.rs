@@ -1073,6 +1073,33 @@ impl Run {
         }
     }
 
+    /// The throne's triage: its answer is no wire report, so its `@V` lines are read where they
+    /// stand — outside code blocks — and filed as the labels of the facts its Elves said. Only an
+    /// answered turn is read.
+    pub fn file_triage(&self, ending: &Ending) {
+        let (Some(c), Ending::Answered(text)) = (&self.commissioner, ending) else {
+            return;
+        };
+        // A line in a code block is quoted, never said: it labels nothing.
+        let mut fenced = false;
+        let verdicts: Vec<String> = text
+            .lines()
+            .filter(|l| {
+                if l.trim().starts_with("```") {
+                    fenced = !fenced;
+                    return false;
+                }
+                !fenced
+            })
+            .filter_map(|l| l.trim().strip_prefix("@V "))
+            .map(str::to_owned)
+            .collect();
+        if !verdicts.is_empty() {
+            let roster = mnemorph_world::Roster::load(&c.world);
+            crate::commission::file_verdicts(&c.world, &roster, &verdicts, &self.body.name);
+        }
+    }
+
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
         // The shared queue is the harness's: the loop moves it in this body's name.
