@@ -503,3 +503,92 @@ async fn an_esc_pending_at_a_shared_start_is_honoured() {
         "an Esc from before the ask is not this ask's: {ending:?}"
     );
 }
+
+/// A session opened in a world with a throne and Elves can commission: the human's Rimuru hands
+/// the order down the same way the scripted Rimuru does. A world with no creatures stays solo.
+#[tokio::test]
+async fn a_session_in_a_world_with_creatures_dispatches() {
+    use mnemorph_loop::open::{Bound, open_with};
+    use mnemorph_loop::{Config, Paths};
+    let w = World::new("session");
+    // A test binary has no guard beside it; the human allows commands unguarded, as a session
+    // without the guard installed would have to.
+    fs::write(
+        w.0.join(".mnemorph/config.local.toml"),
+        "[sandbox]\nallow_unguarded = true\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let config = Config::load(&Paths::with_global(w.attic().join("no-global.toml"), &w.0)).unwrap();
+    let attic = w.attic();
+    let mut opened = open_with(
+        &w.0,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    let ending = opened
+        .session
+        .run()
+        .ask("leave a done marker", &mut |_| {})
+        .await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    assert_eq!(
+        fs::read_to_string(w.0.join("src/done.txt")).unwrap(),
+        "done\n"
+    );
+    assert_eq!(model.requests().len(), 8);
+
+    // No throne, no Elves: solo, and `commission` is no tool here.
+    let bare =
+        std::env::temp_dir().join(format!("mnemorph-commission-bare-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&bare);
+    fs::create_dir_all(&bare).unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("alone"),
+    ]));
+    let config = Config::load(&Paths::with_global(bare.join("no-global.toml"), &bare)).unwrap();
+    let attic = bare.join("../mnemorph-commission-bare-attic");
+    let mut opened = open_with(
+        &bare,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    opened.session.run().ask("go", &mut |_| {}).await;
+    let journals: Vec<_> = fs::read_dir(bare.join(".mnemorph/instruments/loop"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
+    assert_eq!(journals.len(), 1, "no child ran");
+    let _ = fs::remove_dir_all(&bare);
+    let _ = fs::remove_dir_all(&attic);
+}

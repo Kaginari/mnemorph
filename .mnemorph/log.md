@@ -2157,3 +2157,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the parent's triage of a new free fact rides its `@V #<new> …` verdict. The loop
   does not read verdicts yet, so a collision stays `untriaged-fact` until it does. The finding is
   the honest state.
+
+---
+
+### [2026-10-25T09:05:40+01:00] rimuru — the human's Rimuru dispatches
+- **Task:** the human said "go". The session the human opens now uses the commission runner:
+  Rimuru may hand a lane's work to its Elf.
+- **Files:**
+  - crates/mnemorph-loop/src/open.rs:
+    - `lanes` (living Elves under a living throne);
+    - `dispatch_prompt`;
+    - the commission tool and a `Commissioner` carrying the session's ledger, caps and stress
+      line;
+  - tests/commission.rs — a session through `open_with` dispatches down and back; a world with no
+    creatures stays solo;
+  - docs/04.
+- **Gate:** n/a. Instruments: `just check`.
+- **Result:** in review as a pull request.
+- **Learned:** in a test binary the guard is not beside the executable, so a child's verify
+  command is refused unless the world allows unguarded commands. A real `mnemorphd` sits next to
+  its guard.
+- **Open:** the client sees only the commission's report, not the bodies working below.
+  Surfacing their beats, labelled by body, is the next rung.
