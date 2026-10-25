@@ -205,6 +205,12 @@ Elf plans and routes and an Orc judges and routes, neither writing code, each ha
 down with `commission` to the body whose ground holds it; a Slime writes in its territory; a
 Kijin does the outward acts of its post; a Dark Elf challenges what landed.
 
+An Orc codes its Slime's verify line — the test before the change, which the dispatch law asks
+before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
+at most 300 characters, on the doc of a living Slime that reports to it. The harness writes that
+line (set, or added after the doc's last field) and journals it; no body's file tools write a
+creature's doc, so no body rewrites its own checks.
+
 Six tool classes. The shell classifier yields the first four from any command; `dispatch` and
 `seal` are harness tools, never shell commands.
 

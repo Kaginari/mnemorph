@@ -12,6 +12,7 @@ pub mod queue;
 pub mod relief;
 pub mod roster;
 pub mod soil;
+pub mod verify;
 pub mod worth;
 
 pub use dispatch::{Ask, Hop, Refused, dispatch};
