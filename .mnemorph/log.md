@@ -2749,3 +2749,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:**
   - re-asks are not yet counted;
   - a gate denial by the human still counts as a failed act (the doc says denials never add).
+
+---
+
+### [2026-10-25T14:41:45+01:00] rimuru — #167 review fixes
+- **Task:** fix Fable's review of the council.
+- **Fixed:**
+  - a DONE clears, whatever failed on the way; before, a red-green body drifted to relief;
+  - a gate denial carries `Meta.denied`, and the stress meter does not count it;
+  - relief acts only after a warrant; before, one 7-failure run skipped the parent;
+  - the tally is cleared only when relief acts; a refused relief (an Elf) escalates and keeps it;
+  - only answered runs count, so strain is never read from how the loop ended;
+  - the forced ESCALATE keeps the body's own status (`was: …`);
+  - docs: the config keys' real names, and re-asks marked as not counted yet.
+- **Open:**
+  - a parent's loop does not act on a council-forced ESCALATE in a child's report beyond relaying
+    it;
+  - the tally is never compacted.

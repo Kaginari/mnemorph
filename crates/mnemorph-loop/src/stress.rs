@@ -260,7 +260,8 @@ impl Stress {
             self.rereads = 0;
             self.turns = 0;
         }
-        self.failed += u32::from(o.is_error);
+        // A denial is the human's choice: it never strains the body.
+        self.failed += u32::from(o.is_error && !o.meta.denied);
         self.failed_streak = if o.is_error {
             self.failed_streak + 1
         } else {

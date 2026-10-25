@@ -78,8 +78,10 @@ pub fn tally(world: &Path, body: &str) -> (u64, u64) {
     (strain, warrants)
 }
 
-/// Sit after one of `body`'s runs: `failed` acts, `done` when its report answered `DONE` and its
-/// landing held, `counted` false for an interrupted or dry run, which never adds.
+/// Sit after one of `body`'s runs: `failed` acts, `done` when its report answered `DONE`,
+/// `counted` false for a run that did not answer — interrupted, stopped by its clock or budget, a
+/// provider's fault — which never adds: strain is read from the body's report, never from how
+/// its loop ended.
 #[must_use]
 pub fn sit(
     world: &Path,
@@ -95,7 +97,8 @@ pub fn sit(
             eprintln!("mnemorph: the council could not record {body}: {e}");
         }
     };
-    if done && failed == 0 {
+    // A clean landing clears it: a DONE, whatever it failed on the way.
+    if done {
         if tally(world, body) != (0, 0) {
             record(&Row::Clear {
                 body: body.to_owned(),
@@ -106,7 +109,7 @@ pub fn sit(
     if !counted {
         return Sitting::Quiet;
     }
-    let by = failed + u64::from(!done);
+    let by = failed + 1;
     if by > 0 {
         record(&Row::Strain {
             body: body.to_owned(),
@@ -114,12 +117,15 @@ pub fn sit(
         });
     }
     let (strain, warrants) = tally(world, body);
-    if strain >= keys.relieve_at {
-        record(&Row::Clear {
-            body: body.to_owned(),
-        });
+    // Relief follows a warrant: the parent is always asked once before a seat is split.
+    if strain >= keys.relieve_at && warrants > 0 {
         return match crate::world::relief::relieve(world, body, true) {
-            Ok(r) => Sitting::Relieved(r.line()),
+            Ok(r) => {
+                record(&Row::Clear {
+                    body: body.to_owned(),
+                });
+                Sitting::Relieved(r.line())
+            }
             Err(e) => Sitting::Escalate(format!(
                 "council: {body} strain {strain} reached relief, and relief could not act: {e}"
             )),

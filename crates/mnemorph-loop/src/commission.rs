@@ -675,7 +675,7 @@ fn council(
         }
         _ => false,
     };
-    let counted = !matches!(ending, Ending::Interrupted);
+    let counted = matches!(ending, Ending::Answered(_));
     match crate::council::sit(&c.world, c.council, body, u64::from(failed), done, counted) {
         crate::council::Sitting::Quiet => None,
         crate::council::Sitting::Warrant(text) => {
@@ -875,7 +875,7 @@ fn report_of(
     report.other.extend(notes.iter().cloned());
     // The council's last word: after its warrants, the report escalates to the human.
     if let Some(why) = forced {
-        report.status = format!("ESCALATE {why}");
+        report.status = format!("ESCALATE {why} (was: {})", report.status);
     }
     report
         .holes

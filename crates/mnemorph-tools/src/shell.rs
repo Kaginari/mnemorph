@@ -206,9 +206,11 @@ fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outco
             outside: outside.clone(),
         };
         if let Answer::Deny(reason) = cx.gate().ask(&ask) {
-            return Err(Outcome::error(format!(
+            let mut denied = Outcome::error(format!(
                 "the human gate did not approve this {class} command: {reason}"
-            )));
+            ));
+            denied.meta.denied = true;
+            return Err(denied);
         }
     }
     Ok((class, outside))

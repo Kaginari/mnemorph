@@ -87,3 +87,31 @@ fn relief_acts_at_its_threshold_and_resets_the_trigger() {
     assert!(roster.creatures["slime-s"].retired);
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A DONE clears, whatever failed on the way; a jump past relief with no warrant served is a
+/// warrant first; a relief that cannot act escalates and keeps the tally.
+#[test]
+fn the_council_asks_before_it_relieves_and_keeps_what_relief_could_not_clear() {
+    let w = world("guards");
+    assert!(matches!(fail(&w, 2), Sitting::Quiet));
+    assert_eq!(
+        sit(&w, Thresholds::default(), "slime-s", 4, true, true),
+        Sitting::Quiet
+    );
+    assert_eq!(
+        tally(&w, "slime-s"),
+        (0, 0),
+        "a DONE clears, red-green on the way or not"
+    );
+    assert!(
+        matches!(fail(&w, 9), Sitting::Warrant(_)),
+        "relief waits for a warrant"
+    );
+    assert!(matches!(fail(&w, 0), Sitting::Relieved(_)));
+    // An Elf cannot be relieved: the council escalates, and the strain stays.
+    let elf = |w: &Path| sit(w, Thresholds::default(), "elf-e", 4, false, true);
+    assert!(matches!(elf(&w), Sitting::Warrant(_)));
+    assert!(matches!(elf(&w), Sitting::Escalate(why) if why.contains("relief could not act")));
+    assert_eq!(tally(&w, "elf-e").0, 10);
+    let _ = fs::remove_dir_all(&w);
+}
