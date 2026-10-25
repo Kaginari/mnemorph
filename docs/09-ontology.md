@@ -265,6 +265,10 @@ parent's verdict labels the new fact against each:
     @V #<new-id> refines #<id>      # narrower: both stand, linked
     @V #<new-id> distinct           # unrelated to all shown
 
+The candidates reach the parent in its child's report, one line per new fact —
+`[triage #<new> "<text>" on <path>: it resembles #<id> "<text>"; … — label it in your report …]` —
+and the labels it gives in its own report are filed as `label` events. A label counts only on a
+fact said by a body that reports to the labeller: no body triages a fact that is not its child's.
 A collision left unlabeled keeps the new fact **single** and raises an `untriaged-fact` finding.
 Similarity only chooses what to compare; it never makes a fact contested by itself, because two
 facts that share words agree as often as they clash. The cost is bounded: at most three candidate

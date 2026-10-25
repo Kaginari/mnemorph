@@ -195,6 +195,35 @@ impl Fact {
     }
 }
 
+/// The parent's triage of a new free fact, read from one of its `@V` verdicts:
+/// `#<new> support|counter|refines #<id>`, or `#<new> distinct`. Anything else is no label.
+#[must_use]
+pub fn label_of(verdict: &str, by: &str) -> Option<Event> {
+    let mut words = verdict.split_whitespace();
+    let new = words.next()?.strip_prefix('#')?.to_owned();
+    let label = match words.next()? {
+        "support" => Label::Support,
+        "counter" => Label::Counter,
+        "refines" => Label::Refines,
+        "distinct" => Label::Distinct,
+        _ => return None,
+    };
+    let of = match (label, words.next()) {
+        (Label::Distinct, None) => None,
+        (Label::Distinct, Some(_)) | (_, None) => return None,
+        (_, Some(id)) => Some(id.strip_prefix('#')?.to_owned()),
+    };
+    if words.next().is_some() || new.is_empty() {
+        return None;
+    }
+    Some(Event::Label {
+        new,
+        label,
+        of,
+        by: by.to_owned(),
+    })
+}
+
 /// The floor a triage candidate's BM25 score must clear to be shown to the parent.
 pub const THETA_T: f64 = 0.1;
 

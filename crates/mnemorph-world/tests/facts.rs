@@ -330,3 +330,36 @@ fn the_facts_review_held() {
     assert_eq!(lines[2], "@ONTO docs/: o");
     assert_eq!(lines[3], "@ONTO -1", "{lines:?}");
 }
+
+/// The parent's triage, read from its `@V` verdicts; anything else is no label.
+#[test]
+fn a_triage_label_is_read_from_a_verdict() {
+    use mnemorph_world::facts::{Event, Label, label_of};
+    let label = |v: &str| match label_of(v, "orc-o") {
+        Some(Event::Label { new, label, of, by }) => Some((new, label, of, by)),
+        _ => None,
+    };
+    assert_eq!(
+        label("#aa counter #bb"),
+        Some((
+            "aa".into(),
+            Label::Counter,
+            Some("bb".into()),
+            "orc-o".into()
+        ))
+    );
+    assert_eq!(
+        label("#aa distinct"),
+        Some(("aa".into(), Label::Distinct, None, "orc-o".into()))
+    );
+    for bad in [
+        "#aa support",
+        "#aa distinct #bb",
+        "aa counter #bb",
+        "#aa merges #bb",
+        "#aa refines #bb extra",
+        "the landing holds",
+    ] {
+        assert_eq!(label(bad), None, "{bad}");
+    }
+}
