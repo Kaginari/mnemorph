@@ -2923,3 +2923,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `run.py --check`: 30 tasks, none passes untouched;
   - `onto check` on the bench world: PASS, 0 findings.
 - **Next:** the live run (the key from the human), then the write-up.
+
+---
+
+### [2026-10-25T15:54:40+01:00] rimuru — #171 review fixes
+- **Task:** fix Fable's review of the bench.
+- **Fixed:**
+  - rate limits are read on stdout as well as stderr (a body's 429 is a tool result), with a
+    narrower pattern, and any limit stops the run;
+  - hierarchy runs are verified: `below` counts the calls of bodies under the throne, and a
+    hierarchy run with none is `valid: false`;
+  - a timeout kills the run's whole process group, and the timeout is 30 minutes;
+  - stderr is scrubbed before it is cut, and a key file others can read is refused;
+  - task 25: `arith.py` (no shadowing of the stdlib `numbers`), and any `math` import is caught;
+  - the README: results are tracked; the guard helper is needed.

@@ -21,11 +21,16 @@ python3 bench/run.py --tasks 01,02 --modes solo --limit 2
 ```
 
 The key is `OPENROUTER_API_KEY` from the environment, else `~/.config/mnemorph/openrouter.key`
-(mode 600). It is handed only to each run's own process, never written and never printed; a run's
-saved stderr has it scrubbed. `--model` (or `MNEMORPH_BENCH_MODEL`) picks the model; the default is
+(mode 600 — a key file others can read is refused). It is handed only to each run's own process,
+never written and never printed; a run's saved stderr is scrubbed of it before it is cut. `--model` (or `MNEMORPH_BENCH_MODEL`) picks the model; the default is
 a free one.
 
-Each run is one line in `results/<model>.jsonl`: whether it passed, its exit, seconds, model calls,
-weighted tokens and dollars (from the world's usage ledger), and how many times solo escalated. A
-rerun skips what is there. A rate limit or a daily cap stops the run with exit 3, unrecorded, and
-the next run resumes from it — a free model's daily cap may take the sixty runs over a few days.
+Each run is one line in `results/<model>.jsonl`, tracked as the measurement's record: whether it
+passed, its exit, seconds, model calls (and how many came from bodies below the throne), weighted
+tokens and dollars (from the world's usage ledger), and how many times solo escalated. A hierarchy
+run in which no body below the throne made a call did not run as one: it is marked `valid: false`.
+A rerun skips what is there. A rate limit or a daily cap — seen on stderr, or in a body's result
+on stdout — stops the run with exit 3, unrecorded, and the next run resumes from it; a free
+model's daily cap may take the sixty runs over a few days. A run past its timeout (30 minutes) is
+killed with every process it started, and recorded as a fail. `just check` also builds
+`target/debug/mnemorph-guard`, the sandbox's helper: without it every shell act is refused.

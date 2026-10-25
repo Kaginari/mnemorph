@@ -16,6 +16,8 @@ import json
 import os
 import re
 import shutil
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -26,7 +28,7 @@ BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 HANDOFF = "Hand this whole ask to elf-e with the commission tool, then answer with its report:\n\n"
-LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|daily limit|quota", re.I)
+LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|free-models-per-day", re.I)
 
 
 def tasks(only):
@@ -79,12 +81,18 @@ def key():
     if os.environ.get("OPENROUTER_API_KEY"):
         return os.environ["OPENROUTER_API_KEY"]
     path = Path.home() / ".config" / "mnemorph" / "openrouter.key"
-    return path.read_text().strip() if path.exists() else None
+    if not path.exists():
+        return None
+    if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        print("%s is readable by others: chmod 600 it first" % path)
+        return None
+    return path.read_text().strip()
 
 
 def ledger(world):
-    """Calls, weighted tokens and dollars from the world's usage ledger."""
-    calls, wt, usd = 0, 0, 0.0
+    """Calls, weighted tokens, dollars, and the calls of bodies below the throne, from the world's
+    usage ledger."""
+    calls, wt, usd, below = 0, 0, 0.0, 0
     path = world / ".mnemorph" / "instruments" / "usage.jsonl"
     for line in path.read_text().splitlines() if path.exists() else []:
         try:
@@ -94,7 +102,8 @@ def ledger(world):
         calls += 1
         wt += row.get("wt") or 0
         usd += row.get("usd") or 0.0
-    return calls, wt, usd
+        below += row.get("race") != "rimuru"
+    return calls, wt, usd, below
 
 
 def escalations(world):
@@ -114,20 +123,30 @@ def run_one(task, mode, model, secret, timeout):
            "--world", str(world), "--json", "--core", str(REPO / "target/debug/mnemorphd")]
     env = dict(os.environ, OPENROUTER_API_KEY=secret)
     start = time.time()
+    # Its own process group: a timeout ends the CLI and the core it started, key and all.
+    proc = subprocess.Popen(cli, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
     try:
-        out = subprocess.run(cli, env=env, capture_output=True, text=True, timeout=timeout)
-        code, err = out.returncode, out.stderr
+        stdout, err = proc.communicate(timeout=timeout)
+        code = proc.returncode
     except subprocess.TimeoutExpired:
-        code, err = None, "timeout"
+        os.killpg(proc.pid, signal.SIGKILL)
+        stdout, err = proc.communicate()
+        code, err = None, (err or "") + "\ntimeout"
     seconds = round(time.time() - start, 1)
-    limited = bool(LIMITED.search(err or ""))
-    calls, wt, usd = ledger(world)
+    # A rate limit reaches stderr when the throne's call dies, stdout when a body's does.
+    limited = bool(LIMITED.search(err or "") or LIMITED.search(stdout or ""))
+    calls, wt, usd, below = ledger(world)
+    scrubbed = (err or "").replace(secret, "[key]")
     result = {
         "task": task.name, "mode": mode, "model": model,
         "passed": verify(task, world), "exit": code, "seconds": seconds,
         "calls": calls, "wt": wt, "usd": round(usd, 6),
-        "escalations": escalations(world), "limited": limited,
-        "stderr": (err or "")[-400:].replace(secret, "[key]") if secret else (err or "")[-400:],
+        "escalations": escalations(world), "below": below,
+        # A hierarchy run where no body below the throne made a call did not run as one.
+        "valid": mode != "hierarchy" or below > 0,
+        "limited": limited,
+        "stderr": scrubbed[-400:],
     }
     shutil.rmtree(world, ignore_errors=True)
     return result
@@ -140,7 +159,7 @@ def main():
     p.add_argument("--tasks", default="")
     p.add_argument("--modes", default="solo,hierarchy")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
-    p.add_argument("--timeout", type=int, default=900)
+    p.add_argument("--timeout", type=int, default=1800)
     a = p.parse_args()
     if a.check:
         return check()
@@ -164,14 +183,15 @@ def main():
             if a.limit and ran >= a.limit:
                 return 0
             r = run_one(t, mode, a.model, secret, a.timeout)
-            if r["limited"] and not r["passed"]:
+            if r["limited"]:
                 print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
                 return 3
             with out.open("a") as f:
                 f.write(json.dumps(r) + "\n")
             ran += 1
-            print("%s %-9s %s  %ss  %d calls  %d wt  esc %d" % (
-                t.name, mode, "PASS" if r["passed"] else "fail", r["seconds"], r["calls"], r["wt"], r["escalations"]))
+            print("%s %-9s %s  %ss  %d calls (%d below)  %d wt  esc %d%s" % (
+                t.name, mode, "PASS" if r["passed"] else "fail", r["seconds"], r["calls"], r["below"],
+                r["wt"], r["escalations"], "" if r["valid"] else "  INVALID: nothing ran below"))
     return 0
 
 
