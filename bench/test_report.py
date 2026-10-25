@@ -65,11 +65,14 @@ class Causes(unittest.TestCase):
             ("checkpoint: the budget is spent", "checkpoint"),
             ("failed: the end gate failed twice: traits hold", "gate"),
             ("failed: the end gate could not verify: no kernel guard", "machine"),
+            ("failed: the end gate could not verify twice: traits unverified", "gate"),
+            ("failed: the model refused to continue", "refused"),
+            ("failed: the conversation is malformed: two user turns", "harness bug"),
             ("failed: the provider answered 502", "provider"),
             ("interrupted", "interrupted"),
         ]:
             self.assertEqual(report.cause(said(stderr_ending)), want, stderr_ending)
-        self.assertEqual(report.cause(row("t", "solo", exit=None)), "timeout")
+        self.assertEqual(report.cause(row("t", "solo", exit=None)), "hang")
         self.assertEqual(report.cause(row("t", "hierarchy", valid=False)), "never delegated")
         self.assertEqual(report.cause(row("t", "solo", exit=1, ending="escalate: x")), "escalated")
 

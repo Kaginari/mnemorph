@@ -3334,3 +3334,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **On the data:** the one solo failure is `escalate: more than two failed acts in a row`, the
   harness's own three-fails rule, so it rightly counts as a failure. Hierarchy's two are wrong
   answers. Nothing is infrastructure so far.
+
+---
+
+### [2026-10-25T23:10:05+01:00] rimuru — #182's review: Fable
+- **Fable found:**
+  - "could not verify twice" (a body's check hanging) matched the no-guard prefix, so it was rerun
+    and never counted;
+  - a model refusal fell to provider, so a refusal was rerun until the model complied;
+  - the bench's 30-minute kill could not tell slow work from a stall;
+  - a misleading `ending` on a kill.
+- **Fixed:**
+  - the exact no-guard phrase (with its colon);
+  - `refused` counts;
+  - a malformed conversation is a "harness bug", rerun but flagged loudly;
+  - the bench kills at 65 minutes, past the core's one-hour clock, so slow work ends as
+    `checkpoint` (counted) and a kill is a hang (rerun);
+  - tests; the README.
+- **Lesson:** a cause prefix shared by a machine stop and a body stop is a dodge. Match the exact
+  phrase, and test both.

@@ -35,8 +35,8 @@ tokens and dollars (from the world's usage ledger), and how many times solo esca
 run in which no body below the throne made a call did not run as one: it is marked `valid: false`.
 A rerun skips what is there. A rate limit or a daily cap — seen on stderr, or in a body's result
 on stdout — stops the run with exit 3, unrecorded, and the next run resumes from it; a free
-model's daily cap may take the sixty runs over a few days. A run past its timeout (30 minutes) is
-killed with every process it started, and recorded as a fail. `just check` also builds
+model's daily cap may take the sixty runs over a few days. A run past its timeout (65 minutes, beyond the core's one-hour clock) is
+killed with every process it started; the report reads it as a hang, to rerun. `just check` also builds
 `target/debug/mnemorph-guard`, the sandbox's helper: without it every shell act is refused.
 
 ## Reading it
@@ -55,11 +55,13 @@ older row the `mnemorph: <ending>` line the CLI writes to stderr:
 
 | Cause | Ending | Counts |
 |---|---|---|
-| escalated, checkpoint | `escalate: …`, `checkpoint: …` | a failed task |
-| gate | `failed: the end gate …` | a failed task |
-| timeout | killed at the bench's limit | a failed task |
+| escalated, checkpoint | `escalate: …`, `checkpoint: …` — the core's one-hour clock included | a failed task |
+| gate | `failed: the end gate …`, a check that hung included | a failed task |
+| refused | `failed: the model refused …` | a failed task |
 | never delegated | a hierarchy run with no call below the throne | a failed task |
-| machine | `failed: the end gate could not verify …` — no kernel guard | not counted: rerun |
+| machine | `failed: the end gate could not verify: …` — no kernel guard | not counted: rerun |
+| hang | killed at the bench's limit, 65 minutes, past the core's own clock | not counted: rerun |
+| harness bug | `failed: the conversation is malformed …` — flagged loudly | not counted: rerun |
 | provider, interrupted | any other `failed: …`, `interrupted` | not counted: rerun |
 
 A correct file left by a stop the harness made is a failed task, and the report says how many

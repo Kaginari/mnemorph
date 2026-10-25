@@ -37,8 +37,10 @@ def expected_tasks():
 
 # How a run ended, read from its recorded ending — or, for a run recorded before endings were,
 # from the `mnemorph: <ending>` line the CLI writes to stderr for any ending but `answered`.
-HARNESS = {"escalated", "checkpoint", "gate", "timeout", "never delegated"}
-INFRA = {"machine", "provider", "interrupted"}
+HARNESS = {"escalated", "checkpoint", "gate", "refused", "never delegated"}
+# A hang outlives the core's own one-hour clock, which ends slow work as a checkpoint: the bench
+# kills only what stalled, at 65 minutes.
+INFRA = {"machine", "provider", "interrupted", "hang", "harness bug"}
 
 
 def ending(r):
@@ -52,21 +54,26 @@ def ending(r):
 
 def cause(r):
     """Why the run ended as it did: `answered`, a stop the harness made and the task owns
-    (escalated, checkpoint, gate, timeout, never delegated), or one the task does not
-    (machine, provider, interrupted) — that run measured nothing and is rerun."""
+    (escalated, checkpoint, gate, refused, never delegated), or one the task does not (machine,
+    provider, interrupted, a hang, a harness bug) — that run measured nothing and is rerun."""
     e = ending(r)
     if r.get("exit") is None:
-        return "timeout"
+        return "hang"
     if e == "answered":
         return "answered" if r.get("valid", True) else "never delegated"
     if e.startswith("escalate:"):
         return "escalated"
     if e.startswith("checkpoint:"):
         return "checkpoint"
-    if e.startswith("failed: the end gate could not verify"):
+    # Exactly the no-guard phrase: "could not verify twice" is the body's own check hanging.
+    if e.startswith("failed: the end gate could not verify:"):
         return "machine"
     if e.startswith("failed: the end gate"):
         return "gate"
+    if e.startswith("failed: the model refused"):
+        return "refused"
+    if e.startswith("failed: the conversation is malformed"):
+        return "harness bug"
     if e == "interrupted":
         return "interrupted"
     return "provider"
@@ -85,7 +92,7 @@ def succeeded(r):
 def matrix(rows, tasks, modes):
     """The judged rows by (task, mode), every way they miss the fixed matrix, and the runs the
     machine or the provider stopped, to rerun. A later row stands in for an earlier unjudged one;
-    two judged rows for one cell are an error."""
+    any other second row for a cell is an error."""
     want = {(t, m) for t in tasks for m in modes}
     cells, unjudged, errors = {}, {}, []
     for r in rows:
@@ -135,7 +142,9 @@ def report(rows, modes, partial):
     tasks = expected_tasks()
     cells, errors, missing, rerun = matrix(rows, tasks, modes)
     out = {"tasks": len(tasks), "modes": modes, "errors": errors, "missing": missing,
-           "rerun": rerun}
+           "rerun": rerun,
+           "bugs": [k for k in rerun if cause(next(r for r in reversed(rows)
+                                                   if (r["task"], r["mode"]) == k)) == "harness bug"]}
     if errors or ((missing or rerun) and not partial):
         return out, 1
     out["arms"] = {m: arm(cells, tasks, m) for m in modes}
@@ -168,6 +177,10 @@ def show(out, partial):
             "partial —" if partial else "matrix error:", len(out["missing"]),
             out["tasks"] * len(out["modes"]), ", ".join("%s %s" % k for k in out["missing"][:6])
             + (" …" if len(out["missing"]) > 6 else "")))
+    bugs = [k for k in out["rerun"] if out.get("bugs") and k in out["bugs"]]
+    if bugs:
+        lines.append("HARNESS BUG — a malformed conversation, fix it before trusting a rerun: "
+                     + ", ".join("%s %s" % k for k in bugs))
     if out["rerun"]:
         lines.append("%s %d runs the machine or the provider stopped, to rerun "
                      "(run.py --redo-invalid): %s" % (

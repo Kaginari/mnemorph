@@ -152,7 +152,8 @@ def run_one(task, mode, model, secret, timeout, keep=False):
     scrubbed = (err or "").replace(secret, "[key]")
     # How it ended, as the CLI says for any ending but `answered`: the report reads the cause.
     said = [l[len("mnemorph: "):] for l in (err or "").splitlines() if l.startswith("mnemorph: ")]
-    ended = "answered" if code == 0 else (said[-1] if said else "timeout" if code is None else "")
+    ended = ("hang" if code is None else "answered" if code == 0
+             else said[-1] if said else "")
     result = {
         "task": task.name, "mode": mode, "model": model,
         "passed": verify(task, world), "exit": code, "ending": ended.replace(secret, "[key]"),
@@ -179,7 +180,8 @@ def main():
     p.add_argument("--tasks", default="")
     p.add_argument("--modes", default="solo,hierarchy")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
-    p.add_argument("--timeout", type=int, default=1800)
+    # Past the core's one-hour clock: slow work ends as a checkpoint, and this kills only a hang.
+    p.add_argument("--timeout", type=int, default=3900)
     p.add_argument("--keep", action="store_true", help="keep each run's world, for a post-mortem")
     p.add_argument("--out", default="", help="a results file other than the model's")
     p.add_argument("--redo-invalid", action="store_true",
