@@ -12,6 +12,9 @@ use crate::roster::Roster;
 /// Where the usage ledger lives in a world.
 pub const USAGE: &str = ".mnemorph/instruments/usage.jsonl";
 
+/// What the gate writes under each verdict it journals: only its own entries count on a card.
+pub const BY_THE_GATE: &str = "- **By:** the end gate";
+
 /// One body's record, counted with everything below it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
@@ -23,72 +26,115 @@ pub struct Card {
     pub passes: u32,
     /// Gate failures that ended a run.
     pub fails: u32,
+    /// Gate failures handed back to be fixed: half a failure each.
+    pub handed_back: u32,
 }
 
 impl Card {
-    /// Its worth, between 0.5 and 1: `0.5 + 0.5 × (passes + 1) / (passes + fails + 2)`, in
-    /// thousandths. No record reads 750.
+    /// Its worth, between 0.5 and 1, in thousandths: `0.5 + 0.5 × (passes + 1) / (passes +
+    /// fails + handed_back / 2 + 2)`. No record reads 750.
     #[must_use]
     pub fn worth_milli(&self) -> u64 {
-        let (p, f) = (u64::from(self.passes), u64::from(self.fails));
-        500 + 500 * (p + 1) / (p + f + 2)
+        let (p, f, h) = (
+            u64::from(self.passes),
+            u64::from(self.fails),
+            u64::from(self.handed_back),
+        );
+        500 + 500 * (2 * p + 2) / (2 * p + 2 * f + h + 4)
     }
 
-    /// The card as a dispatching body reads it.
+    /// The card as a dispatching body reads it; spend is rounded to the thousand, so a card
+    /// changes only when the record does.
     #[must_use]
     pub fn line(&self) -> String {
         format!(
-            "{}: worth 0.{:03} — {} gate passes, {} fails, {} wt spent (with the bodies below it)",
+            "{}: worth 0.{:03} — {} gate passes, {} fails, {} handed back, ~{}k wt spent (with the bodies below it)",
             self.body,
-            self.worth_milli().min(999),
+            self.worth_milli(),
             self.passes,
             self.fails,
-            self.spent_wt
+            self.handed_back,
+            self.spent_wt.div_ceil(1000)
         )
     }
 }
 
-/// `name`'s card in `world`: its own record and every living body's below it.
+/// A world's records, read once: who spent what, and the gate's verdicts.
+#[derive(Debug, Default)]
+pub struct Records {
+    spent: Vec<(String, u64)>,
+    verdicts: Vec<(String, String)>,
+}
+
+impl Records {
+    /// Read `world`'s usage ledger and journal. Only the gate's own journal entries count.
+    #[must_use]
+    pub fn load(world: &Path) -> Records {
+        let spent = Journal::<UsageRow>::new(world.join(USAGE))
+            .read()
+            .map(|r| r.rows)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|row| (row.body, row.wt))
+            .collect();
+        let journal = std::fs::read_to_string(world.join(LOG)).unwrap_or_default();
+        let mut verdicts = Vec::new();
+        for entry in journal.split("\n---\n") {
+            let mut lines = entry.lines().skip_while(|l| !l.starts_with("### ["));
+            let Some(head) = lines.next() else {
+                continue;
+            };
+            if !lines.any(|l| l == BY_THE_GATE) {
+                continue;
+            }
+            let Some((_, rest)) = head.split_once("] ") else {
+                continue;
+            };
+            if let Some((body, verdict)) = rest.split_once(" — gate: ") {
+                verdicts.push((body.to_owned(), verdict.trim().to_owned()));
+            }
+        }
+        Records { spent, verdicts }
+    }
+
+    /// `name`'s card: its own record and every living body's below it.
+    #[must_use]
+    pub fn card(&self, roster: &Roster, name: &str) -> Card {
+        let below: Vec<&str> = roster
+            .living()
+            .filter(|c| c.name == name || roster.chain(&c.name).iter().any(|n| n == name))
+            .map(|c| c.name.as_str())
+            .collect();
+        let mine = |body: &str| below.contains(&body);
+        let spent_wt = self
+            .spent
+            .iter()
+            .filter(|(b, _)| mine(b))
+            .map(|(_, wt)| wt)
+            .sum();
+        let mut card = Card {
+            body: name.to_owned(),
+            spent_wt,
+            passes: 0,
+            fails: 0,
+            handed_back: 0,
+        };
+        for (_, verdict) in self.verdicts.iter().filter(|(b, _)| mine(b)) {
+            match verdict.as_str() {
+                "PASS" => card.passes += 1,
+                "FAIL" => card.fails += 1,
+                "FAIL, handed back" => card.handed_back += 1,
+                _ => {}
+            }
+        }
+        card
+    }
+}
+
+/// `name`'s card in `world`, read fresh.
 #[must_use]
 pub fn card(world: &Path, roster: &Roster, name: &str) -> Card {
-    let below: Vec<&str> = roster
-        .living()
-        .filter(|c| c.name == name || roster.chain(&c.name).iter().any(|n| n == name))
-        .map(|c| c.name.as_str())
-        .collect();
-    let spent_wt = Journal::<UsageRow>::new(world.join(USAGE))
-        .read()
-        .map(|r| r.rows)
-        .unwrap_or_default()
-        .iter()
-        .filter(|row| below.contains(&row.body.as_str()))
-        .map(|row| row.wt)
-        .sum();
-    let (mut passes, mut fails) = (0, 0);
-    let journal = std::fs::read_to_string(world.join(LOG)).unwrap_or_default();
-    for line in journal.lines().filter(|l| l.starts_with("### [")) {
-        let Some((_, rest)) = line.split_once("] ") else {
-            continue;
-        };
-        let Some((body, verdict)) = rest.split_once(" — gate: ") else {
-            continue;
-        };
-        if !below.contains(&body) {
-            continue;
-        }
-        // A failure handed back to be fixed is not yet a verdict on the run.
-        match verdict.trim() {
-            "PASS" => passes += 1,
-            "FAIL" => fails += 1,
-            _ => {}
-        }
-    }
-    Card {
-        body: name.to_owned(),
-        spent_wt,
-        passes,
-        fails,
-    }
+    Records::load(world).card(roster, name)
 }
 
 /// A race's compiled maximum share of what its parent has left, in percent.

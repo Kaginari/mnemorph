@@ -2528,3 +2528,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   replaces the worth score; the card and the clamp stay.
 - **Next:** top-ups. A child out of budget asks its parent, and the parent gives from its own
   envelope.
+
+---
+
+### [2026-10-25T12:27:03+01:00] rimuru — #158 review fixes
+- **Task:** fix Fable's review of grants and cards.
+- **Fixed:**
+  - the dispatcher is told whenever it gets less than asked, including the default half, which
+    always exceeds the ceiling;
+  - a handed-back failure counts half, so worth no longer drifts to 1;
+  - only entries the end gate wrote count (`- **By:** the end gate`), so a hand entry is ignored;
+  - `Records` is read once per prompt;
+  - spend on cards is rounded to the thousand, so a card changes with the record, not every call;
+  - a refused order no longer counts toward the wake's three;
+  - the tool text and page 06 say "half, within the ceiling", and the plan weights are marked as
+    to come.
+- **Open:**
+  - a creature reborn under a retired name inherits the old record;
+  - cards in a child's system prompt make a second commission of the same child miss the cache.
+    Moving them to the first user turn would keep the system fixed.

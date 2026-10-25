@@ -810,6 +810,7 @@ impl Run {
         if !verdict.failures.is_empty() {
             lines.push(("Failures".to_owned(), verdict.failures.join("; ")));
         }
+        lines.push(("By".to_owned(), "the end gate".to_owned()));
         let entry = mnemorph_world::log::Entry {
             body: self.body.name.clone(),
             title: format!("gate: {word}"),
@@ -1036,7 +1037,10 @@ impl Run {
             let interrupt = Arc::clone(&self.interrupt);
             let order =
                 crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
-            ran += 1;
+            // Only an order that ran counts toward the wake's three: a refusal spent nothing.
+            if !order.outcome.is_error {
+                ran += 1;
+            }
             self.spent_wt = self.spent_wt.saturating_add(order.spent);
             self.landed.extend(order.landed);
             let line = crate::commission::settle(q, &roster, &item, &order.outcome);

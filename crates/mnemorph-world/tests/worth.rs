@@ -18,7 +18,7 @@ fn verdict(world: &std::path::Path, body: &str, said: &str) {
     let entry = Entry {
         body: body.into(),
         title: format!("gate: {said}"),
-        lines: Vec::new(),
+        lines: vec![("By".into(), "the end gate".into())],
     };
     append(world, &entry).unwrap();
 }
@@ -60,6 +60,13 @@ fn a_card_counts_the_body_and_every_body_below_it() {
     verdict(&w, "slime-t", "FAIL");
     verdict(&w, "slime-t", "FAIL, handed back");
     verdict(&w, "orc-o", "PASS");
+    // An entry the gate did not write counts for nothing.
+    let hand = Entry {
+        body: "slime-t".into(),
+        title: "gate: PASS".into(),
+        lines: Vec::new(),
+    };
+    append(&w, &hand).unwrap();
     let row = |body: &str, wt: u64| UsageRow {
         ts: mnemorph_ledger::Timestamp(0),
         session: "s".into(),
@@ -83,9 +90,9 @@ fn a_card_counts_the_body_and_every_body_below_it() {
     assert_eq!((s.passes, s.fails, s.spent_wt), (2, 0, 100));
     let t = card(&w, &roster, "slime-t");
     assert_eq!(
-        (t.passes, t.fails),
-        (0, 1),
-        "a failure handed back is not yet a verdict"
+        (t.passes, t.fails, t.handed_back),
+        (0, 1, 1),
+        "the hand entry is not counted"
     );
     // The Orc answers for its Slimes: their records are in its card.
     let o = card(&w, &roster, "orc-o");
@@ -97,6 +104,7 @@ fn a_card_counts_the_body_and_every_body_below_it() {
 #[test]
 fn the_ceiling_keeps_the_reserve_the_share_and_the_worth() {
     let fresh = Card {
+        handed_back: 0,
         body: "slime-s".into(),
         spent_wt: 0,
         passes: 0,

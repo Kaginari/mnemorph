@@ -32,7 +32,7 @@ impl Tool for CommissionTool {
     }
 
     fn description(&self) -> &'static str {
-        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` carves its slice of your envelope (default: half of what is left)."
+        "Commission the creature one rank below you on the work in `ask`: it runs with a fresh context over its own soil, under its own end gate, and its report comes back as this call's result. A refusal names the creature the order goes to instead. `budget_wt` is what you give it out of your own envelope (default: half of what is left); the harness grants at most your reserve-kept share for its race, scaled by its worth, and the report says when it granted less."
     }
 
     fn schema(&self) -> Value {
@@ -156,15 +156,11 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 /// The cards of the bodies reporting to `name`, for it to read before it funds one; empty when
 /// none reports to it.
 pub(crate) fn cards_below(world: &Path, roster: &Roster, name: &str) -> String {
+    let records = mnemorph_world::worth::Records::load(world);
     let lines: Vec<String> = roster
         .living()
         .filter(|c| c.reports_to.as_deref() == Some(name))
-        .map(|c| {
-            format!(
-                "- {}",
-                mnemorph_world::worth::card(world, roster, &c.name).line()
-            )
-        })
+        .map(|c| format!("- {}", records.card(roster, &c.name).line()))
         .collect();
     if lines.is_empty() {
         return String::new();
@@ -192,7 +188,7 @@ fn grant(
         mnemorph_world::worth::ceiling(l, child.race, &card)
     });
     let slice = ceiling.map_or(asked, |cap| asked.min(cap));
-    let granted = (slice < asked && a.budget_wt.is_some()).then(|| {
+    let granted = (slice < asked).then(|| {
         format!(
             "[granted {slice} wt of the {asked} asked: the ceiling for {} out of what you had left]",
             a.to
