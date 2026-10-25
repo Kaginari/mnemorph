@@ -2618,3 +2618,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs/09.
 - **Open:** Rimuru's own answers are not wire reports, so the throne's triage of an Elf's fact is
   not filed yet. It stays untriaged, and the finding says so.
+
+---
+
+### [2026-10-25T13:23:18+01:00] rimuru — #161 review fixes
+- **Task:** fix Fable's review of the triage.
+- **Fixed:**
+  - triage rides as a hole (`@? triage …`), never cut; as prose it was the first thing a long
+    report lost;
+  - a label counts only when every supporter of the fact reports to the labeller;
+  - the first label stands, across reports and within one; the test caught a second label in one
+    report overriding the first;
+  - quoted fact text is one line of at most 200 characters, with no quote or bracket of its own.
+- **Open:** the throne's triage of an Elf's fact; a re-show of an unlabelled fact on the parent's
+  next commission.

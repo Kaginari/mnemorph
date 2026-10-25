@@ -1083,7 +1083,7 @@ async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
         order("c3", "slime-s"),
         ScriptedModel::text("@S DONE\n@U territory src/ build runs cargo test\n@E"),
         ScriptedModel::text(&format!(
-            "@S DONE\n@V #{new} counter #{old}\n@V #{old} distinct\n@E"
+            "@S DONE\n@V #{new} counter #{old}\n@V #{new} support #{old}\n@V #{old} distinct\n@E"
         )),
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
@@ -1092,8 +1092,8 @@ async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
     run.ask("go", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(
-        seen.contains(&format!("[triage #{new}")),
-        "the Orc is shown the triage"
+        seen.contains(&format!("@? triage #{new}")),
+        "the Orc is shown the triage, as a hole"
     );
     let facts = mnemorph_loop::world::Facts::load(&w.0);
     assert!(facts.facts[&new].labelled, "the Orc's label is filed");
@@ -1102,6 +1102,8 @@ async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
         "{:?}",
         facts.facts[&old]
     );
+    // The first label stands: the second, the other way, is not filed.
+    assert!(!facts.facts[&old].supporters.contains("slime-s"));
     assert!(
         !facts.facts[&old].labelled,
         "a label on the Elf's own fact is not the Orc's to give"
