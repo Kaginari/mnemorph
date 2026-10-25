@@ -228,3 +228,21 @@ fn orders_go_down_the_ranks() {
     );
     assert!(q.add(&r, Some("elf-e"), "human", "x", 0).is_ok());
 }
+
+/// No creature takes the human's or the harness's name: both stand over every body.
+#[test]
+fn the_human_and_the_harness_are_reserved_names() {
+    let w = World::new("reserved");
+    w.doc(
+        "orc",
+        "h",
+        "# human\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
+    );
+    let r = Roster::load(&w.0);
+    assert!(r.living().all(|c| c.name != "human"));
+    assert!(
+        r.problems.iter().any(|p| p.contains("`human` is reserved")),
+        "{:?}",
+        r.problems
+    );
+}

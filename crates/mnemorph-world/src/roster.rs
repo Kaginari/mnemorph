@@ -23,6 +23,9 @@ pub struct Roster {
     pub fingerprint: u64,
 }
 
+/// Names no creature may take: the human and the harness stand over every body.
+const RESERVED: &[&str] = &[crate::queue::HUMAN, crate::queue::HARNESS];
+
 impl Roster {
     /// Read every `.mnemorph/<race>/<name>/README.md` of `world`.
     #[must_use]
@@ -72,7 +75,13 @@ impl Roster {
                 text.hash(&mut hasher);
                 match parse(&text, &rel) {
                     Ok(c) => {
-                        if let Some(other) = roster.creatures.get(&c.name) {
+                        if RESERVED.contains(&c.name.as_str()) {
+                            roster.problems.push(format!(
+                                "{}: `{}` is reserved: it names who stands over every body",
+                                rel.display(),
+                                c.name
+                            ));
+                        } else if let Some(other) = roster.creatures.get(&c.name) {
                             roster.problems.push(format!(
                                 "{}: `{}` is already the creature at {}",
                                 rel.display(),

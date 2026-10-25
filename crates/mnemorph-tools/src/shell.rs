@@ -378,7 +378,7 @@ fn run(
         .process_group(0)
         .env_clear()
         .envs(scrubbed_env())
-        // Who runs it: a body's own `mnemorph q` reads the queue but never moves it as the human.
+        // Who runs it: a body's own `mnemorph q` refuses rather than act as the human.
         .env(
             "MNEMORPH_BODY",
             if cx.body().is_empty() {

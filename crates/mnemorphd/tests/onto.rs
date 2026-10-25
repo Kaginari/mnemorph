@@ -167,7 +167,7 @@ fn the_queue_door() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A body's command reads the queue but never moves it as the human.
+/// A body's command never reaches the queue as the human.
 #[test]
 fn a_bodys_command_reads_the_queue_but_never_moves_it() {
     let dir = std::env::temp_dir().join(format!("mnemorph-q-body-{}", std::process::id()));
@@ -182,7 +182,7 @@ fn a_bodys_command_reads_the_queue_but_never_moves_it() {
             .output()
             .unwrap()
     };
-    assert!(run(&["q", "list"]).status.success());
+    assert_eq!(run(&["q", "list"]).status.code(), Some(2));
     let out = run(&["q", "add", "sneak", "in"]);
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("slime-s runs this"));

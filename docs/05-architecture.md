@@ -251,11 +251,14 @@ flowchart LR
   `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`, `.git/info`, a `.git` file)
   would run code outside any sandbox the next time the human runs git, and `.mnemorph/` holds the
   world's records. Each command runs between two snapshots of them; once its process group is dead,
-  every change is put back and the body is told. The file tools refuse those paths outright. No
-  process escapes the snapshot: seccomp refuses `setsid` and `setpgid`, so killing the group ends
-  everything the command started. The shared work queue lives outside the world, out of every
-  command's reach; a body's own `mnemorph q` reads it and never moves it as the human (every command
-  carries `MNEMORPH_BODY`, a courtesy the file's place makes a border). `tmp/` and `intel/` stay
+  every change is put back and the body is told. The file tools refuse those paths outright. On
+  Linux no process escapes the snapshot: seccomp refuses `setsid` and `setpgid`, so killing the
+  group ends everything the command started. A tool that insists on its own session or group
+  (Python's `start_new_session`, Go's `Setsid`, a pty) fails there with `EPERM`, and coreutils
+  `timeout` signals the whole command when it fires. Seatbelt has no such rule on macOS. The shared
+  work queue lives outside the world, out of every command's reach; a body's own `mnemorph q`
+  refuses (every command carries `MNEMORPH_BODY`, a courtesy the file's place makes a border).
+  `tmp/` and `intel/` stay
   writable; a repository the command itself creates is its own. The snapshot keeps up to 16 MiB of
   content; a change to a protected file beyond that is reported, not undone.
 - **The attic** keeps what a command or a write takes away, outside the world where the guard

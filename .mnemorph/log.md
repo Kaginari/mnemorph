@@ -2320,3 +2320,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   This matters only if the queue travels.
 - **Learned:** an environment variable is courtesy; a file's place is a border. If a guarantee
   depends on what a body's command might do after it is "dead", check that the kill is real.
+
+---
+
+### [2026-10-25T10:37:07+01:00] rimuru — #154 verification fixes
+- **Task:** Opus checked the review fixes.
+- **Fixed:**
+  - `human` and `harness` are reserved creature names: a doc taking one is a roster problem, not
+    a body that stands over all;
+  - the queue's file name uses `fnv64a`, which is stable across toolchains;
+  - a body's `mnemorph q` refuses outright (the landlock read denial had shown it an empty queue);
+  - page 05 names what refusing `setsid` breaks (Python `start_new_session`, Go `Setsid`, ptys,
+    `timeout` signalling the whole command) and that macOS has no such rule;
+  - `.gitattributes` is gone: its only line was for the queue's old place.
+- **Open (`@?`):** whether a pty-using tool (pexpect, `script`) is needed often enough that
+  refusing `setsid` must be relaxed, e.g. by moving to a cgroup kill instead.

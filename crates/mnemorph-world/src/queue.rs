@@ -8,7 +8,6 @@
 //! `mnemorph q`.
 
 use std::collections::BTreeMap;
-use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::path::{Path, PathBuf};
 
 use mnemorph_ledger::Journal;
@@ -158,8 +157,7 @@ impl Queue {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
-        let mut h = DefaultHasher::new();
-        world.hash(&mut h);
+        let h = fnv64a(world.as_os_str().as_encoded_bytes());
         let name = world
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -167,7 +165,7 @@ impl Queue {
         Some(Queue::at(
             &state
                 .join("mnemorph/queue")
-                .join(format!("{name}-{:016x}.jsonl", h.finish())),
+                .join(format!("{name}-{h:016x}.jsonl")),
         ))
     }
 

@@ -302,8 +302,8 @@ fn refused(e: &dyn std::fmt::Display) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// `q …`: the shared work queue, for the human. Run inside a body's command it only reads: a body
-/// moves the queue through the harness, never as the human.
+/// `q …`: the shared work queue, for the human. Inside a body's command it refuses: the queue
+/// lies outside the body's reach, and a body moves it only through the harness.
 fn queue(args: &[String]) -> ExitCode {
     use mnemorph_server::world::queue::{HUMAN, Item, Move, Queue};
     let a = match q_args(args) {
@@ -324,14 +324,9 @@ fn queue(args: &[String]) -> ExitCode {
     let roster = mnemorph_server::world::Roster::load(&world);
     let json = a.json;
     let print = |items: &[Item]| print_items(items, json);
-    let body = std::env::var("MNEMORPH_BODY").ok();
-    let reading = matches!(
-        a.words.first().map(String::as_str),
-        Some("list" | "show") | None
-    );
-    if let Some(body) = body.filter(|_| !reading) {
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
-            "{body} runs this: a body moves the queue through the harness, never by command as the human"
+            "{body} runs this: the queue lies outside a body's reach; the harness moves it"
         ));
     }
     let nth = |n: usize| a.words.get(n).cloned();
