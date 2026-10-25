@@ -2601,3 +2601,34 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a leading `./` no longer loses its dot to the trim in either path reader. Before this,
     `named_path` (#155) read `./src/x` as `/src/x`, an absolute path off every ground;
   - `./` steps are dropped before the ground check.
+
+---
+
+### [2026-10-25T13:17:37+01:00] rimuru — M7: the parent's triage of resembling facts
+- **Task:** the human said "go". Next M7 rung: a free fact that resembles older ones reaches the
+  parent, and the parent's `@V` labels are filed. This closes the ontology's exit item.
+- **Files:**
+  - world facts.rs — `label_of`: `#<new> support|counter|refines #<id>` or `#<new> distinct`;
+  - loop commission.rs:
+    - `file_facts` returns triage lines for new free facts with BM25 candidates above
+      `THETA_T`, and the report carries them;
+    - `file_labels` files the reporting body's labels, only on facts a body reporting to it said;
+  - tests: label parsing; the round trip (the Orc sees the triage, counters, the label is filed,
+    and a label on the Elf's own fact is refused);
+  - docs/09.
+- **Open:** Rimuru's own answers are not wire reports, so the throne's triage of an Elf's fact is
+  not filed yet. It stays untriaged, and the finding says so.
+
+---
+
+### [2026-10-25T13:23:18+01:00] rimuru — #161 review fixes
+- **Task:** fix Fable's review of the triage.
+- **Fixed:**
+  - triage rides as a hole (`@? triage …`), never cut; as prose it was the first thing a long
+    report lost;
+  - a label counts only when every supporter of the fact reports to the labeller;
+  - the first label stands, across reports and within one; the test caught a second label in one
+    report overriding the first;
+  - quoted fact text is one line of at most 200 characters, with no quote or bracket of its own.
+- **Open:** the throne's triage of an Elf's fact; a re-show of an unlabelled fact on the parent's
+  next commission.

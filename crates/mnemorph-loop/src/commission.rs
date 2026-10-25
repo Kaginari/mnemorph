@@ -344,11 +344,14 @@ pub(crate) async fn order(
     landed.extend(courts);
     landed.sort();
     landed.dedup();
-    file_facts(&c.world, &ending, &a.to);
+    let notes: Vec<String> = granted.into_iter().collect();
+    // Triage is a hole the parent must settle: holes are never cut from a report.
+    let triage = file_facts(&c.world, &ending, &a.to);
+    file_labels(&c.world, &roster, &ending, &a.to);
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, &ending, &a.to);
     }
-    let report = report_of(&ending, &landed, &put_back, granted.as_deref());
+    let report = report_of(&ending, &landed, &put_back, &notes, &triage);
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
@@ -365,22 +368,115 @@ pub(crate) async fn order(
 }
 
 /// What the child learned about its territory, said in its `@U territory` lines, filed as facts
-/// in its name: a support, or a counter naming a fact's id.
-fn file_facts(world: &Path, ending: &Ending, by: &str) {
+/// File an answering child's `@U territory` facts in its name, and return the triage its parent
+/// owes: for each new free fact that resembles older ones, a line naming them and how to label it.
+fn file_facts(world: &Path, ending: &Ending, by: &str) -> Vec<String> {
+    let Ending::Answered(text) = ending else {
+        return Vec::new();
+    };
+    let Some(report) = Report::parse(text) else {
+        return Vec::new();
+    };
+    let mut filed = Vec::new();
+    for u in &report.unsaid {
+        if u.kind == Some(mnemorph_wire::UnsaidKind::Territory)
+            && let Some(event) = mnemorph_world::facts::from_unsaid(&u.text, by, None)
+        {
+            // A fact that cannot be filed is lost to the ontology, never to the report — and said.
+            match mnemorph_world::Facts::record(world, &event) {
+                Ok(()) => {
+                    if let mnemorph_world::facts::Event::Support { id, .. } = event {
+                        filed.push(id);
+                    }
+                }
+                Err(e) => eprintln!("mnemorph: {by}'s fact could not be filed: {e}"),
+            }
+        }
+    }
+    let facts = mnemorph_world::Facts::load(world);
+    filed
+        .iter()
+        .filter_map(|id| facts.facts.get(id))
+        .filter(|f| f.keyed.is_none() && !f.labelled)
+        .filter_map(|f| {
+            let shown: Vec<String> = facts
+                .candidates(f, mnemorph_world::facts::THETA_T)
+                .iter()
+                .map(|o| format!("#{} \"{}\"", o.id, quoted(&o.text)))
+                .collect();
+            (!shown.is_empty()).then(|| {
+                format!(
+                    "triage #{} \"{}\" on {}: it resembles {} — label it in your report: @V #{} support|counter|refines #<id>, or @V #{} distinct",
+                    f.id,
+                    quoted(&f.text),
+                    f.about,
+                    shown.join("; "),
+                    f.id,
+                    f.id
+                )
+            })
+        })
+        .collect()
+}
+
+/// A fact's text as a triage line quotes it: one short line, no quote or bracket of its own, so
+/// a fact's words never pass for the line around them.
+fn quoted(text: &str) -> String {
+    let flat: String = text
+        .chars()
+        .map(|c| {
+            if c.is_control() || "\"[]".contains(c) {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    match flat.char_indices().nth(TRIAGE_TEXT) {
+        Some((at, _)) => format!("{}…", &flat[..at]),
+        None => flat,
+    }
+}
+
+/// The most of a fact's text a triage line quotes, in characters.
+const TRIAGE_TEXT: usize = 200;
+
+/// File a reporting body's triage labels: each `@V #<new> <label> [#<id>]` verdict on a fact
+/// said only by bodies reporting to it, and not labelled yet — the first label stands. A label
+/// on anyone else's fact is not this body's to give.
+fn file_labels(world: &Path, roster: &Roster, ending: &Ending, by: &str) {
     let Ending::Answered(text) = ending else {
         return;
     };
     let Some(report) = Report::parse(text) else {
         return;
     };
-    for u in &report.unsaid {
-        if u.kind == Some(mnemorph_wire::UnsaidKind::Territory)
-            && let Some(event) = mnemorph_world::facts::from_unsaid(&u.text, by, None)
+    let facts = mnemorph_world::Facts::load(world);
+    // The first label stands, in this report as across reports.
+    let mut given = std::collections::BTreeSet::new();
+    for event in report
+        .verdicts
+        .iter()
+        .filter_map(|v| mnemorph_world::facts::label_of(v, by))
+    {
+        let mnemorph_world::facts::Event::Label { new, .. } = &event else {
+            continue;
+        };
+        let its_own = facts.facts.get(new).is_some_and(|f| {
+            !f.labelled
+                && !f.supporters.is_empty()
+                && f.supporters.iter().all(|s| {
+                    roster
+                        .creatures
+                        .get(s)
+                        .is_some_and(|c| c.reports_to.as_deref() == Some(by))
+                })
+        });
+        if its_own
+            && given.insert(new.clone())
+            && let Err(e) = mnemorph_world::Facts::record(world, &event)
         {
-            // A fact that cannot be filed is lost to the ontology, never to the report — and said.
-            if let Err(e) = mnemorph_world::Facts::record(world, &event) {
-                eprintln!("mnemorph: {by}'s fact could not be filed: {e}");
-            }
+            eprintln!("mnemorph: {by}'s triage could not be filed: {e}");
         }
     }
 }
@@ -678,7 +774,8 @@ fn report_of(
     ending: &Ending,
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
-    granted: Option<&str>,
+    notes: &[String],
+    triage: &[String],
 ) -> String {
     let mut report = match ending {
         Ending::Answered(text) => Report::parse(text).unwrap_or_else(|| Report {
@@ -718,7 +815,10 @@ fn report_of(
             shown.join(", ")
         ));
     }
-    report.other.extend(granted.map(str::to_owned));
+    report.other.extend(notes.iter().cloned());
+    report
+        .holes
+        .extend(triage.iter().cloned().map(mnemorph_wire::Hole::Other));
     report.emit(DEFAULT_CAP, None)
 }
 

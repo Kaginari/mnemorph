@@ -1049,3 +1049,63 @@ async fn a_dot_slash_path_is_inside_the_world() {
     run.wake(&Ending::Answered(String::new())).await;
     assert_eq!(q.items()[&item.id].state, State::Done);
 }
+
+/// A free fact that resembles an older one reaches the parent as a triage line; the parent's
+/// `@V` label is filed, and a label on a fact no body of its said is not.
+#[tokio::test]
+async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
+    use mnemorph_loop::world::facts::{Event, fact_id};
+    let w = World::new("triage");
+    fs::write(w.0.join("src/done.txt"), "done\n").unwrap();
+    let old = fact_id("src", "build runs make");
+    mnemorph_loop::world::Facts::record(
+        &w.0,
+        &Event::Support {
+            id: old.clone(),
+            about: "src".into(),
+            text: "build runs make".into(),
+            by: "elf-e".into(),
+            source: None,
+        },
+    )
+    .unwrap();
+    let new = fact_id("src", "build runs cargo test");
+    let order = |id: &str, to: &str| {
+        ScriptedModel::tool(
+            id,
+            "commission",
+            json!({"to": to, "ask": "check the build"}),
+        )
+    };
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::text("@S DONE\n@U territory src/ build runs cargo test\n@E"),
+        ScriptedModel::text(&format!(
+            "@S DONE\n@V #{new} counter #{old}\n@V #{new} support #{old}\n@V #{old} distinct\n@E"
+        )),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains(&format!("@? triage #{new}")),
+        "the Orc is shown the triage, as a hole"
+    );
+    let facts = mnemorph_loop::world::Facts::load(&w.0);
+    assert!(facts.facts[&new].labelled, "the Orc's label is filed");
+    assert!(
+        facts.facts[&old].counters.contains("slime-s"),
+        "{:?}",
+        facts.facts[&old]
+    );
+    // The first label stands: the second, the other way, is not filed.
+    assert!(!facts.facts[&old].supporters.contains("slime-s"));
+    assert!(
+        !facts.facts[&old].labelled,
+        "a label on the Elf's own fact is not the Orc's to give"
+    );
+}
