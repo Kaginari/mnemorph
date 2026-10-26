@@ -4803,3 +4803,66 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - OpenAI warns when it drops a call cut by max_tokens, as Anthropic does;
   - an Anthropic test;
   - the solo test writes a README and asserts `read` never ran.
+
+---
+
+### [2026-10-26T19:07:12+01:00] rimuru — the terminal UI in Rust, part one
+- **Asked:** a Ratatui terminal UI with Crush-grade polish and the lowest lag, the session hosted
+  in-process; built on a Rust kit of Charm's good parts (Bubble Tea, Lip Gloss, Bubbles,
+  Harmonica, Glamour).
+- **Built:** crate `mnemorph-tui` (binary `mnemorph-tui`):
+  - `kit`: box styles and cell-measured text, textarea with history, viewport on a critically
+    damped spring, spinner, key help, Markdown from a theme-derived stylesheet, syntect
+    highlighting in palette colours;
+  - `app`: one model, `Msg`, a pure `update` returning `Cmd`s, `view`;
+  - `transcript`/`blocks`: entries folded from `mnemorph_server::events`, tool cards with
+    folded output and diffs (`similar`), per-entry layout cached per width, only the visible
+    window laid out;
+  - `gate`: the approval card over `Pending`; `run`: the session on its own runtime,
+    frames coalesced to 30 a second, the terminal restored on exit and on panic.
+- **Core:** `mnemorph_loop::shown` is public, beside `hidden`, the predicate it escapes by; the
+  transcript escapes with `hidden`, the card with `shown`.
+- **Kept out:** bincode (syntect's dump reader) is unmaintained, not vulnerable: ignored in
+  deny.toml with its reason.
+- **Tests:** the test backend's buffer for Markdown, highlighting, edit and patch diffs, a write's
+  head, folding, spinner to ✓, header and status, narrow widths, the light page, a hostile
+  approval, queueing and Esc; the palette against the TypeScript one; a scripted session hosted
+  end to end; 2,000 messages under 33 ms a frame in a debug build.
+- **Left for part two:** the sidebar (its column is reserved in the layout), mouse scrolling,
+  expanding a folded card.
+
+---
+
+### [2026-10-26T19:25:11+01:00] rimuru — the terminal UI, the security review's round
+- **Opus found:** an act cut at six rows could hide its tail from the approval card; `y`…Enter
+  typed ahead approved; card and input could overflow a short terminal; SIGTERM/SIGHUP left the
+  terminal raw; an expired card stayed; entities (`&#x202E;`) decoded after escaping; a panicked
+  session kept the UI busy; a four-backtick fence holding three read as closed.
+- **Fixed:**
+  - `approval`: the act scrolls in the card, head, cut and last line shown; `y` refused until
+    read to its end; keys ignored for 300 ms after the first draw and keys stamped before it; only
+    a bare `y`/`n`, then Enter; a countdown, and the card leaves at its deadline;
+  - the card takes the input's place, lines drop by priority, the stack is clipped to the area;
+  - signal-hook (already under crossterm) turns SIGTERM/SIGHUP into a quit; a panic off the UI
+    thread no longer restores the terminal under a live UI; `supervise` reports the session
+    task's panic;
+  - the Markdown renderer escapes each parsed text; fences track their character and length;
+  - the palette's names are destructured exhaustively.
+- **Tests:** each finding has one (`tests/ui.rs`, `run.rs`, `transcript.rs`, `markdown.rs`);
+  a pty run checked SIGTERM exits cleanly.
+
+---
+
+### [2026-10-26T19:55:30+01:00] rimuru — the terminal UI, Fable's review of the review
+- **Fable found:** `viewed` came from geometry, so End jumped past an act's middle and `y` still
+  passed; after the arming delay a word ending in `y` (`okay⏎`) or `y\r` in one read approved; a
+  second card overwrote the first, whose wait hung to its deadline; SIGINT and SIGQUIT were not
+  handled.
+- **Fixed:** rows count as seen only when drawn and contiguous with those seen before (`seen_to`,
+  reset on a new width); a key that is not `y`/`n`/Enter/scroll, or a paste, re-arms the card and
+  clears the choice; Enter decides only 150 ms after its letter; cards queue first come first
+  shown, the count on the card, and a turn's end, Ctrl+C or a signal denies them all; the four
+  quit signals share one list.
+- **Left:** the commissioning chain on the card — the gate's ask names the body, not its line.
+- **Tests:** End then `y` refused, steps then `y` accepted; `okay⏎`, `deploy⏎`, `y\r` in one batch,
+  a paste; two cards answered in order; the signal list; a pty run of SIGINT and SIGQUIT.

@@ -122,6 +122,8 @@ flowchart LR
   sandbox, the ledgers, the provider clients. It has no UI.
 - **`mnemorph`** (TypeScript, Ink) is the terminal client. It starts `mnemorphd` as a child process
   and speaks JSON-RPC 2.0 over stdio. It renders; it decides nothing.
+- **`mnemorph-tui`** (Rust, Ratatui) is a terminal UI that hosts the core in its own process: no
+  protocol between them, the same events drawn ([the terminal UI](05-architecture.md#the-terminal-ui)).
 - **The board** (TypeScript, React) is the web cockpit, served by `mnemorphd` on loopback. It
   speaks the same protocol over a WebSocket.
 - One protocol, defined once in Rust; the TypeScript types are generated from it. A client can

@@ -21,6 +21,7 @@ flowchart TB
       SDK --> PROTO
     end
     subgraph rs["Rust — crates/"]
+      TUI["tui<br/>Ratatui terminal UI, the session in-process"]
       SERVER["server<br/>JSON-RPC · stdio · WebSocket"]
       LOOP["loop<br/>six beats"]
       WORLD["world<br/>creatures · territory · dispatch · gate"]
@@ -33,6 +34,8 @@ flowchart TB
       MEM["memory<br/>tiers · recall · write rule"]
       CONFIG["config<br/>layers · origins · loosening"]
       SERVER --> LOOP
+      TUI --> SERVER
+      TUI --> LOOP
       LOOP --> CONFIG --> TOOLS
       CONFIG --> RACES
       CONFIG --> LEDGER
@@ -54,7 +57,7 @@ flowchart TB
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
     class CLI,BOARD,SDK,PROTO ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
+    class TUI,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SANDBOX gate
     style ts fill:#fdf2f8,stroke:#db2777
@@ -64,8 +67,9 @@ flowchart TB
 ## In plain words
 
 All the decisions live in Rust, in small crates that each do one thing and can be tested alone.
-The TypeScript side only shows things and asks you questions: the terminal UI and the web board
-are two windows onto the same core. The arrows only point downward — `races` knows nothing about
+The clients only show things and ask you questions: the TypeScript terminal client and the web
+board speak to the core over its protocol, and the Rust terminal UI hosts the core in its own
+process — three windows onto the same core. The arrows only point downward — `races` knows nothing about
 networks, `wire` knows nothing about models — so each piece can be proven before the next is
 built on it. `tools/check-layers.mjs` holds the same graph and fails on any edge it does not
 draw.
@@ -89,6 +93,7 @@ mnemorph/
 │  ├─ mnemorph-world      creatures, onto, dispatch, gate, Minds      (files)
 │  ├─ mnemorph-loop       the six beats, journal, resume              (all above)
 │  ├─ mnemorph-server     JSON-RPC, WebSocket, board assets           (network: loopback)
+│  ├─ mnemorph-tui        the terminal UI, the session in-process     (terminal)
 │  └─ mnemorphd           the binary
 ├─ packages/
 │  ├─ protocol           generated from crates via ts-rs; checked in
@@ -115,6 +120,97 @@ mnemorph/
 | tests | nextest, insta snapshots, proptest; vitest + ink-testing-library; Playwright for the board | every rung testable alone |
 | TS tooling | Node 22, pnpm workspaces, tsup, Biome | Node is already the platform Claude Code runs on |
 | distribution | an npm package with per-platform optional deps carrying `mnemorphd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers. The names `mnemorph` on npm and crates.io are taken: the published names are settled in phase D |
+
+### The terminal UI
+
+`mnemorph-tui` is a terminal UI in Rust, drawn with [Ratatui](https://ratatui.rs). It hosts the
+session in its own process: `mnemorph_loop::open` gives it the session, an observer turns what the
+run does into the same events the server sends (`mnemorph_server::events`), and the model's stream
+arrives as text deltas. No protocol sits between the screen and the core.
+
+```sh
+cargo run -p mnemorph-tui -- --world <dir>            # a session in that world
+cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
+```
+
+`--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
+background as `COLORFGBG` reports it, else dark.
+
+```
+╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash · ⠋ working ────────────────╮
+│ ▸ you  fix the collate bug in nested types                           │
+│                                                                      │
+│ ◆ rimuru                                                             │
+│   The collation is dropped in _parse_types:                          │
+│   ┌─ read sqlglot/parser.py:4120-4180 ──────────────── 61 lines ✓ ─┐ │
+│   ┌─ edit sqlglot/parser.py ───────────────────────────── +1 −1 ✓ ─┐ │
+│   │ - return this                                                  │ │
+│   │ + return self._parse_collate(this)                             │ │
+│   └────────────────────────────────────────────────────────────────┘ │
+│   ✓ end gate passed · 1 changed                                      │
+│ ╭──────────────────────────────────────────────────────────────────╮ │
+│ │ ›  a line now waits its turn                                     │ │
+│ ╰──────────────────────────────────────────────────────────────────╯ │
+╰─ $0.04 · 60.9k tok · ctx 41% · esc stop · enter queue · pgup scroll ─╯
+```
+
+| Part | What it shows |
+|---|---|
+| header | the session's body, its model, whether a turn runs or an approval waits |
+| transcript | the human's lines; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables); tool calls as cards — a spinner while they run, then ✓ or ✗, output folded to four lines, a diff for `edit`, `multiedit` and `patch`, a new file's head for `write`; the end gate's verdict |
+| input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
+| approval card | the act that asks, its reasons and the paths it opens outside the world, under the gate's own border |
+| status bar | the spend in dollars and tokens, the context against its stress line (gold from 75%, alarm from 90%), the keys that matter now, the world |
+
+| Key | Does |
+|---|---|
+| Enter | send (queued while a turn runs) |
+| Alt+Enter, Shift+Enter, Ctrl+J | break the line |
+| ↑ ↓ | move between lines, then through the lines sent before |
+| PgUp PgDn, Shift+↑ ↓, Ctrl+Home End | scroll the transcript |
+| Esc | stop the turn; back to the end of the transcript |
+| Ctrl+C | stop the turn, or leave when none runs |
+| y, n, then Enter | answer an approval; ↓ ↑ read a long act; Esc denies it |
+
+Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
+`/clear`, `/help`, `/quit`.
+
+**Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
+sequences a program prints and escapes every other control, bidi and zero-width character as
+`\u{…}` (`mnemorph_loop::hidden`). The approval card shows each field through
+`mnemorph_loop::shown`, the core's own rule for what a human approves, and takes an answer only
+from a key: a bare `y` or `n`, then a pause, then Enter. Keys are ignored for 300 ms after the card
+is first drawn, and so are keys the terminal read before it; any key that is not `y`, `n`, Enter
+or a scroll — a paste too — clears the choice and arms the card again, so `okay` or `deploy` typed
+into it, or a `y` and a carriage return in one read, approve nothing. An act longer than the card
+scrolls inside it (↓ ↑, PgDn, End): its head shows, the cut marked, with its last line, and `y` is
+refused until every row has been on screen, read in order — a jump past rows never shown does not
+count them. Acts that ask while a card is open wait their turn, their number on the card. The
+card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending, SIGTERM, SIGHUP,
+SIGINT or SIGQUIT, and ten minutes of silence deny.
+
+A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM, SIGHUP,
+SIGINT and SIGQUIT leave as a quit does, the terminal given back.
+
+**It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
+out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive
+together become one frame, and frames come at most 30 a second. An idle UI wakes for nothing.
+A test draws a 2,000-message session and holds every frame under the 33 ms budget in a debug
+build.
+
+The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
+ecosystem:
+
+| Charm | `mnemorph-tui` | What it gives |
+|---|---|---|
+| Bubble Tea | `app` | one model, a message enum, a pure `update` returning commands the runtime runs off the UI thread, a `view` |
+| Lip Gloss | `kit::style`, `kit::text` | a chainable box style — padding, borders with titles set in, width, alignment, margins — blocks joined across and down, all measured in terminal cells |
+| Bubbles | `kit::textarea`, `kit::viewport`, `kit::spinner`, `kit::keyhelp` | components, each with its own `update` and `view` |
+| Harmonica | `kit::spring` | a critically damped spring: the transcript scrolls smoothly |
+| Glamour | `kit::markdown`, `kit::highlight` | Markdown drawn from a stylesheet the theme derives; code highlighted by syntect's grammars, in colours taken from the palette |
+
+The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
+fails when the two differ.
 
 ### Storage: files are the truth
 

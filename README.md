@@ -44,6 +44,13 @@ node packages/cli/dist/cli.js                 # a session in this world
 node packages/cli/dist/cli.js run "<ask>"     # one ask, the answer on stdout
 ```
 
+Or the terminal UI in Rust, the core in its own process
+([the terminal UI](docs/05-architecture.md#the-terminal-ui)):
+
+```sh
+cargo run -p mnemorph-tui -- --world .
+```
+
 ## Layout
 
 | Path | Holds |
