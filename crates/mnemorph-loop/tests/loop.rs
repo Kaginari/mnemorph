@@ -305,21 +305,43 @@ async fn a_landing_resets_guts() {
     assert_eq!(ask(&mut run, "work").await, Ending::Answered("done".into()));
 }
 
+/// A re-read of an unchanged window is pointed at once — with where the file goes on — and shown
+/// again if asked again: the body is never stuck behind a pointer to text it lost. A body that
+/// keeps asking the same thing still stalls, on the identical-call loop.
 #[tokio::test]
-async fn re_reading_an_unchanged_window_stalls() {
+async fn an_unchanged_re_read_is_pointed_at_once_then_shown() {
     let w = World::new("repin");
-    fs::write(w.world().join("a.txt"), "a\n").unwrap();
+    let lines = (1..=3000).fold(String::new(), |mut s, i| {
+        use std::fmt::Write as _;
+        let _ = writeln!(s, "line {i}");
+        s
+    });
+    fs::write(w.world().join("a.txt"), lines).unwrap();
     let model =
         Arc::new(ScriptedModel::new((0..6).map(|i| {
             tool(&format!("t{i}"), "read", json!({"path": "a.txt"}))
         })));
-    let mut run = w.run(model, limits());
+    let mut run = w.run(model.clone(), limits());
     let e = ask(&mut run, "stare").await;
     assert!(
-        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: repin"),
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: loop"),
         "{e:?}"
     );
-    assert_eq!(run.steps(), 4, "one read, then three unchanged");
+    let result = |i: usize| -> String { format!("{:?}", model.requests()[i].messages.last()) };
+    assert!(
+        result(2).contains("unchanged since you last read them"),
+        "the second read points"
+    );
+    assert!(
+        result(2).contains("The file has 3000 lines: read on with offset 2001"),
+        "and says where the file goes on: {}",
+        result(2)
+    );
+    assert!(
+        result(3).contains("line 1999"),
+        "the third shows it again: {}",
+        &result(3)[..200]
+    );
 }
 
 /// A clock death gets one short turn, without tools, to say what it learned.
@@ -1648,7 +1670,8 @@ async fn a_context_at_the_windows_edge_checkpoints_without_a_drain() {
     let w = World::new("nodrain");
     let model = Arc::new(ScriptedModel::new([
         tool_with("t1", "glob", json!({"pattern": "*"}), usage(199_000)),
-        answer("never"),
+        // The compaction's summary turn fails: with no room left, no drain follows it.
+        Err(mnemorph_provider::Error::Invalid("context too long".into())),
     ]));
     let mut run = w.run(model.clone(), limits());
     let e = ask(&mut run, "big").await;
@@ -1656,7 +1679,11 @@ async fn a_context_at_the_windows_edge_checkpoints_without_a_drain() {
         matches!(&e, Ending::Checkpoint { why, salvage: None } if why.starts_with("context")),
         "{e:?}"
     );
-    assert_eq!(model.requests().len(), 1, "no drain turn was sent");
+    assert_eq!(
+        model.requests().len(),
+        2,
+        "the compaction tried, no drain turn was sent"
+    );
 }
 
 /// A run drains once: the next ask on the same full context checkpoints plainly, with no second

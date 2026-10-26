@@ -1314,6 +1314,8 @@ impl Run {
                 && foldable(&self.messages, self.folded_upto, point) >= worth
             {
                 self.folded_upto = point;
+                // The folded results are gone from what is sent: a re-read shows them again.
+                self.cx.forget_reads();
                 self.record(&Beat::Warning {
                     text: format!("compacted: tool outputs before message {point} are sent folded"),
                 });
@@ -1339,6 +1341,8 @@ impl Run {
             return false;
         }
         self.folded_upto = point;
+        // The folded results are gone from what is sent: a re-read shows them again.
+        self.cx.forget_reads();
         self.last_occupancy = estimate;
         self.record(&Beat::Warning {
             text: format!(
@@ -1368,7 +1372,9 @@ impl Run {
             // The line sits below the window: room for one drain turn, unless a jump took it — and
             // a run drains once.
             let room = self.limits.window.saturating_sub(self.last_occupancy);
-            if self.compactions < self.limits.compactions && room >= u64::from(SALVAGE_TOKENS) * 2 {
+            // A compaction resends what the provider just accepted, with a short note: the window
+            // already held it. Only a drain, which adds a turn to a context past the line, needs room.
+            if self.compactions < self.limits.compactions {
                 return Some(Stop::Compact(why));
             }
             return if self.drains == 0 && room >= u64::from(SALVAGE_TOKENS) * 2 {
@@ -2130,6 +2136,12 @@ impl Run {
         None
     }
 
+    /// Whether the window has room for one drain turn past the context line: a jump that left
+    /// less than two such turns of room checkpoints without one.
+    fn room_to_drain(&self) -> bool {
+        self.limits.window.saturating_sub(self.last_occupancy) >= u64::from(SALVAGE_TOKENS) * 2
+    }
+
     /// What a meter's reading does: the ending it brings, or `None` when the run goes on — a
     /// compaction that came back with no summary is no compaction, and the run drains.
     async fn meet(&mut self, stop: Option<Stop>) -> Option<Ending> {
@@ -2138,11 +2150,13 @@ impl Run {
             Stop::Salvage(why) => Some(self.salvage(why).await),
             Stop::Drain(why) => Some(self.drain(why).await),
             // A compaction that failed drains — once a run, as any drain.
-            Stop::Compact(why) if !self.compact().await => Some(if self.drains == 0 {
-                self.drain(why).await
-            } else {
-                self.end(Ending::Checkpoint { why, salvage: None })
-            }),
+            Stop::Compact(why) if !self.compact().await => {
+                Some(if self.drains == 0 && self.room_to_drain() {
+                    self.drain(why).await
+                } else {
+                    self.end(Ending::Checkpoint { why, salvage: None })
+                })
+            }
             Stop::Compact(_) => None,
         }
     }
@@ -2219,6 +2233,8 @@ impl Run {
         self.folded_upto = 0;
         self.ask_from = 0;
         self.sent.0.clear();
+        // The conversation's reads are summarised away: a re-read shows them again.
+        self.cx.forget_reads();
         self.compactions += 1;
         self.record(&Beat::Warning {
             text: format!(
