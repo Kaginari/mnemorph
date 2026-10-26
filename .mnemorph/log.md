@@ -3516,3 +3516,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the test now carries those false positives and stays at 2 findings.
 - **Lesson again:** a scripted edit stopped at a missed anchor, and the test still passed because
   its own edit had not landed yet. Each edit was grepped before trusting the run.
+
+---
+
+### [2026-10-26T01:22:59+01:00] rimuru — a foreign file survives a cleanup turn (#10)
+- **Task:** #10's lesson "no body deletes or reverts what it did not write. Test: a foreign
+  untracked file survives a cleanup turn".
+- **Finding:** it already holds. A Slime's `rm -rf notes` runs and the shell says the attic kept
+  the file; the Slime's gate fails right-author on `notes/human.md`; the landing is put back whole.
+  The notes return, and the Slime's own write goes with them.
+- **Test:** commission.rs `a_foreign_untracked_file_survives_a_cleanup_turn` asserts each step of
+  that chain from the journal.
+- **False start:** the first version passed vacuously. A guess that the classifier refused the
+  `rm` was wrong; reading the journal showed the real chain.
