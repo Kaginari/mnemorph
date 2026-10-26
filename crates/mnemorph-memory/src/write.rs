@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 use std::path::Path;
 
-use crate::note::{By, Change, Polarity, Status};
+use crate::note::{By, Change, Note, Polarity, Status};
 use crate::store::{Tier, append, event_id, now_ms};
 
 /// A claim said, not proved.
@@ -408,9 +408,11 @@ pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
 pub const STRIKES: usize = 2;
 
 /// Retire what failed twice: each anchor the ask cited goes dormant once [`STRIKES`] distinct
-/// failures — revise notes linking it at 0.9, told apart by the verdict they cite — have cited it.
-/// Its events stay, so a human may wake it; dormant, it is no longer recalled, and lock-in has no
-/// revision of it left to force. Run after [`revise`]; returns the notes retired.
+/// failures have cited it since it was last grounded — grounded revise notes, in shared memory or
+/// the asker's own tier, linking it at 0.9, told apart by the verdict they cite. Its events stay, so
+/// a human may wake it with a grounded status, and only failures after that count again; dormant,
+/// it is no longer recalled, and lock-in has no revision of it left to force. A shared note whose
+/// owner's memory is frozen is left for the human. Run after [`revise`]; returns the notes retired.
 ///
 /// # Errors
 ///
@@ -427,32 +429,59 @@ pub fn retire(
         return Ok(Vec::new());
     }
     crate::audit::unfrozen(world, owner)?;
+    let personal = Tier::Personal(owner.to_owned());
+    let shared_rows = crate::store::read(world, &Tier::Shared)?.rows;
+    let own_rows = crate::store::read(world, &personal)?.rows;
+    // The revise notes that may strike, wherever `revise` put them: grounded, whoever's tier.
+    let revisions: Vec<Note> = crate::note::fold(&shared_rows)
+        .into_values()
+        .chain(crate::note::fold(&own_rows).into_values())
+        .filter(|r| r.polarity == Polarity::Revise && r.status == Status::Grounded)
+        .collect();
     let mut retired = Vec::new();
     for a in cited {
-        let tier = if a.personal {
-            Tier::Personal(owner.to_owned())
+        let (tier, rows) = if a.personal {
+            (&personal, &own_rows)
         } else {
-            Tier::Shared
+            (&Tier::Shared, &shared_rows)
         };
-        let notes = crate::note::fold(&crate::store::read(world, &tier)?.rows);
+        let notes = crate::note::fold(rows);
         let Some(n) = notes.get(&a.id) else {
             continue;
         };
         if n.status != Status::Grounded && n.status != Status::Proposed {
             continue;
         }
-        let strikes: std::collections::BTreeSet<&str> = notes
-            .values()
-            .filter(|r| {
-                r.polarity == Polarity::Revise
-                    && r.links.iter().any(|l| l.note == a.id && l.weight >= 0.9)
+        if let Some(o) = n.owner.as_deref()
+            && o != owner
+            && crate::audit::unfrozen(world, o).is_err()
+        {
+            continue;
+        }
+        // Strikes since its last grounding: a note the human woke starts clean.
+        let since = rows
+            .iter()
+            .filter(|e| {
+                e.note == a.id
+                    && matches!(
+                        e.change,
+                        Change::Status {
+                            status: Status::Grounded
+                        }
+                    )
             })
+            .map(|e| e.time)
+            .max()
+            .unwrap_or(0);
+        let strikes: std::collections::BTreeSet<&str> = revisions
+            .iter()
+            .filter(|r| r.born > since && r.links.iter().any(|l| l.note == a.id && l.weight >= 0.9))
             .filter_map(|r| r.source.as_deref())
             .collect();
         if strikes.len() >= STRIKES {
             append(
                 world,
-                &tier,
+                tier,
                 &a.id,
                 By::Gate,
                 Some(verdict.to_owned()),

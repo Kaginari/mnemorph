@@ -3957,3 +3957,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - write.rs: two cited failures retire, one doesn't, a bystander stays grounded, and the
     retirement resolves;
   - pathology.rs: lock-in forces until heard.
+
+---
+
+### [2026-10-26T08:57:34+01:00] rimuru — #202's review: Fable
+- **Verdict:** safe to merge as a conservative first cut.
+- **Fable found:**
+  - personal anchors never accrued strikes, since `revise` writes shared when any target is
+    shared but `retire` counted the anchor's own tier;
+  - another creature's frozen shared note could be retired;
+  - a woken note re-died on one failure;
+  - any revise note counted, whatever its status.
+- **Fixed:**
+  - strikes are counted over shared plus the asker's own tier, from grounded revise notes born
+    after the note's last grounded status;
+  - a shared note whose owner is frozen is skipped;
+  - docs 08 cover waking by a grounded status, "heard" by either act, and per-machine traces.
+- **Test:** a personal note retires through shared strikes; after a human waking, one more
+  failure doesn't retire it.

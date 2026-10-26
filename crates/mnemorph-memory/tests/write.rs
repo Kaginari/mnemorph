@@ -275,3 +275,72 @@ fn a_note_cited_by_two_failures_is_retired() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A personal note's strikes are counted wherever `revise` wrote them, and a note the human woke
+/// starts clean: one more failure does not retire it again.
+#[test]
+fn strikes_count_across_tiers_and_restart_after_a_waking() {
+    use mnemorph_memory::{Anchor, retire, revise};
+    let w = std::env::temp_dir().join(format!("mnemorph-strikes-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(&w).unwrap();
+    // A personal note, cited, recalled beside a shared one: the revise notes land shared.
+    let mine = propose(&w, "slime-s", "skip the fixture", vec![], None)
+        .unwrap()
+        .note;
+    let shared = ground(
+        &w,
+        propose(&w, "slime-o", "the lexer is pure", vec![], None).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let anchors = [
+        Anchor {
+            id: mine.clone(),
+            personal: true,
+            dissent: false,
+            cited: true,
+        },
+        Anchor {
+            id: shared,
+            personal: false,
+            dissent: false,
+            cited: false,
+        },
+    ];
+    for v in ["log.md one", "log.md two"] {
+        revise(&w, "slime-s", &["traits hold: broke".into()], &anchors, v).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(3));
+    }
+    assert_eq!(
+        retire(&w, "slime-s", &anchors, "log.md two").unwrap(),
+        vec![mine.clone()]
+    );
+    // The human wakes it: a grounded status, by hand.
+    let personal = Tier::Personal("slime-s".into());
+    let wake = format!(
+        r#"{{"id":"wake","time":{},"note":"{mine}","by":"human","kind":"status","status":"grounded"}}"#,
+        mnemorph_memory::store::now_ms()
+    );
+    let path = w.join(personal.file());
+    let mut text = fs::read_to_string(&path).unwrap();
+    text.push_str(&wake);
+    text.push('\n');
+    fs::write(&path, text).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(3));
+    revise(
+        &w,
+        "slime-s",
+        &["traits hold: once more".into()],
+        &anchors,
+        "log.md three",
+    )
+    .unwrap();
+    assert_eq!(
+        retire(&w, "slime-s", &anchors, "log.md three").unwrap(),
+        Vec::<String>::new(),
+        "only failures since the waking count"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

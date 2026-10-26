@@ -296,10 +296,12 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
 - it never targets a dissenting note: a counter or revise note recalled into a failed turn is
   left as it is, so corrections do not breed corrections;
 - **what failed twice is retired**: an anchor the ask cited goes dormant once two distinct
-  run-ending failures — revise notes linking it at 0.9, told apart by the verdict they cite —
-  have cited it. Its events stay, so the human may wake it; dormant, it is no longer recalled. A
-  failure whose verdict reached no journal entry shares one fallback citation, so it can only
-  under-count.
+  run-ending failures have cited it since it was last grounded — grounded revise notes, in shared
+  memory or the asker's own tier, linking it at 0.9, told apart by the verdict they cite. Its
+  events stay: the human wakes it by appending a grounded status, and only failures after that
+  count again. Dormant, it is no longer recalled. A shared note whose owner's memory is frozen is
+  left for the human, and a failure whose verdict reached no journal entry shares one fallback
+  citation, so it can only under-count.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 
@@ -376,7 +378,8 @@ The replay loop and lock-in are read at each recall, before the body sees it:
   approach or say what blocks it.
 - **Lock-in** reads only a grounded revision linked to one of the recalled agreeing notes and
   newer than all of them; its act seats the newest such revision, until an ask it was seated
-  into lands — the correction heard and acted on — or the note it corrects is retired. A forced note takes the place
+  into lands — the correction heard and acted on, by either act — or the note it corrects is
+  retired. "Heard" is read from this machine's traces. A forced note takes the place
   of the lowest-ranked agreeing anchor, which is counted cut.
 
 Each act is said as a warning in the run's journal. `memory status` lists, per creature, a replay
