@@ -465,6 +465,83 @@ async fn the_cached_prefix_is_stable() {
     );
 }
 
+/// Over many turns and asks — tool calls, then a second ask — every
+/// request only appends to the one before: the system and the tools never change, and the run
+/// never says its cached prefix moved.
+#[tokio::test]
+async fn every_request_only_appends_to_the_one_before() {
+    let w = World::new("append-only");
+    fs::write(w.world().join("a.txt"), "a\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "read", json!({"path": "a.txt"})),
+        tool("t2", "glob", json!({"pattern": "*"})),
+        answer("first"),
+        tool("t3", "grep", json!({"pattern": "a"})),
+        tool("t4", "read", json!({"path": "a.txt"})),
+        answer("second"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "go").await;
+    ask(&mut run, "and again").await;
+    let requests = model.requests();
+    assert!(requests.len() >= 6, "{} requests", requests.len());
+    let fps = |r: &mnemorph_provider::Request| mnemorph_loop::compact::fingerprints(&r.messages);
+    for pair in requests.windows(2) {
+        assert_eq!(
+            encode(&pair[1]).unwrap()["system"],
+            encode(&pair[0]).unwrap()["system"]
+        );
+        assert_eq!(
+            encode(&pair[1]).unwrap()["tools"],
+            encode(&pair[0]).unwrap()["tools"]
+        );
+        assert_eq!(
+            mnemorph_loop::compact::moved(&fps(&pair[0]), &fps(&pair[1])),
+            None,
+            "a request rewrote the one before"
+        );
+    }
+    let warned = w.journal().read().unwrap().rows.iter().any(|b| {
+        matches!(b, mnemorph_loop::Beat::Warning { text } if text.contains("cached prefix moved"))
+    });
+    assert!(!warned, "the run said its prefix moved");
+}
+
+/// What the watch catches: a rewritten message, a dropped one; an appended one is fine, and a
+/// moved breakpoint is no change.
+#[test]
+fn a_rewritten_or_dropped_message_moves_the_prefix() {
+    use mnemorph_loop::compact::{fingerprints, moved};
+    use mnemorph_provider::{Message, Role};
+    let text = |t: &str, cache: bool| Block::Text {
+        text: t.into(),
+        cache,
+    };
+    let user = |blocks: Vec<Block>| Message {
+        role: Role::User,
+        content: blocks,
+    };
+    let before = fingerprints(&[user(vec![text("a", false)]), user(vec![text("b", true)])]);
+    // A moved breakpoint and a new message: an append.
+    let appended = fingerprints(&[
+        user(vec![text("a", true)]),
+        user(vec![text("b", false)]),
+        user(vec![text("c", true)]),
+    ]);
+    assert_eq!(moved(&before, &appended), None);
+    // A block added to the last message: still an append, as the cache reads it.
+    let extended = fingerprints(&[
+        user(vec![text("a", false)]),
+        user(vec![text("b", false), text("b2", true)]),
+    ]);
+    assert_eq!(moved(&before, &extended), None);
+    // A rewritten message, a dropped one: the prefix moved.
+    let rewritten = fingerprints(&[user(vec![text("a", false)]), user(vec![text("B", true)])]);
+    assert_eq!(moved(&before, &rewritten), Some(3));
+    let dropped = fingerprints(&[user(vec![text("a", false)])]);
+    assert_eq!(moved(&before, &dropped), Some(2));
+}
+
 fn reply(content: Vec<Block>, stop: StopReason) -> Result<Response, Error> {
     Ok(Response {
         id: "m".into(),

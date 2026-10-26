@@ -95,3 +95,47 @@ pub fn mark_cache(messages: &mut [Message], budget: usize) {
         }
     }
 }
+
+/// A conversation as the provider's prefix cache sees it: for each message a mark of its role,
+/// then each block — its breakpoints aside, which move every turn and change no byte the cache
+/// compares. Blocks added to the last message read as appended, as the cache reads them.
+#[must_use]
+pub fn fingerprints(messages: &[Message]) -> Vec<u64> {
+    use std::hash::{Hash, Hasher};
+    let mut out = Vec::new();
+    for m in messages {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        ("role", m.role == Role::User, m.role == Role::System).hash(&mut h);
+        out.push(h.finish());
+        for b in &m.content {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            match b {
+                Block::Text { text, .. } => ("text", text).hash(&mut h),
+                Block::ToolUse { id, name, input } => {
+                    ("use", id, name, input.to_string()).hash(&mut h);
+                }
+                Block::ToolResult {
+                    tool_use_id,
+                    content,
+                    is_error,
+                    ..
+                } => ("result", tool_use_id, content, is_error).hash(&mut h),
+                Block::Opaque(v) => ("opaque", v.to_string()).hash(&mut h),
+            }
+            out.push(h.finish());
+        }
+    }
+    out
+}
+
+/// Where the request `now` first changed what the request `before` sent — an index into their
+/// [`fingerprints`] — or `None` when `now` only appends to it: a request is append-only between
+/// folds.
+#[must_use]
+pub fn moved(before: &[u64], now: &[u64]) -> Option<usize> {
+    before
+        .iter()
+        .zip(now)
+        .position(|(a, b)| a != b)
+        .or_else(|| (now.len() < before.len()).then_some(now.len()))
+}
