@@ -1722,8 +1722,16 @@ impl Run {
                 .iter()
                 .any(|t| t.name() == crate::wear_tool::WEAR)
         {
-            let dispatches = self.commissioner.is_some() && self.body.race == Race::Rimuru;
-            return crate::wear_tool::run(self.cx.world(), &self.body.name, input, dispatches);
+            // A body that can hand work down — any holding the commissioner — never wears a heavy
+            // Mind; none wears one bigger than half the room its context has left.
+            let room = self.limits.window.saturating_sub(self.last_occupancy);
+            return crate::wear_tool::run(
+                self.cx.world(),
+                &self.body.name,
+                input,
+                self.commissioner.is_some(),
+                room,
+            );
         }
         // A Slime's verify line is the harness's to write, for the Orc it reports to.
         if name == crate::verify_tool::VERIFY

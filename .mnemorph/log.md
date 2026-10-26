@@ -4125,3 +4125,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   than rewrite the doc unasked.
 - **Not done:** prices are estimates at 4 bytes a token. Exact counts need the provider's
   counting API (a network act); the ledger records the real tokens on use.
+
+---
+
+### [2026-10-26T09:46:14+01:00] rimuru — #205's review: Fable
+- **Fable found:**
+  - **children never got the toolbox.** My scripted edits to `child_run` sat behind a missed
+    edit and never ran, while the journal, the PR and docs 08 claimed them;
+  - `dispatches` read the throne only;
+  - a worn Mind's size was unbounded;
+  - `about` took bullets and rules, cut mid-word.
+- **Fixed:**
+  - `child_run` pushes `WearTool` and calls `with_manifest`;
+  - any body holding the commissioner is refused a heavy Mind;
+  - `wear` refuses a Mind over half the context left;
+  - `about` skips headings, fields, bullets, quotes, fences, tables and rules, and cuts at a word.
+- **Tests:**
+  - commission.rs: a commissioned Elf's first ask lists the Mind and its tools have `wear`;
+  - wear_tool.rs: the room cap.
+- **Lesson, third time:** a script that stops at its first miss leaves the edits after it
+  unapplied, and a passing build says nothing about them. After any scripted batch, grep for each
+  intended change before claiming it.

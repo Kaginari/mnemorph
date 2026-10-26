@@ -52,9 +52,16 @@ struct Args {
     mind: String,
 }
 
-/// Run one `wear` call for `body`, in `world`. A throne that can hand work down never wears a
-/// heavy Mind: a worn Mind cannot be unloaded, and the body below that wears it dies with its task.
-pub(crate) fn run(world: &std::path::Path, body: &str, input: &str, dispatches: bool) -> Outcome {
+/// Run one `wear` call for `body`, in `world`, with `room` tokens left in its context. A body that
+/// can hand work down never wears a heavy Mind: a worn Mind cannot be unloaded, and the body below
+/// that wears it dies with its task. No body wears one bigger than half the room it has left.
+pub(crate) fn run(
+    world: &std::path::Path,
+    body: &str,
+    input: &str,
+    dispatches: bool,
+    room: u64,
+) -> Outcome {
     let a: Args = match serde_json::from_str(input) {
         Ok(a) => a,
         Err(e) => return Outcome::error(format!("wear: {e}")),
@@ -77,6 +84,13 @@ pub(crate) fn run(world: &std::path::Path, body: &str, input: &str, dispatches: 
         return Outcome::error(format!(
             "wear: `{name}` is heavy (~{} tokens) and a worn Mind cannot be unloaded: hand the \
              work that needs it to a body below, which wears it for its task",
+            mind.price()
+        ));
+    }
+    if mind.price() > room / 2 {
+        return Outcome::error(format!(
+            "wear: `{name}` (~{} tokens) would take more than half the context left (~{room}): \
+             finish or hand down the work first",
             mind.price()
         ));
     }
@@ -103,7 +117,13 @@ mod tests {
         )
         .unwrap();
         let worn = |mind: &str, dispatches: bool| {
-            run(&w, "rimuru", &format!(r#"{{"mind":"{mind}"}}"#), dispatches)
+            run(
+                &w,
+                "rimuru",
+                &format!(r#"{{"mind":"{mind}"}}"#),
+                dispatches,
+                100_000,
+            )
         };
         assert!(
             !worn("light", true).is_error,
@@ -119,6 +139,12 @@ mod tests {
         assert!(
             !alone.is_error && alone.content.contains(&"x".repeat(100)),
             "solo has no one to hand it to"
+        );
+        let cramped = run(&w, "rimuru", r#"{"mind":"heavy"}"#, false, 3_000);
+        assert!(
+            cramped.is_error && cramped.content.contains("half the context"),
+            "{}",
+            cramped.content
         );
         let unknown = worn("nope", false);
         assert!(

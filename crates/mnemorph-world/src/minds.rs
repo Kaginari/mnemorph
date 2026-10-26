@@ -54,6 +54,16 @@ impl Mind {
     }
 }
 
+/// A description at most 120 characters long, cut at a word.
+fn about_of(line: &str) -> String {
+    if line.chars().count() <= 120 {
+        return line.to_owned();
+    }
+    let head: String = line.chars().take(120).collect();
+    let cut = head.rfind(' ').map_or(head.as_str(), |i| &head[..i]);
+    format!("{cut}…")
+}
+
 /// The world's Minds, by name.
 #[must_use]
 pub fn load(world: &Path) -> Vec<Mind> {
@@ -83,14 +93,17 @@ pub fn load(world: &Path) -> Vec<Mind> {
             let shared = header()
                 .filter_map(|l| l.trim().strip_prefix("- **Shared:**"))
                 .any(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "yes" | "true"));
+            // The first line of prose: not a heading, a field, a bullet, a quote, a fence or a rule.
             let about = text
                 .lines()
                 .map(str::trim)
-                .find(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with("- **"))
-                .unwrap_or("(no description)")
-                .chars()
-                .take(120)
-                .collect();
+                .find(|l| {
+                    !l.is_empty()
+                        && !["#", "-", "*", ">", "`", "|", "="]
+                            .iter()
+                            .any(|p| l.starts_with(p))
+                })
+                .map_or_else(|| "(no description)".to_owned(), about_of);
             Some(Mind {
                 name,
                 doc,
