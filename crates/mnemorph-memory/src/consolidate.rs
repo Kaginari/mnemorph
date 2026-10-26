@@ -18,11 +18,13 @@ pub enum Forget {
     Tombstone,
 }
 
-/// Distil `ids` from `tier` into one schema note saying `text`: salience 0.8, confidence the mean
-/// of the four most salient merged notes' (capped at 0.95), linked to every note it merged; the
-/// two most salient originals stay active beside it, the rest go dormant. A counter or revise note
-/// is never merged nor put to sleep: it is skipped. Returns the schema note's id, or `None` when
-/// fewer than two agreeing notes were given.
+/// Distil `ids` from `tier` into one schema note saying `text`, `owner`'s or the world's: salience
+/// 0.8, confidence the mean of the four most salient merged notes' (capped at 0.95), linked to
+/// every note it merged; the two most salient originals stay active beside it, the rest go dormant.
+/// Only grounded agreeing notes merge — a counter or revise note is never merged nor put to sleep —
+/// and the schema's standing rests on them: its proof is built here, naming every note it merged,
+/// never taken from the caller. Returns the schema note's id, or `None` when fewer than two agreeing
+/// notes were given.
 ///
 /// # Errors
 ///
@@ -32,7 +34,7 @@ pub fn distill(
     tier: &Tier,
     ids: &[String],
     text: &str,
-    proof: &str,
+    owner: Option<&str>,
 ) -> std::io::Result<Option<String>> {
     let notes = fold(&read(world, tier)?.rows);
     let mut merged: Vec<&Note> = ids
@@ -52,13 +54,15 @@ pub fn distill(
     #[allow(clippy::cast_precision_loss, reason = "at most four")]
     let confidence = (top.iter().sum::<f64>() / top.len() as f64).min(0.95);
     let schema = format!("s{}", event_id(now_ms()));
-    let owner = merged[0].owner.clone();
+    let merged_ids: Vec<&str> = merged.iter().map(|n| n.id.as_str()).collect();
+    let proof = format!("distilled: {}", merged_ids.join(", "));
+    let owner = owner.map(str::to_owned);
     append(
         world,
         tier,
         &schema,
         By::Record,
-        Some(proof.to_owned()),
+        Some(proof.clone()),
         Change::Create {
             text: text.to_owned(),
             tags: vec!["schema".into()],
@@ -81,7 +85,7 @@ pub fn distill(
         tier,
         &schema,
         By::Record,
-        Some(proof.to_owned()),
+        Some(proof.clone()),
         Change::Status {
             status: Status::Grounded,
         },
@@ -92,7 +96,7 @@ pub fn distill(
             tier,
             &n.id,
             By::Record,
-            Some(proof.to_owned()),
+            Some(proof.clone()),
             Change::Status {
                 status: Status::Dormant,
             },
@@ -183,37 +187,59 @@ pub fn forget(
             Ok(Some(schema))
         }
         Forget::Tombstone => {
-            if !matches!(tier, Tier::Short(_)) {
-                return Err(std::io::Error::other(
-                    "a tracked note's text has travelled by git: only a short-tier note is tombstoned",
-                ));
-            }
-            // The short tier is machine-local: its file is rewritten with the text gone.
-            let path = world.join(tier.file());
-            let back = read(world, tier)?;
-            let mut text = String::new();
-            for mut e in back.rows {
-                if e.note == id
-                    && let Change::Create { text: t, .. } = &mut e.change
-                {
-                    t.clear();
-                }
-                text.push_str(&serde_json_line(&e)?);
-            }
-            std::fs::write(&path, text)?;
-            append(
-                world,
-                tier,
-                id,
-                By::Record,
-                None,
-                Change::Status {
-                    status: Status::Tombstoned,
-                },
-            )?;
+            tombstone(world, tier, id)?;
             Ok(None)
         }
     }
+}
+
+/// Empty the note `id`'s text, tags and source in a short-tier file, keeping its events, and mark it
+/// tombstoned: a tracked tier's text has travelled by git, so only the short tier is tombstoned.
+fn tombstone(world: &Path, tier: &Tier, id: &str) -> std::io::Result<()> {
+    if !matches!(tier, Tier::Short(_)) {
+        return Err(std::io::Error::other(
+            "a tracked note's text has travelled by git: only a short-tier note is tombstoned",
+        ));
+    }
+    // The short tier is machine-local: its file is rewritten with the text gone.
+    let path = world.join(tier.file());
+    let back = read(world, tier)?;
+    let mut text = String::new();
+    for mut e in back.rows {
+        if e.note == id
+            && let Change::Create {
+                text: t,
+                tags,
+                source,
+                ..
+            } = &mut e.change
+        {
+            t.clear();
+            tags.clear();
+            *source = None;
+        }
+        text.push_str(&serde_json_line(&e)?);
+    }
+    // Written new beside it, then renamed over it: a crash leaves the old file whole.
+    let temp = path.with_extension("jsonl.tombstone");
+    let _ = std::fs::remove_file(&temp);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, text.as_bytes()))
+        .and_then(|()| std::fs::rename(&temp, &path))?;
+    append(
+        world,
+        tier,
+        id,
+        By::Record,
+        None,
+        Change::Status {
+            status: Status::Tombstoned,
+        },
+    )?;
+    Ok(())
 }
 
 fn serde_json_line(e: &crate::note::Event) -> std::io::Result<String> {

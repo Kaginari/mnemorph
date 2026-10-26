@@ -58,8 +58,9 @@ pub enum By {
     Import,
 }
 
-/// A revise note's link to a note it revises, with its weight: 0.9 towards a note the failed act
-/// cited, 0.4 towards one merely recalled into the failed turn.
+/// A note's link to another, with its weight: a revise note's to a note it revises (0.9 towards one
+/// the failed act cited, 0.4 towards one merely recalled), a schema note's to a note it distilled
+/// or abstracted (1.0).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     /// The note revised.

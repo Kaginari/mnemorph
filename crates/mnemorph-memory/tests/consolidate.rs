@@ -27,15 +27,9 @@ fn distillation_merges_agreement_and_never_absorbs_dissent() {
     let ids: Vec<String> = (0..5)
         .map(|i| shared(&w, &format!("the parser keeps fraction {i}")))
         .collect();
-    let schema = distill(
-        &w,
-        &Tier::Shared,
-        &ids,
-        "the parser keeps fractions",
-        "log.md desk",
-    )
-    .unwrap()
-    .unwrap();
+    let schema = distill(&w, &Tier::Shared, &ids, "the parser keeps fractions", None)
+        .unwrap()
+        .unwrap();
     let notes = fold(&read(&w, &Tier::Shared).unwrap().rows);
     let s = &notes[&schema];
     assert_eq!(s.status, Status::Grounded);
@@ -45,6 +39,11 @@ fn distillation_merges_agreement_and_never_absorbs_dissent() {
         "the mean of the four most salient, ≤ 0.95"
     );
     assert_eq!(s.links.len(), 5);
+    assert!(
+        s.proof.as_deref().unwrap().starts_with("distilled: "),
+        "its proof names what it merged, built in code: {:?}",
+        s.proof
+    );
     let active = ids
         .iter()
         .filter(|i| notes[*i].status == Status::Grounded)
@@ -52,7 +51,7 @@ fn distillation_merges_agreement_and_never_absorbs_dissent() {
     assert_eq!(active, 2, "the two most salient originals stay active");
     // Fewer than two agreeing notes: nothing to distil.
     assert_eq!(
-        distill(&w, &Tier::Shared, &ids[..1], "x", "p").unwrap(),
+        distill(&w, &Tier::Shared, &ids[..1], "x", None).unwrap(),
         None
     );
     let _ = fs::remove_dir_all(&w);
@@ -79,7 +78,7 @@ fn a_dissenting_note_is_skipped_by_distillation() {
     .unwrap()
     .remove(0);
     let ids = vec![a, b, correction.clone()];
-    let schema = distill(&w, &Tier::Shared, &ids, "summary", "p")
+    let schema = distill(&w, &Tier::Shared, &ids, "summary", None)
         .unwrap()
         .unwrap();
     let notes = fold(&read(&w, &Tier::Shared).unwrap().rows);
@@ -139,5 +138,23 @@ fn forgetting_keeps_evidence_and_tombstones_only_machine_local_text() {
     );
     let gone = &fold(&read(&w, &short).unwrap().rows)[&scratch];
     assert_eq!((gone.status, gone.text.as_str()), (Status::Tombstoned, ""));
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// A body's short-tier cache is its own: recalled for it, never for another.
+#[test]
+fn a_bodys_cache_is_recalled_as_its_own() {
+    use mnemorph_memory::{Relation, gather};
+    let w = world("cache");
+    let id = cache(&w, "slime-s", "the scratch says the fixture needs utf8").unwrap();
+    let mine = gather(&w, "slime-s", |_| false).unwrap();
+    assert!(mine.personal.contains(&id));
+    assert!(
+        mine.notes
+            .iter()
+            .any(|(n, r)| n.id == id && *r == Relation::Own)
+    );
+    let other = gather(&w, "slime-t", |_| false).unwrap();
+    assert!(other.notes.iter().all(|(n, _)| n.id != id));
     let _ = fs::remove_dir_all(&w);
 }

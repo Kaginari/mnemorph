@@ -3814,3 +3814,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Tests:** consolidate.rs (3); notes.rs checks the exclude.
 - **Not yet:** the desk's distillation trigger, which belongs to evolution.
+
+---
+
+### [2026-10-26T03:38:36+01:00] rimuru — #198's review: Fable
+- **Fable found:**
+  - a write-rule hole: `distill` and abstract-`forget` grounded caller text on a free proof
+    string;
+  - the tombstone rewrite was not atomic and left the source and tags;
+  - the schema's owner came from the first merged note;
+  - the `Link` doc was too narrow;
+  - `cache` was written and never read.
+- **Fixed:**
+  - proofs are built in code (`distilled: <ids>`, `abstracted: <id>`);
+  - the tombstone writes a temp file renamed over the old, clearing text, tags and source;
+  - `distill` takes its owner;
+  - the doc is widened;
+  - `gather` reads the body's short tier as its own;
+  - the tombstone was extracted to keep `forget` under 100 lines.
+- **Tests:** the proofs, and a cache recalled by its own body only.

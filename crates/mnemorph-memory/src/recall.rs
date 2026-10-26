@@ -230,9 +230,13 @@ pub fn gather(
 ) -> std::io::Result<Memory> {
     use crate::store::{Tier, read};
     let own = read(world, &Tier::Personal(name.to_owned()))?;
+    let short = read(world, &Tier::Short(name.to_owned()))?;
     let shared = read(world, &Tier::Shared)?;
-    let skipped = own.skipped.len() + shared.skipped.len();
-    let mine = crate::note::fold(&own.rows);
+    let skipped = own.skipped.len() + short.skipped.len() + shared.skipped.len();
+    // The body's own: its personal notes and its short-tier cache, both personal in scope.
+    let mut events = own.rows;
+    events.extend(short.rows);
+    let mine = crate::note::fold(&events);
     let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
     let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
     for n in crate::note::fold(&shared.rows).into_values() {
