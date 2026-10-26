@@ -3443,3 +3443,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     message are fine; a rewritten or dropped one moved.
 - **Left open on #38:** the thinking-strip recovery has no trigger until a mid-session model
   switch exists.
+
+---
+
+### [2026-10-26T01:04:04+01:00] rimuru — #187's review: Fable
+- **Fable found:** no false positive. An strace of the two folding tests showed 8 folds and no
+  "prefix moved".
+- **Taken:**
+  - the watch covers the system prompt and the tools too;
+  - fingerprints hash fields directly, with no clone or Debug pass;
+  - the long-run compaction test asserts a fold never reads as a moved prefix;
+  - a test comment corrected; docs 06.

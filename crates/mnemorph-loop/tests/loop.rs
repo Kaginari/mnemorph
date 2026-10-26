@@ -465,7 +465,7 @@ async fn the_cached_prefix_is_stable() {
     );
 }
 
-/// Over many turns and asks — tools, a second ask, a wake from the queue's absence — every
+/// Over many turns and asks — tool calls, then a second ask — every
 /// request only appends to the one before: the system and the tools never change, and the run
 /// never says its cached prefix moved.
 #[tokio::test]

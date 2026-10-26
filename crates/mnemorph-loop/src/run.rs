@@ -622,7 +622,16 @@ impl Run {
     }
 
     fn watch_prefix(&mut self, request: &Request) {
-        let now = fingerprints(&request.messages);
+        // The system prompt and the tools first — the heart of the prefix — then the conversation.
+        let head = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            format!("{:?}{:?}", request.system, request.tools).hash(&mut h);
+            h.finish()
+        };
+        let now: Vec<u64> = std::iter::once(head)
+            .chain(fingerprints(&request.messages))
+            .collect();
         let (before, folded) = &self.sent;
         if *folded == self.folded_upto
             && let Some(at) = moved(before, &now)

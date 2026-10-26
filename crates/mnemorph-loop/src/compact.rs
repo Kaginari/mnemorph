@@ -102,34 +102,27 @@ pub fn mark_cache(messages: &mut [Message], budget: usize) {
 #[must_use]
 pub fn fingerprints(messages: &[Message]) -> Vec<u64> {
     use std::hash::{Hash, Hasher};
-    let hash = |what: String| {
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        what.hash(&mut h);
-        h.finish()
-    };
     let mut out = Vec::new();
     for m in messages {
-        out.push(hash(format!("role {:?}", m.role)));
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        ("role", m.role == Role::User, m.role == Role::System).hash(&mut h);
+        out.push(h.finish());
         for b in &m.content {
-            let bare = match b {
-                Block::Text { text, .. } => Block::Text {
-                    text: text.clone(),
-                    cache: false,
-                },
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            match b {
+                Block::Text { text, .. } => ("text", text).hash(&mut h),
+                Block::ToolUse { id, name, input } => {
+                    ("use", id, name, input.to_string()).hash(&mut h);
+                }
                 Block::ToolResult {
                     tool_use_id,
                     content,
                     is_error,
                     ..
-                } => Block::ToolResult {
-                    tool_use_id: tool_use_id.clone(),
-                    content: content.clone(),
-                    is_error: *is_error,
-                    cache: false,
-                },
-                other => other.clone(),
-            };
-            out.push(hash(format!("{bare:?}")));
+                } => ("result", tool_use_id, content, is_error).hash(&mut h),
+                Block::Opaque(v) => ("opaque", v.to_string()).hash(&mut h),
+            }
+            out.push(h.finish());
         }
     }
     out
