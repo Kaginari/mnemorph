@@ -371,3 +371,31 @@ pub struct Anchor {
     /// The body's own text named it.
     pub cited: bool,
 }
+
+/// A body's semantic cache: a note in its machine-local short tier, proposed, dying with its
+/// task. Returns the note's id.
+///
+/// # Errors
+///
+/// The note file cannot be written.
+pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
+    let note = format!("c{}", event_id(now_ms()));
+    append(
+        world,
+        &Tier::Short(body.to_owned()),
+        &note,
+        By::Record,
+        None,
+        Change::Create {
+            text: text.to_owned(),
+            tags: vec![],
+            owner: Some(body.to_owned()),
+            polarity: Polarity::Support,
+            salience: 0.5,
+            confidence: 0.5,
+            source: None,
+            links: Vec::new(),
+        },
+    )?;
+    Ok(note)
+}

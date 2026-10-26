@@ -205,6 +205,11 @@ fn git_merges_note_files_by_union_through_its_local_attributes() {
         attributes,
         "*.png binary\n.mnemorph/memory/**/*.jsonl merge=union\n"
     );
+    let exclude = fs::read_to_string(w.join(".git/info/exclude")).unwrap();
+    assert!(
+        exclude.lines().any(|l| l == ".mnemorph/memory/short/"),
+        "{exclude}"
+    );
     // A worktree's `.git` is a file: git names the attributes it shares, and they hold.
     fs::write(w.join("a.txt"), "a\n").unwrap();
     git(&w, &["add", "-A"]);
