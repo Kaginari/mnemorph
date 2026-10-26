@@ -122,6 +122,16 @@ impl ScriptedModel {
     pub fn requests(&self) -> Vec<Request> {
         self.requests.lock().expect("requests lock").clone()
     }
+
+    /// Append a reply to the script while it runs: a test model that answers from what it was
+    /// shown — an id the harness minted — queues its reply here.
+    ///
+    /// # Panics
+    ///
+    /// The lock was poisoned by a panicking test.
+    pub fn then(&self, reply: Result<Response, Error>) {
+        self.replies.lock().expect("replies lock").push_back(reply);
+    }
 }
 
 impl Model for ScriptedModel {

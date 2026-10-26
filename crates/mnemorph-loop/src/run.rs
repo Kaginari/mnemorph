@@ -255,6 +255,9 @@ pub struct Run {
     landed_in_ask: Option<String>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
     opening: Option<String>,
+    /// The claims this ask's orders offered, `(owner, id)`: the only ones its answer may accept —
+    /// never the body's own, never one an earlier ask was shown.
+    acceptable: std::collections::BTreeSet<(String, String)>,
     /// The toolbox's manifest — the Minds the body may wear, priced — said with its first ask.
     manifest: Option<String>,
     /// How often the run has drained: a full context drains once, and checkpoints plainly after.
@@ -344,6 +347,7 @@ impl Run {
             recall_trace: None,
             landed_in_ask: None,
             opening: None,
+            acceptable: std::collections::BTreeSet::new(),
             manifest: None,
             drains: 0,
             passed: None,
@@ -687,6 +691,9 @@ impl Run {
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
+        if let Ending::Answered(text) = &ending {
+            self.accept(text);
+        }
         // The ask's recall leaves its trace: what the replay loop reads at the next. An ask the
         // human stopped is no replay of anything.
         if !matches!(ending, Ending::Interrupted)
@@ -1153,6 +1160,62 @@ impl Run {
         }
     }
 
+    /// The **accepted** route: each id on an `@V accept` line of an answer grounds the claim it
+    /// names — one this ask's orders offered and its body still holds proposed — citing the
+    /// acceptance. A claim it does not accept stays personal; an id naming nothing it may accept is
+    /// said, not grounded.
+    fn accept(&self, answer: &str) {
+        for line in answer.lines().map(str::trim) {
+            let Some(rest) = line.strip_prefix("@V accept") else {
+                continue;
+            };
+            let ids: Vec<&str> = rest
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .map(|t| t.trim_matches(|c: char| "`.;:!?«»\"'".contains(c)))
+                .filter(|t| !t.is_empty())
+                .collect();
+            if ids.is_empty() {
+                self.record(&Beat::Warning {
+                    text: "memory: `@V accept` names no claim: nothing accepted".into(),
+                });
+            }
+            for id in ids {
+                self.accept_one(id);
+            }
+        }
+    }
+
+    /// Ground the claim `id` by the accepted route, when this ask's orders offered it.
+    fn accept_one(&self, id: &str) {
+        let Some((owner, _)) = self.acceptable.iter().find(|(_, i)| i == id) else {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "memory: `{id}` is no claim this ask's orders offered: nothing accepted"
+                ),
+            });
+            return;
+        };
+        let cite = format!(
+            "{} accepted {id} in run {}",
+            self.body.name, self.caller.run
+        );
+        let said = match mnemorph_memory::proposed(self.cx.world(), owner, id) {
+            Ok(Some(claim)) => match mnemorph_memory::Proof::accepted(&cite, true)
+                .map_err(std::io::Error::other)
+                .and_then(|p| mnemorph_memory::ground(self.cx.world(), claim, &p))
+            {
+                Ok(g) => format!(
+                    "memory: accepted `{}` of {} into shared memory",
+                    g.note, g.owner
+                ),
+                Err(e) => format!("memory: `{id}` could not be accepted: {e}"),
+            },
+            Ok(None) => format!("memory: `{id}` is no longer proposed: nothing accepted"),
+            Err(e) => format!("memory: `{id}` could not be read: {e}"),
+        };
+        self.record(&Beat::Warning { text: said });
+    }
+
     /// The stress line: the configured tokens, never past 90% of the window.
     fn stress_line(&self) -> u64 {
         self.limits
@@ -1333,6 +1396,7 @@ impl Run {
     fn open_ask(&mut self, text: &str) -> String {
         self.ask_from = self.messages.len();
         self.failed_in_ask = None;
+        self.acceptable.clear();
         self.landed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
@@ -1812,6 +1876,9 @@ impl Run {
                     before.refresh(&world, &judged, &order.at);
                 }
                 self.landed.extend(order.landed);
+                // What the order's report offered is what this ask may accept: a refused order
+                // offers nothing.
+                self.acceptable.extend(order.offered);
                 if order.interrupted {
                     self.interrupt.fire();
                 }

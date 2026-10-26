@@ -125,6 +125,9 @@ pub struct Order {
     pub at: crate::gate::Tree,
     /// The human's Esc stopped it.
     pub interrupted: bool,
+    /// The claims its report offered for acceptance, `(owner, id)`: the only ones the dispatcher's
+    /// answer may accept, this ask.
+    pub offered: Vec<(String, String)>,
 }
 
 /// The creatures an Elf's open plan items name: `- [ ] <creature>: …` lines of the `plan.md`
@@ -442,6 +445,7 @@ pub(crate) async fn order(
         put_back: Vec::new(),
         at: crate::gate::Tree::default(),
         interrupted: false,
+        offered: Vec::new(),
     };
     let a: CommissionArgs = match serde_json::from_str(input) {
         Ok(a) => a,
@@ -525,7 +529,7 @@ pub(crate) async fn order(
         .chain(others_note(&others))
         .collect();
     let checked = checked_proof(&a.to, child.passed_gate());
-    let report = report_for(
+    let (report, offered) = report_for(
         c,
         &roster,
         &a.to,
@@ -536,13 +540,13 @@ pub(crate) async fn order(
         &put_back,
         checked.as_ref(),
     );
-    order_of(report, spent, landed, put_back, before, &ending)
+    order_of((report, offered), spent, landed, put_back, before, &ending)
 }
 
-/// The order a commission returns: its report, its spend, what landed, what was put back, the
-/// tree it started from.
+/// The order a commission returns: its report and the claims it offers, its spend, what landed,
+/// what was put back, the tree it started from.
 fn order_of(
-    report: String,
+    (report, offered): (String, Vec<(String, String)>),
     spent: u64,
     landed: Vec<PathBuf>,
     put_back: Vec<(PathBuf, bool)>,
@@ -561,6 +565,7 @@ fn order_of(
             .collect(),
         at: before,
         interrupted: matches!(ending, Ending::Interrupted),
+        offered,
     }
 }
 
@@ -583,26 +588,31 @@ fn checked_proof(
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
 /// its personal memory, proposed; with a **checked** proof its own run earned, they are grounded.
 /// A child that did not answer, or whose gate proved nothing, keeps its words personal. Says what
-/// it did, as a note for the report.
+/// it did, as a note for the report, and returns each claim it left proposed, `(id, text)`: what
+/// the dispatcher may accept.
 fn remember(
     world: &Path,
     to: &str,
     ending: &Ending,
     proof: Option<&mnemorph_memory::Proof>,
-) -> Option<String> {
+) -> (Option<String>, Vec<(String, String)>) {
     let Ending::Answered(text) = ending else {
-        return None;
+        return (None, Vec::new());
     };
-    let report = Report::parse(text)?;
+    let Some(report) = Report::parse(text) else {
+        return (None, Vec::new());
+    };
     let said: Vec<&mnemorph_wire::Unsaid> = report
         .unsaid
         .iter()
         .filter(|u| u.kind != Some(mnemorph_wire::UnsaidKind::Territory))
         .collect();
     if said.is_empty() {
-        return None;
+        return (None, Vec::new());
     }
     let (mut proposed, mut grounded) = (0, 0);
+    // What stays proposed is named, so the commissioner may accept it by id.
+    let mut open = Vec::new();
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
         let claim = match mnemorph_memory::propose(world, to, &u.text, tags, None) {
@@ -613,16 +623,25 @@ fn remember(
             }
         };
         proposed += 1;
+        let id = claim.note.clone();
+        let short: String = u.text.chars().take(80).collect();
         if let Some(p) = proof {
             match mnemorph_memory::ground(world, claim, p) {
-                Ok(_) => grounded += 1,
+                Ok(_) => {
+                    grounded += 1;
+                    continue;
+                }
                 Err(e) => eprintln!("mnemorph: {to}'s claim could not be grounded: {e}"),
             }
         }
+        open.push((id, short));
     }
-    Some(format!(
-        "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked]"
-    ))
+    (
+        Some(format!(
+            "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked]"
+        )),
+        open,
+    )
 }
 
 /// File an answering child's `@U territory` facts in its name, and return the triage its parent
@@ -907,11 +926,20 @@ fn report_for(
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
-) -> String {
+) -> (String, Vec<(String, String)>) {
     let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
-    notes.extend(remember(&c.world, to, ending, checked));
+    let (kept, offered) = remember(&c.world, to, ending, checked);
+    notes.extend(kept);
+    // Each claim left proposed is offered as a hole too: never cut, however much the body said.
+    triage.extend(offered.iter().map(|(id, text)| {
+        format!("accept? {id} «{text}» — once you have checked it yourself, `@V accept {id}`")
+    }));
+    let offered = offered
+        .into_iter()
+        .map(|(id, _)| (to.to_owned(), id))
+        .collect();
     file_labels(&c.world, roster, ending, to);
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, ending, to);
@@ -919,7 +947,8 @@ fn report_for(
     // A clock death's memo is a hole: never cut from the report.
     triage.extend(clock_memo(&c.world, roster, to, ending));
     let forced = council(c, to, ending, failed, &mut notes, &mut triage);
-    report_of(ending, landed, put_back, &notes, &triage, forced.as_deref())
+    let report = report_of(ending, landed, put_back, &notes, &triage, forced.as_deref());
+    (report, offered)
 }
 
 /// Where clock deaths are kept, under the world.

@@ -18,5 +18,5 @@ pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall
 pub use store::{Tier, inherit, read, union_merge};
 pub use write::{
     Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, attributable, cache,
-    confirm, ground, propose, retire, retired, revise, wake,
+    confirm, ground, propose, proposed, retire, retired, revise, wake,
 };

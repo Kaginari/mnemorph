@@ -397,3 +397,38 @@ fn wake_undoes_only_a_retirement_and_a_proposed_note_is_credited() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A proposed claim is found again by its id, for a route to ground later; a grounded one, or
+/// another creature's, is not.
+#[test]
+fn a_proposed_claim_is_found_again_by_its_id() {
+    use mnemorph_memory::proposed;
+    let w = world_of("proposed");
+    let c = propose(&w, "slime-s", "the API caps at 100 a minute", vec![], None).unwrap();
+    let id = c.note.clone();
+    let again = proposed(&w, "slime-s", &id).unwrap().unwrap();
+    assert_eq!(
+        (again.text.as_str(), again.owner.as_str()),
+        ("the API caps at 100 a minute", "slime-s")
+    );
+    assert!(
+        proposed(&w, "slime-o", &id).unwrap().is_none(),
+        "another creature's"
+    );
+    ground(
+        &w,
+        again,
+        &Proof::accepted("orc-o accepted it", true).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        proposed(&w, "slime-s", &id).unwrap().is_none(),
+        "grounded already"
+    );
+    let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
+    assert!(
+        (shared[&id].confidence - 0.6).abs() < 1e-9,
+        "accepted grounds at 0.6"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

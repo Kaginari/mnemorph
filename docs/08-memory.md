@@ -282,6 +282,15 @@ for the routes whose observation is independent of what the model said: **checke
 correlated with the writer's — the same model family shares blind spots — so their $\delta$ is
 larger and unknown until the record measures it; that is why they ground at a lower $\kappa$.
 
+**Accepted** is the commissioner's word, and it names the claim. A commission's report offers
+each claim its body left proposed, by id, as a hole — never cut, however long the report — and the
+commissioner checks what it can (reading the source, asking a second body) and accepts a claim with
+an `@V accept <id>` line in its own answer. When that answer ends the ask, each id grounds its claim
+if this ask's orders offered it and its body still holds it proposed, citing the acceptance. Only
+this ask's offers count: a body never accepts its own words, an order that was refused offers
+nothing, and the orders a wake or an escalation runs offer none. An id naming nothing it may accept
+is said and grounds nothing; a claim it does not accept stays personal and proposed.
+
 A check also observes only what it tests. The end gate runs the verify lines and checks that the
 tests stayed intact; it never reads a claim. A claim about the diff (*this function now handles
 the empty case*) is observed by a test that exercises it; a claim about the world beyond the

@@ -717,3 +717,26 @@ pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String
     }
     Ok(out)
 }
+
+/// The claim `id` of `owner`, still proposed in its personal tier: what a route may ground later —
+/// a commissioner's verdict that accepts it, a second voice. `None` when the owner holds no such
+/// note, or it is no longer proposed.
+///
+/// # Errors
+///
+/// The personal tier cannot be read.
+pub fn proposed(world: &Path, owner: &str, id: &str) -> std::io::Result<Option<Claim<Proposed>>> {
+    let rows = crate::store::read(world, &Tier::Personal(owner.to_owned()))?.rows;
+    let notes = crate::note::fold(&rows);
+    Ok(notes
+        .get(id)
+        .filter(|n| n.status == Status::Proposed && n.owner.as_deref() == Some(owner))
+        .map(|n| Claim {
+            note: n.id.clone(),
+            owner: owner.to_owned(),
+            text: n.text.clone(),
+            tags: n.tags.clone(),
+            source: n.source.clone(),
+            standing: PhantomData,
+        }))
+}

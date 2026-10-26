@@ -72,10 +72,15 @@ impl World {
         self.rimuru_full(model, attic, budget, None, 0)
     }
 
+    /// As [`World::rimuru`], over any model: one that answers from what it is shown.
+    fn rimuru_dyn(&self, model: Arc<dyn mnemorph_loop::Model>) -> Run {
+        self.rimuru_full(model, true, None, None, 0)
+    }
+
     /// As [`World::rimuru_with`], each court's model chosen by `router`.
     fn rimuru_full(
         &self,
-        model: Arc<ScriptedModel>,
+        model: Arc<dyn mnemorph_loop::Model>,
         attic: bool,
         budget: Option<u64>,
         router: Option<mnemorph_loop::commission::Router>,
@@ -1641,4 +1646,153 @@ async fn a_commissioned_body_is_offered_the_minds() {
         "{asked}"
     );
     assert!(elf.tools.iter().any(|t| t.name == "wear"));
+}
+
+/// A model that answers from what it is shown: once a commission's result names the claim it
+/// checked, it accepts that claim by the id the harness minted.
+struct Accepting {
+    inner: ScriptedModel,
+    claim: &'static str,
+}
+
+impl mnemorph_loop::Model for Accepting {
+    fn provider(&self) -> &'static str {
+        "scripted"
+    }
+
+    fn complete<'a>(
+        &'a self,
+        request: &'a mnemorph_provider::Request,
+        on: &'a mut (dyn FnMut(mnemorph_provider::Event) + Send),
+    ) -> mnemorph_loop::model::Completion<'a> {
+        let shown = format!("{:?}", request.messages);
+        let marker = format!(" «{}", self.claim);
+        if let Some(at) = shown.find(&marker) {
+            let id = shown[..at]
+                .rsplit([' ', '[', ':', ';'])
+                .next()
+                .unwrap_or("");
+            self.inner.then(ScriptedModel::text(&format!(
+                "I read the API's docs myself: it holds.\n@V accept {id}"
+            )));
+        }
+        self.inner.complete(request, on)
+    }
+}
+
+/// The **accepted** route: a findings-only commission lands nothing, so no test runs and no claim
+/// is checked; the commissioner accepts one claim by its id, and that one reaches shared memory —
+/// the claim it did not accept stays personal and proposed.
+#[tokio::test]
+async fn a_findings_commission_s_accepted_claim_is_shared_and_the_rest_stay_personal() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("accepted");
+    let model = Arc::new(Accepting {
+        inner: ScriptedModel::new([
+            ScriptedModel::tool(
+                "c1",
+                "commission",
+                json!({"to": "elf-e", "ask": "how fast may we call the API?", "office": "findings"}),
+            ),
+            ScriptedModel::text(
+                "@S DONE\n@U colony the API caps at 100 calls a minute\n@U colony the cache is warm on mondays\n@E",
+            ),
+        ]),
+        claim: "the API caps",
+    });
+    let mut run = w.rimuru_dyn(model.clone());
+    let ending = run.ask("find the API's rate limit", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let personal = fold(&read(&w.0, &Tier::Personal("elf-e".into())).unwrap().rows);
+    let shared = fold(&read(&w.0, &Tier::Shared).unwrap().rows);
+    let by_text = |t: &str| {
+        personal
+            .values()
+            .find(|n| n.text.starts_with(t))
+            .unwrap()
+            .clone()
+    };
+    let caps = by_text("the API caps");
+    let cache = by_text("the cache is warm");
+    assert_eq!(caps.status, Status::Grounded, "accepted");
+    let shared_caps = &shared[&caps.id];
+    assert_eq!(shared_caps.status, Status::Grounded);
+    assert!(
+        (shared_caps.confidence - 0.6).abs() < 1e-9,
+        "accepted grounds at 0.6"
+    );
+    assert!(
+        shared_caps
+            .proof
+            .as_deref()
+            .unwrap()
+            .starts_with(&format!("accepted: rimuru accepted {} in run", caps.id)),
+        "{:?}",
+        shared_caps.proof
+    );
+    assert_eq!(cache.status, Status::Proposed, "not accepted: personal");
+    assert!(!shared.contains_key(&cache.id), "never shared");
+}
+
+/// A body never grounds its own words: a refused order to itself offers nothing, so accepting its
+/// own proposed claim grounds nothing.
+#[tokio::test]
+async fn a_body_cannot_accept_its_own_claim() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("self-accept");
+    let own =
+        mnemorph_memory::propose(&w.0, "rimuru", "the API caps at 100 a minute", vec![], None)
+            .unwrap()
+            .note;
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "rimuru", "ask": "check yourself", "office": "findings"}),
+        ),
+        ScriptedModel::text(&format!("Checked.\n@V accept {own}")),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("look", &mut |_| {}).await;
+    let mine = fold(&read(&w.0, &Tier::Personal("rimuru".into())).unwrap().rows);
+    assert_eq!(
+        mine[&own].status,
+        Status::Proposed,
+        "its own words stay proposed"
+    );
+    assert!(!fold(&read(&w.0, &Tier::Shared).unwrap().rows).contains_key(&own));
+}
+
+/// The offer is a hole, never cut: a report long past the cut still offers its claims, and an
+/// accepted one is shared.
+#[tokio::test]
+async fn a_long_report_still_offers_its_claims() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("long-offer");
+    let prose = "The rate limit is documented in several places, read them all. ".repeat(60);
+    let model = Arc::new(Accepting {
+        inner: ScriptedModel::new([
+            ScriptedModel::tool(
+                "c1",
+                "commission",
+                json!({"to": "elf-e", "ask": "how fast may we call the API?", "office": "findings"}),
+            ),
+            ScriptedModel::text(&format!(
+                "@S DONE\n{prose}\n@U colony the API caps at 100 calls a minute\n@E"
+            )),
+        ]),
+        claim: "the API caps",
+    });
+    let mut run = w.rimuru_dyn(model.clone());
+    run.ask("find the API's rate limit", &mut |_| {}).await;
+    let personal = fold(&read(&w.0, &Tier::Personal("elf-e".into())).unwrap().rows);
+    let caps = personal
+        .values()
+        .find(|n| n.text.starts_with("the API caps"))
+        .unwrap();
+    assert_eq!(
+        caps.status,
+        Status::Grounded,
+        "accepted though the report was cut"
+    );
 }

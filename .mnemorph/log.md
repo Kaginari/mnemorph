@@ -4182,3 +4182,44 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   rule would cite the read-only note through `read`'s arguments.
 - **Disk:** it reached 1.4G free. The private cited target (6.6G) was deleted, and every build
   is back on the one shared target, cleaned per crate when switching worktrees.
+
+---
+
+### [2026-10-26T09:59:55+01:00] rimuru — M8: the accepted route
+- **Task:** wire the **accepted** route (`Proof::accepted` existed, uncalled); exit criterion "a
+  findings-only commission's accepted claims reach shared memory with no test run, and its
+  rejected ones stay personal".
+- **Files:**
+  - memory write.rs `proposed(world, owner, id)` rebuilds a stored proposed claim as
+    `Claim<Proposed>`, so grounding still goes through the typestate;
+  - commission.rs `remember` lists each claim left proposed, `id «text»`, with how to accept;
+  - run.rs: `commissioned` (the bodies this ask ordered, reset per ask); `accept` runs at `end`
+    on an answered ask, and each `@V accept <id>` grounds the matching proposed claim of a
+    commissioned body, citing "<body> accepted it in run <run>: <line>", or warns it named
+    nothing;
+  - model.rs `ScriptedModel::then` lets a test model queue a reply from what it was shown;
+  - docs 08.
+- **Test:** commission.rs. An `Accepting` model reads the minted id from the Elf's report and
+  accepts one of two claims. The accepted one is grounded and shared at 0.6 with its proof; the
+  other stays personal and proposed. It fails without `accept` (checked).
+
+---
+
+### [2026-10-26T10:10:12+01:00] rimuru — #207's review: Fable
+- **Fable found:**
+  - **a body could ground its own words:** `commissioned` took the order's `to` before the order
+    ran, so a refused order to itself qualified it, and with a drained claim's id from recall it
+    could accept its own claim;
+  - **the ids were cut first:** the offer rode the `other` prose line, which `emit` cuts first
+    past 2048 bytes;
+  - the id parse was fragile;
+  - the whole model line went into the proof.
+- **Fixed:**
+  - `Order::offered` carries exactly the `(owner, id)` pairs a report offered; the run keeps them
+    per ask (`acceptable`), and `accept` grounds only those;
+  - the offer is a hole (`accept? <id> «text» — … @V accept <id>`), which is never cut;
+  - `accept` reads every id on a line, trims punctuation and warns on a bare line;
+  - the proof cites `<body> accepted <id> in run <run>`;
+  - docs 08.
+- **Tests:** commission.rs: a body can't accept its own claim through a refused self-order; a
+  report long past the cut still offers and grounds.
