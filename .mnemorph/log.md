@@ -4718,3 +4718,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   3. the waiver is asked once an ask (`!*retried`); `card_list` keeps the cap.
 - **Test:** the card test adds U+202E, asserts one ask, and checks the ending carries no raw
   newline. Checked to fail with the source escape off.
+
+---
+
+### [2026-10-26T16:30:31+01:00] rimuru — suggest the session's verify line
+- **Why:** with #219 the session lands through the end gate, but a card with no `Verify:` line
+  runs no check, so solo claims still never ground. That's every project by default, the bench's
+  worlds included (a side-agent note).
+- **Built:**
+  - world verify.rs `suggest`: a settled or agreed `test=` fact about a top-level file (the root
+    itself is no fact path), else the manifest's command: Cargo, Python, Node (pnpm/yarn/npm by
+    lockfile), Go, or a Makefile `test:`;
+  - `missing_session_verify` says it;
+  - mnemorphd `onto check` raises `no-session-verify` (low); `memory status` prints a note, also
+    when no memory exists yet (`session_verify_note`);
+  - docs 03 and 09.
+- **The card stays the human's:** only ever suggested.
+- **Tests:**
+  - world: detection order, the ontology's word first, and silence once the card has its line;
+  - mnemorphd: the note with `go test ./...`.
