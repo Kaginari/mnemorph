@@ -233,6 +233,8 @@ pub struct Run {
     folded_upto: usize,
     /// The recall row for the ask being opened, journaled after it.
     recalled: Option<Beat>,
+    /// The anchors recalled into this ask: what a run-ending failure reconsolidates.
+    anchors: Vec<mnemorph_memory::Anchor>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -310,6 +312,7 @@ impl Run {
             interrupt,
             folded_upto: 0,
             recalled: None,
+            anchors: Vec::new(),
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -838,9 +841,15 @@ impl Run {
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
         });
-        self.log_verdict(&verdict, *retried);
+        let heading = self.log_verdict(&verdict, *retried);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
+        }
+        // A run-ending failure — a check that wrote, or a second FAIL — reconsolidates what the
+        // run recalled, once; a first failure writes nothing, and a check that gave no result is
+        // no failure of what the body knew.
+        if verdict.wrote || (*retried && verdict.verdict() == crate::gate::Verdict::Fail) {
+            self.reconsolidate(&verdict.failures, &answer, heading.as_deref());
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
         // wrote would pass as the body's. The landing fails whole.
@@ -893,10 +902,10 @@ impl Run {
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.
-    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) {
+    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) -> Option<String> {
         // An answer that changed nothing passed untouched: there is nothing to journal.
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
-            return;
+            return None;
         }
         let word = verdict.verdict().word();
         let word = if verdict.unrun() {
@@ -934,12 +943,40 @@ impl Run {
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
                 if verdict.passed() {
-                    self.passed = Some((verdict.clone(), heading));
+                    self.passed = Some((verdict.clone(), heading.clone()));
                 }
+                heading
             }
-            Err(e) => self.record(&Beat::Warning {
-                text: format!("the gate's verdict could not reach the journal: {e}"),
-            }),
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!("the gate's verdict could not reach the journal: {e}"),
+                });
+                None
+            }
+        }
+    }
+
+    /// One revise note per failed act, linking the anchors this ask recalled — 0.9 towards one the
+    /// body's answer named, 0.4 towards one merely recalled — citing the gate's journal entry.
+    fn reconsolidate(&mut self, acts: &[String], answer: &str, heading: Option<&str>) {
+        let anchors: Vec<mnemorph_memory::Anchor> = self
+            .anchors
+            .iter()
+            .map(|a| mnemorph_memory::Anchor {
+                cited: answer.contains(&a.id),
+                ..a.clone()
+            })
+            .collect();
+        let verdict = heading.map_or_else(
+            || format!("log.md: {} gate: FAIL", self.body.name),
+            |h| format!("log.md {h}"),
+        );
+        if let Err(e) =
+            mnemorph_memory::revise(self.cx.world(), &self.body.name, acts, &anchors, &verdict)
+        {
+            self.record(&Beat::Warning {
+                text: format!("the failure could not reconsolidate memory: {e}"),
+            });
         }
     }
 
@@ -1150,6 +1187,7 @@ impl Run {
     /// lines; what was shown is journaled as the turn's anchors. Nothing when memory holds nothing
     /// that matches, or cannot be read.
     fn recall(&mut self, text: &str) -> Vec<String> {
+        self.anchors.clear();
         let world = self.cx.world().to_path_buf();
         let roster = mnemorph_world::Roster::load(&world);
         let race = self.body.race.base();
@@ -1187,6 +1225,16 @@ impl Run {
         if r.anchors.is_empty() {
             return Vec::new();
         }
+        self.anchors = r
+            .anchors
+            .iter()
+            .map(|h| mnemorph_memory::Anchor {
+                id: h.note.id.clone(),
+                personal: memory.personal.contains(&h.note.id),
+                dissent: h.note.polarity.dissents(),
+                cited: false,
+            })
+            .collect();
         // Journaled after the ask it opens: the turn's recall row follows its ask.
         self.recalled = Some(Beat::Recall {
             anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),

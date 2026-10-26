@@ -8,7 +8,7 @@ pub mod store;
 pub mod text;
 pub mod write;
 
-pub use note::{By, Change, Event, Note, Polarity, Status, fold};
+pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};
 pub use store::{Tier, inherit, read, union_merge};
-pub use write::{Claim, Grounded, Proof, Proposed, Route, ground, propose};
+pub use write::{Anchor, Claim, Grounded, Proof, Proposed, Route, ground, propose, revise};

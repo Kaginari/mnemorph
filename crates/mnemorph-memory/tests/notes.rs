@@ -31,6 +31,7 @@ fn create(note: &str, time: u64, source: Option<&str>) -> Event {
             salience: 0.5,
             confidence: 1.4,
             source: source.map(str::to_owned),
+            links: vec![],
         },
     }
 }

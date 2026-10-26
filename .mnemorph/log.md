@@ -3763,3 +3763,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - unreadable note lines were dropped silently: now warned;
   - the recall row came before its ask: it now follows, via `open_ask`.
 - **Test:** the recall row's order and the warning.
+
+---
+
+### [2026-10-26T03:17:54+01:00] rimuru — M8 rung 4: reconsolidation
+- **Task:** M8 rung 4 (#126), now that each ask journals its recalled anchors.
+- **Files:**
+  - memory note.rs: `Link` (note, weight), `Create.links`, `Note.links`;
+  - write.rs `revise`: one grounded revise note per failed act (salience 1.0, confidence 0.9, by
+    the gate, citing its verdict), linking each non-dissent anchor at 0.9 when cited and 0.4 when
+    recalled; shared when any anchor is shared, else personal; nothing when nothing was recalled;
+  - `Anchor`;
+  - run.rs keeps the ask's anchors (reset per ask); `log_verdict` returns its journal heading;
+    `judge` reconsolidates on a run-ending FAIL (a check that wrote, or a second FAIL), never on a
+    first failure, NOT_VERIFIED or an unrun machine; the answer naming an anchor makes it cited.
+- **Tests:** memory `a_run_ending_failure_revises_what_it_rode_on`; solo
+  `a_run_ending_failure_revises_the_note_it_rode_on` (0.9, cited, citing the FAIL entry).
+- **Not yet:** confidence gained by three passes after recall.

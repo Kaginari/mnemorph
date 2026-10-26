@@ -58,6 +58,16 @@ pub enum By {
     Import,
 }
 
+/// A revise note's link to a note it revises, with its weight: 0.9 towards a note the failed act
+/// cited, 0.4 towards one merely recalled into the failed turn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Link {
+    /// The note revised.
+    pub note: String,
+    /// How strongly, in `[0, 1]`.
+    pub weight: f64,
+}
+
 /// What one event does.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -81,6 +91,9 @@ pub enum Change {
         /// The evidence it points at: a journal entry, a verdict, a commit, a `file:line`.
         #[serde(default)]
         source: Option<String>,
+        /// The notes a revise note revises, each with its weight.
+        #[serde(default)]
+        links: Vec<Link>,
     },
     /// Its standing changes: a promotion, a demotion, a tombstone.
     Status {
@@ -138,6 +151,8 @@ pub struct Note {
     pub proof: Option<String>,
     /// When it was born, in milliseconds since the epoch: its creation's time.
     pub born: u64,
+    /// The notes it revises, each with its weight: a revise note's.
+    pub links: Vec<Link>,
 }
 
 /// Fold events into notes. Events are taken in `(time, id)` order and the latest sets a note's
@@ -163,6 +178,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                 salience,
                 confidence,
                 source,
+                links,
             } => {
                 notes.entry(e.note.clone()).or_insert_with(|| Note {
                     id: e.note.clone(),
@@ -176,6 +192,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                     source: source.clone(),
                     proof: None,
                     born: e.time,
+                    links: links.clone(),
                 });
             }
             Change::Status { status } => {
