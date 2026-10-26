@@ -1,0 +1,91 @@
+//! Session start: a fresh session is given the world's law and the journal's last entries by the
+//! harness itself — the law in the stable system prompt, the entries with its first ask alone.
+
+use std::fs;
+use std::sync::Arc;
+
+use mnemorph_loop::open::{Bound, open_with};
+use mnemorph_loop::{Config, Paths, ScriptedModel};
+use mnemorph_provider::{Block, Role};
+
+fn user_text(model: &ScriptedModel, i: usize) -> String {
+    model.requests()[i]
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == Role::User)
+        .unwrap()
+        .content
+        .iter()
+        .filter_map(|b| match b {
+            Block::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_fresh_session_carries_the_law_and_the_last_journal_entries() {
+    let w = std::env::temp_dir().join(format!("mnemorph-session-start-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    fs::write(
+        w.join(".mnemorph/law.md"),
+        "# The law\n\n1. **Vitality** — docs change with code.\n",
+    )
+    .unwrap();
+    let log: String = std::iter::once("# Journal\n".to_owned())
+        .chain((1..=7).map(|i| {
+            format!(
+                "\n---\n\n### [2026-10-2{i}T10:00:00+02:00] rimuru — entry {i}\n- learned thing {i}\n"
+            )
+        }))
+        .collect();
+    fs::write(w.join(".mnemorph/log.md"), log).unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::text("first"),
+        ScriptedModel::text("second"),
+    ]));
+    let config = Config::load(&Paths::with_global(w.join("no-global.toml"), &w)).unwrap();
+    let attic = w.join("../mnemorph-session-start-attic");
+    let mut opened = open_with(
+        &w,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    opened.session.run().ask("what next", &mut |_| {}).await;
+    opened.session.run().ask("and then", &mut |_| {}).await;
+    let system = format!("{:?}", model.requests()[0].system);
+    assert!(
+        system.contains("**Vitality** — docs change with code."),
+        "{system}"
+    );
+    let first = user_text(&model, 0);
+    for i in 3..=7 {
+        assert!(
+            first.contains(&format!("entry {i}\n- learned thing {i}")),
+            "{first}"
+        );
+    }
+    assert!(!first.contains("entry 2\n"), "the last five only: {first}");
+    assert!(first.ends_with("what next"), "the ask stays last: {first}");
+    assert!(
+        !user_text(&model, 1).contains("learned thing"),
+        "said once, with the first ask"
+    );
+    assert_eq!(
+        format!("{:?}", model.requests()[1].system),
+        system,
+        "the system prompt stays the cached prefix"
+    );
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+}
