@@ -436,11 +436,14 @@ an empty list or table never overrides a lower layer:
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
+  `gate.verify_secs`, how long each of the end gate's verify commands may run, is the project's
+  to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
   envelope that is a bare `*` or admits a destructive or refused act, an envelope without the
   day it was signed, a fallback cycle, a `models.office` race or office that does not exist or an
-  office named twice, a `models.tier` that is not a tier: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
+  office named twice, a `models.tier` that is not a tier, a `gate.verify_secs` outside 10 to
+  600: errors that name the file. An envelope is judged at its worst: a word that is a bare `*` stands for
   any arguments, so it is tried as each destructive one (`--force`, `--delete`, `+ref`,
   `delete`, `publish`, …); a `*` inside a word (`feat/*`) cannot become a flag.
 - **Envelopes are bounded.** Each names the day it was `signed` (a bare TOML date) and lasts

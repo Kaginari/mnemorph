@@ -107,6 +107,7 @@ impl World {
             session: "s".into(),
             caps: None,
             stress_tokens: None,
+            verify_secs: None,
             weights: None,
             busy: std::sync::Mutex::default(),
             observer: None,

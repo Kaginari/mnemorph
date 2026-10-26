@@ -95,6 +95,9 @@ pub struct Commissioner {
     pub caps: Option<mnemorph_ledger::Caps>,
     /// The human's stress line, when the configuration sets one.
     pub stress_tokens: Option<u64>,
+    /// How long each verify command of a child's end gate may run, in seconds, when the
+    /// configuration was read; `None` gives the default.
+    pub verify_secs: Option<u64>,
     /// Recall's weights from the human's configuration, when one was read.
     pub weights: Option<mnemorph_memory::Weights>,
     /// Seats with a live court: one court per seat.
@@ -1264,6 +1267,7 @@ fn child_run(
     };
     let gate = EndGate {
         verify: creature.verify.clone(),
+        verify_secs: c.verify_secs.unwrap_or(mnemorph_config::VERIFY_SECS),
         author: Some(Author {
             name: name.clone(),
             roster: roster.clone(),
