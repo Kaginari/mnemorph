@@ -3462,6 +3462,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-26T00:58:33+01:00] rimuru — append-only requests (#38)
+- **Task:** the M7 tail, #38.
+- **Finding:** nothing moves the prefix today. The system prompt is built once, the model is
+  fixed per session, no date sits in the prompt, and asks, wakes and nudges append.
+- **Files:**
+  - compact.rs `fingerprints` (per block, role marks, breakpoints aside) and `moved`;
+  - run.rs `watch_prefix` (via `next_request`) warns when a request rewrote what the last one
+    sent with no fold;
+  - docs 06.
+- **Tests:**
+  - `every_request_only_appends_to_the_one_before`: two asks, four tools, system and tools
+    identical, no warning;
+  - `a_rewritten_or_dropped_message_moves_the_prefix`: an appended message and an extended last
+    message are fine; a rewritten or dropped one moved.
+- **Left open on #38:** the thinking-strip recovery has no trigger until a mid-session model
+  switch exists.
+
+---
+
+### [2026-10-26T01:04:04+01:00] rimuru — #187's review: Fable
+- **Fable found:** no false positive. An strace of the two folding tests showed 8 folds and no
+  "prefix moved".
+- **Taken:**
+  - the watch covers the system prompt and the tools too;
+  - fingerprints hash fields directly, with no clone or Debug pass;
+  - the long-run compaction test asserts a fold never reads as a moved prefix;
+  - a test comment corrected; docs 06.
 ### [2026-10-26T01:06:10+01:00] rimuru — the provenance lint (#10)
 - **Task:** #10's lesson "provenance lives only in log.md; a lint refuses dates and change notes
   in law, canon and creature docs".
