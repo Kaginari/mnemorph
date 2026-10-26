@@ -231,6 +231,16 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
     findings.extend(mnemorph_server::world::prose_claims(roster, world));
     findings.extend(mnemorph_server::world::mind_findings(roster, world));
     findings.extend(mnemorph_server::world::provenance(roster, world));
+    if let Some(message) = mnemorph_server::world::verify::missing_session_verify(world, roster) {
+        findings.push(mnemorph_server::world::Finding {
+            code: "no-session-verify",
+            severity: mnemorph_server::world::Severity::Low,
+            at: ".mnemorph/rimuru/rimuru/README.md".into(),
+            paths: Vec::new(),
+            creatures: vec!["rimuru".into()],
+            message,
+        });
+    }
     findings.sort_by(|a, b| b.severity.cmp(&a.severity).then_with(|| a.at.cmp(&b.at)));
     let failed = !roster.problems.is_empty() || findings.iter().any(|f| f.severity.blocks());
     let mut out = std::io::stdout().lock();
@@ -543,11 +553,13 @@ fn memory(args: &[String]) -> ExitCode {
         print_memory_json(&world, &rows);
     } else if rows.is_empty() {
         println!("no creature has memory here yet");
+        session_verify_note(&world);
     } else {
         println!("{}", standing(&world));
         for (name, found, seen) in &rows {
             print_memory(name, found, seen);
         }
+        session_verify_note(&world);
     }
     if frozen {
         ExitCode::from(1)
@@ -583,6 +595,15 @@ fn print_memory_json(
         })
         .collect();
     println!("{}", serde_json::Value::Array(rows));
+}
+
+/// The line `memory status` adds when the session's card has no verify line: no claim of a solo
+/// session can be grounded until it has one.
+fn session_verify_note(world: &Path) {
+    let roster = mnemorph_server::world::Roster::load(world);
+    if let Some(why) = mnemorph_server::world::verify::missing_session_verify(world, &roster) {
+        println!("note: {why}");
+    }
 }
 
 /// How many proposed claims `memory status` shows per creature.

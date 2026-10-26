@@ -313,7 +313,11 @@ The world repairs itself in small, mechanical steps, each one written to the led
 Runs on the body's own writes (minus what its Courts already landed on their own account) — a
 commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
 card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens, and in solo the whole
-repository is its soil, so right author holds by construction:
+repository is its soil, so right author holds by construction. A card with no verify line runs no
+check, and then no claim of a solo session is ever grounded: `mnemorph memory status` and
+`onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
+manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
+model's words, since the human may paste it — for the human to add. The gate runs:
 
 1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
    for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the

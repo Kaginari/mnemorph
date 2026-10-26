@@ -319,7 +319,8 @@ $\theta_t = 0.1$, and a collision raises `untriaged-fact` only when it showed th
 one candidate. A fact countered by every voice it had — its own author withdrawing it — reads
 countered, not contested; a support or a counter that reaches a merged fact counts on the fact it
 was merged into; and the projection marks a stale fact `[stale]` and names each counter's reason. `onto check`
-reports `contested-fact`, `stale-fact` and `untriaged-fact` beside the shape findings.
+reports `contested-fact`, `stale-fact` and `untriaged-fact` beside the shape findings, and
+`no-session-verify` when the session's card has no verify line ([the end gate](03-loop.md#the-end-gate)).
 
 `@U law` and `@U colony` are not ontology facts; they land as [memory notes](08-memory.md).
 

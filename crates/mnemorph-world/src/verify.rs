@@ -120,3 +120,65 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
     }
     Ok(line)
 }
+
+/// A verify line for the session's own card, when it has none: without one the end gate runs no
+/// check, and no claim of a solo session is ever grounded. Only a command the harness itself picks
+/// from the project's manifest — never a model's words: an ontology fact is creatures' text, and a
+/// suggested line is one the human may paste. Only ever suggested: the card is the human's.
+#[must_use]
+pub fn suggest(world: &Path) -> Option<String> {
+    detected(world)
+}
+
+/// The test command a project's manifest names, by the first manifest found.
+fn detected(world: &Path) -> Option<String> {
+    let has = |f: &str| world.join(f).is_file();
+    if has("Cargo.toml") {
+        return Some("cargo test --workspace".into());
+    }
+    if has("pyproject.toml") || has("setup.py") || has("pytest.ini") || has("tox.ini") {
+        return Some("python3 -m pytest -q".into());
+    }
+    if has("package.json") {
+        // A suggestion only: a `"test"` script named in the manifest is enough to read.
+        let text = fs::read_to_string(world.join("package.json")).ok()?;
+        // npm's placeholder script always fails: no test to suggest.
+        if !(text.contains("\"scripts\"") && text.contains("\"test\""))
+            || text.contains("no test specified")
+        {
+            return None;
+        }
+        let runner = if has("pnpm-lock.yaml") {
+            "pnpm"
+        } else if has("yarn.lock") {
+            "yarn"
+        } else {
+            "npm"
+        };
+        return Some(format!("{runner} test"));
+    }
+    if has("go.mod") {
+        return Some("go test ./...".into());
+    }
+    let make = fs::read_to_string(world.join("Makefile")).ok()?;
+    make.lines()
+        .any(|l| l.starts_with("test:"))
+        .then(|| "make test".into())
+}
+
+/// The session's card has no verify line: what the end gate cannot then do, and the line to add.
+#[must_use]
+pub fn missing_session_verify(world: &Path, roster: &Roster) -> Option<String> {
+    let card = roster.creatures.get("rimuru")?;
+    if !card.verify.is_empty() {
+        return None;
+    }
+    let advice = suggest(world).map_or_else(
+        || "add `- **Verify:** `<your test command>`` to it".to_owned(),
+        |c| format!("add `- **Verify:** `{c}`` to it"),
+    );
+    Some(format!(
+        "rimuru's card (.mnemorph/rimuru/rimuru/README.md) has no verify line: the session's end \
+         gate runs no check, so no claim of a solo session is ever grounded — {advice}"
+    ))
+}
