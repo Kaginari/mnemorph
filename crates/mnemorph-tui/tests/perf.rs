@@ -1,5 +1,6 @@
-//! A long session stays smooth: 2,000 messages of Markdown, code and tool cards with diffs, and
-//! a frame lays out only what it shows. The timings print with `--nocapture`; the bounds hold
+//! A long session stays smooth: 2,000 messages of Markdown, code and tool cards with diffs, the
+//! sidebar open beside them with every file they changed and a tree of bodies, and a frame lays
+//! out only what it shows. The timings print with `--nocapture`; the bounds hold
 //! in a debug build, so an optimised one has room to spare.
 
 use std::time::{Duration, Instant};
@@ -67,6 +68,35 @@ fn session() -> Model {
             },
         );
     }
+    // The sidebar's world: a standing, and forty bodies two deep, half still working.
+    update(
+        &mut m,
+        Msg::Surveyed(mnemorph_tui::sidebar::Survey {
+            memory: mnemorph_loop::world::memory::Standing {
+                shared: 120,
+                proposed: 40,
+                grounded: 300,
+                latest: Some("the parser keeps collations in nested types".into()),
+            },
+            races: (0..40)
+                .map(|i| (format!("slime-{i}"), mnemorph_races::Race::Slime))
+                .collect(),
+        }),
+    );
+    for i in 0..40 {
+        let chain = vec![format!("orc-{}", i % 4), format!("slime-{i}")];
+        let event = if i % 2 == 0 {
+            Event::TurnEnded {
+                ending: "answered".into(),
+            }
+        } else {
+            Event::ToolStart {
+                id: format!("s{i}"),
+                name: "edit".into(),
+            }
+        };
+        update(&mut m, Msg::Below { event, chain });
+    }
     m
 }
 
@@ -86,6 +116,18 @@ fn two_thousand_messages_stay_smooth() {
     assert!(m.transcript.entries().len() >= MESSAGES);
     let mut t = Terminal::new(TestBackend::new(120, 40)).unwrap();
     let cold = frame(&mut t, &m);
+    let shown: String = {
+        let b = t.backend().buffer();
+        (0..b.area.height)
+            .flat_map(|y| (0..b.area.width).map(move |x| (x, y)))
+            .map(|c| b[c].symbol().to_owned())
+            .collect()
+    };
+    assert!(
+        shown.contains(&format!("files · {}", MESSAGES.div_ceil(3)))
+            && shown.contains("bodies · 44"),
+        "the sidebar is drawn"
+    );
     let warm: Duration = (0..50).map(|_| frame(&mut t, &m)).sum::<Duration>() / 50;
     // Streaming: a delta, a frame, three hundred times — every frame re-renders the live text.
     update(

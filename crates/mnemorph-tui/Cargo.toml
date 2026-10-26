@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 mnemorph-loop = { path = "../mnemorph-loop" }
+mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-server = { path = "../mnemorph-server" }
 mnemorph-tools = { path = "../mnemorph-tools" }
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
@@ -26,9 +27,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3.18"
-
-[dev-dependencies]
-mnemorph-races = { path = "../mnemorph-races" }
 
 [lints]
 workspace = true

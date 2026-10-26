@@ -2,7 +2,7 @@
 //! that reach it, a pure [`update`] that changes it and returns [`Cmd`]s — work the runtime does
 //! off the UI thread, whose results come back as messages — and a [`view`] that draws it.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,9 @@ use mnemorph_loop::GateAnswer;
 use mnemorph_server::protocol::Event;
 use mnemorph_tools::gate::Pending;
 use ratatui::Frame;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{
+    KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use std::sync::Arc;
 
 use crate::approval::{Approval, Decision};
@@ -18,6 +20,7 @@ use crate::gate::Card;
 use crate::kit::spinner::{FRAME_MS, Spinner};
 use crate::kit::textarea::{Outcome, TextArea};
 use crate::kit::viewport::{Viewport, ViewportMsg};
+use crate::sidebar::{Sidebar, Survey};
 use crate::theme::{Theme, Variant};
 use crate::transcript::{Entry, Transcript};
 
@@ -30,6 +33,8 @@ pub enum Msg {
     KeyAt(KeyEvent, Instant),
     /// Text pasted whole.
     Paste(String),
+    /// The mouse: the wheel scrolls, a click expands or folds a card.
+    Mouse(MouseEvent),
     /// The terminal's new size.
     Resize(u16, u16),
     /// Time passed: spinners turn, springs move.
@@ -41,6 +46,25 @@ pub enum Msg {
         /// The body below the session that did it, if any.
         below: Option<String>,
     },
+    /// Something a commissioned body did; `chain` names the bodies it came through, the session's
+    /// own commission first.
+    Below {
+        /// The event.
+        event: Event,
+        /// The bodies, outermost first.
+        chain: Vec<String>,
+    },
+    /// Recall gave the session's ask this many notes.
+    Recalled(usize),
+    /// Whether a `write` call's path existed before it ran.
+    Prior {
+        /// The call.
+        id: String,
+        /// Whether its path existed.
+        existed: bool,
+    },
+    /// The world's survey: its memory's standing, its creatures' races.
+    Surveyed(Survey),
     /// An act waits for the human.
     Gate(Card),
     /// The session finished a line the human sent; `held` orders wait on the shared queue.
@@ -65,6 +89,8 @@ pub enum Cmd {
     Interrupt,
     /// Answer an act waiting at the gate.
     Answer(Arc<Pending>, GateAnswer),
+    /// Read the world's memory standing and roster, off the UI thread.
+    Survey,
     /// Leave.
     Quit,
 }
@@ -107,11 +133,30 @@ pub struct Model {
     spin: Duration,
     /// How far up the transcript goes, as the last frame measured it.
     pub(crate) measured: Cell<usize>,
+    /// The sidebar.
+    pub sidebar: Sidebar,
+    /// Where the last frame drew the transcript, for the mouse.
+    pub(crate) hits: RefCell<Hits>,
+}
+
+/// Where the last frame drew the transcript: its column span, its first row and each row's
+/// entry — what a click lands on.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Hits {
+    /// The transcript's first column.
+    pub x: u16,
+    /// Its width.
+    pub width: u16,
+    /// Its first row.
+    pub y: u16,
+    /// The entry on each row from `y`, `None` where none is.
+    pub owners: Vec<Option<usize>>,
+    /// The rows the transcript's window had.
+    pub rows: usize,
 }
 
 /// The commands typed with a slash.
-pub const COMMANDS: &str =
-    "/send <text> steer the running turn · /theme dark|light · /clear · /quit";
+pub const COMMANDS: &str = "/send <text> steer the running turn · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it";
 
 impl Model {
     /// A model for a session of `header`, in `variant`, at `size`.
@@ -130,6 +175,8 @@ impl Model {
             size,
             spin: Duration::ZERO,
             measured: Cell::new(usize::MAX),
+            sidebar: Sidebar::default(),
+            hits: RefCell::new(Hits::default()),
         }
     }
 
@@ -159,7 +206,7 @@ impl Model {
     #[must_use]
     pub fn main_area(&self) -> (usize, usize) {
         let inner = self.size.0.saturating_sub(4);
-        let w = inner - crate::view::sidebar_width(inner);
+        let w = inner - self.sidebar.width(inner);
         (usize::from(w), usize::from(self.size.1.saturating_sub(2)))
     }
 
@@ -182,12 +229,13 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             }
             Vec::new()
         }
+        Msg::Mouse(e) => {
+            mouse(m, e);
+            Vec::new()
+        }
         Msg::Resize(w, h) => {
             m.size = (w, h);
-            let (mw, mh) = m.main_area();
-            if let Some(a) = &mut m.gate {
-                a.fit(mw, mh);
-            }
+            refit(m);
             Vec::new()
         }
         Msg::Tick(dt) => {
@@ -202,11 +250,28 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         }
         Msg::Event { event, below } => {
             let ended = below.is_none() && matches!(event, Event::TurnEnded { .. });
-            m.transcript.fold(&event, below.as_deref());
+            let chain: Vec<String> = below.into_iter().collect();
+            fold(m, &event, &chain);
             // An approval still open when its turn ends is a question no one asks any more.
             if ended {
                 return deny_all(m, "the turn ended before the human answered");
             }
+            Vec::new()
+        }
+        Msg::Below { event, chain } => {
+            fold(m, &event, &chain);
+            Vec::new()
+        }
+        Msg::Recalled(n) => {
+            m.sidebar.recalled = Some(n);
+            Vec::new()
+        }
+        Msg::Prior { id, existed } => {
+            m.sidebar.files.prior(&id, existed);
+            Vec::new()
+        }
+        Msg::Surveyed(s) => {
+            m.sidebar.surveyed(s);
             Vec::new()
         }
         Msg::Gate(card) => {
@@ -220,7 +285,8 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Done { held } => {
             m.outstanding = m.outstanding.saturating_sub(1);
             m.transcript.held = held;
-            Vec::new()
+            // A finished line may have grounded notes or born creatures: read the world again.
+            vec![Cmd::Survey]
         }
         Msg::Crashed(why) => {
             m.outstanding = 0;
@@ -232,6 +298,109 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             cmds.push(Cmd::Quit);
             cmds
         }
+    }
+}
+
+/// An event into the transcript and the sidebar; `chain` names the bodies it came through.
+fn fold(m: &mut Model, event: &Event, chain: &[String]) {
+    m.transcript.fold(event, chain.last().map(String::as_str));
+    m.sidebar.fold(event, chain);
+}
+
+/// The card fitted again to the main area: the terminal's size or the sidebar changed.
+fn refit(m: &mut Model) {
+    let (mw, mh) = m.main_area();
+    if let Some(a) = &mut m.gate {
+        a.fit(mw, mh);
+    }
+}
+
+/// The human leaves: the act on the card and every act waiting after it are denied — on any way
+/// out of the loop, an error included.
+pub fn leave(m: &mut Model) -> Vec<Cmd> {
+    deny_all(m, "the human left")
+}
+
+/// The mouse: the wheel scrolls the transcript on its spring; a left click on a card gives it the
+/// focus and expands or folds it. While an approval waits, a click answers nothing.
+fn mouse(m: &mut Model, e: MouseEvent) {
+    m.viewport.set_max(m.measured.get());
+    match e.kind {
+        MouseEventKind::ScrollUp => m.viewport.update(ViewportMsg::Up(WHEEL)),
+        MouseEventKind::ScrollDown => m.viewport.update(ViewportMsg::Down(WHEEL)),
+        MouseEventKind::Down(MouseButton::Left) if m.gate.is_none() => {
+            let hit = {
+                let h = m.hits.borrow();
+                let inside = e.column >= h.x && e.column < h.x + h.width && e.row >= h.y;
+                inside
+                    .then(|| h.owners.get(usize::from(e.row - h.y)).copied().flatten())
+                    .flatten()
+            };
+            if let Some(i) = hit
+                && m.transcript.cards().any(|c| c == i)
+            {
+                m.transcript.focus(Some(i));
+                m.transcript.toggle(i);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Lines one notch of the wheel scrolls.
+pub const WHEEL: usize = 3;
+
+/// The focus moves to the card before (`up`) or after the focused one — from none, the newest
+/// — and the transcript scrolls to show it; past the newest, the focus leaves the cards.
+fn step_focus(m: &mut Model, up: bool) {
+    let now = m.transcript.focused();
+    let next = if up {
+        match now {
+            Some(i) => m.transcript.cards().rev().find(|&c| c < i).or(Some(i)),
+            None => m.transcript.cards().next_back(),
+        }
+    } else {
+        now.and_then(|i| m.transcript.cards().find(|&c| c > i))
+    };
+    m.transcript.focus(next);
+    match next {
+        Some(i) => show(m, i),
+        None => m.viewport.update(ViewportMsg::Bottom),
+    }
+}
+
+/// Scroll so entry `i` is in view: its bottom at the window's foot when it was below, its top at
+/// the window's head when it was above or is taller than the window.
+fn show(m: &mut Model, i: usize) {
+    let (w, _) = m.main_area();
+    let rows = m.hits.borrow().rows.max(1);
+    let ctx = crate::view::ctx(m, w);
+    let (h, below) = m.transcript.place(i, &ctx);
+    let at = m.viewport.target();
+    let to = if h > rows || below + h > at + rows {
+        (below + h).saturating_sub(rows)
+    } else if below < at {
+        below
+    } else {
+        at
+    };
+    m.viewport.set_max(m.measured.get());
+    m.viewport.update(ViewportMsg::To(to));
+}
+
+/// Expand or fold the focused card; with none focused, the newest that has something folded,
+/// which takes the focus.
+fn toggle_focused(m: &mut Model) {
+    let target = m.transcript.focused().or_else(|| {
+        let cards: Vec<usize> = m.transcript.cards().collect();
+        cards.into_iter().rev().find(|&i| {
+            matches!(m.transcript.entries().get(i), Some(crate::transcript::Entry::Tool(c)) if crate::blocks::foldable(c))
+        })
+    });
+    if let Some(i) = target {
+        m.transcript.focus(Some(i));
+        m.transcript.toggle(i);
+        show(m, i);
     }
 }
 
@@ -293,8 +462,17 @@ fn keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
     m.viewport.set_max(m.measured.get());
     let page = usize::from(m.size.1 / 2).max(1);
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
     match key.code {
+        KeyCode::Char('o') if ctrl => {
+            m.sidebar.open = !m.sidebar.open;
+            refit(m);
+        }
+        KeyCode::Char('t') if ctrl => toggle_focused(m),
+        KeyCode::Up if alt => step_focus(m, true),
+        KeyCode::Down if alt => step_focus(m, false),
         KeyCode::Esc => {
+            m.transcript.focus(None);
             m.viewport.update(ViewportMsg::Bottom);
             return if m.busy() {
                 vec![Cmd::Interrupt]

@@ -1,6 +1,7 @@
 //! The palette: Mnemorph's colours, the same values as `packages/theme` (a test keeps them
 //! equal), and the theme the terminal wears — dark or light — with the roles every block reads.
 
+use mnemorph_races::Race;
 use ratatui::style::{Color, Modifier, Style};
 
 /// One `#rrggbb` colour.
@@ -155,6 +156,24 @@ impl Palette {
 }
 
 impl Races {
+    /// The colour of `race`.
+    #[must_use]
+    pub fn of(&self, race: Race) -> Rgb {
+        match race {
+            Race::Rimuru => self.rimuru,
+            Race::Elf => self.elf,
+            Race::Orc => self.orc,
+            Race::Slime => self.slime,
+            Race::Kijin => self.kijin,
+            Race::DarkElf => self.dark_elf,
+            Race::HighElf => self.high_elf,
+            Race::HighOrc => self.high_orc,
+            Race::NamedSlime => self.named_slime,
+            Race::Oni => self.oni,
+            Race::ArchDarkElf => self.arch_dark_elf,
+        }
+    }
+
     /// Every race with its name in the TypeScript source, destructured exhaustively as
     /// [`Palette::named`] is.
     #[must_use]
@@ -316,6 +335,12 @@ impl Theme {
         Style::new()
             .fg(self.readable(self.races.rimuru).color())
             .add_modifier(Modifier::BOLD)
+    }
+
+    /// A race's colour, readable on the page.
+    #[must_use]
+    pub fn race(&self, race: Race) -> Style {
+        Style::new().fg(self.readable(self.races.of(race)).color())
     }
 
     /// A border a little brighter than the rules, for what holds attention without alarm.

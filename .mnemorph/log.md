@@ -4866,3 +4866,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Left:** the commissioning chain on the card — the gate's ask names the body, not its line.
 - **Tests:** End then `y` refused, steps then `y` accepted; `okay⏎`, `deploy⏎`, `y\r` in one batch,
   a paste; two cards answered in order; the signal list; a pty run of SIGINT and SIGQUIT.
+
+---
+
+### [2026-10-26T21:14:06+01:00] rimuru — the terminal UI, part two: the sidebar and the mouse
+- **Asked:** the sidebar in the column part one reserved (session, memory, files, bodies),
+  Ctrl+O and a fold under ~100 columns; the wheel on the kit's spring, a click or a key to expand a
+  folded card; Fable's three minor items from part one's review; a small mark in the header.
+- **Built:**
+  - `sidebar`: four sections from what the observer and the world give, nothing guessed; files
+    marked A/M/D by the act (a `write` by whether its path existed, which the observer looks at on
+    the run's task before the act runs); bodies nested by the `Seen::From` chain, each in its
+    roster race's colour; every claim, path and name through `safe::one_line`;
+  - `mnemorph_memory::standing`: the reading `memory status` prints, now shared with the UI and
+    with the claim grounded last; the UI reads it and the roster through `Cmd::Survey` on a
+    runtime thread, at start and after each line;
+  - `kit`: a gauge (Bubbles' progress bar), `ViewportMsg::To`, `clip_left`;
+  - mouse capture; the transcript's window records each row's entry for a click; Alt+↑↓ moves the
+    focus between cards and scrolls it into view; Ctrl+T expands the focused card;
+  - the header's mark: MNEMORPH drawn across the water races' blues.
+- **Fixed:** `rearm` on a card not yet drawn no longer arms it from the key; every approval open
+  or waiting is denied however the loop ends; a terminal mode that fails after the terminal is
+  taken gives it back (`enter_with`).
+- **Tests:** each section with data and hostile text, the race colours and nesting, the toggle,
+  the fold at 99/100 columns, the wheel's spring, click and key expand/collapse, focus scrolling,
+  the three fixes, `standing`'s counts and latest claim; 2,000 messages with the sidebar open,
+  667 files and forty bodies, still ~3 ms a warm frame in a debug build.
+- **Learned:** a `write` result does not say whether it created the file; only a look before the
+  act tells A from M, and the observer runs at the right moment for it.

@@ -7,6 +7,7 @@ pub mod consolidate;
 pub mod note;
 pub mod pathology;
 pub mod recall;
+pub mod standing;
 pub mod store;
 pub mod text;
 pub mod write;
@@ -15,6 +16,7 @@ pub use audit::{Unproven, findings, status, unfrozen};
 pub use consolidate::{Forget, distill, forget};
 pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};
+pub use standing::{Standing, standing};
 pub use store::{Tier, inherit, read, union_merge};
 pub use write::{
     Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, Seconded, attributable,

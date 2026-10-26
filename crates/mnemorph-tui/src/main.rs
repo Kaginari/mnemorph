@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use mnemorph_tui::app::Model;
+use mnemorph_tui::app::{Cmd, Model};
 use mnemorph_tui::kit::highlight;
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
@@ -19,7 +19,9 @@ Options:
   -V, --version     the version
 
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
-pgup/pgdn scroll · esc stops the turn · ctrl+c stops, then quits · y/n then enter at an approval.
+pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
+ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · y/n then enter at an
+approval. The mouse is the UI's: hold shift to select text.
 ";
 
 fn main() -> ExitCode {
@@ -60,14 +62,18 @@ fn main() -> ExitCode {
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
-    let opened = match mnemorph_loop::open(&world, gate(tx.clone()), observer(tx.clone()), |v| {
-        std::env::var(v).ok()
-    }) {
+    let opened = match mnemorph_loop::open(
+        &world,
+        gate(tx.clone()),
+        observer(tx.clone(), world.clone()),
+        |v| std::env::var(v).ok(),
+    ) {
         Ok(o) => o,
         Err(e) => return fail(&e),
     };
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
+    model.sidebar.root = Some(opened.world.clone());
     model.info(format!(
         "{} via {} · sandbox {}",
         opened.model, opened.provider, opened.sandbox
@@ -79,6 +85,8 @@ fn main() -> ExitCode {
         Ok(h) => h,
         Err(e) => return fail(&e),
     };
+    // The sidebar's memory and races come from the world, read off the UI thread.
+    host.run(Cmd::Survey);
     let result = run(model, &host, tx, &rx);
     host.stop();
     match result {

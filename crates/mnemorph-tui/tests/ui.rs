@@ -589,7 +589,7 @@ fn confirm(m: &mut Model, letter: char) -> Vec<Cmd> {
     key(m, KeyCode::Enter)
 }
 
-/// An act of about fifty rows at 100 columns, its payload last.
+/// An act of about seventy-five rows at 100 columns beside the sidebar, its payload last.
 fn long_act(m: &mut Model) {
     let padding = "echo ok && ".repeat(400);
     update(
@@ -616,7 +616,7 @@ fn a_long_act_cannot_be_approved_before_it_is_read_to_its_end() {
     assert!(!approved(&confirm(&mut m, 'y')), "approved unread");
     assert!(screen(&draw(&mut m, 100, 30)).contains("read the whole act first"));
     // Read down page by page, each page drawn, then approve.
-    for _ in 0..12 {
+    for _ in 0..20 {
         key(&mut m, KeyCode::PageDown);
         draw(&mut m, 100, 30);
     }
@@ -640,7 +640,7 @@ fn a_jump_to_the_end_leaves_the_middle_unread() {
     // Back to the top, then through it in steps: now it has all been seen.
     key(&mut m, KeyCode::Home);
     draw(&mut m, 100, 30);
-    for _ in 0..60 {
+    for _ in 0..90 {
         key(&mut m, KeyCode::Down);
         draw(&mut m, 100, 30);
     }
@@ -799,4 +799,58 @@ fn a_crashed_session_frees_the_ui() {
         update(&mut m, Msg::Key(ctrl_c)).as_slice(),
         [Cmd::Quit]
     ));
+}
+
+#[test]
+fn a_key_before_the_first_draw_never_arms_the_card() {
+    use mnemorph_tui::approval::Approval;
+    let mut a = Approval::new(card_with("rm -rf build", vec![], vec![]), 80, 20);
+    let t0 = Instant::now();
+    // A key that answers nothing, read before the card is on screen: the card stays unarmed.
+    assert_eq!(
+        a.key(KeyEvent::from(KeyCode::Char('x')), t0, 80, 20),
+        mnemorph_tui::approval::Decision::Open
+    );
+    let drawn = t0 + Duration::from_millis(200);
+    a.drawn(drawn, 80, 20);
+    // Past ARM after the key, but within ARM of the first draw: still ignored.
+    a.key(
+        KeyEvent::from(KeyCode::Char('y')),
+        t0 + ARM + Duration::from_millis(10),
+        80,
+        20,
+    );
+    assert_eq!(a.choice, None, "armed from the key, not the first draw");
+    a.key(
+        KeyEvent::from(KeyCode::Char('y')),
+        drawn + ARM + Duration::from_millis(10),
+        80,
+        20,
+    );
+    assert_eq!(a.choice, Some(true));
+}
+
+#[test]
+fn leaving_denies_the_card_and_every_act_waiting() {
+    let mut m = model(Variant::Dark);
+    let pendings: Vec<Arc<Pending>> = (0..3)
+        .map(|i| {
+            let card = card_with(&format!("act {i}"), vec![], vec![]);
+            let p = Arc::clone(&card.pending);
+            update(&mut m, Msg::Gate(card));
+            p
+        })
+        .collect();
+    assert!(m.gate.is_some());
+    assert_eq!(m.waiting.len(), 2);
+    let cmds = mnemorph_tui::app::leave(&mut m);
+    assert_eq!(cmds.len(), 3, "{cmds:?}");
+    for (cmd, p) in cmds.iter().zip(&pendings) {
+        let Cmd::Answer(q, GateAnswer::Deny(why)) = cmd else {
+            panic!("{cmd:?}")
+        };
+        assert!(Arc::ptr_eq(p, q));
+        assert_eq!(why, "the human left");
+    }
+    assert!(m.gate.is_none() && m.waiting.is_empty());
 }

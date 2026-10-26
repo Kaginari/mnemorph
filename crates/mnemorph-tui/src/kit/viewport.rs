@@ -14,6 +14,8 @@ pub enum ViewportMsg {
     Top,
     /// Back to the tail, following it again.
     Bottom,
+    /// To this many lines up from the tail.
+    To(usize),
     /// Time passed, in seconds: the spring moves.
     Tick(f64),
 }
@@ -48,6 +50,7 @@ impl Viewport {
             ViewportMsg::Down(n) => self.target = (self.target - to_f64(n)).max(0.0),
             ViewportMsg::Top => self.target = max,
             ViewportMsg::Bottom => self.target = 0.0,
+            ViewportMsg::To(n) => self.target = to_f64(n).min(max),
             ViewportMsg::Tick(dt) => {
                 self.motion = self.spring.step(self.motion, self.target, dt);
                 if Spring::settled(self.motion, self.target) {
@@ -67,6 +70,15 @@ impl Viewport {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let at = self.motion.pos.round().max(0.0) as usize;
         at.min(self.max)
+    }
+
+    /// Lines up from the tail the spring is heading to.
+    #[must_use]
+    pub fn target(&self) -> usize {
+        // Never negative, and at most `max`.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let t = self.target.round().max(0.0) as usize;
+        t
     }
 
     /// Whether the window follows the tail.
@@ -128,5 +140,10 @@ mod tests {
         assert_eq!(v.offset(), 100, "capped at the top");
         v.update(ViewportMsg::Bottom);
         assert!(v.following());
+        v.update(ViewportMsg::To(40));
+        for _ in 0..60 {
+            v.update(ViewportMsg::Tick(0.016));
+        }
+        assert_eq!(v.offset(), 40);
     }
 }
