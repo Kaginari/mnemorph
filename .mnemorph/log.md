@@ -4064,3 +4064,44 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     credited.
 - **Lesson:** a test whose positive case also satisfies the bug proves nothing. Every "only when"
   rule needs its negative case.
+
+---
+
+### [2026-10-26T09:08:27+01:00] rimuru — M8 rung 7: the compaction drain
+- **Task:** M8 rung 7's drain; exit criterion "a stress-zone run drains instead of dying".
+- **Files:**
+  - run.rs: `Stop::Drain` at the context line when the window leaves room for twice
+    `SALVAGE_TOKENS`, else the plain checkpoint;
+  - `drain` runs `last_turn`, now shared with the clock's `salvage` (no tools, 4096 tokens, the
+    clock's grace, ledgered);
+  - `keep_unsaid` reads the drain's `@U` lines with the wire's own `Report` reader and proposes
+    each, tagged with its kind and `drain`;
+  - the salvage text gains `[memory: N line(s) kept as proposed notes]`;
+  - docs 03.
+- **Tests:** loop.rs: a full context drains two `@U` lines into proposed notes, with no tools and
+  4096 tokens; at the window's edge, no drain turn is sent.
+
+---
+
+### [2026-10-26T09:20:19+01:00] rimuru — #203's review: Fable
+- **Fable found:**
+  - **a re-drain loop:** no flag, so a next ask or a resume at a full context drained again,
+    another call and duplicate notes;
+  - the clock's tenth was too short a grace for 4096 tokens;
+  - `@U territory` was kept as memory, against page 08;
+  - escalation dropped the drain text;
+  - room is a heuristic, and a child's report omits the salvage.
+- **Fixed:**
+  - `drains`, a counter because clippy caps a struct at three bools; a resume counts `drain`
+    stops in the journal; once drained, the run checkpoints plainly;
+  - `last_turn` takes its grace: the salvage keeps a tenth of the clock, the drain gets what is
+    left up to `DRAIN_GRACE` (120 s);
+  - territory goes through `facts::from_unsaid` + `Facts::record`; the salvage line counts
+    notes and facts apart;
+  - escalation prepends the salvage to the report;
+  - docs 03.
+- **Left:** the room estimate (a provider error degrades to no salvage) and the child report's
+  salvage.
+- **Tests:** territory filed and not kept; a run drains once (no second turn, no second note).
+- **Tooling:** worktrees sharing one dev target clobber each other's workspace crates (cargo's
+  hash ignores the path). `cargo clean -p` the touched crates when switching worktrees.

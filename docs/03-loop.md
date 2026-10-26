@@ -106,7 +106,7 @@ Before every model call the loop reads four meters from the core, never from the
 |---|---|---|
 | steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40); the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
-| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: checkpoint, telling the human to break |
+| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
@@ -130,6 +130,16 @@ only when folding cannot bring the next request under the line. Between folds th
 sent only grows, and each turn reads it from the provider's cache
 ([Consumption](06-consumption.md)). The journal is never touched: compaction shapes only what is sent. A 40-step run whose
 history would be 150 KB sends at most about 55 KB a turn, and with the cache it is billed a third of its input.
+
+**A full context drains**: at the stress line, once folding cannot bring the next request under
+it, the body gets one more turn — without tools, capped at 4096 tokens, within what is left of the
+clock up to two minutes — to write down what is not durable, `@U <law|colony|territory> <fact>`
+for each thing it learned that is written nowhere, then what is left. Each `@U law` or `@U colony`
+line is kept as the body's proposed note (tagged `drain`, beside its home); each `@U territory`
+fact is filed to the ontology, as a report's is ([Memory](08-memory.md)). The checkpoint carries
+the turn as its salvage, and an escalation keeps it before the report it hands up. A run drains
+once — a resume reads that from its journal — and a jump that leaves less than two such turns of
+room in the window checkpoints without one.
 
 **A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The

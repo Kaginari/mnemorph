@@ -1552,3 +1552,103 @@ async fn a_newer_revision_is_forced_into_a_locked_in_recall() {
     let traces = mnemorph_memory::pathology::traces(&w.world(), name).unwrap();
     assert_eq!(traces[0].forced.as_deref(), Some("lock-in"));
 }
+
+/// A full context drains instead of dying: one turn without tools, its `@U` lines kept as the
+/// body's proposed notes, then the checkpoint.
+#[tokio::test]
+async fn a_full_context_drains_its_unsaid_into_memory() {
+    let w = World::new("drain");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer(
+            "@U territory src/parser keeps interval fractions whole\n@U colony run uv before pytest\nLeft: the docs.",
+        ),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "big").await;
+    let Ending::Checkpoint { why, salvage } = &e else {
+        panic!("{e:?}");
+    };
+    assert!(why.starts_with("context"), "{why}");
+    let salvage = salvage.as_deref().unwrap();
+    assert!(
+        salvage.ends_with("[memory: 1 line(s) kept as proposed notes, 1 territory fact(s) filed]"),
+        "{salvage}"
+    );
+    let drain = &model.requests()[1];
+    assert_eq!(drain.tools, [] as [mnemorph_provider::Tool; 0]);
+    assert_eq!(drain.max_tokens, 4096);
+    let notes = mnemorph_memory::fold(
+        &mnemorph_memory::read(
+            &w.world(),
+            &mnemorph_memory::Tier::Personal("slime-test".into()),
+        )
+        .unwrap()
+        .rows,
+    );
+    let mut kept: Vec<(String, Vec<String>)> = notes
+        .values()
+        .map(|n| {
+            assert_eq!(n.status, mnemorph_memory::Status::Proposed);
+            (n.text.clone(), n.tags.clone())
+        })
+        .collect();
+    kept.sort();
+    assert_eq!(
+        kept,
+        [(
+            "run uv before pytest".to_owned(),
+            vec!["colony".to_owned(), "drain".to_owned()]
+        )],
+        "a territory fact is no memory"
+    );
+    // It is filed to the ontology instead, by the body that learned it.
+    let facts = fs::read_to_string(w.world().join(mnemorph_world::facts::FACTS)).unwrap();
+    assert!(facts.contains("interval fractions whole"), "{facts}");
+}
+
+/// A jump to the window's edge leaves no room for a drain turn: the plain checkpoint.
+#[tokio::test]
+async fn a_context_at_the_windows_edge_checkpoints_without_a_drain() {
+    let w = World::new("nodrain");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(199_000)),
+        answer("never"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "big").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, salvage: None } if why.starts_with("context")),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 1, "no drain turn was sent");
+}
+
+/// A run drains once: the next ask on the same full context checkpoints plainly, with no second
+/// drain turn and no second set of notes.
+#[tokio::test]
+async fn a_run_drains_once() {
+    let w = World::new("drain-once");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer("@U colony run uv before pytest"),
+        answer("never sent"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "big").await;
+    let again = ask(&mut run, "and now?").await;
+    assert!(
+        matches!(&again, Ending::Checkpoint { why, salvage: None } if why.starts_with("context")),
+        "{again:?}"
+    );
+    assert_eq!(model.requests().len(), 2, "no second drain turn");
+    let notes = mnemorph_memory::fold(
+        &mnemorph_memory::read(
+            &w.world(),
+            &mnemorph_memory::Tier::Personal("slime-test".into()),
+        )
+        .unwrap()
+        .rows,
+    );
+    assert_eq!(notes.len(), 1, "no second set of notes");
+}
