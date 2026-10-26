@@ -35,6 +35,8 @@ fn equip(
         OPENING_ENTRIES,
         OPENING_CAP,
     ));
+    let roster = mnemorph_world::Roster::load(world);
+    run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
     if let Some(c) = commissioner {
         run = run.with_commissioner(Arc::new(c));
     }
@@ -220,6 +222,7 @@ pub fn open_with(
     let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
     let (caps, capped, unread, budget) = read_caps(config, &usage, &session_id)?;
     let mut tools = registry();
+    tools.push(Box::new(crate::wear_tool::WearTool));
     if !lanes.is_empty() {
         tools.push(Box::new(crate::commission::CommissionTool));
         tools.push(Box::new(crate::queue_tool::QueueTool));

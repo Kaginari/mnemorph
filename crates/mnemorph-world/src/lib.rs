@@ -10,6 +10,7 @@ pub mod findings;
 pub mod graph;
 pub mod heal;
 pub mod log;
+pub mod minds;
 pub mod own;
 pub mod queue;
 pub mod relief;

@@ -4105,3 +4105,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** territory filed and not kept; a run drains once (no second turn, no second note).
 - **Tooling:** worktrees sharing one dev target clobber each other's workspace crates (cargo's
   hash ignores the path). `cargo clean -p` the touched crates when switching worktrees.
+
+---
+
+### [2026-10-26T09:34:36+01:00] rimuru — M8 rung 7: the toolbox
+- **Task:** M8 rung 7's toolbox, and two exit criteria: each entry metered in tokens of exactly
+  what is injected; every command a prompt or hint names exists in the build.
+- **Files:**
+  - world minds.rs: `load`, `Mind::{injected, price, line}`, `wearable` (the doc's Minds field
+    plus shared ones), `manifest`, `HEAVY` = 2,000;
+  - loop wear_tool.rs: `wear`, intercepted in `call_one` like `verify`, offered to every body (a
+    stable tool tier); a dispatching Rimuru is refused a heavy Mind;
+  - `Run::with_manifest`, said with the first ask, from open.rs (rimuru) and `child_run`;
+  - mnemorphd tests/commands.rs: every backticked `mnemorph`/`mnemorphd` command in the Rust and
+    TS sources is in the CLI's or the core's help (short spans only, no `${`). A planted
+    `mnemorph resume` fails it (checked);
+  - docs 05 (Minds are world, not memory) and docs 08 ("The toolbox").
+- **Found:** docs 03 promises `mnemorph resume <run>`, which no binary ships. Opened #204 rather
+  than rewrite the doc unasked.
+- **Not done:** prices are estimates at 4 bytes a token. Exact counts need the provider's
+  counting API (a network act); the ledger records the real tokens on use.
