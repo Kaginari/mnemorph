@@ -2,6 +2,7 @@
 //! over appended events, in three tiers — personal, shared and short — and only a route's proof
 //! grounds one into shared memory.
 
+pub mod audit;
 pub mod consolidate;
 pub mod note;
 pub mod recall;
@@ -9,6 +10,7 @@ pub mod store;
 pub mod text;
 pub mod write;
 
+pub use audit::{Unproven, findings, status, unfrozen};
 pub use consolidate::{Forget, distill, forget};
 pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};

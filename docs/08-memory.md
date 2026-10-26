@@ -339,6 +339,21 @@ tier is that place: git's local exclude, set when a session opens, keeps it off 
 | **lock-in** | a revise note exists, yet every agreeing note recalled is older than it and no dissent was selected | reopen the recall with the newest revision forced in |
 | **unproven write** | a note event whose `by` or proof does not resolve in the fold — a hand edit, a bad merge, an import that skipped its checks | ignore the event in recall, freeze the creature's memory writes and tell the human |
 
+An event resolves by its author and its proof:
+
+| `by` | Resolves when |
+|---|---|
+| `human` | always |
+| `route` | its proof reads `<route>: <what>`, the route one of `checked`, `accepted`, `corroborated`, `confirmed` |
+| `gate` | it cites a verdict |
+| `import` | it cites its source |
+| `record` | it claims no standing — or, for a schema, its proof names the notes it rests on (`distilled: <ids>`, `abstracted: <id>`), each grounded in the same tier |
+
+A standing is a `grounded` status or a confidence. An unresolved event touching a creature — in
+its personal or short tier, or on a shared note it owns — freezes that creature's proposals,
+groundings, revisions and cache; `mnemorph memory status` names each event, its file and why, and
+exits 1 until the human removes or re-proves it. A run that recalls past one says so in a warning.
+
 There is no aggregate memory score. A high recall hit rate cannot make up for a creature that
 never accepts a correction.
 

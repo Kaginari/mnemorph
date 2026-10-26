@@ -160,7 +160,7 @@ impl Proof {
 ///
 /// # Errors
 ///
-/// The note file cannot be written.
+/// The creature's memory is frozen ([`crate::unfrozen`]), or the note file cannot be written.
 pub fn propose(
     world: &Path,
     owner: &str,
@@ -168,6 +168,7 @@ pub fn propose(
     tags: Vec<String>,
     source: Option<String>,
 ) -> std::io::Result<Claim<Proposed>> {
+    crate::audit::unfrozen(world, owner)?;
     let note = format!("n{}", event_id(now_ms()));
     append(
         world,
@@ -201,12 +202,13 @@ pub fn propose(
 ///
 /// # Errors
 ///
-/// A note file cannot be written.
+/// The creature's memory is frozen ([`crate::unfrozen`]), or a note file cannot be written.
 pub fn ground(
     world: &Path,
     claim: Claim<Proposed>,
     proof: &Proof,
 ) -> std::io::Result<Claim<Grounded>> {
+    crate::audit::unfrozen(world, &claim.owner)?;
     let cites = format!("{}: {}", proof.route.word(), proof.cites);
     let confidence = proof.route.confidence();
     let personal = Tier::Personal(claim.owner.clone());
@@ -274,7 +276,7 @@ pub fn ground(
 ///
 /// # Errors
 ///
-/// A note file cannot be written.
+/// The creature's memory is frozen ([`crate::unfrozen`]), or a note file cannot be written.
 pub fn revise(
     world: &Path,
     owner: &str,
@@ -286,6 +288,7 @@ pub fn revise(
     if targets.is_empty() {
         return Ok(Vec::new());
     }
+    crate::audit::unfrozen(world, owner)?;
     let tier = if targets.iter().any(|r| !r.personal) {
         Tier::Shared
     } else {
@@ -377,8 +380,9 @@ pub struct Anchor {
 ///
 /// # Errors
 ///
-/// The note file cannot be written.
+/// The creature's memory is frozen ([`crate::unfrozen`]), or the note file cannot be written.
 pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
+    crate::audit::unfrozen(world, body)?;
     let note = format!("c{}", event_id(now_ms()));
     append(
         world,

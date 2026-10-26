@@ -3833,3 +3833,34 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `gather` reads the body's short tier as its own;
   - the tombstone was extracted to keep `forget` under 100 lines.
 - **Tests:** the proofs, and a cache recalled by its own body only.
+
+---
+
+### [2026-10-26T08:04:11+01:00] rimuru — M8 rung 6, first half: the unproven write
+- **Task:** M8 rung 6 (#128), the unproven-write finding. The replay loop and lock-in follow in
+  their own PR.
+- **Files:**
+  - memory audit.rs:
+    - `why_unproven` and `unproven`, the resolution rule: human always; route `<route>: <what>`;
+      gate and import cite something; a record never claims a standing, except a schema whose
+      `distilled:`/`abstracted:` ids were grounded in its tier;
+    - `resolved`, `findings`, `unfrozen`, `status`;
+  - `gather` folds only resolved events and counts the rest (`Memory::unproven`);
+  - propose, ground, revise and cache refuse while frozen;
+  - the loop warns;
+  - `mnemorphd memory status [--world] [--json]` exits 1 while anything is found; the CLI passes
+    it through and lists it;
+  - world re-exports memory, so mnemorphd keeps to its one edge;
+  - docs 08 gain the resolution table and the freeze.
+- **Found by the new rule:** #198's abstract-forget still copied the original's proof. Fable's
+  fix there missed, because a scripted `replace` without a count check failed silently against
+  rustfmt's layout, and so did its test assertion. Both are fixed here.
+- **Lesson, again:** every scripted edit asserts its count.
+- **Slip:** `npx biome` in a worktree without `node_modules` fetched the unrelated npm package
+  `biome` (0.3.3, an env-var manager). It created an empty `~/.biome`, and I removed it and the
+  npx cache. Use `pnpm exec` after `pnpm install`, never bare `npx`.
+- **Tests:**
+  - audit.rs (2);
+  - mnemorphd tests/memory.rs, the real binary;
+  - args.test.ts;
+  - consolidate's abstraction proof.

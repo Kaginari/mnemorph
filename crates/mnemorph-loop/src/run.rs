@@ -1237,6 +1237,16 @@ impl Run {
                 ),
             });
         }
+        if memory.unproven > 0 {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "{} note event(s) name no author or proof that resolves: recall ignored them, \
+                     and memory writes they touch are frozen until the human runs \
+                     `mnemorphd memory status`",
+                    memory.unproven
+                ),
+            });
+        }
         let now = mnemorph_memory::store::now_ms();
         let r = mnemorph_memory::recall(
             text,
