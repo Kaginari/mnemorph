@@ -3692,3 +3692,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the doc says a caller keeps the words between calls;
   - the stop list is wider and says it is English only.
 - **Tests:** the seats with dominant dissent; own-only proposed notes.
+
+---
+
+### [2026-10-26T02:39:49+01:00] rimuru — M8 rung 3: the write rule
+- **Task:** M8 rung 3 (#124: a model's words stay personal; four routes promote).
+- **Files:**
+  - mnemorph-memory write.rs: `Claim<Proposed>` and `Claim<Grounded>`; `Proof`, built only from
+    its route's evidence:
+    - checked needs a verify line over a non-empty diff;
+    - accepted, a verdict naming the claim;
+    - corroborated, another creature with disjoint anchors;
+    - confirmed, the human;
+  - `propose` (personal, proposed, 0.6 / 0.5);
+  - `ground` (personal and shared, at the route's confidence: 0.7 checked or confirmed, 0.6
+    accepted or corroborated);
+  - commission.rs `remember`: an answering child's non-territory `@U` lines land proposed; a
+    checked landing grounds them; the report notes it;
+  - wire: `UnsaidKind::word` is public.
+- **Tests:** memory write.rs (proofs refused without evidence; propose, then ground in both tiers);
+  commission (a checked landing grounds; a bare answer stays proposed; territory is not memory).
+- **Next:** wire accepted (the parent's verdict naming a claim) and the turn's recalled anchors.

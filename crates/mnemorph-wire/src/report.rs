@@ -66,7 +66,9 @@ pub enum UnsaidKind {
 }
 
 impl UnsaidKind {
-    fn word(self) -> &'static str {
+    /// Its word on the wire: `law`, `colony`, `territory`.
+    #[must_use]
+    pub fn word(self) -> &'static str {
         match self {
             UnsaidKind::Law => "law",
             UnsaidKind::Colony => "colony",
