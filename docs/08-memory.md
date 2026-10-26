@@ -282,13 +282,15 @@ route at all.
 ### Reconsolidation
 
 A first failure is part of working: it goes back to the body as a note
-([the loop](03-loop.md#the-end-gate)) and writes nothing to memory. Only a run-ending failure — the
-body's last chance spent, or a gate verdict of `FAIL` — reconsolidates, and then once:
+([the loop](03-loop.md#the-end-gate)) and writes nothing to memory. Only a run-ending failure —
+the body's last chance spent after a gate verdict of `FAIL` — reconsolidates, and then once, by
+that `FAIL`: a check that wrote, or one that gave no result, says nothing of what the body knew.
 
-- **one revise event per failed act**, linking every anchor recalled for that turn (the turn's
-  journal row has them), not one note per anchor; each link carries its own weight;
-- the weight is **0.9 towards anchors the failed act cited** (the act's arguments or the body's
-  text name them) and **0.4 towards anchors that were merely recalled** — Mnemorph's own split:
+- **one revise event per failed rule** (`right author`, `traits hold`, …), however many lines it
+  failed by, each line kept by its first line; it links every anchor recalled for that ask (the
+  ask's journal row has them), not one note per anchor; each link carries its own weight;
+- the weight is **0.9 towards anchors the ask cited** (its acts' arguments or the body's text
+  name them) and **0.4 towards anchors that were merely recalled** — Mnemorph's own split:
   MNEMORPH-85 weighs world effects (0.9) and corrections (1.0), with no notion of a recalled
   bystander;
 - it never targets a dissenting note: a counter or revise note recalled into a failed turn is

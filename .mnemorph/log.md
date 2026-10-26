@@ -3763,3 +3763,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - unreadable note lines were dropped silently: now warned;
   - the recall row came before its ask: it now follows, via `open_ask`.
 - **Test:** the recall row's order and the warning.
+
+---
+
+### [2026-10-26T03:17:54+01:00] rimuru — M8 rung 4: reconsolidation
+- **Task:** M8 rung 4 (#126), now that each ask journals its recalled anchors.
+- **Files:**
+  - memory note.rs: `Link` (note, weight), `Create.links`, `Note.links`;
+  - write.rs `revise`: one grounded revise note per failed act (salience 1.0, confidence 0.9, by
+    the gate, citing its verdict), linking each non-dissent anchor at 0.9 when cited and 0.4 when
+    recalled; shared when any anchor is shared, else personal; nothing when nothing was recalled;
+  - `Anchor`;
+  - run.rs keeps the ask's anchors (reset per ask); `log_verdict` returns its journal heading;
+    `judge` reconsolidates on a run-ending FAIL (a check that wrote, or a second FAIL), never on a
+    first failure, NOT_VERIFIED or an unrun machine; the answer naming an anchor makes it cited.
+- **Tests:** memory `a_run_ending_failure_revises_what_it_rode_on`; solo
+  `a_run_ending_failure_revises_the_note_it_rode_on` (0.9, cited, citing the FAIL entry).
+- **Not yet:** confidence gained by three passes after recall.
+
+---
+
+### [2026-10-26T03:25:25+01:00] rimuru — #197's review: Fable
+- **Fable found:**
+  - one revise per gate line (8 foreign paths gave 8 permanent notes);
+  - "cited" read only the final answer;
+  - a FAIL then NOT_VERIFIED wrote nothing, while a check that wrote blamed the notes;
+  - raw test tails became note text.
+- **Fixed:**
+  - one revise per failed rule, each line by its first line, capped;
+  - cited by scanning the ask's text and its acts' arguments (`ask_from`);
+  - the ask keeps its last FAIL (`failed_in_ask`) and reconsolidates by it when the last chance
+    is spent, whatever the second verdict; a check that wrote never reconsolidates;
+  - docs 08 say so.
+- **Tests:** eight lines of one rule give one note; citation through a tool's arguments.

@@ -233,6 +233,12 @@ pub struct Run {
     folded_upto: usize,
     /// The recall row for the ask being opened, journaled after it.
     recalled: Option<Beat>,
+    /// The anchors recalled into this ask: what a run-ending failure reconsolidates.
+    anchors: Vec<mnemorph_memory::Anchor>,
+    /// Where this ask's messages start: what it said and did, for what it cited.
+    ask_from: usize,
+    /// The ask's last FAIL, with the gate's journal heading: what its run-ending failure revises by.
+    failed_in_ask: Option<(Vec<String>, Option<String>)>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -310,6 +316,9 @@ impl Run {
             interrupt,
             folded_upto: 0,
             recalled: None,
+            anchors: Vec::new(),
+            ask_from: 0,
+            failed_in_ask: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -838,9 +847,13 @@ impl Run {
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
         });
-        self.log_verdict(&verdict, *retried);
+        let heading = self.log_verdict(&verdict, *retried);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
+        }
+        // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
+        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote {
+            self.failed_in_ask = Some((verdict.failures.clone(), heading));
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
         // wrote would pass as the body's. The landing fails whole.
@@ -871,6 +884,12 @@ impl Run {
             "failed"
         };
         if *retried {
+            // The last chance spent after a FAIL: what the ask recalled is reconsolidated, once.
+            // A first failure writes nothing; a check that wrote, or that gave no result, says
+            // nothing of what the body knew.
+            if let Some((failures, heading)) = self.failed_in_ask.take() {
+                self.reconsolidate(&failures, heading.as_deref());
+            }
             return Some(Ending::Failed(format!(
                 "the end gate {how} twice: {}",
                 said.join("; ")
@@ -893,10 +912,10 @@ impl Run {
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.
-    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) {
+    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) -> Option<String> {
         // An answer that changed nothing passed untouched: there is nothing to journal.
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
-            return;
+            return None;
         }
         let word = verdict.verdict().word();
         let word = if verdict.unrun() {
@@ -934,12 +953,51 @@ impl Run {
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
                 if verdict.passed() {
-                    self.passed = Some((verdict.clone(), heading));
+                    self.passed = Some((verdict.clone(), heading.clone()));
                 }
+                heading
             }
-            Err(e) => self.record(&Beat::Warning {
-                text: format!("the gate's verdict could not reach the journal: {e}"),
-            }),
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!("the gate's verdict could not reach the journal: {e}"),
+                });
+                None
+            }
+        }
+    }
+
+    /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
+    /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
+    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
+        // What the ask said and did — its text and its acts' arguments — names the anchors it cited.
+        let said: String = self.messages[self.ask_from.min(self.messages.len())..]
+            .iter()
+            .flat_map(|m| &m.content)
+            .map(|b| match b {
+                Block::Text { text, .. } => text.clone(),
+                Block::ToolUse { input, .. } => input.to_string(),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let anchors: Vec<mnemorph_memory::Anchor> = self
+            .anchors
+            .iter()
+            .map(|a| mnemorph_memory::Anchor {
+                cited: said.contains(&a.id),
+                ..a.clone()
+            })
+            .collect();
+        let verdict = heading.map_or_else(
+            || format!("log.md: {} gate: FAIL", self.body.name),
+            |h| format!("log.md {h}"),
+        );
+        if let Err(e) =
+            mnemorph_memory::revise(self.cx.world(), &self.body.name, acts, &anchors, &verdict)
+        {
+            self.record(&Beat::Warning {
+                text: format!("the failure could not reconsolidate memory: {e}"),
+            });
         }
     }
 
@@ -1113,6 +1171,8 @@ impl Run {
 
     /// Open an ask: its preface, its journal row, then the recall row that follows it.
     fn open_ask(&mut self, text: &str) -> String {
+        self.ask_from = self.messages.len();
+        self.failed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
         if let Some(recall) = self.recalled.take() {
@@ -1150,6 +1210,7 @@ impl Run {
     /// lines; what was shown is journaled as the turn's anchors. Nothing when memory holds nothing
     /// that matches, or cannot be read.
     fn recall(&mut self, text: &str) -> Vec<String> {
+        self.anchors.clear();
         let world = self.cx.world().to_path_buf();
         let roster = mnemorph_world::Roster::load(&world);
         let race = self.body.race.base();
@@ -1187,6 +1248,16 @@ impl Run {
         if r.anchors.is_empty() {
             return Vec::new();
         }
+        self.anchors = r
+            .anchors
+            .iter()
+            .map(|h| mnemorph_memory::Anchor {
+                id: h.note.id.clone(),
+                personal: memory.personal.contains(&h.note.id),
+                dissent: h.note.polarity.dissents(),
+                cited: false,
+            })
+            .collect();
         // Journaled after the ask it opens: the turn's recall row follows its ask.
         self.recalled = Some(Beat::Recall {
             anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),

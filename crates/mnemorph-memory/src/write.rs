@@ -183,6 +183,7 @@ pub fn propose(
             salience: 0.6,
             confidence: 0.5,
             source: source.clone(),
+            links: Vec::new(),
         },
     )?;
     Ok(Claim {
@@ -241,6 +242,7 @@ pub fn ground(
             salience: 0.6,
             confidence,
             source: claim.source.clone(),
+            links: Vec::new(),
         },
     )?;
     append(
@@ -261,4 +263,111 @@ pub fn ground(
         source: claim.source,
         standing: PhantomData,
     })
+}
+
+/// Reconsolidate a run-ending failure: one revise note per failed rule, grounded at once — the
+/// failure is an observed fact — salience 1.0, confidence 0.9, written by the gate citing its
+/// verdict. It links every anchor recalled into the failed run, 0.9 towards one the act cited, 0.4
+/// towards one merely recalled, and never a dissenting note: corrections do not breed corrections.
+/// It lands in shared memory when any note it links is shared, else in `owner`'s personal tier.
+/// Returns the revise notes' ids; nothing when no anchor was recalled.
+///
+/// # Errors
+///
+/// A note file cannot be written.
+pub fn revise(
+    world: &Path,
+    owner: &str,
+    acts: &[String],
+    recalled: &[Anchor],
+    verdict: &str,
+) -> std::io::Result<Vec<String>> {
+    let targets: Vec<&Anchor> = recalled.iter().filter(|r| !r.dissent).collect();
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let tier = if targets.iter().any(|r| !r.personal) {
+        Tier::Shared
+    } else {
+        Tier::Personal(owner.to_owned())
+    };
+    // One note per failed rule — `right author`, `traits hold`, … — not per line: a landing that
+    // touched eight foreign files failed one rule. Each line is kept by its first line, cut: the
+    // note says what failed, never a test's whole tail.
+    let mut rules: Vec<(String, Vec<String>)> = Vec::new();
+    for act in acts {
+        let rule = act.split(':').next().unwrap_or(act).trim().to_owned();
+        let first: String = act
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take(160)
+            .collect();
+        match rules.iter_mut().find(|(r, _)| *r == rule) {
+            Some((_, lines)) => lines.push(first),
+            None => rules.push((rule, vec![first])),
+        }
+    }
+    let mut made = Vec::new();
+    for (_, lines) in rules {
+        let mut act: String = lines.join("; ");
+        if act.chars().count() > 600 {
+            act = act.chars().take(600).collect::<String>() + "…";
+        }
+        let links = targets
+            .iter()
+            .map(|r| crate::note::Link {
+                note: r.id.clone(),
+                weight: if act.contains(&r.id) || r.cited {
+                    0.9
+                } else {
+                    0.4
+                },
+            })
+            .collect();
+        let note = format!("r{}", event_id(now_ms()));
+        append(
+            world,
+            &tier,
+            &note,
+            By::Gate,
+            Some(verdict.to_owned()),
+            Change::Create {
+                text: act,
+                tags: vec!["failure".into()],
+                owner: Some(owner.to_owned()),
+                polarity: Polarity::Revise,
+                salience: 1.0,
+                confidence: 0.9,
+                source: Some(verdict.to_owned()),
+                links,
+            },
+        )?;
+        append(
+            world,
+            &tier,
+            &note,
+            By::Gate,
+            Some(verdict.to_owned()),
+            Change::Status {
+                status: Status::Grounded,
+            },
+        )?;
+        made.push(note);
+    }
+    Ok(made)
+}
+
+/// One anchor recalled into a run, as reconsolidation weighs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Anchor {
+    /// The note's id.
+    pub id: String,
+    /// From the asker's personal tier, not shared memory.
+    pub personal: bool,
+    /// A counter or a revise note: never revised.
+    pub dissent: bool,
+    /// The body's own text named it.
+    pub cited: bool,
 }

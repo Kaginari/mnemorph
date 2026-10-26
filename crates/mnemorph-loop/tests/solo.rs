@@ -353,3 +353,64 @@ async fn a_removed_test_function_fails_the_gate() {
         matches!(ask(&mut run, "trim").await, Ending::Failed(why) if why.contains("has 1 tests, it had 2"))
     );
 }
+
+/// A run-ending failure reconsolidates what the ask recalled: a grounded revise note per failed
+/// act links the recalled note — 0.9, since the body's answer named it — and a first failure alone
+/// writes nothing.
+#[tokio::test]
+async fn a_run_ending_failure_revises_the_note_it_rode_on() {
+    use mnemorph_memory::{Polarity, Status, Tier, fold, read};
+    let w = World::new("reconsolidate");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "out.txt should say broken when the build is red",
+        vec![],
+        None,
+    )
+    .unwrap();
+    let note = mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "out.txt", "content": "broken\n"}),
+        ),
+        answer("done"),
+        // The note is named in an act's arguments, not in the answer: still cited.
+        tool(
+            "t2",
+            "write",
+            json!({"path": "out.txt", "content": format!("still broken, per {note}\n")}),
+        ),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
+    let ending = ask(&mut run, "make out.txt say broken, the build is red").await;
+    assert!(matches!(ending, Ending::Failed(_)), "{ending:?}");
+    let shared = fold(&read(&w.world(), &Tier::Shared).unwrap().rows);
+    let revises: Vec<_> = shared
+        .values()
+        .filter(|n| n.polarity == Polarity::Revise)
+        .collect();
+    assert_eq!(revises.len(), 1, "one per failed act: {revises:?}");
+    let r = revises[0];
+    assert_eq!(r.status, Status::Grounded);
+    assert_eq!(r.links.len(), 1);
+    assert_eq!(r.links[0].note, note);
+    assert!(
+        (r.links[0].weight - 0.9).abs() < 1e-9,
+        "cited by an act's arguments"
+    );
+    assert!(
+        r.proof.as_deref().unwrap().contains("gate: FAIL"),
+        "{:?}",
+        r.proof
+    );
+}

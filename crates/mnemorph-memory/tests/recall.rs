@@ -18,6 +18,7 @@ fn note(id: &str, text: &str, polarity: Polarity, status: Status) -> Note {
         source: None,
         proof: None,
         born: NOW - DAY,
+        links: vec![],
     }
 }
 
