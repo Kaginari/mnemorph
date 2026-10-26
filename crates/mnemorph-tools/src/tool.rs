@@ -126,9 +126,9 @@ impl Outcome {
     }
 }
 
-/// Who owns a path of the world, relative to it, as a refusal names them: a creature's name,
-/// `the human`, `the harness` — or `None` when nobody does.
-pub type OwnerOf = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+/// What a refusal outside the soil says next, for a path relative to the world: who owns it and
+/// the ways on — written where the roster is known.
+pub type OwnerOf = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
 /// Where a body works: who it is, the world it may read, the soil it may write, the gate it
 /// asks, and what it already read.
@@ -721,22 +721,10 @@ fn private_scratch() -> Option<PathBuf> {
     None
 }
 
-/// The ways on from a write outside the soil, by who owns the path — unknown when the context
-/// was given no roster.
+/// The ways on from a write outside the soil, when the context knows them.
 fn ways_on(owner_of: Option<&OwnerOf>, shown: &str) -> String {
-    let Some(owner_of) = owner_of else {
-        return String::new();
-    };
-    match owner_of(shown) {
-        Some(who) if who == "the human" || who == "the harness" => format!(
-            ". It is {who}'s: no body writes it — say in your report what should change there"
-        ),
-        Some(who) => format!(
-            ". It is {who}'s. Route: say so in your report, and the parent commissions {who}; \
-or widen: ask for it in your own ground"
-        ),
-        None => ". Nobody owns it. Birth: say so in your report, and Rimuru founds its keeper; \
-or widen: ask for it in your own ground"
-            .to_owned(),
-    }
+    owner_of
+        .map(|f| f(shown))
+        .filter(|w| !w.is_empty())
+        .map_or_else(String::new, |w| format!(". {w}"))
 }

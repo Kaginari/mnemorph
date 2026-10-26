@@ -255,9 +255,11 @@ Slime's zone covers falls to the Orc whose domain covers it, else it is reported
 A commissioned body's write outside its soil is refused with what it needs to go on, so no
 body re-derives ownership at a boundary: the soil it may write, who owns the path, and the ways
 on. A path another Slime keeps — **route**: the body says so in its report, and its parent
-commissions that keeper. A path no Slime keeps, an Orc's domain alone covering it — **birth**:
-Rimuru founds its keeper. Either way — **widen**: the body asks for it in its own ground. The
-human's soil and the harness's are named as theirs, with no way to write them.
+commissions that keeper when it is a sibling; otherwise the report goes up until a commander
+both answer to routes it. A path no Slime keeps, an Orc's domain alone covering it — **birth**:
+Rimuru routes its birth. Either way — **widen**: the body asks for it in its own ground. A seat
+or another body's scratch is never routed: a body writes only its own plan and its own scratch.
+The human's soil and the harness's are named as theirs, with no way to write them.
 The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
 
 ---

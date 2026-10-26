@@ -3500,3 +3500,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 02.
 - **Test:** `a_refusal_names_the_owner_and_the_ways_on`: a sibling's file routes, a domain-only
   file is a birth, and the human's file names no route.
+
+---
+
+### [2026-10-26T01:17:41+01:00] rimuru — #189's review: Fable
+- **Fable found:**
+  - "the parent commissions X" holds only for a same-parent sibling;
+  - a seat and another body's scratch read as route targets;
+  - "Rimuru founds its keeper" names no mechanism (the ontology says Rimuru routes its birth).
+- **Fixed:** the loop writes the whole sentence (`ways_on` in commission.rs, by owner and rule):
+  - a sibling routes by the parent; any other route goes up to a common commander;
+  - a seat, or a scratch, is never routed;
+  - nobody's ground is a birth Rimuru routes;
+  - the human's and the harness's soil are theirs;
+  - tools only append; docs 02.
+- **Test:** sibling, birth, scratch and the human's.

@@ -1208,17 +1208,9 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
         })
         .collect();
     let known = roster.clone();
-    // A domain is routed, never written: ground only an Orc's domain covers has no keeper.
-    let owner_of: mnemorph_tools::OwnerOf = std::sync::Arc::new(move |rel: &str| {
-        let o = explain(&known, rel);
-        match o.owner {
-            Owner::Creature(_) if o.rule == Rule::Domain => None,
-            Owner::Creature(c) => Some(c),
-            Owner::Human => Some("the human".to_owned()),
-            Owner::Harness => Some("the harness".to_owned()),
-            Owner::Unowned => None,
-        }
-    });
+    let me = creature.name.clone();
+    let owner_of: mnemorph_tools::OwnerOf =
+        std::sync::Arc::new(move |rel: &str| ways_on(&known, &me, rel));
     Some(
         Context::new(creature.race, world, &none)
             .with_soil(&s.write, &s.except, s.root_files)
@@ -1226,6 +1218,47 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
             .with_seat(&creature.seat)
             .with_owner_of(owner_of),
     )
+}
+
+/// What a refusal outside `me`'s soil says of `rel`: who owns it and the ways on. Route goes to a
+/// keeper — by the shared parent when it is a sibling's, else up the chain until a commander both
+/// answer to routes it. Ground nobody keeps (an Orc's domain is routed, never written) is a birth
+/// Rimuru routes. A seat or a scratch is never routed, and the human's and the harness's soil is
+/// theirs alone.
+fn ways_on(roster: &Roster, me: &str, rel: &str) -> String {
+    let widen = "or widen: ask for it in your own ground";
+    let o = explain(roster, rel);
+    match (o.owner, o.rule) {
+        (Owner::Human, _) => {
+            "It is the human's: no body writes it — say in your report what should change".into()
+        }
+        (Owner::Harness, _) => "It is the harness's: no body writes it".into(),
+        (Owner::Creature(c), Rule::Seat) if c == me => {
+            "It is your seat: of it, only your plan.md is yours to write".into()
+        }
+        (Owner::Creature(c), Rule::Seat) => format!("It is {c}'s seat: no body writes another's"),
+        (Owner::Creature(c), Rule::Scratch) => {
+            format!("It is {c}'s scratch: yours is under .mnemorph/tmp/{me}/")
+        }
+        (_, Rule::Scratch) => format!("Scratch is per body: yours is under .mnemorph/tmp/{me}/"),
+        (Owner::Creature(_), Rule::Domain) | (Owner::Unowned, _) => {
+            format!(
+                "Nobody keeps it. Birth: say so in your report, and Rimuru routes its birth; {widen}"
+            )
+        }
+        (Owner::Creature(c), _) => {
+            let parent = |n: &str| roster.creatures.get(n).and_then(|k| k.reports_to.clone());
+            if parent(&c).is_some() && parent(&c) == parent(me) {
+                format!(
+                    "It is {c}'s. Route: say so in your report, and your parent commissions {c}; {widen}"
+                )
+            } else {
+                format!(
+                    "It is {c}'s. Route: say so in your report; it goes up until a commander you and {c} both answer to routes it; {widen}"
+                )
+            }
+        }
+    }
 }
 
 #[cfg(test)]
