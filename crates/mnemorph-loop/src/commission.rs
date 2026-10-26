@@ -156,7 +156,7 @@ fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) -> String {
     let ground = soil(roster, name)
         .map(|s| s.write.join(", "))
         .unwrap_or_default();
-    format!(
+    let mut system = format!(
         "You are {name}, a {race} of Mnemorph, commissioned by {parent}. You work only on your own \
 soil: {ground}. A refusal names its reason and the lawful route; never work around it.\n\n\
 {card}\n\n\
@@ -169,7 +169,9 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @E",
         race = c.race.name(),
         card = race_card(c.race),
-    ) + &cards_below(world, roster, name)
+    ) + &cards_below(world, roster, name);
+    crate::solo::with_law(&mut system, world);
+    system
 }
 
 /// What a race does, in the words its body reads first: who writes, who hands work down.

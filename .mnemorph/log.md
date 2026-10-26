@@ -3936,3 +3936,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   trace costs more than it saves.
 - **Untested:** the interrupt guard. A scripted model answers before the loop checks the
   interrupt, so a mid-ask Esc needs the blocking-command setup.
+
+---
+
+### [2026-10-26T08:46:37+01:00] rimuru — M8 rung 7, first part: session start
+- **Task:** M8 rung 7's session start; exit criterion "a fresh session after a clear carries the
+  last journal entries in its first prompt".
+- **Files:**
+  - world start.rs: `law` (capped at 4,000) and `recent(n, cap)`, the last entries split on
+    `---` with the oldest dropped first;
+  - solo.rs `with_law` appends the law to Rimuru's system prompt, and commission's `prompt` to
+    each child's;
+  - run.rs `with_opening`, said once in the first ask's preface;
+  - open.rs: `equip` keeps `open_with` under 100 lines; the opening is the last 5 entries within
+    8,000;
+  - docs 08 gain a "Session start" section.
+- **Test:** session_start.rs through `open_with`:
+  - the system prompt carries the law, unchanged across asks;
+  - the first ask carries entries 3–7, not 2, and the ask stays last;
+  - the second ask carries none.
+- **Next:** the human's side agent flagged that nothing calls distill or forget. Revise notes pile
+  up, and lock-in re-forces one forever. Wire a consolidation trigger before the bench.
