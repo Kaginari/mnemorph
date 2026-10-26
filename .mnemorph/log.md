@@ -4125,3 +4125,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - pathology.rs: the cite-rate line.
 - **Tooling:** a reviewer building in the shared dev target clobbered this build again, so this
   branch builds in a private `tempest-cited-target`, deleted after merge.
+
+---
+
+### [2026-10-26T09:50:41+01:00] rimuru — #206's review: Fable
+- **Fable found:** "use" was too broad. Every term in the body's text and every tool input
+  counted: reads, greps, test commands, the ask echoed back. Notes on the task's target file
+  would be credited on every pass and never retired, trading a dead rule for an inflated one.
+  The header invited listing every id.
+- **Fixed:**
+  - use means change: only the paths of write, edit, multiedit, delete, move and patch acts
+    (`changed_paths`);
+  - terms the ask itself names are dropped;
+  - the header asks for "the id of a note that changes what you do, and only that";
+  - docs 08.
+- **Tests:** solo.rs now holds five notes. Two are cited at 0.9 (by id, by changing the file).
+  Three stay at 0.4: one changed but named in the ask, one only read, one untouched. The broad
+  rule would cite the read-only note through `read`'s arguments.
+- **Disk:** it reached 1.4G free. The private cited target (6.6G) was deleted, and every build
+  is back on the one shared target, cleaned per crate when switching worktrees.

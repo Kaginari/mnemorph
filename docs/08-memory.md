@@ -312,8 +312,11 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   file, an identifier; a `file:line` meets its file, a path its file name), the failed rules'
   names aside. A bare number, a bare directory and a file name every project has (`lib.rs`,
   `__init__.py`, …) name nothing in particular. *Cited* means the body used the note: its own words
-  or its acts' arguments name the note's id — recall's header asks for that — or touch a path,
-  file or identifier the note names. The ask's message, where recall shows the note, never counts.
+  or its acts' arguments name the note's id — recall's header asks for the id of a note that
+  changes what it does, and only that — or it *changed* a path the note names (written, edited,
+  moved, deleted or patched). Reading a file is no use of a note, and a path the ask itself names
+  is the task's own target, which says nothing of any note. The ask's message, where recall shows
+  the note, never counts.
   Each ask's trace counts the notes recalled and cited, and `memory status` reports the rate. A slow test, a weak model or an unrelated bug shares none, and strikes nothing.
   A first attributable failure *doubts* the note: its confidence drops by 0.1, never under 0.3, so
   it ranks lower and is still shown. It is *retired* — dormant, its events kept, no longer

@@ -1045,25 +1045,34 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    /// The anchors recalled into this ask, each marked cited when what the body said and did — its
-    /// text and its acts' arguments — names it. The ask's own message, where recall shows the
-    /// anchors, is never the body's word.
-    ///
-    /// Naming its id is one way; acting on what it names is the other: an ask whose text or acts'
-    /// arguments touch a path, file or identifier the note names used it.
+    /// The anchors recalled into this ask, each marked cited when the body used it: its own words
+    /// or acts name the note's id, or it changed a path the note names — written, edited, moved,
+    /// deleted or patched — other than one the ask itself names, since the task's own target says
+    /// nothing of any note. Reading a file is no use of a note, and the ask's message, where recall
+    /// shows the notes, is never the body's word.
     fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
-        let said: String = self.messages[self.ask_from.min(self.messages.len())..]
+        let mine = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
             .filter(|m| m.role == mnemorph_provider::Role::Assistant)
-            .flat_map(|m| &m.content)
-            .map(|b| match b {
-                Block::Text { text, .. } => text.clone(),
-                Block::ToolUse { input, .. } => input.to_string(),
-                _ => String::new(),
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let used = mnemorph_memory::text::specific_terms(&said);
+            .flat_map(|m| &m.content);
+        let mut said = String::new();
+        let mut changed = std::collections::BTreeSet::new();
+        for b in mine {
+            match b {
+                Block::Text { text, .. } => said.push_str(text),
+                Block::ToolUse { name, input, .. } => {
+                    said.push_str(&input.to_string());
+                    for path in changed_paths(name, input) {
+                        changed.extend(mnemorph_memory::text::specific_terms(&path));
+                    }
+                }
+                _ => {}
+            }
+            said.push('\n');
+        }
+        for t in mnemorph_memory::text::specific_terms(&self.asked) {
+            changed.remove(&t);
+        }
         self.anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
@@ -1071,7 +1080,7 @@ impl Run {
                     || self
                         .anchor_terms
                         .get(&a.id)
-                        .is_some_and(|terms| terms.iter().any(|t| used.contains(t))),
+                        .is_some_and(|terms| terms.iter().any(|t| changed.contains(t))),
                 ..a.clone()
             })
             .collect()
@@ -1350,8 +1359,8 @@ impl Run {
             asked
         } else {
             format!(
-                "Recalled from memory (a proposed note is unproven; when you rely on a note, name \
-                 its id):\n{}\n\n{asked}",
+                "Recalled from memory (a proposed note is unproven; name the id of a note that \
+                 changes what you do, and only that):\n{}\n\n{asked}",
                 recalled.join("\n")
             )
         }
@@ -2029,4 +2038,21 @@ fn text_of(content: &[Block]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// The paths an act changes: written, edited, moved, deleted or patched. A read, a search or a
+/// command changes none.
+fn changed_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
+    let field = |k: &str| input.get(k).and_then(|v| v.as_str()).map(str::to_owned);
+    match tool {
+        "write" | "edit" | "multiedit" | "delete" => field("path").into_iter().collect(),
+        "move" => field("from").into_iter().chain(field("to")).collect(),
+        "patch" => field("patch")
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| l.starts_with("*** ") && l.contains("File:"))
+            .filter_map(|l| l.split_once("File:").map(|(_, p)| p.trim().to_owned()))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
