@@ -418,6 +418,7 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
 
 /// `memory status`: the unproven writes, per creature.
 fn memory(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::memory::{Unproven, audit::SHARED, pathology};
     let mut world = None;
     let mut json = false;
     let mut verb = None;
@@ -445,50 +446,77 @@ fn memory(args: &[String]) -> ExitCode {
         Err(e) => return refused(&format!("memory cannot be read: {e}")),
     };
     let frozen = report.iter().any(|(_, f)| !f.is_empty());
+    // The traces' findings beside the unproven writes: a creature with traces alone is listed too.
+    let mut rows: Vec<(String, Vec<Unproven>, Vec<String>)> = report
+        .into_iter()
+        .map(|(name, found)| (name, found, Vec::new()))
+        .collect();
+    for name in pathology::traced(&world) {
+        if !rows.iter().any(|(n, _, _)| *n == name) {
+            rows.push((name, Vec::new(), Vec::new()));
+        }
+    }
+    for (name, _, seen) in &mut rows {
+        if name != SHARED {
+            *seen = pathology::findings(&pathology::traces(&world, name).unwrap_or_default());
+        }
+    }
     if json {
-        let rows: Vec<serde_json::Value> = report
+        let rows: Vec<serde_json::Value> = rows
             .iter()
-            .map(|(name, found)| {
+            .map(|(name, found, seen)| {
                 serde_json::json!({
                     "creature": name,
-                    "frozen": !found.is_empty()
-                        && name != mnemorph_server::world::memory::audit::SHARED,
+                    "frozen": !found.is_empty() && name != SHARED,
                     "unproven": found.iter().map(|u| serde_json::json!({
                         "file": u.file, "event": u.event, "note": u.note, "why": u.why,
                     })).collect::<Vec<_>>(),
+                    "pathologies": seen,
                 })
             })
             .collect();
         println!("{}", serde_json::Value::Array(rows));
-    } else if report.is_empty() {
+    } else if rows.is_empty() {
         println!("no creature has memory here yet");
     } else {
-        for (name, found) in &report {
-            if found.is_empty() {
-                println!("{name}: clear");
-                continue;
-            }
-            let state = if name == mnemorph_server::world::memory::audit::SHARED {
-                "recall ignores"
-            } else {
-                "frozen —"
-            };
-            println!(
-                "{name}: {state} {} note event(s) that do not resolve; remove or re-prove each",
-                found.len()
-            );
-            for u in found {
-                println!(
-                    "  {}  event {}  note {}: {}",
-                    u.file, u.event, u.note, u.why
-                );
-            }
+        for (name, found, seen) in &rows {
+            print_memory(name, found, seen);
         }
     }
     if frozen {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// One creature's `memory status` lines: clear, or what does not resolve and what its recalls show.
+fn print_memory(name: &str, found: &[mnemorph_server::world::memory::Unproven], seen: &[String]) {
+    if found.is_empty() && seen.is_empty() {
+        println!("{name}: clear");
+        return;
+    }
+    if found.is_empty() {
+        println!("{name}: writes free");
+    } else {
+        let state = if name == mnemorph_server::world::memory::audit::SHARED {
+            "recall ignores"
+        } else {
+            "frozen —"
+        };
+        println!(
+            "{name}: {state} {} note event(s) that do not resolve; remove or re-prove each",
+            found.len()
+        );
+        for u in found {
+            println!(
+                "  {}  event {}  note {}: {}",
+                u.file, u.event, u.note, u.why
+            );
+        }
+    }
+    for line in seen {
+        println!("  {line}");
     }
 }
 

@@ -3886,3 +3886,32 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:**
   - a schema of schemas plus a split, which fails with the old `inherit` (checked);
   - the ownerless row.
+
+---
+
+### [2026-10-26T08:26:08+01:00] rimuru — M8 rung 6, second half: the replay loop and lock-in
+- **Task:** M8 rung 6 (#128), the two remaining findings, each with its act.
+- **Files:**
+  - memory pathology.rs:
+    - `fingerprint`: SHA-256 over the query, the anchor ids and the office (adds `sha2` 0.11,
+      MIT/Apache);
+    - `Trace` and `trace`/`traces`, in machine-local `short/recalls/<name>.jsonl`;
+    - `replays`: 3 in the last 5, the current included, nothing landed, no dissent;
+    - `locked_in`: a grounded revision linked to a recalled agreeing note, newer than all;
+    - `best_dissent`, with the floor set aside;
+    - `force`, which takes the lowest agreeing seat;
+    - `findings` and `traced`, for status;
+  - loop run.rs:
+    - `treat` at each recall: lock-in first, then the replay; each act is a warning;
+    - escalation adds an `@M replay:` line;
+    - `end` appends the trace; `landed_in_ask` is the gate heading; `with_office`;
+  - commission passes the office;
+  - mnemorphd `memory status` lists the trace findings (`print_memory`, a `pathologies` field in
+    `--json`); the exit code still reflects only unproven writes;
+  - docs 08.
+- **Tests:**
+  - pathology.rs (3);
+  - loop.rs: a replayed recall escalates on the third ask, and lock-in forces a non-matching
+    revision. The lock-in test was checked to fail with the detector disabled.
+- **Noted:** `esc_stops_the_child` failed once in the full run at 12 s under load 9.5 from the
+  bench containers, and passed three times alone. It is a timing test, not this change.

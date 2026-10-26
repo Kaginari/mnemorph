@@ -357,6 +357,25 @@ A shared note with no owner freezes no creature; its unresolved events are repor
 own row. A schema rests on schemas too, and an heir inherits a schema with every note it links
 to, so a split never leaves a schema resting on nothing.
 
+The replay loop and lock-in are read at each recall, before the body sees it:
+
+- **The office** is the commission's (`findings`, `verdict`, `draft`), or `ask` for a body asked
+  directly.
+- **Nothing landed** means the ask's end gate judged no change: its trace's outcome is the gate's
+  journal heading when one was written. Each ended ask appends its trace — fingerprint, whether a
+  dissent sat among the anchors, outcome, the act forced — to the machine-local
+  `.mnemorph/memory/short/recalls/<creature>.jsonl`.
+- **The replay loop's act** seats the best dissenting note for the query, the floor set aside;
+  with none in memory, the recall ends with an `@M replay:` line telling the body to change its
+  approach or say what blocks it.
+- **Lock-in** reads only a grounded revision linked to one of the recalled agreeing notes and
+  newer than all of them; its act seats the newest such revision. A forced note takes the place
+  of the lowest-ranked agreeing anchor, which is counted cut.
+
+Each act is said as a warning in the run's journal. `memory status` lists, per creature, a replay
+loop still within its last five traces and how often each act was forced; they leave its exit
+status alone, since code already acted on them — only an unproven write waits on the human.
+
 There is no aggregate memory score. A high recall hit rate cannot make up for a creature that
 never accepts a correction.
 

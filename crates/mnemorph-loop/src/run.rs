@@ -239,6 +239,13 @@ pub struct Run {
     ask_from: usize,
     /// The ask's last FAIL, with the gate's journal heading: what its run-ending failure revises by.
     failed_in_ask: Option<(Vec<String>, Option<String>)>,
+    /// The office the run's recall is made for — the commission's, else `ask` — in its fingerprint.
+    office: String,
+    /// This ask's recall, for its trace when the ask ends: the fingerprint, whether a dissent sat
+    /// among its anchors, and the act a pathology forced into it.
+    recall_trace: Option<(String, bool, Option<String>)>,
+    /// What this ask landed: the gate's journal heading for a change it judged.
+    landed_in_ask: Option<String>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -319,6 +326,9 @@ impl Run {
             anchors: Vec::new(),
             ask_from: 0,
             failed_in_ask: None,
+            office: "ask".into(),
+            recall_trace: None,
+            landed_in_ask: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -537,6 +547,13 @@ impl Run {
         self
     }
 
+    /// The commission's office (`findings`, `verdict`, `draft`): part of each recall's fingerprint.
+    #[must_use]
+    pub fn with_office(mut self, office: &str) -> Self {
+        office.clone_into(&mut self.office);
+        self
+    }
+
     /// The handle the interface fires on Esc.
     #[must_use]
     pub fn interrupt(&self) -> Arc<Interrupt> {
@@ -629,6 +646,22 @@ impl Run {
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
+        // The ask's recall leaves its trace: what the replay loop reads at the next.
+        if let Some((fingerprint, dissent, forced)) = self.recall_trace.clone() {
+            let t = mnemorph_memory::pathology::Trace {
+                time: mnemorph_memory::store::now_ms(),
+                fingerprint,
+                dissent,
+                outcome: self.landed_in_ask.clone(),
+                forced,
+            };
+            if let Err(e) = mnemorph_memory::pathology::trace(self.cx.world(), &self.body.name, &t)
+            {
+                self.record(&Beat::Warning {
+                    text: format!("the recall's trace could not be kept: {e}"),
+                });
+            }
+        }
         self.record(&Beat::End {
             ending: ending.words(),
         });
@@ -952,6 +985,9 @@ impl Run {
         };
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
+                if heading.is_some() {
+                    self.landed_in_ask.clone_from(&heading);
+                }
                 if verdict.passed() {
                     self.passed = Some((verdict.clone(), heading.clone()));
                 }
@@ -1173,6 +1209,7 @@ impl Run {
     fn open_ask(&mut self, text: &str) -> String {
         self.ask_from = self.messages.len();
         self.failed_in_ask = None;
+        self.landed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
         if let Some(recall) = self.recalled.take() {
@@ -1211,6 +1248,7 @@ impl Run {
     /// that matches, or cannot be read.
     fn recall(&mut self, text: &str) -> Vec<String> {
         self.anchors.clear();
+        self.recall_trace = None;
         let world = self.cx.world().to_path_buf();
         let roster = mnemorph_world::Roster::load(&world);
         let race = self.body.race.base();
@@ -1248,7 +1286,7 @@ impl Run {
             });
         }
         let now = mnemorph_memory::store::now_ms();
-        let r = mnemorph_memory::recall(
+        let mut r = mnemorph_memory::recall(
             text,
             &memory.notes,
             now,
@@ -1258,6 +1296,7 @@ impl Run {
         if r.anchors.is_empty() {
             return Vec::new();
         }
+        let (forced, escalate) = self.treat(text, &mut r, &memory.notes);
         self.anchors = r
             .anchors
             .iter()
@@ -1273,7 +1312,67 @@ impl Run {
             anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),
             cut: r.cut,
         });
-        mnemorph_memory::lines(&r, &memory.personal)
+        let mut lines = mnemorph_memory::lines(&r, &memory.personal);
+        if escalate {
+            lines.push(
+                "@M replay: this recall came back three times in the last five with nothing \
+                 landed and no correction in memory. Change the approach, or end the turn and \
+                 say what blocks you."
+                    .into(),
+            );
+        }
+        let anchors: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
+        let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
+        let fingerprint = mnemorph_memory::pathology::fingerprint(text, &anchors, &self.office);
+        self.recall_trace = Some((fingerprint, dissent, forced));
+        lines
+    }
+
+    /// The pathologies read at a recall, each with its act: lock-in forces the newest revision in;
+    /// a replay loop forces the best dissent in, or, with none in memory, tells the body to change
+    /// its approach. Returns the act forced, and whether the body is told.
+    fn treat(
+        &mut self,
+        text: &str,
+        r: &mut mnemorph_memory::Recalled,
+        notes: &[(mnemorph_memory::Note, mnemorph_memory::Relation)],
+    ) -> (Option<String>, bool) {
+        use mnemorph_memory::pathology as p;
+        if let Some(revision) = p::locked_in(r, notes) {
+            let id = revision.id.clone();
+            p::force(r, revision, RECALL_K);
+            self.record(&Beat::Warning {
+                text: format!(
+                    "memory: lock-in — every note recalled is older than revision `{id}`, and no \
+                     correction was selected: it is recalled too"
+                ),
+            });
+            return (Some("lock-in".into()), false);
+        }
+        let anchors: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
+        let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
+        let fingerprint = p::fingerprint(text, &anchors, &self.office);
+        let past = p::traces(self.cx.world(), &self.body.name).unwrap_or_default();
+        if !p::replays(&past, &fingerprint, dissent) {
+            return (None, false);
+        }
+        if let Some(d) = p::best_dissent(text, notes) {
+            let id = d.id.clone();
+            p::force(r, d, RECALL_K);
+            self.record(&Beat::Warning {
+                text: format!(
+                    "memory: replay loop — the same recall a third time in five with nothing \
+                     landed: correction `{id}` is recalled too"
+                ),
+            });
+            return (Some("replay".into()), false);
+        }
+        self.record(&Beat::Warning {
+            text: "memory: replay loop — the same recall a third time in five with nothing \
+                   landed, and no correction in memory: the body is told to change its approach"
+                .into(),
+        });
+        (Some("replay-escalated".into()), true)
     }
 
     /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,

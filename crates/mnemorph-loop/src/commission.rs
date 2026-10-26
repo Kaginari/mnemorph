@@ -489,6 +489,7 @@ pub(crate) async fn order(
         child_cx.with_body(&a.to),
         model,
     )
+    .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
     // What the world held before the child, to put back what it changes off its ground.
