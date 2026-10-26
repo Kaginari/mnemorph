@@ -223,6 +223,8 @@ pub struct GateVerdict {
     pub unguarded: bool,
     /// A verify run changed the tree: a check never writes, and the landing fails whole.
     pub wrote: bool,
+    /// How many verify lines ran over the change: none when nothing changed.
+    pub ran: usize,
 }
 
 /// The gate's word on a landing: three, never more.
@@ -331,6 +333,7 @@ impl EndGate {
                 unverified: Vec::new(),
                 unguarded: false,
                 wrote: false,
+                ran: 0,
             };
         }
         if answer.trim().is_empty() {
@@ -357,6 +360,7 @@ impl EndGate {
             unverified,
             unguarded,
             wrote,
+            ran: self.verify.len(),
         }
     }
 

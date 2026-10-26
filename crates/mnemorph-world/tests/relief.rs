@@ -240,34 +240,19 @@ fn a_split_hands_the_notes_to_the_heir_whose_half_holds_their_source() {
         "s",
         "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/a/, src/b/, src/c.rs\n",
     );
-    let note = |id: &str, source: &str| mnemorph_memory::Change::Create {
-        text: format!("{id} holds"),
-        tags: vec![],
-        owner: Some("slime-s".into()),
-        polarity: mnemorph_memory::Polarity::Support,
-        salience: 0.5,
-        confidence: 0.7,
-        source: Some(source.into()),
-    };
-    let mine = mnemorph_memory::Tier::Personal("slime-s".into());
-    for (id, source) in [("of-a", "src/a/x.rs:3"), ("of-c", "src/c.rs")] {
-        mnemorph_memory::append(
-            &w,
-            &mine,
-            id,
-            mnemorph_memory::By::Record,
-            None,
-            note(id, source),
-        )
-        .unwrap();
+    for (text, source) in [("of-a", "src/a/x.rs:3"), ("of-c", "src/c.rs")] {
+        mnemorph_memory::propose(&w, "slime-s", text, vec![], Some(source.into())).unwrap();
     }
     relieve(&w, "slime-s", true).unwrap();
     let notes_of = |name: &str| {
         let back =
             mnemorph_memory::read(&w, &mnemorph_memory::Tier::Personal(name.into())).unwrap();
-        mnemorph_memory::fold(&back.rows)
-            .into_keys()
-            .collect::<Vec<_>>()
+        let mut texts: Vec<String> = mnemorph_memory::fold(&back.rows)
+            .into_values()
+            .map(|n| n.text)
+            .collect();
+        texts.sort();
+        texts
     };
     assert_eq!(notes_of("slime-s-a"), ["of-a"]);
     assert_eq!(notes_of("slime-s-b"), ["of-c"]);

@@ -5,7 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use mnemorph_memory::{
-    By, Change, Event, Polarity, Status, Tier, append, fold, inherit, read, union_merge,
+    By, Change, Event, Polarity, Proof, Status, Tier, fold, ground, inherit, propose, read,
+    union_merge,
 };
 
 fn world(name: &str) -> PathBuf {
@@ -108,54 +109,38 @@ fn the_store_appends_whole_lines_and_reads_tolerantly() {
         Tier::Shared.file(),
         PathBuf::from(".mnemorph/memory/shared/notes.jsonl")
     );
-    let made = append(
-        &w,
-        &tier,
-        "n1",
-        By::Record,
-        None,
-        create("n1", 1, None).change,
-    )
-    .unwrap();
+    let claim = propose(&w, "slime-s", "n1 holds", vec![], None).unwrap();
     // A torn line, then another event: the torn one is skipped and counted.
     let path = w.join(tier.file());
     let mut text = fs::read_to_string(&path).unwrap();
     text.push_str("{\"id\": \"torn");
     fs::write(&path, text).unwrap();
-    append(
-        &w,
-        &tier,
-        "n1",
-        By::Gate,
-        Some("verdict".into()),
-        Change::Status {
-            status: Status::Grounded,
-        },
-    )
-    .unwrap();
+    let note = claim.note.clone();
+    ground(&w, claim, &Proof::confirmed("the human")).unwrap();
     let back = read(&w, &tier).unwrap();
-    assert_eq!(back.rows.len(), 2);
+    assert_eq!(
+        back.rows.len(),
+        3,
+        "the create, the grounding, its confidence"
+    );
     assert_eq!(back.skipped.len(), 1);
-    assert_eq!(back.rows[0], made);
-    assert_eq!(fold(&back.rows)["n1"].status, Status::Grounded);
+    assert_eq!(fold(&back.rows)[&note].status, Status::Grounded);
     let _ = fs::remove_dir_all(&w);
 }
 
 #[test]
 fn a_split_hands_each_heir_the_notes_whose_source_is_in_its_ground() {
     let w = world("inherit");
-    let journal = Tier::Personal("slime-s".into()).journal(&w);
-    for e in [
-        create("in-a", 1, Some("src/a/x.rs:12")),
-        create("in-b", 2, Some("src/b/y.rs")),
-        create("anywhere", 3, Some("log.md#2026")),
-        create("journal", 5, Some(".mnemorph/log.md#4")),
-        create("at-root", 6, Some("README.md:3")),
-        status("in-a", 4, "p", Status::Grounded),
-    ] {
-        journal.append(&e).unwrap();
-    }
-    let given = inherit(
+    let say = |text: &str, source: &str| {
+        propose(&w, "slime-s", text, vec![], Some(source.to_owned())).unwrap()
+    };
+    let in_a = say("in-a", "src/a/x.rs:12");
+    say("in-b", "src/b/y.rs");
+    say("anywhere", "log.md#2026");
+    say("journal", ".mnemorph/log.md#4");
+    say("at-root", "README.md:3");
+    ground(&w, in_a, &Proof::confirmed("the human")).unwrap();
+    inherit(
         &w,
         "slime-s",
         &[
@@ -167,33 +152,28 @@ fn a_split_hands_each_heir_the_notes_whose_source_is_in_its_ground() {
         ],
     )
     .unwrap();
+    let texts = |name: &str| {
+        let mut t: Vec<(String, Status)> =
+            fold(&read(&w, &Tier::Personal(name.into())).unwrap().rows)
+                .into_values()
+                .map(|n| (n.text, n.status))
+                .collect();
+        t.sort();
+        t
+    };
+    let g = |t: &str| (t.to_owned(), Status::Grounded);
+    let p = |t: &str| (t.to_owned(), Status::Proposed);
+    // A source no heir covers — a journal entry — goes to both; a root file only to its keeper;
+    // the grounding travels with its note.
     assert_eq!(
-        given,
-        [("slime-s-a".to_owned(), 5), ("slime-s-b".to_owned(), 3)]
+        texts("slime-s-a"),
+        [p("anywhere"), p("at-root"), g("in-a"), p("journal")]
     );
-    let a = fold(&read(&w, &Tier::Personal("slime-s-a".into())).unwrap().rows);
-    let b = fold(&read(&w, &Tier::Personal("slime-s-b".into())).unwrap().rows);
-    // A source no heir covers — a journal entry — goes to both; a root file only to its keeper.
+    assert_eq!(texts("slime-s-b"), [p("anywhere"), p("in-b"), p("journal")]);
     assert_eq!(
-        a.keys().collect::<Vec<_>>(),
-        ["anywhere", "at-root", "in-a", "journal"]
-    );
-    assert_eq!(
-        a["in-a"].status,
-        Status::Grounded,
-        "its standing travels with it"
-    );
-    assert_eq!(
-        b.keys().collect::<Vec<_>>(),
-        ["anywhere", "in-b", "journal"]
-    );
-    // The old creature's file is kept whole.
-    assert_eq!(
-        read(&w, &Tier::Personal("slime-s".into()))
-            .unwrap()
-            .rows
-            .len(),
-        6
+        texts("slime-s").len(),
+        5,
+        "the old creature's file is kept whole"
     );
     let _ = fs::remove_dir_all(&w);
 }

@@ -63,6 +63,16 @@ fn clean(text: &str) -> String {
 ///
 /// The journal or its directory is a link, or it cannot be opened or written.
 pub fn append(world: &Path, entry: &Entry) -> std::io::Result<()> {
+    append_entry(world, entry).map(|_| ())
+}
+
+/// [`append`], saying the heading it wrote — `### [<time>] <body> — <title>`, the entry's name
+/// for a proof to cite — or `None` when the world keeps no journal.
+///
+/// # Errors
+///
+/// As [`append`].
+pub fn append_entry(world: &Path, entry: &Entry) -> std::io::Result<Option<String>> {
     let path = world.join(LOG);
     for p in [path.parent(), Some(path.as_path())].into_iter().flatten() {
         if std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()) {
@@ -73,7 +83,7 @@ pub fn append(world: &Path, entry: &Entry) -> std::io::Result<()> {
         }
     }
     if !path.parent().is_some_and(Path::is_dir) {
-        return Ok(());
+        return Ok(None);
     }
     // A link put in its place after the check is refused by the kernel.
     let mut f = std::fs::OpenOptions::new()
@@ -81,5 +91,10 @@ pub fn append(world: &Path, entry: &Entry) -> std::io::Result<()> {
         .append(true)
         .custom_flags(libc::O_NOFOLLOW)
         .open(&path)?;
-    f.write_all(entry.render(Timestamp::now()).as_bytes())
+    let text = entry.render(Timestamp::now());
+    f.write_all(text.as_bytes())?;
+    Ok(text
+        .lines()
+        .find(|l| l.starts_with("### "))
+        .map(str::to_owned))
 }

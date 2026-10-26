@@ -424,7 +424,8 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
             ScriptedModel::text(
                 "@S DONE\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
             ),
-            ScriptedModel::text("@S DONE\n@E"),
+            // The Orc wrote nothing itself: its gate ran nothing, whatever its Slime landed.
+            ScriptedModel::text("@S DONE\n@U law the orc thinks the slime was right\n@E"),
             ScriptedModel::text("@S DONE\n@E"),
             ScriptedModel::text("@S DONE\n@E"),
             ScriptedModel::text("Reported."),
@@ -440,9 +441,18 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
             "territory is not memory"
         );
         let n = mine.values().next().unwrap();
+        let orc = fold(&read(&w.0, &Tier::Personal("orc-o".into())).unwrap().rows);
+        assert!(
+            orc.values().all(|n| n.status == Status::Proposed),
+            "a gate that ran nothing grounds nothing: {orc:?}"
+        );
         if landing {
             assert_eq!(n.status, Status::Grounded);
-            assert_eq!(shared.len(), 1, "grounded into shared memory");
+            assert_eq!(
+                shared.len(),
+                1,
+                "only the Slime's claim, grounded into shared memory"
+            );
             assert!(shared.values().all(|s| s.status == Status::Grounded));
         } else {
             assert_eq!(

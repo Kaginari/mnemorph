@@ -521,9 +521,31 @@ pub(crate) async fn order(
         .chain(rode)
         .chain(others_note(&others))
         .collect();
+    let checked = checked_proof(&a.to, child.passed_gate());
     let report = report_for(
-        c, &roster, &a.to, &ending, failed, notes, &landed, &put_back,
+        c,
+        &roster,
+        &a.to,
+        &ending,
+        failed,
+        notes,
+        &landed,
+        &put_back,
+        checked.as_ref(),
     );
+    order_of(report, spent, landed, put_back, before, &ending)
+}
+
+/// The order a commission returns: its report, its spend, what landed, what was put back, the
+/// tree it started from.
+fn order_of(
+    report: String,
+    spent: u64,
+    landed: Vec<PathBuf>,
+    put_back: Vec<(PathBuf, bool)>,
+    before: crate::gate::Tree,
+    ending: &Ending,
+) -> Order {
     Order {
         outcome: Outcome::ok(report, ToolClass::Dispatch),
         spent,
@@ -539,18 +561,31 @@ pub(crate) async fn order(
     }
 }
 
-/// What the child learned about its territory, said in its `@U territory` lines, filed as facts
+/// The **checked** proof a child's own run earned: the end gate passed on a change of its own,
+/// running its verify lines over it, citing the journal entry the gate wrote. None when its gate
+/// ran nothing — a child that wrote nothing itself passes untouched, whatever its commissions
+/// landed.
+fn checked_proof(
+    to: &str,
+    passed: Option<(&crate::gate::GateVerdict, Option<&str>)>,
+) -> Option<mnemorph_memory::Proof> {
+    let (verdict, heading) = passed?;
+    let cite = heading.map_or_else(
+        || format!("log.md: {to} gate: PASS"),
+        |h| format!("log.md {h}"),
+    );
+    mnemorph_memory::Proof::checked(&cite, verdict.ran, verdict.changed.len()).ok()
+}
+
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
-/// its personal memory, proposed; and when its landing passed the end gate with at least one
-/// verify line over a non-empty diff, they are grounded by **checked**, the proof citing the
-/// gate's journal entry. A child that did not answer, or whose pass proved nothing, keeps its
-/// words personal. Says what it did, as a note for the report.
+/// its personal memory, proposed; with a **checked** proof its own run earned, they are grounded.
+/// A child that did not answer, or whose gate proved nothing, keeps its words personal. Says what
+/// it did, as a note for the report.
 fn remember(
     world: &Path,
-    roster: &Roster,
     to: &str,
     ending: &Ending,
-    landed: &[PathBuf],
+    proof: Option<&mnemorph_memory::Proof>,
 ) -> Option<String> {
     let Ending::Answered(text) = ending else {
         return None;
@@ -564,10 +599,6 @@ fn remember(
     if said.is_empty() {
         return None;
     }
-    let verify = roster.creatures.get(to).map_or(0, |k| k.verify.len());
-    let proof =
-        mnemorph_memory::Proof::checked(&format!("log.md: {to} gate: PASS"), verify, landed.len())
-            .ok();
     let (mut proposed, mut grounded) = (0, 0);
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
@@ -576,7 +607,7 @@ fn remember(
             continue;
         };
         proposed += 1;
-        if let Some(p) = &proof
+        if let Some(p) = proof
             && mnemorph_memory::ground(world, claim, p).is_ok()
         {
             grounded += 1;
@@ -868,11 +899,12 @@ fn report_for(
     notes: Vec<String>,
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
+    checked: Option<&mnemorph_memory::Proof>,
 ) -> String {
     let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
-    notes.extend(remember(&c.world, roster, to, ending, landed));
+    notes.extend(remember(&c.world, to, ending, checked));
     file_labels(&c.world, roster, ending, to);
     if let Some(q) = &c.queue {
         hold_orders(q, &c.world, ending, to);

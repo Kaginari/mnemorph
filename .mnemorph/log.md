@@ -3713,3 +3713,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** memory write.rs (proofs refused without evidence; propose, then ground in both tiers);
   commission (a checked landing grounds; a bare answer stays proposed; territory is not memory).
 - **Next:** wire accepted (the parent's verdict naming a claim) and the turn's recalled anchors.
+
+---
+
+### [2026-10-26T02:53:51+01:00] rimuru — #194's review: Fable
+- **Fable found:**
+  - a false **checked**: `remember` built the proof from the landing, which includes the child's
+    commissions. An Orc that wrote nothing itself passes untouched, with no verify line run and no
+    journal entry, yet its words were grounded;
+  - `append` was public, so the type rule was honour-system;
+  - the cite could not be resolved;
+  - the docs named `Note<Proposed>`.
+- **Fixed:**
+  - the run keeps its last passed verdict (`passed_gate`) with the journal heading the gate wrote
+    (`log::append_entry`); `GateVerdict.ran` counts the verify lines; `checked_proof` builds only
+    from those and cites the heading;
+  - memory's `append` and `Tier::journal` are crate-private: outside the crate only `propose` and
+    `ground` write;
+  - docs 08 say `Claim<…>`;
+  - `order_of` was extracted to keep `order` under 100 lines; a stray doc line was removed.
+- **Test:** the Orc's claim stays proposed while its Slime's is grounded.
+- **Disk:** it fell to 3.1G as stale dev test binaries piled up. The dev target was cleared and is
+  rebuilt with `CARGO_INCREMENTAL=0` (4.4G).
