@@ -536,4 +536,6 @@ fn the_true_duplicate_is_shown_for_triage() {
         TRIAGE_CASES.len()
     );
     assert!(missed.is_empty(), "{missed:#?}");
+    // Docs 09 quote these ranks: a change here is a change there.
+    assert_eq!(ranks, [3, 1, 1, 1, 2, 1, 3, 1]);
 }
