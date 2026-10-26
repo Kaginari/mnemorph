@@ -30,6 +30,8 @@ pub struct Claim<S> {
     pub tags: Vec<String>,
     /// What it points at.
     pub source: Option<String>,
+    /// What it rests on: the files its run read or changed.
+    pub evidence: Vec<String>,
     standing: PhantomData<S>,
 }
 
@@ -208,6 +210,23 @@ pub fn propose(
     tags: Vec<String>,
     source: Option<String>,
 ) -> std::io::Result<Claim<Proposed>> {
+    propose_on(world, owner, text, tags, source, Vec::new())
+}
+
+/// [`propose`], with what the claim rests on: the files its run read or changed, which a second
+/// voice must not share to corroborate it.
+///
+/// # Errors
+///
+/// The creature's memory is frozen ([`crate::unfrozen`]), or the note file cannot be written.
+pub fn propose_on(
+    world: &Path,
+    owner: &str,
+    text: &str,
+    tags: Vec<String>,
+    source: Option<String>,
+    evidence: Vec<String>,
+) -> std::io::Result<Claim<Proposed>> {
     crate::audit::unfrozen(world, owner)?;
     let note = format!("n{}", event_id(now_ms()));
     append(
@@ -225,6 +244,7 @@ pub fn propose(
             confidence: 0.5,
             source: source.clone(),
             links: Vec::new(),
+            evidence: evidence.clone(),
         },
     )?;
     Ok(Claim {
@@ -233,6 +253,7 @@ pub fn propose(
         text: text.to_owned(),
         tags,
         source,
+        evidence,
         standing: PhantomData,
     })
 }
@@ -291,6 +312,7 @@ pub fn ground(
             confidence,
             source: claim.source.clone(),
             links: Vec::new(),
+            evidence: claim.evidence.clone(),
         },
     )?;
     append(
@@ -309,6 +331,7 @@ pub fn ground(
         text: claim.text,
         tags: claim.tags,
         source: claim.source,
+        evidence: claim.evidence,
         standing: PhantomData,
     })
 }
@@ -390,6 +413,7 @@ pub fn revise(
                 salience: 1.0,
                 confidence: 0.9,
                 source: Some(verdict.to_owned()),
+                evidence: Vec::new(),
                 links,
             },
         )?;
@@ -444,6 +468,7 @@ pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
             salience: 0.5,
             confidence: 0.5,
             source: None,
+            evidence: Vec::new(),
             links: Vec::new(),
         },
     )?;
@@ -783,6 +808,79 @@ pub fn proposed(world: &Path, owner: &str, id: &str) -> std::io::Result<Option<C
             text: n.text.clone(),
             tags: n.tags.clone(),
             source: n.source.clone(),
+            evidence: n.evidence.clone(),
             standing: PhantomData,
         }))
+}
+
+/// What [`corroborate`] leaves: the claim grounded with the id of the one that corroborated it,
+/// or the claim back, still proposed.
+pub type Seconded = Result<(Claim<Grounded>, String), Claim<Proposed>>;
+
+/// The **corroborated** route's detector: another creature's proposed claim that says the same —
+/// the same content words, negated alike — resting on evidence disjoint from this claim's grounds
+/// both, each citing the other. Returns the grounded claim and the id of the one that
+/// corroborated it, or the claim back when no second voice is found; a claim that rests on no
+/// evidence is never corroborated.
+///
+/// # Errors
+///
+/// A personal tier cannot be read, or a grounding cannot be written.
+pub fn corroborate(world: &Path, claim: Claim<Proposed>) -> std::io::Result<Seconded> {
+    if claim.evidence.is_empty() {
+        return Ok(Err(claim));
+    }
+    let mut others: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .filter(|o| *o != claim.owner)
+                .collect()
+        })
+        .unwrap_or_default();
+    others.sort();
+    for other in others {
+        let rows = crate::store::read(world, &Tier::Personal(other.clone()))?.rows;
+        let Some(theirs) = crate::note::fold(&rows).into_values().find(|n| {
+            n.status == Status::Proposed
+                && n.owner.as_deref() == Some(other.as_str())
+                && same_claim(&n.text, &claim.text)
+                && Proof::corroborated(&claim.owner, &other, &claim.evidence, &n.evidence).is_ok()
+        }) else {
+            continue;
+        };
+        let (Ok(ours), Ok(back)) = (
+            Proof::corroborated(&claim.owner, &other, &claim.evidence, &theirs.evidence),
+            Proof::corroborated(&other, &claim.owner, &theirs.evidence, &claim.evidence),
+        ) else {
+            continue;
+        };
+        if let Some(second) = proposed(world, &other, &theirs.id)? {
+            ground(world, second, &back)?;
+        }
+        return Ok(Ok((ground(world, claim, &ours)?, theirs.id)));
+    }
+    Ok(Err(claim))
+}
+
+/// Whether two claims say the same: the same content words, and both negated or neither — stop
+/// words drop `not`, so "X is not Y" would otherwise match "X is Y".
+fn same_claim(a: &str, b: &str) -> bool {
+    let set = |t: &str| {
+        crate::text::content_words(t)
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let negated = |t: &str| {
+        crate::text::words(t).iter().any(|w| {
+            matches!(
+                w.as_str(),
+                "not" | "no" | "never" | "none" | "nothing" | "without" | "cannot" | "nor" | "t"
+            )
+        })
+    };
+    let (sa, sb) = (set(a), set(b));
+    !sa.is_empty() && sa == sb && negated(a) == negated(b)
 }

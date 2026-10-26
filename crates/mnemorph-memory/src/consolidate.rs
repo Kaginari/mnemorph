@@ -71,6 +71,7 @@ pub fn distill(
             salience: 0.8,
             confidence,
             source: None,
+            evidence: Vec::new(),
             links: merged
                 .iter()
                 .map(|n| Link {
@@ -156,6 +157,7 @@ pub fn forget(
                     salience: (n.salience - 0.1).max(0.4),
                     confidence: (n.confidence - 0.1).max(0.3),
                     source: n.source.clone(),
+                    evidence: Vec::new(),
                     links: vec![Link {
                         note: id.to_owned(),
                         weight: 1.0,

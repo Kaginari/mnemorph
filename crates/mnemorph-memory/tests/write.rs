@@ -483,3 +483,110 @@ fn a_checked_proof_covers_only_its_diff() {
     assert!(ground(&w, diff_claim, &proof).is_ok());
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A second creature that says the same from other evidence grounds both claims, each citing the
+/// other — and only then: not on shared evidence, not when one is negated, not from itself, not
+/// from no evidence.
+#[test]
+fn a_second_voice_from_other_evidence_corroborates() {
+    use mnemorph_memory::{corroborate, propose_on};
+    let ev = |p: &[&str]| p.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    let w = world_of("corroborate");
+    let first = propose_on(
+        &w,
+        "slime-a",
+        "The lexer keeps interval fractions.",
+        vec![],
+        None,
+        ev(&["src/lexer.rs"]),
+    )
+    .unwrap();
+    let first_id = first.note.clone();
+    // A second creature on the same evidence: no second voice.
+    let same = propose_on(
+        &w,
+        "slime-b",
+        "the lexer keeps interval fractions",
+        vec![],
+        None,
+        ev(&["src/lexer.rs"]),
+    )
+    .unwrap();
+    assert!(
+        corroborate(&w, same).unwrap().is_err(),
+        "one piece of evidence"
+    );
+    // The same creature on other evidence, alone in its world: no second voice.
+    let alone = world_of("corroborate-alone");
+    for on in ["src/lexer.rs", "src/parser.rs"] {
+        let c = propose_on(
+            &alone,
+            "slime-a",
+            "the lexer keeps interval fractions",
+            vec![],
+            None,
+            ev(&[on]),
+        )
+        .unwrap();
+        assert!(corroborate(&alone, c).unwrap().is_err(), "itself, on {on}");
+    }
+    let _ = fs::remove_dir_all(&alone);
+    // Negated, or resting on nothing: no match.
+    let not = propose_on(
+        &w,
+        "slime-c",
+        "the lexer keeps no interval fractions",
+        vec![],
+        None,
+        ev(&["tests/lexer.rs"]),
+    )
+    .unwrap();
+    assert!(
+        corroborate(&w, not).unwrap().is_err(),
+        "negated alike or not at all"
+    );
+    let bare = propose_on(
+        &w,
+        "slime-c",
+        "the lexer keeps interval fractions",
+        vec![],
+        None,
+        vec![],
+    )
+    .unwrap();
+    assert!(
+        corroborate(&w, bare).unwrap().is_err(),
+        "no evidence, no corroboration"
+    );
+    // Another creature, other evidence, the same words: both grounded.
+    let second = propose_on(
+        &w,
+        "slime-d",
+        "interval fractions: the lexer keeps them",
+        vec![],
+        None,
+        ev(&["tests/test_lexer.py"]),
+    )
+    .unwrap();
+    let Ok((grounded, by)) = corroborate(&w, second).unwrap() else {
+        panic!("a second voice from other evidence corroborates");
+    };
+    assert_eq!(by, first_id);
+    let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
+    for (id, owner) in [(&grounded.note, "slime-d"), (&first_id, "slime-a")] {
+        let mine = fold(&read(&w, &Tier::Personal(owner.into())).unwrap().rows);
+        for n in [&mine[id], &shared[id]] {
+            assert_eq!(n.status, Status::Grounded, "{owner}");
+            assert!(
+                n.proof.as_deref().unwrap().starts_with("corroborated: "),
+                "{owner}"
+            );
+        }
+    }
+    assert_eq!(
+        shared[&first_id].evidence,
+        ev(&["src/lexer.rs"]),
+        "evidence travels"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

@@ -529,7 +529,6 @@ pub(crate) async fn order(
         .chain(rode)
         .chain(others_note(&others))
         .collect();
-    let checked = checked_proof(&a.to, child.passed_gate());
     let (report, offered) = report_for(
         c,
         &roster,
@@ -539,7 +538,8 @@ pub(crate) async fn order(
         notes,
         &landed,
         &put_back,
-        checked.as_ref(),
+        checked_proof(&a.to, child.passed_gate()).as_ref(),
+        &child.evidence(),
     );
     order_of((report, offered), spent, landed, put_back, before, &ending)
 }
@@ -602,6 +602,7 @@ pub(crate) fn remember(
     to: &str,
     ending: &Ending,
     proof: Option<&mnemorph_memory::Proof>,
+    evidence: &[String],
 ) -> (Option<String>, Vec<(String, String)>) {
     let Ending::Answered(text) = ending else {
         return (None, Vec::new());
@@ -617,37 +618,52 @@ pub(crate) fn remember(
     if said.is_empty() {
         return (None, Vec::new());
     }
-    let (mut proposed, mut grounded) = (0, 0);
+    let (mut proposed, mut grounded, mut seconded) = (0, 0, 0);
     // What stays proposed is named, so the commissioner may accept it by id.
     let mut open = Vec::new();
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
-        let claim = match mnemorph_memory::propose(world, to, &u.text, tags, None) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("mnemorph: {to}'s claim could not be remembered: {e}");
-                continue;
-            }
-        };
+        let claim =
+            match mnemorph_memory::propose_on(world, to, &u.text, tags, None, evidence.to_vec()) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("mnemorph: {to}'s claim could not be remembered: {e}");
+                    continue;
+                }
+            };
         proposed += 1;
         let id = claim.note.clone();
         let short: String = u.text.chars().take(80).collect();
         // A check observes only its diff: a claim about the world beyond it stays proposed,
         // offered for the commissioner to accept.
-        if let Some(p) = proof.filter(|p| p.covers(&u.text, claim.source.as_deref())) {
-            match mnemorph_memory::ground(world, claim, p) {
+        let claim = match proof.filter(|p| p.covers(&u.text, claim.source.as_deref())) {
+            Some(p) => match mnemorph_memory::ground(world, claim, p) {
                 Ok(_) => {
                     grounded += 1;
                     continue;
                 }
-                Err(e) => eprintln!("mnemorph: {to}'s claim could not be grounded: {e}"),
+                Err(e) => {
+                    eprintln!("mnemorph: {to}'s claim could not be grounded: {e}");
+                    continue;
+                }
+            },
+            None => claim,
+        };
+        // A second creature that said the same from other evidence grounds it: corroborated.
+        match mnemorph_memory::corroborate(world, claim) {
+            Ok(Ok(_)) => {
+                seconded += 1;
+                continue;
             }
+            Ok(Err(_)) => {}
+            Err(e) => eprintln!("mnemorph: {to}'s claim could not be corroborated: {e}"),
         }
         open.push((id, short));
     }
     (
         Some(format!(
-            "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked]"
+            "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked, \
+             {seconded} by corroborated]"
         )),
         open,
     )
@@ -977,11 +993,12 @@ fn report_for(
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
+    evidence: &[String],
 ) -> (String, Vec<(String, String)>) {
     let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
-    let (kept, offered) = remember(&c.world, to, ending, checked);
+    let (kept, offered) = remember(&c.world, to, ending, checked, evidence);
     notes.extend(kept);
     // Each claim left proposed is offered as a hole too: never cut, however much the body said.
     triage.extend(offered.iter().map(|(id, text)| {
@@ -1579,7 +1596,7 @@ mod write_rule_tests {
             let proof = (!caught)
                 .then(|| checked_proof("slime-s", Some((&verdict, Some(heading.as_str())))))
                 .flatten();
-            let _ = remember(&w, "slime-s", &ending, proof.as_ref());
+            let _ = remember(&w, "slime-s", &ending, proof.as_ref(), &[]);
         }
         let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
         let personal = fold(&read(&w, &Tier::Personal("slime-s".into())).unwrap().rows);

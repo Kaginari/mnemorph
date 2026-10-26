@@ -95,6 +95,10 @@ pub enum Change {
         /// The notes a revise note revises, each with its weight.
         #[serde(default)]
         links: Vec<Link>,
+        /// What a claim rests on: the files its run read or changed — the anchors a second voice
+        /// must not share to corroborate it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        evidence: Vec<String>,
     },
     /// Its standing changes: a promotion, a demotion, a tombstone.
     Status {
@@ -157,6 +161,8 @@ pub struct Note {
     /// Words recall borrows for a correction from the notes it cites, to match where they match:
     /// never stored, never counted in how common a word is.
     pub lent: Vec<String>,
+    /// What the claim rests on: the files its run read or changed.
+    pub evidence: Vec<String>,
 }
 
 /// Fold events into notes. Events are taken in `(time, id)` order and the latest sets a note's
@@ -183,6 +189,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                 confidence,
                 source,
                 links,
+                evidence,
             } => {
                 notes.entry(e.note.clone()).or_insert_with(|| Note {
                     id: e.note.clone(),
@@ -198,6 +205,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                     born: e.time,
                     links: links.clone(),
                     lent: Vec::new(),
+                    evidence: evidence.clone(),
                 });
             }
             Change::Status { status } => {

@@ -4510,3 +4510,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - keyed directory facts unanchored;
   - docs 09.
 - **Checked:** the host-path asserts fail with the filter off (`@ONTO /etc/passwd: nobody` shows).
+
+---
+
+### [2026-10-26T14:12:10+01:00] rimuru — the corroborated route, live
+- **Why:** the gap matrix's M17. `Proof::corroborated` had no caller, and no claim carried
+  anchors (every proposal passed `source: None`), so the ε² route was dead.
+- **Files:**
+  - memory note.rs: `Create`/`Note` carry `evidence`, serde-defaulted, so older journals read
+    and older binaries ignore it;
+  - memory write.rs: `propose_on` takes the evidence; `corroborate` finds another creature's
+    proposed claim with the same content words, negated alike (`same_claim`; stop words drop
+    `not`), whose evidence is non-empty and disjoint, then grounds both, each citing the other;
+    the `Seconded` type;
+  - loop run.rs: `Run::evidence` = the paths read or changed since the ask (`acts_since_ask`);
+  - loop commission.rs: `remember` files the evidence and tries corroboration for what no check
+    grounds; the report counts it; a child's evidence reaches `report_for`;
+  - docs 08.
+- **Not `source`:** a note's `source` is the single place it is about (`covers`, heir routing);
+  evidence is a list, and kept apart.
+- **Tests:**
+  - memory: same evidence, the same creature, a negation, and no evidence are each refused; a
+    second voice grounds both. Checked to fail with the negation test off.
+  - solo: a world claim grounded by another creature's earlier claim, its evidence the file it
+    read.

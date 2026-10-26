@@ -17,6 +17,7 @@ pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};
 pub use store::{Tier, inherit, read, union_merge};
 pub use write::{
-    Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, attributable, cache,
-    confirm, ground, propose, proposed, retire, retired, revise, wake,
+    Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, Seconded, attributable,
+    cache, confirm, corroborate, ground, propose, propose_on, proposed, retire, retired, revise,
+    wake,
 };

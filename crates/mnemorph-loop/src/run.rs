@@ -1118,6 +1118,42 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
+    /// What this ask's claims rest on: the files the body read or changed since the ask — the
+    /// anchors a second voice must not share to corroborate one of them.
+    pub(crate) fn evidence(&self) -> Vec<String> {
+        let mut paths = std::collections::BTreeSet::new();
+        for (name, input) in self.acts_since_ask() {
+            let read = (name == "read")
+                .then(|| {
+                    input
+                        .get("path")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned)
+                })
+                .flatten();
+            for p in changed_paths(name, input).into_iter().chain(read) {
+                let p = p.trim_start_matches("./").to_owned();
+                if !p.is_empty() {
+                    paths.insert(p);
+                }
+            }
+        }
+        paths.into_iter().collect()
+    }
+
+    /// The body's acts since the ask: each tool's name and input.
+    fn acts_since_ask(&self) -> Vec<(&str, &serde_json::Value)> {
+        self.messages[self.ask_from.min(self.messages.len())..]
+            .iter()
+            .filter(|m| m.role == mnemorph_provider::Role::Assistant)
+            .flat_map(|m| &m.content)
+            .filter_map(|b| match b {
+                Block::ToolUse { name, input, .. } => Some((name.as_str(), input)),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The anchors recalled into this ask, each marked cited when the body used it: its own words
     /// or acts name the note's id, or it changed a path the note names — written, edited, moved,
     /// deleted or patched — other than one the ask itself names, since the task's own target says
@@ -1231,8 +1267,13 @@ impl Run {
             .flatten();
         let proof = crate::commission::checked_proof(&self.body.name, passed);
         crate::commission::file_facts(world, &ending, &self.body.name);
-        let (kept, _) =
-            crate::commission::remember(world, &self.body.name, &ending, proof.as_ref());
+        let (kept, _) = crate::commission::remember(
+            world,
+            &self.body.name,
+            &ending,
+            proof.as_ref(),
+            &self.evidence(),
+        );
         if let Some(kept) = kept {
             self.record(&Beat::Warning { text: kept });
         }
