@@ -95,6 +95,8 @@ pub struct Commissioner {
     pub caps: Option<mnemorph_ledger::Caps>,
     /// The human's stress line, when the configuration sets one.
     pub stress_tokens: Option<u64>,
+    /// Recall's weights from the human's configuration, when one was read.
+    pub weights: Option<mnemorph_memory::Weights>,
     /// Seats with a live court: one court per seat.
     pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// Who watches the session: every commissioned body's beats reach it, labelled.
@@ -1220,6 +1222,9 @@ fn child_run(
     limits.budget_wt = (slice != u64::MAX).then_some(slice);
     if let Some(stress) = c.stress_tokens {
         limits.stress_tokens = stress;
+    }
+    if let Some(weights) = c.weights {
+        limits.weights = weights;
     }
     let body = Body {
         name: name.clone(),

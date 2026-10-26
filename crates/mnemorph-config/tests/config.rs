@@ -1029,3 +1029,35 @@ fn budget_caps_are_the_humans_and_in_weighted_tokens() {
     g.global("[budget]\nmonth = 0\n");
     assert!(g.load().unwrap_err().contains("budget.month"));
 }
+
+/// Recall's weights are numbers in config: a layer's value stands, an unset key gives the caller's
+/// own default, and a negative or non-numeric value is an error naming its file.
+#[test]
+fn recall_weights_are_numbers_a_layer_sets() {
+    let g = Ground::new("recall");
+    g.tracked("[recall]\nfloor = 0.3\nhalf_life_days = 30\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.number("recall.floor"), Some(0.3));
+    assert_eq!(c.number("recall.half_life_days"), Some(30.0));
+    assert_eq!(c.number("recall.meaning"), None);
+    g.tracked("[recall]\nfloor = -1.0\n");
+    assert!(g.load().unwrap_err().contains("config.toml"));
+    g.tracked("[recall]\nfloor = \"high\"\n");
+    assert!(g.load().is_err());
+    // What recall cannot score: a zero saturation or half-life divides by zero, a floor of zero
+    // matches every note, a weight past 1, an infinity.
+    for bad in [
+        "saturation_short = 0",
+        "half_life_days = 0.0",
+        "floor = 0",
+        "meaning = 1.5",
+        "dissent = inf",
+    ] {
+        g.tracked(&format!("[recall]\n{bad}\n"));
+        let e = g.load().unwrap_err();
+        assert!(
+            e.contains("config.toml") && e.contains("recall."),
+            "{bad}: {e}"
+        );
+    }
+}

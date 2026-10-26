@@ -4595,3 +4595,38 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `memory status --json` gives proposed claims their own `proposed` field, not `pathologies`
     (`print_memory_json`, moved out of `memory` for its length).
 - **Test:** the JSON field and a stray directory.
+
+---
+
+### [2026-10-26T15:08:36+01:00] rimuru — recall's weights in config
+- **Why:** the gap matrix's M8b. Docs 08 said every recall weight lives in config; `run.rs`
+  passed `Weights::default()`.
+- **Files:**
+  - config: eleven `recall.*` Number keys and a public `number()`; a Number key now refuses a
+    negative float as well as a negative integer (the schema said "zero or more"; `-1.0` passed,
+    and the `budget.*_usd` caps had the same hole);
+  - loop solo.rs: `recall_weights` (each set key over `Weights::default()`), applied by
+    `configure`;
+  - `Limits.weights` (`Weights` is now `Copy`); the commissioner carries `weights` to children,
+    as it carries `stress_tokens`; run.rs recalls with `self.limits.weights`.
+- **Docs 08:** the keys; the dissent seat stated over C_θ (matching dissents), as the code does
+  (the matrix's 2.C), with lock-in named for the case it does not cover.
+- **Tests:**
+  - config: the keys read, unset is None, a negative and a string are refused;
+  - loop: the default floor recalls the note; an unreachable floor recalls nothing.
+
+---
+
+### [2026-10-26T15:13:13+01:00] rimuru — recall weights, Fable's review
+- **Fable:** every run gets the configured weights; the C_θ docs are exact.
+- **Found:**
+  - unbounded values made NaN scores that cleared the floor (saturation 0 is `0/0`, a half-life
+    of 0, `inf`), and a floor of 0 matched every note;
+  - the config→Weights key names were untested;
+  - `number()` dropped integers above `i32`.
+- **Fixed:**
+  - config `recall_bound` in `validate` (finite; saturations and half-life > 0; floor in (0, 1];
+    weights ≤ 1), with an error naming the file;
+  - `the_configuration_reaches_the_run` sets `[recall]` and reads it back through `configure`;
+  - `number()` goes through `u32`;
+  - docs 08 state the bounds.

@@ -114,6 +114,17 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
     ("steps.solo", Kind::Int),
+    ("recall.meaning", Kind::Number),
+    ("recall.relation", Kind::Number),
+    ("recall.salience", Kind::Number),
+    ("recall.confidence", Kind::Number),
+    ("recall.freshness", Kind::Number),
+    ("recall.dissent", Kind::Number),
+    ("recall.half_life_days", Kind::Number),
+    ("recall.floor", Kind::Number),
+    ("recall.saturation_short", Kind::Number),
+    ("recall.saturation_mid", Kind::Number),
+    ("recall.saturation_long", Kind::Number),
     ("evolution.mode", Kind::Str),
     ("models.provider", Kind::Str),
     ("models.default", Kind::Str),
@@ -575,6 +586,7 @@ impl Config {
         for (key, leaf) in &self.leaves {
             let at = &leaf.origin;
             match key.as_str() {
+                k if k.starts_with("recall.") => recall_bound(k, &leaf.value, at)?,
                 "gate.ask_rules" => {
                     for name in strings(&leaf.value) {
                         let rule = Rule::from_name(name).ok_or_else(|| {
@@ -1043,6 +1055,20 @@ impl Config {
             .unwrap_or(ENVELOPE_DAYS)
     }
 
+    /// A number key's value — `recall.*` and the like — when a layer sets it: the caller's own
+    /// default stands otherwise.
+    #[must_use]
+    pub fn number(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(|l| {
+            l.value.as_float().or_else(|| {
+                l.value
+                    .as_integer()
+                    .and_then(|i| u32::try_from(i).ok())
+                    .map(f64::from)
+            })
+        })
+    }
+
     fn int(&self, key: &str) -> Option<u64> {
         self.get(key)
             .and_then(|l| l.value.as_integer())
@@ -1089,11 +1115,45 @@ fn kind_of(key: &str) -> Option<Kind> {
     })
 }
 
+/// A `recall.*` value within what recall can score: finite; a saturation or a half-life above
+/// zero (zero divides by zero); a weight, the dissent's boost and the floor at most 1; the floor
+/// above zero, since a floor of zero lets every note match.
+fn recall_bound(key: &str, value: &Value, at: &Origin) -> Result<(), String> {
+    let v = value
+        .as_float()
+        .or_else(|| {
+            value
+                .as_integer()
+                .and_then(|i| u32::try_from(i).ok())
+                .map(f64::from)
+        })
+        .unwrap_or(f64::NAN);
+    let name = key.trim_start_matches("recall.");
+    let fits = v.is_finite()
+        && if name.starts_with("saturation") || name == "half_life_days" {
+            v > 0.0
+        } else if name == "floor" {
+            v > 0.0 && v <= 1.0
+        } else {
+            v <= 1.0
+        };
+    if fits {
+        Ok(())
+    } else {
+        Err(format!(
+            "{at}: {key} is {v}; recall's weights are at most 1, its floor above 0 and at most 1, \
+             its saturations and half-life above 0"
+        ))
+    }
+}
+
 fn check_kind(key: &str, value: &Value, kind: Kind, origin: &Origin) -> Result<(), String> {
     let ok = match kind {
         Kind::Bool => value.is_bool(),
         Kind::Int => value.as_integer().is_some_and(|i| i >= 0),
-        Kind::Number => value.is_float() || value.as_integer().is_some_and(|i| i >= 0),
+        Kind::Number => {
+            value.as_float().is_some_and(|f| f >= 0.0) || value.as_integer().is_some_and(|i| i >= 0)
+        }
         Kind::Str => value.is_str(),
         Kind::StrList => value
             .as_array()

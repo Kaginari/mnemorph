@@ -1081,7 +1081,7 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n",
+        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
     )
     .unwrap();
     let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
@@ -1093,6 +1093,16 @@ fn the_configuration_reaches_the_run() {
     let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
     assert_eq!(limits.stress_tokens, 90_000);
     assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
+    // Recall's weights: the keys set, the defaults for the rest.
+    let d = mnemorph_memory::Weights::default();
+    assert_eq!(
+        (
+            limits.weights.floor,
+            limits.weights.saturation[2],
+            limits.weights.meaning
+        ),
+        (0.9, 2.0, d.meaning)
+    );
     // The solo body's steps: the human's, else the shortest chain's — an Elf's, an Orc's, a
     // Slime's. The session sets them when it has no Elf to dispatch to.
     assert_eq!(config.solo_steps(), 150);
@@ -1883,4 +1893,47 @@ async fn an_ask_naming_a_path_carries_its_facts() {
         "a host path is never shown: {first}"
     );
     assert!(!first.contains("@ONTO ../"), "nor one outside the world");
+}
+
+/// Recall reads its weights from the run's limits, which the human's `recall.*` keys set: a floor
+/// no match can clear recalls nothing, where the default recalls the note.
+#[tokio::test]
+async fn recall_reads_its_configured_weights() {
+    let w = World::new("weights");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "the tokenizer keeps interval fractions whole",
+        vec![],
+        None,
+    )
+    .unwrap();
+    let id = mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let first = |floor: Option<f64>| {
+        let w = &w;
+        async move {
+            let model = Arc::new(ScriptedModel::new([answer("noted")]));
+            let mut l = limits();
+            if let Some(f) = floor {
+                l.weights.floor = f;
+            }
+            let mut run = w.run(model.clone(), l);
+            ask(&mut run, "why does the tokenizer split interval fractions").await;
+            format!("{:?}", model.requests()[0].messages.last())
+        }
+    };
+    assert!(
+        first(None).await.contains(&format!("@M {id} ")),
+        "the default recalls it"
+    );
+    assert!(
+        !first(Some(9.0)).await.contains("@M "),
+        "an unreachable floor recalls nothing"
+    );
 }
