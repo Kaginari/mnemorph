@@ -16,4 +16,7 @@ pub use consolidate::{Forget, distill, forget};
 pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};
 pub use store::{Tier, inherit, read, union_merge};
-pub use write::{Anchor, Claim, Grounded, Proof, Proposed, Route, cache, ground, propose, revise};
+pub use write::{
+    Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, attributable, cache,
+    confirm, ground, propose, retire, retired, revise, wake,
+};

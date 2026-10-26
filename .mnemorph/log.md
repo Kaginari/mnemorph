@@ -3976,6 +3976,94 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - three unit tests (headings with or without a rule, the cap, CRLF and empty).
 - **Tooling:** Fable saw phantom compile errors from the dev target shared between worktrees and
   ran `cargo clean -p` on three crates.
+### [2026-10-26T08:49:38+01:00] rimuru — memory stops piling up: retirement, and lock-in once heard
+- **Why** (a side agent's note relayed by the human): nothing calls distill or forget, so every
+  run-ending failure adds permanent revise notes to tracked shared memory, and lock-in re-forces
+  one at every identical recall forever. Distillation needs a model to write its summary, so it
+  stays with evolution; these two rules need none.
+- **Files:**
+  - memory write.rs `retire` (`STRIKES` = 2): a cited anchor goes dormant once two distinct
+    failures (revise notes linking it at 0.9, by distinct verdict) have cited it; written by the
+    gate citing the verdict, so it resolves;
+  - pathology.rs: `Trace::seated`; `locked_in(r, notes, past)` skips a revision seated into an
+    ask that then landed;
+  - run.rs: reconsolidation calls `retire` after `revise` and warns; `treat` returns the seated
+    note;
+  - docs 08.
+- **Tests:**
+  - write.rs: two cited failures retire, one doesn't, a bystander stays grounded, and the
+    retirement resolves;
+  - pathology.rs: lock-in forces until heard.
+
+---
+
+### [2026-10-26T08:57:34+01:00] rimuru — #202's review: Fable
+- **Verdict:** safe to merge as a conservative first cut.
+- **Fable found:**
+  - personal anchors never accrued strikes, since `revise` writes shared when any target is
+    shared but `retire` counted the anchor's own tier;
+  - another creature's frozen shared note could be retired;
+  - a woken note re-died on one failure;
+  - any revise note counted, whatever its status.
+- **Fixed:**
+  - strikes are counted over shared plus the asker's own tier, from grounded revise notes born
+    after the note's last grounded status;
+  - a shared note whose owner is frozen is skipped;
+  - docs 08 cover waking by a grounded status, "heard" by either act, and per-machine traces.
+- **Test:** a personal note retires through shared strikes; after a human waking, one more
+  failure doesn't retire it.
+
+---
+
+### [2026-10-26T09:07:27+01:00] rimuru — retirement weighs evidence, never company
+- **Why** (the human, relaying a side agent: "two failed runs can retire a correct note … can you
+  do it in an effective agent way and smart way"): two-strikes blamed a note for any failure it
+  sat beside. A weak bench model fails often, and correct notes would have been retired.
+- **The rule now:**
+  - **attribution:** a failure strikes only when its failed lines share a specific term with the
+    note (path, file, identifier; `file:line` meets the file, a path its file name);
+  - **counter-evidence:** a passing, landed ask credits the notes it cited (`confirm`, Gate
+    Confidence events citing `passed:`; every third pass adds +0.05, as page 08 already promised
+    and nothing did);
+  - **doubt first:** a first attributable failure takes 0.1 of confidence (floor 0.3);
+  - **retire** only when two or more distinct attributable failures outnumber passes, since the
+    last grounding;
+  - both copies (the creature's and the shared) move together;
+  - **review:** `memory status` lists retired notes with their undo; `mnemorph memory wake
+    <note>` is the human's alone.
+- **Found by the tests:**
+  - a same-millisecond grounding hid the strike (now `>=`);
+  - `utf8.sql::test_x` didn't meet `utf8.sql` (terms now yield their parts);
+  - retiring a personal note left its shared copy recalled by others (now both);
+  - `retired` listed a note twice (deduplicated).
+- **Process:** #202's queued merge was stopped first, so the blunt rule never reached main.
+
+---
+
+### [2026-10-26T09:15:58+01:00] rimuru — #202's second review: Fable
+- **Fable found:**
+  - **"cited" was always true** (since #197): `cited_anchors` scanned every message since
+    `ask_from`, including the ask's own user message where recall prints the `@M` ids. So every
+    recalled note matched itself, `confirm` credited all of them, and reconsolidation's 0.9/0.4
+    split was dead;
+  - bare numbers and common terms were specific;
+  - proposed notes could be struck but never credited;
+  - `wake` grounded anything.
+- **Fixed:**
+  - only `Role::Assistant` messages are scanned (the body's text and its acts' arguments);
+  - specific terms drop bare numbers, bare directories, a stock file list and the plain
+    seven-letter rule;
+  - `confirm` credits proposed notes;
+  - `wake` undoes only a gate retirement (`gate_retired`);
+  - docs 08.
+- **Tests:**
+  - solo.rs: a recalled-but-unnamed note links at 0.4. It fails without the role filter
+    (checked). The earlier test passed only because its note was also named;
+  - text.rs: common terms;
+  - write.rs: `wake` refuses a housekeeping-dormant note and a proposed one; a proposed note is
+    credited.
+- **Lesson:** a test whose positive case also satisfies the bug proves nothing. Every "only when"
+  rule needs its negative case.
 
 ---
 

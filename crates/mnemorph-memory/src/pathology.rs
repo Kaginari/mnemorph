@@ -48,6 +48,9 @@ pub struct Trace {
     /// The act a pathology forced into it, if any: `replay`, `replay-escalated`, `lock-in`.
     #[serde(default)]
     pub forced: Option<String>,
+    /// The note the act seated, if it seated one.
+    #[serde(default)]
+    pub seated: Option<String>,
 }
 
 /// A creature's recall traces in `world`: in the machine-local short tier, never tracked.
@@ -93,9 +96,20 @@ pub fn replays(past: &[Trace], fingerprint: &str, dissent: bool) -> bool {
 }
 
 /// Whether `r` is locked in: no dissent was selected, and a live revision linked to one of its
-/// agreeing anchors is newer than every one of them. Returns the newest such revision.
+/// agreeing anchors is newer than every one of them. Returns the newest such revision — none that
+/// `past` shows was already seated into an ask that then landed: a correction heard and acted on
+/// is not forced again.
 #[must_use]
-pub fn locked_in<'a>(r: &Recalled, notes: &'a [(Note, Relation)]) -> Option<&'a Note> {
+pub fn locked_in<'a>(
+    r: &Recalled,
+    notes: &'a [(Note, Relation)],
+    past: &[Trace],
+) -> Option<&'a Note> {
+    let heard: std::collections::BTreeSet<&str> = past
+        .iter()
+        .filter(|t| t.outcome.is_some())
+        .filter_map(|t| t.seated.as_deref())
+        .collect();
     if r.anchors.is_empty() || r.anchors.iter().any(|h| h.note.polarity.dissents()) {
         return None;
     }
@@ -107,6 +121,7 @@ pub fn locked_in<'a>(r: &Recalled, notes: &'a [(Note, Relation)]) -> Option<&'a 
             n.polarity == Polarity::Revise
                 && n.status == Status::Grounded
                 && n.born > newest_agreeing
+                && !heard.contains(n.id.as_str())
                 && n.links
                     .iter()
                     .any(|l| r.anchors.iter().any(|h| h.note.id == l.note))

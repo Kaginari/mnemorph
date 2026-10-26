@@ -13,6 +13,7 @@ Usage: mnemorphd [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
+       mnemorphd memory wake <note> [--world <dir>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -430,17 +431,24 @@ fn memory(args: &[String]) -> ExitCode {
                 Some(v) => world = Some(PathBuf::from(v)),
                 None => return refused(&"--world needs a value"),
             },
-            "status" if verb.is_none() => verb = Some(()),
+            "status" if verb.is_none() => verb = Some(None),
+            "wake" if verb.is_none() => match it.next() {
+                Some(id) => verb = Some(Some(id.clone())),
+                None => return refused(&"wake needs the note's id"),
+            },
             other => return refused(&format!("unknown argument `{other}`; see --help")),
         }
     }
-    if verb.is_none() {
-        return refused(&"memory needs a verb: status");
-    }
+    let Some(verb) = verb else {
+        return refused(&"memory needs a verb: status, or wake <note>");
+    };
     let Ok(cwd) = std::env::current_dir() else {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    if let Some(id) = verb {
+        return wake(&world, &id);
+    }
     let report = match mnemorph_server::world::memory::status(&world) {
         Ok(r) => r,
         Err(e) => return refused(&format!("memory cannot be read: {e}")),
@@ -461,6 +469,14 @@ fn memory(args: &[String]) -> ExitCode {
     for (name, _, seen) in &mut rows {
         if name != SHARED {
             *seen = pathology::findings(&pathology::traces(&world, name).unwrap_or_default());
+            // What the gate retired, for the human to review — and to wake when it was wrong.
+            for (id, text) in
+                mnemorph_server::world::memory::retired(&world, name).unwrap_or_default()
+            {
+                seen.push(format!(
+                    "retired, kept dormant: {id} — {text} (undo: mnemorph memory wake {id})"
+                ));
+            }
         }
     }
     if json {
@@ -489,6 +505,22 @@ fn memory(args: &[String]) -> ExitCode {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// `memory wake <note>`: the human restores a note the gate retired. A body never wakes one.
+fn wake(world: &Path, id: &str) -> ExitCode {
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: waking a note is the human's act, never a body's"
+        ));
+    }
+    match mnemorph_server::world::memory::wake(world, id) {
+        Ok(files) => {
+            println!("woke {id}: grounded again in {}", files.join(", "));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
     }
 }
 

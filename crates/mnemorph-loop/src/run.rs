@@ -247,7 +247,7 @@ pub struct Run {
     office: String,
     /// This ask's recall, for its trace when the ask ends: the fingerprint, whether a dissent sat
     /// among its anchors, and the act a pathology forced into it.
-    recall_trace: Option<(String, bool, Option<String>)>,
+    recall_trace: Option<(String, bool, Option<String>, Option<String>)>,
     /// What this ask landed: the gate's journal heading for a change it judged.
     landed_in_ask: Option<String>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
@@ -675,7 +675,7 @@ impl Run {
         // The ask's recall leaves its trace: what the replay loop reads at the next. An ask the
         // human stopped is no replay of anything.
         if !matches!(ending, Ending::Interrupted)
-            && let Some((fingerprint, dissent, forced)) = self.recall_trace.clone()
+            && let Some((fingerprint, dissent, forced, seated)) = self.recall_trace.clone()
         {
             let t = mnemorph_memory::pathology::Trace {
                 time: mnemorph_memory::store::now_ms(),
@@ -683,6 +683,7 @@ impl Run {
                 dissent,
                 outcome: self.landed_in_ask.clone(),
                 forced,
+                seated,
             };
             if let Err(e) = mnemorph_memory::pathology::trace(self.cx.world(), &self.body.name, &t)
             {
@@ -1016,8 +1017,11 @@ impl Run {
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
                 // A change landed only when the gate passed it: a failure is no new outcome.
-                if verdict.passed() && heading.is_some() {
-                    self.landed_in_ask.clone_from(&heading);
+                if verdict.passed()
+                    && let Some(h) = heading.as_deref()
+                {
+                    self.landed_in_ask = Some(h.to_owned());
+                    self.credit(h);
                 }
                 if verdict.passed() {
                     self.passed = Some((verdict.clone(), heading.clone()));
@@ -1035,10 +1039,13 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
-        // What the ask said and did — its text and its acts' arguments — names the anchors it cited.
+    /// The anchors recalled into this ask, each marked cited when what the body said and did — its
+    /// text and its acts' arguments — names it. The ask's own message, where recall shows the
+    /// anchors, is never the body's word.
+    fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
         let said: String = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
+            .filter(|m| m.role == mnemorph_provider::Role::Assistant)
             .flat_map(|m| &m.content)
             .map(|b| match b {
                 Block::Text { text, .. } => text.clone(),
@@ -1047,14 +1054,31 @@ impl Run {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let anchors: Vec<mnemorph_memory::Anchor> = self
-            .anchors
+        self.anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
                 cited: said.contains(&a.id),
                 ..a.clone()
             })
-            .collect();
+            .collect()
+    }
+
+    /// A passing ask that landed credits the notes it cited: evidence for them, weighed against
+    /// the failures laid at their door.
+    fn credit(&mut self, heading: &str) {
+        let anchors = self.cited_anchors();
+        let verdict = format!("log.md {heading}");
+        if let Err(e) =
+            mnemorph_memory::confirm(self.cx.world(), &self.body.name, &anchors, &verdict)
+        {
+            self.record(&Beat::Warning {
+                text: format!("the pass could not credit the notes it cited: {e}"),
+            });
+        }
+    }
+
+    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
+        let anchors = self.cited_anchors();
         let verdict = heading.map_or_else(
             || format!("log.md: {} gate: FAIL", self.body.name),
             |h| format!("log.md {h}"),
@@ -1065,6 +1089,33 @@ impl Run {
             self.record(&Beat::Warning {
                 text: format!("the failure could not reconsolidate memory: {e}"),
             });
+            return;
+        }
+        // A failure laid at a note's door doubts it; enough of them, outnumbering its passes,
+        // retire it — dormant, kept, for the human to review.
+        match mnemorph_memory::retire(self.cx.world(), &self.body.name, &anchors, &verdict) {
+            Ok(r) => {
+                if !r.doubted.is_empty() {
+                    self.record(&Beat::Warning {
+                        text: format!(
+                            "memory: doubted, a failure named what it names: {}",
+                            r.doubted.join(", ")
+                        ),
+                    });
+                }
+                if !r.retired.is_empty() {
+                    self.record(&Beat::Warning {
+                        text: format!(
+                            "memory: retired, kept dormant — its failures outnumber its passes \
+                             (`mnemorph memory wake <id>` undoes it): {}",
+                            r.retired.join(", ")
+                        ),
+                    });
+                }
+            }
+            Err(e) => self.record(&Beat::Warning {
+                text: format!("memory could not weigh the failure against the notes it cited: {e}"),
+            }),
         }
     }
 
@@ -1349,7 +1400,7 @@ impl Run {
             let ids: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
             mnemorph_memory::pathology::fingerprint(text, &ids, &self.office)
         };
-        let (forced, escalate) = self.treat(text, &mut r, &memory.notes, &fingerprint);
+        let (forced, seated, escalate) = self.treat(text, &mut r, &memory.notes, &fingerprint);
         self.anchors = r
             .anchors
             .iter()
@@ -1375,7 +1426,7 @@ impl Run {
             );
         }
         let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
-        self.recall_trace = Some((fingerprint, dissent, forced));
+        self.recall_trace = Some((fingerprint, dissent, forced, seated));
         lines
     }
 
@@ -1388,9 +1439,10 @@ impl Run {
         r: &mut mnemorph_memory::Recalled,
         notes: &[(mnemorph_memory::Note, mnemorph_memory::Relation)],
         fingerprint: &str,
-    ) -> (Option<String>, bool) {
+    ) -> (Option<String>, Option<String>, bool) {
         use mnemorph_memory::pathology as p;
-        if let Some(revision) = p::locked_in(r, notes) {
+        let past = p::traces(self.cx.world(), &self.body.name).unwrap_or_default();
+        if let Some(revision) = p::locked_in(r, notes, &past) {
             let id = revision.id.clone();
             p::force(r, revision, RECALL_K);
             self.record(&Beat::Warning {
@@ -1399,12 +1451,11 @@ impl Run {
                      correction was selected: it is recalled too"
                 ),
             });
-            return (Some("lock-in".into()), false);
+            return (Some("lock-in".into()), Some(id), false);
         }
         let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
-        let past = p::traces(self.cx.world(), &self.body.name).unwrap_or_default();
         if !p::replays(&past, fingerprint, dissent) {
-            return (None, false);
+            return (None, None, false);
         }
         if let Some(d) = p::best_dissent(text, notes) {
             let id = d.id.clone();
@@ -1415,14 +1466,14 @@ impl Run {
                      landed: correction `{id}` is recalled too"
                 ),
             });
-            return (Some("replay".into()), false);
+            return (Some("replay".into()), Some(id), false);
         }
         self.record(&Beat::Warning {
             text: "memory: replay loop — the same recall a third time in five with nothing \
                    landed, and no correction in memory: the body is told to change its approach"
                 .into(),
         });
-        (Some("replay-escalated".into()), true)
+        (Some("replay-escalated".into()), None, true)
     }
 
     /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,
