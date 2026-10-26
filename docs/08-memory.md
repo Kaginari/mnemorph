@@ -294,7 +294,12 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   MNEMORPH-85 weighs world effects (0.9) and corrections (1.0), with no notion of a recalled
   bystander;
 - it never targets a dissenting note: a counter or revise note recalled into a failed turn is
-  left as it is, so corrections do not breed corrections.
+  left as it is, so corrections do not breed corrections;
+- **what failed twice is retired**: an anchor the ask cited goes dormant once two distinct
+  run-ending failures — revise notes linking it at 0.9, told apart by the verdict they cite —
+  have cited it. Its events stay, so the human may wake it; dormant, it is no longer recalled. A
+  failure whose verdict reached no journal entry shares one fallback citation, so it can only
+  under-count.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 
@@ -370,8 +375,8 @@ The replay loop and lock-in are read at each recall, before the body sees it:
   with none in memory, the recall ends with an `@M replay:` line telling the body to change its
   approach or say what blocks it.
 - **Lock-in** reads only a grounded revision linked to one of the recalled agreeing notes and
-  newer than all of them; its act seats the newest such revision, at every such recall until
-  consolidation retires what the revision corrects. A forced note takes the place
+  newer than all of them; its act seats the newest such revision, until an ask it was seated
+  into lands — the correction heard and acted on — or the note it corrects is retired. A forced note takes the place
   of the lowest-ranked agreeing anchor, which is counted cut.
 
 Each act is said as a warning in the run's journal. `memory status` lists, per creature, a replay

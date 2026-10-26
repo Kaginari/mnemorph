@@ -403,3 +403,65 @@ pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
     )?;
     Ok(note)
 }
+
+/// How many run-ending failures must cite a note before it is retired.
+pub const STRIKES: usize = 2;
+
+/// Retire what failed twice: each anchor the ask cited goes dormant once [`STRIKES`] distinct
+/// failures — revise notes linking it at 0.9, told apart by the verdict they cite — have cited it.
+/// Its events stay, so a human may wake it; dormant, it is no longer recalled, and lock-in has no
+/// revision of it left to force. Run after [`revise`]; returns the notes retired.
+///
+/// # Errors
+///
+/// The creature's memory is frozen ([`crate::unfrozen`]), or a note file cannot be read or
+/// written.
+pub fn retire(
+    world: &Path,
+    owner: &str,
+    recalled: &[Anchor],
+    verdict: &str,
+) -> std::io::Result<Vec<String>> {
+    let cited: Vec<&Anchor> = recalled.iter().filter(|a| a.cited && !a.dissent).collect();
+    if cited.is_empty() {
+        return Ok(Vec::new());
+    }
+    crate::audit::unfrozen(world, owner)?;
+    let mut retired = Vec::new();
+    for a in cited {
+        let tier = if a.personal {
+            Tier::Personal(owner.to_owned())
+        } else {
+            Tier::Shared
+        };
+        let notes = crate::note::fold(&crate::store::read(world, &tier)?.rows);
+        let Some(n) = notes.get(&a.id) else {
+            continue;
+        };
+        if n.status != Status::Grounded && n.status != Status::Proposed {
+            continue;
+        }
+        let strikes: std::collections::BTreeSet<&str> = notes
+            .values()
+            .filter(|r| {
+                r.polarity == Polarity::Revise
+                    && r.links.iter().any(|l| l.note == a.id && l.weight >= 0.9)
+            })
+            .filter_map(|r| r.source.as_deref())
+            .collect();
+        if strikes.len() >= STRIKES {
+            append(
+                world,
+                &tier,
+                &a.id,
+                By::Gate,
+                Some(verdict.to_owned()),
+                Change::Status {
+                    status: Status::Dormant,
+                },
+            )?;
+            retired.push(a.id.clone());
+        }
+    }
+    Ok(retired)
+}

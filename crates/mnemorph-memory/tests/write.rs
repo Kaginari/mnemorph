@@ -208,3 +208,70 @@ fn one_rule_failed_on_many_lines_is_one_revise_note() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// What two run-ending failures cited is retired: dormant, kept, no longer recalled. One failure,
+/// or a mere recall, retires nothing.
+#[test]
+fn a_note_cited_by_two_failures_is_retired() {
+    use mnemorph_memory::{Anchor, retire, revise};
+    let w = std::env::temp_dir().join(format!("mnemorph-retire-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(&w).unwrap();
+    let cited = |id: &str, cited: bool| Anchor {
+        id: id.into(),
+        personal: false,
+        dissent: false,
+        cited,
+    };
+    let bad = ground(
+        &w,
+        propose(&w, "slime-s", "skip the fixture", vec![], None).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let bystander = ground(
+        &w,
+        propose(&w, "slime-s", "the lexer is pure", vec![], None).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let anchors = [cited(&bad, true), cited(&bystander, false)];
+    revise(
+        &w,
+        "slime-s",
+        &["traits hold: broke".into()],
+        &anchors,
+        "log.md one",
+    )
+    .unwrap();
+    assert_eq!(
+        retire(&w, "slime-s", &anchors, "log.md one").unwrap(),
+        Vec::<String>::new()
+    );
+    revise(
+        &w,
+        "slime-s",
+        &["traits hold: broke again".into()],
+        &anchors,
+        "log.md two",
+    )
+    .unwrap();
+    assert_eq!(
+        retire(&w, "slime-s", &anchors, "log.md two").unwrap(),
+        vec![bad.clone()]
+    );
+    let notes = fold(&read(&w, &Tier::Shared).unwrap().rows);
+    assert_eq!(notes[&bad].status, Status::Dormant);
+    assert_eq!(
+        notes[&bystander].status,
+        Status::Grounded,
+        "merely recalled"
+    );
+    assert!(
+        mnemorph_memory::findings(&w, "slime-s").unwrap().is_empty(),
+        "the retirement resolves"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

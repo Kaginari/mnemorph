@@ -9,6 +9,7 @@ fn t(fp: &str, outcome: Option<&str>, dissent: bool) -> Trace {
         dissent,
         outcome: outcome.map(str::to_owned),
         forced: None,
+        seated: None,
     }
 }
 
@@ -66,4 +67,69 @@ fn status_reads_a_replay_and_the_acts_forced() {
         findings(&[t("x", Some("landed"), false)]),
         Vec::<String>::new()
     );
+}
+
+/// A correction seated into an ask that then landed was heard: lock-in does not force it again.
+#[test]
+fn lock_in_forces_a_correction_until_it_is_heard() {
+    use mnemorph_memory::pathology::locked_in;
+    use mnemorph_memory::{Anchor, Proof, gather, ground, propose, recall, revise};
+    let w = std::env::temp_dir().join(format!("mnemorph-heard-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(&w).unwrap();
+    let old = ground(
+        &w,
+        propose(
+            &w,
+            "slime-o",
+            "the tokenizer keeps interval fractions",
+            vec![],
+            None,
+        )
+        .unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let revision = revise(
+        &w,
+        "slime-o",
+        &["traits hold: rounding broke the money columns".into()],
+        &[Anchor {
+            id: old,
+            personal: false,
+            dissent: false,
+            cited: true,
+        }],
+        "log.md fail",
+    )
+    .unwrap()
+    .remove(0);
+    let memory = gather(&w, "slime-t", |_| false).unwrap();
+    let r = recall(
+        "why does the tokenizer keep interval fractions",
+        &memory.notes,
+        mnemorph_memory::store::now_ms(),
+        6,
+        &mnemorph_memory::Weights::default(),
+    );
+    let seated = |outcome: Option<&str>| Trace {
+        seated: Some(revision.clone()),
+        forced: Some("lock-in".into()),
+        ..t("x", outcome, false)
+    };
+    assert_eq!(
+        locked_in(&r, &memory.notes, &[]).map(|n| n.id.clone()),
+        Some(revision.clone())
+    );
+    assert!(
+        locked_in(&r, &memory.notes, &[seated(None)]).is_some(),
+        "seated, but nothing landed: still forced"
+    );
+    assert!(
+        locked_in(&r, &memory.notes, &[seated(Some("log.md gate: PASS"))]).is_none(),
+        "heard and acted on"
+    );
+    let _ = std::fs::remove_dir_all(&w);
 }

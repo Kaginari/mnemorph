@@ -3936,3 +3936,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   trace costs more than it saves.
 - **Untested:** the interrupt guard. A scripted model answers before the loop checks the
   interrupt, so a mid-ask Esc needs the blocking-command setup.
+
+---
+
+### [2026-10-26T08:49:38+01:00] rimuru — memory stops piling up: retirement, and lock-in once heard
+- **Why** (a side agent's note relayed by the human): nothing calls distill or forget, so every
+  run-ending failure adds permanent revise notes to tracked shared memory, and lock-in re-forces
+  one at every identical recall forever. Distillation needs a model to write its summary, so it
+  stays with evolution; these two rules need none.
+- **Files:**
+  - memory write.rs `retire` (`STRIKES` = 2): a cited anchor goes dormant once two distinct
+    failures (revise notes linking it at 0.9, by distinct verdict) have cited it; written by the
+    gate citing the verdict, so it resolves;
+  - pathology.rs: `Trace::seated`; `locked_in(r, notes, past)` skips a revision seated into an
+    ask that then landed;
+  - run.rs: reconsolidation calls `retire` after `revise` and warns; `treat` returns the seated
+    note;
+  - docs 08.
+- **Tests:**
+  - write.rs: two cited failures retire, one doesn't, a bystander stays grounded, and the
+    retirement resolves;
+  - pathology.rs: lock-in forces until heard.
