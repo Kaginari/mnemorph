@@ -757,9 +757,20 @@ pub(crate) fn file_verdicts(world: &Path, roster: &Roster, verdicts: &[String], 
             .next()
             .unwrap_or("")
             .trim_end_matches(['.', ',']);
-        if !judges || !facts.facts.contains_key(id) {
+        // Only on its own line's ground: a fact about a path the Orc's soil, or the soil of a
+        // creature reporting to it, admits.
+        let on_its_line = facts.facts.get(id).is_some_and(|f| {
+            let about = f.about.trim_end_matches('/');
+            roster
+                .creatures
+                .iter()
+                .filter(|(n, c)| n.as_str() == by || c.reports_to.as_deref() == Some(by))
+                .filter_map(|(n, _)| soil(roster, n))
+                .any(|g| g.admits(about) || g.admits(&format!("{about}/")))
+        });
+        if !judges || !on_its_line {
             eprintln!(
-                "mnemorph: {by} cannot settle `#{id}`: only an Orc settles a fact it can name"
+                "mnemorph: {by} cannot settle `#{id}`: only an Orc settles a fact on its own line's ground"
             );
             continue;
         }

@@ -4489,3 +4489,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - loop: an ask naming a path carries `@ONTO` with the contested fact;
   - commission: an Orc's `@V settle` settles exactly the fact it names.
 - **Not done:** the owner's gated landing citing `#id` as a third settle route.
+
+---
+
+### [2026-10-26T13:53:18+01:00] rimuru — the live mesh: Fable's review
+- **Fable found:**
+  - any Orc could settle any fact;
+  - named paths were lowercased, so a real `src/Lexer.rs` was missed, and `/etc/passwd` or `../x`
+    passed `exists()` and showed as `@ONTO` lines (a host-path oracle);
+  - the seat and scratch crowded the soil's paths;
+  - fact text was unbounded and unframed, so a text could fake `[stale]` or a status;
+  - keyed directory facts went stale on any file added;
+  - docs 09 named the unbuilt route.
+- **Fixed:**
+  - settle only where the soil of the Orc, or of a creature reporting to it, admits the fact's
+    path (the test also refuses a `docs/` fact);
+  - named paths keep their case and stay inside the world (absolute and `..` refused), and come
+    first; soil without `.mnemorph`;
+  - fact text cut to 200 characters with no brackets, framed as data;
+  - keyed directory facts unanchored;
+  - docs 09.
+- **Checked:** the host-path asserts fail with the filter off (`@ONTO /etc/passwd: nobody` shows).

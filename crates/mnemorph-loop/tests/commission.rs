@@ -1849,10 +1849,19 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         Facts::load(&w.0).live().any(|f| !f.settled),
         "contested before"
     );
+    let elsewhere = from_unsaid("docs/ the guide is current", "elf-e", None).unwrap();
+    let Event::Support { id: far, .. } = &elsewhere else {
+        panic!("{elsewhere:?}");
+    };
+    let far = far.clone();
+    Facts::record(&w.0, &elsewhere).unwrap();
     let model = Arc::new(ScriptedModel::new([
         order("c1", "elf-e"),
         order("c2", "orc-o"),
-        ScriptedModel::text(&format!("@S DONE\n@V settle #{}\n@E", ids[0])),
+        ScriptedModel::text(&format!(
+            "@S DONE\n@V settle #{}\n@V settle #{far}\n@E",
+            ids[0]
+        )),
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
@@ -1865,5 +1874,9 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
     assert!(
         !Facts::load(&w.0).facts[&ids[1]].settled,
         "only the fact it named"
+    );
+    assert!(
+        !Facts::load(&w.0).facts[&far].settled,
+        "never off its own line's ground"
     );
 }

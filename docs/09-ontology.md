@@ -255,7 +255,9 @@ of a `file:line`, the listing of a directory, a commit (which never drifts), a j
 either). When the digest no longer matches, the fact reads **stale** wherever it is shown, and
 `onto check` raises a `stale-fact` finding. Staleness is computed, not stored, so it never adds a
 counter; a creature that asserts the fact again re-anchors it. A fact said with no anchor of its
-own is anchored where it is about — the file's text, the directory's listing — at filing. Most contradictions in a codebase
+own is anchored where it is about — a file's whole text, a directory's listing — at filing, but a
+keyed fact about a directory, whose listing moves with every file added and whose collisions
+already counter it. Most contradictions in a codebase
 are a fact written before the code moved, and this catches them with a hash.
 
 **3. Triage on collision.** A free fact lands through its body's parent (the Orc, for a Slime).
@@ -292,8 +294,9 @@ Each term is pushed down by a different lever: more keys shrink the first, the r
 measure the second, and the parent's own verdicts are what the value ledger scores.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
-proof: a landing by the path's owner that passed its gate and cites the fact, the Orc's verdict
-naming it (`@V settle #<id>` in its report), or the human (`mnemorph onto settle <id>`). A
+proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground,
+or the human (`mnemorph onto settle <id>`); a landing by the path's owner that passed its gate and
+cites the fact is the third route, not yet built. A
 creature's projection (`@ONTO`, [communication](04-communication.md#the-wire-envelope)) shows a
 contested fact with both sides, the way recall always seats one dissenting note: each ask carries
 it, beside the recalled notes, for the paths it concerns — a commissioned body's soil and every

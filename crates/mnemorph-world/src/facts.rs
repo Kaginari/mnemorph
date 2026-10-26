@@ -301,7 +301,9 @@ pub fn anchored(world: &Path, event: Event) -> Event {
             text,
             by,
             source: None,
-        } => {
+        } if !(keyed(&text).is_some() && world.join(about.trim_end_matches('/')).is_dir()) => {
+            // A keyed fact about a directory (`src/ build=…`) is not anchored: its listing moves
+            // with every file added, and the key's own collisions already counter it.
             let at = about.trim_end_matches('/').to_owned();
             let at = if world.join(&at).is_dir() {
                 format!("{at}/")
@@ -594,11 +596,25 @@ impl Facts {
                     format!(" (countered by {})", against.join("; "))
                 };
                 let stale = if f.stale(world) { " [stale]" } else { "" };
+                // A fact's text is a creature's words: one short line, no bracket of its own, so it
+                // never passes for a status or a stale mark.
+                let said: String = f
+                    .text
+                    .chars()
+                    .map(|c| {
+                        if c.is_control() || "[]()".contains(c) {
+                            ' '
+                        } else {
+                            c
+                        }
+                    })
+                    .take(200)
+                    .collect();
                 shown.push(format!(
                     "#{} {} {}{against}{stale}",
                     f.id,
                     f.status().word(),
-                    f.text
+                    said
                 ));
             }
             let owner = owner_of(path);

@@ -1867,11 +1867,20 @@ async fn an_ask_naming_a_path_carries_its_facts() {
     }
     let model = Arc::new(ScriptedModel::new([answer("noted")]));
     let mut run = w.run(model.clone(), limits());
-    ask(&mut run, "fix the build script in src/build.rs").await;
+    ask(
+        &mut run,
+        "fix the build script in src/build.rs, not /etc/passwd nor ../x",
+    )
+    .await;
     let first = format!("{:?}", model.requests()[0].messages.last());
     assert!(first.contains("@ONTO src/"), "{first}");
     assert!(
         first.contains("contested"),
         "both sides of a disagreement: {first}"
     );
+    assert!(
+        !first.contains("@ONTO /etc"),
+        "a host path is never shown: {first}"
+    );
+    assert!(!first.contains("@ONTO ../"), "nor one outside the world");
 }
