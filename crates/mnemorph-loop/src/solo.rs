@@ -39,11 +39,13 @@ briefly, in plain words.";
 /// shelf (read and write; nothing outward), the whole repository as soil.
 #[must_use]
 pub fn solo(world: &Path, model: &str) -> (Body, Context) {
+    let mut system = SOLO_PROMPT.to_owned();
+    with_law(&mut system, world);
     let body = Body {
         name: "rimuru".into(),
         race: Race::Rimuru,
         model: model.to_owned(),
-        system: SOLO_PROMPT.to_owned(),
+        system,
     };
     let mut cx = Context::new(Race::Slime, world, &["."]).with_body("rimuru");
     if let Some(attic) = mnemorph_tools::Attic::for_world(cx.world()) {
@@ -70,4 +72,13 @@ pub fn configure(
         .with_unguarded(config.allow_unguarded());
     limits.stress_tokens = config.context_stress_tokens();
     (cx, limits)
+}
+
+/// The world's law at the end of a system prompt: it changes only as the human's diff, so the
+/// prompt stays the stable, cached prefix.
+pub fn with_law(system: &mut String, world: &Path) {
+    if let Some(law) = mnemorph_world::start::law(world) {
+        system.push_str("\n\nThe world's law (.mnemorph/law.md), which binds every body:\n\n");
+        system.push_str(&law);
+    }
 }

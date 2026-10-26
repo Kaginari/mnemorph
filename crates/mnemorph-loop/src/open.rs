@@ -21,6 +21,38 @@ use crate::run::{Limits, Observer, Run, Setup};
 use crate::session::Session;
 use crate::solo::{configure, solo};
 
+/// The session's run, given what it opens with and answers to: the journal's last entries, the
+/// commissioner over its lanes, the human's caps and the decider.
+fn equip(
+    mut run: Run,
+    world: &Path,
+    commissioner: Option<crate::commission::Commissioner>,
+    caps: Option<mnemorph_ledger::Caps>,
+    decided: Option<crate::Decisions>,
+) -> Run {
+    run = run.with_opening(mnemorph_world::start::recent(
+        world,
+        OPENING_ENTRIES,
+        OPENING_CAP,
+    ));
+    if let Some(c) = commissioner {
+        run = run.with_commissioner(Arc::new(c));
+    }
+    if let Some(caps) = caps {
+        run = run.with_caps(caps);
+    }
+    if let Some(d) = decided {
+        run = run.with_decisions(d);
+    }
+    run
+}
+
+/// How many of the journal's last entries a fresh session opens with: told what earlier sessions
+/// learned by the harness itself, never by a file the host may or may not load.
+const OPENING_ENTRIES: usize = 5;
+/// The most of them it carries, in characters.
+const OPENING_CAP: usize = 8_000;
+
 /// A session, opened, and what a client shows about it.
 pub struct Opened {
     /// The session.
@@ -231,16 +263,8 @@ pub fn open_with(
             prefix: 0,
         },
     };
-    let mut run = Run::new(body, limits, setup).with_observer(observer);
-    if let Some(c) = commissioner {
-        run = run.with_commissioner(Arc::new(c));
-    }
-    if capped {
-        run = run.with_caps(caps);
-    }
-    if let Some(d) = decided {
-        run = run.with_decisions(d);
-    }
+    let run = Run::new(body, limits, setup).with_observer(observer);
+    let run = equip(run, world, commissioner, capped.then_some(caps), decided);
     Ok(Opened {
         session: Session::new(run),
         world: world.to_path_buf(),

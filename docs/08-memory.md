@@ -122,6 +122,18 @@ skipped its checks, not a forger who writes a well-shaped proof.
 Let $C$ be the notes with $\pi \in \lbrace \text{counter}, \text{revise}\rbrace $ (the *dissent*) and $S^{+}$
 the rest.
 
+### Session start
+
+A fresh session is given what earlier ones learned by the harness itself, never by a file the
+host may or may not load:
+
+- **The law** (`.mnemorph/law.md`, at most 4,000 characters) closes every body's system prompt,
+  Rimuru's and each commissioned body's. It changes only as the human's diff, so the prompt stays
+  the stable, cached prefix ([consumption](06-consumption.md#cache-first-prompt-layout)).
+- **The journal's last entries** (`.mnemorph/log.md`, the last five within 8,000 characters, the
+  oldest dropped first) open the session's first ask, in the changing tail, and are said once. A
+  commissioned body gets its commission instead.
+
 ### Recall
 
 Recall keeps the lessons already written for it: never rebuild the index inline, stay silent when
