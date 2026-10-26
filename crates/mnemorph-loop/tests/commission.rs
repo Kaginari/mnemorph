@@ -348,6 +348,57 @@ async fn a_modified_stray_put_back_fails_no_gate_above() {
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
 }
 
+/// No body deletes what it did not write: a foreign untracked file — the human's notes, outside
+/// the Slime's zone — survives a cleanup turn that wipes its folder. The shell says the attic kept
+/// it, the Slime's gate fails the landing for touching what is not its own, and the landing is put
+/// back whole: the notes return, and the Slime's own write goes with the rest.
+#[tokio::test]
+async fn a_foreign_untracked_file_survives_a_cleanup_turn() {
+    let w = World::new("foreign");
+    fs::create_dir_all(w.0.join("notes")).unwrap();
+    fs::write(w.0.join("notes/human.md"), "mine, not yours\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "b1",
+            "bash",
+            json!({"command": "rm -rf notes && echo done > src/done.txt"}),
+        ),
+        ScriptedModel::text("@S DONE cleaned up\n@E"),
+        ScriptedModel::text("@S DONE cleaned up\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Reported."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("tidy up", &mut |_| {}).await;
+    let results: Vec<String> = fs::read_dir(w.0.join(".mnemorph/instruments/loop"))
+        .unwrap()
+        .flat_map(|j| {
+            fs::read_to_string(j.unwrap().path())
+                .unwrap()
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .filter(|l| l.contains("\"beat\":\"result\""))
+        .collect();
+    let said = |needle: &str| results.iter().any(|l| l.contains(needle));
+    assert!(said("kept in the attic"), "{results:?}");
+    assert!(said("right author: `notes/human.md`"), "{results:?}");
+    assert_eq!(
+        fs::read_to_string(w.0.join("notes/human.md")).unwrap(),
+        "mine, not yours\n",
+        "the human's notes were put back"
+    );
+    assert!(
+        !w.0.join("src/done.txt").exists(),
+        "a failed landing is put back whole"
+    );
+}
+
 /// The human's Esc reaches a body three ranks down.
 #[tokio::test]
 async fn esc_stops_the_child() {
