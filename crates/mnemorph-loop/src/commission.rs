@@ -619,6 +619,7 @@ pub(crate) fn remember(
         return (None, Vec::new());
     }
     let (mut proposed, mut grounded, mut seconded) = (0, 0, 0);
+    let kin = line_of(&Roster::load(world), to);
     // What stays proposed is named, so the commissioner may accept it by id.
     let mut open = Vec::new();
     for u in said {
@@ -650,7 +651,7 @@ pub(crate) fn remember(
             None => claim,
         };
         // A second creature that said the same from other evidence grounds it: corroborated.
-        match mnemorph_memory::corroborate(world, claim) {
+        match mnemorph_memory::corroborate(world, claim, &kin) {
             Ok(Ok(_)) => {
                 seconded += 1;
                 continue;
@@ -667,6 +668,37 @@ pub(crate) fn remember(
         )),
         open,
     )
+}
+
+/// The creatures in `name`'s line: those it reports to, up the chain, and those that report to it,
+/// down. A claim one of them restates was offered along that line, so it is no second voice.
+fn line_of(roster: &Roster, name: &str) -> Vec<String> {
+    let parent = |n: &str| roster.creatures.get(n).and_then(|c| c.reports_to.clone());
+    let mut kin = Vec::new();
+    let mut up = parent(name);
+    while let Some(p) = up {
+        if p == name || kin.contains(&p) {
+            break;
+        }
+        up = parent(&p);
+        kin.push(p);
+    }
+    for other in roster.creatures.keys() {
+        let mut up = parent(other);
+        let mut seen = 0;
+        while let Some(p) = up {
+            if p == name {
+                kin.push(other.clone());
+                break;
+            }
+            seen += 1;
+            if seen > roster.creatures.len() {
+                break;
+            }
+            up = parent(&p);
+        }
+    }
+    kin
 }
 
 /// File an answering child's `@U territory` facts in its name, and return the triage its parent

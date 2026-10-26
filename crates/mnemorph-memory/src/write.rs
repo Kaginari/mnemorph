@@ -818,34 +818,45 @@ pub fn proposed(world: &Path, owner: &str, id: &str) -> std::io::Result<Option<C
 pub type Seconded = Result<(Claim<Grounded>, String), Claim<Proposed>>;
 
 /// The **corroborated** route's detector: another creature's proposed claim that says the same —
-/// the same content words, negated alike — resting on evidence disjoint from this claim's grounds
-/// both, each citing the other. Returns the grounded claim and the id of the one that
-/// corroborated it, or the claim back when no second voice is found; a claim that rests on no
-/// evidence is never corroborated.
+/// the same content words, at least [`SAME_WORDS`] of them, negated alike — said within
+/// [`SECOND_VOICE_DAYS`], resting on evidence disjoint from this claim's. `kin`, the creatures in
+/// the claim owner's line, never count: a parent restating its child's offered claim is an echo,
+/// not a second voice. This claim is grounded and shared citing the other; the other is grounded
+/// in its owner's tier citing this one, and not shared again, so recall holds one copy. Returns
+/// the grounded claim and the id of the one that corroborated it, or the claim back.
 ///
 /// # Errors
 ///
 /// A personal tier cannot be read, or a grounding cannot be written.
-pub fn corroborate(world: &Path, claim: Claim<Proposed>) -> std::io::Result<Seconded> {
+pub fn corroborate(
+    world: &Path,
+    claim: Claim<Proposed>,
+    kin: &[String],
+) -> std::io::Result<Seconded> {
     if claim.evidence.is_empty() {
         return Ok(Err(claim));
     }
+    let since = now_ms().saturating_sub(SECOND_VOICE_DAYS * 86_400_000);
     let mut others: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
         .map(|rd| {
             rd.filter_map(Result::ok)
                 .map(|e| e.path())
                 .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
                 .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                .filter(|o| *o != claim.owner)
+                .filter(|o| *o != claim.owner && !kin.contains(o))
                 .collect()
         })
         .unwrap_or_default();
     others.sort();
     for other in others {
         let rows = crate::store::read(world, &Tier::Personal(other.clone()))?.rows;
-        let Some(theirs) = crate::note::fold(&rows).into_values().find(|n| {
+        // The newest match first: a recent second voice, not the oldest.
+        let mut notes: Vec<_> = crate::note::fold(&rows).into_values().collect();
+        notes.sort_by_key(|n| std::cmp::Reverse(n.born));
+        let Some(theirs) = notes.into_iter().find(|n| {
             n.status == Status::Proposed
                 && n.owner.as_deref() == Some(other.as_str())
+                && n.born >= since
                 && same_claim(&n.text, &claim.text)
                 && Proof::corroborated(&claim.owner, &other, &claim.evidence, &n.evidence).is_ok()
         }) else {
@@ -857,13 +868,43 @@ pub fn corroborate(world: &Path, claim: Claim<Proposed>) -> std::io::Result<Seco
         ) else {
             continue;
         };
-        if let Some(second) = proposed(world, &other, &theirs.id)? {
-            ground(world, second, &back)?;
+        // Both tiers writable before either is touched, so one side never stands alone.
+        if crate::audit::unfrozen(world, &other).is_err() {
+            continue;
         }
-        return Ok(Ok((ground(world, claim, &ours)?, theirs.id)));
+        let grounded = ground(world, claim, &ours)?;
+        let cites = format!("{}: {}", back.route.word(), back.cites);
+        let personal = Tier::Personal(other.clone());
+        append(
+            world,
+            &personal,
+            &theirs.id,
+            By::Route,
+            Some(cites.clone()),
+            Change::Status {
+                status: Status::Grounded,
+            },
+        )?;
+        append(
+            world,
+            &personal,
+            &theirs.id,
+            By::Route,
+            Some(cites),
+            Change::Confidence {
+                confidence: back.route.confidence(),
+            },
+        )?;
+        return Ok(Ok((grounded, theirs.id)));
     }
     Ok(Err(claim))
 }
+
+/// The fewest content words a claim must hold to be matched: "tests pass" matches by chance.
+pub const SAME_WORDS: usize = 3;
+
+/// How recent a second voice must be, in days.
+pub const SECOND_VOICE_DAYS: u64 = 30;
 
 /// Whether two claims say the same: the same content words, and both negated or neither — stop
 /// words drop `not`, so "X is not Y" would otherwise match "X is Y".
@@ -882,5 +923,5 @@ fn same_claim(a: &str, b: &str) -> bool {
         })
     };
     let (sa, sb) = (set(a), set(b));
-    !sa.is_empty() && sa == sb && negated(a) == negated(b)
+    sa.len() >= SAME_WORDS && sa == sb && negated(a) == negated(b)
 }

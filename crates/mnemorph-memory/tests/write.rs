@@ -513,24 +513,9 @@ fn a_second_voice_from_other_evidence_corroborates() {
     )
     .unwrap();
     assert!(
-        corroborate(&w, same).unwrap().is_err(),
+        corroborate(&w, same, &[]).unwrap().is_err(),
         "one piece of evidence"
     );
-    // The same creature on other evidence, alone in its world: no second voice.
-    let alone = world_of("corroborate-alone");
-    for on in ["src/lexer.rs", "src/parser.rs"] {
-        let c = propose_on(
-            &alone,
-            "slime-a",
-            "the lexer keeps interval fractions",
-            vec![],
-            None,
-            ev(&[on]),
-        )
-        .unwrap();
-        assert!(corroborate(&alone, c).unwrap().is_err(), "itself, on {on}");
-    }
-    let _ = fs::remove_dir_all(&alone);
     // Negated, or resting on nothing: no match.
     let not = propose_on(
         &w,
@@ -542,7 +527,7 @@ fn a_second_voice_from_other_evidence_corroborates() {
     )
     .unwrap();
     assert!(
-        corroborate(&w, not).unwrap().is_err(),
+        corroborate(&w, not, &[]).unwrap().is_err(),
         "negated alike or not at all"
     );
     let bare = propose_on(
@@ -555,7 +540,7 @@ fn a_second_voice_from_other_evidence_corroborates() {
     )
     .unwrap();
     assert!(
-        corroborate(&w, bare).unwrap().is_err(),
+        corroborate(&w, bare, &[]).unwrap().is_err(),
         "no evidence, no corroboration"
     );
     // Another creature, other evidence, the same words: both grounded.
@@ -568,25 +553,84 @@ fn a_second_voice_from_other_evidence_corroborates() {
         ev(&["tests/test_lexer.py"]),
     )
     .unwrap();
-    let Ok((grounded, by)) = corroborate(&w, second).unwrap() else {
+    let Ok((grounded, by)) = corroborate(&w, second, &[]).unwrap() else {
         panic!("a second voice from other evidence corroborates");
     };
     assert_eq!(by, first_id);
     let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
     for (id, owner) in [(&grounded.note, "slime-d"), (&first_id, "slime-a")] {
         let mine = fold(&read(&w, &Tier::Personal(owner.into())).unwrap().rows);
-        for n in [&mine[id], &shared[id]] {
-            assert_eq!(n.status, Status::Grounded, "{owner}");
-            assert!(
-                n.proof.as_deref().unwrap().starts_with("corroborated: "),
-                "{owner}"
-            );
-        }
+        assert_eq!(mine[id].status, Status::Grounded, "{owner}");
+        assert!(
+            mine[id]
+                .proof
+                .as_deref()
+                .unwrap()
+                .starts_with("corroborated: "),
+            "{owner}"
+        );
     }
+    assert_eq!(shared[&grounded.note].status, Status::Grounded);
+    assert!(
+        !shared.contains_key(&first_id),
+        "one copy shared, so recall counts it once"
+    );
     assert_eq!(
-        shared[&first_id].evidence,
-        ev(&["src/lexer.rs"]),
+        shared[&grounded.note].evidence,
+        ev(&["tests/test_lexer.py"]),
         "evidence travels"
+    );
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// No second voice from the claim owner itself, nor from its own line — a parent restating its child's offered claim
+/// is an echo — nor for a claim too short to match on more than chance.
+#[test]
+fn kin_and_short_claims_never_corroborate() {
+    use mnemorph_memory::{corroborate, propose_on};
+    let w = world_of("corroborate-kin");
+    let say = |who: &str, text: &str, on: &str| {
+        propose_on(&w, who, text, vec![], None, vec![on.to_owned()]).unwrap()
+    };
+    say(
+        "slime-a",
+        "the lexer keeps interval fractions",
+        "src/lexer.rs",
+    );
+    let parent = say(
+        "orc-o",
+        "the lexer keeps interval fractions",
+        "src/parser.rs",
+    );
+    assert!(
+        corroborate(&w, parent, &["slime-a".into()])
+            .unwrap()
+            .is_err(),
+        "an echo along the line"
+    );
+    // The same creature on other evidence, alone in its world: no second voice.
+    let alone = world_of("corroborate-alone");
+    for on in ["src/lexer.rs", "src/parser.rs"] {
+        let c = propose_on(
+            &alone,
+            "slime-a",
+            "the lexer keeps interval fractions",
+            vec![],
+            None,
+            vec![on.to_owned()],
+        )
+        .unwrap();
+        assert!(
+            corroborate(&alone, c, &[]).unwrap().is_err(),
+            "itself, on {on}"
+        );
+    }
+    let _ = fs::remove_dir_all(&alone);
+    say("slime-b", "tests pass", "src/a.rs");
+    let short = say("slime-c", "tests pass", "src/b.rs");
+    assert!(
+        corroborate(&w, short, &[]).unwrap().is_err(),
+        "two words match by chance"
     );
     let _ = fs::remove_dir_all(&w);
 }

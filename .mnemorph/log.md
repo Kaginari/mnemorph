@@ -4534,3 +4534,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     second voice grounds both. Checked to fail with the negation test off.
   - solo: a world claim grounded by another creature's earlier claim, its evidence the file it
     read.
+
+---
+
+### [2026-10-26T14:17:12+01:00] rimuru — corroboration, Fable's review
+- **Fable found:**
+  - an echo loop: a parent restating its child's offered claim corroborated it with no
+    independent look;
+  - one-sided grounding if ours failed after theirs;
+  - recall counting both shared copies;
+  - one content word sufficed, with no age limit.
+- **Fixed:**
+  - `corroborate` takes `kin` (`commission::line_of`: up the `reports_to` chain and down);
+  - both tiers are checked unfrozen, and ours is grounded first;
+  - the older claim is grounded personally only;
+  - `SAME_WORDS = 3`, `SECOND_VOICE_DAYS = 30`, newest match first;
+  - docs 08 also say only read and changed files count as evidence.
+- **Tests:** kin and two-word claims refused; one shared copy.
+- **Open (side-agent note):** the route may rarely fire.
+  - Solo worlds have no second creature, so it never fires there.
+  - Reworded claims don't match.
+  - Measure on a world with several creatures before counting on it.
