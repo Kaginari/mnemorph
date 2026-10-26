@@ -50,8 +50,9 @@ pub fn event_id(time: u64) -> String {
         h.write_u32(std::process::id());
         h.finish()
     });
+    // The counter is padded: ids sort as strings, and `10` must come after `9` within a millisecond.
     format!(
-        "{time:x}-{mark:016x}-{}",
+        "{time:x}-{mark:016x}-{:016x}",
         NEXT.fetch_add(1, Ordering::Relaxed)
     )
 }
@@ -253,4 +254,18 @@ fn local_line(world: &Path, git_path: &str, line: &str) -> std::io::Result<()> {
         .open(&temp)
         .and_then(|mut f| std::io::Write::write_all(&mut f, next.as_bytes()))
         .and_then(|()| std::fs::rename(&temp, &file))
+}
+
+#[cfg(test)]
+mod tests {
+    /// Ids made in one millisecond sort as strings in the order they were made, across a counter's
+    /// digit boundary: the fold orders events by them.
+    #[test]
+    fn ids_of_one_millisecond_sort_in_the_order_made() {
+        let ids: Vec<String> = (0..1100).map(|_| super::event_id(7)).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(sorted, ids);
+        assert!(ids.iter().all(|i| i.len() == ids[0].len()), "one width");
+    }
 }

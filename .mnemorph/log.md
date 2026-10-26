@@ -4555,3 +4555,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Solo worlds have no second creature, so it never fires there.
   - Reworded claims don't match.
   - Measure on a world with several creatures before counting on it.
+
+---
+
+### [2026-10-26T14:21:22+01:00] rimuru — memory event ids sort in the order made
+- **Found by CI on #215:** `event_id` wrote its counter in plain decimal, and the fold sorts ids
+  as strings. Within one millisecond, counter `10` sorted before `9`. A grounding that landed in
+  the same millisecond as its note's creation, across a digit boundary, folded first and was lost:
+  the note stayed proposed.
+- **Fix:** store.rs pads the counter to 16 hex digits. The mark is random per process, so old ids
+  never share a mark with new ones, and old journals keep their order.
+- **Test:** `ids_of_one_millisecond_sort_in_the_order_made` (1100 ids); checked to fail
+  unpadded.
