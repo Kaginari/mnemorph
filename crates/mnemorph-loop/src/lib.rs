@@ -38,7 +38,9 @@ pub use queue_tool::{QUEUE, QueueTool};
 pub use route::{
     Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, capped, pick, route, route_ask, tier_of,
 };
-pub use run::{Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup, Steer};
+pub use run::{
+    Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup, Steer, hidden, shown,
+};
 pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};

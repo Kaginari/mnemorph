@@ -4753,3 +4753,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Left:** the note is text-only; JSON stays rows.
 - **Test:** two creatures asserting `test=rm -rf ~` leave the Cargo suggestion unchanged; the npm
   placeholder gives none.
+
+---
+
+### [2026-10-26T19:07:12+01:00] rimuru — the terminal UI in Rust, part one
+- **Asked:** a Ratatui terminal UI with Crush-grade polish and the lowest lag, the session hosted
+  in-process; built on a Rust kit of Charm's good parts (Bubble Tea, Lip Gloss, Bubbles,
+  Harmonica, Glamour).
+- **Built:** crate `mnemorph-tui` (binary `mnemorph-tui`):
+  - `kit`: box styles and cell-measured text, textarea with history, viewport on a critically
+    damped spring, spinner, key help, Markdown from a theme-derived stylesheet, syntect
+    highlighting in palette colours;
+  - `app`: one model, `Msg`, a pure `update` returning `Cmd`s, `view`;
+  - `transcript`/`blocks`: entries folded from `mnemorph_server::events`, tool cards with
+    folded output and diffs (`similar`), per-entry layout cached per width, only the visible
+    window laid out;
+  - `gate`: the approval card over `Pending`; `run`: the session on its own runtime,
+    frames coalesced to 30 a second, the terminal restored on exit and on panic.
+- **Core:** `mnemorph_loop::shown` is public, beside `hidden`, the predicate it escapes by; the
+  transcript escapes with `hidden`, the card with `shown`.
+- **Kept out:** bincode (syntect's dump reader) is unmaintained, not vulnerable: ignored in
+  deny.toml with its reason.
+- **Tests:** the test backend's buffer for Markdown, highlighting, edit and patch diffs, a write's
+  head, folding, spinner to ✓, header and status, narrow widths, the light page, a hostile
+  approval, queueing and Esc; the palette against the TypeScript one; a scripted session hosted
+  end to end; 2,000 messages under 33 ms a frame in a debug build.
+- **Left for part two:** the sidebar (its column is reserved in the layout), mouse scrolling,
+  expanding a folded card.

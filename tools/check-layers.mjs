@@ -26,6 +26,7 @@ const ALLOWED = {
   ],
   'mnemorph-server': ['mnemorph-loop'],
   mnemorphd: ['mnemorph-server'],
+  'mnemorph-tui': ['mnemorph-server', 'mnemorph-loop', 'mnemorph-tools', 'mnemorph-races'],
 };
 
 const meta = JSON.parse(
