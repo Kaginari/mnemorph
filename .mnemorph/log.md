@@ -3976,3 +3976,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - three unit tests (headings with or without a rule, the cap, CRLF and empty).
 - **Tooling:** Fable saw phantom compile errors from the dev target shared between worktrees and
   ran `cargo clean -p` on three crates.
+
+---
+
+### [2026-10-26T09:08:27+01:00] rimuru — M8 rung 7: the compaction drain
+- **Task:** M8 rung 7's drain; exit criterion "a stress-zone run drains instead of dying".
+- **Files:**
+  - run.rs: `Stop::Drain` at the context line when the window leaves room for twice
+    `SALVAGE_TOKENS`, else the plain checkpoint;
+  - `drain` runs `last_turn`, now shared with the clock's `salvage` (no tools, 4096 tokens, the
+    clock's grace, ledgered);
+  - `keep_unsaid` reads the drain's `@U` lines with the wire's own `Report` reader and proposes
+    each, tagged with its kind and `drain`;
+  - the salvage text gains `[memory: N line(s) kept as proposed notes]`;
+  - docs 03.
+- **Tests:** loop.rs: a full context drains two `@U` lines into proposed notes, with no tools and
+  4096 tokens; at the window's edge, no drain turn is sent.

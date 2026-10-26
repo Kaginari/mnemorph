@@ -194,6 +194,8 @@ enum Stop {
     End(Ending),
     /// The clock: one salvage turn first.
     Salvage(&'static str),
+    /// The context line: one drain turn first, its `@U` lines kept as proposed notes.
+    Drain(String),
 }
 
 /// The tokens a clock death's salvage turn may write.
@@ -780,6 +782,7 @@ impl Run {
             match self.perceive() {
                 Some(Stop::End(ending)) => return self.end(ending),
                 Some(Stop::Salvage(why)) => return self.salvage(why).await,
+                Some(Stop::Drain(why)) => return self.drain(why).await,
                 None => {}
             }
             // Plan: one model call, inside what is left of the clock, unless the human interrupts.
@@ -1124,10 +1127,17 @@ impl Run {
         // A jump past the line from under the fold mark, or a resume above it, folds first: the
         // checkpoint comes only when folding cannot bring the next request under the line.
         if self.last_occupancy >= line && !self.fold_under(line) {
-            return checkpoint(format!(
+            let why = format!(
                 "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
                 self.last_occupancy
-            ));
+            );
+            // The line sits below the window: room for one drain turn, unless a jump took it.
+            let room = self.limits.window.saturating_sub(self.last_occupancy);
+            return if room >= u64::from(SALVAGE_TOKENS) * 2 {
+                Some(Stop::Drain(why))
+            } else {
+                checkpoint(why)
+            };
         }
         // The slice ran out: what the dispatcher set aside for it is given now, once — and the
         // human's caps below are read all the same.
@@ -1806,13 +1816,61 @@ impl Run {
     /// then the checkpoint, carrying it.
     async fn salvage(&mut self, why: &str) -> Ending {
         let note =
-            "Time is up. In a few lines: what you did, what you learned, what is left. No tools."
-                .to_owned();
-        self.record(&Beat::Note { text: note.clone() });
+            "Time is up. In a few lines: what you did, what you learned, what is left. No tools.";
+        let salvage = self.last_turn(note, "salvage").await;
+        self.end(Ending::Checkpoint {
+            why: why.to_owned(),
+            salvage,
+        })
+    }
+
+    /// The context line: one turn without tools to write down what is not durable, its `@U` lines
+    /// kept as the body's proposed notes, then the checkpoint — a full context drains, never dies.
+    async fn drain(&mut self, why: String) -> Ending {
+        let note = "The context is full and this session must break. Before it does, write down \
+                    what is not durable, one line each: `@U <law|colony|territory> <fact>` for \
+                    what you learned that is written nowhere, then what is left. No tools.";
+        let mut salvage = self.last_turn(note, "drain").await;
+        if let Some(text) = salvage.as_mut() {
+            let kept = self.keep_unsaid(text);
+            if kept > 0 {
+                use std::fmt::Write as _;
+                let _ = write!(text, "\n\n[memory: {kept} line(s) kept as proposed notes]");
+            }
+        }
+        self.end(Ending::Checkpoint { why, salvage })
+    }
+
+    /// A drain's `@U` lines, each a proposed note of the body's own: how many were kept.
+    fn keep_unsaid(&self, text: &str) -> usize {
+        // The wire's own reader, so a drain's `@U` reads as a report's does.
+        let Some(report) = mnemorph_wire::Report::parse(&format!("@S DRAIN\n{text}")) else {
+            return 0;
+        };
+        let mut kept = 0;
+        for u in report.unsaid.iter().filter(|u| !u.text.trim().is_empty()) {
+            let mut tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
+            tags.push("drain".into());
+            match mnemorph_memory::propose(self.cx.world(), &self.body.name, &u.text, tags, None) {
+                Ok(_) => kept += 1,
+                Err(e) => self.record(&Beat::Warning {
+                    text: format!("a drained line could not be kept: {e}"),
+                }),
+            }
+        }
+        kept
+    }
+
+    /// One last turn without tools, capped at [`SALVAGE_TOKENS`], in a grace of a tenth of the
+    /// clock (2–60 s): its text, or `None` when the model gave none in time.
+    async fn last_turn(&mut self, note: &str, stop: &str) -> Option<String> {
+        self.record(&Beat::Note {
+            text: note.to_owned(),
+        });
         push_user(
             &mut self.messages,
             vec![Block::Text {
-                text: note,
+                text: note.to_owned(),
                 cache: false,
             }],
         );
@@ -1821,30 +1879,25 @@ impl Run {
         let grace =
             (self.limits.deadline / 10).clamp(Duration::from_secs(2), Duration::from_secs(60));
         let mut quiet = |_: Event| {};
-        let salvage =
-            match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
-                Ok(Ok(r)) => {
-                    // The salvage call is a call like any other: metered and ledgered.
-                    let row = usage_row(
-                        &r,
-                        &self.caller,
-                        self.model.provider(),
-                        &self.prices,
-                        Timestamp::now(),
-                    );
-                    self.spend(&row);
-                    self.record(&Beat::Model {
-                        content: r.content.iter().map(block_json).collect(),
-                        stop: "salvage".into(),
-                    });
-                    Some(text_of(&r.content))
-                }
-                _ => None,
-            };
-        self.end(Ending::Checkpoint {
-            why: why.to_owned(),
-            salvage,
-        })
+        match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
+            Ok(Ok(r)) => {
+                // The last turn is a call like any other: metered and ledgered.
+                let row = usage_row(
+                    &r,
+                    &self.caller,
+                    self.model.provider(),
+                    &self.prices,
+                    Timestamp::now(),
+                );
+                self.spend(&row);
+                self.record(&Beat::Model {
+                    content: r.content.iter().map(block_json).collect(),
+                    stop: stop.into(),
+                });
+                Some(text_of(&r.content))
+            }
+            _ => None,
+        }
     }
 }
 
