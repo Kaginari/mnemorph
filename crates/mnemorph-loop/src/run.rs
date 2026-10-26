@@ -978,7 +978,16 @@ impl Run {
         let (Some(gate), Some(before)) = (&self.gate, &self.before) else {
             return Some(Ending::Answered(answer));
         };
-        let verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        let mut verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        // A failure names paths the model chose: escaped once, here, before any channel shows it —
+        // the journal, the CLI, the note handed back, the ending, the human's approval card.
+        for f in verdict
+            .failures
+            .iter_mut()
+            .chain(verdict.unverified.iter_mut())
+        {
+            *f = shown(f);
+        }
         // A verify command Esc stopped is not a verdict: the ask ends, interrupted.
         if self.interrupt.take() {
             return Some(Ending::Interrupted);
@@ -1006,7 +1015,8 @@ impl Run {
                 .failures
                 .iter()
                 .all(|f| f.starts_with("tests intact:"));
-        if solo && tests_only && self.human_allows(&verdict.failures) {
+        // Asked once an ask: a denial stands through the retry.
+        if solo && tests_only && !*retried && self.human_allows(&verdict.failures) {
             return Some(Ending::Answered(answer));
         }
         // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
@@ -2518,29 +2528,38 @@ fn changed_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
     }
 }
 
-/// Failures as an approval card shows them: control characters escaped — a path is the model's
-/// choice, and a newline or an escape code in one could forge a line of the card — and at most
-/// [`CARD_ITEMS`] of them, the rest counted.
+/// Failures as an approval card shows them, already [`shown`]: at most [`CARD_ITEMS`], the rest
+/// counted.
 fn card_list(failures: &[String]) -> String {
-    let mut shown: Vec<String> = failures
-        .iter()
-        .take(CARD_ITEMS)
-        .map(|f| {
-            f.chars()
-                .flat_map(|c| {
-                    if c.is_control() {
-                        c.escape_debug().collect::<Vec<_>>()
-                    } else {
-                        vec![c]
-                    }
-                })
-                .collect()
-        })
-        .collect();
+    let mut shown: Vec<String> = failures.iter().take(CARD_ITEMS).cloned().collect();
     if failures.len() > CARD_ITEMS {
         shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
     }
     shown.join("; ")
+}
+
+/// A text a model's choice reaches, as a human is shown it: control characters, the bidi
+/// controls, zero-width and line-separator characters escaped, and a backslash doubled so an
+/// escape can never be mistaken for one written in a name.
+fn shown(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            let hidden = c.is_control()
+                || c == '\\'
+                || matches!(
+                    c,
+                    '\u{200B}'..='\u{200F}'
+                        | '\u{2028}'..='\u{202E}'
+                        | '\u{2060}'..='\u{2069}'
+                        | '\u{FEFF}'
+                );
+            if hidden {
+                c.escape_unicode().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
 }
 
 /// See [`card_list`].

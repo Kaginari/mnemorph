@@ -4700,3 +4700,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   delete tool already refuses such a name). Checked to fail unescaped.
 - **Left, pre-existing:** the `Ending::Failed` text and the log carry the same raw path; hollowed
   assertions with an unchanged test count pass tests-intact.
+
+---
+
+### [2026-10-26T16:20:04+01:00] rimuru — the gate waiver, Fable reviews Opus's review
+- **Fable found what Opus missed:**
+  1. The `Gate` beat is recorded before the ask, and the CLI renders it raw
+     (`transcript.ts`, `app.tsx`) one line above the escaped card. The same raw text reached
+     `Ending::Failed` and the note handed back. Escaping only the card was bypassed.
+  2. `is_control` misses the bidi overrides, zero-width characters and line separators.
+  3. A denied waiver was asked again on the retry.
+- **Fixed:**
+  1. `judge` escapes every failure and unverified line once, at the source, with `shown`, before
+     any beat, log, note, ending or card;
+  2. `shown` covers C0/C1, U+200B–200F, U+2028–202E, U+2060–2069 and U+FEFF, and doubles a
+     backslash (`\u{…}` throughout, unambiguous);
+  3. the waiver is asked once an ask (`!*retried`); `card_list` keeps the cap.
+- **Test:** the card test adds U+202E, asserts one ask, and checks the ending carries no raw
+  newline. Checked to fail with the source escape off.
