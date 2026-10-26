@@ -3752,3 +3752,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `Beat::Recall { anchors, cut }` is journaled; server and conversation ignore it;
   - docs 04 and 08.
 - **Test:** `an_ask_recalls_what_memory_holds_and_journals_the_anchors`.
+
+---
+
+### [2026-10-26T03:09:12+01:00] rimuru — #195's review: Fable
+- **Fable found:** safe to merge.
+  - The saturation depends on corpus size: kept as the spec's absolute formula, since both
+    normalised alternatives let a word every note holds count as a match; calibration is now an
+    issue;
+  - unreadable note lines were dropped silently: now warned;
+  - the recall row came before its ask: it now follows, via `open_ask`.
+- **Test:** the recall row's order and the warning.

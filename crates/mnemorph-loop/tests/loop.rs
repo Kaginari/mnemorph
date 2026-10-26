@@ -1355,6 +1355,11 @@ async fn an_ask_recalls_what_memory_holds_and_journals_the_anchors() {
         &mnemorph_memory::Proof::confirmed("the human"),
     )
     .unwrap();
+    // A torn line in the shared notes: left out of recall, and told.
+    let shared = w.world().join(".mnemorph/memory/shared/notes.jsonl");
+    let mut torn = fs::read_to_string(&shared).unwrap();
+    torn.push_str("{\"id\": \"torn\n");
+    fs::write(&shared, torn).unwrap();
     let model = Arc::new(ScriptedModel::new([answer("noted"), answer("fine")]));
     let mut run = w.run(model.clone(), limits());
     ask(&mut run, "why does the tokenizer split interval fractions").await;
@@ -1399,4 +1404,22 @@ async fn an_ask_recalls_what_memory_holds_and_journals_the_anchors() {
         })
         .collect();
     assert_eq!(recalls, [vec![grounded.note.clone()]]);
+    let rows = w.journal().read().unwrap().rows;
+    let ask_at = rows
+        .iter()
+        .position(|b| matches!(b, Beat::Ask { .. }))
+        .unwrap();
+    let recall_at = rows
+        .iter()
+        .position(|b| matches!(b, Beat::Recall { .. }))
+        .unwrap();
+    assert_eq!(
+        recall_at,
+        ask_at + 1,
+        "the turn's recall row follows its ask"
+    );
+    assert!(
+        rows.iter()
+            .any(|b| matches!(b, Beat::Warning { text } if text.contains("could not be read")))
+    );
 }

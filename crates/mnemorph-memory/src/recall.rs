@@ -212,6 +212,8 @@ pub struct Memory {
     pub notes: Vec<(Note, Relation)>,
     /// The ids of the creature's own personal notes.
     pub personal: std::collections::BTreeSet<String>,
+    /// Lines of the note files that could not be read: ignored here, and to be told.
+    pub skipped: usize,
 }
 
 /// The notes a creature recalls from: its own personal notes, and the shared ones — a shared
@@ -227,10 +229,13 @@ pub fn gather(
     kin: impl Fn(&str) -> bool,
 ) -> std::io::Result<Memory> {
     use crate::store::{Tier, read};
-    let mine = crate::note::fold(&read(world, &Tier::Personal(name.to_owned()))?.rows);
+    let own = read(world, &Tier::Personal(name.to_owned()))?;
+    let shared = read(world, &Tier::Shared)?;
+    let skipped = own.skipped.len() + shared.skipped.len();
+    let mine = crate::note::fold(&own.rows);
     let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
     let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
-    for n in crate::note::fold(&read(world, &Tier::Shared)?.rows).into_values() {
+    for n in crate::note::fold(&shared.rows).into_values() {
         if personal.contains(&n.id) {
             continue;
         }
@@ -241,7 +246,11 @@ pub fn gather(
         };
         notes.push((n, rel));
     }
-    Ok(Memory { notes, personal })
+    Ok(Memory {
+        notes,
+        personal,
+        skipped,
+    })
 }
 
 /// A recall on the wire, as `@M` lines: each anchor with its scope, standing and polarity, then

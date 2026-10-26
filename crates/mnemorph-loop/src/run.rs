@@ -231,6 +231,8 @@ pub struct Run {
     before: Option<Tree>,
     interrupt: Arc<Interrupt>,
     folded_upto: usize,
+    /// The recall row for the ask being opened, journaled after it.
+    recalled: Option<Beat>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -307,6 +309,7 @@ impl Run {
             before: None,
             interrupt,
             folded_upto: 0,
+            recalled: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -690,10 +693,7 @@ impl Run {
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
-        let text = &self.preface(text);
-        self.record(&Beat::Ask {
-            text: text.to_owned(),
-        });
+        let text = &self.open_ask(text);
         push_user(
             &mut self.messages,
             vec![Block::Text {
@@ -1111,6 +1111,16 @@ impl Run {
         content
     }
 
+    /// Open an ask: its preface, its journal row, then the recall row that follows it.
+    fn open_ask(&mut self, text: &str) -> String {
+        let text = self.preface(text);
+        self.record(&Beat::Ask { text: text.clone() });
+        if let Some(recall) = self.recalled.take() {
+            self.record(&recall);
+        }
+        text
+    }
+
     /// What the wake ran while the body waited opens its next turn; the ask itself is kept, as
     /// solo's handoff should it escalate, and its signals start clear.
     fn preface(&mut self, text: &str) -> String {
@@ -1149,9 +1159,23 @@ impl Run {
                 .get(name)
                 .is_some_and(|c| c.race.base() == race)
         };
-        let Ok(memory) = mnemorph_memory::gather(&world, &self.body.name, kin) else {
-            return Vec::new();
+        let memory = match mnemorph_memory::gather(&world, &self.body.name, kin) {
+            Ok(m) => m,
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!("memory could not be read, so nothing was recalled: {e}"),
+                });
+                return Vec::new();
+            }
         };
+        if memory.skipped > 0 {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "{} line(s) of the note files could not be read: recall left them out",
+                    memory.skipped
+                ),
+            });
+        }
         let now = mnemorph_memory::store::now_ms();
         let r = mnemorph_memory::recall(
             text,
@@ -1163,7 +1187,8 @@ impl Run {
         if r.anchors.is_empty() {
             return Vec::new();
         }
-        self.record(&Beat::Recall {
+        // Journaled after the ask it opens: the turn's recall row follows its ask.
+        self.recalled = Some(Beat::Recall {
             anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),
             cut: r.cut,
         });
