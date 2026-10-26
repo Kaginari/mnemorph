@@ -1081,7 +1081,7 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n",
+        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
     )
     .unwrap();
     let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
@@ -1093,6 +1093,16 @@ fn the_configuration_reaches_the_run() {
     let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
     assert_eq!(limits.stress_tokens, 90_000);
     assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
+    // Recall's weights: the keys set, the defaults for the rest.
+    let d = mnemorph_memory::Weights::default();
+    assert_eq!(
+        (
+            limits.weights.floor,
+            limits.weights.saturation[2],
+            limits.weights.meaning
+        ),
+        (0.9, 2.0, d.meaning)
+    );
     // The solo body's steps: the human's, else the shortest chain's — an Elf's, an Orc's, a
     // Slime's. The session sets them when it has no Elf to dispatch to.
     assert_eq!(config.solo_steps(), 150);

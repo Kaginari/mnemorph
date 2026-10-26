@@ -1044,4 +1044,20 @@ fn recall_weights_are_numbers_a_layer_sets() {
     assert!(g.load().unwrap_err().contains("config.toml"));
     g.tracked("[recall]\nfloor = \"high\"\n");
     assert!(g.load().is_err());
+    // What recall cannot score: a zero saturation or half-life divides by zero, a floor of zero
+    // matches every note, a weight past 1, an infinity.
+    for bad in [
+        "saturation_short = 0",
+        "half_life_days = 0.0",
+        "floor = 0",
+        "meaning = 1.5",
+        "dissent = inf",
+    ] {
+        g.tracked(&format!("[recall]\n{bad}\n"));
+        let e = g.load().unwrap_err();
+        assert!(
+            e.contains("config.toml") && e.contains("recall."),
+            "{bad}: {e}"
+        );
+    }
 }

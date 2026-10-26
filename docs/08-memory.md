@@ -169,7 +169,9 @@ fixtures: `recall.meaning`, `recall.relation`, `recall.salience`, `recall.confid
 `recall.freshness`, `recall.dissent`, `recall.half_life_days`, `recall.floor`, and BM25's
 saturations by query length, `recall.saturation_short` (one content word), `recall.saturation_mid`
 (two or three) and `recall.saturation_long` (four and more); a key left unset keeps the value
-above.
+above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
+the floor above 0 and at most 1, the saturations and the half-life above 0 — anything else, an
+infinity included, is an error naming its file.
 
 ### Two scopes, two standings
 

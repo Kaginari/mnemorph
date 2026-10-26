@@ -586,6 +586,7 @@ impl Config {
         for (key, leaf) in &self.leaves {
             let at = &leaf.origin;
             match key.as_str() {
+                k if k.starts_with("recall.") => recall_bound(k, &leaf.value, at)?,
                 "gate.ask_rules" => {
                     for name in strings(&leaf.value) {
                         let rule = Rule::from_name(name).ok_or_else(|| {
@@ -1062,7 +1063,7 @@ impl Config {
             l.value.as_float().or_else(|| {
                 l.value
                     .as_integer()
-                    .and_then(|i| i32::try_from(i).ok())
+                    .and_then(|i| u32::try_from(i).ok())
                     .map(f64::from)
             })
         })
@@ -1112,6 +1113,38 @@ fn kind_of(key: &str) -> Option<Kind> {
         (pat.len() == parts.len() && pat.iter().zip(&parts).all(|(p, k)| *p == "*" || p == k))
             .then_some(*kind)
     })
+}
+
+/// A `recall.*` value within what recall can score: finite; a saturation or a half-life above
+/// zero (zero divides by zero); a weight, the dissent's boost and the floor at most 1; the floor
+/// above zero, since a floor of zero lets every note match.
+fn recall_bound(key: &str, value: &Value, at: &Origin) -> Result<(), String> {
+    let v = value
+        .as_float()
+        .or_else(|| {
+            value
+                .as_integer()
+                .and_then(|i| u32::try_from(i).ok())
+                .map(f64::from)
+        })
+        .unwrap_or(f64::NAN);
+    let name = key.trim_start_matches("recall.");
+    let fits = v.is_finite()
+        && if name.starts_with("saturation") || name == "half_life_days" {
+            v > 0.0
+        } else if name == "floor" {
+            v > 0.0 && v <= 1.0
+        } else {
+            v <= 1.0
+        };
+    if fits {
+        Ok(())
+    } else {
+        Err(format!(
+            "{at}: {key} is {v}; recall's weights are at most 1, its floor above 0 and at most 1, \
+             its saturations and half-life above 0"
+        ))
+    }
 }
 
 fn check_kind(key: &str, value: &Value, kind: Kind, origin: &Origin) -> Result<(), String> {

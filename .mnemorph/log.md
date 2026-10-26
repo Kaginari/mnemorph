@@ -4614,3 +4614,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:**
   - config: the keys read, unset is None, a negative and a string are refused;
   - loop: the default floor recalls the note; an unreachable floor recalls nothing.
+
+---
+
+### [2026-10-26T15:13:13+01:00] rimuru — recall weights, Fable's review
+- **Fable:** every run gets the configured weights; the C_θ docs are exact.
+- **Found:**
+  - unbounded values made NaN scores that cleared the floor (saturation 0 is `0/0`, a half-life
+    of 0, `inf`), and a floor of 0 matched every note;
+  - the config→Weights key names were untested;
+  - `number()` dropped integers above `i32`.
+- **Fixed:**
+  - config `recall_bound` in `validate` (finite; saturations and half-life > 0; floor in (0, 1];
+    weights ≤ 1), with an error naming the file;
+  - `the_configuration_reaches_the_run` sets `[recall]` and reads it back through `configure`;
+  - `number()` goes through `u32`;
+  - docs 08 state the bounds.
