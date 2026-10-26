@@ -1670,21 +1670,20 @@ async fn a_context_at_the_windows_edge_checkpoints_without_a_drain() {
     let w = World::new("nodrain");
     let model = Arc::new(ScriptedModel::new([
         tool_with("t1", "glob", json!({"pattern": "*"}), usage(199_000)),
-        answer("never"),
+        // The compaction's summary turn fails: with no room left, no drain follows it.
+        Err(mnemorph_provider::Error::Invalid("context too long".into())),
     ]));
-    let mut run = w.run(
-        model.clone(),
-        Limits {
-            compactions: 0,
-            ..limits()
-        },
-    );
+    let mut run = w.run(model.clone(), limits());
     let e = ask(&mut run, "big").await;
     assert!(
         matches!(&e, Ending::Checkpoint { why, salvage: None } if why.starts_with("context")),
         "{e:?}"
     );
-    assert_eq!(model.requests().len(), 1, "no drain turn was sent");
+    assert_eq!(
+        model.requests().len(),
+        2,
+        "the compaction tried, no drain turn was sent"
+    );
 }
 
 /// A run drains once: the next ask on the same full context checkpoints plainly, with no second

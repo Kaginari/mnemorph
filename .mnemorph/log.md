@@ -4418,3 +4418,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - loop.rs: pointer once with the continuation offset, then content; a stuck body still stops on
     the `loop` stall;
   - the window-edge drain test opts out of compaction.
+
+---
+
+### [2026-10-26T13:03:23+01:00] rimuru — #212's review: Fable
+- **Verdict:** safe after one fix.
+- **Fable found:**
+  - a failed compaction drained without the room check, sending a second doomed request at the
+    window's edge and spending the run's one drain;
+  - `repin` is in practice reached only through the pointer.
+- **Fixed:**
+  - `meet` drains after a failed compaction only when `drains == 0 && room_to_drain()`, else it
+    checkpoints;
+  - the edge test is back on default limits, with a failing summary turn;
+  - docs 03 say the pointer alone counts, and the `loop` stall and the guts bound a stuck reader.

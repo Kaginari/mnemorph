@@ -212,7 +212,8 @@ All are code. None of them asks the body how it feels.
 saying how long the file is and the offset that reads on; asked again, the window is shown — the
 body is never left behind a pointer to text it cannot find. A fold or a compaction forgets what was
 read, since that text is no longer in the conversation. Only the pointer counts as an unchanged
-re-read for `repin`.
+re-read for `repin`, so a body asking the same window again and again meets the identical-call
+`loop` stall and the guts first.
 
 The **bench tally** keeps, per test command — the command before any pipe or `;`, its
 `VAR=value`, `timeout` and runner words (`uv run`, `npx`, …) set aside — its visits, reds,

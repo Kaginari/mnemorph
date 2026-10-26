@@ -2136,6 +2136,12 @@ impl Run {
         None
     }
 
+    /// Whether the window has room for one drain turn past the context line: a jump that left
+    /// less than two such turns of room checkpoints without one.
+    fn room_to_drain(&self) -> bool {
+        self.limits.window.saturating_sub(self.last_occupancy) >= u64::from(SALVAGE_TOKENS) * 2
+    }
+
     /// What a meter's reading does: the ending it brings, or `None` when the run goes on — a
     /// compaction that came back with no summary is no compaction, and the run drains.
     async fn meet(&mut self, stop: Option<Stop>) -> Option<Ending> {
@@ -2144,11 +2150,13 @@ impl Run {
             Stop::Salvage(why) => Some(self.salvage(why).await),
             Stop::Drain(why) => Some(self.drain(why).await),
             // A compaction that failed drains — once a run, as any drain.
-            Stop::Compact(why) if !self.compact().await => Some(if self.drains == 0 {
-                self.drain(why).await
-            } else {
-                self.end(Ending::Checkpoint { why, salvage: None })
-            }),
+            Stop::Compact(why) if !self.compact().await => {
+                Some(if self.drains == 0 && self.room_to_drain() {
+                    self.drain(why).await
+                } else {
+                    self.end(Ending::Checkpoint { why, salvage: None })
+                })
+            }
             Stop::Compact(_) => None,
         }
     }
