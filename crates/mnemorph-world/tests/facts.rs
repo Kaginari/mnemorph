@@ -393,3 +393,147 @@ fn a_fact_is_anchored_where_it_is_about() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// The cases of the triage fixture: on one path, the older fact a new one restates, six older
+/// facts that share its words but say something else, and the new fact, reworded.
+const TRIAGE_CASES: &[(&str, &str, [&str; 6], &str)] = &[
+    (
+        "src/wire/",
+        "the parser rejects tabs",
+        [
+            "the parser accepts trailing commas",
+            "the lexer rejects unicode escapes in identifiers",
+            "tabs in strings are kept verbatim",
+            "the parser keeps comments",
+            "the wire format rejects empty frames",
+            "tab width is four in the formatter",
+        ],
+        "the wire parser refuses tab characters",
+    ),
+    (
+        "src/db/",
+        "migrations run inside one transaction",
+        [
+            "each migration has a down script",
+            "the connection pool holds ten connections",
+            "transactions retry twice on deadlock",
+            "migrations are numbered by date",
+            "one migration failed in staging",
+            "the transaction log is rotated daily",
+        ],
+        "all migrations execute in a single transaction",
+    ),
+    (
+        "tests/",
+        "the integration tests need docker running",
+        [
+            "unit tests run without network",
+            "docker images are pinned by digest",
+            "the test suite takes four minutes",
+            "tests running in docker share one network",
+            "the integration suite needs a seeded database",
+            "flaky tests are retried once",
+        ],
+        "integration tests require a running docker daemon",
+    ),
+    (
+        "src/api/",
+        "the api returns dates in utc",
+        [
+            "the api paginates at 50 items",
+            "timestamps in logs are local time",
+            "the api rejects requests without a token",
+            "the api returns errors as json",
+            "dates in the ui are shown in local time",
+            "the api version is in the url",
+        ],
+        "dates from the api are utc",
+    ),
+    (
+        "src/cache/",
+        "cache entries expire after one hour",
+        [
+            "the cache is keyed by user id",
+            "cache misses fall back to the database",
+            "the hour column is stored as an integer",
+            "cache entries are compressed",
+            "the cache holds at most ten thousand entries",
+            "sessions expire after one day",
+        ],
+        "cached entries live for sixty minutes",
+    ),
+    (
+        "src/build/",
+        "release builds strip debug symbols",
+        [
+            "debug builds enable assertions",
+            "the build caches dependencies",
+            "symbols are uploaded to the crash reporter",
+            "release builds are signed",
+            "the debug build is twice as slow",
+            "builds strip the vendored tests",
+        ],
+        "debug symbols are stripped from release builds",
+    ),
+    (
+        "src/auth/",
+        "passwords are hashed with argon2",
+        [
+            "tokens are signed with ed25519",
+            "the password minimum length is twelve",
+            "hashes are compared in constant time",
+            "passwords are never logged",
+            "the hash of each file is stored",
+            "argon2 parameters come from config",
+        ],
+        "argon2 hashes every password",
+    ),
+    (
+        "config/",
+        "the default port is 8080",
+        [
+            "the port can be set from the environment",
+            "tls is on by default",
+            "the admin port is 9090",
+            "the default log level is info",
+            "the port is checked at startup",
+            "the default timeout is thirty seconds",
+        ],
+        "8080 is the default port",
+    ),
+];
+
+/// `Pr[old fact not in top 3]`, the second term of the bound on a silent contradiction (09): over
+/// the fixture, how often the older fact a new one restates is missing from the three a parent is
+/// shown. Measured, not assumed; the doc quotes the rate this asserts.
+#[test]
+fn the_true_duplicate_is_shown_for_triage() {
+    use mnemorph_world::facts::THETA_T;
+    let (mut missed, mut ranks) = (Vec::new(), Vec::new());
+    for (path, old, others, new) in TRIAGE_CASES {
+        let mut events: Vec<Event> = others
+            .iter()
+            .enumerate()
+            .map(|(i, t)| say(path, t, &format!("slime-{i}")))
+            .collect();
+        events.push(say(path, old, "slime-old"));
+        events.push(say(path, new, "slime-new"));
+        let facts = Facts::fold(&events);
+        let fresh = &facts.facts[&fact_id(path, new)];
+        let shown: Vec<&str> = facts
+            .candidates(fresh, THETA_T)
+            .iter()
+            .map(|f| f.text.as_str())
+            .collect();
+        match shown.iter().position(|t| t == old) {
+            Some(rank) => ranks.push(rank + 1),
+            None => missed.push(format!("{new} → {shown:?}")),
+        }
+    }
+    eprintln!(
+        "Pr[old not in top 3] = {}/{}, the duplicate's ranks {ranks:?}",
+        missed.len(),
+        TRIAGE_CASES.len()
+    );
+    assert!(missed.is_empty(), "{missed:#?}");
+}

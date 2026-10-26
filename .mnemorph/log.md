@@ -4630,3 +4630,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `the_configuration_reaches_the_run` sets `[recall]` and reads it back through `configure`;
   - `number()` goes through `u32`;
   - docs 08 state the bounds.
+
+---
+
+### [2026-10-26T15:18:17+01:00] rimuru — the triage fixture: Pr[old fact not in top 3]
+- **Why:** gap matrix item 14 (§2.G). The bound on a silent contradiction leans on
+  `Pr[old not in top 3]`, which docs 09 said the fixtures measure, and none did.
+- **Built:** world tests/facts.rs `TRIAGE_CASES`. 8 paths, each with a reworded new fact, its
+  true duplicate, and 6 distractors sharing its words. `the_true_duplicate_is_shown_for_triage`
+  asserts no miss and prints the ranks.
+- **Measured:** 0 of 8 missed; ranks `[3, 1, 1, 1, 2, 1, 3, 1]`.
+  - A first version with 3 distractors also gave 0 of 8, but then the top 3 of 4 is nearly
+    guaranteed. I grew it to 6 and checked that each case shows 3 facts.
+  - The synonym case ("sixty minutes" for "one hour") ranks 2nd, saved by "entries".
+- **Docs 09:** quote the rate and its looseness. 0 of 8 is consistent with a miss rate of one in
+  four (the 95% upper bound is ~31%), so the fixture should grow with real misses.
