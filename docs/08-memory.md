@@ -201,7 +201,14 @@ The **corroborated** route is Genesis's *named twice* applied to memory. If two 
 independently at rate $\varepsilon$, a wrong claim survives both with probability $\varepsilon^2$.
 Bodies on the same model share blind spots, so their errors are not independent: the match
 counts only when the two claims cite different anchors (different files, entries or commits),
-never the same note recalled twice.
+never the same note recalled twice. A claim's anchors are its evidence: the files its run read with
+the read tool or changed — a search or a shell command leaves none. When a claim no check grounds
+is kept, it is compared with the proposed claims of every other creature outside its own line (a
+parent restating its child's offered claim is an echo, not a second voice): one with the same
+content words, at least three of them, negated alike, said within 30 days, resting on evidence
+that shares no file with its own, grounds both, each citing the other. The newer is shared; the
+older is grounded in its owner's tier only, so recall holds one copy. A claim that rests on no
+evidence is never corroborated.
 
 **Failed runs still teach.** The failure itself is an observed fact: it grounds a revise event
 at once (see *Reconsolidation*). The body's explanation of *why* it failed stays personal and

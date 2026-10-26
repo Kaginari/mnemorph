@@ -4510,3 +4510,60 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - keyed directory facts unanchored;
   - docs 09.
 - **Checked:** the host-path asserts fail with the filter off (`@ONTO /etc/passwd: nobody` shows).
+
+---
+
+### [2026-10-26T14:12:10+01:00] rimuru — the corroborated route, live
+- **Why:** the gap matrix's M17. `Proof::corroborated` had no caller, and no claim carried
+  anchors (every proposal passed `source: None`), so the ε² route was dead.
+- **Files:**
+  - memory note.rs: `Create`/`Note` carry `evidence`, serde-defaulted, so older journals read
+    and older binaries ignore it;
+  - memory write.rs: `propose_on` takes the evidence; `corroborate` finds another creature's
+    proposed claim with the same content words, negated alike (`same_claim`; stop words drop
+    `not`), whose evidence is non-empty and disjoint, then grounds both, each citing the other;
+    the `Seconded` type;
+  - loop run.rs: `Run::evidence` = the paths read or changed since the ask (`acts_since_ask`);
+  - loop commission.rs: `remember` files the evidence and tries corroboration for what no check
+    grounds; the report counts it; a child's evidence reaches `report_for`;
+  - docs 08.
+- **Not `source`:** a note's `source` is the single place it is about (`covers`, heir routing);
+  evidence is a list, and kept apart.
+- **Tests:**
+  - memory: same evidence, the same creature, a negation, and no evidence are each refused; a
+    second voice grounds both. Checked to fail with the negation test off.
+  - solo: a world claim grounded by another creature's earlier claim, its evidence the file it
+    read.
+
+---
+
+### [2026-10-26T14:17:12+01:00] rimuru — corroboration, Fable's review
+- **Fable found:**
+  - an echo loop: a parent restating its child's offered claim corroborated it with no
+    independent look;
+  - one-sided grounding if ours failed after theirs;
+  - recall counting both shared copies;
+  - one content word sufficed, with no age limit.
+- **Fixed:**
+  - `corroborate` takes `kin` (`commission::line_of`: up the `reports_to` chain and down);
+  - both tiers are checked unfrozen, and ours is grounded first;
+  - the older claim is grounded personally only;
+  - `SAME_WORDS = 3`, `SECOND_VOICE_DAYS = 30`, newest match first;
+  - docs 08 also say only read and changed files count as evidence.
+- **Tests:** kin and two-word claims refused; one shared copy.
+- **Open (side-agent note):** the route may rarely fire.
+  - Solo worlds have no second creature, so it never fires there.
+  - Reworded claims don't match.
+  - Measure on a world with several creatures before counting on it.
+
+---
+
+### [2026-10-26T14:21:22+01:00] rimuru — memory event ids sort in the order made
+- **Found by CI on #215:** `event_id` wrote its counter in plain decimal, and the fold sorts ids
+  as strings. Within one millisecond, counter `10` sorted before `9`. A grounding that landed in
+  the same millisecond as its note's creation, across a digit boundary, folded first and was lost:
+  the note stayed proposed.
+- **Fix:** store.rs pads the counter to 16 hex digits. The mark is random per process, so old ids
+  never share a mark with new ones, and old journals keep their order.
+- **Test:** `ids_of_one_millisecond_sort_in_the_order_made` (1100 ids); checked to fail
+  unpadded.

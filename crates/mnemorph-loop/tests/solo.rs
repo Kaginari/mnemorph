@@ -507,3 +507,54 @@ async fn a_solo_answer_keeps_its_claims_by_the_write_rule() {
         "only the checked claim is shared: {shared:?}"
     );
 }
+
+/// A claim about the world, which no check can ground, is corroborated when another creature said
+/// the same from other evidence: what the body read is the evidence it rests on.
+#[tokio::test]
+async fn a_claim_another_creature_made_from_other_evidence_is_corroborated() {
+    use mnemorph_memory::{Status, Tier, fold, propose_on, read};
+    let w = World::new("solo-corroborated");
+    fs::write(w.world().join("notes.md"), "run the build first\n").unwrap();
+    let earlier = propose_on(
+        &w.world(),
+        "slime-x",
+        "run the build before answering",
+        vec![],
+        None,
+        vec!["Makefile".into()],
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "read", json!({"path": "notes.md"})),
+        answer("Read it.\n@U colony run the build before answering"),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    ask(&mut run, "what do the notes say?").await;
+    let mine = fold(
+        &read(&w.world(), &Tier::Personal("rimuru".into()))
+            .unwrap()
+            .rows,
+    );
+    let n = mine
+        .values()
+        .find(|n| n.text.starts_with("run the build"))
+        .unwrap_or_else(|| panic!("{mine:?}"));
+    assert_eq!(n.status, Status::Grounded, "{n:?}");
+    assert!(
+        n.proof
+            .as_deref()
+            .unwrap()
+            .starts_with("corroborated: slime-x")
+    );
+    assert_eq!(n.evidence, vec!["notes.md".to_owned()], "what it read");
+    let theirs = fold(
+        &read(&w.world(), &Tier::Personal("slime-x".into()))
+            .unwrap()
+            .rows,
+    );
+    assert_eq!(
+        theirs[&earlier.note].status,
+        Status::Grounded,
+        "both voices"
+    );
+}
