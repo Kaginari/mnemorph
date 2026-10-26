@@ -4432,3 +4432,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     checkpoints;
   - the edge test is back on default limits, with a failing summary turn;
   - docs 03 say the pointer alone counts, and the `loop` stall and the guts bound a stuck reader.
+
+---
+
+### [2026-10-26T13:29:15+01:00] rimuru — a correction stands where the note it corrects stands
+- **Why:** the gap matrix (Fable, `gap-matrix.md`) found that docs 08's head start (0.154 ≈ 0.37
+  of meaning) assumes equal relation. A revise note is owned by the failing body, so when A
+  recalls its own note corrected by B's run, w_r·Δrel = 0.34·0.7 = 0.238 > 0.154 and the
+  correction ranks below. Its failure-line text can also fall under θ.
+- **Files:**
+  - recall.rs `lend_to_corrections` in `gather`: a revise note takes the closest relation among
+    its linked notes and their texts as matching tags, in memory only;
+  - docs 08.
+- **Test:** recall.rs: B's correction of A's note has relation Own for A and is recalled for A's
+  query. It fails without the lending (checked).

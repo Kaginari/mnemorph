@@ -352,7 +352,11 @@ With equal recency and the default weights, its prior over an ordinary grounded 
 ```
 
 which is worth $0.154 / 0.42 \approx 0.37$ of normalised meaning: a correction outranks an ordinary
-note that matches the query 0.37 better. Recency, by contrast, can move a score by at most
+note that matches the query 0.37 better. That holds at equal relation and equal match, and recall makes it
+so: a revise note is weighed with the closest relation among the notes it links to, and matched
+with their words beside its own — a correction written by another creature's failed run, in its
+failure's words, stands where the note it corrects stands. Nothing is stored; only recall weighs
+it. Recency, by contrast, can move a score by at most
 $w_t = 0.07$.
 
 A note — grounded, or proposed, since either may be struck — cited by an ask whose change the

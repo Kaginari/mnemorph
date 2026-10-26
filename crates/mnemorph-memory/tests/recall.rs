@@ -247,3 +247,80 @@ fn only_the_askers_own_proposed_notes_are_weighed() {
     );
     assert_eq!(ids(&r), ["mine"]);
 }
+
+/// A correction is recalled where the note it corrects would be: written by another creature's
+/// failed run, in a failure line's words, it still takes the relation of the note it links to and
+/// matches the query that note matches — the premise of its head start.
+#[test]
+fn a_correction_stands_where_the_note_it_corrects_stands() {
+    use mnemorph_memory::{Anchor, Proof, Relation, gather, ground, propose, recall, revise};
+    let w = std::env::temp_dir().join(format!("mnemorph-lend-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(&w).unwrap();
+    let habit = ground(
+        &w,
+        propose(
+            &w,
+            "slime-a",
+            "the tokenizer keeps interval fractions whole",
+            vec![],
+            None,
+        )
+        .unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    for text in [
+        "the planner caches joins",
+        "the lexer is pure",
+        "dates parse in utc",
+    ] {
+        ground(
+            &w,
+            propose(&w, "slime-z", text, vec![], None).unwrap(),
+            &Proof::confirmed("h"),
+        )
+        .unwrap();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(3));
+    // Another creature's failed run corrects it, in its failure's words.
+    let correction = revise(
+        &w,
+        "slime-b",
+        &["traits hold: test_round_trip failed".into()],
+        &[Anchor {
+            id: habit.clone(),
+            personal: false,
+            dissent: false,
+            cited: true,
+        }],
+        "log.md fail",
+    )
+    .unwrap()
+    .remove(0);
+    let memory = gather(&w, "slime-a", |_| false).unwrap();
+    let rel = memory
+        .notes
+        .iter()
+        .find(|(n, _)| n.id == correction)
+        .unwrap()
+        .1;
+    assert_eq!(
+        rel,
+        Relation::Own,
+        "the correction stands where the note it corrects stands"
+    );
+    let r = recall(
+        "why does the tokenizer split interval fractions",
+        &memory.notes,
+        mnemorph_memory::store::now_ms(),
+        6,
+        &mnemorph_memory::Weights::default(),
+    );
+    assert!(
+        r.anchors.iter().any(|h| h.note.id == correction),
+        "recalled with the note it corrects"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}
