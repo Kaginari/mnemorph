@@ -39,6 +39,7 @@ Usage:
   mnemorph q list|show|add|claim|touch|requeue|close …   the shared work queue
   mnemorph housekeep [--heal]        what is broken in the roster; --heal fixes what is mechanical
   mnemorph relief <name> [--apply]   split a strained creature's ground in two young, or retire it
+  mnemorph memory status [--json]    note events that do not resolve, and whose writes they freeze
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -78,7 +79,7 @@ export function parse(argv: string[]): Command {
       break;
     }
   }
-  if (first !== -1 && ['q', 'housekeep', 'relief'].includes(argv[first] as string)) {
+  if (first !== -1 && ['q', 'housekeep', 'relief', 'memory'].includes(argv[first] as string)) {
     let qWorld: string | undefined;
     let qCore: string | undefined;
     const before: string[] = [];

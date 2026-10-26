@@ -12,6 +12,7 @@ Usage: mnemorphd [--world <dir>]
        mnemorphd onto check [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
+       mnemorphd memory status [--world <dir>] [--json]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -24,6 +25,11 @@ from the creature docs; it needs no key and opens no session. A path is relative
 current directory, or absolute. `onto check` prints `@S PASS|FAIL <n> findings`, then each
 finding's severity, code, place and message; it fails on a critical or high finding, or a doc
 that does not read.
+
+`memory status` names, per creature, every note event whose author or proof does not resolve —
+a hand edit, a bad merge, an import that skipped its checks. Recall ignores such an event and
+the creature's memory writes stay frozen until the event is removed or re-proved; it exits 1
+while any is found.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -64,6 +70,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("relief") {
         return relief(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("memory") {
+        return memory(&all[1..]);
     }
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
@@ -404,6 +413,82 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
                 i.ask
             )
         };
+    }
+}
+
+/// `memory status`: the unproven writes, per creature.
+fn memory(args: &[String]) -> ExitCode {
+    let mut world = None;
+    let mut json = false;
+    let mut verb = None;
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--json" => json = true,
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            "status" if verb.is_none() => verb = Some(()),
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    if verb.is_none() {
+        return refused(&"memory needs a verb: status");
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let report = match mnemorph_server::world::memory::status(&world) {
+        Ok(r) => r,
+        Err(e) => return refused(&format!("memory cannot be read: {e}")),
+    };
+    let frozen = report.iter().any(|(_, f)| !f.is_empty());
+    if json {
+        let rows: Vec<serde_json::Value> = report
+            .iter()
+            .map(|(name, found)| {
+                serde_json::json!({
+                    "creature": name,
+                    "frozen": !found.is_empty()
+                        && name != mnemorph_server::world::memory::audit::SHARED,
+                    "unproven": found.iter().map(|u| serde_json::json!({
+                        "file": u.file, "event": u.event, "note": u.note, "why": u.why,
+                    })).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(rows));
+    } else if report.is_empty() {
+        println!("no creature has memory here yet");
+    } else {
+        for (name, found) in &report {
+            if found.is_empty() {
+                println!("{name}: clear");
+                continue;
+            }
+            let state = if name == mnemorph_server::world::memory::audit::SHARED {
+                "recall ignores"
+            } else {
+                "frozen —"
+            };
+            println!(
+                "{name}: {state} {} note event(s) that do not resolve; remove or re-prove each",
+                found.len()
+            );
+            for u in found {
+                println!(
+                    "  {}  event {}  note {}: {}",
+                    u.file, u.event, u.note, u.why
+                );
+            }
+        }
+    }
+    if frozen {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
     }
 }
 

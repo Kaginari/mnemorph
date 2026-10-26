@@ -214,6 +214,8 @@ pub struct Memory {
     pub personal: std::collections::BTreeSet<String>,
     /// Lines of the note files that could not be read: ignored here, and to be told.
     pub skipped: usize,
+    /// Events whose author or proof does not resolve: ignored here, and to be told.
+    pub unproven: usize,
 }
 
 /// The notes a creature recalls from: its own personal notes, and the shared ones — a shared
@@ -233,13 +235,17 @@ pub fn gather(
     let short = read(world, &Tier::Short(name.to_owned()))?;
     let shared = read(world, &Tier::Shared)?;
     let skipped = own.skipped.len() + short.skipped.len() + shared.skipped.len();
+    // An event whose author or proof does not resolve is ignored, each tier judged on its own.
+    let (own, a) = crate::audit::resolved(own.rows);
+    let (short, b) = crate::audit::resolved(short.rows);
+    let (shared, c) = crate::audit::resolved(shared.rows);
     // The body's own: its personal notes and its short-tier cache, both personal in scope.
-    let mut events = own.rows;
-    events.extend(short.rows);
+    let mut events = own;
+    events.extend(short);
     let mine = crate::note::fold(&events);
     let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
     let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
-    for n in crate::note::fold(&shared.rows).into_values() {
+    for n in crate::note::fold(&shared).into_values() {
         if personal.contains(&n.id) {
             continue;
         }
@@ -254,6 +260,7 @@ pub fn gather(
         notes,
         personal,
         skipped,
+        unproven: a + b + c,
     })
 }
 

@@ -162,13 +162,14 @@ pub fn forget(
                     }],
                 },
             )?;
+            // Its standing rests on the original's, named: never on a proof given for other text.
             if n.status == Status::Grounded {
                 append(
                     world,
                     tier,
                     &schema,
                     By::Record,
-                    n.proof.clone(),
+                    Some(format!("abstracted: {id}")),
                     Change::Status {
                         status: Status::Grounded,
                     },

@@ -114,10 +114,10 @@ machines that both append never conflict, because the fold does not trust line o
 Every event also names who wrote it — `by: record | gate | route | human | import` — and an event
 that claims a standing must cite its proof (section *Two scopes, two standings*). An event in a
 tracked tier cites tracked evidence — a `log.md` entry, a commit, a verdict recorded in the
-journal — never a machine-local ledger row, so its proof travels with it. The fold checks that the
-proof resolves: the entry, verdict or commit it cites exists and says what the event claims. A
-proof that is merely out of reach on this machine (a commit not yet fetched) leaves the event
-*unresolved here*: kept, not recalled as grounded, and never counted as an unproven write.
+journal — never a machine-local ledger row, so its proof travels with it. Recall checks that each
+event resolves by the shape of its author and proof ([pathologies as
+instruments](#pathologies-as-instruments)): it catches a hand edit, a bad merge or an import that
+skipped its checks, not a forger who writes a well-shaped proof.
 
 Let $C$ be the notes with $\pi \in \lbrace \text{counter}, \text{revise}\rbrace $ (the *dissent*) and $S^{+}$
 the rest.
@@ -338,6 +338,24 @@ tier is that place: git's local exclude, set when a session opens, keeps it off 
 | **replay loop** | the same recall fingerprint, $\mathrm{SHA256}(\text{query}, \text{selected anchors}, \text{office})$ — MNEMORPH-85 also hashes its synthesised text, which Mnemorph does not produce — at least 3 times in the last 5 recalls with no new outcome and no dissent selected | inject the best dissenting note or escalate one hop, the way the identical-call loop breaker does for tools |
 | **lock-in** | a revise note exists, yet every agreeing note recalled is older than it and no dissent was selected | reopen the recall with the newest revision forced in |
 | **unproven write** | a note event whose `by` or proof does not resolve in the fold — a hand edit, a bad merge, an import that skipped its checks | ignore the event in recall, freeze the creature's memory writes and tell the human |
+
+An event resolves by its author and its proof:
+
+| `by` | Resolves when |
+|---|---|
+| `human` | always |
+| `route` | its proof reads `<route>: <what>`, the route one of `checked`, `accepted`, `corroborated`, `confirmed` |
+| `gate` | it cites a verdict |
+| `import` | it cites its source |
+| `record` | it claims no standing — or, for a schema, its proof names the notes it rests on (`distilled: <ids>`, `abstracted: <id>`), each grounded in the same tier |
+
+A standing is a `grounded` status or a confidence. An unresolved event touching a creature — in
+its personal or short tier, or on a shared note it owns — freezes that creature's proposals,
+groundings, revisions and cache; `mnemorph memory status` names each event, its file and why, and
+exits 1 until the human removes or re-proves it. A run that recalls past one says so in a warning.
+A shared note with no owner freezes no creature; its unresolved events are reported under their
+own row. A schema rests on schemas too, and an heir inherits a schema with every note it links
+to, so a split never leaves a schema resting on nothing.
 
 There is no aggregate memory score. A high recall hit rate cannot make up for a creature that
 never accepts a correction.

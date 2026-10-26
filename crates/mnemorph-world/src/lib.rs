@@ -1,5 +1,8 @@
 //! The world: creatures, territory, dispatch, the end gate, the log writer, evolution.
 
+/// The world's memory: notes, recall, the write rule and the audit, for the human's commands.
+pub use mnemorph_memory as memory;
+
 pub mod dispatch;
 pub mod doc;
 pub mod facts;

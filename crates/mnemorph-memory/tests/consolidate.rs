@@ -116,6 +116,11 @@ fn forgetting_keeps_evidence_and_tombstones_only_machine_local_text() {
     .unwrap();
     let notes = fold(&read(&w, &Tier::Shared).unwrap().rows);
     assert_eq!(notes[&abstracted].status, Status::Dormant);
+    assert_eq!(
+        notes[&schema].proof.as_deref(),
+        Some(format!("abstracted: {abstracted}").as_str()),
+        "its standing rests on the original, named in code"
+    );
     assert!(
         (notes[&schema].salience - 0.5).abs() < 1e-9,
         "max(0.4, 0.6 − 0.1)"

@@ -602,15 +602,19 @@ fn remember(
     let (mut proposed, mut grounded) = (0, 0);
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
-        let Ok(claim) = mnemorph_memory::propose(world, to, &u.text, tags, None) else {
-            eprintln!("mnemorph: {to}'s claim could not be remembered");
-            continue;
+        let claim = match mnemorph_memory::propose(world, to, &u.text, tags, None) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("mnemorph: {to}'s claim could not be remembered: {e}");
+                continue;
+            }
         };
         proposed += 1;
-        if let Some(p) = proof
-            && mnemorph_memory::ground(world, claim, p).is_ok()
-        {
-            grounded += 1;
+        if let Some(p) = proof {
+            match mnemorph_memory::ground(world, claim, p) {
+                Ok(_) => grounded += 1,
+                Err(e) => eprintln!("mnemorph: {to}'s claim could not be grounded: {e}"),
+            }
         }
     }
     Some(format!(

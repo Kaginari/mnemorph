@@ -73,3 +73,13 @@ test('housekeep hands its words to the core whole', () => {
     raw: true,
   });
 });
+
+test('memory status hands its words to the core whole', () => {
+  expect(parse(['--world', 'w', 'memory', 'status', '--json'])).toEqual({
+    kind: 'onto',
+    words: ['memory', 'status', '--json'],
+    world: 'w',
+    core: undefined,
+    raw: true,
+  });
+});
