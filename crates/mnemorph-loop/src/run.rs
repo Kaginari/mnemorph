@@ -2057,10 +2057,13 @@ impl Run {
         if let Some(why) = serde_json::from_str::<serde_json::Value>(input)
             .ok()
             .filter(|v| v.get(mnemorph_provider::MALFORMED).is_some())
-            .map(|v| v["error"].as_str().unwrap_or_default().to_owned())
+            .map(|v| match &v["error"] {
+                serde_json::Value::String(s) => s.chars().take(200).collect::<String>(),
+                _ => "unreadable".to_owned(),
+            })
         {
             return mnemorph_tools::Outcome::error(format!(
-                "this call's arguments were not valid JSON ({why}); nothing ran — send the call \
+                "the arguments to {name} are not valid JSON ({why}); nothing ran — send the call \
                  again with complete JSON arguments"
             ));
         }

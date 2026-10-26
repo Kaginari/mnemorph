@@ -395,6 +395,7 @@ impl Chat {
             .stop
             .take()
             .unwrap_or_else(|| StopReason::Other(String::new()));
+        let mut warnings = Vec::new();
         for (_, call) in std::mem::take(&mut self.calls) {
             // A call with no arguments arrives with an empty string: that is `{}`.
             let input = if call.arguments.trim().is_empty() {
@@ -404,8 +405,14 @@ impl Chat {
             };
             let input = match input {
                 Ok(input) => input,
-                // Cut by the output ceiling: the call never finished, so it is dropped.
-                Err(_) if stop == StopReason::MaxTokens => continue,
+                // Cut by the output ceiling: the call never finished, so it is dropped, and said.
+                Err(_) if stop == StopReason::MaxTokens => {
+                    warnings.push(format!(
+                        "tool call {} was cut by max_tokens and dropped",
+                        call.name
+                    ));
+                    continue;
+                }
                 // A finished call whose arguments are no JSON is the model's slip, not the
                 // stream's: kept, with its text under `MALFORMED`, so the loop answers it with an
                 // error the model can correct, and one bad call never ends a run.
@@ -431,7 +438,7 @@ impl Chat {
             stop,
             stop_details: None,
             usage: self.usage,
-            warnings: Vec::new(),
+            warnings,
         }
     }
 }

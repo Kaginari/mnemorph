@@ -646,6 +646,7 @@ async fn a_deleted_tests_name_cannot_forge_the_card() {
 #[tokio::test]
 async fn a_call_with_broken_arguments_is_answered_and_the_run_goes_on() {
     let w = World::new("broken-args");
+    fs::write(w.world().join("README.md"), "never read\n").unwrap();
     let model = Arc::new(ScriptedModel::new([
         tool(
             "t1",
