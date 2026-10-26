@@ -210,14 +210,37 @@ async fn the_steps_meter_checkpoints() {
     );
 }
 
+/// A body alone — no lane below, no one above — has no one to hand the turn to: three failed
+/// acts in a row warn it to change approach, and the run goes on.
 #[tokio::test]
-async fn three_failed_acts_escalate() {
+async fn three_failed_acts_alone_are_warned() {
+    let w = World::new("escalate-alone");
+    let mut replies: Vec<_> = (0..3)
+        .map(|i| tool(&format!("t{i}"), "read", json!({"path": "missing.txt"})))
+        .collect();
+    replies.push(answer("missing.txt does not exist"));
+    let model = Arc::new(ScriptedModel::new(replies));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "read it").await;
+    assert_eq!(e, Ending::Answered("missing.txt does not exist".into()));
+    let told = format!("{:?}", model.requests()[3].messages.last());
+    assert!(
+        told.contains("[escalate] More than two failed acts in a row"),
+        "{told}"
+    );
+}
+
+/// A commissioned body escalates: three failed acts in a row end its turn one hop up.
+#[tokio::test]
+async fn three_failed_acts_escalate_a_commissioned_body() {
     let w = World::new("escalate");
     let model =
         Arc::new(ScriptedModel::new((0..5).map(|i| {
             tool(&format!("t{i}"), "read", json!({"path": "missing.txt"}))
         })));
-    let mut run = w.run(model, limits());
+    let mut setup = w.setup(model);
+    setup.caller.commission = Some("orc-o".into());
+    let mut run = Run::new(body(), limits(), setup);
     assert!(matches!(
         ask(&mut run, "read it").await,
         Ending::Escalate(_)
