@@ -251,7 +251,7 @@ impl Assembler for Chat {
         started: &mut bool,
     ) -> Result<Option<Response>, Error> {
         if data.trim() == "[DONE]" {
-            return self.finish().map(Some);
+            return Ok(Some(self.finish()));
         }
         let v: Value = serde_json::from_str(data)
             .map_err(|e| Error::Decode(format!("{e}: {}", &data[..data.len().min(200)])))?;
@@ -371,7 +371,7 @@ impl Chat {
         }
     }
 
-    fn finish(&mut self) -> Result<Response, Error> {
+    fn finish(&mut self) -> Response {
         let mut content = Vec::new();
         if !self.reasoning.is_empty() {
             content.push(Block::Opaque(json!({
@@ -424,7 +424,7 @@ impl Chat {
                 input,
             });
         }
-        Ok(Response {
+        Response {
             id: std::mem::take(&mut self.id),
             model: std::mem::take(&mut self.model),
             content,
@@ -432,6 +432,6 @@ impl Chat {
             stop_details: None,
             usage: self.usage,
             warnings: Vec::new(),
-        })
+        }
     }
 }

@@ -658,5 +658,8 @@ async fn a_call_with_broken_arguments_is_answered_and_the_run_goes_on() {
     let ending = ask(&mut run, "read the readme").await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let told = format!("{:?}", model.requests()[1].messages.last());
-    assert!(told.contains("not valid JSON") && told.contains("nothing ran"), "{told}");
+    assert!(
+        told.contains("not valid JSON") && told.contains("nothing ran"),
+        "{told}"
+    );
 }

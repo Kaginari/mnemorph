@@ -300,7 +300,7 @@ impl Assembler for Assembly {
                 }
                 self.read_usage(&v["usage"]);
             }
-            "message_stop" => return self.finish().map(Some),
+            "message_stop" => return Ok(Some(self.finish())),
             "error" => {
                 return Err(Error::Stream {
                     kind: v["error"]["type"].as_str().unwrap_or("unknown").to_owned(),
@@ -342,7 +342,7 @@ impl Assembly {
         }
     }
 
-    fn finish(&mut self) -> Result<Response, Error> {
+    fn finish(&mut self) -> Response {
         let stop = self
             .stop
             .take()
@@ -392,7 +392,7 @@ impl Assembly {
             self.warnings
                 .push("refusal: the partial content was discarded".to_owned());
         }
-        Ok(Response {
+        Response {
             id: std::mem::take(&mut self.id),
             model: std::mem::take(&mut self.model),
             content,
@@ -400,7 +400,7 @@ impl Assembly {
             stop_details: self.stop_details.take(),
             usage: self.usage,
             warnings: std::mem::take(&mut self.warnings),
-        })
+        }
     }
 }
 
