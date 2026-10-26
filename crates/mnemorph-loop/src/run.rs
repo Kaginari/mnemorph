@@ -206,6 +206,8 @@ pub const STRESS_TOKENS: u64 = 150_000;
 pub const NOTICE_PCT: u64 = 75;
 /// The share of the stress line at which old tool outputs fold.
 pub const COMPACT_PCT: u64 = 60;
+/// The notes recall shows an ask: the page's budget of anchors.
+pub const RECALL_K: usize = 6;
 
 /// One body's run.
 pub struct Run {
@@ -229,6 +231,8 @@ pub struct Run {
     before: Option<Tree>,
     interrupt: Arc<Interrupt>,
     folded_upto: usize,
+    /// The recall row for the ask being opened, journaled after it.
+    recalled: Option<Beat>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -305,6 +309,7 @@ impl Run {
             before: None,
             interrupt,
             folded_upto: 0,
+            recalled: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -688,10 +693,7 @@ impl Run {
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
-        let text = &self.preface(text);
-        self.record(&Beat::Ask {
-            text: text.to_owned(),
-        });
+        let text = &self.open_ask(text);
         push_user(
             &mut self.messages,
             vec![Block::Text {
@@ -1109,20 +1111,88 @@ impl Run {
         content
     }
 
+    /// Open an ask: its preface, its journal row, then the recall row that follows it.
+    fn open_ask(&mut self, text: &str) -> String {
+        let text = self.preface(text);
+        self.record(&Beat::Ask { text: text.clone() });
+        if let Some(recall) = self.recalled.take() {
+            self.record(&recall);
+        }
+        text
+    }
+
     /// What the wake ran while the body waited opens its next turn; the ask itself is kept, as
     /// solo's handoff should it escalate, and its signals start clear.
     fn preface(&mut self, text: &str) -> String {
         text.clone_into(&mut self.asked);
         self.unheld = None;
         let woken = std::mem::take(&mut self.woken);
-        if woken.is_empty() {
+        let asked = if woken.is_empty() {
             text.to_owned()
         } else {
             format!(
                 "While you waited, the shared queue ran:\n- {}\n\n{text}",
                 woken.join("\n- ")
             )
+        };
+        let recalled = self.recall(text);
+        if recalled.is_empty() {
+            asked
+        } else {
+            format!(
+                "Recalled from memory (a proposed note is unproven):\n{}\n\n{asked}",
+                recalled.join("\n")
+            )
         }
+    }
+
+    /// Recall for an ask: the body's own notes and the shared ones, ranked for its text, as `@M`
+    /// lines; what was shown is journaled as the turn's anchors. Nothing when memory holds nothing
+    /// that matches, or cannot be read.
+    fn recall(&mut self, text: &str) -> Vec<String> {
+        let world = self.cx.world().to_path_buf();
+        let roster = mnemorph_world::Roster::load(&world);
+        let race = self.body.race.base();
+        let kin = |name: &str| {
+            roster
+                .creatures
+                .get(name)
+                .is_some_and(|c| c.race.base() == race)
+        };
+        let memory = match mnemorph_memory::gather(&world, &self.body.name, kin) {
+            Ok(m) => m,
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!("memory could not be read, so nothing was recalled: {e}"),
+                });
+                return Vec::new();
+            }
+        };
+        if memory.skipped > 0 {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "{} line(s) of the note files could not be read: recall left them out",
+                    memory.skipped
+                ),
+            });
+        }
+        let now = mnemorph_memory::store::now_ms();
+        let r = mnemorph_memory::recall(
+            text,
+            &memory.notes,
+            now,
+            RECALL_K,
+            &mnemorph_memory::Weights::default(),
+        );
+        if r.anchors.is_empty() {
+            return Vec::new();
+        }
+        // Journaled after the ask it opens: the turn's recall row follows its ask.
+        self.recalled = Some(Beat::Recall {
+            anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),
+            cut: r.cut,
+        });
+        mnemorph_memory::lines(&r, &memory.personal)
     }
 
     /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,

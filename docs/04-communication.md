@@ -91,7 +91,7 @@ who said them and on what evidence ([ontology](09-ontology.md)).
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
 | `@T <tool> <cost>` | a tool offered in the level-1 manifest |
-| `@M <anchor> <scope> <standing> <polarity>` · `@M -<n> <anchors>` | a recalled note, and the count cut above the floor ([memory](08-memory.md)) |
+| `@M <anchor> <scope> <standing> <polarity>: <text>` · `@M -<n> <anchors>` | a recalled note with its text, and the count cut above the floor ([memory](08-memory.md)) |
 | `@ONTO <path>: <owner> · <facts>` | the ontology's projection for a body: who owns the paths it touches, and at most $k$ of their facts, each with its `#<fact-id>` so a counter can name it — contested first with both sides, then countered, then the rest by recency; `@ONTO -<n>` counts the facts cut ([ontology](09-ontology.md)) |
 | `@R <path>` · `@H <hash>` | courier envelope: where the full report lies, and its hash |
 | `@E <bytes>` | closes |

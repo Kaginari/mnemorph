@@ -222,9 +222,14 @@ When no dissenting note was selected, recall says *none selected*, never *none e
 **On the wire.** Recall reaches the body as `@M` lines in the recall-anchors tier
 ([communication](04-communication.md#the-wire-envelope)):
 
-    @M <anchor> personal|shared proposed|grounded support|counter|revise
+    @M <anchor> personal|shared proposed|grounded support|counter|revise: <text>
     @M -<n> <anchor> <anchor> <anchor>        # n cut above θ; at most three named
     @M -0 dissent: none selected               # never "none exist"
+
+Recall runs once per ask, over the body's personal notes and the shared ones — a note grounded
+from its personal tier counted once — with the ask's own text as the query. Its lines open the
+ask, and the anchors shown go to the run's journal as the turn's `recall` row, the record a
+run-ending failure reconsolidates by. An ask that matches nothing is sent as it was.
 
 ### The write rule
 

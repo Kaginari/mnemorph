@@ -41,7 +41,9 @@ impl Default for Weights {
             dissent: 0.10,
             half_life_days: 120.0,
             floor: 0.12,
-            saturation: [1.0, 2.0, 3.0],
+            // Set against the fixtures: a lone note matching three content words of four clears
+            // the floor; a word every note holds stays far under it.
+            saturation: [0.5, 1.0, 1.5],
         }
     }
 }
@@ -200,4 +202,92 @@ pub fn recall(
         cut: cut.len(),
         cut_ids: cut.into_iter().take(3).collect(),
     }
+}
+
+/// What a creature recalls from: the notes, each with its relation to it, and which of them are
+/// its personal ones.
+#[derive(Debug, Clone, Default)]
+pub struct Memory {
+    /// The notes, each once, with their relations.
+    pub notes: Vec<(Note, Relation)>,
+    /// The ids of the creature's own personal notes.
+    pub personal: std::collections::BTreeSet<String>,
+    /// Lines of the note files that could not be read: ignored here, and to be told.
+    pub skipped: usize,
+}
+
+/// The notes a creature recalls from: its own personal notes, and the shared ones — a shared
+/// note of its own, or of its race (`kin`), weighed as such — each note once, its personal copy
+/// first.
+///
+/// # Errors
+///
+/// A note file cannot be read.
+pub fn gather(
+    world: &std::path::Path,
+    name: &str,
+    kin: impl Fn(&str) -> bool,
+) -> std::io::Result<Memory> {
+    use crate::store::{Tier, read};
+    let own = read(world, &Tier::Personal(name.to_owned()))?;
+    let shared = read(world, &Tier::Shared)?;
+    let skipped = own.skipped.len() + shared.skipped.len();
+    let mine = crate::note::fold(&own.rows);
+    let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
+    let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
+    for n in crate::note::fold(&shared.rows).into_values() {
+        if personal.contains(&n.id) {
+            continue;
+        }
+        let rel = match n.owner.as_deref() {
+            Some(o) if o == name => Relation::Own,
+            Some(o) if kin(o) => Relation::Race,
+            _ => Relation::Shared,
+        };
+        notes.push((n, rel));
+    }
+    Ok(Memory {
+        notes,
+        personal,
+        skipped,
+    })
+}
+
+/// A recall on the wire, as `@M` lines: each anchor with its scope, standing and polarity, then
+/// its text; the cut above the floor as a count and at most three ids; and, when no dissent was
+/// selected, that it was none selected — never that none exist. Nothing for an empty recall.
+#[must_use]
+pub fn lines(r: &Recalled, personal: &std::collections::BTreeSet<String>) -> Vec<String> {
+    if r.anchors.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = r
+        .anchors
+        .iter()
+        .map(|h| {
+            let scope = if personal.contains(&h.note.id) {
+                "personal"
+            } else {
+                "shared"
+            };
+            let standing = match h.note.status {
+                Status::Grounded => "grounded",
+                _ => "proposed",
+            };
+            let polarity = match h.note.polarity {
+                crate::note::Polarity::Support => "support",
+                crate::note::Polarity::Counter => "counter",
+                crate::note::Polarity::Revise => "revise",
+            };
+            let text: String = h.note.text.split_whitespace().collect::<Vec<_>>().join(" ");
+            format!("@M {} {scope} {standing} {polarity}: {text}", h.note.id)
+        })
+        .collect();
+    if r.cut > 0 {
+        out.push(format!("@M -{} {}", r.cut, r.cut_ids.join(" ")));
+    }
+    if !r.anchors.iter().any(|h| h.note.polarity.dissents()) {
+        out.push("@M -0 dissent: none selected".to_owned());
+    }
+    out
 }

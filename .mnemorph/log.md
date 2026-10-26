@@ -3735,3 +3735,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Test:** the Orc's claim stays proposed while its Slime's is grounded.
 - **Disk:** it fell to 3.1G as stale dev test binaries piled up. The dev target was cleared and is
   rebuilt with `CARGO_INCREMENTAL=0` (4.4G).
+
+---
+
+### [2026-10-26T03:03:14+01:00] rimuru — recall in the loop
+- **Task:** reconsolidation (rung 4) needs the anchors each turn recalled, and nothing in the loop
+  recalled. Recall is wired first.
+- **Files:**
+  - memory recall.rs: `Memory` and `gather` (personal as own; shared by owner: own, race or
+    shared; a note grounded from personal counted once); `lines` (`@M <id> <scope> <standing>
+    <polarity>: <text>`, the cut line, "dissent: none selected");
+  - the saturation is retuned against the fixtures to [0.5, 1.0, 1.5]: with [1, 2, 3] a lone
+    note matching three content words of four stayed under θ, while a word every note holds stays
+    at about 0.04;
+  - run.rs `preface` recalls once per ask (`RECALL_K` = 6) and opens the ask with the lines;
+  - `Beat::Recall { anchors, cut }` is journaled; server and conversation ignore it;
+  - docs 04 and 08.
+- **Test:** `an_ask_recalls_what_memory_holds_and_journals_the_anchors`.
+
+---
+
+### [2026-10-26T03:09:12+01:00] rimuru — #195's review: Fable
+- **Fable found:** safe to merge.
+  - The saturation depends on corpus size: kept as the spec's absolute formula, since both
+    normalised alternatives let a word every note holds count as a match; calibration is now an
+    issue;
+  - unreadable note lines were dropped silently: now warned;
+  - the recall row came before its ask: it now follows, via `open_ask`.
+- **Test:** the recall row's order and the warning.
