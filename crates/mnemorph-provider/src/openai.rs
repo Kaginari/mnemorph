@@ -11,6 +11,10 @@ use crate::model::{Block, Event, Request, Response, Role, StopReason};
 use crate::retry::Policy;
 use crate::transport::Transport;
 
+/// The key a tool call's input carries when the model's arguments were no JSON: the raw text,
+/// beside `error`, for the loop to hand back as the call's error.
+pub const MALFORMED: &str = "__malformed_arguments";
+
 /// Opaque blocks this client produces carry a type with this prefix; it replays them, and every
 /// other provider leaves them out.
 pub const OPAQUE_PREFIX: &str = "openai.";
@@ -247,7 +251,7 @@ impl Assembler for Chat {
         started: &mut bool,
     ) -> Result<Option<Response>, Error> {
         if data.trim() == "[DONE]" {
-            return self.finish().map(Some);
+            return Ok(Some(self.finish()));
         }
         let v: Value = serde_json::from_str(data)
             .map_err(|e| Error::Decode(format!("{e}: {}", &data[..data.len().min(200)])))?;
@@ -367,7 +371,7 @@ impl Chat {
         }
     }
 
-    fn finish(&mut self) -> Result<Response, Error> {
+    fn finish(&mut self) -> Response {
         let mut content = Vec::new();
         if !self.reasoning.is_empty() {
             content.push(Block::Opaque(json!({
@@ -391,6 +395,7 @@ impl Chat {
             .stop
             .take()
             .unwrap_or_else(|| StopReason::Other(String::new()));
+        let mut warnings = Vec::new();
         for (_, call) in std::mem::take(&mut self.calls) {
             // A call with no arguments arrives with an empty string: that is `{}`.
             let input = if call.arguments.trim().is_empty() {
@@ -400,14 +405,18 @@ impl Chat {
             };
             let input = match input {
                 Ok(input) => input,
-                // Cut by the output ceiling: the call never finished, so it is dropped.
-                Err(_) if stop == StopReason::MaxTokens => continue,
-                Err(e) => {
-                    return Err(Error::Decode(format!(
-                        "tool {}'s arguments: {e}",
+                // Cut by the output ceiling: the call never finished, so it is dropped, and said.
+                Err(_) if stop == StopReason::MaxTokens => {
+                    warnings.push(format!(
+                        "tool call {} was cut by max_tokens and dropped",
                         call.name
-                    )));
+                    ));
+                    continue;
                 }
+                // A finished call whose arguments are no JSON is the model's slip, not the
+                // stream's: kept, with its text under `MALFORMED`, so the loop answers it with an
+                // error the model can correct, and one bad call never ends a run.
+                Err(e) => json!({ MALFORMED: call.arguments, "error": e.to_string() }),
             };
             if !call.extra.is_empty() {
                 content.push(Block::Opaque(json!({
@@ -422,14 +431,14 @@ impl Chat {
                 input,
             });
         }
-        Ok(Response {
+        Response {
             id: std::mem::take(&mut self.id),
             model: std::mem::take(&mut self.model),
             content,
             stop,
             stop_details: None,
             usage: self.usage,
-            warnings: Vec::new(),
-        })
+            warnings,
+        }
     }
 }

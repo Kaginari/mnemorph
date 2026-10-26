@@ -461,3 +461,25 @@ async fn the_ledger_prices_every_answer() {
         assert!(prices.get(model).is_some(), "{model}");
     }
 }
+
+/// A finished call whose input is no JSON is the model's slip: kept under `MALFORMED`, never an
+/// error that ends the run.
+#[tokio::test(start_paused = true)]
+async fn a_call_with_broken_input_is_kept_for_the_loop_to_answer() {
+    let body = sse(&[
+        start(&json!({"input_tokens": 5, "output_tokens": 1})),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "t1", "name": "read", "input": {}}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"path\": "}}),
+        json!({"type": "content_block_stop", "index": 0}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}}),
+        json!({"type": "message_stop"}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+    let (result, _) = run(&client(&script), &request()).await;
+    let r = result.expect("a broken call is no stream error");
+    let [Block::ToolUse { name, input, .. }] = r.content.as_slice() else {
+        panic!("{:?}", r.content);
+    };
+    assert_eq!(name, "read");
+    assert_eq!(input[mnemorph_provider::MALFORMED], "{\"path\": ");
+}
