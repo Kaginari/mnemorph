@@ -603,6 +603,8 @@ fn remember(
         return None;
     }
     let (mut proposed, mut grounded) = (0, 0);
+    // What stays proposed is named, so the commissioner may accept it by id.
+    let mut open = Vec::new();
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
         let claim = match mnemorph_memory::propose(world, to, &u.text, tags, None) {
@@ -613,16 +615,27 @@ fn remember(
             }
         };
         proposed += 1;
+        let id = claim.note.clone();
+        let short: String = u.text.chars().take(80).collect();
         if let Some(p) = proof {
             match mnemorph_memory::ground(world, claim, p) {
-                Ok(_) => grounded += 1,
+                Ok(_) => {
+                    grounded += 1;
+                    continue;
+                }
                 Err(e) => eprintln!("mnemorph: {to}'s claim could not be grounded: {e}"),
             }
         }
+        open.push(format!("{id} «{short}»"));
     }
-    Some(format!(
-        "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked]"
-    ))
+    let mut said =
+        format!("[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked");
+    if !open.is_empty() {
+        said.push_str("; proposed — a claim you checked yourself, accept it with `@V accept <id>` in your answer: ");
+        said.push_str(&open.join("; "));
+    }
+    said.push(']');
+    Some(said)
 }
 
 /// File an answering child's `@U territory` facts in its name, and return the triage its parent

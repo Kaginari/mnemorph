@@ -4146,3 +4146,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Lesson, third time:** a script that stops at its first miss leaves the edits after it
   unapplied, and a passing build says nothing about them. After any scripted batch, grep for each
   intended change before claiming it.
+
+---
+
+### [2026-10-26T09:59:55+01:00] rimuru — M8: the accepted route
+- **Task:** wire the **accepted** route (`Proof::accepted` existed, uncalled); exit criterion "a
+  findings-only commission's accepted claims reach shared memory with no test run, and its
+  rejected ones stay personal".
+- **Files:**
+  - memory write.rs `proposed(world, owner, id)` rebuilds a stored proposed claim as
+    `Claim<Proposed>`, so grounding still goes through the typestate;
+  - commission.rs `remember` lists each claim left proposed, `id «text»`, with how to accept;
+  - run.rs: `commissioned` (the bodies this ask ordered, reset per ask); `accept` runs at `end`
+    on an answered ask, and each `@V accept <id>` grounds the matching proposed claim of a
+    commissioned body, citing "<body> accepted it in run <run>: <line>", or warns it named
+    nothing;
+  - model.rs `ScriptedModel::then` lets a test model queue a reply from what it was shown;
+  - docs 08.
+- **Test:** commission.rs. An `Accepting` model reads the minted id from the Elf's report and
+  accepts one of two claims. The accepted one is grounded and shared at 0.6 with its proof; the
+  other stays personal and proposed. It fails without `accept` (checked).

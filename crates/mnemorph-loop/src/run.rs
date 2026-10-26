@@ -252,6 +252,8 @@ pub struct Run {
     landed_in_ask: Option<String>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
     opening: Option<String>,
+    /// The bodies this ask commissioned: whose proposed claims its answer may accept.
+    commissioned: std::collections::BTreeSet<String>,
     /// The toolbox's manifest — the Minds the body may wear, priced — said with its first ask.
     manifest: Option<String>,
     /// How often the run has drained: a full context drains once, and checkpoints plainly after.
@@ -340,6 +342,7 @@ impl Run {
             recall_trace: None,
             landed_in_ask: None,
             opening: None,
+            commissioned: std::collections::BTreeSet::new(),
             manifest: None,
             drains: 0,
             passed: None,
@@ -683,6 +686,9 @@ impl Run {
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
+        if let Ending::Answered(text) = &ending {
+            self.accept(text);
+        }
         // The ask's recall leaves its trace: what the replay loop reads at the next. An ask the
         // human stopped is no replay of anything.
         if !matches!(ending, Ending::Interrupted)
@@ -1130,6 +1136,47 @@ impl Run {
         }
     }
 
+    /// The **accepted** route: each `@V accept <id>` line of an answer grounds the claim it names —
+    /// one a body this ask commissioned said and still holds proposed — citing the verdict. A claim
+    /// it does not accept stays personal; an id naming nothing it may accept is said, not grounded.
+    fn accept(&self, answer: &str) {
+        for line in answer.lines().map(str::trim) {
+            let Some(rest) = line.strip_prefix("@V accept ") else {
+                continue;
+            };
+            let id = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_matches('`');
+            let cite = format!(
+                "{} accepted it in run {}: {line}",
+                self.body.name, self.caller.run
+            );
+            let found = self.commissioned.iter().find_map(|child| {
+                mnemorph_memory::proposed(self.cx.world(), child, id)
+                    .ok()
+                    .flatten()
+            });
+            let said = match found {
+                Some(claim) => match mnemorph_memory::Proof::accepted(&cite, true)
+                    .map_err(std::io::Error::other)
+                    .and_then(|p| mnemorph_memory::ground(self.cx.world(), claim, &p))
+                {
+                    Ok(g) => format!(
+                        "memory: accepted `{}` of {} into shared memory",
+                        g.note, g.owner
+                    ),
+                    Err(e) => format!("memory: `{id}` could not be accepted: {e}"),
+                },
+                None => format!(
+                    "memory: `{id}` names no claim a body this ask commissioned still holds proposed: nothing accepted"
+                ),
+            };
+            self.record(&Beat::Warning { text: said });
+        }
+    }
+
     /// The stress line: the configured tokens, never past 90% of the window.
     fn stress_line(&self) -> u64 {
         self.limits
@@ -1310,6 +1357,7 @@ impl Run {
     fn open_ask(&mut self, text: &str) -> String {
         self.ask_from = self.messages.len();
         self.failed_in_ask = None;
+        self.commissioned.clear();
         self.landed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
@@ -1756,6 +1804,12 @@ impl Run {
         match self.commissioner.clone() {
             // A commission runs a whole child body: the loop runs it, not the tool.
             Some(c) if name == crate::commission::COMMISSION => {
+                if let Some(to) = serde_json::from_str::<serde_json::Value>(input)
+                    .ok()
+                    .and_then(|v| v.get("to").and_then(|t| t.as_str()).map(str::to_owned))
+                {
+                    self.commissioned.insert(to);
+                }
                 let left = self
                     .limits
                     .budget_wt
