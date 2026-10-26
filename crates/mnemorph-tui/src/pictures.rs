@@ -27,6 +27,7 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::{Duration, Instant};
 
 use mnemorph_races::Race;
 use ratatui::buffer::Buffer;
@@ -86,6 +87,8 @@ pub struct Pictures {
     pub cell: Option<(u16, u16)>,
     /// What the last frame wanted shown.
     pub(crate) wants: RefCell<Vec<Want>>,
+    /// A protocol set aside until the cell's size can be trusted again.
+    lost: Option<Protocol>,
 }
 
 impl Pictures {
@@ -96,6 +99,7 @@ impl Pictures {
             protocol: cell.and(protocol.pixels().then_some(protocol)),
             cell,
             wants: RefCell::new(Vec::new()),
+            lost: None,
         }
     }
 
@@ -103,6 +107,12 @@ impl Pictures {
     #[must_use]
     pub fn active(&self) -> bool {
         self.protocol.is_some()
+    }
+
+    /// Whether the terminal draws pictures at all, now or once the cell's size returns.
+    #[must_use]
+    pub fn images(&self) -> bool {
+        self.protocol.is_some() || self.lost.is_some()
     }
 
     /// The rows a portrait `cols` wide takes, when it is a picture.
@@ -167,6 +177,31 @@ struct Shown {
 /// background.
 type Key = (Slot, Art, u16, u16, Rgb);
 
+/// How long a moved box stays put before its picture is sent.
+pub const SETTLE: Duration = Duration::from_millis(150);
+
+/// After a resize, `cell` the cell's size read again (`None` when the window gives no pixels).
+/// A new size rebuilds the pictures. Sixel draws exactly the pixels it was built for, so with
+/// no size to trust it falls back to half blocks — the old picture erased — until one returns;
+/// Kitty and iTerm2 are given their box in cells and fit it themselves.
+pub fn resized(pictures: &mut Pictures, placer: &mut Placer, cell: Option<(u16, u16)>) {
+    match cell {
+        Some(c) => {
+            if let Some(p) = pictures.lost.take() {
+                pictures.protocol = Some(p);
+                placer.set_protocol(Some(p));
+            }
+            pictures.cell = Some(c);
+            placer.set_cell(c);
+        }
+        None if pictures.protocol == Some(Protocol::Sixel) => {
+            pictures.lost = pictures.protocol.take();
+            placer.set_protocol(None);
+        }
+        None => {}
+    }
+}
+
 /// The most encoded pictures kept: a few boxes, a few races.
 const KEPT: usize = 24;
 
@@ -174,8 +209,15 @@ const KEPT: usize = 24;
 #[derive(Debug)]
 pub struct Placer {
     protocol: Option<Protocol>,
+    /// The protocol the pictures on screen were sent with: what erases them, even once the
+    /// pictures fell back to half blocks.
+    erase_with: Option<Protocol>,
     cell: (u16, u16),
     shown: Vec<Shown>,
+    /// Each slot's box as last wanted, and since when it has been there.
+    seen: Vec<(Slot, Rect, Instant)>,
+    /// When a picture held back while its box moved has settled.
+    settle_at: Option<Instant>,
     cache: HashMap<Key, Arc<str>>,
     /// Pictures sent to the terminal.
     pub sends: usize,
@@ -189,8 +231,11 @@ impl Placer {
     pub fn new(pictures: &Pictures) -> Self {
         Self {
             protocol: pictures.protocol,
+            erase_with: pictures.protocol,
             cell: pictures.cell.unwrap_or((8, 16)),
             shown: Vec::new(),
+            seen: Vec::new(),
+            settle_at: None,
             cache: HashMap::new(),
             sends: 0,
             builds: 0,
@@ -203,6 +248,22 @@ impl Placer {
             self.cell = cell;
             self.cache.clear();
         }
+    }
+
+    /// Draw with `protocol` from now on; `None` falls back to half blocks, and the next sync
+    /// erases what is on screen.
+    pub fn set_protocol(&mut self, protocol: Option<Protocol>) {
+        self.protocol = protocol;
+        if protocol.is_some() {
+            self.erase_with = protocol;
+        }
+    }
+
+    /// How long until a picture held back while its box moved may be placed: zero when a frame
+    /// is owed now, `None` when none waits.
+    #[must_use]
+    pub fn due(&self, now: Instant) -> Option<Duration> {
+        self.settle_at.map(|t| t.saturating_duration_since(now))
     }
 
     /// Whether a picture is on screen.
@@ -219,7 +280,7 @@ impl Placer {
     ///
     /// `out` cannot be written.
     pub fn before(&mut self, wants_none: bool, out: &mut impl Write) -> std::io::Result<()> {
-        if wants_none && self.protocol == Some(Protocol::Kitty) && self.showing() {
+        if wants_none && self.erase_with == Some(Protocol::Kitty) && self.showing() {
             self.clear(out)?;
         }
         Ok(())
@@ -232,7 +293,7 @@ impl Placer {
     ///
     /// `out` cannot be written.
     pub fn clear(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        if self.protocol == Some(Protocol::Kitty) {
+        if self.erase_with == Some(Protocol::Kitty) {
             for s in &self.shown {
                 KITTY_SHOWN.fetch_and(!s.want.slot.bit(), Ordering::SeqCst);
                 out.write_all(pixels::kitty_delete(s.want.slot.id()).as_bytes())?;
@@ -243,8 +304,7 @@ impl Placer {
         Ok(())
     }
 
-    /// After a frame drawn as `buf` at terminal `size`: erase what is no longer wanted, send what
-    /// is newly wanted; nothing when nothing changed.
+    /// After a frame drawn as `buf` at terminal `size`, now: see [`Placer::sync_at`].
     ///
     /// # Errors
     ///
@@ -256,15 +316,32 @@ impl Placer {
         buf: &Buffer,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        let Some(protocol) = self.protocol else {
-            return Ok(());
-        };
-        let keep = |s: &Shown| s.size == size && wants.contains(&s.want);
+        self.sync_at(wants, size, buf, out, Instant::now())
+    }
+
+    /// After a frame drawn as `buf` at terminal `size`, at `now`: erase what is no longer wanted,
+    /// send what is newly wanted; nothing when nothing changed. A picture whose box moved — the
+    /// welcome scrolling — is not sent until its box has stayed put for [`SETTLE`]: a moving box
+    /// shows its plain cells, and is never sent once a frame.
+    ///
+    /// # Errors
+    ///
+    /// `out` cannot be written.
+    pub fn sync_at(
+        &mut self,
+        wants: &[Want],
+        size: (u16, u16),
+        buf: &Buffer,
+        out: &mut impl Write,
+        now: Instant,
+    ) -> std::io::Result<()> {
+        let live = self.protocol.is_some();
+        let keep = |s: &Shown| live && s.size == size && wants.contains(&s.want);
         let (kept, gone): (Vec<Shown>, Vec<Shown>) = self.shown.drain(..).partition(keep);
         let mut wrote = false;
         for g in &gone {
-            match protocol {
-                Protocol::Kitty => {
+            match self.erase_with {
+                Some(Protocol::Kitty) => {
                     KITTY_SHOWN.fetch_and(!g.want.slot.bit(), Ordering::SeqCst);
                     out.write_all(pixels::kitty_delete(g.want.slot.id()).as_bytes())?;
                 }
@@ -273,31 +350,54 @@ impl Placer {
             wrote = true;
         }
         self.shown = kept;
-        for w in wants {
-            if self.shown.iter().any(|s| s.want == *w) {
-                continue;
+        self.settle_at = None;
+        if let Some(protocol) = self.protocol {
+            for w in wants {
+                if self.shown.iter().any(|s| s.want == *w) {
+                    continue;
+                }
+                // A box off the frame is never sent: a picture past the edge would scroll it.
+                if w.area.right() > buf.area.right() || w.area.bottom() > buf.area.bottom() {
+                    continue;
+                }
+                let since = self.since(w, now);
+                if now < since + SETTLE {
+                    let at = since + SETTLE;
+                    self.settle_at = Some(self.settle_at.map_or(at, |t| t.min(at)));
+                    continue;
+                }
+                let Some(payload) = self.payload(protocol, w) else {
+                    continue;
+                };
+                write!(out, "\x1b7\x1b[{};{}H", w.area.y + 1, w.area.x + 1)?;
+                out.write_all(payload.as_bytes())?;
+                out.write_all(b"\x1b8")?;
+                if protocol == Protocol::Kitty {
+                    KITTY_SHOWN.fetch_or(w.slot.bit(), Ordering::SeqCst);
+                }
+                self.sends += 1;
+                wrote = true;
+                self.shown.push(Shown { want: *w, size });
             }
-            // A box off the frame is never sent: a picture past the edge would scroll it.
-            if w.area.right() > buf.area.right() || w.area.bottom() > buf.area.bottom() {
-                continue;
-            }
-            let Some(payload) = self.payload(protocol, w) else {
-                continue;
-            };
-            write!(out, "\x1b7\x1b[{};{}H", w.area.y + 1, w.area.x + 1)?;
-            out.write_all(payload.as_bytes())?;
-            out.write_all(b"\x1b8")?;
-            if protocol == Protocol::Kitty {
-                KITTY_SHOWN.fetch_or(w.slot.bit(), Ordering::SeqCst);
-            }
-            self.sends += 1;
-            wrote = true;
-            self.shown.push(Shown { want: *w, size });
         }
         if wrote {
             out.flush()?;
         }
         Ok(())
+    }
+
+    /// Since when `w`'s box has been where it is: a slot first seen counts as settled.
+    fn since(&mut self, w: &Want, now: Instant) -> Instant {
+        if let Some((_, area, since)) = self.seen.iter_mut().find(|(s, ..)| *s == w.slot) {
+            if *area != w.area {
+                *area = w.area;
+                *since = now;
+            }
+            return *since;
+        }
+        let settled = now.checked_sub(SETTLE).unwrap_or(now);
+        self.seen.push((w.slot, w.area, settled));
+        settled
     }
 
     /// The encoded picture for `w`: from the cache, else built once.
@@ -491,22 +591,98 @@ mod tests {
             &mut Vec::new(),
         )
         .unwrap();
+        // It moves (the welcome scrolling): the old box erased, nothing sent while it moves.
+        let t0 = Instant::now();
         let mut out = Vec::new();
-        sx.sync(
+        sx.sync_at(
             &[want(Slot::Welcome, Race::Slime, 30, 3)],
             (40, 20),
             &frame,
             &mut out,
+            t0,
         )
         .unwrap();
         let s = String::from_utf8(out).unwrap();
-        let erase = s
-            .find("\x1b[2;31H\x1b[0m\x1b[4X")
-            .expect("the old box's rows erased");
-        let place = s.find("\x1bP0;1;0q").expect("sent again");
-        assert!(erase < place, "erased before the new one is sent");
+        assert!(
+            s.contains("\x1b[2;31H\x1b[0m\x1b[4X"),
+            "the old box's rows erased"
+        );
         assert!(s.contains("ma\x1b[0mb"), "its text written again: {s:.200}");
-        assert_eq!(sx.builds, 1, "the same box size is built once");
+        assert!(!s.contains("\x1bP"), "no picture sent for a moving box");
+        assert_eq!(sx.due(t0), Some(SETTLE));
+        // A frame a step later, still moving: no payload, no repaint either.
+        for (i, y) in [4u16, 5, 6].into_iter().enumerate() {
+            let at = t0 + Duration::from_millis(33 * (i as u64 + 1));
+            let mut out = Vec::new();
+            sx.sync_at(
+                &[want(Slot::Welcome, Race::Slime, 30, y)],
+                (40, 20),
+                &frame,
+                &mut out,
+                at,
+            )
+            .unwrap();
+            assert_eq!(out, b"", "frame {i}: something sent while moving");
+        }
+        assert_eq!(sx.sends, 1);
+        // Settled for 150 ms: placed once.
+        let still = want(Slot::Welcome, Race::Slime, 30, 6);
+        let early = t0 + Duration::from_millis(99 + 140);
+        let mut out = Vec::new();
+        sx.sync_at(&[still], (40, 20), &frame, &mut out, early)
+            .unwrap();
+        assert_eq!(out, b"");
+        let settled = t0 + Duration::from_millis(99) + SETTLE;
+        assert_eq!(sx.due(early), Some(settled - early));
+        let mut out = Vec::new();
+        sx.sync_at(&[still], (40, 20), &frame, &mut out, settled)
+            .unwrap();
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .starts_with("\x1b7\x1b[7;31H\x1bP0;1;0q")
+        );
+        assert_eq!(
+            (sx.sends, sx.builds),
+            (2, 1),
+            "the same box size is built once"
+        );
+        assert_eq!(sx.due(settled), None);
+    }
+
+    #[test]
+    fn sixel_falls_back_to_half_blocks_when_the_cell_cannot_be_read_again() {
+        let mut pics = Pictures::new(Protocol::Sixel, Some((8, 17)));
+        let mut pl = Placer::new(&pics);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let w = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        pl.sync(&w, (60, 30), &buf, &mut Vec::new()).unwrap();
+        // Zoomed out; the window gives no pixels: half blocks, the old picture's box repainted.
+        resized(&mut pics, &mut pl, None);
+        assert!(!pics.active() && pics.images());
+        assert_eq!(pics.rows(32), None, "the view draws half blocks");
+        let mut out = Vec::new();
+        pl.sync(&w, (70, 30), &buf, &mut out).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("\x1b[2;31H\x1b[0m\x1b[4X"),
+            "the old box repainted"
+        );
+        assert!(!s.contains("\x1bP"), "no picture sent");
+        assert!(!pl.showing());
+        // A size to trust returns: pictures again, built at it.
+        resized(&mut pics, &mut pl, Some((10, 21)));
+        assert!(pics.active());
+        assert_eq!(pics.cell, Some((10, 21)));
+        pl.sync(&w, (70, 30), &buf, &mut Vec::new()).unwrap();
+        assert_eq!(pl.sends, 2);
+        // iTerm2 and Kitty fit their cells themselves: they keep their pictures.
+        for p in [Protocol::Iterm, Protocol::Kitty] {
+            let mut pics = Pictures::new(p, Some((8, 17)));
+            let mut pl = Placer::new(&pics);
+            resized(&mut pics, &mut pl, None);
+            assert!(pics.active(), "{p:?}");
+        }
     }
 
     #[test]

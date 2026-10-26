@@ -77,7 +77,8 @@ pub const LATE: Duration = Duration::from_secs(2);
 /// The replies of a probe that timed out, arriving late: the UI's input reads them as keys —
 /// XTVERSION's `ESC P` as Alt+P, Kitty's `ESC _` as Alt+_, their `ESC \` as Alt+\, the rest as
 /// plain characters, a `1` among them, the approval card's "yes". For [`LATE`] after such a
-/// probe, keys shaped like a reply are dropped, and no key reaches an open card.
+/// probe, keys shaped like a reply are dropped, and no key but Esc and Ctrl+C — the denial —
+/// reaches an open card.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Late {
     until: Option<Instant>,
@@ -107,7 +108,15 @@ impl Late {
             self.inside = false;
             return false;
         }
-        let alt = key.modifiers.contains(KeyModifiers::ALT);
+        // Every shape below names its modifiers too: a reply arrives as plain characters (Shift
+        // at most) and Alt+P, Alt+_, Alt+[ and Alt+\ — never with Control. Ctrl+C and Esc are
+        // always the human's: they stop, quit and deny a card.
+        if key.modifiers.contains(KeyModifiers::CONTROL) || key.code == KeyCode::Esc {
+            return false;
+        }
+        let rest = key.modifiers.difference(KeyModifiers::SHIFT);
+        let plain = rest.is_empty();
+        let alt = rest == KeyModifiers::ALT;
         let reply = match key.code {
             // A string reply opens (DCS, APC) …
             KeyCode::Char('P' | 'p' | '_') if alt => {
@@ -119,14 +128,15 @@ impl Late {
                 self.inside = false;
                 true
             }
-            // The escape of a reply split across reads.
-            KeyCode::Esc => true,
-            _ if self.inside => true,
             KeyCode::Char('[') if alt => true,
+            KeyCode::Char(_) if plain && self.inside => true,
             // The shapes of `CSI ? … c` and `CSI 6 ; h ; w t` read as characters.
-            KeyCode::Char(c) => c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't'),
+            KeyCode::Char(c) if plain => {
+                c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't')
+            }
             _ => false,
         };
+        // No other key reaches an open card in the window: only the human's denial does.
         reply || card
     }
 }
@@ -398,6 +408,35 @@ mod tests {
         // After the window, everything passes: a `1` answers a card again.
         let later = t0 + LATE + Duration::from_millis(1);
         assert!(!late.drops(&KeyEvent::from(KeyCode::Char('1')), later, true));
+        // Ctrl+C and Esc always pass, on a card or not: they stop, quit and deny.
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
+        let esc = KeyEvent::from(KeyCode::Esc);
+        for card in [false, true] {
+            assert!(!late.drops(&ctrl_c, soon, card));
+            assert!(!late.drops(&ctrl_t, soon, card));
+            assert!(!late.drops(&esc, soon, card));
+        }
+        // Inside a string reply too.
+        assert!(late.drops(
+            &KeyEvent::new(KeyCode::Char('_'), KeyModifiers::ALT),
+            soon,
+            false
+        ));
+        assert!(!late.drops(&ctrl_c, soon, false));
+        assert!(late.drops(
+            &KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::ALT),
+            soon,
+            false
+        ));
+        // A plain `c` or `t` is still a reply's shape; Alt+c is not.
+        assert!(late.drops(&KeyEvent::from(KeyCode::Char('c')), soon, false));
+        assert!(late.drops(&KeyEvent::from(KeyCode::Char('t')), soon, false));
+        assert!(!late.drops(
+            &KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT),
+            soon,
+            false
+        ));
         // No probe timed out: nothing is ever dropped.
         let mut none = Late::default();
         for k in keys("\x1b_Gi=31;OK\x1b\\") {

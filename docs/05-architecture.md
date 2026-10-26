@@ -228,8 +228,9 @@ last — every terminal answers DA1, so its reply ends the wait. It waits at mos
 `poll` on the calling thread, leaves no thread reading the input, and flushes a half-reply when
 the time runs out. A reply that comes later still reaches the UI's input as keys — `ESC P` and
 `ESC _` read as Alt+P and Alt+_, the rest as characters, Kitty's `1` among them — so for two
-seconds after a probe that timed out, keys shaped like a reply are dropped, and no key reaches an
-open approval card. `kit::pixels` reads the replies and chooses:
+seconds after a probe that timed out, keys shaped like a reply — plain characters, and Alt+P,
+Alt+_, Alt+[ and Alt+\ — are dropped, and no other key reaches an open approval card. A key with
+Control is never a reply: Ctrl+C and Esc always reach the UI, so they stop, quit and deny. `kit::pixels` reads the replies and chooses:
 
 1. **Kitty** when its query answered OK;
 2. **iTerm2's inline images** when the terminal is xterm.js (VS Code), iTerm2 or WezTerm, by its
@@ -248,7 +249,9 @@ height` pixels — 32 columns of 8 × 17 px cells are 256 × 255 px in 15 rows �
 terminal never rescales it; its encoding is cached. iTerm2's inline images are given their box
 in cells, so a font zoom never leaves the picture spilling past its box; on a resize the cell's
 size is read again from the window (`TIOCGWINSZ`), and when it changed every picture is built
-again at the new size. Every byte of an image sequence comes from
+again at the new size. Sixel draws exactly the pixels it was built for: where the window gives no
+pixels, a resize leaves no size to trust, so the portraits fall back to half blocks — the old
+picture's box written again — until a size returns. Every byte of an image sequence comes from
 those embedded files and from numbers, never from the model or the world.
 
 A terminal image lies over the cells, and text drawn after it does not cover it, so the view
@@ -262,7 +265,8 @@ sits under one; under Kitty they are placed below the text (`z=-1`), so text dra
 always shows, and they are deleted before the frame that opens the card besides. A panic deletes
 Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
 the screen, so each picture is sent again; the sidebar's toggle, its fold below 100 columns and
-the welcome scrolling move or remove theirs. In pixels a portrait is still — the working body's
+the welcome scrolling move or remove theirs. A box that moved is erased and its picture held
+back until the box has stayed put for 150 ms, so a scroll never sends a picture once a frame. In pixels a portrait is still — the working body's
 race, swapped when it changes — and asks no ticks. The welcome card's portrait is a picture too
 while its rows are all on screen; partly scrolled away, those rows show its half blocks.
 (A Kitty-only animation would upload each frame once under its own id and switch placements by

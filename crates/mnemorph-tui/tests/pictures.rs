@@ -126,8 +126,24 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     assert!(m.gate.is_none());
     let buf = draw(&mut m, &mut t);
     assert!(slot(&m.pictures.wanted(), Slot::Sidebar).is_some());
+    // The welcome moved while the turn ran (the activity strip): it is placed once settled.
+    let now = std::time::Instant::now();
     placer
-        .sync(&m.pictures.wanted(), (120, 50), &buf, &mut Vec::new())
+        .sync_at(&m.pictures.wanted(), (120, 50), &buf, &mut Vec::new(), now)
+        .unwrap();
+    assert_eq!(
+        placer.sends, 3,
+        "the sidebar at once, the moved welcome held back"
+    );
+    let later = now + mnemorph_tui::pictures::SETTLE;
+    placer
+        .sync_at(
+            &m.pictures.wanted(),
+            (120, 50),
+            &buf,
+            &mut Vec::new(),
+            later,
+        )
         .unwrap();
     assert_eq!(placer.sends, 4);
     assert_eq!(
@@ -244,4 +260,53 @@ fn a_late_probe_reply_never_answers_a_card_nor_types() {
         assert!(cmds.is_empty(), "{k:?} reached the card");
     }
     assert!(m.gate.is_some(), "the card still waits for the human");
+}
+
+#[test]
+fn ctrl_c_and_esc_always_pass_a_late_window() {
+    use mnemorph_tui::app::Cmd;
+    use ratatui::crossterm::event::KeyModifiers;
+    let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let t0 = std::time::Instant::now();
+    let soon = t0 + std::time::Duration::from_millis(300);
+
+    // A card open in the window: Esc denies it.
+    let mut m = model(Protocol::Blocks);
+    m.late = mnemorph_tui::probe::Late::after(t0);
+    m.outstanding = 1;
+    update(&mut m, Msg::Gate(card()));
+    let cmds = update(&mut m, Msg::KeyAt(KeyEvent::from(KeyCode::Esc), soon));
+    assert!(
+        cmds.iter().any(|c| matches!(c, Cmd::Answer(..))),
+        "Esc denies"
+    );
+    assert!(m.gate.is_none());
+
+    // Ctrl+C denies a card too.
+    update(&mut m, Msg::Gate(card()));
+    let cmds = update(&mut m, Msg::KeyAt(ctrl_c, soon));
+    assert!(
+        cmds.iter().any(|c| matches!(c, Cmd::Answer(..))),
+        "Ctrl+C denies"
+    );
+    assert!(m.gate.is_none());
+
+    // Idle, no card: Ctrl+C quits, at once and in the window.
+    let mut idle = model(Protocol::Blocks);
+    idle.late = mnemorph_tui::probe::Late::after(t0);
+    let mut quit = false;
+    for _ in 0..2 {
+        quit |= update(&mut idle, Msg::KeyAt(ctrl_c, soon))
+            .iter()
+            .any(|c| matches!(c, Cmd::Quit));
+    }
+    assert!(quit, "Ctrl+C quits in the window");
+
+    // A plain `c` or `t`, the tail of a reply, is still dropped.
+    let mut m = model(Protocol::Blocks);
+    m.late = mnemorph_tui::probe::Late::after(t0);
+    for c in ['c', 't'] {
+        update(&mut m, Msg::KeyAt(KeyEvent::from(KeyCode::Char(c)), soon));
+    }
+    assert_eq!(m.input.text(), "");
 }

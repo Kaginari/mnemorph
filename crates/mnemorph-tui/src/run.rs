@@ -496,7 +496,7 @@ fn event_loop(
             let frame = terminal.draw(|f| app::view(model, f))?;
             // The pictures after the text: sent only when what is wanted changed.
             let size = (frame.area.width, frame.area.height);
-            placer.sync(&model.pictures.wanted(), size, frame.buffer, &mut out)?;
+            placer.sync_at(&model.pictures.wanted(), size, frame.buffer, &mut out, now)?;
             clock.drew(now);
             dirty = false;
         }
@@ -508,6 +508,10 @@ fn event_loop(
             let frame = clock.wait(now);
             wait = Some(wait.map_or(frame, |w| w.min(frame)));
         }
+        // A picture held back while its box moved is placed once the box has settled.
+        if let Some(settle) = placer.due(now) {
+            wait = Some(wait.map_or(settle, |w| w.min(settle)));
+        }
         let first = match wait {
             Some(w) => rx.recv_timeout(w),
             None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
@@ -517,6 +521,9 @@ fn event_loop(
             Err(RecvTimeoutError::Timeout) => Vec::new(),
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
         };
+        if placer.due(Instant::now()).is_some_and(|d| d.is_zero()) {
+            dirty = true;
+        }
         // Everything already waiting is taken before the next frame: a burst of deltas is one
         // frame.
         msgs.extend(rx.try_iter());
@@ -535,13 +542,10 @@ fn event_loop(
                 }
             }
         }
-        // A font zoom resizes the window and changes the cell: the pictures follow it.
-        if resized
-            && model.pictures.active()
-            && let Some(cell) = crate::probe::cell_now()
-        {
-            model.pictures.cell = Some(cell);
-            placer.set_cell(cell);
+        // A font zoom resizes the window and changes the cell: the pictures follow it, or fall
+        // back to half blocks when the size cannot be read again.
+        if resized && model.pictures.images() {
+            crate::pictures::resized(&mut model.pictures, placer, crate::probe::cell_now());
         }
         if model.next_tick().is_none() {
             last_tick = Instant::now();

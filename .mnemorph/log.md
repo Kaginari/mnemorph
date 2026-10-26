@@ -5007,3 +5007,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   pictures before the terminal is given back, once.
 - **Learned:** a probe's reply has no owner after its timeout: whatever reads the input next
   takes it as typing, so the window after a timeout is the probe's to guard.
+
+---
+
+### [2026-10-27T01:30:00+01:00] rimuru — the terminal UI, part four: Fable's three on the pictures
+- **Fixed, tested:** the late-reply filter ate Ctrl+C (a bare `c` matched, modifiers unread) and
+  every key on a card — now Control and Esc always pass, reply shapes are plain or Shift, and
+  only Alt+P/_/[/\ carry Alt; Sixel with no window pixels falls back to half blocks after a
+  resize (the old box repainted) until a size returns; a moving box is erased and its picture
+  held back until it has stayed put 150 ms — a scroll sends none per frame.
+- **Learned:** an input filter that names a key shape must also name its modifiers.
