@@ -20,8 +20,9 @@ Options:
 
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
 pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
-ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · y/n then enter at an
-approval. The mouse is the UI's: hold shift to select text.
+ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · at an approval, 1 (y)
+yes, 2 (n) no or 3 no with a reason, then enter. The mouse is the UI's: hold shift to select
+text.
 ";
 
 fn main() -> ExitCode {
@@ -71,6 +72,7 @@ fn main() -> ExitCode {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
     model.sidebar.root = Some(opened.world.clone());
+    model.session_id.clone_from(&opened.session_id);
     model.info(format!(
         "{} via {} · sandbox {}",
         opened.model, opened.provider, opened.sandbox

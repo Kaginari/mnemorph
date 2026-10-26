@@ -273,6 +273,42 @@ pub fn plain(line: &Line<'_>) -> String {
     line.spans.iter().map(|s| s.content.as_ref()).collect()
 }
 
+/// `s` in small capitals — a pane's label, designed-looking at one line's weight. Letters the
+/// Unicode small capitals miss, digits and signs pass through as they are.
+#[must_use]
+pub fn small_caps(s: &str) -> String {
+    s.chars()
+        .map(|c| match c.to_ascii_lowercase() {
+            'a' => 'ᴀ',
+            'b' => 'ʙ',
+            'c' => 'ᴄ',
+            'd' => 'ᴅ',
+            'e' => 'ᴇ',
+            'f' => 'ꜰ',
+            'g' => 'ɢ',
+            'h' => 'ʜ',
+            'i' => 'ɪ',
+            'j' => 'ᴊ',
+            'k' => 'ᴋ',
+            'l' => 'ʟ',
+            'm' => 'ᴍ',
+            'n' => 'ɴ',
+            'o' => 'ᴏ',
+            'p' => 'ᴘ',
+            'q' => 'ǫ',
+            'r' => 'ʀ',
+            's' => 'ꜱ',
+            't' => 'ᴛ',
+            'u' => 'ᴜ',
+            'v' => 'ᴠ',
+            'w' => 'ᴡ',
+            'y' => 'ʏ',
+            'z' => 'ᴢ',
+            _ => c,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4912,3 +4912,62 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** release pops once and turns both modes off twice; a late survey is ignored; 3,030
   bodies walk in tree order and draw under the frame budget; a look answered before or after the
   result, a raced "there", a delete-then-write, a failed write.
+
+---
+
+### [2026-10-26T23:40:00+01:00] rimuru — the terminal UI, part three: alive and progressive
+- **Asked:** the human tried PR 2 — "no loading; thinking and tool calls load all at once".
+  Match Isekai's TUI (read only: `tui/` and its screenshots), progressive from the first frame.
+- **Built:**
+  - the activity strip, from the frame after Enter until the turn ends: a spinner —
+    Isekai's braille dot at 10 fps, the phase as a verb in a shimmer, elapsed and tokens, then
+    the body and the phase in words (thinking, writing, calling, running `bash: …`, waiting for
+    approval, compacting) and the context near its line; the header's right says the same;
+  - the reasoning: providers stream it (`StreamEvent::Thinking`) and a call's arguments
+    (`StreamEvent::ToolInput`); one live line, folded to `✓ thought for 12s`; opaque reasoning
+    from the journaled blocks placed where its step began;
+  - cards from the first byte (summary from the partial JSON), `⎿ ok · 1.2s`, output folded to
+    three lines, reads/greps/globs grouped, the class read off the UI thread;
+  - Isekai's depth as kit styles (`kit::slab`): spined panels, lit edge, cast shadow; small-caps
+    pane labels; the welcome card; the toast; the sidebar's vitals, folding sections, file tree;
+  - the approval as a modal over the dimmed view, numbered answers (the third denies with a
+    reason), every pick through the same arming, reading and confirmation rules;
+  - `kit::mnanim`: the `.mnanim.json` decoder; the sidebar's head plays the working body's 24 px
+    idle loop (only while it works and shows; idle, frame 0 and no ticks), the welcome shows
+    Rimuru's first frame — on a hand-made placeholder until mnemorph-animations ships 24 px.
+- **Tests:** the status on send before any token, the phases, the thought's fold and duration,
+  the card before its result, grouping, a 500-line fold, the portrait swap as a child starts and
+  ends, no ticks while idle or hidden, the gate's line and toast, a 2×2 file; 2,000 messages still ~3–8 ms a debug frame.
+- **Learned:** the stream never carried reasoning to a surface: both providers kept it to replay
+  only. A surface that wants it needs its own event, never part of `started` (a retry must stay
+  possible while only reasoning has been shown).
+- **Open (@?):** the server's protocol does not yet carry `Thinking`/`ToolInput`; the Ctrl+K
+  palette and the per-body view (Ctrl+T in Isekai) are left for a later part.
+
+---
+
+### [2026-10-27T00:30:00+01:00] rimuru — the terminal UI, part three: Opus's review and the real portraits
+- **Art:** the eleven races' idle loops at 32 px (mnemorph-animations `df20cfa`,
+  `gen/mnanim.py --size 32`, 1.1 MB) replace the placeholder and its tint; the sidebar widens to
+  36 columns for the 32-column portrait, still folding below 100; the head keeps only the state
+  under it. 2,000 messages with the portrait playing: ~5.5 ms a streaming frame (debug).
+- **Opus found, fixed, tested:** ↑↓ from no pick landed on "Yes" and ↓ wrapped through it — now
+  from no pick to "No", clamped at the ends, and ↓ then Enter denies; a group with a stopped call
+  read "ok" — it counts "N stopped"; a retry that streamed reasoning twice left it doubled — the
+  journaled text replaces whatever streamed; a non-ASCII or overflowing frame could panic the
+  decoder — an error now; the toast drew over the approval — hidden while a card is open.
+- **Learned:** an arrow on a gate card is a pick like any other: its landing spot is a safety
+  default, and the safe default is the denial.
+
+---
+
+### [2026-10-27T01:15:00+01:00] rimuru — the terminal UI, part three: Fable's follow-ups
+- **Fable found, fixed, tested:** the portrait followed the last event's body, so two working
+  children thrashed it and an ending fell back to Rimuru mid-run — now it is the newest body still
+  working (`sidebar.bodies`), else the session's, and the loop restarts only on a real change; each
+  race decoded lazily on the UI thread (~24 ms) — now `mnanim::warm` decodes all eleven on a
+  blocking thread at start and frames only read the cache (`ready`), drawing nothing until then;
+  the streaming refactor is pinned by the whole assembled content of a stream with reasoning and a
+  call, for both providers.
+- **Learned:** "who acts" is a state, not an event: read it from the bodies' standing, never from
+  whichever one spoke last.

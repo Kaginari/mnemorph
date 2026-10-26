@@ -1,11 +1,14 @@
-//! The frame: a rounded border naming the session and carrying the status bar, the transcript's
-//! visible window, the lines waiting their turn, the approval card and the input box, and the
-//! sidebar's column on the right ([`crate::sidebar`]).
+//! The frame, in Isekai's look: a rounded border naming the session on the left of its top edge
+//! and its state on the right, the status bar on its bottom edge; inside, the panes labelled in
+//! small capitals — ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ (the welcome, the transcript's visible window, the lines
+//! waiting their turn, the activity strip while work runs), ᴀꜱᴋ (the input) and ꜱᴇꜱꜱɪᴏɴ (the
+//! sidebar, [`crate::sidebar`]). An approval floats over the view, dimmed, as a modal; a toast
+//! floats at the top right while it fades.
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Modifier;
+use ratatui::style::{Color, Modifier};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Widget};
 
@@ -13,7 +16,8 @@ use crate::app::Model;
 use crate::blocks::Ctx;
 use crate::kit::keyhelp::{Binding, KeyHelp};
 use crate::kit::style::{Border, Sides, Style as Boxed};
-use crate::kit::text::{Lines, cells, clip, truncate};
+use crate::kit::text::{Lines, cells, clip, small_caps, truncate};
+use crate::theme::Rgb;
 
 /// The smallest frame worth drawing.
 const MIN: (u16, u16) = (24, 8);
@@ -29,6 +33,7 @@ pub fn ctx(m: &Model, width: usize) -> Ctx<'_> {
         frame: m.spinner.frame(),
         spinner: m.spinner.view(),
         me: &m.header.body,
+        now: m.transcript.clock,
     }
 }
 
@@ -46,10 +51,14 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         buf.set_line(area.x, area.y, &msg, area.width);
         return;
     }
+    let right = state(m);
+    let left_room =
+        usize::from(area.width).saturating_sub(crate::kit::text::line_cells(&right) + 4);
     Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(t.frame())
-        .title_top(header(m, area.width.into()))
+        .title_top(header(m, left_room))
+        .title_top(right.right_aligned())
         .title_bottom(status(m, area.width.into()))
         .render(area, buf);
     let inner = Rect {
@@ -63,7 +72,14 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         width: inner.width - side,
         ..inner
     };
-    body(m, main, buf);
+    label(buf, main, "conversation", t.holo(), t);
+    let below_label = Rect {
+        y: main.y + 1,
+        height: main.height.saturating_sub(1),
+        ..main
+    };
+    body(m, below_label, buf);
+    m.hits.borrow_mut().side_w = 0;
     if side > 0 {
         sidebar(
             m,
@@ -75,41 +91,127 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
             buf,
         );
     }
+    if m.gate.is_some() {
+        dim(buf, inner, t);
+        modal(m, below_label, buf);
+    }
+    // A toast never covers the approval: it waits under the card, unseen, until it is gone.
+    if let Some(toast) = m.toast.as_ref().filter(|_| m.gate.is_none()) {
+        let lines = toast.view(t);
+        let width = lines.first().map_or(0, crate::kit::text::line_cells);
+        let left = below_label.right().saturating_sub(to_u16(width));
+        for (row, line) in (below_label.y..below_label.bottom()).zip(&lines) {
+            buf.set_line(left, row, line, to_u16(width));
+        }
+    }
 }
 
-/// The sidebar in `area`: a quiet rule down its left edge, a space, its sections.
+/// The approval as a modal over `area`, centred across and a third of the way down. Its first
+/// draw arms it, and the rows of the act it shows count as read.
+fn modal(m: &Model, area: Rect, buf: &mut Buffer) {
+    let Some(a) = &m.gate else {
+        return;
+    };
+    let (cw, ch) = crate::approval::modal(usize::from(area.width), usize::from(area.height));
+    let now = std::time::Instant::now();
+    a.drawn(now, cw, ch);
+    let card = a.view(&m.theme, cw, ch, now, m.waiting.len());
+    let left = area.x + to_u16(usize::from(area.width).saturating_sub(cw) / 2);
+    let top = area.y + to_u16(usize::from(area.height).saturating_sub(card.len()) / 3);
+    for (row, line) in (top..area.bottom()).zip(&card) {
+        buf.set_line(left, row, line, to_u16(cw));
+    }
+}
+
+/// A pane's label on its first row: its name in small capitals, a quiet rule to its edge.
+fn label(
+    buf: &mut Buffer,
+    area: Rect,
+    name: &str,
+    hue: ratatui::style::Style,
+    t: &crate::theme::Theme,
+) {
+    let name = small_caps(name);
+    let rule = usize::from(area.width).saturating_sub(cells(&name) + 1);
+    let line = Line::from(vec![
+        Span::styled(name, hue.add_modifier(Modifier::BOLD)),
+        Span::raw(" "),
+        Span::styled("─".repeat(rule), t.line()),
+    ]);
+    buf.set_line(area.x, area.y, &line, area.width);
+}
+
+/// Everything in `area` dimmed toward the page: the view under a modal.
+fn dim(buf: &mut Buffer, area: Rect, t: &crate::theme::Theme) {
+    let page = t.p.bg;
+    let fade = |c: Color, k: f32| match c {
+        Color::Rgb(r, g, b) => Rgb(r, g, b).mix(page, k).color(),
+        Color::Reset => c,
+        _ => t.p.line.color(),
+    };
+    for y in area.y..area.bottom() {
+        for x in area.x..area.right() {
+            let cell = &mut buf[(x, y)];
+            let fg = fade(cell.fg, 0.6);
+            let bg = fade(cell.bg, 0.5);
+            cell.set_fg(fg);
+            cell.set_bg(bg);
+        }
+    }
+}
+
+/// The section title under (`col`, `row`) in the sidebar the last frame drew.
+#[must_use]
+pub fn sidebar_title_at(m: &Model, col: u16, row: u16) -> Option<crate::sidebar::Section> {
+    let h = m.hits.borrow();
+    let inside = h.side_w > 0 && col >= h.side_x && col < h.side_x + h.side_w && row >= h.side_y;
+    if !inside {
+        return None;
+    }
+    m.sidebar.title_at(usize::from(row - h.side_y))
+}
+
+/// The sidebar in `area`: a quiet rule down its left edge, a space, its label, its sections.
 fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
     let rule = Span::styled("│", m.theme.line());
     let w = usize::from(area.width.saturating_sub(3));
-    let lines = crate::sidebar::view(m, w, usize::from(area.height));
+    let top = area.y + 1;
+    let lines = crate::sidebar::view(m, w, usize::from(area.height.saturating_sub(1)));
     for y in area.y..area.bottom() {
         buf.set_span(area.x + 1, y, &rule, 1);
     }
-    for (y, line) in (area.y..area.bottom()).zip(&lines) {
+    label(
+        buf,
+        Rect {
+            x: area.x + 3,
+            width: area.width.saturating_sub(3),
+            ..area
+        },
+        "session",
+        m.theme.gold(),
+        &m.theme,
+    );
+    for (y, line) in (top..area.bottom()).zip(&lines) {
         buf.set_line(area.x + 3, y, line, area.width.saturating_sub(3));
     }
+    let mut hits = m.hits.borrow_mut();
+    hits.side_x = area.x + 3;
+    hits.side_w = area.width.saturating_sub(3);
+    hits.side_y = top;
 }
 
 /// The transcript, the queue, the card and the input, stacked in `area`.
 fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     let theme = &m.theme;
     let w = usize::from(area.width);
-    let now = std::time::Instant::now();
-    // While an approval waits it takes the input's place: the input takes no keys then.
-    let card = m.gate.as_ref().map(|a| {
-        a.drawn(now, w, usize::from(area.height));
-        a.view(theme, w, usize::from(area.height), now, m.waiting.len())
-    });
-    let input = if card.is_some() {
-        Vec::new()
-    } else {
-        input_box(m, w)
-    };
+    // While an approval waits it floats over the view; the input takes no keys then.
+    let input = input_box(m, w);
+    let strip = crate::activity::strip(m, w);
     let queued: Lines = m
         .transcript
         .queued
         .iter()
-        .take(if card.is_some() { 0 } else { 3 })
+        .take(if m.gate.is_some() { 0 } else { 3 })
         .map(|q| {
             truncate(
                 Line::from(vec![
@@ -120,23 +222,20 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
             )
         })
         .collect();
-    let below = input.len() + card.as_ref().map_or(0, Vec::len) + queued.len();
+    let below = input.len() + strip.len() + queued.len();
     let rows = usize::from(area.height).saturating_sub(below);
     let ctx = ctx(m, w);
+    let head = crate::welcome::card(m, w);
     let crate::transcript::Window {
         lines: window,
         owners,
         top,
-    } = m.transcript.window(&ctx, rows, m.viewport.offset());
+    } = m.transcript.window(&ctx, rows, m.viewport.offset(), &head);
     m.measured.set(top.unwrap_or(usize::MAX));
     // The transcript sits on the input: a short one is pushed down, as a chat reads.
     let top_row = area.y + to_u16(rows.saturating_sub(window.len()));
-    let stack = window
-        .iter()
-        .chain(&queued)
-        .chain(card.iter().flatten())
-        .chain(&input);
-    // A stack taller than the area keeps its bottom: the card's choice and the input stay.
+    let stack = window.iter().chain(&queued).chain(&strip).chain(&input);
+    // A stack taller than the area keeps its bottom: the status and the input stay.
     let stack: Vec<&Line<'static>> = stack.collect();
     let skip = stack.len().saturating_sub(usize::from(area.height));
     let first = top_row.max(area.y);
@@ -185,21 +284,39 @@ fn header(m: &Model, width: usize) -> Line<'static> {
             t.muted(),
         ));
     }
-    if m.gate.is_some() {
-        spans.push(Span::styled(" · ", t.frame()));
-        spans.push(Span::styled(
-            "approval waiting",
-            t.gold().add_modifier(Modifier::BOLD),
-        ));
-    } else if m.busy() {
-        spans.push(Span::styled(" · ", t.frame()));
-        spans.push(Span::styled(
-            format!("{} working", m.spinner.view()),
-            t.holo(),
-        ));
-    }
     spans.push(Span::raw(" "));
     truncate(Line::from(spans), width.saturating_sub(3))
+}
+
+/// The top edge's right: the session's id, and its state — `○ idle`, `● running bash 3s`,
+/// `◆ waiting for you`.
+fn state(m: &Model) -> Line<'static> {
+    let t = &m.theme;
+    let mut spans = vec![Span::raw(" ")];
+    if !m.session_id.is_empty() && m.size.0 >= 70 {
+        spans.push(Span::styled("session ", t.muted()));
+        spans.push(Span::styled(short_id(&m.session_id), t.text()));
+        spans.push(Span::raw("  "));
+    }
+    let chip = crate::activity::chip(m);
+    if m.size.0 < 60 {
+        // Narrow, the state keeps its mark alone: the session's name comes first.
+        if let Some(first) = chip.into_iter().next() {
+            let mark: String = first.content.chars().take(1).collect();
+            spans.push(Span::styled(mark, first.style));
+        }
+    } else {
+        spans.extend(chip);
+    }
+    spans.push(Span::raw(" "));
+    Line::from(spans)
+}
+
+/// A session id as the header shows it: its last part, the rest of it the date.
+fn short_id(id: &str) -> String {
+    let id = crate::safe::one_line(id);
+    let tail = id.rsplit('-').next().unwrap_or(&id);
+    clip(tail, 12)
 }
 
 /// Mnemorph's mark: the hologram's diamond in the slimes' teal, the name drawn across the
@@ -387,9 +504,25 @@ fn input_box(m: &Model, w: usize) -> Lines {
     } else {
         t.frame()
     };
-    Boxed::new()
+    let mut title = vec![Span::styled(
+        small_caps("ask"),
+        t.alarm().add_modifier(Modifier::BOLD),
+    )];
+    let hint = if m.gate.is_some() {
+        title.push(Span::styled(" · answer the card first", t.gold()));
+        String::new()
+    } else if m.busy() {
+        format!("enter queues for {}", crate::safe::one_line(&m.header.body))
+    } else {
+        "enter sends · alt+enter newline".to_owned()
+    };
+    let mut boxed = Boxed::new()
         .border(Border::Rounded, border)
         .padding(Sides::sym(0, 1))
         .width(w)
-        .render(lines)
+        .title(Line::from(title));
+    if !hint.is_empty() && w >= 50 {
+        boxed = boxed.title_right(Line::from(Span::styled(hint, t.muted())));
+    }
+    boxed.render(lines)
 }

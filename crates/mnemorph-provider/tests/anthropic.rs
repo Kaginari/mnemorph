@@ -198,7 +198,28 @@ async fn tool_calls_with_and_without_arguments() {
             },
         ]
     );
-    assert_eq!(events.len(), 2);
+    // Each call announced as it starts, then its arguments piece by piece, as they came.
+    assert_eq!(
+        events,
+        [
+            Event::ToolStart {
+                id: "t1".into(),
+                name: "list".into()
+            },
+            Event::ToolStart {
+                id: "t2".into(),
+                name: "read".into()
+            },
+            Event::ToolInput {
+                id: "t2".into(),
+                json: "{\"pa".into()
+            },
+            Event::ToolInput {
+                id: "t2".into(),
+                json: "th\": \"a.rs\"}".into()
+            },
+        ]
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -229,6 +250,61 @@ async fn thinking_blocks_come_back_exactly() {
     assert_eq!(
         encode(&next).unwrap()["messages"][1]["content"][0],
         thinking
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn reasoning_then_a_call_streams_and_assembles_whole() {
+    let body = sse(&[
+        start(&json!({"input_tokens": 5})),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": "", "signature": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "read "}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "it"}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "c2ln"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+        json!({"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "t1", "name": "read", "input": {}}}),
+        json!({"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "{\"path\": "}}),
+        json!({"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "\"a.rs\"}"}}),
+        json!({"type": "content_block_stop", "index": 1}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}}),
+        json!({"type": "message_stop"}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+    let (result, events) = run(&client(&script), &request()).await;
+    let r = result.unwrap();
+    // The whole answer, pinned: the thinking block exactly as it came, then the call.
+    assert_eq!(
+        r.content,
+        [
+            Block::Opaque(json!({"type": "thinking", "thinking": "read it", "signature": "c2ln"})),
+            Block::ToolUse {
+                id: "t1".into(),
+                name: "read".into(),
+                input: json!({"path": "a.rs"})
+            },
+        ]
+    );
+    // And what streamed to the surface, in order: reasoning begun, its pieces, the call, its
+    // arguments.
+    assert_eq!(
+        events,
+        [
+            Event::Thinking(String::new()),
+            Event::Thinking("read ".into()),
+            Event::Thinking("it".into()),
+            Event::ToolStart {
+                id: "t1".into(),
+                name: "read".into()
+            },
+            Event::ToolInput {
+                id: "t1".into(),
+                json: "{\"path\": ".into()
+            },
+            Event::ToolInput {
+                id: "t1".into(),
+                json: "\"a.rs\"}".into()
+            },
+        ]
     );
 }
 

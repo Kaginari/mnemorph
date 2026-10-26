@@ -71,6 +71,13 @@ pub fn observer(tx: Sender<Msg>) -> Observer {
                 for (id, path) in content.iter().filter_map(written) {
                     let _ = tx.send(Msg::Writes { id, path });
                 }
+                // The reasoning the turn carried, before its text and calls: a provider that did
+                // not stream it is shown it whole.
+                if chain.is_empty()
+                    && let Some(text) = reasoning(content)
+                {
+                    let _ = tx.send(Msg::Reasoned(text));
+                }
             }
             _ => {}
         }
@@ -86,6 +93,55 @@ pub fn observer(tx: Sender<Msg>) -> Observer {
             let _ = tx.send(msg);
         }
     })
+}
+
+/// The reasoning in a model turn's journaled blocks — Anthropic's thinking, a redacted block
+/// (hidden: empty), an OpenAI-compatible server's reasoning — or `None` when it carried none.
+#[must_use]
+pub fn reasoning(content: &[serde_json::Value]) -> Option<String> {
+    let opaque = content
+        .iter()
+        .filter(|b| b.get("type").and_then(serde_json::Value::as_str) == Some("opaque"))
+        .filter_map(|b| b.get("value"));
+    let mut found = false;
+    let mut text = String::new();
+    let s = |v: &serde_json::Value, k: &str| {
+        v.get(k)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    for v in opaque {
+        let kind = v
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let piece = match kind {
+            "thinking" => s(v, "thinking"),
+            "redacted_thinking" => String::new(),
+            k if k == format!("{}reasoning_content", mnemorph_loop::OPAQUE_PREFIX) => s(v, "text"),
+            k if k == format!("{}reasoning_details", mnemorph_loop::OPAQUE_PREFIX) => v
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|i| {
+                    let t = s(i, "text");
+                    if t.is_empty() { s(i, "summary") } else { t }
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => continue,
+        };
+        found = true;
+        if !piece.is_empty() {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(&piece);
+        }
+    }
+    found.then_some(text)
 }
 
 /// A journaled block that is a `write` call: its id and path.
@@ -125,6 +181,8 @@ impl Host {
             .enable_all()
             .build()
             .map_err(|e| format!("runtime: {e}"))?;
+        // The races' portraits decode off the UI thread, once, while the session starts.
+        runtime.spawn_blocking(crate::kit::mnanim::warm);
         let interrupt = opened.session.interrupt();
         let steer = opened.session.steer();
         let (lines, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -137,11 +195,19 @@ impl Host {
             while let Some(line) = rx.recv().await {
                 let streaming = deltas.clone();
                 let mut on = move |e: StreamEvent| {
-                    let event = match e {
-                        StreamEvent::Text(text) => Event::TextDelta { text },
-                        StreamEvent::ToolStart { id, name } => Event::ToolStart { id, name },
+                    let msg = match e {
+                        StreamEvent::Text(text) => Msg::Event {
+                            event: Event::TextDelta { text },
+                            below: None,
+                        },
+                        StreamEvent::ToolStart { id, name } => Msg::Event {
+                            event: Event::ToolStart { id, name },
+                            below: None,
+                        },
+                        StreamEvent::ToolInput { id, json } => Msg::ToolInput { id, json },
+                        StreamEvent::Thinking(piece) => Msg::Thinking(piece),
                     };
-                    let _ = streaming.send(Msg::Event { event, below: None });
+                    let _ = streaming.send(msg);
                 };
                 session.drive(&line, &mut on).await;
                 let _ = done.send(Msg::Done { held: held(&world) });
@@ -188,6 +254,21 @@ impl Host {
                 self.runtime.spawn_blocking(move || {
                     let survey = crate::sidebar::survey(&world);
                     let _ = tx.send(Msg::Surveyed { seq, survey });
+                });
+            }
+            Cmd::Classify { id, command } => {
+                let (tx, world) = (self.tx.clone(), self.world.clone());
+                // The classifier resolves paths on disk: a blocking thread, never the UI's.
+                self.runtime.spawn_blocking(move || {
+                    let home =
+                        std::env::var_os("HOME").map_or_else(|| world.clone(), PathBuf::from);
+                    let place = mnemorph_tools::Place::new(&world, home);
+                    if let Some(class) = mnemorph_tools::classify(&command, &place).class() {
+                        let _ = tx.send(Msg::Classed {
+                            id,
+                            class: class.to_string(),
+                        });
+                    }
                 });
             }
             Cmd::Quit => return false,

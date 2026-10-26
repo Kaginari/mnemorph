@@ -190,4 +190,15 @@ pub enum Event {
         /// The tool.
         name: String,
     },
+    /// A piece of a started tool call's input, as raw JSON text: the pieces joined are the
+    /// input whole. A surface may read the call's arguments as they arrive.
+    ToolInput {
+        /// The call's id.
+        id: String,
+        /// The piece.
+        json: String,
+    },
+    /// A piece of the model's reasoning, as it streams: shown, never part of the answer, and
+    /// never a reason not to retry. An empty piece says reasoning began whose text is hidden.
+    Thinking(String),
 }

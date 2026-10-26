@@ -114,6 +114,8 @@ fn two_thousand_messages_stay_smooth() {
     // The grammars load once per process, off the UI thread in the binary: not a frame's cost.
     let load = Instant::now();
     mnemorph_tui::kit::highlight::preload();
+    // The portraits decode at start, off the UI thread, as the binary does.
+    mnemorph_tui::kit::mnanim::warm();
     let load = load.elapsed();
     let mut m = session();
     assert!(m.transcript.entries().len() >= MESSAGES);
@@ -142,6 +144,9 @@ fn two_thousand_messages_stay_smooth() {
             below: None,
         },
     );
+    // Busy: the activity strip and its shimmer, and the sidebar's portrait playing its loop,
+    // draw in every frame too.
+    m.outstanding = 1;
     let mut streaming = Duration::ZERO;
     for i in 0..300 {
         let text = if i % 40 == 39 {
@@ -156,9 +161,15 @@ fn two_thousand_messages_stay_smooth() {
                 below: None,
             },
         );
+        // A frame's worth of time: the portrait plays at the sidebar's head.
+        update(&mut m, Msg::Tick(Duration::from_millis(33)));
         streaming += frame(&mut t, &m);
     }
     let streaming = streaming / 300;
+    assert!(
+        m.portrait_plays() && m.portrait_clock > Duration::ZERO,
+        "the portrait played"
+    );
     // A resize lays out again only what shows.
     let mut t2 = Terminal::new(TestBackend::new(90, 40)).unwrap();
     let resized = frame(&mut t2, &m);

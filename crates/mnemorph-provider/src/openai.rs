@@ -289,6 +289,9 @@ impl Assembler for Chat {
             .or_else(|| delta["reasoning"].as_str())
         {
             self.reasoning.push_str(piece);
+            if !piece.is_empty() {
+                on(Event::Thinking(piece.to_owned()));
+            }
         }
         if let Some(items) = delta["reasoning_details"].as_array() {
             self.reasoning_details.extend(items.iter().cloned());
@@ -353,9 +356,10 @@ impl Chat {
         {
             name.clone_into(&mut call.name);
         }
-        if let Some(args) = fragment["function"]["arguments"].as_str() {
-            call.arguments.push_str(args);
-        }
+        let args = fragment["function"]["arguments"]
+            .as_str()
+            .unwrap_or_default();
+        call.arguments.push_str(args);
         for (k, v) in fragment.as_object().into_iter().flatten() {
             if !KNOWN_CALL_FIELDS.contains(&k.as_str()) {
                 call.extra.insert(k.clone(), v.clone());
@@ -367,6 +371,18 @@ impl Chat {
             on(Event::ToolStart {
                 id: call.id.clone(),
                 name: call.name.clone(),
+            });
+            // Arguments that came before the name are shown with it.
+            if !call.arguments.is_empty() {
+                on(Event::ToolInput {
+                    id: call.id.clone(),
+                    json: call.arguments.clone(),
+                });
+            }
+        } else if call.announced && !args.is_empty() {
+            on(Event::ToolInput {
+                id: call.id.clone(),
+                json: args.to_owned(),
             });
         }
     }

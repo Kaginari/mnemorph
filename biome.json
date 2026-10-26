@@ -14,6 +14,7 @@
       "!**/dist",
       "!**/*.md",
       "!assets",
+      "!crates/mnemorph-tui/assets",
       "!packages/protocol/src/generated"
     ]
   },

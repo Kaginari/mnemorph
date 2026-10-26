@@ -240,24 +240,7 @@ impl Assembler for Assembly {
             "content_block_start" => {
                 let index = index(&v)?;
                 let cb = &v["content_block"];
-                let partial = match cb["type"].as_str().unwrap_or("") {
-                    "text" => Partial::Text(cb["text"].as_str().unwrap_or_default().to_owned()),
-                    "tool_use" => {
-                        let id = cb["id"].as_str().unwrap_or_default().to_owned();
-                        let name = cb["name"].as_str().unwrap_or_default().to_owned();
-                        *started = true;
-                        on(Event::ToolStart {
-                            id: id.clone(),
-                            name: name.clone(),
-                        });
-                        Partial::Tool {
-                            id,
-                            name,
-                            json: String::new(),
-                        }
-                    }
-                    _ => Partial::Opaque(cb.clone()),
-                };
+                let partial = start_block(cb, on, started);
                 self.blocks.push((index, partial));
             }
             "content_block_delta" => {
@@ -277,12 +260,27 @@ impl Assembler for Assembly {
                             on(Event::Text(piece.to_owned()));
                         }
                     }
-                    (Partial::Tool { json, .. }, "input_json_delta") => {
-                        json.push_str(delta["partial_json"].as_str().unwrap_or_default());
+                    (Partial::Tool { id, json, .. }, "input_json_delta") => {
+                        let piece = delta["partial_json"].as_str().unwrap_or_default();
+                        json.push_str(piece);
+                        if !piece.is_empty() {
+                            on(Event::ToolInput {
+                                id: id.clone(),
+                                json: piece.to_owned(),
+                            });
+                        }
                     }
                     // Thinking, signatures, server tools and anything newer: assembled into the
-                    // block, which goes back untouched.
-                    (Partial::Opaque(block), kind) => opaque_delta(block, kind, delta),
+                    // block, which goes back untouched — thinking's text shown as it comes.
+                    (Partial::Opaque(block), kind) => {
+                        if kind == "thinking_delta"
+                            && let Some(piece) =
+                                delta["thinking"].as_str().filter(|p| !p.is_empty())
+                        {
+                            on(Event::Thinking(piece.to_owned()));
+                        }
+                        opaque_delta(block, kind, delta);
+                    }
                     (_, other) => {
                         let note = format!("a {other} delta on block {index} was not kept");
                         if !self.warnings.contains(&note) {
@@ -410,6 +408,37 @@ const PARTIAL_JSON: &str = "__partial_json";
 /// One delta on an opaque block: strings append to their field, `partial_json` collects into the
 /// block's `input`, objects append to an array named after their field (`citation` →
 /// `citations`).
+/// The partial a `content_block_start` opens: a call announced to the surfaces as it starts,
+/// reasoning announced as it begins.
+fn start_block(cb: &Value, on: &mut (dyn FnMut(Event) + Send), started: &mut bool) -> Partial {
+    match cb["type"].as_str().unwrap_or("") {
+        "text" => Partial::Text(cb["text"].as_str().unwrap_or_default().to_owned()),
+        "tool_use" => {
+            let id = cb["id"].as_str().unwrap_or_default().to_owned();
+            let name = cb["name"].as_str().unwrap_or_default().to_owned();
+            *started = true;
+            on(Event::ToolStart {
+                id: id.clone(),
+                name: name.clone(),
+            });
+            Partial::Tool {
+                id,
+                name,
+                json: String::new(),
+            }
+        }
+        kind => {
+            // Reasoning begins: a surface shows it as it comes, its text or not.
+            if kind == "thinking" || kind == "redacted_thinking" {
+                on(Event::Thinking(
+                    cb["thinking"].as_str().unwrap_or_default().to_owned(),
+                ));
+            }
+            Partial::Opaque(cb.clone())
+        }
+    }
+}
+
 fn opaque_delta(block: &mut Value, kind: &str, delta: &Value) {
     let (Some(slot), Some(fields)) = (block.as_object_mut(), delta.as_object()) else {
         return;
