@@ -592,7 +592,8 @@ fn checked_proof(
 }
 
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
-/// its personal memory, proposed; with a **checked** proof its own run earned, they are grounded.
+/// its personal memory, proposed; with a **checked** proof its own run earned, each that names a
+/// path its diff changed is grounded — a claim about the world beyond the diff stays proposed.
 /// A child that did not answer, or whose gate proved nothing, keeps its words personal. Says what
 /// it did, as a note for the report, and returns each claim it left proposed, `(id, text)`: what
 /// the dispatcher may accept.
@@ -633,7 +634,7 @@ fn remember(
         let short: String = u.text.chars().take(80).collect();
         // A check observes only its diff: a claim about the world beyond it stays proposed,
         // offered for the commissioner to accept.
-        if let Some(p) = proof.filter(|p| p.covers(&u.text, None)) {
+        if let Some(p) = proof.filter(|p| p.covers(&u.text, claim.source.as_deref())) {
             match mnemorph_memory::ground(world, claim, p) {
                 Ok(_) => {
                     grounded += 1;
@@ -1486,7 +1487,9 @@ mod write_rule_tests {
     use super::*;
 
     /// M8's exit run of the write rule, through what the loop runs after every child's landing —
-    /// `checked_proof` over the gate's verdict, then `remember` over the child's report. Fifty
+    /// `checked_proof` over the gate's verdict, then `remember` over the child's report. It drives
+    /// that path directly: the gate and the model are not in it, and its ratio is the fixture's
+    /// construction, not a measurement. Fifty
     /// landings, each claiming one thing about its diff and one about the world beyond it; one diff
     /// claim in five is wrong, and the verify lines catch nine of those ten: a caught landing ends
     /// failed and remembers nothing, the one they miss passes. Then no note reaches shared memory

@@ -4262,3 +4262,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** mnemorphd tests/memory.rs expect the standing line.
 - **Noted:** `the_clock_reaches_a_running_command` failed once at load 8.4 and passed twice
   alone in 0.5 s; it is a timing test.
+
+---
+
+### [2026-10-26T10:25:27+01:00] rimuru — #208's review: Fable
+- **Verdict:** safe to merge after the doc and comment fixes.
+- **Fixed:**
+  - docs 08's example claim names its path, and the page says a diff of common files observes
+    nothing;
+  - the scope adds each changed path's directories (`src/parser/mod.rs` is in `src/parser`);
+  - `remember`'s doc comment is corrected, and it passes the claim's source to `covers`;
+  - the exit test's doc says it bypasses the gate and the model, and that its ratio is by
+    construction;
+  - a memory-level test of `covers` and `ground`'s refusal.
+- **Left:** a world claim that names a changed file still grounds; that is inherent without
+  reading claims.

@@ -442,3 +442,44 @@ fn a_proposed_claim_is_found_again_by_its_id() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A checked proof covers only claims about its diff: the path, a `file:line` in it, a directory
+/// above it; never a claim about another file or the world beyond, which `ground` refuses.
+#[test]
+fn a_checked_proof_covers_only_its_diff() {
+    let proof = Proof::checked(
+        "log.md v",
+        1,
+        &["src/parser/mod.rs".into(), "src/a.rs".into()],
+    )
+    .unwrap();
+    assert!(proof.covers("src/a.rs:12 handles the empty case", None));
+    assert!(
+        proof.covers("the parser in src/parser keeps fractions", None),
+        "a directory above"
+    );
+    assert!(
+        proof.covers("it keeps fractions", Some("src/a.rs")),
+        "by its source"
+    );
+    assert!(!proof.covers("src/b.rs handles the empty case", None));
+    assert!(!proof.covers("the API caps at 100 a minute", None));
+    assert!(
+        Proof::confirmed("the human").covers("anything at all", None),
+        "other routes observe no diff"
+    );
+    let w = world_of("covers");
+    let world_claim = propose(&w, "slime-s", "the API caps at 100 a minute", vec![], None).unwrap();
+    let refused = ground(&w, world_claim, &proof).unwrap_err();
+    assert!(refused.to_string().contains("beyond the diff"), "{refused}");
+    let diff_claim = propose(
+        &w,
+        "slime-s",
+        "src/a.rs:12 handles the empty case",
+        vec![],
+        None,
+    )
+    .unwrap();
+    assert!(ground(&w, diff_claim, &proof).is_ok());
+    let _ = fs::remove_dir_all(&w);
+}

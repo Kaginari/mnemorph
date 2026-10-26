@@ -104,7 +104,16 @@ impl Proof {
             scope: Some(
                 changed
                     .iter()
-                    .flat_map(|p| crate::text::specific_terms(p))
+                    .flat_map(|p| {
+                        // The path, and each directory above it: `src/parser/mod.rs` is in
+                        // `src/parser`.
+                        let dirs = p
+                            .match_indices('/')
+                            .map(|(i, _)| p[..i].to_lowercase())
+                            .filter(|d| d.contains('/'))
+                            .collect::<Vec<_>>();
+                        crate::text::specific_terms(p).into_iter().chain(dirs)
+                    })
                     .collect(),
             ),
         })
