@@ -3545,6 +3545,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-26T01:22:59+01:00] rimuru — a foreign file survives a cleanup turn (#10)
+- **Task:** #10's lesson "no body deletes or reverts what it did not write. Test: a foreign
+  untracked file survives a cleanup turn".
+- **Finding:** it already holds. A Slime's `rm -rf notes` runs and the shell says the attic kept
+  the file; the Slime's gate fails right-author on `notes/human.md`; the landing is put back whole.
+  The notes return, and the Slime's own write goes with them.
+- **Test:** commission.rs `a_foreign_untracked_file_survives_a_cleanup_turn` asserts each step of
+  that chain from the journal.
+- **False start:** the first version passed vacuously. A guess that the classifier refused the
+  `rm` was wrong; reading the journal showed the real chain.
 ### [2026-10-26T01:28:43+01:00] rimuru — writes attributed per body (#10)
 - **Task:** #10's lesson "write attribution is per body (per sandbox)".
 - **Finding:** tool calls run one after another in a session, so the risk is a second session on
