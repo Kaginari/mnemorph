@@ -1607,3 +1607,38 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
     assert_eq!(roster.creatures["slime-t"].verify, ["true"]);
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
 }
+
+/// A commissioned body gets the toolbox too: its first ask lists the Minds it may wear, and `wear`
+/// is on its shelf.
+#[tokio::test]
+async fn a_commissioned_body_is_offered_the_minds() {
+    let w = World::new("child-minds");
+    fs::create_dir_all(w.0.join(".mnemorph/minds")).unwrap();
+    fs::write(
+        w.0.join(".mnemorph/minds/dialects.md"),
+        "# Dialects\n\n- **Shared:** yes\n\nHow a dialect overrides the generator.\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("look", &mut |_| {}).await;
+    let elf = &model.requests()[1];
+    let asked: String = elf
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter_map(|b| match b {
+            mnemorph_provider::Block::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        asked.contains("@T mind:dialects — How a dialect"),
+        "{asked}"
+    );
+    assert!(elf.tools.iter().any(|t| t.name == "wear"));
+}

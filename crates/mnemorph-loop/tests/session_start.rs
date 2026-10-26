@@ -89,3 +89,55 @@ async fn a_fresh_session_carries_the_law_and_the_last_journal_entries() {
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(&attic);
 }
+
+/// The toolbox's two levels: a fresh session's first ask lists the Minds it may wear, each priced,
+/// and `wear` brings one's whole text in; the tool list stays the cached tier, whatever the Minds.
+#[tokio::test]
+async fn the_first_ask_lists_the_minds_and_wear_brings_one_in() {
+    let w = std::env::temp_dir().join(format!("mnemorph-toolbox-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph/minds")).unwrap();
+    fs::write(
+        w.join(".mnemorph/minds/dialects.md"),
+        "# Dialects\n\n- **Shared:** yes\n\nHow a dialect overrides the generator.\n\nOverride `TRANSFORMS`.\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool("w1", "wear", serde_json::json!({"mind": "dialects"})),
+        ScriptedModel::text("done"),
+    ]));
+    let config = Config::load(&Paths::with_global(w.join("no-global.toml"), &w)).unwrap();
+    let attic = w.join("../mnemorph-toolbox-attic");
+    let mut opened = open_with(
+        &w,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    opened.session.run().ask("add a dialect", &mut |_| {}).await;
+    let first = user_text(&model, 0);
+    assert!(
+        first.contains("@T mind:dialects — How a dialect overrides the generator. (~"),
+        "{first}"
+    );
+    assert!(model.requests()[0].tools.iter().any(|t| t.name == "wear"));
+    let worn: String = model.requests()[1]
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter_map(|b| match b {
+            Block::ToolResult { content, .. } => Some(format!("{content:?}")),
+            _ => None,
+        })
+        .collect();
+    assert!(worn.contains("Override `TRANSFORMS`."), "{worn}");
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+}
