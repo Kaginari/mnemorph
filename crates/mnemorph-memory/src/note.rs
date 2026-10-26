@@ -136,6 +136,8 @@ pub struct Note {
     pub source: Option<String>,
     /// The proof its standing rests on, when one was cited.
     pub proof: Option<String>,
+    /// When it was born, in milliseconds since the epoch: its creation's time.
+    pub born: u64,
 }
 
 /// Fold events into notes. Events are taken in `(time, id)` order and the latest sets a note's
@@ -173,6 +175,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                     status: Status::Proposed,
                     source: source.clone(),
                     proof: None,
+                    born: e.time,
                 });
             }
             Change::Status { status } => {

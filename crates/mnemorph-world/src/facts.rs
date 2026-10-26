@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use mnemorph_ledger::Journal;
+use mnemorph_memory::text::{bm25, words};
 use mnemorph_wire::fnv64a;
 use serde::{Deserialize, Serialize};
 
@@ -617,36 +618,4 @@ fn collide(facts: &mut BTreeMap<String, Fact>) {
             }
         }
     }
-}
-
-/// A text's words for BM25: lower-cased, alphanumeric runs.
-fn words(text: &str) -> Vec<String> {
-    text.split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(str::to_lowercase)
-        .collect()
-}
-
-/// BM25 of `query` against `doc` among `docs`.
-fn bm25(query: &[String], doc: &[String], docs: &[Vec<String>]) -> f64 {
-    const K1: f64 = 1.2;
-    const B: f64 = 0.75;
-    #[allow(clippy::cast_precision_loss, reason = "word counts are small")]
-    let len = |d: &[String]| d.len() as f64;
-    #[allow(clippy::cast_precision_loss, reason = "document counts are small")]
-    let n = docs.len() as f64;
-    let avg = docs.iter().map(|d| len(d)).sum::<f64>() / n.max(1.0);
-    query
-        .iter()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(|term| {
-            #[allow(clippy::cast_precision_loss, reason = "counts are small")]
-            let df = docs.iter().filter(|d| d.contains(term)).count() as f64;
-            #[allow(clippy::cast_precision_loss, reason = "counts are small")]
-            let tf = doc.iter().filter(|w| *w == term).count() as f64;
-            let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln();
-            idf * tf * (K1 + 1.0) / (tf + K1 * (1.0 - B + B * len(doc) / avg.max(1.0)))
-        })
-        .sum()
 }
