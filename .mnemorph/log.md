@@ -4223,3 +4223,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Tests:** commission.rs: a body can't accept its own claim through a refused self-order; a
   report long past the cut still offers and grounds.
+
+---
+
+### [2026-10-26T10:20:01+01:00] rimuru — M8: checked observes only its diff; the 50-landing exit run
+- **Task:** M8's last exit criterion, the 50-turn write-rule run. It needs "none of its claims
+  about the world beyond the diff grounds through **checked**", and the code grounded every claim
+  of a passing landing.
+- **Files:**
+  - memory write.rs: `Proof::checked(verdict, verify_lines, changed: &[String])` keeps the
+    changed paths' specific terms as `scope`; `Proof::covers(text, source)`; `ground` refuses a
+    checked proof for a claim it doesn't cover;
+  - commission.rs: `checked_proof` passes the changed paths; `remember` grounds only covered
+    claims, and the rest stay proposed and are offered for acceptance (#207);
+  - docs 08.
+- **Tests:**
+  - commission.rs `write_rule_tests::fifty_landings_…` drives the loop's own `checked_proof` and
+    `remember` over 50 landings (one diff claim and one world claim each; every fifth diff claim
+    wrong; verify catches 9 of 10, and a caught landing ends failed). Shared memory holds exactly
+    41 notes, all checked proofs, exactly one wrong (1/41), no world claim, and every event
+    resolves. Without the scope rule shared holds 82 (checked);
+  - commission.rs: the landing test now has a diff claim (grounded) and a world claim (proposed);
+  - write.rs: the new signature.
+- **Note:** this is a unit-level drive of the post-landing path, not 50 scripted model turns.
+  The gate itself is covered by the loop's gate tests.

@@ -298,7 +298,9 @@ diff (*the API rate-limits at 100 a minute*) passes a green gate as easily wrong
 it the checked route observes nothing, and it needs **accepted**, **corroborated** or
 **confirmed**. A checked route's verify lines stood before the turn, so a wrong claim about the
 diff has to slip past a test written without it; that is why a pass with no verify line is not a
-route at all.
+route at all. A **checked** proof carries what its diff changed, and grounds only a claim that names
+one of those paths (by its specific terms: `src/a.rs:12` names `src/a.rs`, a path names its file);
+any other claim of the landing stays proposed, offered for the commissioner to accept.
 
 ### Reconsolidation
 

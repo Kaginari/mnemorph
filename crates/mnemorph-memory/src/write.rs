@@ -74,6 +74,10 @@ impl Route {
 pub struct Proof {
     route: Route,
     cites: String,
+    /// What a **checked** proof observed: the specific terms of the paths its diff changed. A
+    /// claim naming none of them is about the world beyond the diff, which a green gate passes as
+    /// easily wrong as right. `None` for the routes that observe no diff.
+    scope: Option<std::collections::BTreeSet<String>>,
 }
 
 impl Proof {
@@ -84,17 +88,41 @@ impl Proof {
     /// # Errors
     ///
     /// No verify line ran, or the diff was empty.
-    pub fn checked(verdict: &str, verify_lines: usize, changed: usize) -> Result<Self, String> {
+    pub fn checked(verdict: &str, verify_lines: usize, changed: &[String]) -> Result<Self, String> {
         if verify_lines == 0 {
             return Err("no verify line ran: the gate proved nothing of the claims".into());
         }
-        if changed == 0 {
+        if changed.is_empty() {
             return Err("the answer changed nothing: a pass over no diff proves no claim".into());
         }
         Ok(Self {
             route: Route::Checked,
-            cites: format!("{verdict} ({verify_lines} verify line(s) over {changed} path(s))"),
+            cites: format!(
+                "{verdict} ({verify_lines} verify line(s) over {} path(s))",
+                changed.len()
+            ),
+            scope: Some(
+                changed
+                    .iter()
+                    .flat_map(|p| crate::text::specific_terms(p))
+                    .collect(),
+            ),
         })
+    }
+
+    /// Whether this proof observes a claim saying `text`, pointing at `source`: always for a route
+    /// that observes no diff; for **checked**, only when the claim names a path its diff changed —
+    /// a claim about the world beyond the diff needs another route.
+    #[must_use]
+    pub fn covers(&self, text: &str, source: Option<&str>) -> bool {
+        let Some(scope) = &self.scope else {
+            return true;
+        };
+        let mut named = crate::text::specific_terms(text);
+        if let Some(s) = source {
+            named.extend(crate::text::specific_terms(s));
+        }
+        named.iter().any(|t| scope.contains(t))
     }
 
     /// **accepted**: the commissioner's verdict, cited, names the claim and accepts it.
@@ -109,6 +137,7 @@ impl Proof {
         Ok(Self {
             route: Route::Accepted,
             cites: verdict.to_owned(),
+            scope: None,
         })
     }
 
@@ -137,6 +166,7 @@ impl Proof {
         Ok(Self {
             route: Route::Corroborated,
             cites: format!("{second}: {}", theirs.join(", ")),
+            scope: None,
         })
     }
 
@@ -146,6 +176,7 @@ impl Proof {
         Self {
             route: Route::Confirmed,
             cites: answer.to_owned(),
+            scope: None,
         }
     }
 
@@ -209,6 +240,12 @@ pub fn ground(
     proof: &Proof,
 ) -> std::io::Result<Claim<Grounded>> {
     crate::audit::unfrozen(world, &claim.owner)?;
+    if !proof.covers(&claim.text, claim.source.as_deref()) {
+        return Err(std::io::Error::other(
+            "the claim names nothing the checked diff changed: it is about the world beyond the \
+             diff, and needs accepted, corroborated or confirmed",
+        ));
+    }
     let cites = format!("{}: {}", proof.route.word(), proof.cites);
     let confidence = proof.route.confidence();
     let personal = Tier::Personal(claim.owner.clone());
