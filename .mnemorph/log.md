@@ -3648,3 +3648,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - relief inherits before seating and undoes the heirs' files on failure.
 - **Tests:** a real repo and a worktree; journal and root-file sources; colliding events fold the
   same in either order; distinct ids.
+
+---
+
+### [2026-10-26T02:29:47+01:00] rimuru — M8 rung 2: recall
+- **Task:** M8 rung 2 (#125: the dissent seat and the declared omissions).
+- **Files:**
+  - mnemorph-memory text.rs: `words`, `content_words` (stop words aside) and `bm25`, moved from
+    world's facts.rs, which now uses them, so there is one implementation;
+  - recall.rs: `Weights` (the page's defaults, for config); `Relation` (own 1.0, race 0.6,
+    shared 0.3, log 0.1); `recall`:
+    - silent with no content words;
+    - dormant and tombstoned never recalled;
+    - the meaning term alone clears the floor θ;
+    - the score adds relation, salience, confidence, freshness (half-life H) and dissent β;
+    - one seat for the best dissent; the cut are counted, at most three named;
+  - `Note.born`.
+- **Tests:** the two roadmap fixtures (a buried correction recalled; a poor match under θ despite
+  every prior), silence, own over shared, dormant and tombstoned excluded.
+- **Lesson:** a fixture where every note holds the query's words makes BM25 rightly weigh them at
+  nothing. The realistic fixture carries notes about other things.
+- **Disk:** it filled to 33M mid-build. My dev target (13G) and nine merged worktrees were cleared;
+  memory feedback-disk-budget.
+- **Small bench complete** (60 runs, measured build 9d17040):
+  - success: solo 93%, hierarchy 83%;
+  - the difference is −0.10, interval [−0.267, +0.067], 30 groups, 7 discordant;
+  - hierarchy costs about 4.4× the calls, 5.2× the wt and 8× the time;
+  - `26-readme-usage` hierarchy failed during the disk-full window: rerun it before the
+    write-up.
