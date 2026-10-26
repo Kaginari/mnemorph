@@ -108,7 +108,11 @@ fn lock_in_forces_a_correction_until_it_is_heard() {
     )
     .unwrap()
     .remove(0);
-    let memory = gather(&w, "slime-t", |_| false).unwrap();
+    let mut memory = gather(&w, "slime-t", |_| false).unwrap();
+    // A revision that misses the floor even on the words it borrows: what lock-in is for.
+    for (n, _) in &mut memory.notes {
+        n.lent.clear();
+    }
     let r = recall(
         "why does the tokenizer keep interval fractions",
         &memory.notes,

@@ -4446,3 +4446,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Test:** recall.rs: B's correction of A's note has relation Own for A and is recalled for A's
   query. It fails without the lending (checked).
+
+---
+
+### [2026-10-26T13:34:32+01:00] rimuru — #213's review: Fable
+- **Verdict:** safe to merge.
+- **Fable found:**
+  - lending from every link let a correction surface on queries about bystanders;
+  - copying words into tags raised their document frequency and could dilute the very note the
+    correction corrects.
+- **Fixed:**
+  - lending comes from cited links (weight ≥ 0.9), and from all links only when none is cited;
+  - the borrowed words live in `Note::lent`, in memory only; recall scores a note on its own words
+    plus `lent`, while document frequency stays the notes' own;
+  - docs 08.
+- **Tests:**
+  - the recall test also asserts the corrected note is still recalled and that the stored tags
+    stay `["failure"]`;
+  - the lock-in loop test now asserts the revision is recalled (on its borrowed words);
+  - the pathology lock-in test clears `lent` to keep covering a revision that misses the floor.

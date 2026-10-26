@@ -154,6 +154,9 @@ pub struct Note {
     pub born: u64,
     /// The notes it revises, each with its weight: a revise note's.
     pub links: Vec<Link>,
+    /// Words recall borrows for a correction from the notes it cites, to match where they match:
+    /// never stored, never counted in how common a word is.
+    pub lent: Vec<String>,
 }
 
 /// Fold events into notes. Events are taken in `(time, id)` order and the latest sets a note's
@@ -194,6 +197,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                     proof: None,
                     born: e.time,
                     links: links.clone(),
+                    lent: Vec::new(),
                 });
             }
             Change::Status { status } => {

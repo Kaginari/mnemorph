@@ -19,6 +19,7 @@ fn note(id: &str, text: &str, polarity: Polarity, status: Status) -> Note {
         proof: None,
         born: NOW - DAY,
         links: vec![],
+        lent: vec![],
     }
 }
 
@@ -321,6 +322,20 @@ fn a_correction_stands_where_the_note_it_corrects_stands() {
     assert!(
         r.anchors.iter().any(|h| h.note.id == correction),
         "recalled with the note it corrects"
+    );
+    assert!(
+        r.anchors.iter().any(|h| h.note.id == habit),
+        "the note itself is not diluted"
+    );
+    let stored = mnemorph_memory::fold(
+        &mnemorph_memory::read(&w, &mnemorph_memory::Tier::Shared)
+            .unwrap()
+            .rows,
+    );
+    assert_eq!(
+        stored[&correction].tags,
+        ["failure"],
+        "nothing lent is stored"
     );
     let _ = std::fs::remove_dir_all(&w);
 }
