@@ -12,7 +12,8 @@ pub const GUTS_FLOOR: i32 = -2;
 pub const DOOM_AFTER: u32 = 3;
 /// Consecutive failed acts that end the turn in escalation (more than this many).
 pub const ESCALATE_AFTER: u32 = 2;
-/// Re-reads of unchanged windows, with nothing landed, before the stall checkpoint.
+/// Re-reads of unchanged windows back to back, with nothing landed, before the stall checkpoint:
+/// any other act between them is work, and exploring a large codebase re-reads as it goes.
 pub const REPIN: u32 = 3;
 /// Turns with nothing landed before the stall checkpoint.
 pub const ACT_BUDGET: u32 = 40;
@@ -356,12 +357,16 @@ impl Stress {
         };
         if self.failed_streak > ESCALATE_AFTER {
             out.push(Signal::Escalate);
+            // Said once a streak: a body with no one to hand the turn to is warned, not hounded.
+            self.failed_streak = 0;
         }
         if o.meta.unchanged {
             self.rereads += 1;
             if self.rereads >= REPIN {
                 out.push(Signal::Stall("repin"));
             }
+        } else {
+            self.rereads = 0;
         }
         self.window.push_back(score);
         if self.window.len() > GUTS_WINDOW {
@@ -468,5 +473,42 @@ impl Stress {
             self.act_budget
         };
         (self.turns > budget).then_some(Signal::Stall("actBudget"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{REPIN, Signal, Stress};
+    use mnemorph_races::ToolClass;
+    use mnemorph_tools::Outcome;
+
+    fn reread() -> Outcome {
+        let mut o = Outcome::ok("[unchanged since your last read]", ToolClass::Read);
+        o.meta.unchanged = true;
+        o
+    }
+
+    fn stalled(signals: &[Signal]) -> bool {
+        signals.iter().any(|s| matches!(s, Signal::Stall("repin")))
+    }
+
+    /// Exploring re-reads as it goes: re-reads with other work between them never stall; only
+    /// [`REPIN`] back to back do.
+    #[test]
+    fn repin_counts_re_reads_back_to_back() {
+        let mut s = Stress::default();
+        for i in 0..10 {
+            assert!(
+                !stalled(&s.act("read a.rs", None, &reread())),
+                "re-read {i}"
+            );
+            let fresh = Outcome::ok(format!("lines of b{i}.rs"), ToolClass::Read);
+            assert!(!stalled(&s.act(&format!("read b{i}.rs"), None, &fresh)));
+        }
+        let mut s = Stress::default();
+        let signals: Vec<bool> = (0..REPIN)
+            .map(|i| stalled(&s.act(&format!("read c{i}.rs"), None, &reread())))
+            .collect();
+        assert_eq!(signals.last(), Some(&true), "{REPIN} back to back stall");
     }
 }

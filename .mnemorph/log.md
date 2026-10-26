@@ -4358,3 +4358,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Bench:** the large suite's world seeds Elves, so its "solo" Rimuru had a commissioner and only
   40 steps (`steps.solo` applies without lanes). The bench's solo modes now run without the roster
   below the throne (Kaginari/bench).
+
+---
+
+### [2026-10-26T12:26:40+01:00] rimuru — stress for a body alone: escalation warns, repin is a streak
+- **Why:** the campaign's first Mnemorph solo rows (build 145ded7, sqlglot) stopped on the
+  harness's own rules while OpenCode passed the same tasks:
+  - task 09 `stall: repin` at 49 calls; repin counted re-reads across the whole run until a
+    landing, and three are ordinary exploration in 3 MB of code;
+  - task 07 `escalate` at 14 calls; a solo body with no lane below has nowhere to escalate, so
+    the run just ended.
+- **Files:**
+  - stress.rs: `rereads` resets on any act that is not an unchanged re-read; `failed_streak`
+    resets once `Escalate` is signalled;
+  - run.rs: `heed` (the signal handling, out of `act`, which passed 100 lines) treats `Escalate`
+    as a warning note when the run has no commissioner and no commission;
+  - docs 03.
+- **Tests:**
+  - loop.rs: a lone body is warned and answers; a commissioned body still escalates;
+  - stress.rs: interleaved re-reads never stall, three back to back do.
+- **Not changed:** solo's 100 steps (task 08 stopped there; OpenCode used 137). It is the human's
+  call.

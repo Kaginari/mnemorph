@@ -2069,30 +2069,8 @@ impl Run {
             return Some(Ending::Interrupted);
         }
         self.deliver_steering();
-        for s in signals {
-            match s {
-                Signal::Warn(text) => {
-                    self.record(&Beat::Note { text: text.clone() });
-                    push_user(&mut self.messages, vec![Block::Text { text, cache: false }]);
-                }
-                Signal::Doom => {
-                    return Some(Ending::Checkpoint {
-                        why: "doom: guts warned three windows running".into(),
-                        salvage: None,
-                    });
-                }
-                Signal::Escalate => {
-                    return Some(Ending::Escalate(
-                        "more than two failed acts in a row".into(),
-                    ));
-                }
-                Signal::Stall(which) => {
-                    return Some(Ending::Checkpoint {
-                        why: format!("stall: {which}"),
-                        salvage: None,
-                    });
-                }
-            }
+        if let Some(ending) = self.heed(signals) {
+            return Some(ending);
         }
         None
     }
@@ -2109,6 +2087,49 @@ impl Run {
             why: why.to_owned(),
             salvage,
         })
+    }
+
+    /// What the stress instruments said of the last acts: a note to the body, or an ending.
+    fn heed(&mut self, signals: Vec<Signal>) -> Option<Ending> {
+        for s in signals {
+            match s {
+                Signal::Warn(text) => {
+                    self.record(&Beat::Note { text: text.clone() });
+                    push_user(&mut self.messages, vec![Block::Text { text, cache: false }]);
+                }
+                Signal::Doom => {
+                    return Some(Ending::Checkpoint {
+                        why: "doom: guts warned three windows running".into(),
+                        salvage: None,
+                    });
+                }
+                // A body alone — answering the human, with no lane below — has no one to hand
+                // the turn to: it is told to change its approach, and the doom checkpoint, the
+                // stalls and its steps still bound it.
+                Signal::Escalate
+                    if self.commissioner.is_none() && self.caller.commission.is_none() =>
+                {
+                    let text = "[escalate] More than two failed acts in a row, and no one to hand \
+                                this to. Stop, read the errors and the ask again, and change \
+                                approach — or end the turn and say what blocks you."
+                        .to_owned();
+                    self.record(&Beat::Note { text: text.clone() });
+                    push_user(&mut self.messages, vec![Block::Text { text, cache: false }]);
+                }
+                Signal::Escalate => {
+                    return Some(Ending::Escalate(
+                        "more than two failed acts in a row".into(),
+                    ));
+                }
+                Signal::Stall(which) => {
+                    return Some(Ending::Checkpoint {
+                        why: format!("stall: {which}"),
+                        salvage: None,
+                    });
+                }
+            }
+        }
+        None
     }
 
     /// What a meter's reading does: the ending it brings, or `None` when the run goes on — a
