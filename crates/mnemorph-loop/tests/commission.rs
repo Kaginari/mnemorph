@@ -1826,3 +1826,57 @@ async fn a_throne_with_lanes_is_warned_not_ended_by_failed_acts() {
     let told = format!("{:?}", model.requests()[3].messages.last());
     assert!(told.contains("[escalate]"), "{told}");
 }
+
+/// An Orc's verdict settles a contested fact it names: `@V settle #<id>` in its report. Recency
+/// never does; a body that is no Orc cannot.
+#[tokio::test]
+async fn an_orcs_verdict_settles_a_contested_fact() {
+    use mnemorph_loop::world::Facts;
+    use mnemorph_loop::world::facts::{Event, from_unsaid};
+    let w = World::new("orc-settles");
+    let mut ids = Vec::new();
+    for (text, by) in [
+        ("build=cargo test", "slime-s"),
+        ("build=cargo nextest run", "elf-e"),
+    ] {
+        let e = from_unsaid(&format!("src/ {text}"), by, None).unwrap();
+        if let Event::Support { id, .. } = &e {
+            ids.push(id.clone());
+        }
+        Facts::record(&w.0, &e).unwrap();
+    }
+    assert!(
+        Facts::load(&w.0).live().any(|f| !f.settled),
+        "contested before"
+    );
+    let elsewhere = from_unsaid("docs/ the guide is current", "elf-e", None).unwrap();
+    let Event::Support { id: far, .. } = &elsewhere else {
+        panic!("{elsewhere:?}");
+    };
+    let far = far.clone();
+    Facts::record(&w.0, &elsewhere).unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::text(&format!(
+            "@S DONE\n@V settle #{}\n@V settle #{far}\n@E",
+            ids[0]
+        )),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("settle the build command", &mut |_| {}).await;
+    assert!(
+        Facts::load(&w.0).facts[&ids[0]].settled,
+        "the Orc's verdict settled it"
+    );
+    assert!(
+        !Facts::load(&w.0).facts[&ids[1]].settled,
+        "only the fact it named"
+    );
+    assert!(
+        !Facts::load(&w.0).facts[&far].settled,
+        "never off its own line's ground"
+    );
+}

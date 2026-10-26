@@ -363,3 +363,33 @@ fn a_triage_label_is_read_from_a_verdict() {
         assert_eq!(label(bad), None, "{bad}");
     }
 }
+
+/// A fact said with no anchor of its own is anchored where it is about: when that file changes,
+/// the fact reads stale instead of standing as true.
+#[test]
+fn a_fact_is_anchored_where_it_is_about() {
+    use mnemorph_world::facts::anchored;
+    let w = std::env::temp_dir().join(format!("mnemorph-anchored-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join("src")).unwrap();
+    fs::write(w.join("src/lexer.rs"), "fn lex() {}\n").unwrap();
+    let said = from_unsaid("src/lexer.rs the lexer is pure", "slime-s", None).unwrap();
+    let event = anchored(&w, said);
+    let Event::Support {
+        source: Some(a), ..
+    } = &event
+    else {
+        panic!("{event:?}");
+    };
+    assert_eq!(a.at, "src/lexer.rs");
+    assert!(a.digest.is_some(), "a file is anchored by its text");
+    Facts::record(&w, &event).unwrap();
+    let fresh = Facts::load(&w);
+    assert!(!fresh.live().any(|f| f.stale(&w)), "unchanged: not stale");
+    fs::write(w.join("src/lexer.rs"), "fn lex() { panic!() }\n").unwrap();
+    assert!(
+        Facts::load(&w).live().any(|f| f.stale(&w)),
+        "its file moved: stale"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

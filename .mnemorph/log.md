@@ -4465,3 +4465,48 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     stay `["failure"]`;
   - the lock-in loop test now asserts the revision is recalled (on its borrowed words);
   - the pathology lock-in test clears `lent` to keep covering a revision that misses the floor.
+
+---
+
+### [2026-10-26T13:45:13+01:00] rimuru — the mesh live: facts anchored, shown, settled
+- **Why:** the gap matrix's top three mesh gaps were one theme. The outer layer was built and
+  tested, but on the live path it had no input (anchors), no output (`@ONTO`) and no closure
+  (settle).
+- **Files:**
+  - world facts.rs: `anchored` (a fact with no anchor is anchored at its `about`); `digest`
+    hashes a whole file too;
+  - commission.rs + run.rs: both `from_unsaid` callers file `anchored` facts;
+  - commission.rs `file_verdicts`: `@V settle #<id>` from an Orc records `Settle` with its proof
+    (others are refused and told);
+  - run.rs `onto_view`: the `@ONTO` projection for a commissioned body's soil and every existing
+    path the ask names (up to 6 paths, 3 facts each), in the preface beside `@M`, only when there
+    is a fact;
+  - mnemorphd `onto settle <id>`, the human's (a body is refused); the CLI's help;
+  - docs 09.
+- **Tests:**
+  - world facts: anchored, then stale once its file changes;
+  - mnemorphd: the human settles, a body and an unknown id are refused;
+  - loop: an ask naming a path carries `@ONTO` with the contested fact;
+  - commission: an Orc's `@V settle` settles exactly the fact it names.
+- **Not done:** the owner's gated landing citing `#id` as a third settle route.
+
+---
+
+### [2026-10-26T13:53:18+01:00] rimuru — the live mesh: Fable's review
+- **Fable found:**
+  - any Orc could settle any fact;
+  - named paths were lowercased, so a real `src/Lexer.rs` was missed, and `/etc/passwd` or `../x`
+    passed `exists()` and showed as `@ONTO` lines (a host-path oracle);
+  - the seat and scratch crowded the soil's paths;
+  - fact text was unbounded and unframed, so a text could fake `[stale]` or a status;
+  - keyed directory facts went stale on any file added;
+  - docs 09 named the unbuilt route.
+- **Fixed:**
+  - settle only where the soil of the Orc, or of a creature reporting to it, admits the fact's
+    path (the test also refuses a `docs/` fact);
+  - named paths keep their case and stay inside the world (absolute and `..` refused), and come
+    first; soil without `.mnemorph`;
+  - fact text cut to 200 characters with no brackets, framed as data;
+  - keyed directory facts unanchored;
+  - docs 09.
+- **Checked:** the host-path asserts fail with the filter off (`@ONTO /etc/passwd: nobody` shows).

@@ -666,6 +666,7 @@ pub(crate) fn file_facts(world: &Path, ending: &Ending, by: &str) -> Vec<String>
     for u in &report.unsaid {
         if u.kind == Some(mnemorph_wire::UnsaidKind::Territory)
             && let Some(event) = mnemorph_world::facts::from_unsaid(&u.text, by, None)
+                .map(|e| mnemorph_world::facts::anchored(world, e))
         {
             // A fact that cannot be filed is lost to the ontology, never to the report — and said.
             match mnemorph_world::Facts::record(world, &event) {
@@ -741,6 +742,47 @@ fn file_labels(world: &Path, roster: &Roster, ending: &Ending, by: &str) {
 /// File `by`'s triage labels from its `@V` verdicts, by the rules of [`file_labels`].
 pub(crate) fn file_verdicts(world: &Path, roster: &Roster, verdicts: &[String], by: &str) {
     let facts = mnemorph_world::Facts::load(world);
+    // `@V settle #<id>`: an Orc's verdict closes a contested fact — the one act besides the
+    // human's that settles; recency never does.
+    let judges = roster
+        .creatures
+        .get(by)
+        .is_some_and(|c| c.race.base() == mnemorph_races::Race::Orc);
+    for v in verdicts {
+        let Some(id) = v.trim().strip_prefix("settle #") else {
+            continue;
+        };
+        let id = id
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(['.', ',']);
+        // Only on its own line's ground: a fact about a path the Orc's soil, or the soil of a
+        // creature reporting to it, admits.
+        let on_its_line = facts.facts.get(id).is_some_and(|f| {
+            let about = f.about.trim_end_matches('/');
+            roster
+                .creatures
+                .iter()
+                .filter(|(n, c)| n.as_str() == by || c.reports_to.as_deref() == Some(by))
+                .filter_map(|(n, _)| soil(roster, n))
+                .any(|g| g.admits(about) || g.admits(&format!("{about}/")))
+        });
+        if !judges || !on_its_line {
+            eprintln!(
+                "mnemorph: {by} cannot settle `#{id}`: only an Orc settles a fact on its own line's ground"
+            );
+            continue;
+        }
+        let event = mnemorph_world::facts::Event::Settle {
+            id: id.to_owned(),
+            by: by.to_owned(),
+            proof: format!("{by}'s verdict: {}", v.trim()),
+        };
+        if let Err(e) = mnemorph_world::Facts::record(world, &event) {
+            eprintln!("mnemorph: {by}'s settle could not be filed: {e}");
+        }
+    }
     // The first label stands, in this report as across reports.
     let mut given = std::collections::BTreeSet::new();
     for event in verdicts

@@ -36,6 +36,7 @@ Usage:
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [options]          the build, the core, the key's origin, the sandbox
   mnemorph onto owner <path>...      who owns each path, by which rule and claim
+  mnemorph onto settle <fact-id>     settle a contested fact in the ontology
   mnemorph q list|show|add|claim|touch|requeue|close …   the shared work queue
   mnemorph housekeep [--heal]        what is broken in the roster; --heal fixes what is mechanical
   mnemorph relief <name> [--apply]   split a strained creature's ground in two young, or retire it
