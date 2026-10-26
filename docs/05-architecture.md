@@ -179,15 +179,18 @@ Slash commands: `/send <text>` steers the running turn at its next tool step, `/
 sequences a program prints and escapes every other control, bidi and zero-width character as
 `\u{…}` (`mnemorph_loop::hidden`). The approval card shows each field through
 `mnemorph_loop::shown`, the core's own rule for what a human approves, and takes an answer only
-from a key: a bare `y` or `n`, then Enter — any other key clears the choice, so `yes` or `you…`
-typed ahead approves nothing. Keys are ignored for 300 ms after the card is first drawn, and so are
-keys the terminal read before it. An act longer than the card scrolls inside it (↓ ↑, PgDn, End):
-its head shows, the cut marked, with its last line, and `y` is refused until the act has been read
-to its end. The card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending,
-SIGTERM or SIGHUP, and ten minutes of silence deny.
+from a key: a bare `y` or `n`, then a pause, then Enter. Keys are ignored for 300 ms after the card
+is first drawn, and so are keys the terminal read before it; any key that is not `y`, `n`, Enter
+or a scroll — a paste too — clears the choice and arms the card again, so `okay` or `deploy` typed
+into it, or a `y` and a carriage return in one read, approve nothing. An act longer than the card
+scrolls inside it (↓ ↑, PgDn, End): its head shows, the cut marked, with its last line, and `y` is
+refused until every row has been on screen, read in order — a jump past rows never shown does not
+count them. Acts that ask while a card is open wait their turn, their number on the card. The
+card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending, SIGTERM, SIGHUP,
+SIGINT or SIGQUIT, and ten minutes of silence deny.
 
-A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM and SIGHUP
-leave as a quit does, the terminal given back.
+A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM, SIGHUP,
+SIGINT and SIGQUIT leave as a quit does, the terminal given back.
 
 **It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
 out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive

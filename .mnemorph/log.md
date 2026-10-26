@@ -4821,3 +4821,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the palette's names are destructured exhaustively.
 - **Tests:** each finding has one (`tests/ui.rs`, `run.rs`, `transcript.rs`, `markdown.rs`);
   a pty run checked SIGTERM exits cleanly.
+
+---
+
+### [2026-10-26T19:55:30+01:00] rimuru — the terminal UI, Fable's review of the review
+- **Fable found:** `viewed` came from geometry, so End jumped past an act's middle and `y` still
+  passed; after the arming delay a word ending in `y` (`okay⏎`) or `y\r` in one read approved; a
+  second card overwrote the first, whose wait hung to its deadline; SIGINT and SIGQUIT were not
+  handled.
+- **Fixed:** rows count as seen only when drawn and contiguous with those seen before (`seen_to`,
+  reset on a new width); a key that is not `y`/`n`/Enter/scroll, or a paste, re-arms the card and
+  clears the choice; Enter decides only 150 ms after its letter; cards queue first come first
+  shown, the count on the card, and a turn's end, Ctrl+C or a signal denies them all; the four
+  quit signals share one list.
+- **Left:** the commissioning chain on the card — the gate's ask names the body, not its line.
+- **Tests:** End then `y` refused, steps then `y` accepted; `okay⏎`, `deploy⏎`, `y\r` in one batch,
+  a paste; two cards answered in order; the signal list; a pty run of SIGINT and SIGQUIT.

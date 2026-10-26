@@ -243,11 +243,20 @@ fn read_input(tx: Sender<Msg>) {
     });
 }
 
-/// SIGTERM and SIGHUP end the UI as a quit does: the gate denied, the terminal given back.
+/// The signals that end the UI as a quit does. In raw mode Ctrl+C is a key, not SIGINT: a SIGINT
+/// or SIGQUIT comes from outside, as SIGTERM and SIGHUP do.
+#[cfg(unix)]
+pub const QUIT_SIGNALS: [i32; 4] = [
+    signal_hook::consts::SIGTERM,
+    signal_hook::consts::SIGHUP,
+    signal_hook::consts::SIGINT,
+    signal_hook::consts::SIGQUIT,
+];
+
+/// The quit signals end the UI as a quit does: the gate denied, the terminal given back.
 #[cfg(unix)]
 fn signals(tx: Sender<Msg>) {
-    use signal_hook::consts::{SIGHUP, SIGTERM};
-    let Ok(mut signals) = signal_hook::iterator::Signals::new([SIGTERM, SIGHUP]) else {
+    let Ok(mut signals) = signal_hook::iterator::Signals::new(QUIT_SIGNALS) else {
         return;
     };
     std::thread::spawn(move || {
@@ -399,6 +408,15 @@ mod tests {
             matches!(&msg, Msg::Crashed(why) if why.contains("boom")),
             "{msg:?}"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn every_quit_signal_is_handled() {
+        use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
+        for sig in [SIGTERM, SIGHUP, SIGINT, SIGQUIT] {
+            assert!(QUIT_SIGNALS.contains(&sig), "{sig}");
+        }
     }
 
     #[test]

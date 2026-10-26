@@ -68,8 +68,8 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     let now = std::time::Instant::now();
     // While an approval waits it takes the input's place: the input takes no keys then.
     let card = m.gate.as_ref().map(|a| {
-        a.drawn(now);
-        a.view(theme, w, usize::from(area.height), now)
+        a.drawn(now, w, usize::from(area.height));
+        a.view(theme, w, usize::from(area.height), now, m.waiting.len())
     });
     let input = if card.is_some() {
         Vec::new()

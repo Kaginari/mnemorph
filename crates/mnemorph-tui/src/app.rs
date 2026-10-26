@@ -3,6 +3,7 @@
 //! off the UI thread, whose results come back as messages — and a [`view`] that draws it.
 
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use mnemorph_loop::GateAnswer;
@@ -94,8 +95,10 @@ pub struct Model {
     pub viewport: Viewport,
     /// The spinner of calls in flight.
     pub spinner: Spinner,
-    /// The act waiting for the human.
+    /// The act on the card.
     pub gate: Option<Approval>,
+    /// Acts asking after it, first come first shown.
+    pub waiting: VecDeque<Card>,
     /// Lines sent and not yet finished.
     pub outstanding: usize,
     /// The terminal's size.
@@ -122,6 +125,7 @@ impl Model {
             viewport: Viewport::default(),
             spinner: Spinner::default(),
             gate: None,
+            waiting: VecDeque::new(),
             outstanding: 0,
             size,
             spin: Duration::ZERO,
@@ -171,8 +175,10 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Key(key) => keys(m, key, Instant::now()),
         Msg::KeyAt(key, at) => keys(m, key, at),
         Msg::Paste(text) => {
-            if m.gate.is_none() {
-                m.input.insert(&text);
+            match &mut m.gate {
+                // A paste into the card is never an answer: it arms the card again.
+                Some(a) => a.pasted(Instant::now()),
+                None => m.input.insert(&text),
             }
             Vec::new()
         }
@@ -198,16 +204,16 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             let ended = below.is_none() && matches!(event, Event::TurnEnded { .. });
             m.transcript.fold(&event, below.as_deref());
             // An approval still open when its turn ends is a question no one asks any more.
-            if ended && let Some(a) = m.gate.take() {
-                return vec![deny(&a.card, "the turn ended before the human answered")];
+            if ended {
+                return deny_all(m, "the turn ended before the human answered");
             }
             Vec::new()
         }
         Msg::Gate(card) => {
             // Every approval starts unchosen and unarmed: a key typed as it appears approves
             // nothing.
-            let (w, h) = m.main_area();
-            m.gate = Some(Approval::new(card, w, h));
+            m.waiting.push_back(card);
+            next_gate(m);
             m.viewport.update(ViewportMsg::Bottom);
             Vec::new()
         }
@@ -219,19 +225,10 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Crashed(why) => {
             m.outstanding = 0;
             m.transcript.push(Entry::Ending(format!("failed: {why}")));
-            m.gate
-                .take()
-                .map(|a| deny(&a.card, "the session stopped"))
-                .into_iter()
-                .collect()
+            deny_all(m, "the session stopped")
         }
         Msg::Terminate => {
-            let mut cmds: Vec<Cmd> = m
-                .gate
-                .take()
-                .map(|a| deny(&a.card, "the terminal UI was told to end"))
-                .into_iter()
-                .collect();
+            let mut cmds = deny_all(m, "the terminal UI was told to end");
             cmds.push(Cmd::Quit);
             cmds
         }
@@ -240,14 +237,39 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
 
 /// The card leaves at its deadline: the core has denied the act by then.
 fn expire(m: &mut Model, now: Instant) -> Vec<Cmd> {
-    if m.gate.as_ref().is_some_and(|a| now >= a.card.deadline)
+    let mut cmds = Vec::new();
+    while m.gate.as_ref().is_some_and(|a| now >= a.card.deadline)
         && let Some(a) = m.gate.take()
     {
         m.transcript
             .push(Entry::Warning("denied: no answer in time".into()));
-        return vec![deny(&a.card, "no answer in time")];
+        cmds.push(deny(&a.card, "no answer in time"));
+        next_gate(m);
     }
-    Vec::new()
+    cmds
+}
+
+/// The next act waiting, onto the card, when the card is free.
+fn next_gate(m: &mut Model) {
+    if m.gate.is_none()
+        && let Some(card) = m.waiting.pop_front()
+    {
+        // Every approval starts unchosen and unarmed: a key typed as it appears approves
+        // nothing.
+        let (w, h) = m.main_area();
+        m.gate = Some(Approval::new(card, w, h));
+    }
+}
+
+/// Deny the act on the card and every act waiting after it.
+fn deny_all(m: &mut Model, why: &str) -> Vec<Cmd> {
+    m.gate
+        .take()
+        .map(|a| a.card)
+        .into_iter()
+        .chain(m.waiting.drain(..))
+        .map(|c| deny(&c, why))
+        .collect()
 }
 
 fn deny(card: &Card, why: &str) -> Cmd {
@@ -258,8 +280,10 @@ fn keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if ctrl && key.code == KeyCode::Char('c') {
         // Ctrl+C always does something: it denies an open approval and stops the turn, or quits.
-        if let Some(a) = m.gate.take() {
-            return vec![deny(&a.card, "the human stopped the turn"), Cmd::Interrupt];
+        if m.gate.is_some() {
+            let mut cmds = deny_all(m, "the human stopped the turn");
+            cmds.push(Cmd::Interrupt);
+            return cmds;
         }
         return vec![if m.busy() { Cmd::Interrupt } else { Cmd::Quit }];
     }
@@ -305,6 +329,7 @@ fn gate_keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
         Decision::Answered(answer) => {
             let cmd = Cmd::Answer(Arc::clone(&a.card.pending), answer);
             m.gate = None;
+            next_gate(m);
             vec![cmd]
         }
     }

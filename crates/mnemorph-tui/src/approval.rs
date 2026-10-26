@@ -3,10 +3,13 @@
 //! the gate's deadline.
 //!
 //! - The act scrolls inside the card: a cut act shows its head, the cut marked, and its last
-//!   line; `y` is refused until the act has been read to its end.
+//!   line. `y` is refused until every row of the act has been drawn on screen, read in order: a
+//!   jump past rows never shown does not count them.
 //! - Keys are ignored until [`ARM`] after the card was first drawn — keys stamped earlier too, so
-//!   a line typed ahead never reaches it. Only a bare `y` or `n`, then Enter, decides; any other
-//!   key clears the choice. Esc denies at once.
+//!   a line typed ahead never reaches it. Any key that is not `y`, `n`, Enter or a scroll — a
+//!   paste too — clears the choice and arms the card again, so a word typed into it (`okay`,
+//!   `deploy`) never ends in an answer. Enter decides only [`CONFIRM`] after its `y` or `n`. Esc
+//!   denies at once.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -23,6 +26,9 @@ use crate::theme::Theme;
 
 /// How long the card ignores keys once it is on screen.
 pub const ARM: Duration = Duration::from_millis(300);
+/// How long after its `y` or `n` an Enter may confirm it: a `y` and a carriage return that come
+/// in one read are typing, not a decision.
+pub const CONFIRM: Duration = Duration::from_millis(150);
 /// The most rows of the act the card shows at once.
 pub const ACT_ROWS: usize = 6;
 
@@ -35,12 +41,18 @@ pub struct Approval {
     pub choice: Option<bool>,
     /// The first act row in view.
     pub scroll: usize,
-    /// Whether the human has had the whole act in view.
-    pub viewed: bool,
+    /// When the choice was made.
+    chosen_at: Option<Instant>,
     /// `y` was pressed before the act was read to its end.
     pub unread: bool,
-    /// When the card was first drawn.
+    /// When the card was first drawn, or last armed again by a key that answers nothing.
     pub(crate) armed: Cell<Option<Instant>>,
+    /// The act rows drawn on screen so far, from the first, without a gap.
+    seen_to: Cell<usize>,
+    /// The width the act was wrapped at when those rows were drawn.
+    seen_width: Cell<usize>,
+    /// The act's rows, as last drawn.
+    total: Cell<usize>,
 }
 
 /// What a key did to the card.
@@ -71,9 +83,12 @@ impl Approval {
             card,
             choice: None,
             scroll: 0,
-            viewed: false,
+            chosen_at: None,
             unread: false,
             armed: Cell::new(None),
+            seen_to: Cell::new(0),
+            seen_width: Cell::new(0),
+            total: Cell::new(0),
         };
         a.fit(w, h);
         a
@@ -86,58 +101,102 @@ impl Approval {
             .collect()
     }
 
-    /// Clamp the scroll to the act at this size, and note when its end is in view.
+    /// Clamp the scroll to the act at this size.
     pub fn fit(&mut self, w: usize, h: usize) {
         let total = self.act(w).len();
-        let rows = act_rows(h);
-        self.scroll = self.scroll.min(total.saturating_sub(rows));
-        if self.scroll + rows >= total {
-            self.viewed = true;
-        }
+        self.scroll = self.scroll.min(total.saturating_sub(act_rows(h)));
     }
 
-    /// The card was drawn at `now`; the first draw arms it.
-    pub fn drawn(&self, now: Instant) {
+    /// The card was drawn at `now` in a main area of `w`×`h`: the first draw arms it, and the
+    /// rows drawn count as seen when they continue the rows seen before.
+    pub fn drawn(&self, now: Instant, w: usize, h: usize) {
         if self.armed.get().is_none() {
             self.armed.set(Some(now));
         }
+        let total = self.act(w).len();
+        // Wrapped at another width the rows are other rows: reading starts again.
+        if self.seen_width.get() != act_width(w) {
+            self.seen_width.set(act_width(w));
+            self.seen_to.set(0);
+        }
+        let seen = self.seen_to.get();
+        if self.scroll <= seen {
+            self.seen_to
+                .set(seen.max(self.scroll + act_rows(h)).min(total));
+        }
+        self.total.set(total);
+    }
+
+    /// Whether every row of the act has been on screen.
+    #[must_use]
+    pub fn viewed(&self) -> bool {
+        self.total.get() > 0 && self.seen_to.get() >= self.total.get()
+    }
+
+    /// Arm the card again from `at`, its choice cleared: a key that answers nothing.
+    fn rearm(&mut self, at: Instant) {
+        self.choice = None;
+        let t = self.armed.get().map_or(at, |t| t.max(at));
+        self.armed.set(Some(t));
+    }
+
+    /// Text pasted while the card is open: never an answer.
+    pub fn pasted(&mut self, at: Instant) {
+        self.rearm(at);
     }
 
     /// A key stamped `at`, the main area `w`×`h`.
     pub fn key(&mut self, key: KeyEvent, at: Instant, w: usize, h: usize) -> Decision {
-        if key.code == KeyCode::Esc {
+        let code = key.code;
+        if code == KeyCode::Esc {
             return Decision::Answered(GateAnswer::Deny("the human said no".into()));
+        }
+        let rows = act_rows(h);
+        let scroll = match code {
+            KeyCode::Down | KeyCode::Char('j') => Some(self.scroll + 1),
+            KeyCode::Up | KeyCode::Char('k') => Some(self.scroll.saturating_sub(1)),
+            KeyCode::PageDown | KeyCode::Char(' ') => Some(self.scroll + rows),
+            KeyCode::PageUp => Some(self.scroll.saturating_sub(rows)),
+            KeyCode::End => Some(usize::MAX),
+            KeyCode::Home => Some(0),
+            _ => None,
+        };
+        let answer = matches!(code, KeyCode::Char('y' | 'n') | KeyCode::Enter);
+        if scroll.is_none() && !answer {
+            self.rearm(at);
+            return Decision::Open;
         }
         // Typed before the card was on screen, or too soon after: not an answer to it.
         if self.armed.get().is_none_or(|t| at < t + ARM) {
             return Decision::Open;
         }
-        let rows = act_rows(h);
-        match key.code {
+        if let Some(to) = scroll {
+            self.choice = None;
+            self.scroll = to;
+            self.fit(w, h);
+            return Decision::Open;
+        }
+        match code {
             KeyCode::Char('y') => {
-                self.unread = !self.viewed;
-                self.choice = self.viewed.then_some(true);
+                self.unread = !self.viewed();
+                self.choice = self.viewed().then_some(true);
+                self.chosen_at = Some(at);
             }
-            KeyCode::Char('n') => self.choice = Some(false),
-            KeyCode::Enter => match self.choice.take() {
-                Some(true) => return Decision::Answered(GateAnswer::Approve),
-                Some(false) => {
-                    return Decision::Answered(GateAnswer::Deny("the human said no".into()));
+            KeyCode::Char('n') => {
+                self.choice = Some(false);
+                self.chosen_at = Some(at);
+            }
+            _ => {
+                let settled = self.chosen_at.is_some_and(|c| at >= c + CONFIRM);
+                match self.choice.take() {
+                    Some(true) if settled => return Decision::Answered(GateAnswer::Approve),
+                    Some(false) if settled => {
+                        return Decision::Answered(GateAnswer::Deny("the human said no".into()));
+                    }
+                    // An Enter on the heels of its letter: typing, not a decision.
+                    Some(_) => self.rearm(at),
+                    None => {}
                 }
-                None => {}
-            },
-            code => {
-                self.choice = None;
-                match code {
-                    KeyCode::Down | KeyCode::Char('j') => self.scroll += 1,
-                    KeyCode::Up | KeyCode::Char('k') => self.scroll = self.scroll.saturating_sub(1),
-                    KeyCode::PageDown | KeyCode::Char(' ') => self.scroll += rows,
-                    KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(rows),
-                    KeyCode::End => self.scroll = usize::MAX,
-                    KeyCode::Home => self.scroll = 0,
-                    _ => {}
-                }
-                self.fit(w, h);
             }
         }
         Decision::Open
@@ -149,9 +208,9 @@ impl Approval {
         self.card.deadline.saturating_duration_since(now)
     }
 
-    /// The card, `w` cells wide and at most `h` rows tall, at `now`.
+    /// The card, `w` cells wide and at most `h` rows tall, at `now`, `after` more acts waiting.
     #[must_use]
-    pub fn view(&self, t: &Theme, w: usize, h: usize, now: Instant) -> Lines {
+    pub fn view(&self, t: &Theme, w: usize, h: usize, now: Instant, after: usize) -> Lines {
         let inner = w.saturating_sub(4);
         let act = self.act(w);
         let rows = act_rows(h);
@@ -224,7 +283,11 @@ impl Approval {
             .padding(Sides::sym(0, 1))
             .width(w)
             .title(Line::from(Span::styled(
-                "⚠ the human gate",
+                if after > 0 {
+                    format!("⚠ the human gate · {after} more waiting")
+                } else {
+                    "⚠ the human gate".to_owned()
+                },
                 t.gold().add_modifier(Modifier::BOLD),
             )))
             .title_right(Line::from(Span::styled(
@@ -244,7 +307,7 @@ impl Approval {
             };
             Span::styled(format!(" {key} "), style)
         };
-        let next = if self.unread && !self.viewed {
+        let next = if self.unread && !self.viewed() {
             Span::styled("  read the whole act first: ↓", t.alarm())
         } else if self.choice.is_some() {
             Span::styled("  enter confirms · esc denies", t.muted())
