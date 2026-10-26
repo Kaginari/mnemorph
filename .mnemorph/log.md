@@ -4771,3 +4771,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:**
   - provider: a stream ending `{"path": ` gives a kept call, not an error;
   - solo: the call is answered and the run goes on to its answer.
+
+---
+
+### [2026-10-26T19:48:32+01:00] rimuru — broken arguments, Fable's review
+- **Fable:** safe.
+  - The replay encodes the marker as a valid object.
+  - Every reader before `call_one` treats it as a plain object.
+  - The loop detector still counts identical repeats.
+- **Follow-ups done:**
+  - the error names the tool, as lessons.md promises;
+  - the echoed error is capped at 200 characters, and a non-string error is "unreadable";
+  - OpenAI warns when it drops a call cut by max_tokens, as Anthropic does;
+  - an Anthropic test;
+  - the solo test writes a README and asserts `read` never ran.
