@@ -1143,8 +1143,18 @@ fn repair(
     let me = Owner::Creature(name.to_owned());
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
+    // The child's own grant, under the guard it ran with: what it could have written.
+    let its = context_for(&c.world, roster, name).map(|k| k.inherit(cx));
     for rel in changed(before, &c.world) {
         if courts.contains(&rel) {
+            continue;
+        }
+        // Another writer's change — one this body's guard would not let it make — is neither its
+        // landing nor its to put back: a second session's work stays as that session left it.
+        if its
+            .as_ref()
+            .is_some_and(|k| !k.could_have_written(&c.world.join(&rel)))
+        {
             continue;
         }
         let shown = rel.to_string_lossy().into_owned();

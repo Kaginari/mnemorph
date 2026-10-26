@@ -3542,3 +3542,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the human's and the harness's soil are theirs;
   - tools only append; docs 02.
 - **Test:** sibling, birth, scratch and the human's.
+
+---
+
+### [2026-10-26T01:28:43+01:00] rimuru — writes attributed per body (#10)
+- **Task:** #10's lesson "write attribution is per body (per sandbox)".
+- **Finding:** tool calls run one after another in a session, so the risk is a second session on
+  one world: its writes landed in a child's tree diff, failed the child's right author, and were
+  then put back, destroying that session's work.
+- **Files:**
+  - tools `Context::could_have_written`: under a guard, a narrowed body's grant (soil, build,
+    scratch nest, own plan); otherwise true;
+  - gate.rs: right author judges only what the body could have written;
+  - commission.rs `repair` skips another writer's change, judged by the child's own rebuilt
+    context with the parent's guard;
+  - docs 03.
+- **Test:** `another_writers_change_is_not_the_bodys_under_a_guard`, guarded and unguarded. No
+  end-to-end put-back test: a scripted run cannot make a second session write mid-run.

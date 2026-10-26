@@ -322,3 +322,51 @@ fn a_refusal_names_the_owner_and_the_ways_on() {
     let human = write(&mut cx, ".mnemorph/config.toml");
     assert!(!human.contains("Route"), "{human}");
 }
+
+/// Under a kernel guard a commissioned body could have written only its grant, so a change
+/// elsewhere — a second session on the world — is not its to answer for; with no guard, writers
+/// cannot be told apart and the change still fails it.
+#[test]
+fn another_writers_change_is_not_the_bodys_under_a_guard() {
+    let w = World::new("attribution");
+    let roster = Roster::load(&w.0);
+    let guard = Sandbox::Guard(std::path::PathBuf::from("/nonexistent/mnemorph-guard"));
+    let guarded = context_for(&w.0, &roster, "slime-a")
+        .unwrap()
+        .with_sandbox(guard.clone());
+    assert!(guarded.could_have_written(&w.0.join("src/mine.rs")));
+    assert!(!guarded.could_have_written(&w.0.join("lib/theirs.rs")));
+    let open = context_for(&w.0, &roster, "slime-a")
+        .unwrap()
+        .with_sandbox(Sandbox::None("no guard".into()));
+    assert!(open.could_have_written(&w.0.join("lib/theirs.rs")));
+    let judge = |sandbox: Sandbox| {
+        let before = snapshot(&w.0);
+        fs::write(w.0.join("src/mine.rs"), "mine\n").unwrap();
+        fs::write(w.0.join("lib/theirs.rs"), "another session's\n").unwrap();
+        let gate = EndGate {
+            verify: Vec::new(),
+            author: Some(Author {
+                name: "slime-a".into(),
+                roster: roster.clone(),
+            }),
+        };
+        let mut cx = context_for(&w.0, &roster, "slime-a")
+            .unwrap()
+            .with_sandbox(sandbox);
+        let failures = gate.judge(&before, "done", &registry(), &mut cx).failures;
+        let _ = fs::remove_file(w.0.join("lib/theirs.rs"));
+        let _ = fs::remove_file(w.0.join("src/mine.rs"));
+        failures
+    };
+    assert_eq!(
+        judge(guard),
+        Vec::<String>::new(),
+        "not the body's to answer for"
+    );
+    let unguarded = judge(Sandbox::None("no guard".into()));
+    assert!(
+        unguarded.iter().any(|f| f.contains("lib/theirs.rs")),
+        "{unguarded:?}"
+    );
+}

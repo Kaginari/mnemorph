@@ -355,6 +355,25 @@ impl Context {
         self.world.join(".mnemorph/tmp")
     }
 
+    /// Whether this body could have written `path` (absolute). Under a kernel guard a commissioned
+    /// body's commands write only what it is granted — its soil, its build output, its scratch,
+    /// its plan — and its file tools no more, so a change anywhere else is another writer's: a
+    /// second session on the world. With no guard, or the whole world as soil, writers cannot be
+    /// told apart, and every change may be its.
+    #[must_use]
+    pub fn could_have_written(&self, path: &Path) -> bool {
+        if !self.narrowed || matches!(self.sandbox, Sandbox::None(_)) {
+            return true;
+        }
+        let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
+            && self.seat.is_some()
+            && path.parent() == self.seat.as_deref();
+        self.admits(path)
+            || own_plan
+            || self.build.iter().any(|b| path.starts_with(b))
+            || self.nest.as_ref().is_some_and(|n| path.starts_with(n))
+    }
+
     /// Whether the soil admits `path`: the longest covering claim decides, a tie to the
     /// exclusion; a root file by `root_files`, unless a claim excludes it.
     fn admits(&self, path: &Path) -> bool {
