@@ -310,7 +310,10 @@ The world repairs itself in small, mechanical steps, each one written to the led
 
 ### The end gate
 
-Runs on the body's own writes (minus what its Courts already landed on their own account):
+Runs on the body's own writes (minus what its Courts already landed on their own account) — a
+commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
+card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens, and in solo the whole
+repository is its soil, so right author holds by construction:
 
 1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
    for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the
@@ -341,7 +344,10 @@ Runs on the body's own writes (minus what its Courts already landed on their own
    for checks never hides a body's change.
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
-5. **Tests intact** — no test deleted or skipped.
+5. **Tests intact** — no test deleted or skipped. In solo, where the human is at hand and may
+   have asked for exactly that, a landing that fails on this alone is put to the human on the
+   approval gate — allowed, it lands; with no human attached, it fails as ever — and a failure
+   on this alone never reconsolidates memory: it says nothing of what the body knew.
 6. **No seal** — the territory is not sealed, or this landing is the fix: it carries the frozen
    witness into the zone's tests, unchanged by hash.
 
