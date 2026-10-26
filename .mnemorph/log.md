@@ -3676,3 +3676,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - hierarchy costs about 4.4× the calls, 5.2× the wt and 8× the time;
   - `26-readme-usage` hierarchy failed during the disk-full window: rerun it before the
     write-up.
+
+---
+
+### [2026-10-26T02:33:11+01:00] rimuru — #193's review: Fable
+- **Fable found:**
+  - another creature's proposed note was weighed;
+  - the seats differed from the page with three or more dissents in the top k (the page keeps
+    k − 2 seats for agreement);
+  - the word lists are rebuilt per call;
+  - the English stop list was thin.
+- **Fixed:**
+  - only the asker's own proposed notes are weighed;
+  - the seats are the page's, literally (k − 2 agreeing, the best dissent, then the fill);
+  - the doc says a caller keeps the words between calls;
+  - the stop list is wider and says it is English only.
+- **Tests:** the seats with dominant dissent; own-only proposed notes.

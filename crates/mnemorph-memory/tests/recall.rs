@@ -167,3 +167,82 @@ fn dormant_and_tombstoned_notes_are_never_recalled_and_the_own_ranks_first() {
     assert_eq!(ids(&r), ["own", "shared"]);
     assert_eq!(r.cut, 0);
 }
+
+/// The seats are the page's: the k − 2 best agreeing notes, the best dissent, then the fill — so
+/// agreeing notes keep their seats when dissents outnumber them.
+#[test]
+fn the_seats_keep_k_minus_two_for_agreement_and_one_for_dissent() {
+    let text = "the planner inlines common table expressions";
+    let mut notes: Vec<(Note, Relation)> = (0..3)
+        .map(|i| {
+            let mut n = note(&format!("c{i}"), text, Polarity::Counter, Status::Grounded);
+            n.salience = 1.0;
+            (n, Relation::Own)
+        })
+        .collect();
+    notes.push((
+        note("s", text, Polarity::Support, Status::Grounded),
+        Relation::Shared,
+    ));
+    for i in 0..20 {
+        notes.push((
+            note(
+                &format!("x{i}"),
+                &format!("unrelated note {i}"),
+                Polarity::Support,
+                Status::Grounded,
+            ),
+            Relation::Shared,
+        ));
+    }
+    let r = recall(
+        "planner inlines table expressions",
+        &notes,
+        NOW,
+        3,
+        &Weights::default(),
+    );
+    let got = ids(&r);
+    assert!(
+        got.contains(&"s"),
+        "the agreeing note keeps its seat: {got:?}"
+    );
+    assert_eq!(got.len(), 3);
+}
+
+/// Another creature's proposed note is its guess: never weighed. The asker's own is.
+#[test]
+fn only_the_askers_own_proposed_notes_are_weighed() {
+    let text = "the dialect quotes identifiers with backticks";
+    let notes = vec![
+        (
+            note("mine", text, Polarity::Support, Status::Proposed),
+            Relation::Own,
+        ),
+        (
+            note("theirs", text, Polarity::Support, Status::Proposed),
+            Relation::Shared,
+        ),
+        (
+            note("kin", text, Polarity::Support, Status::Proposed),
+            Relation::Race,
+        ),
+        (
+            note(
+                "other",
+                "nothing like that",
+                Polarity::Support,
+                Status::Grounded,
+            ),
+            Relation::Shared,
+        ),
+    ];
+    let r = recall(
+        "dialect quotes identifiers backticks",
+        &notes,
+        NOW,
+        6,
+        &Weights::default(),
+    );
+    assert_eq!(ids(&r), ["mine"]);
+}

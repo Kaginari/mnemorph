@@ -2,12 +2,15 @@
 
 use std::collections::BTreeSet;
 
-/// Words with no meaning of their own: a query of only these recalls nothing.
+/// Words with no meaning of their own: a query of only these recalls nothing. English only:
+/// another language's stop words pass as words, and unspaced scripts read as one word a run.
 const STOP: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "but", "by", "do", "for", "from", "has", "have",
-    "how", "i", "if", "in", "into", "is", "it", "its", "of", "on", "or", "so", "that", "the",
-    "then", "there", "this", "to", "was", "we", "what", "when", "where", "which", "who", "why",
-    "will", "with", "you",
+    "a", "all", "an", "and", "any", "are", "as", "at", "be", "but", "by", "can", "could", "did",
+    "do", "does", "for", "from", "had", "has", "have", "how", "i", "if", "in", "into", "is", "it",
+    "its", "may", "me", "might", "my", "no", "not", "of", "on", "or", "our", "should", "so",
+    "that", "the", "their", "them", "then", "there", "these", "they", "this", "those", "to", "us",
+    "was", "we", "were", "what", "when", "where", "which", "who", "why", "will", "with", "would",
+    "you", "your",
 ];
 
 /// A text's words for BM25: lower-cased, alphanumeric runs.

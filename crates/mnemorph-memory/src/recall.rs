@@ -96,10 +96,14 @@ pub struct Recalled {
 /// Recall at most `k` notes (`k ≥ 2`) for `query` from `notes`, each with its relation to the
 /// asker, at `now` (milliseconds since the epoch).
 ///
-/// Silent when the query has no content words. Dormant and tombstoned notes are never recalled.
-/// A note's meaning term must clear the floor on its own. One of the `k` seats is kept for the
-/// best counter or revise note when any clears the floor, so a correction ranked `k + 1` is still
-/// recalled; the rest go by score.
+/// Silent when the query has no content words. Dormant and tombstoned notes are never recalled,
+/// and a proposed note only when it is the asker's own. A note's meaning term must clear the
+/// floor on its own. The seats: the `k − 2` best agreeing notes, the best counter or revise note
+/// whatever its rank — so a correction ranked `k + 1` is still recalled — then the best of the
+/// rest to fill `k`.
+///
+/// Every call reads the notes' words afresh: a caller recalling turn after turn keeps them (and
+/// their document frequencies) between calls, so the index is never rebuilt inline.
 #[must_use]
 pub fn recall(
     query: &str,
@@ -110,9 +114,12 @@ pub fn recall(
 ) -> Recalled {
     let terms = content_words(query);
     let k = k.max(2);
+    // A proposed note is a guess: only the asker's own are weighed, never another's.
     let live: Vec<&(Note, Relation)> = notes
         .iter()
-        .filter(|(n, _)| matches!(n.status, Status::Proposed | Status::Grounded))
+        .filter(|(n, rel)| {
+            n.status == Status::Grounded || (n.status == Status::Proposed && *rel == Relation::Own)
+        })
         .collect();
     if terms.is_empty() || live.is_empty() {
         return Recalled::default();
@@ -161,15 +168,24 @@ pub fn recall(
             .total_cmp(&a.score)
             .then_with(|| a.note.id.cmp(&b.note.id))
     });
-    // The dissent's seat: the best counter or revise note, whatever its rank.
-    let seat = hits.iter().position(|h| h.note.polarity.dissents());
-    let mut chosen: Vec<usize> = (0..hits.len()).take(k).collect();
-    if let Some(s) = seat
-        && !chosen.contains(&s)
-    {
-        chosen.pop();
-        chosen.push(s);
+    // The seats: the k − 2 best agreeing notes, the best dissent whatever its rank, then the best
+    // of the rest to fill k.
+    let mut chosen: Vec<usize> = (0..hits.len())
+        .filter(|&i| !hits[i].note.polarity.dissents())
+        .take(k - 2)
+        .collect();
+    if let Some(d) = hits.iter().position(|h| h.note.polarity.dissents()) {
+        chosen.push(d);
     }
+    for i in 0..hits.len() {
+        if chosen.len() >= k {
+            break;
+        }
+        if !chosen.contains(&i) {
+            chosen.push(i);
+        }
+    }
+    chosen.sort_unstable();
     let mut anchors = Vec::new();
     let mut cut = Vec::new();
     for (i, h) in hits.into_iter().enumerate() {
