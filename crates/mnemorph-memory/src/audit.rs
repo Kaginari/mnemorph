@@ -48,21 +48,26 @@ pub fn why_unproven(e: &Event, grounded: &BTreeSet<&str>) -> Option<String> {
 /// The events of one tier that do not resolve, each with why.
 #[must_use]
 pub fn unproven(events: &[Event]) -> Vec<(&Event, String)> {
-    // A note ever grounded by an event that itself resolves — a schema rests on those.
-    let none = BTreeSet::new();
-    let grounded: BTreeSet<&str> = events
-        .iter()
-        .filter(|e| {
-            matches!(
+    // A note ever grounded by an event that itself resolves — a schema rests on those, a schema of
+    // schemas on the schemas: grown until nothing more resolves, never resting on itself.
+    let mut grounded: BTreeSet<&str> = BTreeSet::new();
+    loop {
+        let before = grounded.len();
+        for e in events {
+            if matches!(
                 e.change,
                 Change::Status {
                     status: Status::Grounded
                 }
-            ) && !matches!(e.by, By::Record)
-                && why_unproven(e, &none).is_none()
-        })
-        .map(|e| e.note.as_str())
-        .collect();
+            ) && why_unproven(e, &grounded).is_none()
+            {
+                grounded.insert(e.note.as_str());
+            }
+        }
+        if grounded.len() == before {
+            break;
+        }
+    }
     events
         .iter()
         .filter_map(|e| why_unproven(e, &grounded).map(|why| (e, why)))
@@ -158,8 +163,12 @@ pub fn unfrozen(world: &Path, owner: &str) -> std::io::Result<()> {
     }
 }
 
+/// The row a shared note with no owner reports under: it freezes no creature, yet the human is told.
+pub const SHARED: &str = "(shared, no owner)";
+
 /// Every creature with memory in `world` — a personal or short tier, or a shared note it owns —
-/// and the unresolved events touching it, by name.
+/// and the unresolved events touching it, by name; then [`SHARED`], when an unresolved shared event
+/// is on a note no creature owns.
 ///
 /// # Errors
 ///
@@ -185,8 +194,24 @@ pub fn status(world: &Path) -> std::io::Result<Vec<(String, Vec<Unproven>)>> {
             names.insert(o);
         }
     }
-    names
+    let mut out: Vec<(String, Vec<Unproven>)> = names
         .into_iter()
         .map(|n| findings(world, &n).map(|f| (n, f)))
-        .collect()
+        .collect::<std::io::Result<_>>()?;
+    let shared = read(world, &Tier::Shared)?.rows;
+    let owned: BTreeSet<&str> = shared
+        .iter()
+        .filter(|e| matches!(&e.change, Change::Create { owner: Some(_), .. }))
+        .map(|e| e.note.as_str())
+        .collect();
+    let mut orphans = Vec::new();
+    let bad: Vec<(&Event, String)> = unproven(&shared)
+        .into_iter()
+        .filter(|(e, _)| !owned.contains(e.note.as_str()))
+        .collect();
+    push(&mut orphans, &Tier::Shared, &bad);
+    if !orphans.is_empty() {
+        out.push((SHARED.to_owned(), orphans));
+    }
+    Ok(out)
 }

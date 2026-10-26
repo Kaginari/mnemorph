@@ -114,10 +114,10 @@ machines that both append never conflict, because the fold does not trust line o
 Every event also names who wrote it — `by: record | gate | route | human | import` — and an event
 that claims a standing must cite its proof (section *Two scopes, two standings*). An event in a
 tracked tier cites tracked evidence — a `log.md` entry, a commit, a verdict recorded in the
-journal — never a machine-local ledger row, so its proof travels with it. The fold checks that the
-proof resolves: the entry, verdict or commit it cites exists and says what the event claims. A
-proof that is merely out of reach on this machine (a commit not yet fetched) leaves the event
-*unresolved here*: kept, not recalled as grounded, and never counted as an unproven write.
+journal — never a machine-local ledger row, so its proof travels with it. Recall checks that each
+event resolves by the shape of its author and proof ([pathologies as
+instruments](#pathologies-as-instruments)): it catches a hand edit, a bad merge or an import that
+skipped its checks, not a forger who writes a well-shaped proof.
 
 Let $C$ be the notes with $\pi \in \lbrace \text{counter}, \text{revise}\rbrace $ (the *dissent*) and $S^{+}$
 the rest.
@@ -353,6 +353,9 @@ A standing is a `grounded` status or a confidence. An unresolved event touching 
 its personal or short tier, or on a shared note it owns — freezes that creature's proposals,
 groundings, revisions and cache; `mnemorph memory status` names each event, its file and why, and
 exits 1 until the human removes or re-proves it. A run that recalls past one says so in a warning.
+A shared note with no owner freezes no creature; its unresolved events are reported under their
+own row. A schema rests on schemas too, and an heir inherits a schema with every note it links
+to, so a split never leaves a schema resting on nothing.
 
 There is no aggregate memory score. A high recall hit rate cannot make up for a creature that
 never accepts a correction.

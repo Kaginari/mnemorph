@@ -117,3 +117,77 @@ fn routes_resolve_by_their_proof_and_schemas_by_what_they_rest_on() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+#[test]
+fn a_schema_of_schemas_resolves_and_a_split_keeps_what_a_schema_rests_on() {
+    use mnemorph_memory::{Forget, forget, inherit};
+    let w = world("schemas");
+    let one = ground(
+        &w,
+        propose(&w, "old", "parse one", vec![], Some("src/a.rs".into())).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let two = ground(
+        &w,
+        propose(&w, "old", "parse two", vec![], Some("src/a.rs".into())).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let personal = Tier::Personal("old".into());
+    let schema = distill(&w, &personal, &[one, two], "parse", Some("old"))
+        .unwrap()
+        .unwrap();
+    // An abstraction of the schema rests on a schema: it resolves.
+    forget(&w, &personal, &schema, Forget::Abstract, "parsing").unwrap();
+    assert_eq!(mnemorph_memory::findings(&w, "old").unwrap(), vec![]);
+    // A split: the merged notes' source is one heir's ground, the schemas have none; both heirs
+    // receive what their schemas rest on, and neither is frozen.
+    inherit(
+        &w,
+        "old",
+        &[
+            ("young-a".into(), vec!["src/".into()]),
+            ("young-b".into(), vec!["docs/".into()]),
+        ],
+    )
+    .unwrap();
+    for heir in ["young-a", "young-b"] {
+        assert_eq!(
+            mnemorph_memory::findings(&w, heir).unwrap(),
+            vec![],
+            "{heir}"
+        );
+        assert!(
+            propose(&w, heir, "fresh", vec![], None).is_ok(),
+            "{heir} not frozen"
+        );
+    }
+    let _ = fs::remove_dir_all(&w);
+}
+
+#[test]
+fn an_ownerless_shared_note_is_reported_under_its_own_row() {
+    use mnemorph_memory::audit::SHARED;
+    let w = world("orphan");
+    let a = ground(
+        &w,
+        propose(&w, "slime-s", "kept", vec![], None).unwrap(),
+        &Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    distill(&w, &Tier::Shared, &[a.clone(), a.clone()], "x", None).unwrap();
+    by_hand(&w, &Tier::Shared, "ghost", By::Record, None, grounded());
+    let report = status(&w).unwrap();
+    let row = report
+        .iter()
+        .find(|(c, _)| c == SHARED)
+        .expect("a shared row");
+    assert_eq!(row.1.len(), 1);
+    assert_eq!(row.1[0].note, "ghost");
+    assert!(propose(&w, "slime-s", "still free", vec![], None).is_ok());
+    let _ = fs::remove_dir_all(&w);
+}

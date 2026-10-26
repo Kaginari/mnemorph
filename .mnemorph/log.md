@@ -3864,3 +3864,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - mnemorphd tests/memory.rs, the real binary;
   - args.test.ts;
   - consolidate's abstraction proof.
+
+---
+
+### [2026-10-26T08:12:26+01:00] rimuru — #199's review: Fable
+- **Fable found (two lawful writes froze creatures, both reproduced):**
+  - a schema of schemas failed, since only non-record groundings counted;
+  - `inherit` sent a sourceless schema to every heir but its merged notes to one, freezing the
+    others;
+  - unresolved events on ownerless shared notes were reported to nobody;
+  - commission swallowed the freeze message;
+  - docs 08 promised existence checks the code doesn't make;
+  - a misplaced doc comment.
+- **Fixed:**
+  - the grounded set grows to a fixpoint;
+  - a linked note follows its linking note's heirs, also to a fixpoint;
+  - `status` adds a `(shared, no owner)` row that freezes no one;
+  - commission prints the error;
+  - docs 08 state the shape rule and that it catches sloppy edits, not forgery;
+  - the doc comment is moved back.
+- **Tests:**
+  - a schema of schemas plus a split, which fails with the old `inherit` (checked);
+  - the ownerless row.

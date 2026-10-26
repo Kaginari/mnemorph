@@ -103,8 +103,9 @@ pub fn read(world: &Path, tier: &Tier) -> std::io::Result<ReadBack<Event>> {
 
 /// On a split, each heir inherits `from`'s notes whose source lies in its ground; a note whose
 /// source no heir's ground covers — a journal entry, a commit, a path outside them all — goes to
-/// every heir. The inherited note keeps its id and its standing: the same events, appended to the
-/// heir's file. `from`'s own file is kept whole, never deleted. Returns how many events each heir
+/// every heir. A note another links to — a schema's merged notes, a revision's anchors — also goes
+/// wherever the linking note goes, so a schema never reaches an heir without what it rests on. The
+/// inherited note keeps its id and its standing: the same events, appended to the heir's file. `from`'s own file is kept whole, never deleted. Returns how many events each heir
 /// received.
 ///
 /// # Errors
@@ -118,29 +119,47 @@ pub fn inherit(
     let events = read(world, &Tier::Personal(from.to_owned()))?.rows;
     let notes = crate::note::fold(&events);
     // Each note's heirs: those whose ground covers its source, else all.
-    let heirs_of = |note: &str| -> Vec<&str> {
-        let path = notes
-            .get(note)
-            .and_then(|n| n.source.as_deref())
-            .map(path_of);
-        let covering: Vec<&str> = heirs
+    let by_source = |n: &crate::note::Note| -> std::collections::BTreeSet<String> {
+        let path = n.source.as_deref().map(path_of);
+        let covering: std::collections::BTreeSet<String> = heirs
             .iter()
             .filter(|(_, ground)| {
                 path.as_ref()
                     .is_some_and(|p| ground.iter().any(|g| covers(g, p)))
             })
-            .map(|(h, _)| h.as_str())
+            .map(|(h, _)| h.clone())
             .collect();
         if covering.is_empty() {
-            heirs.iter().map(|(h, _)| h.as_str()).collect()
+            heirs.iter().map(|(h, _)| h.clone()).collect()
         } else {
             covering
         }
     };
+    let mut heirs_of: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> = notes
+        .iter()
+        .map(|(id, n)| (id.as_str(), by_source(n)))
+        .collect();
+    // A linked note follows its linking note, through every link: grown until nothing changes.
+    loop {
+        let mut grew = false;
+        for n in notes.values() {
+            let theirs = heirs_of.get(n.id.as_str()).cloned().unwrap_or_default();
+            for link in &n.links {
+                if let Some(set) = heirs_of.get_mut(link.note.as_str()) {
+                    let before = set.len();
+                    set.extend(theirs.iter().cloned());
+                    grew |= set.len() > before;
+                }
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
     let mut given: Vec<(String, usize)> = heirs.iter().map(|(h, _)| (h.clone(), 0)).collect();
     for e in &events {
-        for heir in heirs_of(&e.note) {
-            Tier::Personal(heir.to_owned()).journal(world).append(e)?;
+        for heir in heirs_of.get(e.note.as_str()).into_iter().flatten() {
+            Tier::Personal(heir.clone()).journal(world).append(e)?;
             if let Some(g) = given.iter_mut().find(|(h, _)| h == heir) {
                 g.1 += 1;
             }

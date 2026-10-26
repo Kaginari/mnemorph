@@ -416,7 +416,6 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
     }
 }
 
-/// A queue refusal: said on stderr, exit 2.
 /// `memory status`: the unproven writes, per creature.
 fn memory(args: &[String]) -> ExitCode {
     let mut world = None;
@@ -452,7 +451,8 @@ fn memory(args: &[String]) -> ExitCode {
             .map(|(name, found)| {
                 serde_json::json!({
                     "creature": name,
-                    "frozen": !found.is_empty(),
+                    "frozen": !found.is_empty()
+                        && name != mnemorph_server::world::memory::audit::SHARED,
                     "unproven": found.iter().map(|u| serde_json::json!({
                         "file": u.file, "event": u.event, "note": u.note, "why": u.why,
                     })).collect::<Vec<_>>(),
@@ -468,8 +468,13 @@ fn memory(args: &[String]) -> ExitCode {
                 println!("{name}: clear");
                 continue;
             }
+            let state = if name == mnemorph_server::world::memory::audit::SHARED {
+                "recall ignores"
+            } else {
+                "frozen —"
+            };
             println!(
-                "{name}: frozen — {} note event(s) do not resolve; remove or re-prove each",
+                "{name}: {state} {} note event(s) that do not resolve; remove or re-prove each",
                 found.len()
             );
             for u in found {
@@ -487,6 +492,7 @@ fn memory(args: &[String]) -> ExitCode {
     }
 }
 
+/// A queue refusal: said on stderr, exit 2.
 fn refused(e: &dyn std::fmt::Display) -> ExitCode {
     let _ = writeln!(std::io::stderr(), "mnemorphd: refused: {e}");
     ExitCode::from(2)
