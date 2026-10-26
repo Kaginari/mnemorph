@@ -1599,9 +1599,8 @@ async fn a_newer_revision_is_forced_into_a_locked_in_recall() {
         first.contains(&format!("@M {revision} ")),
         "the revision is recalled: {first}"
     );
-    let name = "slime-test";
-    let traces = mnemorph_memory::pathology::traces(&w.world(), name).unwrap();
-    assert_eq!(traces[0].forced.as_deref(), Some("lock-in"));
+    // It reaches the recall on the words it borrows from the note it cites; lock-in forces in
+    // only a revision that still misses (pathology.rs's own tests hold that case).
 }
 
 /// A full context drains instead of dying: one turn without tools, its `@U` lines kept as the

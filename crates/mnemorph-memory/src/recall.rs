@@ -139,6 +139,15 @@ pub fn recall(
         .iter()
         .zip(&docs)
         .filter_map(|((n, rel), doc)| {
+            // A correction is matched with the words it borrows too; how common a word is stays
+            // the notes' own count, so borrowing never dilutes the note it corrects.
+            let lent;
+            let doc = if n.lent.is_empty() {
+                doc
+            } else {
+                lent = [doc.clone(), content_words(&n.lent.join(" "))].concat();
+                &lent
+            };
             let raw = bm25(&terms, doc, &docs);
             let meaning = weights.meaning * raw / (raw + saturation);
             if meaning < weights.floor {
@@ -256,12 +265,60 @@ pub fn gather(
         };
         notes.push((n, rel));
     }
+    lend_to_corrections(&mut notes);
     Ok(Memory {
         notes,
         personal,
         skipped,
         unproven: a + b + c,
     })
+}
+
+/// A correction is recalled where the note it corrects would be: a revise note takes the closest
+/// relation of the notes it cites — all it links, when it cites none — and their words for
+/// matching (`Note::lent`): never stored, only weighed.
+/// The head start a correction is given over an ordinary note (`0.154`, worth `0.37` of meaning)
+/// holds only at equal relation and equal match; the body that failed and the one that recalls
+/// are not always the same, nor its failure line in the habit's words.
+fn lend_to_corrections(notes: &mut [(Note, Relation)]) {
+    let lent: Vec<Option<(Relation, Vec<String>)>> = notes
+        .iter()
+        .map(|(n, rel)| {
+            if n.polarity != crate::note::Polarity::Revise || n.links.is_empty() {
+                return None;
+            }
+            // What it cites, when it cites any: a note merely recalled into the failed run was in
+            // the room, and is never blamed by company.
+            let cited: Vec<&str> = n
+                .links
+                .iter()
+                .filter(|l| l.weight >= 0.9)
+                .map(|l| l.note.as_str())
+                .collect();
+            let lenders: Vec<&str> = if cited.is_empty() {
+                n.links.iter().map(|l| l.note.as_str()).collect()
+            } else {
+                cited
+            };
+            let linked: Vec<&(Note, Relation)> = notes
+                .iter()
+                .filter(|(m, _)| lenders.contains(&m.id.as_str()))
+                .collect();
+            let closest = linked
+                .iter()
+                .map(|(_, r)| *r)
+                .chain(std::iter::once(*rel))
+                .max_by(|a, b| a.weight().total_cmp(&b.weight()))?;
+            let words = linked.iter().map(|(m, _)| m.text.clone()).collect();
+            Some((closest, words))
+        })
+        .collect();
+    for ((n, rel), lend) in notes.iter_mut().zip(lent) {
+        if let Some((closest, words)) = lend {
+            *rel = closest;
+            n.lent = words;
+        }
+    }
 }
 
 /// A recall on the wire, as `@M` lines: each anchor with its scope, standing and polarity, then

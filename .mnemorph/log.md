@@ -4432,3 +4432,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     checkpoints;
   - the edge test is back on default limits, with a failing summary turn;
   - docs 03 say the pointer alone counts, and the `loop` stall and the guts bound a stuck reader.
+
+---
+
+### [2026-10-26T13:29:15+01:00] rimuru — a correction stands where the note it corrects stands
+- **Why:** the gap matrix (Fable, `gap-matrix.md`) found that docs 08's head start (0.154 ≈ 0.37
+  of meaning) assumes equal relation. A revise note is owned by the failing body, so when A
+  recalls its own note corrected by B's run, w_r·Δrel = 0.34·0.7 = 0.238 > 0.154 and the
+  correction ranks below. Its failure-line text can also fall under θ.
+- **Files:**
+  - recall.rs `lend_to_corrections` in `gather`: a revise note takes the closest relation among
+    its linked notes and their texts as matching tags, in memory only;
+  - docs 08.
+- **Test:** recall.rs: B's correction of A's note has relation Own for A and is recalled for A's
+  query. It fails without the lending (checked).
+
+---
+
+### [2026-10-26T13:34:32+01:00] rimuru — #213's review: Fable
+- **Verdict:** safe to merge.
+- **Fable found:**
+  - lending from every link let a correction surface on queries about bystanders;
+  - copying words into tags raised their document frequency and could dilute the very note the
+    correction corrects.
+- **Fixed:**
+  - lending comes from cited links (weight ≥ 0.9), and from all links only when none is cited;
+  - the borrowed words live in `Note::lent`, in memory only; recall scores a note on its own words
+    plus `lent`, while document frequency stays the notes' own;
+  - docs 08.
+- **Tests:**
+  - the recall test also asserts the corrected note is still recalled and that the stored tags
+    stay `["failure"]`;
+  - the lock-in loop test now asserts the revision is recalled (on its borrowed words);
+  - the pathology lock-in test clears `lent` to keep covering a revision that misses the floor.
