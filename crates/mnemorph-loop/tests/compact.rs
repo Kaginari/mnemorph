@@ -206,6 +206,14 @@ async fn a_long_run_stays_under_its_stress_line() {
         "the run finished instead of hitting its stress line"
     );
     assert!(*model.folded_seen.lock().unwrap(), "it compacted");
+    // A fold is the one rewrite allowed: it never reads as a moved prefix.
+    let moved = Journal::<mnemorph_loop::Beat>::new(root.join("run.jsonl"))
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .any(|b| matches!(b, mnemorph_loop::Beat::Warning { text } if text.contains("cached prefix moved")));
+    assert!(!moved, "a fold read as a moved prefix");
     assert!(
         largest < usize::try_from(stress * 4).unwrap(),
         "every request stayed under the line: {largest}"
