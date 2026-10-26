@@ -55,18 +55,24 @@ pub fn content_words(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// A text's specific terms: the tokens that name one thing — a path, a file, an identifier, a
-/// number — rather than a common word. A token is specific when it holds `/`, `.`, `_`, `::` or a
-/// digit, or is at least seven letters long; quotes, backticks and closing punctuation aside,
-/// lowercased. Each also yields its specific parts — what `::` and `:` separate, and a path's file
-/// name — so `src/a.rs:12` meets `a.rs`, and `t.sql::test_x` meets `t.sql`.
+/// A text's specific terms: the tokens that name one thing — a path, a file, an identifier —
+/// rather than a common word. A token is specific when it holds `/`, `.`, `_`, `::` or a digit,
+/// and is not a bare number, a bare directory or a file name every project has; quotes,
+/// backticks and closing punctuation aside, lowercased. Each also yields its specific parts —
+/// what `::` and `:` separate, and a path's file name — so `src/a.rs:12` meets `a.rs`, and
+/// `t.sql::test_x` meets `t.sql`.
 #[must_use]
 pub fn specific_terms(text: &str) -> std::collections::BTreeSet<String> {
+    // One thing named: a path or a file (not a bare directory, not a stock file name), an
+    // identifier, a number inside a name — never a bare number or an everyday word.
     let specific = |t: &str| {
-        t.contains(['/', '.', '_'])
-            || t.contains("::")
-            || t.chars().any(|c| c.is_ascii_digit())
-            || (t.chars().count() >= 7 && t.chars().all(char::is_alphanumeric))
+        !t.is_empty()
+            && !t.ends_with('/')
+            && !t.chars().all(|c| c.is_ascii_digit() || ".,:".contains(c))
+            && !COMMON_FILES.contains(&t)
+            && (t.contains(['/', '.', '_'])
+                || t.contains("::")
+                || t.chars().any(|c| c.is_ascii_digit()))
     };
     let mut out = std::collections::BTreeSet::new();
     for token in text
@@ -83,10 +89,28 @@ pub fn specific_terms(text: &str) -> std::collections::BTreeSet<String> {
             parts.push(name.to_owned());
         }
         out.extend(parts.into_iter().filter(|p| specific(p)));
-        out.insert(token);
+        if specific(&token) {
+            out.insert(token);
+        }
     }
     out
 }
+
+/// File names every project has: naming one names nothing in particular.
+const COMMON_FILES: [&str; 12] = [
+    "lib.rs",
+    "mod.rs",
+    "main.rs",
+    "__init__.py",
+    "index.ts",
+    "index.js",
+    "main.py",
+    "setup.py",
+    "readme.md",
+    "cargo.toml",
+    "package.json",
+    "pyproject.toml",
+];
 
 #[cfg(test)]
 mod tests {
@@ -108,5 +132,9 @@ mod tests {
         for not in ["run", "uv", "before", "see", "and", "12"] {
             assert!(!t.contains(not), "{not}: {t:?}");
         }
+        // What every project or every report names, names nothing in particular.
+        let common =
+            specific_terms("2 failed, 1 passed in src/ and tests/ — see lib.rs, expected timeout");
+        assert!(common.is_empty(), "{common:?}");
     }
 }

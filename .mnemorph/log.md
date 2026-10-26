@@ -4037,3 +4037,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - retiring a personal note left its shared copy recalled by others (now both);
   - `retired` listed a note twice (deduplicated).
 - **Process:** #202's queued merge was stopped first, so the blunt rule never reached main.
+
+---
+
+### [2026-10-26T09:15:58+01:00] rimuru — #202's second review: Fable
+- **Fable found:**
+  - **"cited" was always true** (since #197): `cited_anchors` scanned every message since
+    `ask_from`, including the ask's own user message where recall prints the `@M` ids. So every
+    recalled note matched itself, `confirm` credited all of them, and reconsolidation's 0.9/0.4
+    split was dead;
+  - bare numbers and common terms were specific;
+  - proposed notes could be struck but never credited;
+  - `wake` grounded anything.
+- **Fixed:**
+  - only `Role::Assistant` messages are scanned (the body's text and its acts' arguments);
+  - specific terms drop bare numbers, bare directories, a stock file list and the plain
+    seven-letter rule;
+  - `confirm` credits proposed notes;
+  - `wake` undoes only a gate retirement (`gate_retired`);
+  - docs 08.
+- **Tests:**
+  - solo.rs: a recalled-but-unnamed note links at 0.4. It fails without the role filter
+    (checked). The earlier test passed only because its note was also named;
+  - text.rs: common terms;
+  - write.rs: `wake` refuses a housekeeping-dormant note and a proposed one; a proposed note is
+    credited.
+- **Lesson:** a test whose positive case also satisfies the bug proves nothing. Every "only when"
+  rule needs its negative case.

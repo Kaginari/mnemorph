@@ -1023,11 +1023,13 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    /// The anchors recalled into this ask, each marked cited when what the ask said and did — its
-    /// text and its acts' arguments — names it.
+    /// The anchors recalled into this ask, each marked cited when what the body said and did — its
+    /// text and its acts' arguments — names it. The ask's own message, where recall shows the
+    /// anchors, is never the body's word.
     fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
         let said: String = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
+            .filter(|m| m.role == mnemorph_provider::Role::Assistant)
             .flat_map(|m| &m.content)
             .map(|b| match b {
                 Block::Text { text, .. } => text.clone(),

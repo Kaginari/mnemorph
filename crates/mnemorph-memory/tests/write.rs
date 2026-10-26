@@ -301,7 +301,11 @@ fn a_note_is_retired_only_by_failures_laid_at_its_door() {
 fn passes_outweigh_failures_and_a_waking_starts_clean() {
     use mnemorph_memory::{confirm, retire, revise, wake};
     let w = world_of("evidence");
-    let mine = grounded_note(&w, "slime-s", "run uv before pytest in sqlglot/");
+    let mine = grounded_note(
+        &w,
+        "slime-s",
+        "run uv before pytest in sqlglot/tests/conftest.py",
+    );
     let shared = grounded_note(&w, "slime-o", "the dialects live in sqlglot/dialects/");
     let anchors = [anchor(&mine, true, true), anchor(&shared, false, false)];
     for v in ["log.md pass one", "log.md pass two"] {
@@ -311,7 +315,7 @@ fn passes_outweigh_failures_and_a_waking_starts_clean() {
         revise(
             &w,
             "slime-s",
-            &["tests intact: sqlglot/ tests could not import".into()],
+            &["tests intact: sqlglot/tests/conftest.py could not import".into()],
             &anchors,
             v,
         )
@@ -358,5 +362,38 @@ fn passes_outweigh_failures_and_a_waking_starts_clean() {
         "it starts clean"
     );
     assert!(wake(&w, "no-such-note").is_err());
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// Only a retirement is woken: a note put to sleep otherwise, or never grounded, keeps its standing
+/// and its route. A proposed note can be struck, so a pass credits it too.
+#[test]
+fn wake_undoes_only_a_retirement_and_a_proposed_note_is_credited() {
+    use mnemorph_memory::{Forget, confirm, forget, wake};
+    let w = world_of("wake-only");
+    let asleep = grounded_note(&w, "slime-s", "the cache lives in .cache/sqlglot");
+    forget(&w, &Tier::Shared, &asleep, Forget::Dormant, "").unwrap();
+    assert!(
+        wake(&w, &asleep).is_err(),
+        "put to sleep by housekeeping, not retired"
+    );
+    let guess = propose(
+        &w,
+        "slime-s",
+        "maybe src/tokens.py:40 is wrong",
+        vec![],
+        None,
+    )
+    .unwrap()
+    .note;
+    assert!(
+        wake(&w, &guess).is_err(),
+        "never grounded: no route, no waking"
+    );
+    assert_eq!(
+        confirm(&w, "slime-s", &[anchor(&guess, true, true)], "log.md pass").unwrap(),
+        1,
+        "a proposed note is credited"
+    );
     let _ = fs::remove_dir_all(&w);
 }

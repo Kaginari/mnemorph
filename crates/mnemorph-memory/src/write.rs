@@ -508,7 +508,11 @@ pub fn confirm(
         };
         let rows = crate::store::read(world, &tier)?.rows;
         let notes = crate::note::fold(&rows);
-        let Some(n) = notes.get(&a.id).filter(|n| n.status == Status::Grounded) else {
+        // A proposed note may be struck, so it may be credited: evidence both ways.
+        let Some(n) = notes
+            .get(&a.id)
+            .filter(|n| matches!(n.status, Status::Grounded | Status::Proposed))
+        else {
             continue;
         };
         let passes = evidence(&a.id, &rows, n, &[]).passes + 1;
@@ -628,12 +632,14 @@ pub fn retire(
     Ok(out)
 }
 
-/// The human wakes the note `id`: a grounded status, theirs, in every tier that holds it — the
-/// creatures' and shared memory. Evidence before it no longer counts. Returns the files written.
+/// The human wakes the note `id` the gate retired: a grounded status, theirs, in every tier that
+/// holds it — the creatures' and shared memory. Evidence before it no longer counts. Only a
+/// retirement is undone: a note put to sleep otherwise, or never grounded, keeps its standing
+/// and its route. Returns the files written.
 ///
 /// # Errors
 ///
-/// No tier holds the note, or a note file cannot be read or written.
+/// No tier holds the note as one the gate retired, or a note file cannot be read or written.
 pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
     let mut tiers = vec![Tier::Shared];
     if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
@@ -649,7 +655,7 @@ pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
     let mut woke = Vec::new();
     for tier in tiers {
         let rows = crate::store::read(world, &tier)?.rows;
-        if rows.iter().any(|e| e.note == id) {
+        if gate_retired(&rows, id) {
             append(
                 world,
                 &tier,
@@ -665,10 +671,26 @@ pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
     }
     if woke.is_empty() {
         return Err(std::io::Error::other(format!(
-            "no note `{id}` in this world's memory"
+            "no note `{id}` the gate retired in this world's memory: only a retirement is woken"
         )));
     }
     Ok(woke)
+}
+
+/// Whether `rows` hold the note `id` retired by the gate: dormant, its last status the gate's.
+fn gate_retired(rows: &[crate::note::Event], id: &str) -> bool {
+    rows.iter()
+        .filter(|e| e.note == id && matches!(e.change, Change::Status { .. }))
+        .max_by_key(|e| (e.time, e.id.clone()))
+        .is_some_and(|e| {
+            matches!(e.by, By::Gate)
+                && matches!(
+                    e.change,
+                    Change::Status {
+                        status: Status::Dormant
+                    }
+                )
+        })
 }
 
 /// The notes the gate retired that touch `owner` — its own tier, and shared notes it owns — each
@@ -687,15 +709,8 @@ pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String
             {
                 continue;
             }
-            // Retired, not put to sleep: its last status is the gate's.
-            let last = rows
-                .iter()
-                .filter(|e| e.note == n.id && matches!(e.change, Change::Status { .. }))
-                .max_by_key(|e| (e.time, e.id.clone()));
-            // A note in both tiers is listed once.
-            if last.is_some_and(|e| matches!(e.by, By::Gate))
-                && !out.iter().any(|(id, _)| *id == n.id)
-            {
+            // Retired, not put to sleep; a note in both tiers listed once.
+            if gate_retired(&rows, &n.id) && !out.iter().any(|(id, _)| *id == n.id) {
                 out.push((n.id.clone(), n.text.clone()));
             }
         }
