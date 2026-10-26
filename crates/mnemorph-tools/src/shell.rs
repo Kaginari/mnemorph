@@ -28,7 +28,7 @@ use crate::tripwire::Snapshot;
 /// How long a command may run when the call names no timeout.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
 /// The longest timeout a call may ask for.
-const MAX_TIMEOUT: Duration = Duration::from_secs(600);
+pub const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 /// How long output pipes get to drain once the group is dead.
 const DRAIN: Duration = Duration::from_millis(500);
 /// Bytes kept from each of stdout and stderr.

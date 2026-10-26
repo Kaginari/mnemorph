@@ -4756,6 +4756,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-26T19:03:45+01:00] rimuru — the end gate's verify limit, `gate.verify_secs`
+- **Why:** each verify command had a fixed 120 s, and `suggest` offered `cargo test --workspace`
+  for any Cargo.toml: a cold build of a large compiled project (Mnemorph's own included) outruns
+  it, so the gate said NOT_VERIFIED and the suggested line never grounded a claim.
+- **Built:**
+  - config `gate.verify_secs`: an Int, default 120, 10 to 600 (the bash tool's own ceiling, so
+    no value is clamped unseen), an error naming the file outside it;
+  - `EndGate::verify_secs`, set by the session's gate and carried to children by the
+    Commissioner, as `stress_tokens` is;
+  - `suggest`: a workspace whose root is a package gives `cargo test -p <name>`, the name taken
+    only when Cargo would accept it; `missing_session_verify` adds, for Cargo, Go and TypeScript,
+    that a cold build may need the key raised;
+  - docs 03 and 05.
+- **Decided:** the tracked file may set it. A longer limit runs the same classified, sandboxed
+  command, only for longer, within the ask's clock; a killed command grounds nothing either way.
+  The project knows its own build; the human's local file still wins.
+- **Tests:** the key's default, bounds and layers; the gate kills `sleep 3` at 1 s (NOT_VERIFIED)
+  and passes it at 5 s; the root-package narrowing, and names Cargo would refuse kept out.
 ### [2026-10-26T19:17:57+01:00] rimuru — a call with broken arguments is answered, not fatal
 - **Found by the bench:** the checked arm's task 09 ended after 51 calls with "the stream could not
   be read: tool read's arguments: EOF while parsing". The model streamed a finished `read` call

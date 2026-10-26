@@ -37,6 +37,7 @@ const DEFAULTS: &str = r#"
 [gate]
 enabled = true
 timeout_secs = 300
+verify_secs = 120
 
 [stress]
 escalate_at = 5
@@ -63,6 +64,15 @@ key_env = "ANTHROPIC_API_KEY"
 measured = 0.6
 stated = 0.9
 "#;
+
+/// How long each of the end gate's verify commands may run, in seconds, unless the configuration
+/// says.
+pub const VERIFY_SECS: u64 = 120;
+
+/// The bounds of `gate.verify_secs`: at least long enough to start a test runner, and at most what
+/// the `bash` tool grants any command.
+pub const VERIFY_SECS_RANGE: std::ops::RangeInclusive<u64> =
+    10..=mnemorph_tools::shell::MAX_TIMEOUT.as_secs();
 
 /// Keys only the local or global file may set: each one loosens the human gate.
 const LOOSENING: &[&str] = &[
@@ -98,6 +108,7 @@ enum Kind {
 const SCHEMA: &[(&str, Kind)] = &[
     ("gate.enabled", Kind::Bool),
     ("gate.timeout_secs", Kind::Int),
+    ("gate.verify_secs", Kind::Int),
     ("gate.ask_rules", Kind::StrList),
     ("gate.approve", Kind::StrList),
     ("sandbox.allow_unguarded", Kind::Bool),
@@ -609,6 +620,19 @@ impl Config {
                 "oni.envelopes" => {
                     envelopes(&leaf.value, at, self.envelope_days())?;
                 }
+                "gate.verify_secs"
+                    if !leaf
+                        .value
+                        .as_integer()
+                        .and_then(|s| u64::try_from(s).ok())
+                        .is_some_and(|s| VERIFY_SECS_RANGE.contains(&s)) =>
+                {
+                    return Err(format!(
+                        "{at}: gate.verify_secs is a count of seconds from {} to {}",
+                        VERIFY_SECS_RANGE.start(),
+                        VERIFY_SECS_RANGE.end()
+                    ));
+                }
                 "oni.envelope_days"
                     if !leaf
                         .value
@@ -704,6 +728,14 @@ impl Config {
     #[must_use]
     pub fn gate_timeout_secs(&self) -> u64 {
         self.int("gate.timeout_secs").unwrap_or(300)
+    }
+
+    /// How long each of the end gate's verify commands may run, in seconds. A tracked file may
+    /// set it: a longer limit runs the same classified, sandboxed command, only for longer, and a
+    /// command killed at the limit grounds nothing either way.
+    #[must_use]
+    pub fn verify_secs(&self) -> u64 {
+        self.int("gate.verify_secs").unwrap_or(VERIFY_SECS)
     }
 
     /// Commands may run with no kernel guard in force (local or global file only).
