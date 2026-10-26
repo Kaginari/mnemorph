@@ -291,7 +291,12 @@ the parent mislabels it:
 ```
 
 Each term is pushed down by a different lever: more keys shrink the first, the recall fixtures
-measure the second, and the parent's own verdicts are what the value ledger scores.
+measure the second, and the parent's own verdicts are what the value ledger scores. The triage
+fixture (`tests/facts.rs`, `TRIAGE_CASES`) puts each reworded fact against its true duplicate and
+six older facts sharing its words: the duplicate is shown in 8 cases of 8, though third in two of
+them and second in the one that restates it in synonyms ("sixty minutes" for "one hour"). Eight
+cases bound the term loosely — a miss rate of 0 of 8 is consistent with one in four — so the
+fixture grows with each miss found in a real world.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
 proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground,
