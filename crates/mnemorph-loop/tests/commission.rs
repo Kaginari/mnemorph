@@ -427,7 +427,7 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
             order("c3", "slime-s"),
             ScriptedModel::tool("b1", "bash", json!({"command": act})),
             ScriptedModel::text(
-                "@S DONE\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
+                "@S DONE\n@U law src/done.txt marks the work done\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
             ),
             // The Orc wrote nothing itself: its gate ran nothing, whatever its Slime landed.
             ScriptedModel::text("@S DONE\n@U law the orc thinks the slime was right\n@E"),
@@ -439,13 +439,23 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
         run.ask("go", &mut |_| {}).await;
         let mine = fold(&read(&w.0, &Tier::Personal("slime-s".into())).unwrap().rows);
         let shared = fold(&read(&w.0, &Tier::Shared).unwrap().rows);
-        let texts: Vec<&str> = mine.values().map(|n| n.text.as_str()).collect();
+        let mut texts: Vec<&str> = mine.values().map(|n| n.text.as_str()).collect();
+        texts.sort_unstable();
         assert_eq!(
             texts,
-            ["the parser keeps interval fractions"],
+            [
+                "src/done.txt marks the work done",
+                "the parser keeps interval fractions"
+            ],
             "territory is not memory"
         );
-        let n = mine.values().next().unwrap();
+        let of = |t: &str| mine.values().find(|n| n.text == t).unwrap();
+        let n = of("src/done.txt marks the work done");
+        // A check observes only its diff: a claim about the world beyond it stays proposed.
+        assert_eq!(
+            of("the parser keeps interval fractions").status,
+            Status::Proposed
+        );
         let orc = fold(&read(&w.0, &Tier::Personal("orc-o".into())).unwrap().rows);
         assert!(
             orc.values().all(|n| n.status == Status::Proposed),

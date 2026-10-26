@@ -4223,3 +4223,57 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Tests:** commission.rs: a body can't accept its own claim through a refused self-order; a
   report long past the cut still offers and grounds.
+
+---
+
+### [2026-10-26T10:20:01+01:00] rimuru — M8: checked observes only its diff; the 50-landing exit run
+- **Task:** M8's last exit criterion, the 50-turn write-rule run. It needs "none of its claims
+  about the world beyond the diff grounds through **checked**", and the code grounded every claim
+  of a passing landing.
+- **Files:**
+  - memory write.rs: `Proof::checked(verdict, verify_lines, changed: &[String])` keeps the
+    changed paths' specific terms as `scope`; `Proof::covers(text, source)`; `ground` refuses a
+    checked proof for a claim it doesn't cover;
+  - commission.rs: `checked_proof` passes the changed paths; `remember` grounds only covered
+    claims, and the rest stay proposed and are offered for acceptance (#207);
+  - docs 08.
+- **Tests:**
+  - commission.rs `write_rule_tests::fifty_landings_…` drives the loop's own `checked_proof` and
+    `remember` over 50 landings (one diff claim and one world claim each; every fifth diff claim
+    wrong; verify catches 9 of 10, and a caught landing ends failed). Shared memory holds exactly
+    41 notes, all checked proofs, exactly one wrong (1/41), no world claim, and every event
+    resolves. Without the scope rule shared holds 82 (checked);
+  - commission.rs: the landing test now has a diff claim (grounded) and a world claim (proposed);
+  - write.rs: the new signature.
+- **Note:** this is a unit-level drive of the post-landing path, not 50 scripted model turns.
+  The gate itself is covered by the loop's gate tests.
+
+---
+
+### [2026-10-26T10:22:14+01:00] rimuru — #208: claims name their file; status counts what is shared
+- **Why** (the human, relaying a side agent): with checked scoped to the diff, a cheap model's
+  unnamed claims never reach shared memory, so the bench could show little from memory.
+- **Done:**
+  - the child prompt asks `@U law <path> <fact>` for a rule of a changed file, and the drain asks
+    to name the file, so the work's own tests can prove the claim;
+  - `mnemorphd memory status` opens with "memory: N note(s) shared and grounded; personal:
+    P proposed, G grounded" (`standing`);
+  - docs 08.
+- **Tests:** mnemorphd tests/memory.rs expect the standing line.
+- **Noted:** `the_clock_reaches_a_running_command` failed once at load 8.4 and passed twice
+  alone in 0.5 s; it is a timing test.
+
+---
+
+### [2026-10-26T10:25:27+01:00] rimuru — #208's review: Fable
+- **Verdict:** safe to merge after the doc and comment fixes.
+- **Fixed:**
+  - docs 08's example claim names its path, and the page says a diff of common files observes
+    nothing;
+  - the scope adds each changed path's directories (`src/parser/mod.rs` is in `src/parser`);
+  - `remember`'s doc comment is corrected, and it passes the claim's source to `covers`;
+  - the exit test's doc says it bypasses the gate and the model, and that its ratio is by
+    construction;
+  - a memory-level test of `covers` and `ground`'s refusal.
+- **Left:** a world claim that names a changed file still grounds; that is inherent without
+  reading claims.

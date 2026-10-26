@@ -168,6 +168,7 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
 @W <path> for each path you wrote\n\
 @F <file:line> <claim> for each finding\n\
+@U law <path> <fact> for a rule of a file you changed — name the path: your gate's tests can then prove it\n\
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),
@@ -582,11 +583,17 @@ fn checked_proof(
         || format!("log.md: {to} gate: PASS"),
         |h| format!("log.md {h}"),
     );
-    mnemorph_memory::Proof::checked(&cite, verdict.ran, verdict.changed.len()).ok()
+    let changed: Vec<String> = verdict
+        .changed
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    mnemorph_memory::Proof::checked(&cite, verdict.ran, &changed).ok()
 }
 
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
-/// its personal memory, proposed; with a **checked** proof its own run earned, they are grounded.
+/// its personal memory, proposed; with a **checked** proof its own run earned, each that names a
+/// path its diff changed is grounded — a claim about the world beyond the diff stays proposed.
 /// A child that did not answer, or whose gate proved nothing, keeps its words personal. Says what
 /// it did, as a note for the report, and returns each claim it left proposed, `(id, text)`: what
 /// the dispatcher may accept.
@@ -625,7 +632,9 @@ fn remember(
         proposed += 1;
         let id = claim.note.clone();
         let short: String = u.text.chars().take(80).collect();
-        if let Some(p) = proof {
+        // A check observes only its diff: a claim about the world beyond it stays proposed,
+        // offered for the commissioner to accept.
+        if let Some(p) = proof.filter(|p| p.covers(&u.text, claim.source.as_deref())) {
             match mnemorph_memory::ground(world, claim, p) {
                 Ok(_) => {
                     grounded += 1;
@@ -1469,6 +1478,106 @@ mod clock_tests {
         assert_eq!(clock_memo(&w, &roster, "slime-s", &stopped), None);
         let alone = clock_memo(&w, &roster, "orc-o", &died).unwrap();
         assert!(alone.contains("no sibling fits"), "{alone}");
+        let _ = std::fs::remove_dir_all(&w);
+    }
+}
+
+#[cfg(test)]
+mod write_rule_tests {
+    use super::*;
+
+    /// M8's exit run of the write rule, through what the loop runs after every child's landing —
+    /// `checked_proof` over the gate's verdict, then `remember` over the child's report. It drives
+    /// that path directly: the gate and the model are not in it, and its ratio is the fixture's
+    /// construction, not a measurement. Fifty
+    /// landings, each claiming one thing about its diff and one about the world beyond it; one diff
+    /// claim in five is wrong, and the verify lines catch nine of those ten: a caught landing ends
+    /// failed and remembers nothing, the one they miss passes. Then no note reaches shared memory
+    /// without a route's proof, exactly one of the 41 grounded notes is wrong
+    /// (Pr[wrong | pass] = 1/41), and no claim about the world grounds through **checked**.
+    #[test]
+    fn fifty_landings_ground_forty_one_notes_of_which_one_is_wrong() {
+        use mnemorph_memory::{Status, Tier, fold, read};
+        let w = std::env::temp_dir().join(format!("mnemorph-write-rule-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&w);
+        std::fs::create_dir_all(&w).unwrap();
+        let mut wrong_texts = std::collections::BTreeSet::new();
+        for i in 0..50 {
+            let path = format!("src/f{i}.rs");
+            let wrong = i % 5 == 0;
+            let caught = wrong && i != 45;
+            let diff_claim = if wrong {
+                format!("{path} rejects the empty input")
+            } else {
+                format!("{path} handles the empty input")
+            };
+            if wrong {
+                wrong_texts.insert(diff_claim.clone());
+            }
+            let report = format!(
+                "@S DONE\n@W {path}\n@U law {diff_claim}\n@U colony the API caps at {i}0 calls a minute\n@E"
+            );
+            // A caught wrong claim fails its gate twice: the run ends failed, nothing is said.
+            let ending = if caught {
+                Ending::Failed(format!(
+                    "the end gate failed twice: tests for {path} failed"
+                ))
+            } else {
+                Ending::Answered(report)
+            };
+            let verdict = crate::gate::GateVerdict {
+                changed: vec![PathBuf::from(&path)],
+                failures: Vec::new(),
+                unverified: Vec::new(),
+                unguarded: false,
+                wrote: false,
+                ran: 1,
+            };
+            let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");
+            let proof = (!caught)
+                .then(|| checked_proof("slime-s", Some((&verdict, Some(heading.as_str())))))
+                .flatten();
+            let _ = remember(&w, "slime-s", &ending, proof.as_ref());
+        }
+        let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
+        let personal = fold(&read(&w, &Tier::Personal("slime-s".into())).unwrap().rows);
+        assert_eq!(
+            shared.len(),
+            41,
+            "the 40 right claims and the one the verify lines missed"
+        );
+        assert!(shared.values().all(|n| n.status == Status::Grounded));
+        assert!(
+            shared.values().all(|n| n
+                .proof
+                .as_deref()
+                .is_some_and(|p| p.starts_with("checked: log.md ["))),
+            "every shared note cites its route's proof"
+        );
+        let wrong_grounded = shared
+            .values()
+            .filter(|n| wrong_texts.contains(&n.text))
+            .count();
+        assert_eq!(wrong_grounded, 1, "Pr[wrong | pass] = 1/41");
+        assert!(
+            shared.values().all(|n| !n.text.contains("calls a minute")),
+            "no claim about the world grounds through checked"
+        );
+        let world_claims: Vec<_> = personal
+            .values()
+            .filter(|n| n.text.contains("calls a minute"))
+            .collect();
+        assert_eq!(
+            world_claims.len(),
+            41,
+            "each passing landing's world claim, kept personal"
+        );
+        assert!(world_claims.iter().all(|n| n.status == Status::Proposed));
+        assert_eq!(
+            mnemorph_memory::findings(&w, "slime-s").unwrap(),
+            vec![],
+            "every event resolves"
+        );
         let _ = std::fs::remove_dir_all(&w);
     }
 }

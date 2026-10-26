@@ -8,15 +8,17 @@ use mnemorph_memory::{Proof, Route, Status, Tier, fold, ground, propose, read};
 #[test]
 fn every_proof_is_refused_without_its_evidence() {
     assert!(
-        Proof::checked("log.md: gate PASS", 0, 3).is_err(),
+        Proof::checked("log.md: gate PASS", 0, &["a.rs".into()]).is_err(),
         "no verify line ran"
     );
     assert!(
-        Proof::checked("log.md: gate PASS", 2, 0).is_err(),
+        Proof::checked("log.md: gate PASS", 2, &[]).is_err(),
         "nothing changed"
     );
     assert_eq!(
-        Proof::checked("log.md: gate PASS", 1, 1).unwrap().route(),
+        Proof::checked("log.md: gate PASS", 1, &["a.rs".into()])
+            .unwrap()
+            .route(),
         Route::Checked
     );
     assert!(Proof::accepted("verdict", false).is_err());
@@ -77,7 +79,16 @@ fn a_claim_lands_proposed_and_a_route_grounds_it_in_both_tiers() {
         fold(&read(&w, &Tier::Shared).unwrap().rows).is_empty(),
         "nothing unconfirmed is shared"
     );
-    let proof = Proof::checked("log.md: slime-s gate PASS", 2, 3).unwrap();
+    let proof = Proof::checked(
+        "log.md: slime-s gate PASS",
+        2,
+        &[
+            "src/parser.rs".into(),
+            "src/lexer.rs".into(),
+            "README.md".into(),
+        ],
+    )
+    .unwrap();
     let grounded = ground(&w, claim, &proof).unwrap();
     let mine = fold(&read(&w, &personal).unwrap().rows);
     let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
@@ -85,10 +96,9 @@ fn a_claim_lands_proposed_and_a_route_grounds_it_in_both_tiers() {
         assert_eq!(n.status, Status::Grounded);
         assert!((n.confidence - 0.7).abs() < 1e-9, "a check grounds at 0.7");
         assert!(
-            n.proof
-                .as_deref()
-                .unwrap()
-                .starts_with("checked: log.md: slime-s gate PASS")
+            n.proof.as_deref().unwrap().starts_with(
+                "checked: log.md: slime-s gate PASS (2 verify line(s) over 3 path(s))"
+            )
         );
     }
     assert_eq!(shared[&grounded.note].owner.as_deref(), Some("slime-s"));
@@ -430,5 +440,46 @@ fn a_proposed_claim_is_found_again_by_its_id() {
         (shared[&id].confidence - 0.6).abs() < 1e-9,
         "accepted grounds at 0.6"
     );
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// A checked proof covers only claims about its diff: the path, a `file:line` in it, a directory
+/// above it; never a claim about another file or the world beyond, which `ground` refuses.
+#[test]
+fn a_checked_proof_covers_only_its_diff() {
+    let proof = Proof::checked(
+        "log.md v",
+        1,
+        &["src/parser/mod.rs".into(), "src/a.rs".into()],
+    )
+    .unwrap();
+    assert!(proof.covers("src/a.rs:12 handles the empty case", None));
+    assert!(
+        proof.covers("the parser in src/parser keeps fractions", None),
+        "a directory above"
+    );
+    assert!(
+        proof.covers("it keeps fractions", Some("src/a.rs")),
+        "by its source"
+    );
+    assert!(!proof.covers("src/b.rs handles the empty case", None));
+    assert!(!proof.covers("the API caps at 100 a minute", None));
+    assert!(
+        Proof::confirmed("the human").covers("anything at all", None),
+        "other routes observe no diff"
+    );
+    let w = world_of("covers");
+    let world_claim = propose(&w, "slime-s", "the API caps at 100 a minute", vec![], None).unwrap();
+    let refused = ground(&w, world_claim, &proof).unwrap_err();
+    assert!(refused.to_string().contains("beyond the diff"), "{refused}");
+    let diff_claim = propose(
+        &w,
+        "slime-s",
+        "src/a.rs:12 handles the empty case",
+        vec![],
+        None,
+    )
+    .unwrap();
+    assert!(ground(&w, diff_claim, &proof).is_ok());
     let _ = fs::remove_dir_all(&w);
 }

@@ -292,13 +292,21 @@ nothing, and the orders a wake or an escalation runs offer none. An id naming no
 is said and grounds nothing; a claim it does not accept stays personal and proposed.
 
 A check also observes only what it tests. The end gate runs the verify lines and checks that the
-tests stayed intact; it never reads a claim. A claim about the diff (*this function now handles
+tests stayed intact; it never reads a claim. A claim about the diff (*`src/parser.rs` now handles
 the empty case*) is observed by a test that exercises it; a claim about the world beyond the
 diff (*the API rate-limits at 100 a minute*) passes a green gate as easily wrong as right, so for
 it the checked route observes nothing, and it needs **accepted**, **corroborated** or
 **confirmed**. A checked route's verify lines stood before the turn, so a wrong claim about the
 diff has to slip past a test written without it; that is why a pass with no verify line is not a
-route at all.
+route at all. A **checked** proof carries what its diff changed, and grounds only a claim that names
+one of those paths or the directories above them (by its specific terms: `src/a.rs:12` names
+`src/a.rs`, a path names its file); a diff of only files every project has (`Cargo.toml`,
+`README.md`) observes none;
+any other claim of the landing stays proposed, offered for the commissioner to accept. A
+commissioned body is asked to name the file a claim is about (`@U law <path> <fact>`), and the
+drain asks the same, so a claim about the work can be proven by the work's own tests. `memory
+status` opens with how much of the world's memory stands — shared and grounded, personal and
+proposed — the first number to read after a run, since only shared notes reach other bodies.
 
 ### Reconsolidation
 

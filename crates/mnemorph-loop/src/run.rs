@@ -2035,7 +2035,8 @@ impl Run {
     async fn drain(&mut self, why: String) -> Ending {
         let note = "The context is full and this session must break. Before it does, write down \
                     what is not durable, one line each: `@U <law|colony|territory> <fact>` for \
-                    what you learned that is written nowhere, then what is left. No tools.";
+                    what you learned that is written nowhere — naming the file it is about — then what is left. \
+                    No tools.";
         self.drains += 1;
         // The clock is not spent: the drain may take what is left of it, up to two minutes.
         let grace = self
