@@ -337,7 +337,13 @@ impl EndGate {
             failures.push("duties done: the answer is empty; say what was done".into());
         }
         if let Some(author) = &self.author {
-            failures.extend(right_author(author, &changed, cx.world()));
+            // What the body could not have written is another writer's: never its to answer for.
+            let its: Vec<PathBuf> = changed
+                .iter()
+                .filter(|p| cx.could_have_written(&cx.world().join(p)))
+                .cloned()
+                .collect();
+            failures.extend(right_author(author, &its, cx.world()));
         }
         let mut unverified = Vec::new();
         let unguarded = matches!(cx.sandbox(), mnemorph_tools::Sandbox::None(_))

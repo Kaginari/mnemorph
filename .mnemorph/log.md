@@ -3555,3 +3555,55 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   that chain from the journal.
 - **False start:** the first version passed vacuously. A guess that the classifier refused the
   `rm` was wrong; reading the journal showed the real chain.
+### [2026-10-26T01:28:43+01:00] rimuru — writes attributed per body (#10)
+- **Task:** #10's lesson "write attribution is per body (per sandbox)".
+- **Finding:** tool calls run one after another in a session, so the risk is a second session on
+  one world: its writes landed in a child's tree diff, failed the child's right author, and were
+  then put back, destroying that session's work.
+- **Files:**
+  - tools `Context::could_have_written`: under a guard, a narrowed body's grant (soil, build,
+    scratch nest, own plan); otherwise true;
+  - gate.rs: right author judges only what the body could have written;
+  - commission.rs `repair` skips another writer's change, judged by the child's own rebuilt
+    context with the parent's guard;
+  - docs 03.
+- **Test:** `another_writers_change_is_not_the_bodys_under_a_guard`, guarded and unguarded. No
+  end-to-end put-back test: a scripted run cannot make a second session write mid-run.
+
+---
+
+### [2026-10-26T01:37:34+01:00] rimuru — #191's security review: Opus
+- **Opus found:** no full laundering hole. The predicate matches the real grant or is more
+  generous, symlinks are resolved, and a missing guard runs nothing.
+  - LOW: `repair` rebuilt the grant after the run (a changed `.gitignore` moves the build grant);
+  - LOW: skipped changes were named nowhere;
+  - INFO: Seatbelt off macOS runs unguarded but read as guarded.
+- **Fixed:**
+  - the grant is captured before the child runs and passed to `repair`;
+  - `repair` returns another writer's changes, and the report says "[another writer changed, left
+    as it is: …]";
+  - Seatbelt counts as a guard only on macOS;
+  - docs 03;
+  - `held_before` was extracted to keep `order` under 100 lines.
+- **Next:** Fable checks Opus's review.
+
+---
+
+### [2026-10-26T01:45:15+01:00] rimuru — #191: Fable checked Opus
+- **Fable confirmed Opus:** safe to merge. A skipped path stays in the dispatcher's view and
+  floats up; solo is not narrowed, so nothing is skipped there. One LOW: the second
+  `context_for` leaked a `/tmp` scratch dir per commission.
+- **Fixed:**
+  - `Grant` (`Context::write_grant`) is taken from the child's real context before it runs, with
+    no second context;
+  - `Context::admits` and the grant share one `admits` function, so the two cannot drift.
+
+---
+
+### [2026-10-26T01:49:58+01:00] rimuru — #191: macOS CI
+- **Found:** macOS CI failed the attribution test. The grant stores resolved paths, but the
+  predicate compared the path as asked, and macOS temp dirs sit behind `/var` → `/private/var`.
+- **Fixed:** `Grant::could_have_written` resolves the asked path with `real()`.
+- **Test:** it now also asks through a symlinked alias of the world, so Linux catches the same
+  class. It fails without the fix.
+- **Note:** #191 was correctly not merged on the red check.
