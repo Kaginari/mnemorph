@@ -193,3 +193,52 @@ pub fn compacted(ask: &str, summary: &str, tail: &[Message]) -> Vec<Message> {
     out.extend(tail.iter().cloned());
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{compacted, tail_from};
+    use mnemorph_provider::{Block, Message, Role};
+
+    fn text(role: Role, t: &str) -> Message {
+        Message {
+            role,
+            content: vec![Block::Text {
+                text: t.into(),
+                cache: false,
+            }],
+        }
+    }
+
+    #[test]
+    fn the_tail_starts_at_an_assistant_turn_and_may_be_empty() {
+        let small = [
+            text(Role::User, "ask"),
+            text(Role::Assistant, "a"),
+            text(Role::User, "r"),
+            text(Role::Assistant, "b"),
+            text(Role::User, "s"),
+        ];
+        assert_eq!(
+            tail_from(&small, 1_000),
+            1,
+            "all but the ask fits, from the first assistant"
+        );
+        assert_eq!(
+            tail_from(&small, 2),
+            3,
+            "from the last assistant turn that fits"
+        );
+        let big = [
+            text(Role::Assistant, "a"),
+            text(Role::User, &"x".repeat(50_000)),
+        ];
+        assert_eq!(
+            tail_from(&big, 40_000),
+            2,
+            "a result past the budget: nothing kept"
+        );
+        let alone = compacted("ask", "## Goal\nx", &big[2..]);
+        assert_eq!(alone.len(), 1, "the head alone");
+        assert_eq!(alone[0].role, Role::User);
+    }
+}

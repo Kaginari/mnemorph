@@ -132,14 +132,17 @@ sent only grows, and each turn reads it from the provider's cache
 history would be 150 KB sends at most about 55 KB a turn, and with the cache it is billed a third of its input.
 
 **A full context compacts**: at the stress line, once folding cannot bring the next request
-under it, the body writes the summary that will replace the conversation — one turn without
-tools, capped at 4096 tokens, in fixed sections: *Goal*, *Instructions*, *Discoveries* (one
+under it, the body writes the summary that will replace the conversation — one turn, told to
+call no tool and sent with the same tools and cache marks as any turn, so the cached prefix is
+read rather than rebuilt; capped at 4096 tokens, in fixed sections: *Goal*, *Instructions*, *Discoveries* (one
 `@U <law|colony|territory> <path> <fact>` line each), *Accomplished*, *Files* (one `@F <path> …`
-line each), *Todo*. The conversation becomes the ask with that summary, then the newest exchanges
+line each), *Todo*. The conversation becomes the ask — with the Minds' manifest, when this ask did not carry it —
+and that summary, then the newest exchanges
 verbatim — from an assistant turn, so every result kept has its call, up to 40,000 bytes — and
 the run goes on. The discoveries are kept as the body's proposed notes, as a drain's are. The
-journal keeps everything and records the compaction as a beat, so a resume rebuilds the same
-conversation. An ask compacts at most twice (`Limits::compactions`); a summary that does not
+journal keeps everything and records the compaction as a beat — with its head and the context it
+was estimated to carry — so a resume rebuilds the same conversation and reads that estimate, not
+the summary turn's reading of the full one. An ask compacts at most twice (`Limits::compactions`); a summary that does not
 come back drains instead.
 
 **A full context drains** once its compactions are spent: the body gets one more turn —

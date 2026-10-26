@@ -4303,3 +4303,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     `conversation(journal) == messages` (resume); the discovery is a proposed note;
   - spent compactions drain;
   - the old drain and context tests opt out with `compactions: 0`.
+
+---
+
+### [2026-10-26T11:03:45+01:00] rimuru — #209's review: Fable
+- **Verdict:** mergeable after #1; #2 before the bench runs on it.
+- **Fable found:**
+  1. a resume right after a compaction read the summary turn's full-context reading and
+     compacted the small conversation again;
+  2. the summary turn missed the cache, because clearing the tools invalidates the whole prefix,
+     costing up to 150k tokens at full price twice an ask;
+  3. a later ask's compaction lost the Minds' manifest;
+  4. a failed compaction drained regardless of `drains`, and said nothing.
+- **Fixed:**
+  - `Beat::Compacted` gains `head` and `occupancy` (serde default); resume reads the estimate
+    when a compaction follows the last model turn;
+  - the summary request is the run's own `request()`, with tools and marks, over the messages
+    plus the note, then restored;
+  - `manifest_said` keeps the manifest, and the head carries it when the ask did not;
+  - warnings on a timeout or an empty summary; `meet` drains only when `drains == 0`;
+  - docs 03.
+- **Tests:**
+  - loop.rs: two compactions with replay equality; a resume answers without compacting;
+    the summary turn's tools equal the previous turn's;
+  - compact.rs: `tail_from`'s assistant start and empty tail.
+  - The resume test does not isolate the stale-reading case (its ledger's last row is already
+    small); that path is three lines and reviewed.

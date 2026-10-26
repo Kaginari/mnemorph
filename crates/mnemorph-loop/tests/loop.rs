@@ -1689,11 +1689,9 @@ async fn a_full_context_compacts_and_the_run_goes_on() {
     let e = ask(&mut run, "map the repo").await;
     assert_eq!(e, Ending::Answered("done: the repo is mapped".into()));
     let requests = model.requests();
-    assert_eq!(requests.len(), 3);
     assert_eq!(
-        requests[1].tools,
-        [] as [mnemorph_provider::Tool; 0],
-        "the summary turn has no tools"
+        requests[1].tools, requests[0].tools,
+        "the summary turn sends the tools as any turn does: the cached prefix holds"
     );
     let after = &requests[2].messages;
     let head = format!("{:?}", after[0]);
@@ -1759,4 +1757,46 @@ async fn spent_compactions_drain() {
         "{e:?}"
     );
     assert_eq!(model.requests().len(), 4, "one compaction, then the drain");
+}
+
+/// Two compactions in one ask: each leaves the head and its summary, the journal replays exactly
+/// what was sent, and a resume reads the compaction's own estimate — it does not compact the
+/// small conversation again.
+#[tokio::test]
+async fn two_compactions_replay_and_a_resume_reads_their_estimate() {
+    let w = World::new("compact-twice");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer(SUMMARY),
+        tool_with("t2", "glob", json!({"pattern": "*"}), usage(182_000)),
+        answer(SUMMARY),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "map the repo").await;
+    assert_eq!(e, Ending::Answered("done".into()));
+    let rows = w.journal().read().unwrap().rows;
+    let tails: Vec<usize> = rows
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Compacted { tail, .. } => Some(*tail),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tails.len(), 2, "two compactions");
+    assert_eq!(
+        conversation(&rows),
+        run.messages(),
+        "the journal replays what was sent"
+    );
+    // A resume over this journal reads the last compaction's estimate, not a full reading.
+    let after = Arc::new(ScriptedModel::new([answer("resumed")]));
+    let mut resumed = Run::resume(body(), limits(), w.setup(after.clone())).unwrap();
+    let e = ask(&mut resumed, "and now?").await;
+    assert_eq!(
+        e,
+        Ending::Answered("resumed".into()),
+        "no compaction of the compacted"
+    );
+    assert_eq!(after.requests().len(), 1);
 }

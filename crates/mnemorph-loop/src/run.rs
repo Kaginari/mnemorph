@@ -290,6 +290,9 @@ pub struct Run {
     compactions: u32,
     /// This ask's own text as journaled: what a structured compaction keeps at the head.
     ask_said: String,
+    /// The Minds' manifest as the session's first ask said it: a compaction in a later ask keeps
+    /// it at the head, so the toolbox is never lost.
+    manifest_said: Option<String>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -380,6 +383,7 @@ impl Run {
             drains: 0,
             compactions: 0,
             ask_said: String::new(),
+            manifest_said: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -590,6 +594,18 @@ impl Run {
                 .collect();
             run.spent_wt = rows.iter().map(|r| r.wt).sum();
             run.last_occupancy = rows.last().map_or(0, |r| occupancy(r.usage));
+            // A compaction after the last model turn left its own estimate: the ledger's last
+            // reading is the summary turn's, taken over the full context.
+            let last_model = beats.iter().rposition(|b| matches!(b, Beat::Model { .. }));
+            if let Some(Beat::Compacted { occupancy, .. }) = beats
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| last_model.is_none_or(|m| *i > m))
+                .map(|(_, b)| b)
+                .rfind(|b| matches!(b, Beat::Compacted { .. }))
+            {
+                run.last_occupancy = *occupancy;
+            }
         }
         // A conversation already past the fold mark was sent folded before the stop: it resumes
         // folded, and the occupancy read back is never counted as savings a second time.
@@ -1456,7 +1472,10 @@ impl Run {
         let recalled = self.recall(text);
         // The first ask carries the toolbox's manifest.
         let asked = match self.manifest.take() {
-            Some(manifest) => format!("{manifest}\n\n{asked}"),
+            Some(manifest) => {
+                self.manifest_said = Some(manifest.clone());
+                format!("{manifest}\n\n{asked}")
+            }
             None => asked,
         };
         // A fresh session's first ask opens with what earlier sessions learned.
@@ -2070,7 +2089,12 @@ impl Run {
             Stop::End(ending) => Some(self.end(ending)),
             Stop::Salvage(why) => Some(self.salvage(why).await),
             Stop::Drain(why) => Some(self.drain(why).await),
-            Stop::Compact(why) if !self.compact().await => Some(self.drain(why).await),
+            // A compaction that failed drains — once a run, as any drain.
+            Stop::Compact(why) if !self.compact().await => Some(if self.drains == 0 {
+                self.drain(why).await
+            } else {
+                self.end(Ending::Checkpoint { why, salvage: None })
+            }),
             Stop::Compact(_) => None,
         }
     }
@@ -2080,17 +2104,18 @@ impl Run {
     /// the newest exchanges verbatim, up to [`KEEP_BYTES`]. The journal keeps everything; a resume
     /// rebuilds the same conversation from the compaction's beat. False when no summary came back.
     async fn compact(&mut self) -> bool {
-        let mut scratch = self.messages.clone();
+        // The request as any other — the tools and the cache marks kept, so the cached prefix is
+        // read, not rebuilt — with the note after it; the conversation itself is left as it was.
+        let kept = self.messages.clone();
         push_user(
-            &mut scratch,
+            &mut self.messages,
             vec![Block::Text {
                 text: SUMMARY_NOTE.to_owned(),
                 cache: false,
             }],
         );
-        let mut request = self.request(SALVAGE_TOKENS);
-        request.messages = fold(&scratch, self.folded_upto);
-        request.tools.clear();
+        let request = self.request(SALVAGE_TOKENS);
+        self.messages = kept;
         let grace = self
             .limits
             .deadline
@@ -2100,6 +2125,9 @@ impl Run {
         let Ok(Ok(r)) =
             tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await
         else {
+            self.record(&Beat::Warning {
+                text: "compaction: the summary turn gave nothing in time".into(),
+            });
             return false;
         };
         let row = usage_row(
@@ -2112,24 +2140,34 @@ impl Run {
         self.spend(&row);
         let summary = text_of(&r.content);
         if summary.trim().is_empty() {
+            self.record(&Beat::Warning {
+                text: "compaction: the summary turn came back empty".into(),
+            });
             return false;
         }
         let from = tail_from(&self.messages, KEEP_BYTES);
         let tail = self.messages.len() - from;
         let before: usize = self.messages.iter().map(message_bytes).sum();
-        self.messages = compacted(&self.ask_said, &summary, &self.messages[from..]);
+        // The head: the ask as journaled, with the Minds' manifest when this ask did not carry it.
+        let head = match &self.manifest_said {
+            Some(m) if !self.ask_said.contains(m.as_str()) => format!("{m}\n\n{}", self.ask_said),
+            _ => self.ask_said.clone(),
+        };
+        self.messages = compacted(&head, &summary, &self.messages[from..]);
         let after: usize = self.messages.iter().map(message_bytes).sum();
-        self.record(&Beat::Compacted {
-            summary: summary.clone(),
-            tail,
-        });
-        let (notes, facts) = self.keep_unsaid(&summary);
         // The context the next request carries, scaled by what the compaction took out; the
-        // provider's next reading corrects it.
+        // provider's next reading corrects it, and a resume reads it from the beat.
         self.last_occupancy = u64::try_from(
             u128::from(self.last_occupancy) * (after as u128) / (before.max(1) as u128),
         )
         .unwrap_or(self.last_occupancy);
+        self.record(&Beat::Compacted {
+            summary: summary.clone(),
+            tail,
+            head,
+            occupancy: self.last_occupancy,
+        });
+        let (notes, facts) = self.keep_unsaid(&summary);
         self.folded_upto = 0;
         self.ask_from = 0;
         self.sent.0.clear();
