@@ -33,7 +33,7 @@ impl Tier {
 
     /// The tier's journal in `world`.
     #[must_use]
-    pub fn journal(&self, world: &Path) -> Journal<Event> {
+    pub(crate) fn journal(&self, world: &Path) -> Journal<Event> {
         Journal::new(world.join(self.file()))
     }
 }
@@ -64,12 +64,14 @@ pub fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// Append `change` about `note` to `tier`, by `by`, citing `proof`: one full line, synced.
+/// Append `change` about `note` to `tier`, by `by`, citing `proof`: one full line, synced. Inside
+/// the crate only: outside it, a body's words land through [`crate::propose`], and a standing
+/// through [`crate::ground`] with its route's proof.
 ///
 /// # Errors
 ///
 /// The file cannot be opened, written or synced.
-pub fn append(
+pub(crate) fn append(
     world: &Path,
     tier: &Tier,
     note: &str,

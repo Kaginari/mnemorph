@@ -239,7 +239,7 @@ Writes to the traces are a function of observed outcomes, never of model output 
 | a human's correction | shared | grounded | revise | 1.0 | 1.0 |
 
 Only the record beat, the gate and the promotion routes hold the write path, and that is a
-type, not a habit: a `Note<Proposed>` becomes a `Note<Grounded>` only through a value that
+type, not a habit: a `Claim<Proposed>` becomes a `Claim<Grounded>` only through a value that
 carries its route's proof (a gate verdict, a passed verify line, a commissioner's verdict, a
 second creature's anchors, a human answer). A body cannot ground its own words.
 

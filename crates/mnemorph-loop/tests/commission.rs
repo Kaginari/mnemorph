@@ -399,6 +399,72 @@ async fn a_foreign_untracked_file_survives_a_cleanup_turn() {
     );
 }
 
+/// The write rule through a commission: a Slime's `@U` claim lands personal and proposed, and
+/// its landing — a verify line over a real diff — grounds it into shared memory by **checked**;
+/// a territory fact goes to the ontology, never memory.
+#[tokio::test]
+async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    for landing in [true, false] {
+        let w = World::new(if landing {
+            "remember-landed"
+        } else {
+            "remember-bare"
+        });
+        let act = if landing {
+            "echo done > src/done.txt"
+        } else {
+            "true"
+        };
+        let model = Arc::new(ScriptedModel::new([
+            order("c1", "elf-e"),
+            order("c2", "orc-o"),
+            order("c3", "slime-s"),
+            ScriptedModel::tool("b1", "bash", json!({"command": act})),
+            ScriptedModel::text(
+                "@S DONE\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
+            ),
+            // The Orc wrote nothing itself: its gate ran nothing, whatever its Slime landed.
+            ScriptedModel::text("@S DONE\n@U law the orc thinks the slime was right\n@E"),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("Reported."),
+        ]));
+        let mut run = w.rimuru(model.clone());
+        run.ask("go", &mut |_| {}).await;
+        let mine = fold(&read(&w.0, &Tier::Personal("slime-s".into())).unwrap().rows);
+        let shared = fold(&read(&w.0, &Tier::Shared).unwrap().rows);
+        let texts: Vec<&str> = mine.values().map(|n| n.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["the parser keeps interval fractions"],
+            "territory is not memory"
+        );
+        let n = mine.values().next().unwrap();
+        let orc = fold(&read(&w.0, &Tier::Personal("orc-o".into())).unwrap().rows);
+        assert!(
+            orc.values().all(|n| n.status == Status::Proposed),
+            "a gate that ran nothing grounds nothing: {orc:?}"
+        );
+        if landing {
+            assert_eq!(n.status, Status::Grounded);
+            assert_eq!(
+                shared.len(),
+                1,
+                "only the Slime's claim, grounded into shared memory"
+            );
+            assert!(shared.values().all(|s| s.status == Status::Grounded));
+        } else {
+            assert_eq!(
+                n.status,
+                Status::Proposed,
+                "a pass over no diff proves nothing"
+            );
+            assert!(shared.is_empty(), "nothing unconfirmed is shared");
+        }
+    }
+}
+
 /// The human's Esc reaches a body three ranks down.
 #[tokio::test]
 async fn esc_stops_the_child() {

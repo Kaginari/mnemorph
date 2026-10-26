@@ -229,6 +229,9 @@ pub struct Run {
     before: Option<Tree>,
     interrupt: Arc<Interrupt>,
     folded_upto: usize,
+    /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
+    /// a **checked** route cites.
+    passed: Option<(crate::gate::GateVerdict, Option<String>)>,
     /// The fingerprints of the last request's messages, and the fold it was sent under: the next
     /// request must only append to them, unless a fold moved.
     sent: (Vec<u64>, usize),
@@ -302,6 +305,7 @@ impl Run {
             before: None,
             interrupt,
             folded_upto: 0,
+            passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
             decisions: None,
@@ -523,6 +527,12 @@ impl Run {
     #[must_use]
     pub fn interrupt(&self) -> Arc<Interrupt> {
         Arc::clone(&self.interrupt)
+    }
+
+    /// The last verdict the end gate passed on a change, and the journal heading it wrote.
+    #[must_use]
+    pub fn passed_gate(&self) -> Option<(&crate::gate::GateVerdict, Option<&str>)> {
+        self.passed.as_ref().map(|(v, h)| (v, h.as_deref()))
     }
 
     /// The conversation so far.
@@ -881,7 +891,7 @@ impl Run {
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.
-    fn log_verdict(&self, verdict: &crate::gate::GateVerdict, retried: bool) {
+    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) {
         // An answer that changed nothing passed untouched: there is nothing to journal.
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
             return;
@@ -919,10 +929,15 @@ impl Run {
             title: format!("gate: {word}"),
             lines,
         };
-        if let Err(e) = mnemorph_world::log::append(self.cx.world(), &entry) {
-            self.record(&Beat::Warning {
+        match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
+            Ok(heading) => {
+                if verdict.passed() {
+                    self.passed = Some((verdict.clone(), heading));
+                }
+            }
+            Err(e) => self.record(&Beat::Warning {
                 text: format!("the gate's verdict could not reach the journal: {e}"),
-            });
+            }),
         }
     }
 
