@@ -4012,3 +4012,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08 cover waking by a grounded status, "heard" by either act, and per-machine traces.
 - **Test:** a personal note retires through shared strikes; after a human waking, one more
   failure doesn't retire it.
+
+---
+
+### [2026-10-26T09:07:27+01:00] rimuru — retirement weighs evidence, never company
+- **Why** (the human, relaying a side agent: "two failed runs can retire a correct note … can you
+  do it in an effective agent way and smart way"): two-strikes blamed a note for any failure it
+  sat beside. A weak bench model fails often, and correct notes would have been retired.
+- **The rule now:**
+  - **attribution:** a failure strikes only when its failed lines share a specific term with the
+    note (path, file, identifier; `file:line` meets the file, a path its file name);
+  - **counter-evidence:** a passing, landed ask credits the notes it cited (`confirm`, Gate
+    Confidence events citing `passed:`; every third pass adds +0.05, as page 08 already promised
+    and nothing did);
+  - **doubt first:** a first attributable failure takes 0.1 of confidence (floor 0.3);
+  - **retire** only when two or more distinct attributable failures outnumber passes, since the
+    last grounding;
+  - both copies (the creature's and the shared) move together;
+  - **review:** `memory status` lists retired notes with their undo; `mnemorph memory wake
+    <note>` is the human's alone.
+- **Found by the tests:**
+  - a same-millisecond grounding hid the strike (now `>=`);
+  - `utf8.sql::test_x` didn't meet `utf8.sql` (terms now yield their parts);
+  - retiring a personal note left its shared copy recalled by others (now both);
+  - `retired` listed a note twice (deduplicated).
+- **Process:** #202's queued merge was stopped first, so the blunt rule never reached main.

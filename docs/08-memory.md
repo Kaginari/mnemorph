@@ -307,13 +307,15 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   bystander;
 - it never targets a dissenting note: a counter or revise note recalled into a failed turn is
   left as it is, so corrections do not breed corrections;
-- **what failed twice is retired**: an anchor the ask cited goes dormant once two distinct
-  run-ending failures have cited it since it was last grounded — grounded revise notes, in shared
-  memory or the asker's own tier, linking it at 0.9, told apart by the verdict they cite. Its
-  events stay: the human wakes it by appending a grounded status, and only failures after that
-  count again. Dormant, it is no longer recalled. A shared note whose owner's memory is frozen is
-  left for the human, and a failure whose verdict reached no journal entry shares one fallback
-  citation, so it can only under-count.
+- **a note is weighed, never blamed by company**: a failure counts against an anchor the ask
+  cited only when it is *attributable* — what failed names something the note names (a path, a
+  file, an identifier; a `file:line` meets its file, a path its file name), the failed rules'
+  names aside. A slow test, a weak model or an unrelated bug shares none, and strikes nothing.
+  A first attributable failure *doubts* the note: its confidence drops by 0.1, never under 0.3, so
+  it ranks lower and is still shown. It is *retired* — dormant, its events kept, no longer
+  recalled — once two distinct attributable failures outnumber the passing asks that cited it, all
+  counted since it was last grounded. Both copies of a grounded note, the creature's and the
+  shared one, move together. A shared note whose owner's memory is frozen is left for the human.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 
@@ -325,8 +327,14 @@ which is worth $0.154 / 0.42 \approx 0.37$ of normalised meaning: a correction o
 note that matches the query 0.37 better. Recency, by contrast, can move a score by at most
 $w_t = 0.07$.
 
-A note that passes the gate three times after being recalled gains confidence
-($\kappa \leftarrow \min(0.95, \kappa + 0.05)$); it never gains salience by repetition alone.
+A note cited by an ask whose change the gate passed gains a pass, citing that verdict: the
+evidence retirement weighs failures against. Every third pass since its last grounding raises its
+confidence ($\kappa \leftarrow \min(0.95, \kappa + 0.05)$); it never gains salience by repetition
+alone.
+
+`mnemorph memory status` lists each retired note with its undo; `mnemorph memory wake <note>` —
+the human's alone, refused to a body — grounds it again in every tier that holds it, and only
+evidence after the waking counts.
 
 ### Consolidation and forgetting
 

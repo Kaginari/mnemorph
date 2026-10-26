@@ -1001,8 +1001,11 @@ impl Run {
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
                 // A change landed only when the gate passed it: a failure is no new outcome.
-                if verdict.passed() && heading.is_some() {
-                    self.landed_in_ask.clone_from(&heading);
+                if verdict.passed()
+                    && let Some(h) = heading.as_deref()
+                {
+                    self.landed_in_ask = Some(h.to_owned());
+                    self.credit(h);
                 }
                 if verdict.passed() {
                     self.passed = Some((verdict.clone(), heading.clone()));
@@ -1020,8 +1023,9 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
-        // What the ask said and did — its text and its acts' arguments — names the anchors it cited.
+    /// The anchors recalled into this ask, each marked cited when what the ask said and did — its
+    /// text and its acts' arguments — names it.
+    fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
         let said: String = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
             .flat_map(|m| &m.content)
@@ -1032,14 +1036,31 @@ impl Run {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let anchors: Vec<mnemorph_memory::Anchor> = self
-            .anchors
+        self.anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
                 cited: said.contains(&a.id),
                 ..a.clone()
             })
-            .collect();
+            .collect()
+    }
+
+    /// A passing ask that landed credits the notes it cited: evidence for them, weighed against
+    /// the failures laid at their door.
+    fn credit(&mut self, heading: &str) {
+        let anchors = self.cited_anchors();
+        let verdict = format!("log.md {heading}");
+        if let Err(e) =
+            mnemorph_memory::confirm(self.cx.world(), &self.body.name, &anchors, &verdict)
+        {
+            self.record(&Beat::Warning {
+                text: format!("the pass could not credit the notes it cited: {e}"),
+            });
+        }
+    }
+
+    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
+        let anchors = self.cited_anchors();
         let verdict = heading.map_or_else(
             || format!("log.md: {} gate: FAIL", self.body.name),
             |h| format!("log.md {h}"),
@@ -1052,17 +1073,30 @@ impl Run {
             });
             return;
         }
-        // What failed twice, cited, is retired: dormant, kept, no longer recalled.
+        // A failure laid at a note's door doubts it; enough of them, outnumbering its passes,
+        // retire it — dormant, kept, for the human to review.
         match mnemorph_memory::retire(self.cx.world(), &self.body.name, &anchors, &verdict) {
-            Ok(retired) if !retired.is_empty() => self.record(&Beat::Warning {
-                text: format!(
-                    "memory: retired after a second cited failure, kept dormant: {}",
-                    retired.join(", ")
-                ),
-            }),
-            Ok(_) => {}
+            Ok(r) => {
+                if !r.doubted.is_empty() {
+                    self.record(&Beat::Warning {
+                        text: format!(
+                            "memory: doubted, a failure named what it names: {}",
+                            r.doubted.join(", ")
+                        ),
+                    });
+                }
+                if !r.retired.is_empty() {
+                    self.record(&Beat::Warning {
+                        text: format!(
+                            "memory: retired, kept dormant — its failures outnumber its passes \
+                             (`mnemorph memory wake <id>` undoes it): {}",
+                            r.retired.join(", ")
+                        ),
+                    });
+                }
+            }
             Err(e) => self.record(&Beat::Warning {
-                text: format!("memory could not retire what failed twice: {e}"),
+                text: format!("memory could not weigh the failure against the notes it cited: {e}"),
             }),
         }
     }

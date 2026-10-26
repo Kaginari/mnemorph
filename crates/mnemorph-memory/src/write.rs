@@ -404,15 +404,157 @@ pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
     Ok(note)
 }
 
-/// How many run-ending failures must cite a note before it is retired.
+/// How many attributable failures a note must have caused before it is retired.
 pub const STRIKES: usize = 2;
+/// The confidence a first attributable failure takes from a note, and the floor it stops at.
+pub const DOUBT: f64 = 0.1;
+/// How low doubt brings a note's confidence.
+pub const DOUBT_FLOOR: f64 = 0.3;
 
-/// Retire what failed twice: each anchor the ask cited goes dormant once [`STRIKES`] distinct
-/// failures have cited it since it was last grounded — grounded revise notes, in shared memory or
-/// the asker's own tier, linking it at 0.9, told apart by the verdict they cite. Its events stay, so
-/// a human may wake it with a grounded status, and only failures after that count again; dormant,
-/// it is no longer recalled, and lock-in has no revision of it left to force. A shared note whose
-/// owner's memory is frozen is left for the human. Run after [`revise`]; returns the notes retired.
+/// Whether a failure can be laid at a note's door: what failed names something the note names — a
+/// path, a file, an identifier — once the failed rules' names are set aside. A slow test, a weak
+/// model or an unrelated bug shares none of them, and strikes nothing.
+#[must_use]
+pub fn attributable(note: &str, failure: &str) -> bool {
+    // A revise note reads `rule: line; rule: line`: the lines are what failed, the rules are not.
+    let lines: String = failure
+        .split("; ")
+        .map(|part| part.split_once(": ").map_or(part, |(_, line)| line))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let said = crate::text::specific_terms(note);
+    !said.is_empty()
+        && crate::text::specific_terms(&lines)
+            .iter()
+            .any(|t| said.contains(t))
+}
+
+/// The evidence on one note since it was last grounded: the distinct failures laid at its door,
+/// and the passing asks that cited it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Evidence {
+    /// The verdicts of the attributable failures that cited it.
+    pub strikes: std::collections::BTreeSet<String>,
+    /// How many passing asks cited it.
+    pub passes: usize,
+}
+
+/// The evidence on the note `id` of `rows` (its own tier), with `revisions` the grounded revise
+/// notes that may strike it.
+fn evidence(id: &str, rows: &[crate::note::Event], note: &Note, revisions: &[Note]) -> Evidence {
+    let since = rows
+        .iter()
+        .filter(|e| {
+            e.note == id
+                && matches!(
+                    e.change,
+                    Change::Status {
+                        status: Status::Grounded
+                    }
+                )
+        })
+        .map(|e| e.time)
+        .max()
+        .unwrap_or(0);
+    let strikes = revisions
+        .iter()
+        .filter(|r| {
+            r.born >= since
+                && r.links.iter().any(|l| l.note == id && l.weight >= 0.9)
+                && attributable(&note.text, &r.text)
+        })
+        .filter_map(|r| r.source.clone())
+        .collect();
+    let passes = rows
+        .iter()
+        .filter(|e| {
+            e.note == id
+                && e.time >= since
+                && matches!(e.by, By::Gate)
+                && matches!(e.change, Change::Confidence { .. })
+                && e.proof
+                    .as_deref()
+                    .is_some_and(|p| p.starts_with("passed: "))
+        })
+        .count();
+    Evidence { strikes, passes }
+}
+
+/// What a passing ask says of the notes it cited: each gains a pass, citing the verdict, and every
+/// third pass since its last grounding raises its confidence by 0.05, to at most 0.95. Returns how
+/// many notes were credited.
+///
+/// # Errors
+///
+/// The creature's memory is frozen ([`crate::unfrozen`]), or a note file cannot be read or
+/// written.
+pub fn confirm(
+    world: &Path,
+    owner: &str,
+    recalled: &[Anchor],
+    verdict: &str,
+) -> std::io::Result<usize> {
+    let cited: Vec<&Anchor> = recalled.iter().filter(|a| a.cited && !a.dissent).collect();
+    if cited.is_empty() {
+        return Ok(0);
+    }
+    crate::audit::unfrozen(world, owner)?;
+    let mut credited = 0;
+    for a in cited {
+        let tier = if a.personal {
+            Tier::Personal(owner.to_owned())
+        } else {
+            Tier::Shared
+        };
+        let rows = crate::store::read(world, &tier)?.rows;
+        let notes = crate::note::fold(&rows);
+        let Some(n) = notes.get(&a.id).filter(|n| n.status == Status::Grounded) else {
+            continue;
+        };
+        let passes = evidence(&a.id, &rows, n, &[]).passes + 1;
+        let confidence = if passes.is_multiple_of(3) {
+            (n.confidence + 0.05).min(0.95)
+        } else {
+            n.confidence
+        };
+        // The same note in either tier: the creature's copy and the shared one move together.
+        for t in [Tier::Personal(owner.to_owned()), Tier::Shared] {
+            let held = t == tier
+                || crate::store::read(world, &t)?
+                    .rows
+                    .iter()
+                    .any(|e| e.note == a.id);
+            if held {
+                append(
+                    world,
+                    &t,
+                    &a.id,
+                    By::Gate,
+                    Some(format!("passed: {verdict}")),
+                    Change::Confidence { confidence },
+                )?;
+            }
+        }
+        credited += 1;
+    }
+    Ok(credited)
+}
+
+/// What [`retire`] did to the notes the failing ask cited.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Retired {
+    /// Retired: dormant, kept, no longer recalled.
+    pub retired: Vec<String>,
+    /// Doubted: a first attributable failure took [`DOUBT`] of their confidence.
+    pub doubted: Vec<String>,
+}
+
+/// Weigh what a run-ending failure says of the notes its ask cited. A failure counts against a
+/// note only when it is [`attributable`] to it; then a first such failure doubts the note, and it
+/// is retired — dormant, its events kept, no longer recalled — once [`STRIKES`] distinct
+/// attributable failures outnumber the passing asks that cited it, all since it was last grounded.
+/// The human wakes a retired note with [`wake`], and only evidence after that counts. A shared note
+/// whose owner's memory is frozen is left for the human. Run after [`revise`].
 ///
 /// # Errors
 ///
@@ -423,10 +565,11 @@ pub fn retire(
     owner: &str,
     recalled: &[Anchor],
     verdict: &str,
-) -> std::io::Result<Vec<String>> {
+) -> std::io::Result<Retired> {
     let cited: Vec<&Anchor> = recalled.iter().filter(|a| a.cited && !a.dissent).collect();
+    let mut out = Retired::default();
     if cited.is_empty() {
-        return Ok(Vec::new());
+        return Ok(out);
     }
     crate::audit::unfrozen(world, owner)?;
     let personal = Tier::Personal(owner.to_owned());
@@ -438,13 +581,8 @@ pub fn retire(
         .chain(crate::note::fold(&own_rows).into_values())
         .filter(|r| r.polarity == Polarity::Revise && r.status == Status::Grounded)
         .collect();
-    let mut retired = Vec::new();
     for a in cited {
-        let (tier, rows) = if a.personal {
-            (&personal, &own_rows)
-        } else {
-            (&Tier::Shared, &shared_rows)
-        };
+        let rows = if a.personal { &own_rows } else { &shared_rows };
         let notes = crate::note::fold(rows);
         let Some(n) = notes.get(&a.id) else {
             continue;
@@ -458,39 +596,109 @@ pub fn retire(
         {
             continue;
         }
-        // Strikes since its last grounding: a note the human woke starts clean.
-        let since = rows
-            .iter()
-            .filter(|e| {
-                e.note == a.id
-                    && matches!(
-                        e.change,
-                        Change::Status {
-                            status: Status::Grounded
-                        }
-                    )
-            })
-            .map(|e| e.time)
-            .max()
-            .unwrap_or(0);
-        let strikes: std::collections::BTreeSet<&str> = revisions
-            .iter()
-            .filter(|r| r.born > since && r.links.iter().any(|l| l.note == a.id && l.weight >= 0.9))
-            .filter_map(|r| r.source.as_deref())
-            .collect();
-        if strikes.len() >= STRIKES {
-            append(
-                world,
-                tier,
-                &a.id,
-                By::Gate,
-                Some(verdict.to_owned()),
-                Change::Status {
-                    status: Status::Dormant,
-                },
-            )?;
-            retired.push(a.id.clone());
+        let e = evidence(&a.id, rows, n, &revisions);
+        if !e.strikes.contains(verdict) {
+            continue;
+        }
+        let change = if e.strikes.len() >= STRIKES && e.strikes.len() > e.passes {
+            out.retired.push(a.id.clone());
+            Change::Status {
+                status: Status::Dormant,
+            }
+        } else {
+            out.doubted.push(a.id.clone());
+            Change::Confidence {
+                confidence: (n.confidence - DOUBT).max(DOUBT_FLOOR),
+            }
+        };
+        // The same note in either tier: the creature's copy and the shared one move together.
+        for (t, held) in [(&personal, &own_rows), (&Tier::Shared, &shared_rows)] {
+            if held.iter().any(|e| e.note == a.id) {
+                append(
+                    world,
+                    t,
+                    &a.id,
+                    By::Gate,
+                    Some(verdict.to_owned()),
+                    change.clone(),
+                )?;
+            }
         }
     }
-    Ok(retired)
+    Ok(out)
+}
+
+/// The human wakes the note `id`: a grounded status, theirs, in every tier that holds it — the
+/// creatures' and shared memory. Evidence before it no longer counts. Returns the files written.
+///
+/// # Errors
+///
+/// No tier holds the note, or a note file cannot be read or written.
+pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
+    let mut tiers = vec![Tier::Shared];
+    if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
+        for entry in rd.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.extension().is_some_and(|x| x == "jsonl")
+                && let Some(stem) = path.file_stem()
+            {
+                tiers.push(Tier::Personal(stem.to_string_lossy().into_owned()));
+            }
+        }
+    }
+    let mut woke = Vec::new();
+    for tier in tiers {
+        let rows = crate::store::read(world, &tier)?.rows;
+        if rows.iter().any(|e| e.note == id) {
+            append(
+                world,
+                &tier,
+                id,
+                By::Human,
+                Some("woken by the human".into()),
+                Change::Status {
+                    status: Status::Grounded,
+                },
+            )?;
+            woke.push(tier.file().display().to_string());
+        }
+    }
+    if woke.is_empty() {
+        return Err(std::io::Error::other(format!(
+            "no note `{id}` in this world's memory"
+        )));
+    }
+    Ok(woke)
+}
+
+/// The notes the gate retired that touch `owner` — its own tier, and shared notes it owns — each
+/// with its text: what `memory status` lists for the human to review and, if wrong, wake.
+///
+/// # Errors
+///
+/// A note file cannot be read.
+pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String)>> {
+    let mut out = Vec::new();
+    for tier in [Tier::Personal(owner.to_owned()), Tier::Shared] {
+        let rows = crate::store::read(world, &tier)?.rows;
+        for n in crate::note::fold(&rows).into_values() {
+            if n.status != Status::Dormant
+                || (matches!(tier, Tier::Shared) && n.owner.as_deref() != Some(owner))
+            {
+                continue;
+            }
+            // Retired, not put to sleep: its last status is the gate's.
+            let last = rows
+                .iter()
+                .filter(|e| e.note == n.id && matches!(e.change, Change::Status { .. }))
+                .max_by_key(|e| (e.time, e.id.clone()));
+            // A note in both tiers is listed once.
+            if last.is_some_and(|e| matches!(e.by, By::Gate))
+                && !out.iter().any(|(id, _)| *id == n.id)
+            {
+                out.push((n.id.clone(), n.text.clone()));
+            }
+        }
+    }
+    Ok(out)
 }

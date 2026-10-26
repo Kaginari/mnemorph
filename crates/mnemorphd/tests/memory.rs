@@ -60,3 +60,53 @@ fn a_hand_edit_is_named_and_fails_the_status() {
     assert_eq!(v[0]["unproven"][0]["event"], "e2");
     let _ = fs::remove_dir_all(&world);
 }
+
+/// A note the gate retired is listed for the human with its undo; `wake` restores it, and a body is
+/// never let wake one.
+#[test]
+fn a_retired_note_is_listed_and_the_human_wakes_it() {
+    let world = std::env::temp_dir().join(format!("mnemorph-memory-wake-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&world);
+    let dir = world.join(".mnemorph/memory/creature");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("slime-a.jsonl"),
+        concat!(
+            r#"{"id":"e1","time":1,"note":"n1","by":"record","kind":"create","text":"skip the fixture","tags":[],"owner":"slime-a","polarity":"support","salience":0.5,"confidence":0.5,"source":null,"links":[]}"#,
+            "\n",
+            r#"{"id":"e2","time":2,"note":"n1","by":"human","kind":"status","status":"grounded"}"#,
+            "\n",
+            r#"{"id":"e3","time":3,"note":"n1","by":"gate","proof":"log.md two","kind":"status","status":"dormant"}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+    let (code, out) = status(&world, false);
+    assert_eq!(code, Some(0), "a retirement waits on nobody: {out}");
+    assert!(
+        out.contains(
+            "retired, kept dormant: n1 — skip the fixture (undo: mnemorph memory wake n1)"
+        ),
+        "{out}"
+    );
+    let bin = env!("CARGO_BIN_EXE_mnemorphd");
+    let body = Command::new(bin)
+        .args(["memory", "wake", "n1", "--world", world.to_str().unwrap()])
+        .env("MNEMORPH_BODY", "slime-a")
+        .output()
+        .unwrap();
+    assert_eq!(body.status.code(), Some(2), "a body never wakes a note");
+    let human = Command::new(bin)
+        .args(["memory", "wake", "n1", "--world", world.to_str().unwrap()])
+        .env_remove("MNEMORPH_BODY")
+        .output()
+        .unwrap();
+    assert!(
+        human.status.success(),
+        "{}",
+        String::from_utf8_lossy(&human.stderr)
+    );
+    let (_, out) = status(&world, false);
+    assert_eq!(out, "slime-a: clear\n");
+    let _ = fs::remove_dir_all(&world);
+}

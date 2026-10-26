@@ -54,3 +54,59 @@ pub fn content_words(text: &str) -> Vec<String> {
         .filter(|w| !STOP.contains(&w.as_str()))
         .collect()
 }
+
+/// A text's specific terms: the tokens that name one thing — a path, a file, an identifier, a
+/// number — rather than a common word. A token is specific when it holds `/`, `.`, `_`, `::` or a
+/// digit, or is at least seven letters long; quotes, backticks and closing punctuation aside,
+/// lowercased. Each also yields its specific parts — what `::` and `:` separate, and a path's file
+/// name — so `src/a.rs:12` meets `a.rs`, and `t.sql::test_x` meets `t.sql`.
+#[must_use]
+pub fn specific_terms(text: &str) -> std::collections::BTreeSet<String> {
+    let specific = |t: &str| {
+        t.contains(['/', '.', '_'])
+            || t.contains("::")
+            || t.chars().any(|c| c.is_ascii_digit())
+            || (t.chars().count() >= 7 && t.chars().all(char::is_alphanumeric))
+    };
+    let mut out = std::collections::BTreeSet::new();
+    for token in text
+        .split(|c: char| c.is_whitespace() || "`'\"()[]{}<>,;".contains(c))
+        .map(|t| t.trim_matches(|c: char| ".:!?".contains(c)).to_lowercase())
+        .filter(|t| specific(t))
+    {
+        let mut parts: Vec<String> = token
+            .split(':')
+            .filter(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit()))
+            .map(str::to_owned)
+            .collect();
+        if let Some(name) = parts.first().and_then(|p| p.rsplit('/').next()) {
+            parts.push(name.to_owned());
+        }
+        out.extend(parts.into_iter().filter(|p| specific(p)));
+        out.insert(token);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::specific_terms;
+
+    #[test]
+    fn specific_terms_name_one_thing() {
+        let t = specific_terms(
+            "Run `uv` before pytest in sqlglot/dialects, see parser.py:12 and test_round_trip.",
+        );
+        for want in [
+            "sqlglot/dialects",
+            "parser.py:12",
+            "parser.py",
+            "test_round_trip",
+        ] {
+            assert!(t.contains(want), "{want}: {t:?}");
+        }
+        for not in ["run", "uv", "before", "see", "and", "12"] {
+            assert!(!t.contains(not), "{not}: {t:?}");
+        }
+    }
+}
