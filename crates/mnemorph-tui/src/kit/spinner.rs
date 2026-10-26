@@ -1,10 +1,10 @@
 //! A spinner: frames that turn while work runs, advanced by the model's tick.
 
-/// The braille dots, the frames Charm's spinner turns by default.
-pub const DOTS: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/// The braille dot circling a full cell, Bubbles' `Dot` spinner — the one Isekai turns.
+pub const DOTS: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 
-/// How long one frame shows, in milliseconds.
-pub const FRAME_MS: u64 = 80;
+/// How long one frame shows, in milliseconds: ten frames a second.
+pub const FRAME_MS: u64 = 100;
 
 /// A spinner's state: which frame shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -38,12 +38,12 @@ mod tests {
     #[test]
     fn it_turns_and_wraps() {
         let mut s = Spinner::default();
-        assert_eq!(s.view(), "⠋");
+        assert_eq!(s.view(), "⣾");
         for _ in 0..DOTS.len() {
             s.update();
         }
-        assert_eq!(s.view(), "⠋");
+        assert_eq!(s.view(), "⣾");
         s.update();
-        assert_eq!(s.view(), "⠙");
+        assert_eq!(s.view(), "⣽");
     }
 }

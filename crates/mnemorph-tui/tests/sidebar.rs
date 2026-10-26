@@ -251,20 +251,23 @@ fn busy_session(m: &mut Model) {
 fn every_section_shows_what_the_observer_and_the_world_gave() {
     let mut m = model();
     busy_session(&mut m);
-    let buf = draw(&mut m, 120, 40);
+    // Tall enough for the portrait at the head and every section whole under it.
+    let buf = draw(&mut m, 120, 52);
     let scr = screen(&buf);
     println!("{scr}");
     for want in [
-        "session ─",
-        "$0.04 · 60.9k tok",
+        "vitals ─",
+        "ᴄᴏꜱᴛ $0.04",
+        "ᴛᴏᴋ  60.9k",
         "41%",
         "deepseek-v4-flash",
         "memory ─",
         "recalled 3 this ask",
         "grounded 5 · shared 2",
         "files · 3 ─",
-        "M sqlglot/parser.py",
-        "A tests/test_collate.py",
+        "sqlglot/",
+        "└ M parser.py",
+        "└ A test_collate.py",
         r"D old\u{202e}.py",
         "bodies · 3 · 2 live",
         "◆ rimuru",
@@ -292,7 +295,7 @@ fn every_section_shows_what_the_observer_and_the_world_gave() {
     // The gauge is drawn against the stress line.
     let ctx_row = rows(&buf)
         .into_iter()
-        .find(|r| r.contains("ctx ━"))
+        .find(|r| r.contains("ᴄᴛx  ━"))
         .unwrap();
     assert!(
         ctx_row.contains('─') && ctx_row.contains("41%"),
@@ -394,27 +397,40 @@ fn a_click_expands_a_folded_card_and_folds_it_again() {
     long_output(&mut m);
     let buf = draw(&mut m, 120, 40);
     let scr = screen(&buf);
-    assert!(scr.contains("… +6 lines · click to expand"), "{scr}");
+    assert!(
+        scr.contains("… +7 lines · click or ctrl+t to expand"),
+        "{scr}"
+    );
     assert!(!scr.contains("line 10"), "{scr}");
     let at = find(&buf, "line 2").unwrap();
     click(&mut m, at);
     let scr = screen(&draw(&mut m, 120, 40));
     assert!(
-        scr.contains("line 10") && !scr.contains("+6 lines"),
+        scr.contains("line 10") && !scr.contains("+7 lines"),
         "{scr}"
     );
     let buf = draw(&mut m, 120, 40);
     click(&mut m, find(&buf, "line 7").unwrap());
     let scr = screen(&draw(&mut m, 120, 40));
     assert!(
-        scr.contains("+6 lines") && !scr.contains("line 10"),
+        scr.contains("+7 lines") && !scr.contains("line 10"),
         "{scr}"
     );
-    // A click on a card with nothing folded, or in the sidebar, changes nothing.
+    // A click on a card with nothing folded, or on a row of the sidebar, changes nothing.
     let buf = draw(&mut m, 120, 40);
-    click(&mut m, find(&buf, "bash ls").unwrap());
-    click(&mut m, find(&buf, "memory").unwrap());
+    click(&mut m, find(&buf, "bash  ls").unwrap());
+    click(&mut m, find(&buf, "recalled").unwrap());
     assert_eq!(screen(&draw(&mut m, 120, 40)), screen(&buf));
+    // A click on a section's title folds it, and another opens it again.
+    click(&mut m, find(&buf, "▾ memory").unwrap());
+    let folded = screen(&draw(&mut m, 120, 40));
+    assert!(
+        folded.contains("▸ memory") && !folded.contains("recalled"),
+        "{folded}"
+    );
+    let buf = draw(&mut m, 120, 40);
+    click(&mut m, find(&buf, "▸ memory").unwrap());
+    assert!(screen(&draw(&mut m, 120, 40)).contains("recalled"));
 }
 
 #[test]
@@ -427,8 +443,9 @@ fn a_key_expands_the_focused_card_and_the_focus_moves_between_cards() {
     let buf = draw(&mut m, 120, 40);
     assert!(screen(&buf).contains("line 10"));
     // The focused card wears the accent on its border.
-    let (x, y) = find(&buf, "bash pytest").unwrap();
-    assert_eq!(buf[(x - 2, y)].fg, m.theme.p.holo.color());
+    let (x, y) = find(&buf, "bash  pytest").unwrap();
+    assert_eq!(buf[(x - 4, y)].symbol(), "▌", "the card's spine");
+    assert_eq!(buf[(x - 4, y)].fg, m.theme.p.holo.color());
     ctrl(&mut m, 't');
     assert!(!screen(&draw(&mut m, 120, 40)).contains("line 10"));
     // alt+↓ past the newest card leaves the cards; alt+↑ comes back to the newest.
@@ -451,7 +468,7 @@ fn the_focus_scrolls_an_old_card_into_view() {
     long_output(&mut m);
     long_transcript(&mut m);
     let scr = screen(&draw(&mut m, 120, 40));
-    assert!(!scr.contains("bash pytest"), "{scr}");
+    assert!(!scr.contains("bash  pytest"), "{scr}");
     let alt = |code| Msg::Key(KeyEvent::new(code, KeyModifiers::ALT));
     update(&mut m, alt(KeyCode::Up));
     update(&mut m, alt(KeyCode::Up));
@@ -459,7 +476,7 @@ fn the_focus_scrolls_an_old_card_into_view() {
         update(&mut m, Msg::Tick(Duration::from_millis(16)));
     }
     let scr = screen(&draw(&mut m, 120, 40));
-    assert!(scr.contains("bash pytest"), "{scr}");
+    assert!(scr.contains("bash  pytest"), "{scr}");
 }
 
 #[test]

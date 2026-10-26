@@ -180,12 +180,12 @@ fn an_edit_is_a_coloured_unified_diff_in_its_card() {
     let buf = draw(&mut m, 100, 30);
     let scr = screen(&buf);
     assert!(
-        scr.contains("┌─ read sqlglot/parser.py:4120-4180 "),
+        scr.contains("● read  sqlglot/parser.py:4120-4180  read"),
         "{scr}"
     );
-    assert!(scr.contains("61 lines ✓ ─┐"), "{scr}");
-    assert!(scr.contains("┌─ edit sqlglot/parser.py "), "{scr}");
-    assert!(scr.contains("+1 −1 ✓"), "{scr}");
+    assert!(scr.contains("⎿ ok · 0ms · 61 lines · ctrl+t"), "{scr}");
+    assert!(scr.contains("● edit  sqlglot/parser.py  write"), "{scr}");
+    assert!(scr.contains("⎿ ok · 0ms · +1 −1"), "{scr}");
     let (x, y) = find(&buf, "-     return this").unwrap();
     assert_eq!(buf[(x, y)].fg, rgb(DARK.alarm));
     let (x, y) = find(&buf, "+     return self._parse_collate(this)").unwrap();
@@ -248,11 +248,11 @@ fn long_output_folds_and_an_error_is_in_the_alarm_colour() {
     );
     let buf = draw(&mut m, 90, 30);
     let scr = screen(&buf);
-    assert!(scr.contains("line 4") && !scr.contains("line 5"), "{scr}");
-    assert!(scr.contains("… +6 lines"), "{scr}");
+    assert!(scr.contains("line 3") && !scr.contains("line 4"), "{scr}");
+    assert!(scr.contains("… +7 lines"), "{scr}");
     let (x, y) = find(&buf, "refused: destructive").unwrap();
     assert_eq!(buf[(x, y)].fg, rgb(DARK.alarm));
-    let (x, y) = find(&buf, "✗").unwrap();
+    let (x, y) = find(&buf, "failed").unwrap();
     assert_eq!(buf[(x, y)].fg, rgb(DARK.alarm));
 }
 
@@ -267,11 +267,15 @@ fn a_running_call_spins_then_checks() {
             name: "grep".into(),
         },
     );
-    assert!(screen(&draw(&mut m, 80, 20)).contains("⠋"));
-    assert!(m.next_tick().is_some(), "work running ticks the spinner");
-    update(&mut m, Msg::Tick(Duration::from_millis(80)));
+    let scr = screen(&draw(&mut m, 80, 20));
     assert!(
-        screen(&draw(&mut m, 80, 20)).contains("⠙"),
+        scr.contains("⣾ grep") && scr.contains("⎿ running…"),
+        "{scr}"
+    );
+    assert!(m.next_tick().is_some(), "work running ticks the spinner");
+    update(&mut m, Msg::Tick(Duration::from_millis(100)));
+    assert!(
+        screen(&draw(&mut m, 80, 20)).contains("⣽ grep"),
         "the spinner turned"
     );
     call(
@@ -282,8 +286,11 @@ fn a_running_call_spins_then_checks() {
         Some(("a.py:1", false)),
     );
     let scr = screen(&draw(&mut m, 80, 20));
-    assert!(scr.contains("grep collate") && scr.contains("✓"), "{scr}");
-    assert!(!scr.contains("⠙ ─"), "{scr}");
+    assert!(
+        scr.contains("● grep  collate") && scr.contains("⎿ ok"),
+        "{scr}"
+    );
+    assert!(!scr.contains("⣽ grep"), "{scr}");
 }
 
 #[test]
@@ -321,7 +328,7 @@ fn the_header_and_the_status_bar_read_what_the_observer_gave() {
     ] {
         assert!(last.contains(want), "{want} missing: {last}");
     }
-    assert!(r[0].contains("working"), "{}", r[0]);
+    assert!(r[0].contains("● thinking 0s"), "{}", r[0]);
 }
 
 #[test]
@@ -557,7 +564,7 @@ fn a_frame_for_the_eye() {
     );
     let scr = screen(&draw(&mut m, 72, 18));
     println!("{scr}");
-    assert!(scr.contains("✓ end gate passed · 1 changed"), "{scr}");
+    assert!(scr.contains("✓ end gate · pass  · 1 changed"), "{scr}");
 }
 
 fn wait_armed() {

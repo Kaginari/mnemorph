@@ -198,7 +198,28 @@ async fn tool_calls_with_and_without_arguments() {
             },
         ]
     );
-    assert_eq!(events.len(), 2);
+    // Each call announced as it starts, then its arguments piece by piece, as they came.
+    assert_eq!(
+        events,
+        [
+            Event::ToolStart {
+                id: "t1".into(),
+                name: "list".into()
+            },
+            Event::ToolStart {
+                id: "t2".into(),
+                name: "read".into()
+            },
+            Event::ToolInput {
+                id: "t2".into(),
+                json: "{\"pa".into()
+            },
+            Event::ToolInput {
+                id: "t2".into(),
+                json: "th\": \"a.rs\"}".into()
+            },
+        ]
+    );
 }
 
 #[tokio::test(start_paused = true)]

@@ -483,13 +483,21 @@ async fn reasoning_and_call_extras_go_back() {
     let script = Arc::new(Scripted::new([Reply::ok(&body)]));
     let (r, events) = chat(&openai(&script), &request(vec![user("a")])).await;
     let r = r.unwrap();
+    // Reasoning streams as its own event, never the answer's text; the call follows it.
     assert_eq!(
         events,
-        [Event::ToolStart {
-            id: "c1".into(),
-            name: "read".into()
-        }],
-        "reasoning is not shown"
+        [
+            Event::Thinking("let me ".into()),
+            Event::Thinking("see".into()),
+            Event::ToolStart {
+                id: "c1".into(),
+                name: "read".into()
+            },
+            Event::ToolInput {
+                id: "c1".into(),
+                json: "{}".into()
+            },
+        ]
     );
     let mut next = request(vec![user("a")]);
     next.messages.push(Message {
@@ -536,7 +544,11 @@ async fn fragments_without_index_and_repeated_names() {
             },
         ]
     );
-    assert_eq!(events.len(), 2, "one ToolStart per call");
+    let starts = events
+        .iter()
+        .filter(|e| matches!(e, Event::ToolStart { .. }))
+        .count();
+    assert_eq!(starts, 2, "one ToolStart per call");
 }
 
 #[test]

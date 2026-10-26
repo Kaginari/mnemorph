@@ -82,10 +82,25 @@ async fn a_recorded_text_answer() {
         })
         .collect();
     assert!(text.to_lowercase().contains("ready"), "{text}");
+    // Reasoning streams to a surface as its own event, never as the answer's text.
     assert!(
-        events.iter().all(|e| matches!(e, Event::Text(_))),
-        "reasoning is never shown"
+        events
+            .iter()
+            .all(|e| matches!(e, Event::Text(_) | Event::Thinking(_))),
+        "{events:?}"
     );
+    assert!(
+        events.iter().any(|e| matches!(e, Event::Thinking(_))),
+        "the recorded reasoning is shown as it comes"
+    );
+    let shown: String = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(shown, text, "the text events are the answer, and only it");
     let kinds = opaque_kinds(&r.content);
     assert!(
         kinds.contains(&format!("{OPAQUE_PREFIX}reasoning_content")),

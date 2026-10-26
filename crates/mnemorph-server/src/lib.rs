@@ -584,6 +584,9 @@ async fn drive(
         let mut on = move |e: StreamEvent| match e {
             StreamEvent::Text(text) => streaming.emit(&Event::TextDelta { text }),
             StreamEvent::ToolStart { id, name } => streaming.emit(&Event::ToolStart { id, name }),
+            // Reasoning and a call's arguments as they stream are the terminal UI's for now: the
+            // protocol carries the call whole, and the answer's text.
+            StreamEvent::ToolInput { .. } | StreamEvent::Thinking(_) => {}
         };
         session.drive(&line, &mut on).await;
         core.emit(&Event::Held { held: held(&world) });

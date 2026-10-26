@@ -1,15 +1,19 @@
 //! The sidebar: a column beside the transcript, toggled with Ctrl+O and folded away on a narrow
-//! terminal. Four sections, each drawn only from what the observer or the world gave:
+//! terminal, in Isekai's look: the working body's portrait at its head over the world, the model
+//! and the state, then four sections, each folded or opened by a click on its title (`▾` open,
+//! `▸` folded), each drawn only from what the observer or the world gave:
 //!
-//! - **session** — the spend, the context against its stress line as a gauge, the model;
+//! - **vitals** — the context against its stress line as a gauge, the tokens, the spend;
 //! - **memory** — the notes recalled for this ask, the grounded and shared counts, the claim
 //!   grounded last, read as `mnemorphd memory status` reads it, off the UI thread ([`survey`]);
-//! - **files** — the paths the session's acts changed, marked added, modified or deleted;
+//! - **files** — the paths the session's acts changed, marked added, modified or deleted, as a
+//!   tree of their directories;
 //! - **bodies** — the session's body and the bodies it commissioned, as `Seen::From` nests them:
 //!   each in its race's colour, with what it is doing.
 //!
 //! Every name, path and claim passes through [`crate::safe`] before it is drawn.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -23,12 +27,15 @@ use serde_json::Value;
 
 use crate::app::Model;
 use crate::kit::gauge::Gauge;
-use crate::kit::text::{Lines, cells, clip, clip_left, truncate, wrap_text};
+use crate::kit::mnanim;
+use crate::kit::text::{Lines, cells, clip, clip_left, small_caps, truncate, wrap_text};
 use crate::safe::one_line;
 use crate::theme::Theme;
 
 /// The sidebar's width, its gutter included.
 pub const WIDTH: u16 = 32;
+/// The sidebar's height, in rows, from which the portrait sits at its head.
+pub const HEAD_FROM: usize = 34;
 /// The narrowest frame that keeps the sidebar: below it, the transcript takes the whole width.
 pub const FOLD_BELOW: u16 = 100;
 
@@ -401,6 +408,29 @@ pub struct Sidebar {
     pub files: Files,
     /// The bodies below the session.
     pub bodies: Bodies,
+    /// The sections folded, by [`Section`].
+    pub folded: [bool; 4],
+    /// Where the last frame drew each section's title: its row among the sidebar's lines.
+    pub(crate) titles: RefCell<Vec<(usize, Section)>>,
+}
+
+/// A section of the sidebar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Section {
+    /// The context, the tokens, the spend.
+    Vitals,
+    /// The memory's standing.
+    Memory,
+    /// The files changed.
+    Files,
+    /// The bodies.
+    Bodies,
+}
+
+impl Section {
+    fn at(self) -> usize {
+        self as usize
+    }
 }
 
 impl Default for Sidebar {
@@ -413,6 +443,8 @@ impl Default for Sidebar {
             races: BTreeMap::new(),
             files: Files::default(),
             bodies: Bodies::default(),
+            folded: [false; 4],
+            titles: RefCell::new(Vec::new()),
         }
     }
 }
@@ -434,6 +466,27 @@ impl Sidebar {
         }
     }
 
+    /// Fold `section`, or open it again.
+    pub fn fold_section(&mut self, section: Section) {
+        self.folded[section.at()] = !self.folded[section.at()];
+    }
+
+    /// Whether `section` is folded.
+    #[must_use]
+    pub fn is_folded(&self, section: Section) -> bool {
+        self.folded[section.at()]
+    }
+
+    /// The section whose title the last frame drew on line `row` of the sidebar.
+    #[must_use]
+    pub fn title_at(&self, row: usize) -> Option<Section> {
+        self.titles
+            .borrow()
+            .iter()
+            .find(|(r, _)| *r == row)
+            .map(|(_, s)| *s)
+    }
+
     /// The world's survey arrived.
     pub fn surveyed(&mut self, s: Survey) {
         self.memory = Some(s.memory);
@@ -452,12 +505,19 @@ impl Sidebar {
     }
 }
 
-/// A section's title: its name in its hue, a count, a quiet rule to the edge.
-fn title(t: &Theme, name: &str, hue: Style, count: Option<String>, w: usize) -> Line<'static> {
-    let mut spans = vec![Span::styled(
-        name.to_owned(),
-        hue.add_modifier(Modifier::BOLD),
-    )];
+/// A section's title: open or folded, its name in its hue, a count, a quiet rule to the edge.
+fn title(
+    t: &Theme,
+    open: bool,
+    name: &str,
+    hue: Style,
+    count: Option<String>,
+    w: usize,
+) -> Line<'static> {
+    let mut spans = vec![
+        Span::styled(if open { "▾ " } else { "▸ " }, t.muted()),
+        Span::styled(name.to_owned(), hue.add_modifier(Modifier::BOLD)),
+    ];
     if let Some(c) = count {
         spans.push(Span::styled(format!(" · {c}"), t.muted()));
     }
@@ -506,29 +566,67 @@ pub fn band(t: &Theme, pct: u64) -> Style {
     }
 }
 
-fn session(m: &Model, w: usize) -> Lines {
+/// The head: the portrait of the body working now — Rimuru for the session, a commissioned
+/// body's race while it acts — centred, playing its idle loop while it works and still on its
+/// first frame otherwise; under it the world, the model and the state, centred too.
+fn head(m: &Model, w: usize) -> Lines {
+    let t = &m.theme;
+    let (who, race) = crate::activity::actor(m);
+    let mut out: Lines = Vec::new();
+    if let Some(p) = mnanim::portrait(race) {
+        let clock = if m.busy() {
+            m.portrait_clock
+        } else {
+            std::time::Duration::ZERO
+        };
+        let pad = Span::raw(" ".repeat(w.saturating_sub(mnanim::SIZE) / 2));
+        out.extend(mnanim::lines(p.at(clock), None).into_iter().map(|l| {
+            let mut spans = vec![pad.clone()];
+            spans.extend(l.spans);
+            Line::from(spans)
+        }));
+    }
+    let world = m.header.world.rsplit('/').next().unwrap_or(&m.header.world);
+    let centred = |spans: Vec<Span<'static>>| {
+        let line = truncate(Line::from(spans), w);
+        crate::kit::text::fit(line, w, crate::kit::text::Align::Center, Style::new())
+    };
+    out.push(centred(vec![Span::styled(one_line(world), t.rimuru())]));
+    out.push(centred(vec![Span::styled(
+        one_line(&m.header.model),
+        t.muted(),
+    )]));
+    let mut state = crate::activity::chip(m);
+    if who != m.header.body {
+        state.insert(
+            0,
+            Span::styled(format!("{} ", one_line(&who)), t.race(race)),
+        );
+    }
+    out.push(centred(state));
+    out
+}
+
+/// A labelled row of the vitals: its label in small capitals, its value.
+fn vital(t: &Theme, label: &str, value: Vec<Span<'static>>) -> Line<'static> {
+    let mut spans = vec![Span::styled(format!("{:<5}", small_caps(label)), t.muted())];
+    spans.extend(value);
+    Line::from(spans)
+}
+
+fn vitals(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let u = &m.transcript.usage;
-    let mut out = vec![title(t, "session", t.holo(), None, w)];
-    if u.tokens > 0 || u.usd > 0.0 {
-        let cost = if u.unpriced && u.usd == 0.0 {
-            "unpriced".to_owned()
-        } else {
-            format!("${:.2}{}", u.usd, if u.unpriced { "+" } else { "" })
-        };
-        out.push(Line::from(vec![
-            Span::styled(cost, t.text().add_modifier(Modifier::BOLD)),
-            Span::styled(" · ", t.frame()),
-            Span::styled(format!("{} tok", short(u.tokens)), t.muted()),
-        ]));
-    } else {
-        out.push(Line::from(Span::styled("no spend yet", t.muted())));
+    let open = !m.sidebar.is_folded(Section::Vitals);
+    let mut out = vec![title(t, open, "vitals", t.holo(), None, w)];
+    if !open {
+        return out;
     }
-    let mut ctx = vec![Span::styled("ctx ", t.muted())];
+    let mut ctx: Vec<Span<'static>> = Vec::new();
     match u.occupancy.saturating_mul(100).checked_div(u.stress_line) {
         Some(pct) => {
-            let label = format!(" {pct}%");
-            let bar = w.saturating_sub(4 + cells(&label)).min(20);
+            let label = format!(" {pct}% / {}", short(u.stress_line));
+            let bar = w.saturating_sub(6 + cells(&label)).min(20);
             // Display only: a fraction of the stress line.
             #[allow(clippy::cast_precision_loss)]
             let frac = u.occupancy as f64 / u.stress_line as f64;
@@ -550,18 +648,34 @@ fn session(m: &Model, w: usize) -> Lines {
         }
         None => ctx.push(Span::styled("—", t.muted())),
     }
-    out.push(Line::from(ctx));
-    out.push(Line::from(Span::styled(
-        clip(&one_line(&m.header.model), w),
-        t.muted(),
-    )));
+    out.push(vital(t, "ctx", ctx));
+    out.push(vital(
+        t,
+        "tok",
+        vec![Span::styled(
+            short(u.tokens),
+            t.text().add_modifier(Modifier::BOLD),
+        )],
+    ));
+    let cost = if u.tokens == 0 && u.usd == 0.0 {
+        "no calls yet".to_owned()
+    } else if u.unpriced && u.usd == 0.0 {
+        "unpriced".to_owned()
+    } else {
+        format!("${:.2}{}", u.usd, if u.unpriced { "+" } else { "" })
+    };
+    out.push(vital(t, "cost", vec![Span::styled(cost, t.text())]));
     out
 }
 
 fn memory(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let side = &m.sidebar;
-    let mut out = vec![title(t, "memory", t.race(Race::Elf), None, w)];
+    let open = !side.is_folded(Section::Memory);
+    let mut out = vec![title(t, open, "memory", t.race(Race::Elf), None, w)];
+    if !open {
+        return out;
+    }
     out.push(match side.recalled {
         Some(count) => Line::from(vec![
             Span::styled("recalled ", t.muted()),
@@ -617,35 +731,120 @@ fn files(m: &Model, w: usize, rows: usize) -> Lines {
     let t = &m.theme;
     let list = m.sidebar.files.list();
     let count = (!list.is_empty()).then(|| list.len().to_string());
-    let mut out = vec![title(t, "files", t.gold(), count, w)];
+    let open = !m.sidebar.is_folded(Section::Files);
+    let mut out = vec![title(t, open, "files", t.gold(), count, w)];
+    if !open {
+        return out;
+    }
     if list.is_empty() {
         out.push(Line::from(Span::styled("· nothing changed yet", t.muted())));
         return out;
     }
+    // The latest touched that fit, drawn as a tree of their directories.
     let room = rows.saturating_sub(1).max(1);
-    let (hidden, shown) = if list.len() > room {
-        let keep = room.saturating_sub(1).max(1);
-        (list.len() - keep, &list[list.len() - keep..])
-    } else {
-        (0, list)
+    let mut keep = list.len().min(room);
+    let tree = loop {
+        let shown = &list[list.len() - keep..];
+        let tree = file_tree(shown);
+        let hidden = list.len() - keep;
+        if tree.len() + usize::from(hidden > 0) <= room || keep <= 1 {
+            break (tree, hidden);
+        }
+        keep -= 1;
     };
+    let (tree, hidden) = tree;
     if hidden > 0 {
         out.push(Line::from(Span::styled(
             format!("… +{hidden} earlier"),
             t.muted(),
         )));
     }
-    for (path, mark) in shown {
-        let style = match mark {
-            Mark::Added => t.ok(),
-            Mark::Modified => t.gold(),
-            Mark::Deleted => t.alarm(),
-        };
-        out.push(Line::from(vec![
-            Span::styled(mark.letter(), style.add_modifier(Modifier::BOLD)),
-            Span::raw(" "),
-            Span::styled(clip_left(&one_line(path), w.saturating_sub(2)), t.text()),
-        ]));
+    for row in tree {
+        match row {
+            TreeRow::Dir(dir) => out.push(Line::from(Span::styled(
+                clip_left(&format!("{}/", one_line(&dir)), w),
+                t.muted(),
+            ))),
+            TreeRow::File {
+                name,
+                mark,
+                last,
+                nested,
+            } => {
+                let style = match mark {
+                    Mark::Added => t.ok(),
+                    Mark::Modified => t.gold(),
+                    Mark::Deleted => t.alarm(),
+                };
+                let branch = match (nested, last) {
+                    (false, _) => "",
+                    (true, true) => "└ ",
+                    (true, false) => "├ ",
+                };
+                let lead = cells(branch) + 2;
+                out.push(Line::from(vec![
+                    Span::styled(branch, t.line()),
+                    Span::styled(mark.letter(), style.add_modifier(Modifier::BOLD)),
+                    Span::raw(" "),
+                    Span::styled(
+                        clip_left(&one_line(&name), w.saturating_sub(lead)),
+                        t.text(),
+                    ),
+                ]));
+            }
+        }
+    }
+    out
+}
+
+/// A row of the files' tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TreeRow {
+    /// A directory, its files under it.
+    Dir(String),
+    /// A file: its name (its whole path at the root), its mark, whether it ends its directory.
+    File {
+        name: String,
+        mark: Mark,
+        last: bool,
+        nested: bool,
+    },
+}
+
+/// Paths as a tree of their directories, one level: each directory once, its files under it in
+/// the order touched; files at the root first.
+fn file_tree(list: &[(String, Mark)]) -> Vec<TreeRow> {
+    let mut dirs: Vec<(String, Vec<(String, Mark)>)> = Vec::new();
+    let mut root = Vec::new();
+    for (path, mark) in list {
+        match path.rsplit_once('/') {
+            Some((dir, name)) => match dirs.iter_mut().find(|(d, _)| d == dir) {
+                Some((_, files)) => files.push((name.to_owned(), *mark)),
+                None => dirs.push((dir.to_owned(), vec![(name.to_owned(), *mark)])),
+            },
+            None => root.push(TreeRow::File {
+                name: path.clone(),
+                mark: *mark,
+                last: false,
+                nested: false,
+            }),
+        }
+    }
+    let mut out = root;
+    for (dir, files) in dirs {
+        out.push(TreeRow::Dir(dir));
+        let n = files.len();
+        out.extend(
+            files
+                .into_iter()
+                .enumerate()
+                .map(|(i, (name, mark))| TreeRow::File {
+                    name,
+                    mark,
+                    last: i + 1 == n,
+                    nested: true,
+                }),
+        );
     }
     out
 }
@@ -658,7 +857,11 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
         (seen, 0) => Some(seen.to_string()),
         (seen, live) => Some(format!("{seen} · {live} live")),
     };
-    let mut out = vec![title(t, "bodies", t.rimuru(), count, w)];
+    let open = !m.sidebar.is_folded(Section::Bodies);
+    let mut out = vec![title(t, open, "bodies", t.rimuru(), count, w)];
+    if !open {
+        return out;
+    }
     let me = one_line(&m.header.body);
     let race = |name: &str| m.sidebar.races.get(name).copied();
     let state = if m.busy() {
@@ -723,18 +926,25 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
     out
 }
 
-/// The sidebar's lines, `w` cells wide and at most `h` rows tall: the session and the memory
-/// whole, the bodies and the files sharing the rows left.
+/// The sidebar's lines, `w` cells wide and at most `h` rows tall: the head and the vitals and the
+/// memory whole, the bodies and the files sharing the rows left. Each title's row is kept for the
+/// mouse.
 #[must_use]
 pub fn view(m: &Model, w: usize, h: usize) -> Lines {
     let gap = || Line::from("");
-    let head = session(m, w);
+    // A short column gives its rows to the sections: the head is only drawn with room to spare.
+    let top = if h >= HEAD_FROM {
+        head(m, w)
+    } else {
+        Vec::new()
+    };
+    let vit = vitals(m, w);
     let mem = memory(m, w);
-    let fixed = head.len() + mem.len() + 3;
+    let fixed = top.len() + vit.len() + mem.len() + 4;
     let left = h.saturating_sub(fixed);
     // Each wants a row a path or a body, and its title; short of room, the bodies keep at least
     // half of what is left, and the files take the rest, the latest last.
-    let need_files = m.sidebar.files.list().len().max(1) + 1;
+    let need_files = m.sidebar.files.list().len().max(1) * 2 + 1;
     let need_bodies = m.sidebar.bodies.list().len() + 2;
     let body_rows = if need_files + need_bodies <= left {
         need_bodies
@@ -742,13 +952,21 @@ pub fn view(m: &Model, w: usize, h: usize) -> Lines {
         need_bodies.min((left / 2).max(3))
     };
     let file_rows = left.saturating_sub(body_rows).max(2);
-    let mut out = head;
-    out.push(gap());
-    out.extend(mem);
-    out.push(gap());
-    out.extend(files(m, w, file_rows));
-    out.push(gap());
-    out.extend(bodies(m, w, body_rows));
+    let mut out = top;
+    let mut titles = Vec::new();
+    for (section, block) in [
+        (Section::Vitals, vit),
+        (Section::Memory, mem),
+        (Section::Files, files(m, w, file_rows)),
+        (Section::Bodies, bodies(m, w, body_rows)),
+    ] {
+        if !out.is_empty() {
+            out.push(gap());
+        }
+        titles.push((out.len(), section));
+        out.extend(block);
+    }
     out.truncate(h);
+    *m.sidebar.titles.borrow_mut() = titles;
     out
 }

@@ -28,6 +28,7 @@ pub use gate::{Author, EndGate, GateVerdict, Tree, Verdict, snapshot};
 /// The configuration, for a client that opens a session from it.
 pub use mnemorph_config::{Config, Paths};
 pub use mnemorph_provider::Event as StreamEvent;
+pub use mnemorph_provider::OPAQUE_PREFIX;
 pub use mnemorph_races::ToolClass;
 /// The human gate's types, for a client that answers it.
 pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};

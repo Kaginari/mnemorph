@@ -15,10 +15,12 @@ use ratatui::crossterm::event::{
 };
 use std::sync::Arc;
 
+use crate::activity::Activity;
 use crate::approval::{Approval, Decision};
 use crate::gate::Card;
 use crate::kit::spinner::{FRAME_MS, Spinner};
 use crate::kit::textarea::{Outcome, TextArea};
+use crate::kit::toast::Toast;
 use crate::kit::viewport::{Viewport, ViewportMsg};
 use crate::sidebar::{Sidebar, Survey};
 use crate::theme::{Theme, Variant};
@@ -56,6 +58,24 @@ pub enum Msg {
     },
     /// Recall gave the session's ask this many notes.
     Recalled(usize),
+    /// A piece of the session's reasoning, as it streams; empty when its text is hidden.
+    Thinking(String),
+    /// A piece of a started call's input, as raw JSON.
+    ToolInput {
+        /// The call.
+        id: String,
+        /// The piece.
+        json: String,
+    },
+    /// The session's model turn, whole, carried this reasoning in its blocks.
+    Reasoned(String),
+    /// The classifier read a command's class, off the UI thread.
+    Classed {
+        /// The call.
+        id: String,
+        /// Its class.
+        class: String,
+    },
     /// A `write` call names its path: the UI looks whether it exists, off the session's task.
     Writes {
         /// The call.
@@ -111,6 +131,13 @@ pub enum Cmd {
     },
     /// Read the world's memory standing and roster, off the UI thread; its answer carries `seq`.
     Survey(u64),
+    /// Read a `bash` call's class, off the UI thread: the classifier looks at paths on disk.
+    Classify {
+        /// The call.
+        id: String,
+        /// Its command.
+        command: String,
+    },
     /// Leave.
     Quit,
 }
@@ -159,6 +186,17 @@ pub struct Model {
     pub(crate) hits: RefCell<Hits>,
     /// The world's surveys asked for and applied.
     surveys: Surveys,
+    /// The turn as the status keeps it.
+    pub activity: Activity,
+    /// The spinner's frames since the session began: the shimmer's crest.
+    pub frames: usize,
+    /// The toast floating at the top right, while it shows.
+    pub toast: Option<Toast>,
+    /// The session's id, as the header names it.
+    pub session_id: String,
+    /// How long the sidebar's portrait has played: it moves only while a body works and the
+    /// portrait is on screen.
+    pub portrait_clock: Duration,
 }
 
 /// The surveys: the next one's number, and the newest whose reading was applied.
@@ -182,10 +220,16 @@ pub(crate) struct Hits {
     pub owners: Vec<Option<usize>>,
     /// The rows the transcript's window had.
     pub rows: usize,
+    /// The sidebar's first column, its width (none while closed) and its first row.
+    pub side_x: u16,
+    /// The sidebar's width.
+    pub side_w: u16,
+    /// The sidebar's first row.
+    pub side_y: u16,
 }
 
 /// The commands typed with a slash.
-pub const COMMANDS: &str = "/send <text> steer the running turn · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it";
+pub const COMMANDS: &str = "/send <text> steer the running turn · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
 
 impl Model {
     /// A model for a session of `header`, in `variant`, at `size`.
@@ -207,7 +251,26 @@ impl Model {
             sidebar: Sidebar::default(),
             hits: RefCell::new(Hits::default()),
             surveys: Surveys::default(),
+            activity: Activity::default(),
+            frames: 0,
+            toast: None,
+            session_id: String::new(),
+            portrait_clock: Duration::ZERO,
         }
+    }
+
+    /// Whether the sidebar shows its portrait: open, wide enough, tall enough.
+    #[must_use]
+    pub fn portrait_shown(&self) -> bool {
+        let inner = self.size.0.saturating_sub(4);
+        self.sidebar.width(inner) > 0
+            && usize::from(self.size.1.saturating_sub(3)) >= crate::sidebar::HEAD_FROM
+    }
+
+    /// Whether the portrait plays: a body works, and the portrait is on screen.
+    #[must_use]
+    pub fn portrait_plays(&self) -> bool {
+        self.busy() && self.portrait_shown()
     }
 
     /// Whether a turn runs.
@@ -220,8 +283,11 @@ impl Model {
     /// while work runs, never while idle — an idle UI wakes for nothing.
     #[must_use]
     pub fn next_tick(&self) -> Option<Duration> {
-        if self.viewport.animating() {
+        if self.viewport.animating() || self.toast.is_some() {
             Some(Duration::from_millis(16))
+        } else if self.portrait_plays() {
+            // The portrait's own pace, 16 frames a second; the frame cap still holds.
+            Some(Duration::from_millis(1000 / 16))
         } else if self.busy() || self.transcript.running() {
             Some(Duration::from_millis(FRAME_MS))
         } else if self.gate.is_some() {
@@ -238,6 +304,14 @@ impl Model {
         let inner = self.size.0.saturating_sub(4);
         let w = inner - self.sidebar.width(inner);
         (usize::from(w), usize::from(self.size.1.saturating_sub(2)))
+    }
+
+    /// The approval card's size: a modal over the main area.
+    #[must_use]
+    pub fn card_area(&self) -> (usize, usize) {
+        // The conversation's label takes the main area's first row.
+        let (w, h) = self.main_area();
+        crate::approval::modal(w, h.saturating_sub(1))
     }
 
     /// A new survey of the world, numbered after every one before it.
@@ -275,28 +349,27 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             refit(m);
             Vec::new()
         }
-        Msg::Tick(dt) => {
-            m.viewport.set_max(m.measured.get());
-            m.viewport.update(ViewportMsg::Tick(dt.as_secs_f64()));
-            m.spin += dt;
-            while m.spin >= Duration::from_millis(FRAME_MS) {
-                m.spin -= Duration::from_millis(FRAME_MS);
-                m.spinner.update();
-            }
-            expire(m, Instant::now())
-        }
-        Msg::Event { event, below } => {
-            let ended = below.is_none() && matches!(event, Event::TurnEnded { .. });
-            let chain: Vec<String> = below.into_iter().collect();
+        Msg::Tick(dt) => tick(m, dt),
+        Msg::Event { event, below } => session_event(m, event, below),
+        Msg::Below { event, chain } => {
+            acting(m, &event, &chain);
             fold(m, &event, &chain);
-            // An approval still open when its turn ends is a question no one asks any more.
-            if ended {
-                return deny_all(m, "the turn ended before the human answered");
-            }
             Vec::new()
         }
-        Msg::Below { event, chain } => {
-            fold(m, &event, &chain);
+        Msg::Thinking(piece) => {
+            m.transcript.thinking(&piece);
+            Vec::new()
+        }
+        Msg::ToolInput { id, json } => {
+            m.transcript.tool_input(&id, &json);
+            Vec::new()
+        }
+        Msg::Reasoned(text) => {
+            m.transcript.reasoned(&text);
+            Vec::new()
+        }
+        Msg::Classed { id, class } => {
+            m.transcript.classed(&id, &class);
             Vec::new()
         }
         Msg::Recalled(n) => {
@@ -326,12 +399,18 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         }
         Msg::Done { held } => {
             m.outstanding = m.outstanding.saturating_sub(1);
+            if !m.busy() {
+                m.activity.since = None;
+                m.activity.actor = None;
+            }
             m.transcript.held = held;
             // A finished line may have grounded notes or born creatures: read the world again.
             vec![m.survey()]
         }
         Msg::Crashed(why) => {
             m.outstanding = 0;
+            m.activity.since = None;
+            m.activity.actor = None;
             m.transcript.push(Entry::Ending(format!("failed: {why}")));
             deny_all(m, "the session stopped")
         }
@@ -343,6 +422,102 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
     }
 }
 
+/// Time passed: the clock, the spinner and its shimmer, the springs, the toast, the card's
+/// deadline.
+fn tick(m: &mut Model, dt: Duration) -> Vec<Cmd> {
+    m.viewport.set_max(m.measured.get());
+    m.viewport.update(ViewportMsg::Tick(dt.as_secs_f64()));
+    m.transcript.clock += dt;
+    if m.portrait_plays() {
+        m.portrait_clock += dt;
+    }
+    m.spin += dt;
+    while m.spin >= Duration::from_millis(FRAME_MS) {
+        m.spin -= Duration::from_millis(FRAME_MS);
+        m.spinner.update();
+        m.frames = m.frames.wrapping_add(1);
+    }
+    if let Some(toast) = &mut m.toast {
+        toast.tick(dt.as_secs_f64());
+        if !toast.alive() {
+            m.toast = None;
+        }
+    }
+    expire(m, Instant::now())
+}
+
+/// An event of the session's, or of a body `below` it.
+fn session_event(m: &mut Model, event: Event, below: Option<String>) -> Vec<Cmd> {
+    let mine = below.is_none();
+    let ended = mine && matches!(event, Event::TurnEnded { .. });
+    if mine {
+        status(m, &event);
+    }
+    let chain: Vec<String> = below.into_iter().collect();
+    fold(m, &event, &chain);
+    // An approval still open when its turn ends is a question no one asks any more.
+    if ended {
+        return deny_all(m, "the turn ended before the human answered");
+    }
+    match event {
+        Event::ToolCall { id, name, input } if mine && name == "bash" => input
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+            .map(|c| Cmd::Classify {
+                id,
+                command: c.to_owned(),
+            })
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The session's own event, for the status: a turn that starts restarts the count, one that
+/// ends lets the next restart it; the end gate's verdict floats a toast.
+fn status(m: &mut Model, event: &Event) {
+    match event {
+        Event::TurnStarted { .. } => {
+            if m.activity.since.is_none() || m.activity.ended {
+                m.activity.since = Some(m.transcript.clock);
+                m.activity.base_tokens = m.transcript.usage.tokens;
+            }
+            m.activity.ended = false;
+            m.activity.actor = None;
+        }
+        Event::TurnEnded { .. } => {
+            m.activity.ended = true;
+            m.activity.actor = None;
+        }
+        Event::GateVerdict { verdict, .. } => {
+            let t = &m.theme;
+            let (word, hue) = match verdict.as_str() {
+                "PASS" => ("pass", t.readable(t.races.elf)),
+                "NOT_VERIFIED" => ("not verified", t.p.gold),
+                _ => ("fail", t.p.alarm),
+            };
+            m.toast = Some(Toast::new(format!("◆ end gate {word}"), hue));
+        }
+        _ => {}
+    }
+}
+
+/// A commissioned body's event: the body acting now is the innermost whose turn runs; when it
+/// ends, the one that commissioned it acts again.
+fn acting(m: &mut Model, event: &Event, chain: &[String]) {
+    match event {
+        Event::TurnEnded { .. } => {
+            m.activity.actor = chain
+                .len()
+                .checked_sub(1)
+                .and_then(|n| chain.get(..n))
+                .and_then(|outer| outer.last().cloned());
+        }
+        Event::Usage { .. } | Event::Held { .. } => {}
+        _ => m.activity.actor = chain.last().cloned(),
+    }
+}
+
 /// An event into the transcript and the sidebar; `chain` names the bodies it came through.
 fn fold(m: &mut Model, event: &Event, chain: &[String]) {
     m.transcript.fold(event, chain.last().map(String::as_str));
@@ -351,7 +526,7 @@ fn fold(m: &mut Model, event: &Event, chain: &[String]) {
 
 /// The card fitted again to the main area: the terminal's size or the sidebar changed.
 fn refit(m: &mut Model) {
-    let (mw, mh) = m.main_area();
+    let (mw, mh) = m.card_area();
     if let Some(a) = &mut m.gate {
         a.fit(mw, mh);
     }
@@ -371,6 +546,10 @@ fn mouse(m: &mut Model, e: MouseEvent) {
         MouseEventKind::ScrollUp => m.viewport.update(ViewportMsg::Up(WHEEL)),
         MouseEventKind::ScrollDown => m.viewport.update(ViewportMsg::Down(WHEEL)),
         MouseEventKind::Down(MouseButton::Left) if m.gate.is_none() => {
+            if let Some(section) = crate::view::sidebar_title_at(m, e.column, e.row) {
+                m.sidebar.fold_section(section);
+                return;
+            }
             let hit = {
                 let h = m.hits.borrow();
                 let inside = e.column >= h.x && e.column < h.x + h.width && e.row >= h.y;
@@ -435,9 +614,10 @@ fn show(m: &mut Model, i: usize) {
 fn toggle_focused(m: &mut Model) {
     let target = m.transcript.focused().or_else(|| {
         let cards: Vec<usize> = m.transcript.cards().collect();
-        cards.into_iter().rev().find(|&i| {
-            matches!(m.transcript.entries().get(i), Some(crate::transcript::Entry::Tool(c)) if crate::blocks::foldable(c))
-        })
+        cards
+            .into_iter()
+            .rev()
+            .find(|&i| m.transcript.entries().get(i).is_some_and(Entry::foldable))
     });
     if let Some(i) = target {
         m.transcript.focus(Some(i));
@@ -467,7 +647,7 @@ fn next_gate(m: &mut Model) {
     {
         // Every approval starts unchosen and unarmed: a key typed as it appears approves
         // nothing.
-        let (w, h) = m.main_area();
+        let (w, h) = m.card_area();
         m.gate = Some(Approval::new(card, w, h));
     }
 }
@@ -540,7 +720,7 @@ fn keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
 
 /// A key while an approval waits: the card decides, or not yet.
 fn gate_keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
-    let (w, h) = m.main_area();
+    let (w, h) = m.card_area();
     let Some(a) = &mut m.gate else {
         return Vec::new();
     };
@@ -585,6 +765,11 @@ fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
     if m.busy() {
         m.transcript
             .fold(&Event::Queued { text: line.clone() }, None);
+    } else {
+        // The status shows from this frame on, before the first token.
+        m.activity.since = Some(m.transcript.clock);
+        m.activity.base_tokens = m.transcript.usage.tokens;
+        m.activity.ended = false;
     }
     m.outstanding += 1;
     vec![Cmd::Ask(line)]

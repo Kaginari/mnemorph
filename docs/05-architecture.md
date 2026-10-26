@@ -137,36 +137,41 @@ cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
 background as `COLORFGBG` reports it, else dark.
 
 ```
-╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash · ⠋ working ────────────────────────────────────────────────────╮
-│                                                                          │ session ───────────────────── │
-│                                                                          │ $0.04 · 60.9k tok             │
-│                                                                          │ ctx ━━━━━━━━──────────── 41%  │
-│                                                                          │ deepseek-v4-flash             │
+╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash ───────────────────────────────────────────────── ● thinking 0s ╮
+│ ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ ─────────────────────────────────────────────────────────── │ ꜱᴇꜱꜱɪᴏɴ ───────────────────── │
+│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ ▘ │ ▾ vitals ──────────────────── │
+│                                                                          │ ᴄᴛx  ━━━━────── 41% / 150.0k  │
+│ ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   │ ᴛᴏᴋ  60.9k                    │
+│ ▌ ● edit  sqlglot/parser.py  write                                   ▕▄▖ │ ᴄᴏꜱᴛ $0.04                    │
+│ ▌   ⎿ ok · 0ms · +1 −1                                               ▕ ▌ │                               │
+│ ▌      - return this                                                 ▕ ▌ │ ▾ memory ──────────────────── │
+│ ▌    1 + return self._parse_collate(this)                            ▕ ▌ │ recalled 3 this ask           │
+│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ ▘ │ grounded 5 · shared 2         │
+│                                                                          │ ✓ “collations drop in         │
+│   ↳ orc-sql  is working on: judge                                        │   \u{202e}_parse_types\u{1b}… │
 │                                                                          │                               │
-│                                                                          │ memory ────────────────────── │
-│ ▸ you  fix the collate bug in nested types                               │ recalled 3 this ask           │
-│                                                                          │ grounded 5 · shared 2         │
-│ ◆ rimuru                                                                 │ ✓ “collations drop in nested  │
-│   The collation is dropped in _parse_types:                              │   types”                      │
-│   ┌─ edit sqlglot/parser.py ───────────────────────────────── +1 −1 ✓ ─┐ │                               │
-│   │ - return this                                                      │ │ files · 1 ─────────────────── │
-│   │ + return self._parse_collate(this)                                 │ │ M sqlglot/parser.py           │
-│   └────────────────────────────────────────────────────────────────────┘ │                               │
-│   ↳ orc-sql  is working on: judge                                        │ bodies · 2 · 2 live ───────── │
-│   ↳ slime-parser  bash pytest tests/test_parser.py                       │ ◆ rimuru            ⠋ working │
-│ ╭──────────────────────────────────────────────────────────────────────╮ │   ● orc-sql         ⠋ working │
-│ │ ›  a line now waits its turn                                         │ │     ● slime-parser     ⠋ bash │
+│   ↳ slime-parser  bash pytest tests/test_parser.py                       │ ▾ files · 1 ───────────────── │
+│  ▄▀▀▀▀▄  ⣾ Thinking… (0s · 61k tokens · esc to interrupt)                │ sqlglot/                      │
+│ ▀▀▀▀▀▀▀▀   slime-parser · running bash                                   │ └ M parser.py                 │
+│ ▀▀▀▀▀▀▀▀                                                                 │                               │
+│  ▀▀▀▀▀▀                                                                  │ ▾ bodies · 2 · 2 live ─────── │
+│ ╭─ ᴀꜱᴋ ────────────────────────────────────── enter queues for rimuru ─╮ │ ◆ rimuru            ⣾ working │
+│ │ ›  a line now waits its turn                                         │ │ … +2 more                     │
 │ ╰──────────────────────────────────────────────────────────────────────╯ │                               │
 ╰─ $0.04 · 60.9k tok · ctx 41% · esc stop · enter queue · pgup scroll · world ~/sqlglot ───────────────────╯
 ```
 
 | Part | What it shows |
 |---|---|
-| header | Mnemorph's mark (the name drawn across the water races' blues), the session's body, its model, whether a turn runs or an approval waits |
-| transcript | the human's lines; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables); tool calls as cards — a spinner while they run, then ✓ or ✗, output folded to four lines, a diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; the end gate's verdict |
-| sidebar | **session**: the spend, the context as a gauge against the stress line, the model; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing |
+| header | Mnemorph's mark (the name drawn across the water races' blues), the session's body and its model on the left; the session's id and its state on the right — `○ idle`, `● running bash 3s`, `◆ waiting for you` |
+| panes | labelled in small capitals on their edges: ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ, ꜱᴇꜱꜱɪᴏɴ (the sidebar), ᴀꜱᴋ (the input) |
+| welcome | the card the conversation opens on: Rimuru's portrait (still), the name and tagline, the races as chips, the world, the model and the session in small capitals, the first keys |
+| transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
+| activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
+| sidebar | at its head, on a column 34 rows tall or more, the portrait of the body working now (Rimuru for the session, a commissioned body's race while it acts) over the world, the model and the state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
-| approval card | the act that asks, its reasons and the paths it opens outside the world, under the gate's own border |
+| approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
+| toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring |
 | status bar | the spend in dollars and tokens, the context against its stress line (gold from 75%, alarm from 90%), the keys that matter now, the world |
 
 | Key | Does |
@@ -175,15 +180,38 @@ background as `COLORFGBG` reports it, else dark.
 | Alt+Enter, Shift+Enter, Ctrl+J | break the line |
 | ↑ ↓ | move between lines, then through the lines sent before |
 | PgUp PgDn, Shift+↑ ↓, Ctrl+Home End, the wheel | scroll the transcript |
-| Alt+↑ ↓ | move the focus between tool cards, scrolling each into view |
-| Ctrl+T, a click on a card | expand the focused (or clicked) card's folded output, or fold it again; with none focused, the newest |
+| Alt+↑ ↓ | move the focus between cards (calls, groups, thoughts), scrolling each into view |
+| Ctrl+T, a click on a card | expand the focused (or clicked) card — a call's folded output, a group's calls, a thought's text — or fold it again; with none focused, the newest |
 | Ctrl+O | show or hide the sidebar |
 | Esc | stop the turn; back to the end of the transcript |
 | Ctrl+C | stop the turn, or leave when none runs |
-| y, n, then Enter | answer an approval; ↓ ↑ read a long act; Esc denies it |
+| 1 or y, 2 or n, 3, then Enter | answer an approval — yes, no, or no with a reason typed for the model; ↑ ↓ pick while the whole act shows, and read a long act otherwise; Esc denies it |
 
 Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
 `/clear`, `/help`, `/quit`.
+
+**It shows its work as it happens.** The status appears in the frame after Enter, before any
+token: the phase is read from the model — an approval on the card, a call whose arguments still
+stream (`calling grep`), a call running (`running bash: pytest -q`), the answer streaming
+(`writing`), the context past its stress line with the next answer not begun (`compacting`), else
+`thinking` — and a commissioned body that acts (its events come through `Seen::From`) puts its
+own name and tool there, and its portrait at the sidebar's head, until its turn ends. The providers hand the stream reasoning as it comes
+and a call's arguments piece by piece (`StreamEvent::Thinking`, `StreamEvent::ToolInput`; the
+server's protocol does not carry them): the reasoning shows as one line that updates in place —
+`◌ thinking · 12s · …its latest words` — and folds to `✓ thought for 12s` when the answer or a
+call begins, its text a key away. A provider that keeps its reasoning in opaque blocks shows it
+when the turn's blocks are journaled: the thought is placed where the step began, timed to the
+step's first output. A call's card appears at its first byte, its summary filling in as its
+arguments arrive, its class read by the classifier off the UI thread; its duration is the time
+to its result. Time is the model's clock, advanced by its ticks.
+
+The portraits are idle loops 24 pixels square (24 columns by 12 rows) in the `.mnanim.json`
+format of Kaginari/mnemorph-animations, embedded from `assets/anims/` and decoded once per race
+into every frame's cells by `kit::mnanim` (the half-block rule of that repository's player); a
+race without its own loop there wears a placeholder slime tinted toward its colour. The portrait
+plays at the loop's own pace, 16 frames a second, advanced by elapsed time under the 30-frame
+cap, only while a body works and the portrait is on screen; idle, it rests on its first frame and
+the UI schedules no tick for it.
 
 The sidebar takes 32 columns on the right from a 100-column terminal up, and folds away below it.
 It shows only what the run or the world gives. The observer sends the chain of bodies each
@@ -201,14 +229,16 @@ indexed as events fold in, so a frame walks only the rows it shows. The UI takes
 sequences a program prints and escapes every other control, bidi and zero-width character as
 `\u{…}` (`mnemorph_loop::hidden`); so does the sidebar, for every claim, path and body name it
 shows. The approval card shows each field through `mnemorph_loop::shown`, the core's own rule
-for what a human approves, and takes an answer only from a key: a bare `y` or `n`, then a pause,
-then Enter. Keys are ignored for 300 ms after the card is first drawn — a key that came before
-the first draw never arms it — and so are keys the terminal read before it; any key that is not `y`, `n`, Enter
-or a scroll — a paste too — clears the choice and arms the card again, so `okay` or `deploy` typed
-into it, or a `y` and a carriage return in one read, approve nothing. An act longer than the card
-scrolls inside it (↓ ↑, PgDn, End): its head shows, the cut marked, with its last line, and `y` is
-refused until every row has been on screen, read in order — a jump past rows never shown does not
-count them. Acts that ask while a card is open wait their turn, their number on the card. The
+for what a human approves, and takes an answer only from a key: a pick (`1` or `y`, `2` or `n`,
+`3`, or ↑ ↓ while the whole act shows), then a pause, then Enter. Every pick passes the same
+rules. Keys are ignored for 300 ms after the card is first drawn — a key that came before
+the first draw never arms it — and so are keys the terminal read before it; any key that is not a
+pick, Enter or a scroll — a paste too — clears the choice and arms the card again, so `okay` or
+`deploy` typed into it, or a `y` and a carriage return in one read, approve nothing. An act longer
+than the card scrolls inside it (↓ ↑, PgDn, End): its head shows, the cut marked, with the end of
+its last line, and yes is refused until every row has been on screen, read in order — a jump past
+rows never shown does not count them. The third answer denies, and once confirmed takes a reason
+typed for the model; Enter sends the denial with it. Acts that ask while a card is open wait their turn, their number on the card. The
 card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending, SIGTERM, SIGHUP,
 SIGINT or SIGQUIT, and ten minutes of silence deny.
 
@@ -218,12 +248,14 @@ approval open or waiting is denied, and a terminal mode that cannot be set at st
 terminal back before the error prints. A panic on the UI thread turns the mouse, bracketed paste
 and the keyboard flags off before its message prints.
 
-**It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
-out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive
+**It stays fast in a long session.** Each entry is laid out once per width and kept — what moves
+(a spinner, an elapsed count) once per frame and second — and a frame lays out only the entries
+it shows, counted up from the end. Only the tail paragraph of a streaming answer reflows: a
+finished paragraph leaves for an entry of its own, joined to the same panel. Stream deltas and tool events that arrive
 together become one frame, and frames come at most 30 a second. An idle UI wakes for nothing.
 The wheel moves the scroll on the same spring as the keys, and the loop ticks only while it moves.
 A test draws a 2,000-message session with the sidebar open — every file it changed, forty
-bodies — and holds every frame under the 33 ms budget in a debug build.
+bodies, the activity strip drawn and the portrait playing — and holds every frame under the 33 ms budget in a debug build.
 
 The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
 ecosystem:
@@ -233,8 +265,10 @@ ecosystem:
 | Bubble Tea | `app` | one model, a message enum, a pure `update` returning commands the runtime runs off the UI thread, a `view` |
 | Lip Gloss | `kit::style`, `kit::text` | a chainable box style — padding, borders with titles set in, width, alignment, margins — blocks joined across and down, all measured in terminal cells |
 | Bubbles | `kit::textarea`, `kit::viewport`, `kit::spinner`, `kit::keyhelp` | components, each with its own `update` and `view` |
-| Harmonica | `kit::spring` | a critically damped spring: the transcript scrolls smoothly |
+| Harmonica | `kit::spring`, `kit::toast` | a critically damped spring: the transcript scrolls smoothly, a toast fades |
 | Glamour | `kit::markdown`, `kit::highlight` | Markdown drawn from a stylesheet the theme derives; code highlighted by syntect's grammars, in colours taken from the palette |
+| Isekai's depth | `kit::slab`, `kit::shimmer` | raised panels — a spine, a lit top edge, a shaded bevel, a cast shadow, every tone stepped from the palette — and a crest of light sweeping a busy word |
+| mnemorph-animations | `kit::mnanim` | the races' portraits, their idle loops decoded once into cells and drawn in half blocks |
 
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
 fails when the two differ.
