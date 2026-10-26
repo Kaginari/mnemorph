@@ -3796,3 +3796,40 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     is spent, whatever the second verdict; a check that wrote never reconsolidates;
   - docs 08 say so.
 - **Tests:** eight lines of one rule give one note; citation through a tool's arguments.
+
+---
+
+### [2026-10-26T03:32:41+01:00] rimuru — M8 rung 5: consolidation and forgetting
+- **Task:** M8 rung 5 (#127).
+- **Files:**
+  - memory consolidate.rs:
+    - `distill`: grounded agreeing notes become one schema note (salience 0.8, confidence the
+      mean of the four most salient capped at 0.95, linked to each); the two most salient stay
+      active, the rest go dormant; dissent is skipped, never merged or slept;
+    - `forget`: dormant; abstract (a schema note at max(0.4, s − 0.1) and max(0.3, κ − 0.1),
+      the original dormant); tombstone, short tier only (the file is rewritten without the text,
+      the event kept);
+  - write.rs `cache` writes the short tier;
+  - `union_merge` also adds `.mnemorph/memory/short/` to git's local exclude (via `local_line`);
+  - docs 08.
+- **Tests:** consolidate.rs (3); notes.rs checks the exclude.
+- **Not yet:** the desk's distillation trigger, which belongs to evolution.
+
+---
+
+### [2026-10-26T03:38:36+01:00] rimuru — #198's review: Fable
+- **Fable found:**
+  - a write-rule hole: `distill` and abstract-`forget` grounded caller text on a free proof
+    string;
+  - the tombstone rewrite was not atomic and left the source and tags;
+  - the schema's owner came from the first merged note;
+  - the `Link` doc was too narrow;
+  - `cache` was written and never read.
+- **Fixed:**
+  - proofs are built in code (`distilled: <ids>`, `abstracted: <id>`);
+  - the tombstone writes a temp file renamed over the old, clearing text, tags and source;
+  - `distill` takes its owner;
+  - the doc is widened;
+  - `gather` reads the body's short tier as its own;
+  - the tombstone was extracted to keep `forget` under 100 lines.
+- **Tests:** the proofs, and a cache recalled by its own body only.

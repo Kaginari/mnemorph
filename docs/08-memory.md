@@ -326,7 +326,8 @@ exception it disagrees with.
 | `tombstone` | text removed, the event kept | machine-local tiers only |
 
 Tracked notes travel by git, so their text cannot be unpublished. Private content therefore never
-enters a tracked tier; a tombstone deletes text only where it can truly be deleted.
+enters a tracked tier; a tombstone deletes text only where it can truly be deleted. The short
+tier is that place: git's local exclude, set when a session opens, keeps it off every commit.
 
 ### Pathologies as instruments
 

@@ -167,17 +167,28 @@ fn covers(claim: &str, path: &str) -> bool {
 }
 
 /// Git merges every note file by union, through its local attributes — never committed, so the
-/// world's own files stay the human's: two machines that both appended never conflict. Lines
-/// already there are not added twice; a world with no git, or whose git files are links, is left.
+/// world's own files stay the human's: two machines that both appended never conflict — and the
+/// short tier stays machine-local, through git's local exclude, so a tombstone there deletes text
+/// that can truly be deleted. Lines already there are not added twice; a world with no git, or
+/// whose git files are links, is left.
 ///
 /// # Errors
 ///
-/// The attributes file cannot be written.
+/// An attributes or exclude file cannot be written.
 pub fn union_merge(world: &Path) -> std::io::Result<()> {
-    const LINE: &str = ".mnemorph/memory/**/*.jsonl merge=union";
-    // Git says where its attributes live: a worktree's or a submodule's `.git` is a file.
+    local_line(
+        world,
+        "info/attributes",
+        ".mnemorph/memory/**/*.jsonl merge=union",
+    )?;
+    local_line(world, "info/exclude", ".mnemorph/memory/short/")
+}
+
+/// Add `line` to one of git's local files (`info/attributes`, `info/exclude`), once.
+fn local_line(world: &Path, git_path: &str, line: &str) -> std::io::Result<()> {
+    // Git says where its local files live: a worktree's or a submodule's `.git` is a file.
     let Ok(out) = std::process::Command::new("git")
-        .args(["rev-parse", "--git-path", "info/attributes"])
+        .args(["rev-parse", "--git-path", git_path])
         .current_dir(world)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .output()
@@ -199,18 +210,23 @@ pub fn union_merge(world: &Path) -> std::io::Result<()> {
     }
     std::fs::create_dir_all(&info)?;
     let had = std::fs::read_to_string(&file).unwrap_or_default();
-    if had.lines().any(|l| l.trim() == LINE) {
+    if had.lines().any(|l| l.trim() == line) {
         return Ok(());
     }
     let mut next = had;
     if !next.is_empty() && !next.ends_with('\n') {
         next.push('\n');
     }
-    next.push_str(LINE);
+    next.push_str(line);
     next.push('\n');
     // Written new beside it, then renamed over it: a link put in its place is replaced, never
     // followed.
-    let temp = info.join(".attributes.mnemorph");
+    let temp = info.join(format!(
+        ".{}.mnemorph",
+        file.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    ));
     let _ = std::fs::remove_file(&temp);
     std::fs::OpenOptions::new()
         .write(true)
