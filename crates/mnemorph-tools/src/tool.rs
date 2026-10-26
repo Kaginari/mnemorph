@@ -126,6 +126,10 @@ impl Outcome {
     }
 }
 
+/// What a refusal outside the soil says next, for a path relative to the world: who owns it and
+/// the ways on — written where the roster is known.
+pub type OwnerOf = Arc<dyn Fn(&str) -> String + Send + Sync>;
+
 /// Where a body works: who it is, the world it may read, the soil it may write, the gate it
 /// asks, and what it already read.
 pub struct Context {
@@ -134,6 +138,8 @@ pub struct Context {
     soil: Vec<PathBuf>,
     /// The body's own seat, absolute: the one place under `.mnemorph` its plan is written.
     seat: Option<PathBuf>,
+    /// Who owns what, for a refusal to name: set where the world's roster is known.
+    owner_of: Option<OwnerOf>,
     /// Claims inside the soil that are not the body's: the longest claim that covers a path
     /// decides, and on a tie the exclusion wins.
     except: Vec<PathBuf>,
@@ -192,6 +198,7 @@ impl Context {
             world,
             soil,
             seat: None,
+            owner_of: None,
             except: Vec::new(),
             root_files: false,
             narrowed: false,
@@ -371,6 +378,14 @@ impl Context {
     #[must_use]
     pub fn with_seat(mut self, seat: impl AsRef<Path>) -> Self {
         self.seat = Some(real(&self.world.join(seat.as_ref())));
+        self
+    }
+
+    /// Who owns a path, so a write outside the soil is refused with its owner named and the
+    /// ways on: route, widen, birth.
+    #[must_use]
+    pub fn with_owner_of(mut self, owner_of: OwnerOf) -> Self {
+        self.owner_of = Some(owner_of);
         self
     }
 
@@ -598,10 +613,11 @@ impl Context {
             Ok(path)
         } else {
             let soil: Vec<String> = self.soil.iter().map(|s| self.shown(s)).collect();
+            let shown = self.shown(&path);
             Err(format!(
-                "`{}` is outside your soil; you may write under: {}",
-                self.shown(&path),
-                soil.join(", ")
+                "`{shown}` is outside your soil; you may write under: {}{}",
+                soil.join(", "),
+                ways_on(self.owner_of.as_ref(), &shown)
             ))
         }
     }
@@ -703,4 +719,12 @@ fn private_scratch() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The ways on from a write outside the soil, when the context knows them.
+fn ways_on(owner_of: Option<&OwnerOf>, shown: &str) -> String {
+    owner_of
+        .map(|f| f(shown))
+        .filter(|w| !w.is_empty())
+        .map_or_else(String::new, |w| format!(". {w}"))
 }

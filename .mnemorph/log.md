@@ -3516,6 +3516,32 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - the test now carries those false positives and stays at 2 findings.
 - **Lesson again:** a scripted edit stopped at a missed anchor, and the test still passed because
   its own edit had not landed yet. Each edit was grepped before trusting the run.
+### [2026-10-26T01:11:17+01:00] rimuru — refusals name the owner and the ways on (#10)
+- **Task:** #10's lesson "an out-of-territory refusal names the owner and carries the three arms
+  (widen, birth, route)".
+- **Files:**
+  - tools: `OwnerOf` and `Context::with_owner_of`; `ways_on` adds the owner and the arms to the
+    soil refusal. The tools stay below the world: the lookup is a closure;
+  - commission.rs `context_for` fills it from `explain`: a domain is routed, never written, so
+    ground only a domain covers reads as nobody's (birth);
+  - docs 02.
+- **Test:** `a_refusal_names_the_owner_and_the_ways_on`: a sibling's file routes, a domain-only
+  file is a birth, and the human's file names no route.
+
+---
+
+### [2026-10-26T01:17:41+01:00] rimuru — #189's review: Fable
+- **Fable found:**
+  - "the parent commissions X" holds only for a same-parent sibling;
+  - a seat and another body's scratch read as route targets;
+  - "Rimuru founds its keeper" names no mechanism (the ontology says Rimuru routes its birth).
+- **Fixed:** the loop writes the whole sentence (`ways_on` in commission.rs, by owner and rule):
+  - a sibling routes by the parent; any other route goes up to a common commander;
+  - a seat, or a scratch, is never routed;
+  - nobody's ground is a birth Rimuru routes;
+  - the human's and the harness's soil are theirs;
+  - tools only append; docs 02.
+- **Test:** sibling, birth, scratch and the human's.
 
 ---
 

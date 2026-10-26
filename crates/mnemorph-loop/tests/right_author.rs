@@ -280,3 +280,45 @@ fn a_check_that_gave_no_result_is_not_verified() {
     assert_eq!(crashed.verdict(), Verdict::Fail, "{crashed:?}");
     assert_eq!(Verdict::NotVerified.word(), "NOT_VERIFIED");
 }
+
+/// A write outside the soil names who owns the path and the ways on: route to a sibling's
+/// keeper, birth for ground nobody keeps, never a route to another body's scratch, and nothing
+/// for the human's.
+#[test]
+fn a_refusal_names_the_owner_and_the_ways_on() {
+    let w = World::new("ways-on");
+    w.doc(
+        "slime",
+        "b",
+        "# slime-b\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/b/\n",
+    );
+    let roster = Roster::load(&w.0);
+    let mut cx = context_for(&w.0, &roster, "slime-a")
+        .unwrap()
+        .with_sandbox(Sandbox::None("refusals under test".into()));
+    let write = |cx: &mut mnemorph_tools::Context, path: &str| {
+        let args = serde_json::json!({"path": path, "content": "x\n"}).to_string();
+        mnemorph_tools::call(&registry(), "write", &args, cx).content
+    };
+    let sibling = write(&mut cx, "lib/b/x.rs");
+    assert!(
+        sibling.contains(
+            "It is slime-b's. Route: say so in your report, and your parent commissions slime-b"
+        ),
+        "{sibling}"
+    );
+    let nobody = write(&mut cx, "lib/other.rs");
+    assert!(
+        nobody
+            .contains("Nobody keeps it. Birth: say so in your report, and Rimuru routes its birth"),
+        "{nobody}"
+    );
+    let scratch = write(&mut cx, ".mnemorph/tmp/slime-b/x.txt");
+    assert!(
+        scratch.contains("It is slime-b's scratch: yours is under .mnemorph/tmp/slime-a/"),
+        "{scratch}"
+    );
+    assert!(!scratch.contains("Route"), "{scratch}");
+    let human = write(&mut cx, ".mnemorph/config.toml");
+    assert!(!human.contains("Route"), "{human}");
+}
