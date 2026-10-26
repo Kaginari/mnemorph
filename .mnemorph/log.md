@@ -4105,3 +4105,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** territory filed and not kept; a run drains once (no second turn, no second note).
 - **Tooling:** worktrees sharing one dev target clobber each other's workspace crates (cargo's
   hash ignores the path). `cargo clean -p` the touched crates when switching worktrees.
+
+---
+
+### [2026-10-26T09:44:07+01:00] rimuru — a note is cited by use, not only by its id
+- **Why** (the human, relaying a side agent): since #202, "cited" means the body typed the
+  note's long id, which bodies rarely do. Doubt, credit and retirement would almost never fire,
+  and corrections would keep piling up.
+- **Now:**
+  - an ask cites a recalled note when its own text or acts' arguments name the id, or touch a
+    specific term the note names (`anchor_terms` from `specific_terms`; bare directories and
+    stock files still don't count);
+  - recall's header asks bodies to name the ids they rely on;
+  - each trace counts `recalled` and `cited`, and `memory status` prints the rate, so the bench
+    can show whether the rules fire.
+- **Tests:**
+  - solo.rs: three notes, cited by id 0.9, by use 0.9, untouched 0.4; it fails without
+    cite-by-use (checked);
+  - pathology.rs: the cite-rate line.
+- **Tooling:** a reviewer building in the shared dev target clobbered this build again, so this
+  branch builds in a private `tempest-cited-target`, deleted after merge.

@@ -239,6 +239,9 @@ pub struct Run {
     recalled: Option<Beat>,
     /// The anchors recalled into this ask: what a run-ending failure reconsolidates.
     anchors: Vec<mnemorph_memory::Anchor>,
+    /// Each anchor's specific terms — the paths, files and identifiers it names — so an ask that
+    /// acts on one cites it without quoting its id.
+    anchor_terms: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
     /// Where this ask's messages start: what it said and did, for what it cited.
     ask_from: usize,
     /// The ask's last FAIL, with the gate's journal heading: what its run-ending failure revises by.
@@ -332,6 +335,7 @@ impl Run {
             folded_upto: 0,
             recalled: None,
             anchors: Vec::new(),
+            anchor_terms: std::collections::BTreeMap::new(),
             ask_from: 0,
             failed_in_ask: None,
             office: "ask".into(),
@@ -683,6 +687,8 @@ impl Run {
                 dissent,
                 outcome: self.landed_in_ask.clone(),
                 forced,
+                recalled: self.anchors.len(),
+                cited: self.cited_anchors().iter().filter(|a| a.cited).count(),
                 seated,
             };
             if let Err(e) = mnemorph_memory::pathology::trace(self.cx.world(), &self.body.name, &t)
@@ -1042,6 +1048,9 @@ impl Run {
     /// The anchors recalled into this ask, each marked cited when what the body said and did — its
     /// text and its acts' arguments — names it. The ask's own message, where recall shows the
     /// anchors, is never the body's word.
+    ///
+    /// Naming its id is one way; acting on what it names is the other: an ask whose text or acts'
+    /// arguments touch a path, file or identifier the note names used it.
     fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
         let said: String = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
@@ -1054,10 +1063,15 @@ impl Run {
             })
             .collect::<Vec<_>>()
             .join("\n");
+        let used = mnemorph_memory::text::specific_terms(&said);
         self.anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
-                cited: said.contains(&a.id),
+                cited: said.contains(&a.id)
+                    || self
+                        .anchor_terms
+                        .get(&a.id)
+                        .is_some_and(|terms| terms.iter().any(|t| used.contains(t))),
                 ..a.clone()
             })
             .collect()
@@ -1336,7 +1350,8 @@ impl Run {
             asked
         } else {
             format!(
-                "Recalled from memory (a proposed note is unproven):\n{}\n\n{asked}",
+                "Recalled from memory (a proposed note is unproven; when you rely on a note, name \
+                 its id):\n{}\n\n{asked}",
                 recalled.join("\n")
             )
         }
@@ -1401,6 +1416,16 @@ impl Run {
             mnemorph_memory::pathology::fingerprint(text, &ids, &self.office)
         };
         let (forced, seated, escalate) = self.treat(text, &mut r, &memory.notes, &fingerprint);
+        self.anchor_terms = r
+            .anchors
+            .iter()
+            .map(|h| {
+                (
+                    h.note.id.clone(),
+                    mnemorph_memory::text::specific_terms(&h.note.text),
+                )
+            })
+            .collect();
         self.anchors = r
             .anchors
             .iter()

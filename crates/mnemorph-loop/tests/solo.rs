@@ -364,7 +364,7 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     let claim = mnemorph_memory::propose(
         &w.world(),
         "slime-other",
-        "out.txt should say broken when the build is red",
+        "the status should say broken when the build is red",
         vec![],
         None,
     )
@@ -376,21 +376,19 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     )
     .unwrap()
     .note;
-    // Recalled beside it, never named by the body: shown in the ask, yet not cited.
-    let bystander = mnemorph_memory::ground(
-        &w.world(),
-        mnemorph_memory::propose(
+    let grounded = |text: &str| {
+        mnemorph_memory::ground(
             &w.world(),
-            "slime-other",
-            "the build is red when out.txt is stale",
-            vec![],
-            None,
+            mnemorph_memory::propose(&w.world(), "slime-other", text, vec![], None).unwrap(),
+            &mnemorph_memory::Proof::confirmed("the human"),
         )
-        .unwrap(),
-        &mnemorph_memory::Proof::confirmed("the human"),
-    )
-    .unwrap()
-    .note;
+        .unwrap()
+        .note
+    };
+    // Never named, but acted on: the body writes the file it names.
+    let used = grounded("out.txt holds what the build says when it is red");
+    // Recalled beside them, never named nor acted on: shown in the ask, yet not cited.
+    let bystander = grounded("the build is red and broken when .build/stamp is stale");
     let model = Arc::new(ScriptedModel::new([
         tool(
             "t1",
@@ -417,11 +415,20 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     assert_eq!(revises.len(), 1, "one per failed act: {revises:?}");
     let r = revises[0];
     assert_eq!(r.status, Status::Grounded);
-    assert_eq!(r.links.len(), 2, "{:?}", r.links);
+    assert_eq!(
+        r.links.len(),
+        3,
+        "{:?} — note {note}, used {used}, bystander {bystander}",
+        r.links
+    );
     let weight = |id: &str| r.links.iter().find(|l| l.note == id).unwrap().weight;
     assert!(
         (weight(&note) - 0.9).abs() < 1e-9,
         "cited by an act's arguments"
+    );
+    assert!(
+        (weight(&used) - 0.9).abs() < 1e-9,
+        "cited by acting on the file it names"
     );
     assert!(
         (weight(&bystander) - 0.4).abs() < 1e-9,
