@@ -104,7 +104,7 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40) | checkpoint |
+| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40); the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
@@ -181,7 +181,7 @@ calls, interrupts and queued lines at a session and checks every request it send
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
-| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`); 40 turns with nothing landed (`actBudget`); the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times with no green and nothing landed between, or 8 times muted (`bench`) | checkpoint: the run is busy, not working |
+| **stall** | 3 re-reads of unchanged windows with nothing landed (`repin`); 40 turns with nothing landed (`actBudget`), or the run's steps when it has more, so its steps can be spent; the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times with no green and nothing landed between, or 8 times muted (`bench`) | checkpoint: the run is busy, not working |
 
 All are code. None of them asks the body how it feels.
 

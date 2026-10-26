@@ -113,6 +113,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.relieve_at", Kind::Int),
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
+    ("steps.solo", Kind::Int),
     ("evolution.mode", Kind::Str),
     ("models.provider", Kind::Str),
     ("models.default", Kind::Str),
@@ -242,6 +243,9 @@ pub struct Hole {
     /// Why it was not taken.
     pub why: String,
 }
+
+/// The session body's steps working solo, by default: an Elf's, an Orc's and a Slime's.
+pub const SOLO_STEPS: u32 = 100;
 
 /// The merged configuration.
 #[derive(Debug, Clone, Default)]
@@ -745,6 +749,18 @@ impl Config {
     #[must_use]
     pub fn context_stress_tokens(&self) -> u64 {
         self.int("stress.context_tokens").unwrap_or(150_000)
+    }
+
+    /// The steps of the session's own body, working solo: it does the work of the shortest chain
+    /// it stands for — an Elf, an Orc and a Slime, 30 + 30 + 40 — so it is given their steps, not
+    /// one body's. Spend is capped only by the `budget.*` caps the human sets; without them, the
+    /// steps, the clock, the context line and the stall guards are what stop it.
+    #[must_use]
+    pub fn solo_steps(&self) -> u32 {
+        self.int("steps.solo")
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(SOLO_STEPS)
     }
 
     /// Evolution applies its plans itself, or proposes them.

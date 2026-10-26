@@ -292,7 +292,7 @@ impl Run {
             prices: setup.prices,
             caller: setup.caller,
             messages: Vec::new(),
-            stress: Stress::default(),
+            stress: Stress::for_steps(limits.steps),
             steps: 0,
             ask_steps: 0,
             spent_wt: 0,
@@ -694,7 +694,7 @@ impl Run {
         }
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
-        self.stress = Stress::default();
+        self.stress = Stress::for_steps(self.limits.steps);
         self.noticed = false;
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
