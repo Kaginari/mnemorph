@@ -3886,3 +3886,53 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:**
   - a schema of schemas plus a split, which fails with the old `inherit` (checked);
   - the ownerless row.
+
+---
+
+### [2026-10-26T08:26:08+01:00] rimuru — M8 rung 6, second half: the replay loop and lock-in
+- **Task:** M8 rung 6 (#128), the two remaining findings, each with its act.
+- **Files:**
+  - memory pathology.rs:
+    - `fingerprint`: SHA-256 over the query, the anchor ids and the office (adds `sha2` 0.11,
+      MIT/Apache);
+    - `Trace` and `trace`/`traces`, in machine-local `short/recalls/<name>.jsonl`;
+    - `replays`: 3 in the last 5, the current included, nothing landed, no dissent;
+    - `locked_in`: a grounded revision linked to a recalled agreeing note, newer than all;
+    - `best_dissent`, with the floor set aside;
+    - `force`, which takes the lowest agreeing seat;
+    - `findings` and `traced`, for status;
+  - loop run.rs:
+    - `treat` at each recall: lock-in first, then the replay; each act is a warning;
+    - escalation adds an `@M replay:` line;
+    - `end` appends the trace; `landed_in_ask` is the gate heading; `with_office`;
+  - commission passes the office;
+  - mnemorphd `memory status` lists the trace findings (`print_memory`, a `pathologies` field in
+    `--json`); the exit code still reflects only unproven writes;
+  - docs 08.
+- **Tests:**
+  - pathology.rs (3);
+  - loop.rs: a replayed recall escalates on the third ask, and lock-in forces a non-matching
+    revision. The lock-in test was checked to fail with the detector disabled.
+- **Noted:** `esc_stops_the_child` failed once in the full run at 12 s under load 9.5 from the
+  bench containers, and passed three times alone. It is a timing test, not this change.
+
+---
+
+### [2026-10-26T08:36:02+01:00] rimuru — #200's review: Fable
+- **Fable found:**
+  - a FAIL's gate heading counted as landed;
+  - an interrupted ask left a trace;
+  - the trace held the fingerprint after the force;
+  - lock-in re-fires on every identical recall;
+  - the short exclude is installed only on open;
+  - traced-only rows were unsorted.
+- **Fixed:**
+  - only a passing verdict lands;
+  - no trace on `Interrupted`;
+  - the fingerprint is taken before `treat` and passed to it;
+  - docs 08 say lock-in repeats until consolidation retires what it corrects;
+  - status rows are sorted, the shared row last.
+- **Left:** the exclude-on-open. Every session opens through `open.rs`, and calling `git` per
+  trace costs more than it saves.
+- **Untested:** the interrupt guard. A scripted model answers before the loop checks the
+  interrupt, so a mid-ask Esc needs the blocking-command setup.

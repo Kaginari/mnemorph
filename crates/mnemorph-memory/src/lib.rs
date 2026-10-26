@@ -5,6 +5,7 @@
 pub mod audit;
 pub mod consolidate;
 pub mod note;
+pub mod pathology;
 pub mod recall;
 pub mod store;
 pub mod text;

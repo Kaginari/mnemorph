@@ -1423,3 +1423,124 @@ async fn an_ask_recalls_what_memory_holds_and_journals_the_anchors() {
             .any(|b| matches!(b, Beat::Warning { text } if text.contains("could not be read")))
     );
 }
+
+/// The same recall a third time in five with nothing landed, and no correction in memory: the body
+/// is told to change its approach, and each ended ask leaves its trace.
+#[tokio::test]
+async fn a_replayed_recall_tells_the_body_to_change_its_approach() {
+    let w = World::new("replay");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "the tokenizer keeps interval fractions whole",
+        vec![],
+        None,
+    )
+    .unwrap();
+    mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        answer("looking"),
+        answer("still looking"),
+        answer("looking again"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    for _ in 0..3 {
+        ask(&mut run, "why does the tokenizer split interval fractions").await;
+    }
+    let last_user = |i: usize| -> String {
+        model.requests()[i]
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == mnemorph_provider::Role::User)
+            .unwrap()
+            .content
+            .iter()
+            .filter_map(|b| match b {
+                Block::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    assert!(!last_user(1).contains("@M replay"), "twice is no loop");
+    assert!(
+        last_user(2).contains("@M replay: this recall came back three times"),
+        "{}",
+        last_user(2)
+    );
+    let name = "slime-test";
+    let traces = mnemorph_memory::pathology::traces(&w.world(), name).unwrap();
+    assert_eq!(traces.len(), 3);
+    assert_eq!(traces[2].forced.as_deref(), Some("replay-escalated"));
+    assert!(
+        traces
+            .iter()
+            .all(|t| t.outcome.is_none() && t.fingerprint == traces[0].fingerprint)
+    );
+}
+
+/// Lock-in: a revision newer than every note recalled, linked to one of them, while no correction
+/// was selected — it is recalled too, though its words match nothing in the ask.
+#[tokio::test]
+async fn a_newer_revision_is_forced_into_a_locked_in_recall() {
+    let w = World::new("lockin");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "the tokenizer keeps interval fractions whole",
+        vec![],
+        None,
+    )
+    .unwrap();
+    let old = mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let revision = mnemorph_memory::revise(
+        &w.world(),
+        "slime-other",
+        &["traits hold: a rounding regression broke the money columns".into()],
+        &[mnemorph_memory::Anchor {
+            id: old.clone(),
+            personal: false,
+            dissent: false,
+            cited: true,
+        }],
+        "log.md gate: FAIL",
+    )
+    .unwrap()
+    .remove(0);
+    let model = Arc::new(ScriptedModel::new([answer("noted")]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "why does the tokenizer split interval fractions").await;
+    let first: String = model.requests()[0]
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == mnemorph_provider::Role::User)
+        .unwrap()
+        .content
+        .iter()
+        .filter_map(|b| match b {
+            Block::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(first.contains(&format!("@M {old} ")), "{first}");
+    assert!(
+        first.contains(&format!("@M {revision} ")),
+        "the revision is recalled: {first}"
+    );
+    let name = "slime-test";
+    let traces = mnemorph_memory::pathology::traces(&w.world(), name).unwrap();
+    assert_eq!(traces[0].forced.as_deref(), Some("lock-in"));
+}
