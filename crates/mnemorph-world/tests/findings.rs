@@ -340,3 +340,39 @@ fn a_mind_nobody_wears_and_not_shared_is_an_orphan() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// `doc-provenance`: a date or a change note in the law or a creature's doc; fenced code, and a
+/// number that is no date, are left alone.
+#[test]
+fn a_date_or_a_change_note_in_a_living_doc_is_doc_provenance() {
+    let w = std::env::temp_dir().join(format!("mnemorph-provenance-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(w.join(".mnemorph/slime/s")).unwrap();
+    std::fs::write(
+        w.join(".mnemorph/law.md"),
+        "# Law\n\nWrite tests first.\nAdded on the human's order.\nSchemas of the wire, in the caller's order; fields added by the parser.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        w.join(".mnemorph/slime/s/README.md"),
+        "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n\n## Notes\n\
+         Owns the parser since 2026-10-24.\nPort 8080-1234 and v2026-10-24x are no dates, nor `log/2026-10-24.md`.\n\
+         ```\nlet released = \"2026-01-01\";\n```\n",
+    )
+    .unwrap();
+    let found = mnemorph_world::provenance(&Roster::load(&w), &w);
+    let at: Vec<&str> = found.iter().map(|f| f.at.as_str()).collect();
+    assert_eq!(
+        at,
+        [".mnemorph/law.md:4", ".mnemorph/slime/s/README.md:7"],
+        "{found:?}"
+    );
+    assert!(
+        found
+            .iter()
+            .all(|f| f.code == "doc-provenance" && f.severity == Severity::Medium)
+    );
+    assert!(found[1].message.contains("2026-10-24"));
+    assert_eq!(found[1].creatures, ["slime-s"]);
+    let _ = std::fs::remove_dir_all(&w);
+}

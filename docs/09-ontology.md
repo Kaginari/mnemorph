@@ -366,6 +366,7 @@ blocking. Findings are never summed into a score.
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
+| `doc-provenance` | medium | a date (`YYYY-MM-DD`) or a change note (`added on`, `updated on`, `edited on`, `as of`, `at the request of`, `per the human`, each as words of its own) in the law or a creature's doc, code in fences or backticks aside — provenance lives only in `log.md` |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
 | `prose-claim` | low | a Slime's doc names, in prose, a path of the world its Territory field does not claim: a backticked word read as a claim would be, that exists, on soil a Slime could claim (a zone, a domain, or no one's) — one per path, at its line, in `onto check` |
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |
