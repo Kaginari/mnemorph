@@ -456,6 +456,8 @@ fn memory(args: &[String]) -> ExitCode {
             rows.push((name, Vec::new(), Vec::new()));
         }
     }
+    // By name, the shared row last.
+    rows.sort_by(|a, b| (a.0 == SHARED, &a.0).cmp(&(b.0 == SHARED, &b.0)));
     for (name, _, seen) in &mut rows {
         if name != SHARED {
             *seen = pathology::findings(&pathology::traces(&world, name).unwrap_or_default());

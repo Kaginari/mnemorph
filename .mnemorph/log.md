@@ -3915,3 +3915,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     revision. The lock-in test was checked to fail with the detector disabled.
 - **Noted:** `esc_stops_the_child` failed once in the full run at 12 s under load 9.5 from the
   bench containers, and passed three times alone. It is a timing test, not this change.
+
+---
+
+### [2026-10-26T08:36:02+01:00] rimuru — #200's review: Fable
+- **Fable found:**
+  - a FAIL's gate heading counted as landed;
+  - an interrupted ask left a trace;
+  - the trace held the fingerprint after the force;
+  - lock-in re-fires on every identical recall;
+  - the short exclude is installed only on open;
+  - traced-only rows were unsorted.
+- **Fixed:**
+  - only a passing verdict lands;
+  - no trace on `Interrupted`;
+  - the fingerprint is taken before `treat` and passed to it;
+  - docs 08 say lock-in repeats until consolidation retires what it corrects;
+  - status rows are sorted, the shared row last.
+- **Left:** the exclude-on-open. Every session opens through `open.rs`, and calling `git` per
+  trace costs more than it saves.
+- **Untested:** the interrupt guard. A scripted model answers before the loop checks the
+  interrupt, so a mid-ask Esc needs the blocking-command setup.

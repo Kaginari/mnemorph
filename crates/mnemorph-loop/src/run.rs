@@ -646,8 +646,11 @@ impl Run {
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
-        // The ask's recall leaves its trace: what the replay loop reads at the next.
-        if let Some((fingerprint, dissent, forced)) = self.recall_trace.clone() {
+        // The ask's recall leaves its trace: what the replay loop reads at the next. An ask the
+        // human stopped is no replay of anything.
+        if !matches!(ending, Ending::Interrupted)
+            && let Some((fingerprint, dissent, forced)) = self.recall_trace.clone()
+        {
             let t = mnemorph_memory::pathology::Trace {
                 time: mnemorph_memory::store::now_ms(),
                 fingerprint,
@@ -985,7 +988,8 @@ impl Run {
         };
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
-                if heading.is_some() {
+                // A change landed only when the gate passed it: a failure is no new outcome.
+                if verdict.passed() && heading.is_some() {
                     self.landed_in_ask.clone_from(&heading);
                 }
                 if verdict.passed() {
@@ -1296,7 +1300,12 @@ impl Run {
         if r.anchors.is_empty() {
             return Vec::new();
         }
-        let (forced, escalate) = self.treat(text, &mut r, &memory.notes);
+        // The fingerprint is the recall's own, before any act forces a note in: a replay matches it.
+        let fingerprint = {
+            let ids: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
+            mnemorph_memory::pathology::fingerprint(text, &ids, &self.office)
+        };
+        let (forced, escalate) = self.treat(text, &mut r, &memory.notes, &fingerprint);
         self.anchors = r
             .anchors
             .iter()
@@ -1321,9 +1330,7 @@ impl Run {
                     .into(),
             );
         }
-        let anchors: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
         let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
-        let fingerprint = mnemorph_memory::pathology::fingerprint(text, &anchors, &self.office);
         self.recall_trace = Some((fingerprint, dissent, forced));
         lines
     }
@@ -1336,6 +1343,7 @@ impl Run {
         text: &str,
         r: &mut mnemorph_memory::Recalled,
         notes: &[(mnemorph_memory::Note, mnemorph_memory::Relation)],
+        fingerprint: &str,
     ) -> (Option<String>, bool) {
         use mnemorph_memory::pathology as p;
         if let Some(revision) = p::locked_in(r, notes) {
@@ -1349,11 +1357,9 @@ impl Run {
             });
             return (Some("lock-in".into()), false);
         }
-        let anchors: Vec<String> = r.anchors.iter().map(|h| h.note.id.clone()).collect();
         let dissent = r.anchors.iter().any(|h| h.note.polarity.dissents());
-        let fingerprint = p::fingerprint(text, &anchors, &self.office);
         let past = p::traces(self.cx.world(), &self.body.name).unwrap_or_default();
-        if !p::replays(&past, &fingerprint, dissent) {
+        if !p::replays(&past, fingerprint, dissent) {
             return (None, false);
         }
         if let Some(d) = p::best_dissent(text, notes) {

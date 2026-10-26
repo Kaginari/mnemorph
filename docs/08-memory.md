@@ -361,15 +361,17 @@ The replay loop and lock-in are read at each recall, before the body sees it:
 
 - **The office** is the commission's (`findings`, `verdict`, `draft`), or `ask` for a body asked
   directly.
-- **Nothing landed** means the ask's end gate judged no change: its trace's outcome is the gate's
-  journal heading when one was written. Each ended ask appends its trace — fingerprint, whether a
+- **Nothing landed** means the ask's end gate passed no change: its trace's outcome is the
+  journal heading of a passing verdict, so failing the same way again is no new outcome. An ask
+  the human interrupted leaves no trace; the fingerprint is taken before any act forces a note in. Each ended ask appends its trace — fingerprint, whether a
   dissent sat among the anchors, outcome, the act forced — to the machine-local
   `.mnemorph/memory/short/recalls/<creature>.jsonl`.
 - **The replay loop's act** seats the best dissenting note for the query, the floor set aside;
   with none in memory, the recall ends with an `@M replay:` line telling the body to change its
   approach or say what blocks it.
 - **Lock-in** reads only a grounded revision linked to one of the recalled agreeing notes and
-  newer than all of them; its act seats the newest such revision. A forced note takes the place
+  newer than all of them; its act seats the newest such revision, at every such recall until
+  consolidation retires what the revision corrects. A forced note takes the place
   of the lowest-ranked agreeing anchor, which is counted cut.
 
 Each act is said as a warning in the run's journal. `memory status` lists, per creature, a replay
