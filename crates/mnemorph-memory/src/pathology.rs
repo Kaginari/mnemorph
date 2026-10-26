@@ -51,6 +51,13 @@ pub struct Trace {
     /// The note the act seated, if it seated one.
     #[serde(default)]
     pub seated: Option<String>,
+    /// How many notes the recall showed.
+    #[serde(default)]
+    pub recalled: usize,
+    /// How many of them the ask cited — by id, or by acting on what they name: the evidence that
+    /// credits, doubts and retires notes reaches only these.
+    #[serde(default)]
+    pub cited: usize,
 }
 
 /// A creature's recall traces in `world`: in the machine-local short tier, never tracked.
@@ -205,6 +212,15 @@ pub fn findings(past: &[Trace]) -> Vec<String> {
                 window.len()
             ));
         }
+    }
+    // How often recall is used: retirement and credit weigh only what was cited.
+    let recalled: usize = window.iter().map(|t| t.recalled).sum();
+    if recalled > 0 {
+        let cited: usize = window.iter().map(|t| t.cited).sum();
+        out.push(format!(
+            "cited {cited} of {recalled} recalled notes in the last {} asks",
+            window.len()
+        ));
     }
     for act in ["lock-in", "replay", "replay-escalated"] {
         let n = window
