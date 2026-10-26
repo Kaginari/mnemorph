@@ -200,6 +200,8 @@ enum Stop {
 
 /// The tokens a clock death's salvage turn may write.
 pub const SALVAGE_TOKENS: u32 = 4096;
+/// The longest a drain turn may take: what is left of the clock, up to this.
+pub const DRAIN_GRACE: Duration = Duration::from_secs(120);
 /// The share of the window the stress line may never pass (percent).
 pub const CONTEXT_STRESS_PCT: u64 = 90;
 /// The stress line, in tokens, by default.
@@ -250,6 +252,8 @@ pub struct Run {
     landed_in_ask: Option<String>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
     opening: Option<String>,
+    /// How often the run has drained: a full context drains once, and checkpoints plainly after.
+    drains: u32,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -334,6 +338,7 @@ impl Run {
             recall_trace: None,
             landed_in_ask: None,
             opening: None,
+            drains: 0,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -525,6 +530,14 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // A run that drained before its stop never drains again: its notes are already kept.
+        run.drains = u32::try_from(
+            beats
+                .iter()
+                .filter(|b| matches!(b, Beat::Model { stop, .. } if stop == "drain"))
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
         // The cost and context meters read the ledger, so a budget or context checkpoint does
         // not resume into one more call it already could not afford.
         if let Some(ledger) = &run.ledger {
@@ -1131,9 +1144,10 @@ impl Run {
                 "context: {} of {line} tokens — start a fresh session, or end the turn and say what is left",
                 self.last_occupancy
             );
-            // The line sits below the window: room for one drain turn, unless a jump took it.
+            // The line sits below the window: room for one drain turn, unless a jump took it — and
+            // a run drains once.
             let room = self.limits.window.saturating_sub(self.last_occupancy);
-            return if room >= u64::from(SALVAGE_TOKENS) * 2 {
+            return if self.drains == 0 && room >= u64::from(SALVAGE_TOKENS) * 2 {
                 Some(Stop::Drain(why))
             } else {
                 checkpoint(why)
@@ -1510,9 +1524,13 @@ impl Run {
         let report = format!("Escalated to {to} ({signal}).\n\n{}", order.outcome.content);
         match ending {
             Ending::Answered(text) => Ending::Answered(format!("{text}\n\n{report}")),
-            Ending::Checkpoint { why, .. } => Ending::Checkpoint {
+            // What the stopped run wrote down before it stopped stays beside the report.
+            Ending::Checkpoint { why, salvage } => Ending::Checkpoint {
                 why,
-                salvage: Some(report),
+                salvage: Some(match salvage {
+                    Some(s) => format!("{s}\n\n{report}"),
+                    None => report,
+                }),
             },
             other => other,
         }
@@ -1817,7 +1835,9 @@ impl Run {
     async fn salvage(&mut self, why: &str) -> Ending {
         let note =
             "Time is up. In a few lines: what you did, what you learned, what is left. No tools.";
-        let salvage = self.last_turn(note, "salvage").await;
+        let grace =
+            (self.limits.deadline / 10).clamp(Duration::from_secs(2), Duration::from_secs(60));
+        let salvage = self.last_turn(note, "salvage", grace).await;
         self.end(Ending::Checkpoint {
             why: why.to_owned(),
             salvage,
@@ -1830,25 +1850,50 @@ impl Run {
         let note = "The context is full and this session must break. Before it does, write down \
                     what is not durable, one line each: `@U <law|colony|territory> <fact>` for \
                     what you learned that is written nowhere, then what is left. No tools.";
-        let mut salvage = self.last_turn(note, "drain").await;
+        self.drains += 1;
+        // The clock is not spent: the drain may take what is left of it, up to two minutes.
+        let grace = self
+            .limits
+            .deadline
+            .saturating_sub(self.started.elapsed())
+            .clamp(Duration::from_secs(2), DRAIN_GRACE);
+        let mut salvage = self.last_turn(note, "drain", grace).await;
         if let Some(text) = salvage.as_mut() {
-            let kept = self.keep_unsaid(text);
-            if kept > 0 {
+            let (notes, facts) = self.keep_unsaid(text);
+            if notes + facts > 0 {
                 use std::fmt::Write as _;
-                let _ = write!(text, "\n\n[memory: {kept} line(s) kept as proposed notes]");
+                let _ = write!(
+                    text,
+                    "\n\n[memory: {notes} line(s) kept as proposed notes, {facts} territory fact(s) filed]"
+                );
             }
         }
         self.end(Ending::Checkpoint { why, salvage })
     }
 
-    /// A drain's `@U` lines, each a proposed note of the body's own: how many were kept.
-    fn keep_unsaid(&self, text: &str) -> usize {
+    /// A drain's `@U` lines, each a proposed note of the body's own — a territory fact filed to the
+    /// ontology instead: how many notes were kept, and how many facts filed.
+    fn keep_unsaid(&self, text: &str) -> (usize, usize) {
         // The wire's own reader, so a drain's `@U` reads as a report's does.
         let Some(report) = mnemorph_wire::Report::parse(&format!("@S DRAIN\n{text}")) else {
-            return 0;
+            return (0, 0);
         };
-        let mut kept = 0;
+        let (mut kept, mut filed) = (0, 0);
         for u in report.unsaid.iter().filter(|u| !u.text.trim().is_empty()) {
+            // A territory fact is no memory: it is filed to the ontology, as a report's is.
+            if u.kind == Some(mnemorph_wire::UnsaidKind::Territory) {
+                if let Some(event) =
+                    mnemorph_world::facts::from_unsaid(&u.text, &self.body.name, None)
+                {
+                    match mnemorph_world::Facts::record(self.cx.world(), &event) {
+                        Ok(()) => filed += 1,
+                        Err(e) => self.record(&Beat::Warning {
+                            text: format!("a drained fact could not be filed: {e}"),
+                        }),
+                    }
+                }
+                continue;
+            }
             let mut tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
             tags.push("drain".into());
             match mnemorph_memory::propose(self.cx.world(), &self.body.name, &u.text, tags, None) {
@@ -1858,12 +1903,12 @@ impl Run {
                 }),
             }
         }
-        kept
+        (kept, filed)
     }
 
-    /// One last turn without tools, capped at [`SALVAGE_TOKENS`], in a grace of a tenth of the
-    /// clock (2–60 s): its text, or `None` when the model gave none in time.
-    async fn last_turn(&mut self, note: &str, stop: &str) -> Option<String> {
+    /// One last turn without tools, capped at [`SALVAGE_TOKENS`], within `grace`: its text, or
+    /// `None` when the model gave none in time.
+    async fn last_turn(&mut self, note: &str, stop: &str, grace: Duration) -> Option<String> {
         self.record(&Beat::Note {
             text: note.to_owned(),
         });
@@ -1876,8 +1921,6 @@ impl Run {
         );
         let mut request = self.request(SALVAGE_TOKENS);
         request.tools.clear();
-        let grace =
-            (self.limits.deadline / 10).clamp(Duration::from_secs(2), Duration::from_secs(60));
         let mut quiet = |_: Event| {};
         match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
             Ok(Ok(r)) => {

@@ -132,11 +132,14 @@ sent only grows, and each turn reads it from the provider's cache
 history would be 150 KB sends at most about 55 KB a turn, and with the cache it is billed a third of its input.
 
 **A full context drains**: at the stress line, once folding cannot bring the next request under
-it, the body gets one more turn — without tools, capped at 4096 tokens, in the clock's grace — to
-write down what is not durable, `@U <law|colony|territory> <fact>` for each thing it learned that
-is written nowhere, then what is left. Each `@U` line is kept as the body's proposed note (tagged
-`drain`, beside its home), and the checkpoint carries the turn as its salvage. A jump that leaves
-less than two such turns of room in the window checkpoints without one.
+it, the body gets one more turn — without tools, capped at 4096 tokens, within what is left of the
+clock up to two minutes — to write down what is not durable, `@U <law|colony|territory> <fact>`
+for each thing it learned that is written nowhere, then what is left. Each `@U law` or `@U colony`
+line is kept as the body's proposed note (tagged `drain`, beside its home); each `@U territory`
+fact is filed to the ontology, as a report's is ([Memory](08-memory.md)). The checkpoint carries
+the turn as its salvage, and an escalation keeps it before the report it hands up. A run drains
+once — a resume reads that from its journal — and a jump that leaves less than two such turns of
+room in the window checkpoints without one.
 
 **A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The
