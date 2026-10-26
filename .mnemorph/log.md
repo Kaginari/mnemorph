@@ -4347,3 +4347,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Test:** solo.rs: a solo answer's diff claim is grounded and shared, its colony claim stays
   proposed, and shared memory holds one note.
+
+---
+
+### [2026-10-26T11:42:41+01:00] rimuru — #210's review: Fable
+- **Verdict:** safe to merge and measure for solo; no double-counting on the solo path.
+- **Fixed:** `remember_own` runs only without a commissioner, so a throne with lanes is a
+  dispatcher and its children's `@U` lines are not kept twice. This matches docs 08 ("Rimuru
+  alone in solo").
+- **Bench:** the large suite's world seeds Elves, so its "solo" Rimuru had a commissioner and only
+  40 steps (`steps.solo` applies without lanes). The bench's solo modes now run without the roster
+  below the throne (Kaginari/bench).

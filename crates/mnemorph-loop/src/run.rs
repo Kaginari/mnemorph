@@ -740,8 +740,9 @@ impl Run {
         if let Ending::Answered(text) = &ending {
             self.accept(text);
             // A commissioned body's claims are its dispatcher's to keep; a body answering the
-            // human keeps its own, by the same write rule.
-            if self.caller.commission.is_none() {
+            // human alone — Rimuru in solo — keeps its own, by the same write rule. A throne with
+            // a lane below is a dispatcher: what its answer says of its children's work is theirs.
+            if self.caller.commission.is_none() && self.commissioner.is_none() {
                 self.remember_own(text);
             }
         }
