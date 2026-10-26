@@ -310,7 +310,10 @@ The world repairs itself in small, mechanical steps, each one written to the led
 
 ### The end gate
 
-Runs on the body's own writes (minus what its Courts already landed on their own account):
+Runs on the body's own writes (minus what its Courts already landed on their own account) — a
+commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
+card (`.mnemorph/rimuru/rimuru/README.md`), and in solo the whole repository is its soil, so right
+author holds by construction:
 
 1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
    for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the

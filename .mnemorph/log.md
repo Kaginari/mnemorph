@@ -4645,3 +4645,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The synonym case ("sixty minutes" for "one hour") ranks 2nd, saved by "entries".
 - **Docs 09:** quote the rate and its looseness. 0 of 8 is consistent with a miss rate of one in
   four (the 95% upper bound is ~31%), so the fixture should grow with real misses.
+
+---
+
+### [2026-10-26T16:06:34+01:00] rimuru — the session lands through the end gate
+- **Found while asking why the bench's solo worlds ground nothing:** `open.rs` never gave the
+  session run an `EndGate`; only commissioned children had one.
+  - The solo prompt promised "the end gate checks them", docs 02 promised solo runs under the end
+    gate, and `EndGate`'s own doc said `author` is "None in solo".
+  - So for any solo session: no gate on landings, no check for deleted or skipped tests, no
+    one-chance fix, and `passed_gate()` was always None. No claim could be grounded by the
+    checked route; #210's `remember_own` grounding was dead outside tests.
+- **Fix:** open.rs `session_gate` builds the run's `EndGate` from the verify lines of the
+  session body's card, with no author; docs 03 say where they come from.
+- **Test:** session_start `the_session_lands_through_the_end_gate`. Through `open_with`, the gate
+  sends a failing answer back, and the fixed answer's `@U law` claim is grounded. Checked to fail
+  with the gate detached.
+- **Bench consequence:** this campaign's Mnemorph arms ran without a session gate. A
+  `solo-carry` measured on a build with this fix also needs a `Verify:` line on the bench
+  world's Rimuru card.
