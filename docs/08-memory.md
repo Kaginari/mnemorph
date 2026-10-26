@@ -255,6 +255,10 @@ Writes to the traces are a function of observed outcomes, never of model output 
 | a run-ending failed verify or a failed gate verdict | the scope of the notes it names | grounded | revise | 1.0 | 0.9 · 0.4 |
 | a human's correction | shared | grounded | revise | 1.0 | 1.0 |
 
+A `@U` line lands this way whoever says it: a commissioned body's, in its report, as its
+dispatcher reads it; a body answering the human — Rimuru alone in solo — in its own answer, which
+its prompt asks to end with them, grounded by that ask's own passing gate when they name its diff.
+
 Only the record beat, the gate and the promotion routes hold the write path, and that is a
 type, not a habit: a `Claim<Proposed>` becomes a `Claim<Grounded>` only through a value that
 carries its route's proof (a gate verdict, a passed verify line, a commissioner's verdict, a

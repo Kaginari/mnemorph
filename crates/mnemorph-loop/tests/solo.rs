@@ -460,3 +460,50 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
         r.proof
     );
 }
+
+/// A body answering the human keeps its own claims by the write rule: the one about its passing
+/// diff is grounded by the check and shared, the one about the world stays its own, proposed.
+#[tokio::test]
+async fn a_solo_answer_keeps_its_claims_by_the_write_rule() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("solo-remembers");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "out.txt", "content": "fixed\n"}),
+        ),
+        answer(
+            "Done: out.txt says fixed.\n@U law out.txt says fixed once the build is green\n@U colony run the build before answering",
+        ),
+    ]));
+    let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
+    let ending = ask(&mut run, "make out.txt say fixed").await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let mine = fold(
+        &read(&w.world(), &Tier::Personal("rimuru".into()))
+            .unwrap()
+            .rows,
+    );
+    let of = |t: &str| {
+        mine.values()
+            .find(|n| n.text.starts_with(t))
+            .unwrap_or_else(|| panic!("{t}: {mine:?}"))
+    };
+    assert_eq!(
+        of("out.txt says fixed").status,
+        Status::Grounded,
+        "about its passing diff"
+    );
+    assert_eq!(
+        of("run the build").status,
+        Status::Proposed,
+        "about the world"
+    );
+    let shared = fold(&read(&w.world(), &Tier::Shared).unwrap().rows);
+    assert_eq!(
+        shared.len(),
+        1,
+        "only the checked claim is shared: {shared:?}"
+    );
+}

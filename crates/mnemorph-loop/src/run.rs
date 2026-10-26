@@ -739,6 +739,12 @@ impl Run {
         self.drop_steering();
         if let Ending::Answered(text) = &ending {
             self.accept(text);
+            // A commissioned body's claims are its dispatcher's to keep; a body answering the
+            // human alone — Rimuru in solo — keeps its own, by the same write rule. A throne with
+            // a lane below is a dispatcher: what its answer says of its children's work is theirs.
+            if self.caller.commission.is_none() && self.commissioner.is_none() {
+                self.remember_own(text);
+            }
         }
         // The ask's recall leaves its trace: what the replay loop reads at the next. An ask the
         // human stopped is no replay of anything.
@@ -1201,6 +1207,29 @@ impl Run {
             Err(e) => self.record(&Beat::Warning {
                 text: format!("memory could not weigh the failure against the notes it cited: {e}"),
             }),
+        }
+    }
+
+    /// The write rule for an answer to the human: its `@U` lines land as the body's proposed
+    /// notes — a claim about this ask's own passing diff grounded by its **checked** proof, any
+    /// other left proposed — and its territory facts are filed, as a commissioned body's report's
+    /// are.
+    fn remember_own(&self, answer: &str) {
+        let world = self.cx.world();
+        // The answer read as a report: prose around its `@U` lines, as a drain's is.
+        let ending = Ending::Answered(format!("@S DONE\n{answer}"));
+        // Only a gate this ask passed proves this ask's claims: never an earlier one's.
+        let passed = self
+            .landed_in_ask
+            .is_some()
+            .then(|| self.passed_gate())
+            .flatten();
+        let proof = crate::commission::checked_proof(&self.body.name, passed);
+        crate::commission::file_facts(world, &ending, &self.body.name);
+        let (kept, _) =
+            crate::commission::remember(world, &self.body.name, &ending, proof.as_ref());
+        if let Some(kept) = kept {
+            self.record(&Beat::Warning { text: kept });
         }
     }
 
