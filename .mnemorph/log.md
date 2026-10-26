@@ -3597,3 +3597,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - `Grant` (`Context::write_grant`) is taken from the child's real context before it runs, with
     no second context;
   - `Context::admits` and the grant share one `admits` function, so the two cannot drift.
+
+---
+
+### [2026-10-26T01:49:58+01:00] rimuru — #191: macOS CI
+- **Found:** macOS CI failed the attribution test. The grant stores resolved paths, but the
+  predicate compared the path as asked, and macOS temp dirs sit behind `/var` → `/private/var`.
+- **Fixed:** `Grant::could_have_written` resolves the asked path with `real()`.
+- **Test:** it now also asks through a symlinked alias of the world, so Linux catches the same
+  class. It fails without the fix.
+- **Note:** #191 was correctly not merged on the red check.

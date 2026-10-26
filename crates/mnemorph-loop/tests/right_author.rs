@@ -336,6 +336,16 @@ fn another_writers_change_is_not_the_bodys_under_a_guard() {
         .with_sandbox(guard.clone());
     assert!(guarded.could_have_written(&w.0.join("src/mine.rs")));
     assert!(!guarded.could_have_written(&w.0.join("lib/theirs.rs")));
+    // Asked through a link to the world — macOS's `/var` is one — the answer is the same.
+    let alias = w.0.with_file_name(format!(
+        "{}-alias",
+        w.0.file_name().unwrap().to_string_lossy()
+    ));
+    let _ = fs::remove_file(&alias);
+    std::os::unix::fs::symlink(&w.0, &alias).unwrap();
+    assert!(guarded.could_have_written(&alias.join("src/mine.rs")));
+    assert!(!guarded.could_have_written(&alias.join("lib/theirs.rs")));
+    let _ = fs::remove_file(&alias);
     let open = context_for(&w.0, &roster, "slime-a")
         .unwrap()
         .with_sandbox(Sandbox::None("no guard".into()));

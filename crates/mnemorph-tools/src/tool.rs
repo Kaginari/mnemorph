@@ -772,6 +772,8 @@ impl Grant {
         if !self.confined {
             return true;
         }
+        // The grant's paths are resolved; so is the one asked about (macOS's `/var` is a link).
+        let path = &real(path);
         let admits = admits(&self.world, &self.soil, &self.except, self.root_files, path);
         let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
             && self.seat.is_some()
