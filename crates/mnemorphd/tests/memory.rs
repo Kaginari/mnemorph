@@ -172,6 +172,18 @@ fn the_human_confirms_a_proposed_claim_and_a_body_cannot() {
         )),
         "{out}"
     );
+    let (_, json) = status(&world, true);
+    assert!(
+        json.contains(&format!(
+            r#""proposed":[{{"id":"{id}","text":"run uv before pytest"}}]"#
+        )),
+        "{json}"
+    );
+    assert!(
+        !json.contains("vouch"),
+        "no claim among the pathologies: {json}"
+    );
+    fs::create_dir_all(world.join(".mnemorph/memory/creature/stray")).unwrap();
     let w = world.to_str().unwrap();
     let bin = env!("CARGO_BIN_EXE_mnemorphd");
     let run = |args: &[&str], body: Option<&str>| {

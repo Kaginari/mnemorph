@@ -523,7 +523,11 @@ fn memory(args: &[String]) -> ExitCode {
                     "retired, kept dormant: {id} — {text} (undo: mnemorph memory wake {id})"
                 ));
             }
-            // What waits for a route, newest first: the human may vouch for any of it.
+            // What waits for a route, newest first: the human may vouch for any of it. JSON
+            // gives it a field of its own: a claim waiting is no pathology.
+            if json {
+                continue;
+            }
             let open = proposed_of(&world, name);
             for (id, text) in open.iter().take(PROPOSED_SHOWN) {
                 seen.push(format!(
@@ -536,20 +540,7 @@ fn memory(args: &[String]) -> ExitCode {
         }
     }
     if json {
-        let rows: Vec<serde_json::Value> = rows
-            .iter()
-            .map(|(name, found, seen)| {
-                serde_json::json!({
-                    "creature": name,
-                    "frozen": !found.is_empty() && name != SHARED,
-                    "unproven": found.iter().map(|u| serde_json::json!({
-                        "file": u.file, "event": u.event, "note": u.note, "why": u.why,
-                    })).collect::<Vec<_>>(),
-                    "pathologies": seen,
-                })
-            })
-            .collect();
-        println!("{}", serde_json::Value::Array(rows));
+        print_memory_json(&world, &rows);
     } else if rows.is_empty() {
         println!("no creature has memory here yet");
     } else {
@@ -563,6 +554,35 @@ fn memory(args: &[String]) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// `memory status --json`: each creature's unproven writes, pathologies and proposed claims.
+fn print_memory_json(
+    world: &Path,
+    rows: &[(
+        String,
+        Vec<mnemorph_server::world::memory::Unproven>,
+        Vec<String>,
+    )],
+) {
+    use mnemorph_server::world::memory::audit::SHARED;
+    let rows: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|(name, found, seen)| {
+            serde_json::json!({
+                "creature": name,
+                "frozen": !found.is_empty() && name != SHARED,
+                "unproven": found.iter().map(|u| serde_json::json!({
+                    "file": u.file, "event": u.event, "note": u.note, "why": u.why,
+                })).collect::<Vec<_>>(),
+                "pathologies": seen,
+                "proposed": proposed_of(world, name).iter().map(|(id, text)| {
+                    serde_json::json!({"id": id, "text": text})
+                }).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::Value::Array(rows));
 }
 
 /// How many proposed claims `memory status` shows per creature.
@@ -595,11 +615,9 @@ fn confirm(world: &Path, id: &str) -> ExitCode {
     let owners: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
         .map(|rd| {
             rd.filter_map(Result::ok)
-                .filter_map(|e| {
-                    e.path()
-                        .file_stem()
-                        .map(|s| s.to_string_lossy().into_owned())
-                })
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
                 .collect()
         })
         .unwrap_or_default();

@@ -4583,3 +4583,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 08.
 - **Test:** listed with its vouch; a body and an unknown id refused; the human's confirm grounds
   it in shared memory.
+
+---
+
+### [2026-10-26T14:58:31+01:00] rimuru — memory confirm, Fable's review
+- **Fable:** safe to merge. A body cannot forge a confirm: it could unset `MNEMORPH_BODY`, but
+  the tripwire puts back any change it makes under `.mnemorph/`, the same border as `wake` and
+  `onto settle`.
+- **Fixed:**
+  - `confirm` reads only `.jsonl` tiers, so a stray directory no longer aborts it;
+  - `memory status --json` gives proposed claims their own `proposed` field, not `pathologies`
+    (`print_memory_json`, moved out of `memory` for its length).
+- **Test:** the JSON field and a stray directory.
