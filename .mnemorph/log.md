@@ -3625,3 +3625,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - memory → ledger, in check-layers and docs 05; docs 08.
 - **Tests:** memory notes.rs (5), relief's notes-follow-the-split.
 - **Next rungs:** recall (BM25), the write rule, proofs.
+
+---
+
+### [2026-10-26T02:15:31+01:00] rimuru — #192's review: Fable
+- **Fable found:**
+  - `union_merge` did nothing in a worktree (`.git` is a file);
+  - `inherit`'s '/' guess dropped `.mnemorph/log.md#…` notes and sent `README.md:3` to every
+    heir;
+  - event ids could collide across machines;
+  - the fold depended on line order for colliding keys;
+  - `inherit` read sources in file order;
+  - a failed `inherit` left relief half-done.
+- **Fixed:**
+  - git names its attributes path (`rev-parse --git-path`), resolved against the world for git
+    before 2.31, whose answer is relative (this machine runs 2.25);
+  - a note goes to the heirs whose ground covers its source path (`:line` and `#…` dropped),
+    else to all;
+  - ids carry a random per-process mark;
+  - the fold sorts by a total order;
+  - `inherit` reads the fold's source;
+  - relief inherits before seating and undoes the heirs' files on failure.
+- **Tests:** a real repo and a worktree; journal and root-file sources; colliding events fold the
+  same in either order; distinct ids.

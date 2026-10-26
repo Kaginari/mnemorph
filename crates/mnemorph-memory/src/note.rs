@@ -144,8 +144,11 @@ pub struct Note {
 /// a note never created is set aside, never guessed at; a second creation of one is ignored.
 #[must_use]
 pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
-    let mut ordered: Vec<&Event> = events.iter().collect();
-    ordered.sort_by(|a, b| (a.time, &a.id).cmp(&(b.time, &b.id)));
+    // A total order, whatever the line order: two machines whose union merges listed the same
+    // events differently fold them the same.
+    let mut ordered: Vec<(&Event, String)> = events.iter().map(|e| (e, format!("{e:?}"))).collect();
+    ordered.sort_by(|(a, x), (b, y)| (a.time, &a.id, x).cmp(&(b.time, &b.id, y)));
+    let ordered = ordered.into_iter().map(|(e, _)| e);
     let mut notes: BTreeMap<String, Note> = BTreeMap::new();
     let mut last: BTreeMap<String, (u64, String)> = BTreeMap::new();
     for e in ordered {

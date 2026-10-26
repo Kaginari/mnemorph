@@ -149,6 +149,8 @@ fn a_split_hands_each_heir_the_notes_whose_source_is_in_its_ground() {
         create("in-a", 1, Some("src/a/x.rs:12")),
         create("in-b", 2, Some("src/b/y.rs")),
         create("anywhere", 3, Some("log.md#2026")),
+        create("journal", 5, Some(".mnemorph/log.md#4")),
+        create("at-root", 6, Some("README.md:3")),
         status("in-a", 4, "p", Status::Grounded),
     ] {
         journal.append(&e).unwrap();
@@ -157,31 +159,41 @@ fn a_split_hands_each_heir_the_notes_whose_source_is_in_its_ground() {
         &w,
         "slime-s",
         &[
-            ("slime-s-a".into(), vec!["src/a/".into()]),
+            (
+                "slime-s-a".into(),
+                vec!["src/a/".into(), "./README.md".into()],
+            ),
             ("slime-s-b".into(), vec!["src/b/".into()]),
         ],
     )
     .unwrap();
     assert_eq!(
         given,
-        [("slime-s-a".to_owned(), 3), ("slime-s-b".to_owned(), 2)]
+        [("slime-s-a".to_owned(), 5), ("slime-s-b".to_owned(), 3)]
     );
     let a = fold(&read(&w, &Tier::Personal("slime-s-a".into())).unwrap().rows);
     let b = fold(&read(&w, &Tier::Personal("slime-s-b".into())).unwrap().rows);
-    assert_eq!(a.keys().collect::<Vec<_>>(), ["anywhere", "in-a"]);
+    // A source no heir covers — a journal entry — goes to both; a root file only to its keeper.
+    assert_eq!(
+        a.keys().collect::<Vec<_>>(),
+        ["anywhere", "at-root", "in-a", "journal"]
+    );
     assert_eq!(
         a["in-a"].status,
         Status::Grounded,
         "its standing travels with it"
     );
-    assert_eq!(b.keys().collect::<Vec<_>>(), ["anywhere", "in-b"]);
+    assert_eq!(
+        b.keys().collect::<Vec<_>>(),
+        ["anywhere", "in-b", "journal"]
+    );
     // The old creature's file is kept whole.
     assert_eq!(
         read(&w, &Tier::Personal("slime-s".into()))
             .unwrap()
             .rows
             .len(),
-        4
+        6
     );
     let _ = fs::remove_dir_all(&w);
 }
@@ -191,7 +203,19 @@ fn git_merges_note_files_by_union_through_its_local_attributes() {
     let w = world("union");
     union_merge(&w).unwrap();
     assert!(!w.join(".git").exists(), "no git: nothing");
-    fs::create_dir_all(w.join(".git/info")).unwrap();
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .current_dir(dir)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    };
+    git(&w, &["init", "-q"]);
     fs::write(w.join(".git/info/attributes"), "*.png binary").unwrap();
     union_merge(&w).unwrap();
     union_merge(&w).unwrap();
@@ -200,5 +224,53 @@ fn git_merges_note_files_by_union_through_its_local_attributes() {
         attributes,
         "*.png binary\n.mnemorph/memory/**/*.jsonl merge=union\n"
     );
+    // A worktree's `.git` is a file: git names the attributes it shares, and they hold.
+    fs::write(w.join("a.txt"), "a\n").unwrap();
+    git(&w, &["add", "-A"]);
+    git(&w, &["commit", "-qm", "a"]);
+    let tree = w.with_file_name(format!("{}-tree", w.file_name().unwrap().to_string_lossy()));
+    let _ = fs::remove_dir_all(&tree);
+    git(&w, &["worktree", "add", "-q", tree.to_str().unwrap()]);
+    union_merge(&tree).unwrap();
+    let out = std::process::Command::new("git")
+        .args(["check-attr", "merge", ".mnemorph/memory/creature/x.jsonl"])
+        .current_dir(&tree)
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&out.stdout).ends_with("merge: union\n"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let _ = fs::remove_dir_all(&tree);
     let _ = fs::remove_dir_all(&w);
+}
+
+/// Events the order cannot separate fold the same whatever the line order, and two ids drawn
+/// here never collide.
+#[test]
+fn colliding_events_fold_the_same_in_any_order() {
+    let mut a = create("n", 10, None);
+    let mut b = create("n", 10, None);
+    if let Change::Create { text, .. } = &mut a.change {
+        *text = "one".into();
+    }
+    if let Change::Create { text, .. } = &mut b.change {
+        *text = "two".into();
+    }
+    let conf = |c: f64| Event {
+        id: "same".into(),
+        time: 20,
+        note: "n".into(),
+        by: By::Gate,
+        proof: None,
+        change: Change::Confidence { confidence: c },
+    };
+    let one = vec![a.clone(), b.clone(), conf(0.2), conf(0.9)];
+    let two = vec![conf(0.9), b, conf(0.2), a];
+    assert_eq!(fold(&one), fold(&two));
+    assert_ne!(
+        mnemorph_memory::store::event_id(5),
+        mnemorph_memory::store::event_id(5)
+    );
 }

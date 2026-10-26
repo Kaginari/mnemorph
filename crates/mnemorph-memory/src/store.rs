@@ -38,13 +38,20 @@ impl Tier {
     }
 }
 
-/// A fresh event id: the time, the process and a counter, unique on this machine.
+/// A fresh event id: the time, a random mark drawn once per process, and a counter — unique across
+/// machines, where two processes may share a pid and a millisecond.
 #[must_use]
 pub fn event_id(time: u64) -> String {
+    use std::hash::{BuildHasher, Hasher};
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    static MARK: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    let mark = MARK.get_or_init(|| {
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u32(std::process::id());
+        h.finish()
+    });
     format!(
-        "{time:x}-{}-{}",
-        std::process::id(),
+        "{time:x}-{mark:016x}-{}",
         NEXT.fetch_add(1, Ordering::Relaxed)
     )
 }
@@ -92,10 +99,11 @@ pub fn read(world: &Path, tier: &Tier) -> std::io::Result<ReadBack<Event>> {
     tier.journal(world).read()
 }
 
-/// On a split, each heir inherits `from`'s notes whose source lies in its ground — a note with no
-/// path to read goes to every heir. The inherited note keeps its id and its standing: the same
-/// events, appended to the heir's file. `from`'s own file is kept whole, never deleted.
-/// Returns how many events each heir received.
+/// On a split, each heir inherits `from`'s notes whose source lies in its ground; a note whose
+/// source no heir's ground covers — a journal entry, a commit, a path outside them all — goes to
+/// every heir. The inherited note keeps its id and its standing: the same events, appended to the
+/// heir's file. `from`'s own file is kept whole, never deleted. Returns how many events each heir
+/// received.
 ///
 /// # Errors
 ///
@@ -106,37 +114,44 @@ pub fn inherit(
     heirs: &[(String, Vec<String>)],
 ) -> std::io::Result<Vec<(String, usize)>> {
     let events = read(world, &Tier::Personal(from.to_owned()))?.rows;
-    let source_of = |note: &str| {
-        events.iter().find_map(|e| match &e.change {
-            Change::Create { source, .. } if e.note == note => Some(source.clone()),
-            _ => None,
-        })?
+    let notes = crate::note::fold(&events);
+    // Each note's heirs: those whose ground covers its source, else all.
+    let heirs_of = |note: &str| -> Vec<&str> {
+        let path = notes
+            .get(note)
+            .and_then(|n| n.source.as_deref())
+            .map(path_of);
+        let covering: Vec<&str> = heirs
+            .iter()
+            .filter(|(_, ground)| {
+                path.as_ref()
+                    .is_some_and(|p| ground.iter().any(|g| covers(g, p)))
+            })
+            .map(|(h, _)| h.as_str())
+            .collect();
+        if covering.is_empty() {
+            heirs.iter().map(|(h, _)| h.as_str()).collect()
+        } else {
+            covering
+        }
     };
-    let mut given = Vec::new();
-    for (heir, ground) in heirs {
-        let journal = Tier::Personal(heir.clone()).journal(world);
-        let mut n = 0;
-        for e in &events {
-            let path = source_of(&e.note).map(|s| path_of(&s));
-            let fits = match path {
-                Some(Some(p)) => ground.iter().any(|g| covers(g, &p)),
-                _ => true,
-            };
-            if fits {
-                journal.append(e)?;
-                n += 1;
+    let mut given: Vec<(String, usize)> = heirs.iter().map(|(h, _)| (h.clone(), 0)).collect();
+    for e in &events {
+        for heir in heirs_of(&e.note) {
+            Tier::Personal(heir.to_owned()).journal(world).append(e)?;
+            if let Some(g) = given.iter_mut().find(|(h, _)| h == heir) {
+                g.1 += 1;
             }
         }
-        given.push((heir.clone(), n));
     }
     Ok(given)
 }
 
-/// The path a source points at, when it is one — `src/a.rs:12` reads as `src/a.rs`; a journal
-/// entry or a commit is no path.
-fn path_of(source: &str) -> Option<String> {
-    let path = source.split(':').next()?.trim_start_matches("./");
-    (path.contains('/') && !path.starts_with('/')).then(|| path.to_owned())
+/// The path a source names, its `:line` and `#fragment` dropped: `src/a.rs:12` reads as
+/// `src/a.rs`, `.mnemorph/log.md#4` as `.mnemorph/log.md`.
+fn path_of(source: &str) -> String {
+    let path = source.split(['#', ':']).next().unwrap_or_default();
+    path.trim_start_matches("./").to_owned()
 }
 
 /// Whether a ground claim covers `path`: a directory claim what lies under it, a file claim itself.
@@ -158,17 +173,29 @@ fn covers(claim: &str, path: &str) -> bool {
 /// The attributes file cannot be written.
 pub fn union_merge(world: &Path) -> std::io::Result<()> {
     const LINE: &str = ".mnemorph/memory/**/*.jsonl merge=union";
-    let git = world.join(".git");
+    // Git says where its attributes live: a worktree's or a submodule's `.git` is a file.
+    let Ok(out) = std::process::Command::new("git")
+        .args(["rev-parse", "--git-path", "info/attributes"])
+        .current_dir(world)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+    else {
+        return Ok(());
+    };
+    let named = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    if !out.status.success() || named.is_empty() {
+        return Ok(());
+    }
+    // Relative to the world when git answers so (every git before 2.31 does).
+    let file = world.join(named);
+    let Some(info) = file.parent().map(Path::to_path_buf) else {
+        return Ok(());
+    };
     let linked = |p: &Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
-    if !git.is_dir() || linked(&git) || linked(&git.join("info")) {
+    if linked(&info) || linked(&file) {
         return Ok(());
     }
-    let info = git.join("info");
     std::fs::create_dir_all(&info)?;
-    let file = info.join("attributes");
-    if linked(&file) {
-        return Ok(());
-    }
     let had = std::fs::read_to_string(&file).unwrap_or_default();
     if had.lines().any(|l| l.trim() == LINE) {
         return Ok(());
