@@ -71,17 +71,20 @@ fn session() -> Model {
     // The sidebar's world: a standing, and forty bodies two deep, half still working.
     update(
         &mut m,
-        Msg::Surveyed(mnemorph_tui::sidebar::Survey {
-            memory: mnemorph_loop::world::memory::Standing {
-                shared: 120,
-                proposed: 40,
-                grounded: 300,
-                latest: Some("the parser keeps collations in nested types".into()),
+        Msg::Surveyed {
+            seq: 0,
+            survey: mnemorph_tui::sidebar::Survey {
+                memory: mnemorph_loop::world::memory::Standing {
+                    shared: 120,
+                    proposed: 40,
+                    grounded: 300,
+                    latest: Some("the parser keeps collations in nested types".into()),
+                },
+                races: (0..40)
+                    .map(|i| (format!("slime-{i}"), mnemorph_races::Race::Slime))
+                    .collect(),
             },
-            races: (0..40)
-                .map(|i| (format!("slime-{i}"), mnemorph_races::Race::Slime))
-                .collect(),
-        }),
+        },
     );
     for i in 0..40 {
         let chain = vec![format!("orc-{}", i % 4), format!("slime-{i}")];

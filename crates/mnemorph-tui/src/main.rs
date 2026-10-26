@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use mnemorph_tui::app::{Cmd, Model};
+use mnemorph_tui::app::Model;
 use mnemorph_tui::kit::highlight;
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
@@ -62,12 +62,9 @@ fn main() -> ExitCode {
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
-    let opened = match mnemorph_loop::open(
-        &world,
-        gate(tx.clone()),
-        observer(tx.clone(), world.clone()),
-        |v| std::env::var(v).ok(),
-    ) {
+    let opened = match mnemorph_loop::open(&world, gate(tx.clone()), observer(tx.clone()), |v| {
+        std::env::var(v).ok()
+    }) {
         Ok(o) => o,
         Err(e) => return fail(&e),
     };
@@ -86,7 +83,7 @@ fn main() -> ExitCode {
         Err(e) => return fail(&e),
     };
     // The sidebar's memory and races come from the world, read off the UI thread.
-    host.run(Cmd::Survey);
+    host.run(model.survey());
     let result = run(model, &host, tx, &rx);
     host.stop();
     match result {

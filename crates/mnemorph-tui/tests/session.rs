@@ -40,7 +40,7 @@ fn a_scripted_turn_reaches_the_screen() {
             attic: None,
         },
         gate(tx.clone()),
-        observer(tx.clone(), world.clone()),
+        observer(tx.clone()),
         |_| None,
     )
     .unwrap();

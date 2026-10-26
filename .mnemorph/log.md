@@ -4894,3 +4894,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   667 files and forty bodies, still ~3 ms a warm frame in a debug build.
 - **Learned:** a `write` result does not say whether it created the file; only a look before the
   act tells A from M, and the observer runs at the right moment for it.
+
+---
+
+### [2026-10-26T22:05:00+01:00] rimuru — the terminal UI, part two: Fable's review
+- **Fable found:** the panic hook left mouse capture on; unordered surveys could overwrite a newer
+  reading with an older one; the bodies' depth-first order searched the whole list per body,
+  per frame; the observer stat a model-chosen path on the session's task, before the gate.
+- **Fixed:** `run::release` turns the mouse and bracketed paste off and pops the keyboard flags
+  once, from the hook or the drop; `Cmd::Survey(seq)` and `Msg::Surveyed { seq, .. }` drop stale
+  readings; `Bodies` keeps a name and parent→children index as events fold in, and `walk` is
+  lazy; the observer posts a `write`'s path (`Msg::Writes`) and `Cmd::Look` checks it on a runtime
+  thread.
+- **Learned:** a look off the session's task races the write it looks for. Only "not there" is
+  proof (the write created it), so the A mark may arrive late and upgrade an M; "there" proves
+  nothing.
+- **Tests:** release pops once and turns both modes off twice; a late survey is ignored; 3,030
+  bodies walk in tree order and draw under the frame budget; a look answered before or after the
+  result, a raced "there", a delete-then-write, a failed write.

@@ -52,10 +52,10 @@ impl FrameClock {
 
 /// The observer that turns what the run did into messages, as the server turns it into events: a
 /// commissioned body's beat comes with the chain of bodies it came through. It also tells the
-/// sidebar what recall gave the session's ask, and — on the run's own task, before the act runs —
-/// whether each `write`'s path already exists in `world`.
+/// sidebar what recall gave the session's ask, and each `write`'s path — the UI looks at it off
+/// this task ([`Cmd::Look`]): the observer runs on the session's task and never touches the disk.
 #[must_use]
-pub fn observer(tx: Sender<Msg>, world: PathBuf) -> Observer {
+pub fn observer(tx: Sender<Msg>) -> Observer {
     Arc::new(move |seen: &Seen| {
         let mut chain = Vec::new();
         let mut inner = seen;
@@ -69,13 +69,7 @@ pub fn observer(tx: Sender<Msg>, world: PathBuf) -> Observer {
             }
             Seen::Beat(Beat::Model { content, .. }) => {
                 for (id, path) in content.iter().filter_map(written) {
-                    let p = Path::new(&path);
-                    let existed = if p.is_absolute() {
-                        p.exists()
-                    } else {
-                        world.join(p).exists()
-                    };
-                    let _ = tx.send(Msg::Prior { id, existed });
+                    let _ = tx.send(Msg::Writes { id, path });
                 }
             }
             _ => {}
@@ -181,10 +175,19 @@ impl Host {
             Cmd::Answer(pending, answer) => {
                 let _ = pending.answer(answer);
             }
-            Cmd::Survey => {
+            Cmd::Look { id, path } => {
+                let (tx, world) = (self.tx.clone(), self.world.clone());
+                // A blocking thread of the runtime's: a hung mount holds it, never the session.
+                self.runtime.spawn_blocking(move || {
+                    let existed = world.join(&path).symlink_metadata().is_ok();
+                    let _ = tx.send(Msg::Prior { id, existed });
+                });
+            }
+            Cmd::Survey(seq) => {
                 let (tx, world) = (self.tx.clone(), self.world.clone());
                 self.runtime.spawn_blocking(move || {
-                    let _ = tx.send(Msg::Surveyed(crate::sidebar::survey(&world)));
+                    let survey = crate::sidebar::survey(&world);
+                    let _ = tx.send(Msg::Surveyed { seq, survey });
                 });
             }
             Cmd::Quit => return false,
@@ -240,7 +243,7 @@ impl Screen {
                 let ui = std::thread::current().id();
                 std::panic::set_hook(Box::new(move |info| {
                     if std::thread::current().id() == ui {
-                        ratatui::restore();
+                        give_back();
                         original(info);
                     }
                 }));
@@ -261,20 +264,43 @@ impl Screen {
                     term::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 )
             )?;
+            PUSHED.store(true, std::sync::atomic::Ordering::SeqCst);
         }
         Ok(())
     }
 }
 
+/// Whether the keyboard enhancement flags are pushed: popped once, by whichever gives the
+/// terminal back first — the panic hook or the screen's drop.
+static PUSHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Unset the modes the UI set, into `out`: the keyboard flags popped if still pushed, the mouse
+/// and bracketed paste turned off. Safe to run twice: only the pop is once-only, and turning a
+/// mode off again does nothing.
+///
+/// # Errors
+///
+/// `out` cannot be written.
+pub fn release(out: &mut impl std::io::Write) -> std::io::Result<()> {
+    if PUSHED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        ratatui::crossterm::queue!(out, term::PopKeyboardEnhancementFlags)?;
+    }
+    ratatui::crossterm::queue!(out, term::DisableMouseCapture, term::DisableBracketedPaste)?;
+    out.flush()
+}
+
+/// The terminal given back whole: its modes, then raw mode and the alternate screen — before a
+/// panic's message prints, and on the screen's drop.
+fn give_back() {
+    let mut out = std::io::stdout();
+    let _ = release(&mut out);
+    ratatui::restore();
+    let _ = out.flush();
+}
+
 impl Drop for Screen {
     fn drop(&mut self) {
-        let mut out = std::io::stdout();
-        if terminal::supports_keyboard_enhancement().unwrap_or(false) {
-            let _ = execute!(out, term::PopKeyboardEnhancementFlags);
-        }
-        let _ = execute!(out, term::DisableMouseCapture, term::DisableBracketedPaste);
-        ratatui::restore();
-        let _ = out.flush();
+        give_back();
     }
 }
 
@@ -510,6 +536,29 @@ mod tests {
         let screen = enter_with(|| Ok(Taken(&ok)), || Ok(())).unwrap();
         assert!(!ok.load(Ordering::SeqCst), "given back while in use");
         drop(screen);
+    }
+
+    #[test]
+    fn releasing_turns_every_mode_off_and_pops_the_keys_once() {
+        PUSHED.store(true, std::sync::atomic::Ordering::SeqCst);
+        let mut first = Vec::new();
+        release(&mut first).unwrap();
+        let first = String::from_utf8(first).unwrap();
+        assert!(
+            first.contains("\x1b[<1u"),
+            "the keyboard flags popped: {first:?}"
+        );
+        assert!(first.contains("\x1b[?1000l"), "the mouse off: {first:?}");
+        assert!(
+            first.contains("\x1b[?2004l"),
+            "bracketed paste off: {first:?}"
+        );
+        // The hook, then the drop: the second release turns the modes off again, pops nothing.
+        let mut second = Vec::new();
+        release(&mut second).unwrap();
+        let second = String::from_utf8(second).unwrap();
+        assert!(!second.contains("\x1b[<1u"), "{second:?}");
+        assert!(second.contains("\x1b[?1000l") && second.contains("\x1b[?2004l"));
     }
 
     #[test]

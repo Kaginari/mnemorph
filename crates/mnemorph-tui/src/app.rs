@@ -56,15 +56,28 @@ pub enum Msg {
     },
     /// Recall gave the session's ask this many notes.
     Recalled(usize),
-    /// Whether a `write` call's path existed before it ran.
+    /// A `write` call names its path: the UI looks whether it exists, off the session's task.
+    Writes {
+        /// The call.
+        id: String,
+        /// Its path, as the model wrote it.
+        path: String,
+    },
+    /// Whether a `write` call's path existed when the UI looked.
     Prior {
         /// The call.
         id: String,
         /// Whether its path existed.
         existed: bool,
     },
-    /// The world's survey: its memory's standing, its creatures' races.
-    Surveyed(Survey),
+    /// The world's survey: its memory's standing, its creatures' races; `seq` is the
+    /// [`Cmd::Survey`] it answers, so a reading that comes back late never overwrites a newer one.
+    Surveyed {
+        /// The survey asked for.
+        seq: u64,
+        /// What it read.
+        survey: Survey,
+    },
     /// An act waits for the human.
     Gate(Card),
     /// The session finished a line the human sent; `held` orders wait on the shared queue.
@@ -89,8 +102,15 @@ pub enum Cmd {
     Interrupt,
     /// Answer an act waiting at the gate.
     Answer(Arc<Pending>, GateAnswer),
-    /// Read the world's memory standing and roster, off the UI thread.
-    Survey,
+    /// Look whether a `write` call's path exists, off the UI thread and the session's task.
+    Look {
+        /// The call.
+        id: String,
+        /// Its path, as the model wrote it: joined to the world unless absolute.
+        path: String,
+    },
+    /// Read the world's memory standing and roster, off the UI thread; its answer carries `seq`.
+    Survey(u64),
     /// Leave.
     Quit,
 }
@@ -137,6 +157,15 @@ pub struct Model {
     pub sidebar: Sidebar,
     /// Where the last frame drew the transcript, for the mouse.
     pub(crate) hits: RefCell<Hits>,
+    /// The world's surveys asked for and applied.
+    surveys: Surveys,
+}
+
+/// The surveys: the next one's number, and the newest whose reading was applied.
+#[derive(Debug, Clone, Copy, Default)]
+struct Surveys {
+    next: u64,
+    applied: Option<u64>,
 }
 
 /// Where the last frame drew the transcript: its column span, its first row and each row's
@@ -177,6 +206,7 @@ impl Model {
             measured: Cell::new(usize::MAX),
             sidebar: Sidebar::default(),
             hits: RefCell::new(Hits::default()),
+            surveys: Surveys::default(),
         }
     }
 
@@ -208,6 +238,13 @@ impl Model {
         let inner = self.size.0.saturating_sub(4);
         let w = inner - self.sidebar.width(inner);
         (usize::from(w), usize::from(self.size.1.saturating_sub(2)))
+    }
+
+    /// A new survey of the world, numbered after every one before it.
+    pub fn survey(&mut self) -> Cmd {
+        let seq = self.surveys.next;
+        self.surveys.next += 1;
+        Cmd::Survey(seq)
     }
 
     /// Write a line of its own into the transcript.
@@ -266,12 +303,17 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             m.sidebar.recalled = Some(n);
             Vec::new()
         }
+        Msg::Writes { id, path } => vec![Cmd::Look { id, path }],
         Msg::Prior { id, existed } => {
             m.sidebar.files.prior(&id, existed);
             Vec::new()
         }
-        Msg::Surveyed(s) => {
-            m.sidebar.surveyed(s);
+        Msg::Surveyed { seq, survey } => {
+            // Readings run unordered on the runtime: only one newer than the last applied lands.
+            if m.surveys.applied.is_none_or(|a| seq > a) {
+                m.surveys.applied = Some(seq);
+                m.sidebar.surveyed(survey);
+            }
             Vec::new()
         }
         Msg::Gate(card) => {
@@ -286,7 +328,7 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             m.outstanding = m.outstanding.saturating_sub(1);
             m.transcript.held = held;
             // A finished line may have grounded notes or born creatures: read the world again.
-            vec![Cmd::Survey]
+            vec![m.survey()]
         }
         Msg::Crashed(why) => {
             m.outstanding = 0;

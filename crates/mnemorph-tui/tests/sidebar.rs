@@ -134,18 +134,21 @@ fn world(m: &mut Model) {
     update(m, Msg::Recalled(3));
     update(
         m,
-        Msg::Surveyed(Survey {
-            memory: Standing {
-                shared: 2,
-                proposed: 1,
-                grounded: 5,
-                latest: Some("collations drop in \u{202e}_parse_types\u{1b}[2J".into()),
+        Msg::Surveyed {
+            seq: 0,
+            survey: Survey {
+                memory: Standing {
+                    shared: 2,
+                    proposed: 1,
+                    grounded: 5,
+                    latest: Some("collations drop in \u{202e}_parse_types\u{1b}[2J".into()),
+                },
+                races: BTreeMap::from([
+                    ("orc-sql".to_owned(), Race::Orc),
+                    ("slime-parser".to_owned(), Race::Slime),
+                ]),
             },
-            races: BTreeMap::from([
-                ("orc-sql".to_owned(), Race::Orc),
-                ("slime-parser".to_owned(), Race::Slime),
-            ]),
-        }),
+        },
     );
     ev(
         m,
@@ -464,7 +467,50 @@ fn a_finished_line_reads_the_world_again() {
     let mut m = model();
     m.outstanding = 1;
     let cmds = update(&mut m, Msg::Done { held: 0 });
-    assert!(matches!(cmds.as_slice(), [Cmd::Survey]), "{cmds:?}");
+    assert!(matches!(cmds.as_slice(), [Cmd::Survey(0)]), "{cmds:?}");
+}
+
+#[test]
+fn a_survey_that_comes_back_late_never_overwrites_a_newer_one() {
+    let mut m = model();
+    let reading = |shared| Survey {
+        memory: Standing {
+            shared,
+            ..Standing::default()
+        },
+        races: BTreeMap::new(),
+    };
+    let (Cmd::Survey(old), Cmd::Survey(new)) = (m.survey(), m.survey()) else {
+        panic!("not surveys")
+    };
+    assert!(new > old);
+    // The newer reading lands first; the older one, arriving after it, is dropped.
+    update(
+        &mut m,
+        Msg::Surveyed {
+            seq: new,
+            survey: reading(9),
+        },
+    );
+    update(
+        &mut m,
+        Msg::Surveyed {
+            seq: old,
+            survey: reading(1),
+        },
+    );
+    assert_eq!(m.sidebar.memory.as_ref().map(|s| s.shared), Some(9));
+    let Cmd::Survey(newest) = m.survey() else {
+        panic!("not a survey")
+    };
+    update(
+        &mut m,
+        Msg::Surveyed {
+            seq: newest,
+            survey: reading(12),
+        },
+    );
+    assert_eq!(m.sidebar.memory.as_ref().map(|s| s.shared), Some(12));
 }
 
 /// The frame the pull request shows: the sidebar beside a turn, as a human sees it.
@@ -511,4 +557,154 @@ fn a_frame_for_the_eye_with_the_sidebar() {
     let scr = screen(&draw(&mut m, 108, 22));
     println!("{scr}");
     assert!(scr.contains("bodies · 2 · 2 live"), "{scr}");
+}
+
+#[test]
+fn many_bodies_walk_as_a_tree_and_stay_cheap_to_draw() {
+    let mut m = model();
+    m.outstanding = 1;
+    // Thirty orcs, each with a hundred slimes: three thousand and thirty bodies.
+    for o in 0..30 {
+        for s in 0..100 {
+            below(
+                &mut m,
+                &[&format!("orc-{o}"), &format!("slime-{o}-{s}")],
+                Event::TurnStarted {
+                    text: "work".into(),
+                },
+            );
+        }
+        below(
+            &mut m,
+            &[&format!("orc-{o}")],
+            Event::TurnEnded {
+                ending: "answered".into(),
+            },
+        );
+    }
+    let bodies = &m.sidebar.bodies;
+    assert_eq!(bodies.list().len(), 3_030);
+    assert_eq!(
+        bodies.live(),
+        3_000,
+        "every slime works, every orc answered"
+    );
+    let walked: Vec<(usize, String)> = bodies.walk().map(|(d, b)| (d, b.name.clone())).collect();
+    assert_eq!(walked.len(), 3_030);
+    assert_eq!(walked[0], (1, "orc-0".to_owned()));
+    assert_eq!(walked[1], (2, "slime-0-0".to_owned()));
+    assert_eq!(walked[100], (2, "slime-0-99".to_owned()));
+    assert_eq!(walked[101], (1, "orc-1".to_owned()));
+    let mut t = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    t.draw(|f| view(&m, f)).unwrap();
+    let start = std::time::Instant::now();
+    for _ in 0..20 {
+        t.draw(|f| view(&m, f)).unwrap();
+    }
+    let frame = start.elapsed() / 20;
+    assert!(frame < Duration::from_millis(33), "a frame took {frame:?}");
+    let scr = screen(t.backend().buffer());
+    assert!(scr.contains("bodies · 3030 · 3000 live"), "{scr}");
+    assert!(scr.contains("● orc-0") && scr.contains("more"), "{scr}");
+}
+
+fn write_call(m: &mut Model, id: &str, path: &str) {
+    ev(
+        m,
+        Event::ToolCall {
+            id: id.into(),
+            name: "write".into(),
+            input: json!({"path": path, "content": "x\n"}),
+        },
+    );
+}
+
+fn landed(m: &mut Model, id: &str) {
+    ev(
+        m,
+        Event::ToolResult {
+            id: id.into(),
+            content: "wrote".into(),
+            is_error: false,
+            cut: 0,
+        },
+    );
+}
+
+fn prior(m: &mut Model, id: &str, existed: bool) {
+    update(
+        m,
+        Msg::Prior {
+            id: id.into(),
+            existed,
+        },
+    );
+}
+
+fn mark_of(m: &Model, path: &str) -> Option<&'static str> {
+    m.sidebar
+        .files
+        .list()
+        .iter()
+        .find(|(p, _)| p == path)
+        .map(|(_, mark)| mark.letter())
+}
+
+#[test]
+fn a_write_path_is_looked_at_off_the_session_and_its_answer_may_come_late() {
+    let mut m = model();
+    // The observer names the path; the UI asks for a look, never the session's task.
+    let cmds = update(
+        &mut m,
+        Msg::Writes {
+            id: "w1".into(),
+            path: "new.py".into(),
+        },
+    );
+    assert!(
+        matches!(cmds.as_slice(), [Cmd::Look { id, path }] if id == "w1" && path == "new.py"),
+        "{cmds:?}"
+    );
+    // The look comes back between the call and its result.
+    write_call(&mut m, "w1", "new.py");
+    prior(&mut m, "w1", false);
+    landed(&mut m, "w1");
+    assert_eq!(mark_of(&m, "new.py"), Some("A"));
+    // After the result: "not there" still proves the write created it.
+    write_call(&mut m, "w2", "late.py");
+    landed(&mut m, "w2");
+    assert_eq!(mark_of(&m, "late.py"), Some("M"), "unknown until the look");
+    prior(&mut m, "w2", false);
+    assert_eq!(mark_of(&m, "late.py"), Some("A"));
+    // "There" proves nothing — it may have raced the write: the path stays modified.
+    write_call(&mut m, "w3", "old.py");
+    landed(&mut m, "w3");
+    prior(&mut m, "w3", true);
+    assert_eq!(mark_of(&m, "old.py"), Some("M"));
+    // A path the session deleted, then wrote again, was there before: modified, whatever the
+    // look saw in between.
+    call(
+        &mut m,
+        "d1",
+        "delete",
+        json!({"path": "gone.py"}),
+        "deleted",
+    );
+    write_call(&mut m, "w4", "gone.py");
+    landed(&mut m, "w4");
+    prior(&mut m, "w4", false);
+    assert_eq!(mark_of(&m, "gone.py"), Some("M"));
+    // A failed write counts nothing, and its late look changes nothing.
+    write_call(&mut m, "w5", "never.py");
+    ev(
+        &mut m,
+        Event::ToolResult {
+            id: "w5".into(),
+            content: "refused".into(),
+            is_error: true,
+            cut: 0,
+        },
+    );
+    prior(&mut m, "w5", false);
+    assert_eq!(mark_of(&m, "never.py"), None);
 }

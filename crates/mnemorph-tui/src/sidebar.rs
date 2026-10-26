@@ -98,9 +98,11 @@ pub struct Files {
     list: Vec<(String, Mark)>,
     /// Calls in flight: the paths each will change.
     pending: HashMap<String, Vec<(String, Mark)>>,
-    /// Whether a `write`'s path existed before it ran, by call: the observer looks, before the
-    /// act runs.
+    /// Whether a `write`'s path existed, by call, when a look came back before the call.
     existed: HashMap<String, bool>,
+    /// `write` calls whose look has not come back: once landed, the path and whether it was
+    /// listed before the write.
+    awaiting: HashMap<String, Option<(String, bool)>>,
 }
 
 impl Files {
@@ -110,9 +112,35 @@ impl Files {
         &self.list
     }
 
-    /// The observer saw that `write` call `id`'s path existed, or not, before it ran.
+    /// A look at `write` call `id`'s path came back: it existed, or not. The look runs off the
+    /// session's task, so it may race the write: "not there" proves the write created the file,
+    /// whenever it arrives; "there" proves nothing, and the path stays modified.
     pub fn prior(&mut self, id: &str, existed: bool) {
-        self.existed.insert(id.to_owned(), existed);
+        match self.awaiting.remove(id) {
+            // Called, not landed: the mark waiting for the result is set now.
+            Some(None) => {
+                if !existed && let Some(marks) = self.pending.get_mut(id) {
+                    for (_, mark) in marks.iter_mut() {
+                        *mark = Mark::Added;
+                    }
+                }
+            }
+            // Landed as modified: a path the session had not touched before becomes added.
+            Some(Some((path, listed))) => {
+                if !existed
+                    && !listed
+                    && let Some(entry) = self
+                        .list
+                        .iter_mut()
+                        .find(|(p, m)| *p == path && *m == Mark::Modified)
+                {
+                    entry.1 = Mark::Added;
+                }
+            }
+            None => {
+                self.existed.insert(id.to_owned(), existed);
+            }
+        }
     }
 
     /// A call `id` of tool `name` with `input`; `root` is the world, for absolute paths.
@@ -133,9 +161,15 @@ impl Files {
                 .into_iter()
                 .collect(),
             "write" => {
-                // Unknown whether it existed: the observer did not look, so call it changed.
-                let added = self.existed.remove(id) == Some(false);
-                let mark = if added { Mark::Added } else { Mark::Modified };
+                // Until a look says the path was not there, the write changed it.
+                let mark = match self.existed.remove(id) {
+                    Some(false) => Mark::Added,
+                    Some(true) => Mark::Modified,
+                    None => {
+                        self.awaiting.insert(id.to_owned(), None);
+                        Mark::Modified
+                    }
+                };
                 field("path").map(|p| (p, mark)).into_iter().collect()
             }
             "move" => field("from")
@@ -161,10 +195,14 @@ impl Files {
             return;
         };
         if is_error {
+            self.awaiting.remove(id);
             return;
         }
         for (path, mark) in marks {
             let was = self.list.iter().position(|(p, _)| *p == path);
+            if let Some(wait) = self.awaiting.get_mut(id) {
+                *wait = Some((path.clone(), was.is_some()));
+            }
             let mark = match was {
                 Some(at) => {
                     let (_, before) = self.list.remove(at);
@@ -251,10 +289,17 @@ pub struct Body {
     pub doing: Option<String>,
 }
 
-/// The bodies below the session, first seen first.
+/// The bodies below the session, first seen first, indexed as they fold in — by name, and by
+/// the body that commissioned them — so a frame walks the tree without searching it.
 #[derive(Debug, Clone, Default)]
 pub struct Bodies {
     list: Vec<Body>,
+    /// Each body's place in `list`, by name.
+    at: HashMap<String, usize>,
+    /// The bodies each commissioned, first seen first; the session's own under `None`.
+    children: HashMap<Option<usize>, Vec<usize>>,
+    /// How many work.
+    working: usize,
 }
 
 impl Bodies {
@@ -267,32 +312,50 @@ impl Bodies {
     /// How many still work.
     #[must_use]
     pub fn live(&self) -> usize {
-        self.list
-            .iter()
-            .filter(|b| b.state == State::Working)
-            .count()
+        self.working
+    }
+
+    /// The tree, depth first: each body after the one that commissioned it, siblings first seen
+    /// first, with its depth (the session's own commissions at 1). Lazy: a frame that shows ten
+    /// rows walks ten bodies.
+    pub fn walk(&self) -> impl Iterator<Item = (usize, &Body)> + '_ {
+        let roots = self.children.get(&None).map_or(&[][..], Vec::as_slice);
+        let mut stack: Vec<(usize, usize)> = roots.iter().rev().map(|&i| (1, i)).collect();
+        std::iter::from_fn(move || {
+            let (depth, i) = stack.pop()?;
+            if let Some(kids) = self.children.get(&Some(i)) {
+                stack.extend(kids.iter().rev().map(|&k| (depth + 1, k)));
+            }
+            Some((depth, &self.list[i]))
+        })
     }
 
     /// An event from the innermost body of `chain`, outermost first.
     pub fn fold(&mut self, chain: &[String], event: &Event) {
-        let mut parent: Option<&String> = None;
+        let mut parent: Option<usize> = None;
         for name in chain {
-            if !self.list.iter().any(|b| &b.name == name) {
+            let i = if let Some(&i) = self.at.get(name) {
+                i
+            } else {
+                let i = self.list.len();
                 self.list.push(Body {
                     name: name.clone(),
-                    parent: parent.cloned(),
+                    parent: parent.map(|p| self.list[p].name.clone()),
                     state: State::Working,
                     doing: None,
                 });
-            }
-            parent = Some(name);
+                self.at.insert(name.clone(), i);
+                self.children.entry(parent).or_default().push(i);
+                self.working += 1;
+                i
+            };
+            parent = Some(i);
         }
-        let Some(b) = chain
-            .last()
-            .and_then(|who| self.list.iter_mut().find(|b| &b.name == who))
-        else {
+        let Some(i) = parent else {
             return;
         };
+        let b = &mut self.list[i];
+        let was = b.state;
         match event {
             Event::TurnStarted { .. } => {
                 b.state = State::Working;
@@ -311,6 +374,11 @@ impl Bodies {
                     _ => State::Failed,
                 };
             }
+            _ => {}
+        }
+        match (was == State::Working, b.state == State::Working) {
+            (true, false) => self.working -= 1,
+            (false, true) => self.working += 1,
             _ => {}
         }
     }
@@ -609,33 +677,14 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
         state,
         w,
     ));
-    // Depth first, each body under the one that commissioned it, first seen first.
-    let mut order: Vec<(usize, &Body)> = Vec::new();
-    let mut stack: Vec<(usize, &Body)> = all
-        .list()
-        .iter()
-        .filter(|x| x.parent.is_none())
-        .rev()
-        .map(|x| (1, x))
-        .collect();
-    while let Some((depth, body)) = stack.pop() {
-        order.push((depth, body));
-        stack.extend(
-            all.list()
-                .iter()
-                .filter(|x| x.parent.as_deref() == Some(body.name.as_str()))
-                .rev()
-                .map(|x| (depth + 1, x)),
-        );
-    }
     let room = rows.saturating_sub(2);
-    let hidden = order.len().saturating_sub(room);
+    let hidden = all.list().len().saturating_sub(room);
     let shown = if hidden > 0 {
         room.saturating_sub(1)
     } else {
-        order.len()
+        all.list().len()
     };
-    for (depth, body) in order.into_iter().take(shown) {
+    for (depth, body) in all.walk().take(shown) {
         let hue = race(&body.name).map_or_else(|| t.frame(), |r| t.race(r));
         let (dot, name) = match body.state {
             State::Working => (hue, t.text()),

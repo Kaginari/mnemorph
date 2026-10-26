@@ -187,12 +187,15 @@ Slash commands: `/send <text>` steers the running turn at its next tool step, `/
 
 The sidebar takes 32 columns on the right from a 100-column terminal up, and folds away below it.
 It shows only what the run or the world gives. The observer sends the chain of bodies each
-commissioned body's event came through (`Seen::From`), what recall gave the session's ask, and,
-on the run's own task before a `write` runs, whether its path already existed — so a written file
-is marked `A` or `M` truthfully; an act's paths count once its result lands without error. The
-memory's standing (`mnemorph_memory::standing`, the same reading `memory status` prints) and the
-roster's races are read on a runtime thread at start and after each line finishes, never on the
-UI thread. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
+commissioned body's event came through (`Seen::From`), what recall gave the session's ask, and
+each `write`'s path; it never touches the disk on the session's task. The UI looks whether that
+path exists on a runtime thread, so a hung mount holds that thread, never the session. The look
+may race the write: "not there" proves the write created the file and marks it `A`, whenever the
+answer arrives; anything else leaves it `M`. An act's paths count once its result lands without
+error. The memory's standing (`mnemorph_memory::standing`, the same reading `memory status`
+prints) and the roster's races are read on a runtime thread at start and after each line
+finishes, each reading numbered so a late one never overwrites a newer one. The bodies' tree is
+indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
 
 **Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
 sequences a program prints and escapes every other control, bidi and zero-width character as
@@ -212,7 +215,8 @@ SIGINT or SIGQUIT, and ten minutes of silence deny.
 A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM, SIGHUP,
 SIGINT and SIGQUIT leave as a quit does, the terminal given back. However the loop ends, every
 approval open or waiting is denied, and a terminal mode that cannot be set at start gives the
-terminal back before the error prints.
+terminal back before the error prints. A panic on the UI thread turns the mouse, bracketed paste
+and the keyboard flags off before its message prints.
 
 **It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
 out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive
