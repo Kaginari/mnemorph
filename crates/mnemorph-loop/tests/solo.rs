@@ -364,7 +364,7 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     let claim = mnemorph_memory::propose(
         &w.world(),
         "slime-other",
-        "out.txt should say broken when the build is red",
+        "the status should say broken when the build is red",
         vec![],
         None,
     )
@@ -376,27 +376,36 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     )
     .unwrap()
     .note;
-    // Recalled beside it, never named by the body: shown in the ask, yet not cited.
-    let bystander = mnemorph_memory::ground(
-        &w.world(),
-        mnemorph_memory::propose(
+    let grounded = |text: &str| {
+        mnemorph_memory::ground(
             &w.world(),
-            "slime-other",
-            "the build is red when out.txt is stale",
-            vec![],
-            None,
+            mnemorph_memory::propose(&w.world(), "slime-other", text, vec![], None).unwrap(),
+            &mnemorph_memory::Proof::confirmed("the human"),
         )
-        .unwrap(),
-        &mnemorph_memory::Proof::confirmed("the human"),
-    )
-    .unwrap()
-    .note;
+        .unwrap()
+        .note
+    };
+    // Never named, but acted on: the body writes the file it names.
+    let used = grounded("out.txt holds what the build says when it is red");
+    // Recalled beside them, never named nor acted on: shown in the ask, yet not cited.
+    let bystander = grounded("the build is red and broken when .build/stamp is stale");
+    // Changed, but named by the ask itself: the task's own target says nothing of a note.
+    let echoed = grounded("stamp.txt marks the build red and broken");
+    // Only read: reading a file is no use of the note that names it.
+    let read_only = grounded("build.log says why the status is broken when the build is red");
+    std::fs::write(w.world().join("build.log"), "red\n").unwrap();
     let model = Arc::new(ScriptedModel::new([
         tool(
             "t1",
             "write",
             json!({"path": "out.txt", "content": "broken\n"}),
         ),
+        tool(
+            "t1b",
+            "write",
+            json!({"path": "stamp.txt", "content": "red\n"}),
+        ),
+        tool("t1c", "read", json!({"path": "build.log"})),
         answer("done"),
         // The note is named in an act's arguments, not in the answer: still cited.
         tool(
@@ -407,7 +416,11 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
         answer("done"),
     ]));
     let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
-    let ending = ask(&mut run, "make out.txt say broken, the build is red").await;
+    let ending = ask(
+        &mut run,
+        "make the status say broken, the build is red; stamp.txt too",
+    )
+    .await;
     assert!(matches!(ending, Ending::Failed(_)), "{ending:?}");
     let shared = fold(&read(&w.world(), &Tier::Shared).unwrap().rows);
     let revises: Vec<_> = shared
@@ -417,16 +430,30 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     assert_eq!(revises.len(), 1, "one per failed act: {revises:?}");
     let r = revises[0];
     assert_eq!(r.status, Status::Grounded);
-    assert_eq!(r.links.len(), 2, "{:?}", r.links);
+    assert_eq!(
+        r.links.len(),
+        5,
+        "{:?} — note {note}, used {used}, bystander {bystander}",
+        r.links
+    );
     let weight = |id: &str| r.links.iter().find(|l| l.note == id).unwrap().weight;
     assert!(
         (weight(&note) - 0.9).abs() < 1e-9,
         "cited by an act's arguments"
     );
     assert!(
+        (weight(&used) - 0.9).abs() < 1e-9,
+        "cited by acting on the file it names"
+    );
+    assert!(
         (weight(&bystander) - 0.4).abs() < 1e-9,
         "shown in the ask's own message, never named by the body"
     );
+    assert!(
+        (weight(&echoed) - 0.4).abs() < 1e-9,
+        "changed, but the ask named it"
+    );
+    assert!((weight(&read_only) - 0.4).abs() < 1e-9, "only read");
     assert!(
         r.proof.as_deref().unwrap().contains("gate: FAIL"),
         "{:?}",

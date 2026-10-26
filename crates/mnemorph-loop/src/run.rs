@@ -239,6 +239,9 @@ pub struct Run {
     recalled: Option<Beat>,
     /// The anchors recalled into this ask: what a run-ending failure reconsolidates.
     anchors: Vec<mnemorph_memory::Anchor>,
+    /// Each anchor's specific terms — the paths, files and identifiers it names — so an ask that
+    /// acts on one cites it without quoting its id.
+    anchor_terms: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
     /// Where this ask's messages start: what it said and did, for what it cited.
     ask_from: usize,
     /// The ask's last FAIL, with the gate's journal heading: what its run-ending failure revises by.
@@ -334,6 +337,7 @@ impl Run {
             folded_upto: 0,
             recalled: None,
             anchors: Vec::new(),
+            anchor_terms: std::collections::BTreeMap::new(),
             ask_from: 0,
             failed_in_ask: None,
             office: "ask".into(),
@@ -694,6 +698,8 @@ impl Run {
                 dissent,
                 outcome: self.landed_in_ask.clone(),
                 forced,
+                recalled: self.anchors.len(),
+                cited: self.cited_anchors().iter().filter(|a| a.cited).count(),
                 seated,
             };
             if let Err(e) = mnemorph_memory::pathology::trace(self.cx.world(), &self.body.name, &t)
@@ -1050,25 +1056,42 @@ impl Run {
 
     /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
     /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    /// The anchors recalled into this ask, each marked cited when what the body said and did — its
-    /// text and its acts' arguments — names it. The ask's own message, where recall shows the
-    /// anchors, is never the body's word.
+    /// The anchors recalled into this ask, each marked cited when the body used it: its own words
+    /// or acts name the note's id, or it changed a path the note names — written, edited, moved,
+    /// deleted or patched — other than one the ask itself names, since the task's own target says
+    /// nothing of any note. Reading a file is no use of a note, and the ask's message, where recall
+    /// shows the notes, is never the body's word.
     fn cited_anchors(&self) -> Vec<mnemorph_memory::Anchor> {
-        let said: String = self.messages[self.ask_from.min(self.messages.len())..]
+        let mine = self.messages[self.ask_from.min(self.messages.len())..]
             .iter()
             .filter(|m| m.role == mnemorph_provider::Role::Assistant)
-            .flat_map(|m| &m.content)
-            .map(|b| match b {
-                Block::Text { text, .. } => text.clone(),
-                Block::ToolUse { input, .. } => input.to_string(),
-                _ => String::new(),
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .flat_map(|m| &m.content);
+        let mut said = String::new();
+        let mut changed = std::collections::BTreeSet::new();
+        for b in mine {
+            match b {
+                Block::Text { text, .. } => said.push_str(text),
+                Block::ToolUse { name, input, .. } => {
+                    said.push_str(&input.to_string());
+                    for path in changed_paths(name, input) {
+                        changed.extend(mnemorph_memory::text::specific_terms(&path));
+                    }
+                }
+                _ => {}
+            }
+            said.push('\n');
+        }
+        for t in mnemorph_memory::text::specific_terms(&self.asked) {
+            changed.remove(&t);
+        }
         self.anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
-                cited: said.contains(&a.id),
+                cited: said.contains(&a.id)
+                    || self
+                        .anchor_terms
+                        .get(&a.id)
+                        .is_some_and(|terms| terms.iter().any(|t| changed.contains(t))),
                 ..a.clone()
             })
             .collect()
@@ -1352,7 +1375,8 @@ impl Run {
             asked
         } else {
             format!(
-                "Recalled from memory (a proposed note is unproven):\n{}\n\n{asked}",
+                "Recalled from memory (a proposed note is unproven; name the id of a note that \
+                 changes what you do, and only that):\n{}\n\n{asked}",
                 recalled.join("\n")
             )
         }
@@ -1417,6 +1441,16 @@ impl Run {
             mnemorph_memory::pathology::fingerprint(text, &ids, &self.office)
         };
         let (forced, seated, escalate) = self.treat(text, &mut r, &memory.notes, &fingerprint);
+        self.anchor_terms = r
+            .anchors
+            .iter()
+            .map(|h| {
+                (
+                    h.note.id.clone(),
+                    mnemorph_memory::text::specific_terms(&h.note.text),
+                )
+            })
+            .collect();
         self.anchors = r
             .anchors
             .iter()
@@ -2038,4 +2072,21 @@ fn text_of(content: &[Block]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// The paths an act changes: written, edited, moved, deleted or patched. A read, a search or a
+/// command changes none.
+fn changed_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
+    let field = |k: &str| input.get(k).and_then(|v| v.as_str()).map(str::to_owned);
+    match tool {
+        "write" | "edit" | "multiedit" | "delete" => field("path").into_iter().collect(),
+        "move" => field("from").into_iter().chain(field("to")).collect(),
+        "patch" => field("patch")
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| l.starts_with("*** ") && l.contains("File:"))
+            .filter_map(|l| l.split_once("File:").map(|(_, p)| p.trim().to_owned()))
+            .collect(),
+        _ => Vec::new(),
+    }
 }

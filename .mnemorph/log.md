@@ -4146,3 +4146,39 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Lesson, third time:** a script that stops at its first miss leaves the edits after it
   unapplied, and a passing build says nothing about them. After any scripted batch, grep for each
   intended change before claiming it.
+### [2026-10-26T09:44:07+01:00] rimuru — a note is cited by use, not only by its id
+- **Why** (the human, relaying a side agent): since #202, "cited" means the body typed the
+  note's long id, which bodies rarely do. Doubt, credit and retirement would almost never fire,
+  and corrections would keep piling up.
+- **Now:**
+  - an ask cites a recalled note when its own text or acts' arguments name the id, or touch a
+    specific term the note names (`anchor_terms` from `specific_terms`; bare directories and
+    stock files still don't count);
+  - recall's header asks bodies to name the ids they rely on;
+  - each trace counts `recalled` and `cited`, and `memory status` prints the rate, so the bench
+    can show whether the rules fire.
+- **Tests:**
+  - solo.rs: three notes, cited by id 0.9, by use 0.9, untouched 0.4; it fails without
+    cite-by-use (checked);
+  - pathology.rs: the cite-rate line.
+- **Tooling:** a reviewer building in the shared dev target clobbered this build again, so this
+  branch builds in a private `tempest-cited-target`, deleted after merge.
+
+---
+
+### [2026-10-26T09:50:41+01:00] rimuru — #206's review: Fable
+- **Fable found:** "use" was too broad. Every term in the body's text and every tool input
+  counted: reads, greps, test commands, the ask echoed back. Notes on the task's target file
+  would be credited on every pass and never retired, trading a dead rule for an inflated one.
+  The header invited listing every id.
+- **Fixed:**
+  - use means change: only the paths of write, edit, multiedit, delete, move and patch acts
+    (`changed_paths`);
+  - terms the ask itself names are dropped;
+  - the header asks for "the id of a note that changes what you do, and only that";
+  - docs 08.
+- **Tests:** solo.rs now holds five notes. Two are cited at 0.9 (by id, by changing the file).
+  Three stay at 0.4: one changed but named in the ask, one only read, one untouched. The broad
+  rule would cite the read-only note through `read`'s arguments.
+- **Disk:** it reached 1.4G free. The private cited target (6.6G) was deleted, and every build
+  is back on the one shared target, cleaned per crate when switching worktrees.

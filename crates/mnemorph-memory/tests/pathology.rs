@@ -10,6 +10,8 @@ fn t(fp: &str, outcome: Option<&str>, dissent: bool) -> Trace {
         outcome: outcome.map(str::to_owned),
         forced: None,
         seated: None,
+        recalled: 0,
+        cited: 0,
     }
 }
 
@@ -132,4 +134,22 @@ fn lock_in_forces_a_correction_until_it_is_heard() {
         "heard and acted on"
     );
     let _ = std::fs::remove_dir_all(&w);
+}
+
+/// `memory status` says how often recall is used: retirement and credit weigh only cited notes.
+#[test]
+fn status_says_how_many_recalled_notes_were_cited() {
+    let past: Vec<Trace> = [(6, 1), (4, 0), (5, 2)]
+        .into_iter()
+        .map(|(recalled, cited)| Trace {
+            recalled,
+            cited,
+            ..t("x", Some("landed"), true)
+        })
+        .collect();
+    assert!(
+        findings(&past).contains(&"cited 3 of 15 recalled notes in the last 3 asks".to_owned()),
+        "{:?}",
+        findings(&past)
+    );
 }
