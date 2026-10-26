@@ -8,6 +8,11 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mnemorph-ledger = { path = "../mnemorph-ledger" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
 
 [lints]
 workspace = true

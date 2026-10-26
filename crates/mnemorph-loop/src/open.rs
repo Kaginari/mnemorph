@@ -160,6 +160,10 @@ pub fn open_with(
     if let Err(e) = mnemorph_world::report::prepare(world) {
         eprintln!("mnemorph: the report folder could not be prepared: {e}");
     }
+    // Two machines that both appended notes never conflict: git merges note files by union.
+    if let Err(e) = mnemorph_memory::union_merge(world) {
+        eprintln!("mnemorph: the notes' union merge could not be set: {e}");
+    }
     let (mut body, cx) = solo(world, model_id);
     // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
     let lanes = lanes(world);

@@ -1108,6 +1108,11 @@ dependencies = [
 [[package]]
 name = "mnemorph-memory"
 version = "0.0.0"
+dependencies = [
+ "mnemorph-ledger",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "mnemorph-provider"

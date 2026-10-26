@@ -47,6 +47,7 @@ flowchart TB
       WORLD --> WIRE
       WORLD --> LEDGER
       WORLD --> MEM
+      MEM --> LEDGER
     end
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER

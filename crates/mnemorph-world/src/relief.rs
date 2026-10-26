@@ -249,6 +249,12 @@ fn carry_out(
         }
         return Err(e);
     }
+    // Personal memory survives the split: each heir inherits the notes whose sources lie in its
+    // ground; the old creature's file is kept whole.
+    if let Act::Split { young } = &relief.act {
+        mnemorph_memory::inherit(world, &c.name, young)
+            .map_err(|e| format!("the young are seated, but the notes could not follow: {e}"))?;
+    }
     for (child, to) in &relief.children {
         let Some(k) = roster.creatures.get(child) else {
             continue;

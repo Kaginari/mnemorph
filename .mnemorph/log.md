@@ -3607,3 +3607,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Test:** it now also asks through a symlinked alias of the world, so Linux catches the same
   class. It fails without the fix.
 - **Note:** #191 was correctly not merged on the red check.
+
+---
+
+### [2026-10-26T02:07:40+01:00] rimuru — M8 rung 1: notes as events
+- **Task:** M8 begins, after M7's tail.
+- **Files:**
+  - mnemorph-memory note.rs: `Polarity` (`dissents`), `Status` (ordered by strength), `By`, and
+    `Change` (create, status, confidence); `Event` and `Note`; `fold` orders by (time, id), the
+    latest status and confidence stand, a merge's duplicate takes the stronger status, an orphan
+    event is set aside, and a second creation is ignored;
+  - store.rs: `Tier` (personal, shared, short), `append` and `read` on the ledger's `Journal`
+    (one synced line, tolerant read); `inherit` (an heir gets the notes sourced in its ground,
+    every heir gets those with no path, the old file is kept); `union_merge` (`merge=union` via
+    `.git/info/attributes`, idempotent, never through a link);
+  - relief hands notes to heirs on a split; the session open sets union merge;
+  - memory → ledger, in check-layers and docs 05; docs 08.
+- **Tests:** memory notes.rs (5), relief's notes-follow-the-split.
+- **Next rungs:** recall (BM25), the write rule, proofs.

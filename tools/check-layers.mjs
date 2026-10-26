@@ -8,7 +8,7 @@ const ALLOWED = {
   'mnemorph-wire': [],
   'mnemorph-races': [],
   'mnemorph-sandbox': [],
-  'mnemorph-memory': [],
+  'mnemorph-memory': ['mnemorph-ledger'],
   'mnemorph-ledger': ['mnemorph-races'],
   'mnemorph-tools': ['mnemorph-races', 'mnemorph-sandbox'],
   'mnemorph-config': ['mnemorph-races', 'mnemorph-tools', 'mnemorph-ledger'],
