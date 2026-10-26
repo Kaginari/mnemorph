@@ -153,3 +153,60 @@ fn the_human_settles_a_fact_and_a_body_cannot() {
     assert!(f.settled);
     let _ = fs::remove_dir_all(&world);
 }
+
+/// A proposed claim is listed with its vouch; the human confirms it, and it is grounded and
+/// shared by the confirmed route. A body is never let, and an id no creature proposes is refused.
+#[test]
+fn the_human_confirms_a_proposed_claim_and_a_body_cannot() {
+    use mnemorph_server::world::memory::{Status, Tier, fold, propose, read};
+    let world =
+        std::env::temp_dir().join(format!("mnemorph-memory-confirm-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&world);
+    fs::create_dir_all(&world).unwrap();
+    let claim = propose(&world, "slime-a", "run uv before pytest", vec![], None).unwrap();
+    let id = claim.note.clone();
+    let (_, out) = status(&world, false);
+    assert!(
+        out.contains(&format!(
+            "proposed: {id} — run uv before pytest (vouch: mnemorph memory confirm {id})"
+        )),
+        "{out}"
+    );
+    let w = world.to_str().unwrap();
+    let bin = env!("CARGO_BIN_EXE_mnemorphd");
+    let run = |args: &[&str], body: Option<&str>| {
+        let mut c = Command::new(bin);
+        c.args(args).args(["--world", w]);
+        match body {
+            Some(b) => c.env("MNEMORPH_BODY", b),
+            None => c.env_remove("MNEMORPH_BODY"),
+        };
+        c.output().unwrap()
+    };
+    assert_eq!(
+        run(&["memory", "confirm", &id], Some("slime-a"))
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(
+        run(&["memory", "confirm", "n0"], None).status.code(),
+        Some(2)
+    );
+    let human = run(&["memory", "confirm", &id], None);
+    assert!(
+        human.status.success(),
+        "{}",
+        String::from_utf8_lossy(&human.stderr)
+    );
+    let shared = fold(&read(&world, &Tier::Shared).unwrap().rows);
+    assert_eq!(shared[&id].status, Status::Grounded);
+    assert!(
+        shared[&id]
+            .proof
+            .as_deref()
+            .unwrap()
+            .starts_with("confirmed: ")
+    );
+    let _ = fs::remove_dir_all(&world);
+}

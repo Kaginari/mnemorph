@@ -189,7 +189,7 @@ by exactly one of:
 | **checked** | the end gate passed *and* ran at least one verify line over a non-empty diff | work that wrote files |
 | **accepted** | the commissioner's verdict names the claim and accepts it (the verdict-current) | research, reads, reviews — work with nothing to test |
 | **corroborated** | a second creature lands a matching claim from different evidence anchors | anything, including failed runs |
-| **confirmed** | the human says so | anything |
+| **confirmed** | the human says so: `mnemorph memory confirm <claim>` | anything |
 
 An answer that changed nothing passes the end gate untouched; that pass proves nothing about
 its claims, so it never counts as **checked**. Its `@U` lines wait for **accepted**: the parent
@@ -377,6 +377,10 @@ alone.
 the human's alone, refused to a body — grounds it again in every tier that holds it, and only
 evidence after the waking counts. It undoes only a retirement: a note put to sleep otherwise, or
 never grounded, keeps its standing and its route.
+
+It also lists each creature's proposed claims, newest first, ten at most, each with its vouch:
+`mnemorph memory confirm <claim>` — the human's alone, refused to a body — grounds the claim by
+the **confirmed** route, in its creature's tier and in shared memory, citing the human's word.
 
 ### Consolidation and forgetting
 
