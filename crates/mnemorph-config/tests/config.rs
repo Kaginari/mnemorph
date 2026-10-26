@@ -1029,3 +1029,19 @@ fn budget_caps_are_the_humans_and_in_weighted_tokens() {
     g.global("[budget]\nmonth = 0\n");
     assert!(g.load().unwrap_err().contains("budget.month"));
 }
+
+/// Recall's weights are numbers in config: a layer's value stands, an unset key gives the caller's
+/// own default, and a negative or non-numeric value is an error naming its file.
+#[test]
+fn recall_weights_are_numbers_a_layer_sets() {
+    let g = Ground::new("recall");
+    g.tracked("[recall]\nfloor = 0.3\nhalf_life_days = 30\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.number("recall.floor"), Some(0.3));
+    assert_eq!(c.number("recall.half_life_days"), Some(30.0));
+    assert_eq!(c.number("recall.meaning"), None);
+    g.tracked("[recall]\nfloor = -1.0\n");
+    assert!(g.load().unwrap_err().contains("config.toml"));
+    g.tracked("[recall]\nfloor = \"high\"\n");
+    assert!(g.load().is_err());
+}

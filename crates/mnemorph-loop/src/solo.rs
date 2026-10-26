@@ -73,7 +73,31 @@ pub fn configure(
         .with_asked_rules(config.asked_rules())
         .with_unguarded(config.allow_unguarded());
     limits.stress_tokens = config.context_stress_tokens();
+    limits.weights = recall_weights(config);
     (cx, limits)
+}
+
+/// Recall's weights, floor and saturations: each `recall.*` key the configuration sets, the
+/// defaults set against the recall fixtures for the rest.
+#[must_use]
+pub fn recall_weights(config: &mnemorph_config::Config) -> mnemorph_memory::Weights {
+    let d = mnemorph_memory::Weights::default();
+    let n = |key: &str, or: f64| config.number(&format!("recall.{key}")).unwrap_or(or);
+    mnemorph_memory::Weights {
+        meaning: n("meaning", d.meaning),
+        relation: n("relation", d.relation),
+        salience: n("salience", d.salience),
+        confidence: n("confidence", d.confidence),
+        freshness: n("freshness", d.freshness),
+        dissent: n("dissent", d.dissent),
+        half_life_days: n("half_life_days", d.half_life_days),
+        floor: n("floor", d.floor),
+        saturation: [
+            n("saturation_short", d.saturation[0]),
+            n("saturation_mid", d.saturation[1]),
+            n("saturation_long", d.saturation[2]),
+        ],
+    }
 }
 
 /// The world's law at the end of a system prompt: it changes only as the human's diff, so the

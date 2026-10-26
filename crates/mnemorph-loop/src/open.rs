@@ -243,6 +243,7 @@ pub fn open_with(
         session: session_id.clone(),
         caps: capped.then_some(caps),
         stress_tokens: Some(config.context_stress_tokens()),
+        weights: Some(crate::solo::recall_weights(config)),
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),

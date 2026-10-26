@@ -7,7 +7,7 @@ use crate::text::{bm25, content_words};
 
 /// The weights, the floor and the saturation constants of a recall's score; all of them belong
 /// in config, set against the recall fixtures.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Weights {
     /// The meaning term's weight, `w_q`.
     pub meaning: f64,

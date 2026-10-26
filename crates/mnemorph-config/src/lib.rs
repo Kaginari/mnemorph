@@ -114,6 +114,17 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
     ("steps.solo", Kind::Int),
+    ("recall.meaning", Kind::Number),
+    ("recall.relation", Kind::Number),
+    ("recall.salience", Kind::Number),
+    ("recall.confidence", Kind::Number),
+    ("recall.freshness", Kind::Number),
+    ("recall.dissent", Kind::Number),
+    ("recall.half_life_days", Kind::Number),
+    ("recall.floor", Kind::Number),
+    ("recall.saturation_short", Kind::Number),
+    ("recall.saturation_mid", Kind::Number),
+    ("recall.saturation_long", Kind::Number),
     ("evolution.mode", Kind::Str),
     ("models.provider", Kind::Str),
     ("models.default", Kind::Str),
@@ -1043,6 +1054,20 @@ impl Config {
             .unwrap_or(ENVELOPE_DAYS)
     }
 
+    /// A number key's value — `recall.*` and the like — when a layer sets it: the caller's own
+    /// default stands otherwise.
+    #[must_use]
+    pub fn number(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(|l| {
+            l.value.as_float().or_else(|| {
+                l.value
+                    .as_integer()
+                    .and_then(|i| i32::try_from(i).ok())
+                    .map(f64::from)
+            })
+        })
+    }
+
     fn int(&self, key: &str) -> Option<u64> {
         self.get(key)
             .and_then(|l| l.value.as_integer())
@@ -1093,7 +1118,9 @@ fn check_kind(key: &str, value: &Value, kind: Kind, origin: &Origin) -> Result<(
     let ok = match kind {
         Kind::Bool => value.is_bool(),
         Kind::Int => value.as_integer().is_some_and(|i| i >= 0),
-        Kind::Number => value.is_float() || value.as_integer().is_some_and(|i| i >= 0),
+        Kind::Number => {
+            value.as_float().is_some_and(|f| f >= 0.0) || value.as_integer().is_some_and(|i| i >= 0)
+        }
         Kind::Str => value.is_str(),
         Kind::StrList => value
             .as_array()

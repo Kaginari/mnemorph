@@ -1884,3 +1884,46 @@ async fn an_ask_naming_a_path_carries_its_facts() {
     );
     assert!(!first.contains("@ONTO ../"), "nor one outside the world");
 }
+
+/// Recall reads its weights from the run's limits, which the human's `recall.*` keys set: a floor
+/// no match can clear recalls nothing, where the default recalls the note.
+#[tokio::test]
+async fn recall_reads_its_configured_weights() {
+    let w = World::new("weights");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "the tokenizer keeps interval fractions whole",
+        vec![],
+        None,
+    )
+    .unwrap();
+    let id = mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
+    let first = |floor: Option<f64>| {
+        let w = &w;
+        async move {
+            let model = Arc::new(ScriptedModel::new([answer("noted")]));
+            let mut l = limits();
+            if let Some(f) = floor {
+                l.weights.floor = f;
+            }
+            let mut run = w.run(model.clone(), l);
+            ask(&mut run, "why does the tokenizer split interval fractions").await;
+            format!("{:?}", model.requests()[0].messages.last())
+        }
+    };
+    assert!(
+        first(None).await.contains(&format!("@M {id} ")),
+        "the default recalls it"
+    );
+    assert!(
+        !first(Some(9.0)).await.contains("@M "),
+        "an unreachable floor recalls nothing"
+    );
+}

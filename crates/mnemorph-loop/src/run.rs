@@ -57,6 +57,8 @@ pub struct Limits {
     pub budget_wt: Option<u64>,
     /// How many structured compactions one ask may take before a full context drains.
     pub compactions: u32,
+    /// Recall's weights, floor and saturations, from the human's `recall.*` keys.
+    pub weights: mnemorph_memory::Weights,
 }
 
 impl Limits {
@@ -74,6 +76,7 @@ impl Limits {
             deadline: Duration::from_hours(1),
             window: 200_000,
             stress_tokens: STRESS_TOKENS,
+            weights: mnemorph_memory::Weights::default(),
             compactions: COMPACTIONS,
             max_tokens: 8192,
             budget_wt: None,
@@ -1681,13 +1684,8 @@ impl Run {
             });
         }
         let now = mnemorph_memory::store::now_ms();
-        let mut r = mnemorph_memory::recall(
-            text,
-            &memory.notes,
-            now,
-            RECALL_K,
-            &mnemorph_memory::Weights::default(),
-        );
+        let mut r =
+            mnemorph_memory::recall(text, &memory.notes, now, RECALL_K, &self.limits.weights);
         if r.anchors.is_empty() {
             return Vec::new();
         }

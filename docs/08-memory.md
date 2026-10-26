@@ -165,7 +165,11 @@ relevance floor $\theta = 0.12$ applies to the meaning term alone,
 $w_q\,\widehat{\mathrm{bm25}}(q,\tau) \ge \theta$: the priors rank notes that match, they never
 make a note match (with them in the sum, a body's own note would clear the floor with no match
 at all). All of them live in config, never in a prompt, and are tuned against the recall
-fixtures.
+fixtures: `recall.meaning`, `recall.relation`, `recall.salience`, `recall.confidence`,
+`recall.freshness`, `recall.dissent`, `recall.half_life_days`, `recall.floor`, and BM25's
+saturations by query length, `recall.saturation_short` (one content word), `recall.saturation_mid`
+(two or three) and `recall.saturation_long` (four and more); a key left unset keeps the value
+above.
 
 ### Two scopes, two standings
 
@@ -221,10 +225,13 @@ where it is remembered with who said it and can be countered; ownership is check
 **The dissent seat.** With a budget of $k \ge 2$ anchors:
 
 ```math
-\mathcal{S} = \operatorname{top}_{k-2}(S^{+}) \ \cup\ \{\arg\max_{\tau \in C} \mathrm{score}(\tau)\} \ \cup\ \text{fill to } k
+\mathcal{S} = \operatorname{top}_{k-2}(S^{+}) \ \cup\ \{\arg\max_{\tau \in C_\theta} \mathrm{score}(\tau)\} \ \cup\ \text{fill to } k,
+\qquad C_\theta = \{\tau \in C : w_q\,\widehat{\mathrm{bm25}}(q,\tau) \ge \theta\}
 ```
 
-If $C \neq \emptyset$, at least one dissenting note is always recalled. Plain top-$k$ cannot
+If $C_\theta \neq \emptyset$ — some dissenting note matches the ask — at least one dissenting note
+is always recalled. A correction whose words match nothing in the ask is no candidate; lock-in
+(see *Pathologies as instruments*) forces the newest one linked to a recalled note. Plain top-$k$ cannot
 promise that: when agreeing notes outnumber disagreeing ones, the one correction that matters
 ranks $k+1$ and is never seen.
 

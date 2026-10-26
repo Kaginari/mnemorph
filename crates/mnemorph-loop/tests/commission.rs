@@ -107,6 +107,7 @@ impl World {
             session: "s".into(),
             caps: None,
             stress_tokens: None,
+            weights: None,
             busy: std::sync::Mutex::default(),
             observer: None,
             council: mnemorph_loop::council::Thresholds::default(),
