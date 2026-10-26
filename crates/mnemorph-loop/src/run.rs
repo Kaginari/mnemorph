@@ -2053,6 +2053,17 @@ impl Run {
 
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
+        // Arguments the model sent as no JSON: never run, answered so the model can resend them.
+        if let Some(why) = serde_json::from_str::<serde_json::Value>(input)
+            .ok()
+            .filter(|v| v.get(mnemorph_provider::MALFORMED).is_some())
+            .map(|v| v["error"].as_str().unwrap_or_default().to_owned())
+        {
+            return mnemorph_tools::Outcome::error(format!(
+                "this call's arguments were not valid JSON ({why}); nothing ran — send the call \
+                 again with complete JSON arguments"
+            ));
+        }
         // A Mind is the world's: the loop reads it from there, in this body's name.
         if name == crate::wear_tool::WEAR
             && self

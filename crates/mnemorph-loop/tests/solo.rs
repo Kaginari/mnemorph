@@ -640,3 +640,23 @@ async fn a_deleted_tests_name_cannot_forge_the_card() {
     };
     assert!(!said.contains('\n') && said.contains("\\u{a}"), "{said:?}");
 }
+
+/// A call the model sent with broken arguments never runs and never ends the run: the body is told,
+/// and goes on.
+#[tokio::test]
+async fn a_call_with_broken_arguments_is_answered_and_the_run_goes_on() {
+    let w = World::new("broken-args");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "read",
+            json!({ mnemorph_provider::MALFORMED: "{\"path\": ", "error": "EOF while parsing" }),
+        ),
+        answer("Sent it again; done."),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    let ending = ask(&mut run, "read the readme").await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let told = format!("{:?}", model.requests()[1].messages.last());
+    assert!(told.contains("not valid JSON") && told.contains("nothing ran"), "{told}");
+}

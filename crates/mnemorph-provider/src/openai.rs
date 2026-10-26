@@ -11,6 +11,10 @@ use crate::model::{Block, Event, Request, Response, Role, StopReason};
 use crate::retry::Policy;
 use crate::transport::Transport;
 
+/// The key a tool call's input carries when the model's arguments were no JSON: the raw text,
+/// beside `error`, for the loop to hand back as the call's error.
+pub const MALFORMED: &str = "__malformed_arguments";
+
 /// Opaque blocks this client produces carry a type with this prefix; it replays them, and every
 /// other provider leaves them out.
 pub const OPAQUE_PREFIX: &str = "openai.";
@@ -402,12 +406,10 @@ impl Chat {
                 Ok(input) => input,
                 // Cut by the output ceiling: the call never finished, so it is dropped.
                 Err(_) if stop == StopReason::MaxTokens => continue,
-                Err(e) => {
-                    return Err(Error::Decode(format!(
-                        "tool {}'s arguments: {e}",
-                        call.name
-                    )));
-                }
+                // A finished call whose arguments are no JSON is the model's slip, not the
+                // stream's: kept, with its text under `MALFORMED`, so the loop answers it with an
+                // error the model can correct, and one bad call never ends a run.
+                Err(e) => json!({ MALFORMED: call.arguments, "error": e.to_string() }),
             };
             if !call.extra.is_empty() {
                 content.push(Block::Opaque(json!({

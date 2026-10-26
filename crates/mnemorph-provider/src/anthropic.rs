@@ -368,7 +368,13 @@ impl Assembly {
                                 "tool call {name} was cut by max_tokens and dropped"
                             ));
                         }
-                        Err(e) => return Err(Error::Decode(format!("tool {name}'s input: {e}"))),
+                        // The model's slip, not the stream's: kept under `MALFORMED`, for the loop
+                        // to answer with an error the model can correct.
+                        Err(e) => content.push(Block::ToolUse {
+                            id,
+                            name,
+                            input: json!({ crate::MALFORMED: json, "error": e.to_string() }),
+                        }),
                     }
                 }
                 Partial::Opaque(mut v) => {

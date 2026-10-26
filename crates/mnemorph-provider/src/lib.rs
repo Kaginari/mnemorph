@@ -31,7 +31,7 @@ pub use decide::{
 };
 pub use error::{Error, Wait};
 pub use model::{Block, Effort, Event, Message, Request, Response, Role, StopReason, Tool};
-pub use openai::{OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
+pub use openai::{MALFORMED, OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use systemone::{
