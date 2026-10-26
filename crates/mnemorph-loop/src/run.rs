@@ -13,7 +13,10 @@ use mnemorph_races::Race;
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
-use crate::compact::{fingerprints, fold, fold_point, foldable, mark_cache, moved};
+use crate::compact::{
+    KEEP_BYTES, bytes as message_bytes, compacted, fingerprints, fold, fold_point, foldable,
+    mark_cache, moved, tail_from,
+};
 use crate::decisions::{BENCH_POINT, Decisions, bench_ask, bench_read};
 use crate::gate::{EndGate, Tree, snapshot};
 use crate::model::Model;
@@ -52,6 +55,8 @@ pub struct Limits {
     pub max_tokens: u32,
     /// The carved budget, in weighted tokens, if any.
     pub budget_wt: Option<u64>,
+    /// How many structured compactions one ask may take before a full context drains.
+    pub compactions: u32,
 }
 
 impl Limits {
@@ -69,6 +74,7 @@ impl Limits {
             deadline: Duration::from_hours(1),
             window: 200_000,
             stress_tokens: STRESS_TOKENS,
+            compactions: COMPACTIONS,
             max_tokens: 8192,
             budget_wt: None,
         }
@@ -196,10 +202,28 @@ enum Stop {
     Salvage(&'static str),
     /// The context line: one drain turn first, its `@U` lines kept as proposed notes.
     Drain(String),
+    /// The context line, with compactions left: the body summarises, the run goes on.
+    Compact(String),
 }
 
 /// The tokens a clock death's salvage turn may write.
 pub const SALVAGE_TOKENS: u32 = 4096;
+/// How many structured compactions one ask may take before a full context drains.
+pub const COMPACTIONS: u32 = 2;
+
+/// What the body is asked when the context is full and the run can go on: a summary that replaces
+/// the conversation, in fixed sections, its discoveries and files on the wire.
+const SUMMARY_NOTE: &str = "The context is full. Write the summary that will replace this \
+conversation so far — it is all you will keep of it, beside the newest exchanges — in exactly \
+these sections, and nothing else:\n\
+## Goal\nwhat the ask is for, in a line or two\n\
+## Instructions\nwhat the human asked and every constraint they set\n\
+## Discoveries\none `@U <law|colony|territory> <path> <fact>` line for each thing learned\n\
+## Accomplished\nwhat is done, and how it was checked\n\
+## Files\none `@F <path> <what changed or was found>` line for each file that matters\n\
+## Todo\nwhat is left, in order\n\
+No tools.";
+
 /// The longest a drain turn may take: what is left of the clock, up to this.
 pub const DRAIN_GRACE: Duration = Duration::from_secs(120);
 /// The share of the window the stress line may never pass (percent).
@@ -262,6 +286,10 @@ pub struct Run {
     manifest: Option<String>,
     /// How often the run has drained: a full context drains once, and checkpoints plainly after.
     drains: u32,
+    /// How often this ask has compacted: at most [`COMPACTIONS`], then a full context drains.
+    compactions: u32,
+    /// This ask's own text as journaled: what a structured compaction keeps at the head.
+    ask_said: String,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -350,6 +378,8 @@ impl Run {
             acceptable: std::collections::BTreeSet::new(),
             manifest: None,
             drains: 0,
+            compactions: 0,
+            ask_said: String::new(),
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -817,11 +847,9 @@ impl Run {
         let mut gate_retried = false;
         loop {
             // Perceive: the meters, read from the core, never from the model.
-            match self.perceive() {
-                Some(Stop::End(ending)) => return self.end(ending),
-                Some(Stop::Salvage(why)) => return self.salvage(why).await,
-                Some(Stop::Drain(why)) => return self.drain(why).await,
-                None => {}
+            let stop = self.perceive();
+            if let Some(ending) = self.meet(stop).await {
+                return ending;
             }
             // Plan: one model call, inside what is left of the clock, unless the human interrupts.
             if self.interrupt.take() {
@@ -1295,6 +1323,9 @@ impl Run {
             // The line sits below the window: room for one drain turn, unless a jump took it — and
             // a run drains once.
             let room = self.limits.window.saturating_sub(self.last_occupancy);
+            if self.compactions < self.limits.compactions && room >= u64::from(SALVAGE_TOKENS) * 2 {
+                return Some(Stop::Compact(why));
+            }
             return if self.drains == 0 && room >= u64::from(SALVAGE_TOKENS) * 2 {
                 Some(Stop::Drain(why))
             } else {
@@ -1400,6 +1431,8 @@ impl Run {
         self.landed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
+        self.compactions = 0;
+        text.clone_into(&mut self.ask_said);
         if let Some(recall) = self.recalled.take() {
             self.record(&recall);
         }
@@ -2028,6 +2061,86 @@ impl Run {
             why: why.to_owned(),
             salvage,
         })
+    }
+
+    /// What a meter's reading does: the ending it brings, or `None` when the run goes on — a
+    /// compaction that came back with no summary is no compaction, and the run drains.
+    async fn meet(&mut self, stop: Option<Stop>) -> Option<Ending> {
+        match stop? {
+            Stop::End(ending) => Some(self.end(ending)),
+            Stop::Salvage(why) => Some(self.salvage(why).await),
+            Stop::Drain(why) => Some(self.drain(why).await),
+            Stop::Compact(why) if !self.compact().await => Some(self.drain(why).await),
+            Stop::Compact(_) => None,
+        }
+    }
+
+    /// A structured compaction: the body summarises the conversation in fixed sections — its
+    /// discoveries kept as proposed notes — and the conversation becomes the ask, that summary and
+    /// the newest exchanges verbatim, up to [`KEEP_BYTES`]. The journal keeps everything; a resume
+    /// rebuilds the same conversation from the compaction's beat. False when no summary came back.
+    async fn compact(&mut self) -> bool {
+        let mut scratch = self.messages.clone();
+        push_user(
+            &mut scratch,
+            vec![Block::Text {
+                text: SUMMARY_NOTE.to_owned(),
+                cache: false,
+            }],
+        );
+        let mut request = self.request(SALVAGE_TOKENS);
+        request.messages = fold(&scratch, self.folded_upto);
+        request.tools.clear();
+        let grace = self
+            .limits
+            .deadline
+            .saturating_sub(self.started.elapsed())
+            .clamp(Duration::from_secs(2), DRAIN_GRACE);
+        let mut quiet = |_: Event| {};
+        let Ok(Ok(r)) =
+            tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await
+        else {
+            return false;
+        };
+        let row = usage_row(
+            &r,
+            &self.caller,
+            self.model.provider(),
+            &self.prices,
+            Timestamp::now(),
+        );
+        self.spend(&row);
+        let summary = text_of(&r.content);
+        if summary.trim().is_empty() {
+            return false;
+        }
+        let from = tail_from(&self.messages, KEEP_BYTES);
+        let tail = self.messages.len() - from;
+        let before: usize = self.messages.iter().map(message_bytes).sum();
+        self.messages = compacted(&self.ask_said, &summary, &self.messages[from..]);
+        let after: usize = self.messages.iter().map(message_bytes).sum();
+        self.record(&Beat::Compacted {
+            summary: summary.clone(),
+            tail,
+        });
+        let (notes, facts) = self.keep_unsaid(&summary);
+        // The context the next request carries, scaled by what the compaction took out; the
+        // provider's next reading corrects it.
+        self.last_occupancy = u64::try_from(
+            u128::from(self.last_occupancy) * (after as u128) / (before.max(1) as u128),
+        )
+        .unwrap_or(self.last_occupancy);
+        self.folded_upto = 0;
+        self.ask_from = 0;
+        self.sent.0.clear();
+        self.compactions += 1;
+        self.record(&Beat::Warning {
+            text: format!(
+                "compacted: the conversation summarised, its {tail} newest message(s) kept \
+                 verbatim; {notes} discovery(ies) kept as proposed notes, {facts} fact(s) filed"
+            ),
+        });
+        true
     }
 
     /// The context line: one turn without tools to write down what is not durable, its `@U` lines

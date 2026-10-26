@@ -296,7 +296,7 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             unverified: unverified.clone(),
         }],
         // The guts' readings are for the record and the value model, not for the surfaces.
-        Beat::Guts { .. } | Beat::Recall { .. } => vec![],
+        Beat::Guts { .. } | Beat::Recall { .. } | Beat::Compacted { .. } => vec![],
         Beat::End { ending } => vec![Event::TurnEnded {
             ending: ending.clone(),
         }],

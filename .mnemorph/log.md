@@ -4277,3 +4277,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a memory-level test of `covers` and `ground`'s refusal.
 - **Left:** a world claim that names a changed file still grounds; that is inherent without
   reading claims.
+
+---
+
+### [2026-10-26T10:54:36+01:00] rimuru — #41: structured compaction
+- **Task:** #41, chosen by the human as "the mesh" to do before the bench. At the context line a
+  run compacted only by folding and then stopped, so long runs lost their steps.
+- **Files:**
+  - compact.rs: `KEEP_BYTES` (40,000); `bytes` (now public); `tail_from` (the earliest
+    assistant turn whose rest fits); `compacted` (the ask, the summary, the tail);
+  - beats.rs: `Beat::Compacted { summary, tail }`, replayed by `conversation`, which keeps the
+    last ask's text; the server ignores the beat;
+  - run.rs:
+    - `Stop::Compact` at the line while `compactions < Limits::compactions` (default
+      `COMPACTIONS` = 2) and the window has room;
+    - `compact()` runs `SUMMARY_NOTE` on a scratch copy (no tools, ledgered), rebuilds from
+      `ask_said`, records the beat, keeps `@U` through `keep_unsaid`, scales the occupancy,
+      resets the fold, `ask_from` and the prefix watch;
+    - a failed summary drains;
+    - `meet` holds the stop dispatch (`ask` was over 100 lines);
+  - docs 03.
+- **Tests:** loop.rs:
+  - a full context compacts and the run answers; the summary turn has no tools; the next
+    request leads with the ask and summary and keeps a tool call; the journal has `Compacted`;
+    `conversation(journal) == messages` (resume); the discovery is a proposed note;
+  - spent compactions drain;
+  - the old drain and context tests opt out with `compactions: 0`.
