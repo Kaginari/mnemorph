@@ -1,6 +1,7 @@
 //! The runtime: the session hosted in-process, the terminal owned and always given back, and
 //! the loop — receive a message, update, run the commands, draw when dirty — with frames
-//! coalesced to at most [`FPS`] a second, however fast the model streams.
+//! coalesced to at most [`FPS`] a second, however fast the model streams. After each frame the
+//! [`Placer`] sends the portraits' pictures the frame wants, when they changed.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ use ratatui::crossterm::{execute, terminal};
 
 use crate::app::{self, Cmd, Header, Model, Msg};
 use crate::gate::TuiGate;
+use crate::pictures::Placer;
 
 /// The most frames drawn a second.
 pub const FPS: u64 = 30;
@@ -374,6 +376,8 @@ pub fn release(out: &mut impl std::io::Write) -> std::io::Result<()> {
 /// panic's message prints, and on the screen's drop.
 fn give_back() {
     let mut out = std::io::stdout();
+    // A Kitty picture outlives the text under it: deleted while the screen is still the UI's.
+    let _ = crate::pictures::release(&mut out);
     let _ = release(&mut out);
     ratatui::restore();
     let _ = out.flush();
@@ -461,7 +465,10 @@ pub fn run(model: Model, host: &Host, tx: Sender<Msg>, rx: &Receiver<Msg>) -> st
         model.size = (size.width, size.height);
     }
     read_input(tx);
-    let result = event_loop(&mut model, host, &mut screen.0, rx);
+    let mut placer = Placer::new(&model.pictures);
+    let result = event_loop(&mut model, host, &mut screen.0, rx, &mut placer);
+    // A Kitty picture outlives the text under it: deleted before the screen is given back.
+    let _ = placer.clear(&mut std::io::stdout());
     // However the loop ended, every approval still open or waiting is denied: the human left
     // without answering it.
     for cmd in app::leave(&mut model) {
@@ -476,6 +483,7 @@ fn event_loop(
     host: &Host,
     terminal: &mut ratatui::DefaultTerminal,
     rx: &Receiver<Msg>,
+    placer: &mut Placer,
 ) -> std::io::Result<()> {
     let mut clock = FrameClock::default();
     let mut dirty = true;
@@ -483,7 +491,12 @@ fn event_loop(
     loop {
         let now = Instant::now();
         if dirty && clock.wait(now).is_zero() {
-            terminal.draw(|f| app::view(model, f))?;
+            let mut out = std::io::stdout();
+            placer.before(model.gate.is_some(), &mut out)?;
+            let frame = terminal.draw(|f| app::view(model, f))?;
+            // The pictures after the text: sent only when what is wanted changed.
+            let size = (frame.area.width, frame.area.height);
+            placer.sync_at(&model.pictures.wanted(), size, frame.buffer, &mut out, now)?;
             clock.drew(now);
             dirty = false;
         }
@@ -495,6 +508,10 @@ fn event_loop(
             let frame = clock.wait(now);
             wait = Some(wait.map_or(frame, |w| w.min(frame)));
         }
+        // A picture held back while its box moved is placed once the box has settled.
+        if let Some(settle) = placer.due(now) {
+            wait = Some(wait.map_or(settle, |w| w.min(settle)));
+        }
         let first = match wait {
             Some(w) => rx.recv_timeout(w),
             None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
@@ -504,12 +521,16 @@ fn event_loop(
             Err(RecvTimeoutError::Timeout) => Vec::new(),
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
         };
+        if placer.due(Instant::now()).is_some_and(|d| d.is_zero()) {
+            dirty = true;
+        }
         // Everything already waiting is taken before the next frame: a burst of deltas is one
         // frame.
         msgs.extend(rx.try_iter());
         if model.next_tick().is_some_and(|t| last_tick.elapsed() >= t) {
             msgs.push(Msg::Tick(last_tick.elapsed()));
         }
+        let resized = msgs.iter().any(|m| matches!(m, Msg::Resize(..)));
         for msg in msgs {
             if matches!(msg, Msg::Tick(_)) {
                 last_tick = Instant::now();
@@ -520,6 +541,11 @@ fn event_loop(
                     return Ok(());
                 }
             }
+        }
+        // A font zoom resizes the window and changes the cell: the pictures follow it, or fall
+        // back to half blocks when the size cannot be read again.
+        if resized && model.pictures.images() {
+            crate::pictures::resized(&mut model.pictures, placer, crate::probe::cell_now());
         }
         if model.next_tick().is_none() {
             last_tick = Instant::now();

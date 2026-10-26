@@ -5,7 +5,7 @@ use mnemorph_races::Race;
 use ratatui::style::{Color, Modifier, Style};
 
 /// One `#rrggbb` colour.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
 impl Rgb {

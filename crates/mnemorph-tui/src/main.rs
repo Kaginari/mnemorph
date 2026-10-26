@@ -5,18 +5,25 @@ use std::process::ExitCode;
 
 use mnemorph_tui::app::Model;
 use mnemorph_tui::kit::highlight;
+use mnemorph_tui::pictures::Pictures;
+use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
 
 const HELP: &str = "mnemorph-tui — a Mnemorph session in the terminal
 
-Usage: mnemorph-tui [--world <dir>] [--theme dark|light|auto]
+Usage: mnemorph-tui [--world <dir>] [--theme dark|light|auto] [--probe]
 
 Options:
   --world <dir>     the world to work in (default: the current directory)
   --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
+  --probe           print what the terminal can draw (the portraits' image protocol), and exit
   -h, --help        this help
   -V, --version     the version
+
+Portraits are real pixels where the terminal draws images — Kitty, iTerm2's inline images
+(iTerm2, WezTerm, VS Code with terminal.integrated.enableImages), Sixel — else half blocks.
+MNEMORPH_TUI_IMAGES=auto|kitty|iterm|sixel|blocks|off overrides the choice.
 
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
 pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
@@ -37,6 +44,10 @@ fn main() -> ExitCode {
             }
             "-V" | "--version" => {
                 println!("mnemorph-tui {}", env!("CARGO_PKG_VERSION"));
+                return ExitCode::SUCCESS;
+            }
+            "--probe" => {
+                print!("{}", probe(&|k| std::env::var(k).ok()).report());
                 return ExitCode::SUCCESS;
             }
             "--world" => match args.next() {
@@ -79,6 +90,15 @@ fn main() -> ExitCode {
     ));
     for hole in &opened.holes {
         model.info(format!("config hole: {hole}"));
+    }
+    // What the terminal draws, asked before the screen is taken: within 200 ms, never blocking.
+    let caps = probe(&|k| std::env::var(k).ok());
+    for note in &caps.notes {
+        model.info(format!("portraits: {note}"));
+    }
+    model.pictures = Pictures::new(caps.protocol, caps.cell);
+    if caps.timed_out {
+        model.late = Late::after(std::time::Instant::now());
     }
     let host = match Host::start(opened, tx.clone()) {
         Ok(h) => h,

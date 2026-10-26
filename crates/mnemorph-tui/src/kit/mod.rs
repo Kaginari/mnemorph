@@ -8,7 +8,7 @@
 //! | Harmonica | [`spring`], [`toast`] | a critically damped spring: smooth scrolling, a toast's fade |
 //! | Glamour | [`markdown`], [`highlight`] | Markdown drawn from a stylesheet the theme derives, code in colour |
 //! | Isekai's depth | [`slab`], [`shimmer`] | raised panels — a spine, a lit top edge, a cast shadow — and a crest of light across a busy word |
-//! | mnemorph-animations | [`mnanim`] | each race's portrait, its idle loop decoded once from its `.mnanim.json` into cells, drawn in half blocks |
+//! | mnemorph-animations | [`mnanim`], [`pixels`] | each race's portrait: its idle loop decoded once from its `.mnanim.json` into cells, drawn in half blocks; or its 256 px source as real pixels — Kitty, iTerm2 or Sixel — resized once to its box |
 //!
 //! Bubble Tea's own part, the Elm architecture — one model, messages, a pure `update` that
 //! returns commands, a `view` — is the application itself ([`crate::app`]). A component never
@@ -19,6 +19,7 @@ pub mod highlight;
 pub mod keyhelp;
 pub mod markdown;
 pub mod mnanim;
+pub mod pixels;
 pub mod shimmer;
 pub mod slab;
 pub mod spinner;

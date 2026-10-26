@@ -1,0 +1,798 @@
+//! The portraits as real pixels, placed over the cells: what a frame wants shown
+//! ([`Pictures`], on the model) and what the terminal shows ([`Placer`], in the runtime).
+//!
+//! A terminal image is drawn over cells, and text drawn later does not cover it. So the view
+//! draws plain cells of the picture's background where a picture goes, and says so ([`Want`]);
+//! after the frame is written, the placer compares what is wanted with what is shown:
+//!
+//! - **unchanged** — nothing is sent: the same race, box, background and terminal size is never
+//!   sent twice, however many frames are drawn;
+//! - **gone or moved** — the old one is erased first: Kitty deletes it by id; under Sixel and
+//!   iTerm2 the cells under its box are written again from the frame just drawn (their text
+//!   covers the image);
+//! - **new** — the picture, built once per race, box and background and kept encoded, is sent at
+//!   the box's top-left with the cursor saved and restored.
+//!
+//! The view wants nothing while an approval is open — the card never sits under a picture —
+//! nor where a toast or a note would cover one. A resize redraws the whole screen, so each
+//! picture is sent again.
+//!
+//! In image mode a portrait is still: the working body's race, swapped when it changes. A Kitty
+//! animation would upload each frame once as its own image id and switch placements by id
+//! (`a=p`); [`Art`] is where such a picture would be named.
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Write as _;
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::{Duration, Instant};
+
+use mnemorph_races::Race;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Modifier};
+use unicode_width::UnicodeWidthStr;
+
+use crate::kit::pixels::{self, Protocol};
+use crate::theme::Rgb;
+
+/// Where a picture goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    /// The sidebar's head: the working body.
+    Sidebar,
+    /// The welcome card: Rimuru.
+    Welcome,
+}
+
+impl Slot {
+    /// Its Kitty image id: one per slot, so a slot's picture is deleted by id.
+    #[must_use]
+    pub fn id(self) -> u32 {
+        match self {
+            Self::Sidebar => 0x4d_4e01,
+            Self::Welcome => 0x4d_4e02,
+        }
+    }
+}
+
+/// What a picture shows: a race's still portrait. (A Kitty animation would add its frame here.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Art {
+    /// A race's portrait, still.
+    Still(Race),
+}
+
+/// A picture a frame wants: its slot, its art, its box in cells, and the background it sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Want {
+    /// Where.
+    pub slot: Slot,
+    /// What.
+    pub art: Art,
+    /// Its box, in cells.
+    pub area: Rect,
+    /// The background the picture is laid on: the cells' own.
+    pub bg: Rgb,
+}
+
+/// The model's side: the protocol, the cell's size, and what the last frame wanted.
+#[derive(Debug, Default)]
+pub struct Pictures {
+    /// How portraits are drawn.
+    pub protocol: Option<Protocol>,
+    /// A cell's size in pixels.
+    pub cell: Option<(u16, u16)>,
+    /// What the last frame wanted shown.
+    pub(crate) wants: RefCell<Vec<Want>>,
+    /// A protocol set aside until the cell's size can be trusted again.
+    lost: Option<Protocol>,
+}
+
+impl Pictures {
+    /// Pictures drawn with `protocol`, cells of `cell` pixels; half blocks without a cell size.
+    #[must_use]
+    pub fn new(protocol: Protocol, cell: Option<(u16, u16)>) -> Self {
+        Self {
+            protocol: cell.and(protocol.pixels().then_some(protocol)),
+            cell,
+            wants: RefCell::new(Vec::new()),
+            lost: None,
+        }
+    }
+
+    /// Whether portraits are real pixels.
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.protocol.is_some()
+    }
+
+    /// Whether the terminal draws pictures at all, now or once the cell's size returns.
+    #[must_use]
+    pub fn images(&self) -> bool {
+        self.protocol.is_some() || self.lost.is_some()
+    }
+
+    /// The rows a portrait `cols` wide takes, when it is a picture.
+    #[must_use]
+    pub fn rows(&self, cols: u16) -> Option<u16> {
+        self.protocol?;
+        Some(pixels::square(cols, self.cell?).0)
+    }
+
+    /// What the last frame wanted shown.
+    #[must_use]
+    pub fn wanted(&self) -> Vec<Want> {
+        self.wants.borrow().clone()
+    }
+
+    /// A frame wants `want` shown.
+    pub(crate) fn want(&self, want: Want) {
+        if self.active() {
+            self.wants.borrow_mut().push(want);
+        }
+    }
+}
+
+/// The slots whose Kitty picture is on screen, one bit each: what a panic, which never reaches
+/// the placer, deletes on its way out ([`release`]).
+static KITTY_SHOWN: AtomicU8 = AtomicU8::new(0);
+
+impl Slot {
+    fn bit(self) -> u8 {
+        match self {
+            Self::Sidebar => 1,
+            Self::Welcome => 2,
+        }
+    }
+}
+
+/// Delete every Kitty picture still on screen, into `out`: for the panic hook and the screen's
+/// drop, before the terminal is given back. Safe to run twice, and after the placer's own
+/// [`Placer::clear`]: what is deleted once is never deleted again.
+///
+/// # Errors
+///
+/// `out` cannot be written.
+pub fn release(out: &mut impl Write) -> std::io::Result<()> {
+    let shown = KITTY_SHOWN.swap(0, Ordering::SeqCst);
+    for slot in [Slot::Sidebar, Slot::Welcome] {
+        if shown & slot.bit() != 0 {
+            out.write_all(pixels::kitty_delete(slot.id()).as_bytes())?;
+        }
+    }
+    out.flush()
+}
+
+/// A picture on screen: what it shows, and the terminal's size when it was sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Shown {
+    want: Want,
+    size: (u16, u16),
+}
+
+/// The cache's key: a picture is built once per slot (its Kitty id), art, box size and
+/// background.
+type Key = (Slot, Art, u16, u16, Rgb);
+
+/// How long a moved box stays put before its picture is sent.
+pub const SETTLE: Duration = Duration::from_millis(150);
+
+/// After a resize, `cell` the cell's size read again (`None` when the window gives no pixels).
+/// A new size rebuilds the pictures. Sixel draws exactly the pixels it was built for, so with
+/// no size to trust it falls back to half blocks — the old picture erased — until one returns;
+/// Kitty and iTerm2 are given their box in cells and fit it themselves.
+pub fn resized(pictures: &mut Pictures, placer: &mut Placer, cell: Option<(u16, u16)>) {
+    match cell {
+        Some(c) => {
+            if let Some(p) = pictures.lost.take() {
+                pictures.protocol = Some(p);
+                placer.set_protocol(Some(p));
+            }
+            pictures.cell = Some(c);
+            placer.set_cell(c);
+        }
+        None if pictures.protocol == Some(Protocol::Sixel) => {
+            pictures.lost = pictures.protocol.take();
+            placer.set_protocol(None);
+        }
+        None => {}
+    }
+}
+
+/// The most encoded pictures kept: a few boxes, a few races.
+const KEPT: usize = 24;
+
+/// The runtime's side: what the terminal shows, and the pictures encoded so far.
+#[derive(Debug)]
+pub struct Placer {
+    protocol: Option<Protocol>,
+    /// The protocol the pictures on screen were sent with: what erases them, even once the
+    /// pictures fell back to half blocks.
+    erase_with: Option<Protocol>,
+    cell: (u16, u16),
+    shown: Vec<Shown>,
+    /// Each slot's box as last wanted, and since when it has been there.
+    seen: Vec<(Slot, Rect, Instant)>,
+    /// When a picture held back while its box moved has settled.
+    settle_at: Option<Instant>,
+    cache: HashMap<Key, Arc<str>>,
+    /// Pictures sent to the terminal.
+    pub sends: usize,
+    /// Pictures built and encoded.
+    pub builds: usize,
+}
+
+impl Placer {
+    /// A placer for `pictures`' protocol.
+    #[must_use]
+    pub fn new(pictures: &Pictures) -> Self {
+        Self {
+            protocol: pictures.protocol,
+            erase_with: pictures.protocol,
+            cell: pictures.cell.unwrap_or((8, 16)),
+            shown: Vec::new(),
+            seen: Vec::new(),
+            settle_at: None,
+            cache: HashMap::new(),
+            sends: 0,
+            builds: 0,
+        }
+    }
+
+    /// A cell is now `cell` pixels (a font zoom): every picture is built again at the new size.
+    pub fn set_cell(&mut self, cell: (u16, u16)) {
+        if cell != self.cell {
+            self.cell = cell;
+            self.cache.clear();
+        }
+    }
+
+    /// Draw with `protocol` from now on; `None` falls back to half blocks, and the next sync
+    /// erases what is on screen.
+    pub fn set_protocol(&mut self, protocol: Option<Protocol>) {
+        self.protocol = protocol;
+        if protocol.is_some() {
+            self.erase_with = protocol;
+        }
+    }
+
+    /// How long until a picture held back while its box moved may be placed: zero when a frame
+    /// is owed now, `None` when none waits.
+    #[must_use]
+    pub fn due(&self, now: Instant) -> Option<Duration> {
+        self.settle_at.map(|t| t.saturating_duration_since(now))
+    }
+
+    /// Whether a picture is on screen.
+    #[must_use]
+    pub fn showing(&self) -> bool {
+        !self.shown.is_empty()
+    }
+
+    /// Before a frame: under Kitty, whose pictures float over the text, every picture is deleted
+    /// before the frame is written when it wants none — an approval opening never shows under
+    /// one, not even for a frame.
+    ///
+    /// # Errors
+    ///
+    /// `out` cannot be written.
+    pub fn before(&mut self, wants_none: bool, out: &mut impl Write) -> std::io::Result<()> {
+        if wants_none && self.erase_with == Some(Protocol::Kitty) && self.showing() {
+            self.clear(out)?;
+        }
+        Ok(())
+    }
+
+    /// Delete every Kitty picture shown: for leaving, and before a frame that wants none. Under
+    /// Sixel and iTerm2 a picture lives in the cells, and the next frame's text covers it.
+    ///
+    /// # Errors
+    ///
+    /// `out` cannot be written.
+    pub fn clear(&mut self, out: &mut impl Write) -> std::io::Result<()> {
+        if self.erase_with == Some(Protocol::Kitty) {
+            for s in &self.shown {
+                KITTY_SHOWN.fetch_and(!s.want.slot.bit(), Ordering::SeqCst);
+                out.write_all(pixels::kitty_delete(s.want.slot.id()).as_bytes())?;
+            }
+            out.flush()?;
+        }
+        self.shown.clear();
+        Ok(())
+    }
+
+    /// After a frame drawn as `buf` at terminal `size`, now: see [`Placer::sync_at`].
+    ///
+    /// # Errors
+    ///
+    /// `out` cannot be written.
+    pub fn sync(
+        &mut self,
+        wants: &[Want],
+        size: (u16, u16),
+        buf: &Buffer,
+        out: &mut impl Write,
+    ) -> std::io::Result<()> {
+        self.sync_at(wants, size, buf, out, Instant::now())
+    }
+
+    /// After a frame drawn as `buf` at terminal `size`, at `now`: erase what is no longer wanted,
+    /// send what is newly wanted; nothing when nothing changed. A picture whose box moved — the
+    /// welcome scrolling — is not sent until its box has stayed put for [`SETTLE`]: a moving box
+    /// shows its plain cells, and is never sent once a frame.
+    ///
+    /// # Errors
+    ///
+    /// `out` cannot be written.
+    pub fn sync_at(
+        &mut self,
+        wants: &[Want],
+        size: (u16, u16),
+        buf: &Buffer,
+        out: &mut impl Write,
+        now: Instant,
+    ) -> std::io::Result<()> {
+        let live = self.protocol.is_some();
+        let keep = |s: &Shown| live && s.size == size && wants.contains(&s.want);
+        let (kept, gone): (Vec<Shown>, Vec<Shown>) = self.shown.drain(..).partition(keep);
+        let mut wrote = false;
+        for g in &gone {
+            match self.erase_with {
+                Some(Protocol::Kitty) => {
+                    KITTY_SHOWN.fetch_and(!g.want.slot.bit(), Ordering::SeqCst);
+                    out.write_all(pixels::kitty_delete(g.want.slot.id()).as_bytes())?;
+                }
+                _ => repaint(buf, g.want.area, out)?,
+            }
+            wrote = true;
+        }
+        self.shown = kept;
+        self.settle_at = None;
+        if let Some(protocol) = self.protocol {
+            for w in wants {
+                if self.shown.iter().any(|s| s.want == *w) {
+                    continue;
+                }
+                // A box off the frame is never sent: a picture past the edge would scroll it.
+                if w.area.right() > buf.area.right() || w.area.bottom() > buf.area.bottom() {
+                    continue;
+                }
+                let since = self.since(w, now);
+                if now < since + SETTLE {
+                    let at = since + SETTLE;
+                    self.settle_at = Some(self.settle_at.map_or(at, |t| t.min(at)));
+                    continue;
+                }
+                let Some(payload) = self.payload(protocol, w) else {
+                    continue;
+                };
+                write!(out, "\x1b7\x1b[{};{}H", w.area.y + 1, w.area.x + 1)?;
+                out.write_all(payload.as_bytes())?;
+                out.write_all(b"\x1b8")?;
+                if protocol == Protocol::Kitty {
+                    KITTY_SHOWN.fetch_or(w.slot.bit(), Ordering::SeqCst);
+                }
+                self.sends += 1;
+                wrote = true;
+                self.shown.push(Shown { want: *w, size });
+            }
+        }
+        if wrote {
+            out.flush()?;
+        }
+        Ok(())
+    }
+
+    /// Since when `w`'s box has been where it is: a slot first seen counts as settled.
+    fn since(&mut self, w: &Want, now: Instant) -> Instant {
+        if let Some((_, area, since)) = self.seen.iter_mut().find(|(s, ..)| *s == w.slot) {
+            if *area != w.area {
+                *area = w.area;
+                *since = now;
+            }
+            return *since;
+        }
+        let settled = now.checked_sub(SETTLE).unwrap_or(now);
+        self.seen.push((w.slot, w.area, settled));
+        settled
+    }
+
+    /// The encoded picture for `w`: from the cache, else built once.
+    fn payload(&mut self, protocol: Protocol, w: &Want) -> Option<Arc<str>> {
+        let key = (w.slot, w.art, w.area.width, w.area.height, w.bg);
+        if let Some(p) = self.cache.get(&key) {
+            return Some(Arc::clone(p));
+        }
+        let (cw, ch) = (u32::from(self.cell.0), u32::from(self.cell.1));
+        let (px_w, px_h) = (u32::from(w.area.width) * cw, u32::from(w.area.height) * ch);
+        let Art::Still(race) = w.art;
+        let img = pixels::picture(pixels::png(race), px_w, px_h, w.bg)?;
+        let encoded: String = match protocol {
+            Protocol::Kitty => pixels::kitty(
+                &pixels::png_bytes(&img),
+                w.area.width,
+                w.area.height,
+                w.slot.id(),
+            ),
+            Protocol::Iterm => pixels::iterm(&pixels::png_bytes(&img), w.area.width, w.area.height),
+            Protocol::Sixel => pixels::sixel(&img),
+            Protocol::Blocks => return None,
+        };
+        let encoded: Arc<str> = Arc::from(encoded);
+        if self.cache.len() >= KEPT {
+            self.cache.clear();
+        }
+        self.cache.insert(key, Arc::clone(&encoded));
+        self.builds += 1;
+        Some(encoded)
+    }
+}
+
+/// Write `area`'s cells again from `buf`, over whatever picture lies there: each row erased
+/// (`ECH`), then its cells as the frame has them. The cursor is saved and restored, and the
+/// colours reset after, as the backend leaves them.
+fn repaint(buf: &Buffer, area: Rect, out: &mut impl Write) -> std::io::Result<()> {
+    let area = area.intersection(buf.area);
+    if area.is_empty() {
+        return Ok(());
+    }
+    let mut s = String::from("\x1b7");
+    for y in area.top()..area.bottom() {
+        let _ = write!(
+            s,
+            "\x1b[{};{}H\x1b[0m\x1b[{}X",
+            y + 1,
+            area.x + 1,
+            area.width
+        );
+        let mut skip = 0usize;
+        for x in area.left()..area.right() {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            let cell = &buf[(x, y)];
+            let sym = cell.symbol();
+            skip = sym.width().saturating_sub(1);
+            s.push_str("\x1b[0");
+            sgr(&mut s, cell.fg, 38);
+            sgr(&mut s, cell.bg, 48);
+            for (m, code) in [
+                (Modifier::BOLD, "1"),
+                (Modifier::DIM, "2"),
+                (Modifier::ITALIC, "3"),
+                (Modifier::UNDERLINED, "4"),
+                (Modifier::REVERSED, "7"),
+            ] {
+                if cell.modifier.contains(m) {
+                    s.push(';');
+                    s.push_str(code);
+                }
+            }
+            s.push('m');
+            // A cell holds text the frame drew: control characters never reach it.
+            if sym.is_empty() || sym.chars().any(char::is_control) {
+                s.push(' ');
+            } else {
+                s.push_str(sym);
+            }
+        }
+    }
+    s.push_str("\x1b[0m\x1b8");
+    out.write_all(s.as_bytes())
+}
+
+/// A colour's SGR parameters, `base` 38 for the text and 48 for the background.
+fn sgr(out: &mut String, colour: Color, base: u8) {
+    let _ = match colour {
+        Color::Rgb(r, g, b) => write!(out, ";{base};2;{r};{g};{b}"),
+        Color::Indexed(i) => write!(out, ";{base};5;{i}"),
+        _ => Ok(()),
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn placer(p: Protocol) -> Placer {
+        Placer::new(&Pictures::new(p, Some((8, 17))))
+    }
+
+    fn want(slot: Slot, race: Race, x: u16, y: u16) -> Want {
+        Want {
+            slot,
+            art: Art::Still(race),
+            area: Rect::new(x, y, 4, 2),
+            bg: Rgb(6, 11, 18),
+        }
+    }
+
+    #[test]
+    fn an_unchanged_frame_sends_nothing() {
+        for p in [Protocol::Kitty, Protocol::Iterm, Protocol::Sixel] {
+            let mut pl = placer(p);
+            let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+            let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+            let mut out = Vec::new();
+            pl.sync(&wants, (40, 20), &buf, &mut out).unwrap();
+            assert!(!out.is_empty(), "{p:?}: sent once");
+            assert_eq!((pl.sends, pl.builds), (1, 1));
+            for _ in 0..5 {
+                let mut again = Vec::new();
+                pl.sync(&wants, (40, 20), &buf, &mut again).unwrap();
+                assert!(
+                    again.is_empty(),
+                    "{p:?}: an unchanged frame wrote something"
+                );
+            }
+            assert_eq!(pl.sends, 1);
+        }
+    }
+
+    #[test]
+    fn a_placement_saves_and_restores_the_cursor() {
+        let mut pl = placer(Protocol::Iterm);
+        let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        let mut out = Vec::new();
+        pl.sync(
+            &[want(Slot::Welcome, Race::Elf, 3, 5)],
+            (40, 20),
+            &buf,
+            &mut out,
+        )
+        .unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.starts_with("\x1b7\x1b[6;4H\x1b]1337;File=inline=1;"));
+        assert!(s.ends_with("\x07\x1b8"));
+    }
+
+    #[test]
+    fn a_moved_or_changed_picture_is_erased_then_sent_again() {
+        let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        let mut k = placer(Protocol::Kitty);
+        k.sync(
+            &[want(Slot::Sidebar, Race::Rimuru, 30, 1)],
+            (40, 20),
+            &buf,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        // The working body changes: the old picture deleted by id, the new one sent.
+        let mut out = Vec::new();
+        k.sync(
+            &[want(Slot::Sidebar, Race::Orc, 30, 1)],
+            (40, 20),
+            &buf,
+            &mut out,
+        )
+        .unwrap();
+        let s = String::from_utf8(out).unwrap();
+        let del = pixels::kitty_delete(Slot::Sidebar.id());
+        assert!(s.starts_with(&del), "deleted first");
+        assert!(s.contains("a=T,f=100"));
+        // The sidebar folds: deleted, nothing sent.
+        let mut out = Vec::new();
+        k.sync(&[], (40, 20), &buf, &mut out).unwrap();
+        assert_eq!(String::from_utf8(out).unwrap(), del);
+        assert!(!k.showing());
+
+        // Under Sixel, the cells under the old box are written again from the frame.
+        let mut sx = placer(Protocol::Sixel);
+        let mut frame = Buffer::empty(Rect::new(0, 0, 40, 20));
+        frame.set_string(30, 1, "abcd", ratatui::style::Style::new());
+        sx.sync(
+            &[want(Slot::Welcome, Race::Slime, 30, 1)],
+            (40, 20),
+            &frame,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        // It moves (the welcome scrolling): the old box erased, nothing sent while it moves.
+        let t0 = Instant::now();
+        let mut out = Vec::new();
+        sx.sync_at(
+            &[want(Slot::Welcome, Race::Slime, 30, 3)],
+            (40, 20),
+            &frame,
+            &mut out,
+            t0,
+        )
+        .unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("\x1b[2;31H\x1b[0m\x1b[4X"),
+            "the old box's rows erased"
+        );
+        assert!(s.contains("ma\x1b[0mb"), "its text written again: {s:.200}");
+        assert!(!s.contains("\x1bP"), "no picture sent for a moving box");
+        assert_eq!(sx.due(t0), Some(SETTLE));
+        // A frame a step later, still moving: no payload, no repaint either.
+        for (i, y) in [4u16, 5, 6].into_iter().enumerate() {
+            let at = t0 + Duration::from_millis(33 * (i as u64 + 1));
+            let mut out = Vec::new();
+            sx.sync_at(
+                &[want(Slot::Welcome, Race::Slime, 30, y)],
+                (40, 20),
+                &frame,
+                &mut out,
+                at,
+            )
+            .unwrap();
+            assert_eq!(out, b"", "frame {i}: something sent while moving");
+        }
+        assert_eq!(sx.sends, 1);
+        // Settled for 150 ms: placed once.
+        let still = want(Slot::Welcome, Race::Slime, 30, 6);
+        let early = t0 + Duration::from_millis(99 + 140);
+        let mut out = Vec::new();
+        sx.sync_at(&[still], (40, 20), &frame, &mut out, early)
+            .unwrap();
+        assert_eq!(out, b"");
+        let settled = t0 + Duration::from_millis(99) + SETTLE;
+        assert_eq!(sx.due(early), Some(settled - early));
+        let mut out = Vec::new();
+        sx.sync_at(&[still], (40, 20), &frame, &mut out, settled)
+            .unwrap();
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .starts_with("\x1b7\x1b[7;31H\x1bP0;1;0q")
+        );
+        assert_eq!(
+            (sx.sends, sx.builds),
+            (2, 1),
+            "the same box size is built once"
+        );
+        assert_eq!(sx.due(settled), None);
+    }
+
+    #[test]
+    fn sixel_falls_back_to_half_blocks_when_the_cell_cannot_be_read_again() {
+        let mut pics = Pictures::new(Protocol::Sixel, Some((8, 17)));
+        let mut pl = Placer::new(&pics);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let w = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        pl.sync(&w, (60, 30), &buf, &mut Vec::new()).unwrap();
+        // Zoomed out; the window gives no pixels: half blocks, the old picture's box repainted.
+        resized(&mut pics, &mut pl, None);
+        assert!(!pics.active() && pics.images());
+        assert_eq!(pics.rows(32), None, "the view draws half blocks");
+        let mut out = Vec::new();
+        pl.sync(&w, (70, 30), &buf, &mut out).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("\x1b[2;31H\x1b[0m\x1b[4X"),
+            "the old box repainted"
+        );
+        assert!(!s.contains("\x1bP"), "no picture sent");
+        assert!(!pl.showing());
+        // A size to trust returns: pictures again, built at it.
+        resized(&mut pics, &mut pl, Some((10, 21)));
+        assert!(pics.active());
+        assert_eq!(pics.cell, Some((10, 21)));
+        pl.sync(&w, (70, 30), &buf, &mut Vec::new()).unwrap();
+        assert_eq!(pl.sends, 2);
+        // iTerm2 and Kitty fit their cells themselves: they keep their pictures.
+        for p in [Protocol::Iterm, Protocol::Kitty] {
+            let mut pics = Pictures::new(p, Some((8, 17)));
+            let mut pl = Placer::new(&pics);
+            resized(&mut pics, &mut pl, None);
+            assert!(pics.active(), "{p:?}");
+        }
+    }
+
+    #[test]
+    fn a_resize_sends_every_picture_again() {
+        let mut pl = placer(Protocol::Iterm);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
+        pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
+        assert_eq!(pl.sends, 2);
+        assert_eq!(pl.builds, 1);
+    }
+
+    #[test]
+    fn a_new_cell_size_builds_every_picture_again() {
+        let mut pl = placer(Protocol::Iterm);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
+        pl.set_cell((8, 17));
+        pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
+        assert_eq!(pl.builds, 1, "the same cell: from the cache");
+        // Zoomed: cells of 10 x 21 px, and the window's size changed with them.
+        pl.set_cell((10, 21));
+        pl.sync(&wants, (50, 25), &buf, &mut Vec::new()).unwrap();
+        assert_eq!((pl.builds, pl.sends), (2, 3));
+    }
+
+    #[test]
+    fn a_panic_deletes_the_kitty_pictures_once() {
+        let mut pl = placer(Protocol::Kitty);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let wants = [
+            want(Slot::Sidebar, Race::Rimuru, 30, 1),
+            want(Slot::Welcome, Race::Rimuru, 2, 4),
+        ];
+        pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
+        // The panic hook, then the screen's drop: deleted once, then nothing.
+        let mut first = Vec::new();
+        release(&mut first).unwrap();
+        let first = String::from_utf8(first).unwrap();
+        assert!(first.contains(&pixels::kitty_delete(Slot::Sidebar.id())));
+        assert!(first.contains(&pixels::kitty_delete(Slot::Welcome.id())));
+        let mut second = Vec::new();
+        release(&mut second).unwrap();
+        assert_eq!(second, b"");
+        // The normal way out leaves nothing for the hook either.
+        pl.sync(&wants[..1], (60, 31), &buf, &mut Vec::new())
+            .unwrap();
+        pl.clear(&mut Vec::new()).unwrap();
+        let mut after = Vec::new();
+        release(&mut after).unwrap();
+        assert_eq!(after, b"");
+    }
+
+    #[test]
+    fn half_blocks_send_nothing() {
+        let pics = Pictures::new(Protocol::Blocks, Some((8, 17)));
+        assert!(!pics.active());
+        assert_eq!(pics.rows(32), None);
+        pics.want(want(Slot::Sidebar, Race::Rimuru, 0, 0));
+        assert_eq!(pics.wanted(), Vec::new());
+        // An image protocol without a cell size is half blocks too.
+        assert!(!Pictures::new(Protocol::Iterm, None).active());
+        let mut pl = Placer::new(&pics);
+        let mut out = Vec::new();
+        pl.sync(
+            &[want(Slot::Sidebar, Race::Rimuru, 0, 0)],
+            (40, 20),
+            &Buffer::empty(Rect::new(0, 0, 40, 20)),
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(out, b"");
+    }
+
+    #[test]
+    fn a_box_past_the_frame_is_never_sent() {
+        let mut pl = placer(Protocol::Iterm);
+        let buf = Buffer::empty(Rect::new(0, 0, 20, 10));
+        let mut out = Vec::new();
+        pl.sync(
+            &[want(Slot::Welcome, Race::Rimuru, 18, 9)],
+            (20, 10),
+            &buf,
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(out, b"");
+    }
+
+    #[test]
+    fn kitty_pictures_go_before_a_frame_that_wants_none() {
+        let mut pl = placer(Protocol::Kitty);
+        let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        pl.sync(
+            &[want(Slot::Sidebar, Race::Rimuru, 30, 1)],
+            (40, 20),
+            &buf,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        let mut out = Vec::new();
+        pl.before(false, &mut out).unwrap();
+        assert_eq!(out, b"");
+        pl.before(true, &mut out).unwrap();
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            pixels::kitty_delete(Slot::Sidebar.id())
+        );
+        assert!(!pl.showing());
+    }
+}

@@ -788,7 +788,8 @@ impl Transcript {
             have += lines.len();
             tail.push((Some(i), lines));
         }
-        if i == 0 && have < want {
+        let with_head = i == 0 && have < want;
+        if with_head {
             have += head.len();
             tail.push((None, head.clone()));
         }
@@ -807,6 +808,7 @@ impl Transcript {
             lines: lines.split_off(start),
             owners: owners.split_off(start),
             top,
+            head: with_head.then_some(start),
         }
     }
 
@@ -882,6 +884,9 @@ pub struct Window {
     pub owners: Vec<Option<usize>>,
     /// How far up the transcript goes, once a frame has laid it out to the top.
     pub top: Option<usize>,
+    /// When the head (the welcome) was laid out: how many of its lines lie above the window's
+    /// first — its line `k` is the window's line `k - n`.
+    pub head: Option<usize>,
 }
 
 /// Whether `text` ends inside a fenced code block: a fence opens with three or more backticks

@@ -131,6 +131,7 @@ arrives as text deltas. No protocol sits between the screen and the core.
 ```sh
 cargo run -p mnemorph-tui -- --world <dir>            # a session in that world
 cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
+cargo run -p mnemorph-tui -- --probe                  # what the terminal draws, then exit
 ```
 
 `--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
@@ -218,6 +219,63 @@ malformed file is an error, never a panic. The portrait plays at the loop's own 
 cap, only while a body works and the portrait is on screen; idle, it rests on its first frame and
 the UI schedules no tick for it.
 
+**The portraits in real pixels.** Where the terminal draws images, the portraits are pictures as
+sharp as their source — each race's 256 px PNG, embedded from `assets/portraits/` (mnemorph-animations
+`df20cfa`) — and the half blocks above are the fallback. At start, before the alternate screen,
+`probe` asks the terminal on `/dev/tty` in raw mode: the window's pixels (`TIOCGWINSZ`), a cell's
+size (`CSI 16 t`), its name (XTVERSION), Kitty's graphics query, and the device attributes (DA1)
+last — every terminal answers DA1, so its reply ends the wait. It waits at most 200 ms with
+`poll` on the calling thread, leaves no thread reading the input, and flushes a half-reply when
+the time runs out. A reply that comes later still reaches the UI's input as keys — `ESC P` and
+`ESC _` read as Alt+P and Alt+_, the rest as characters, Kitty's `1` among them — so for two
+seconds after a probe that timed out, keys shaped like a reply — plain characters, and Alt+P,
+Alt+_, Alt+[ and Alt+\ — are dropped, and no other key reaches an open approval card. A key with
+Control is never a reply: Ctrl+C and Esc always reach the UI, so they stop, quit and deny. `kit::pixels` reads the replies and chooses:
+
+1. **Kitty** when its query answered OK;
+2. **iTerm2's inline images** when the terminal is xterm.js (VS Code), iTerm2 or WezTerm, by its
+   name or the environment, and images are on — DA1 lists 4, or iTerm2 or WezTerm, which always
+   draw them. A PNG in full colour, smaller than Sixel, so it is preferred where both exist;
+3. **Sixel** when DA1 lists 4;
+4. **half blocks** otherwise — and whenever a cell's size in pixels is unknown, or inside tmux.
+
+`MNEMORPH_TUI_IMAGES` overrides it: `auto` (the default), `kitty`, `iterm`, `sixel`, `blocks`, or
+`off` — half blocks, nothing asked of the terminal. `mnemorph-tui --probe` prints what was found,
+the replies as they came, and the choice.
+
+A picture is built once per race, box size and background: the PNG laid on the background at
+its own size, then Lanczos-resized to a square exactly `cols × cell width` by `rows × cell
+height` pixels — 32 columns of 8 × 17 px cells are 256 × 255 px in 15 rows — centred, so the
+terminal never rescales it; its encoding is cached. iTerm2's inline images are given their box
+in cells, so a font zoom never leaves the picture spilling past its box; on a resize the cell's
+size is read again from the window (`TIOCGWINSZ`), and when it changed every picture is built
+again at the new size. Sixel draws exactly the pixels it was built for: where the window gives no
+pixels, a resize leaves no size to trust, so the portraits fall back to half blocks — the old
+picture's box written again — until a size returns. Every byte of an image sequence comes from
+those embedded files and from numbers, never from the model or the world.
+
+A terminal image lies over the cells, and text drawn after it does not cover it, so the view
+draws plain cells of the picture's background where it goes and names the picture it wants
+(`pictures::Want`: the slot, the race, the box, the background). After each frame `Placer`
+compares that with what the terminal shows. An unchanged picture is never sent again; one gone
+or moved is erased first — Kitty deletes it by id, and under Sixel and iTerm2 the cells under its
+old box are written again from the frame just drawn — then the new one is sent at its box with
+the cursor saved and restored. While an approval is open no picture is wanted, so the card never
+sits under one; under Kitty they are placed below the text (`z=-1`), so text drawn over one
+always shows, and they are deleted before the frame that opens the card besides. A panic deletes
+Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
+the screen, so each picture is sent again; the sidebar's toggle, its fold below 100 columns and
+the welcome scrolling move or remove theirs. A box that moved is erased and its picture held
+back until the box has stayed put for 150 ms, so a scroll never sends a picture once a frame. In pixels a portrait is still — the working body's
+race, swapped when it changes — and asks no ticks. The welcome card's portrait is a picture too
+while its rows are all on screen; partly scrolled away, those rows show its half blocks.
+(A Kitty-only animation would upload each frame once under its own id and switch placements by
+id; `pictures::Art` is where it would be named.)
+
+To see the pictures in VS Code's terminal, turn on `terminal.integrated.enableImages` in the
+settings and reload the window: xterm.js then lists Sixel in DA1, and Mnemorph draws iTerm2's
+inline images. `mnemorph-tui --probe` says `drawing iterm` when it took.
+
 The sidebar takes 36 columns on the right from a 100-column terminal up, and folds away below it.
 It shows only what the run or the world gives. The observer sends the chain of bodies each
 commissioned body's event came through (`Seen::From`), what recall gave the session's ask, and
@@ -273,7 +331,7 @@ ecosystem:
 | Harmonica | `kit::spring`, `kit::toast` | a critically damped spring: the transcript scrolls smoothly, a toast fades |
 | Glamour | `kit::markdown`, `kit::highlight` | Markdown drawn from a stylesheet the theme derives; code highlighted by syntect's grammars, in colours taken from the palette |
 | Isekai's depth | `kit::slab`, `kit::shimmer` | raised panels — a spine, a lit top edge, a shaded bevel, a cast shadow, every tone stepped from the palette — and a crest of light sweeping a busy word |
-| mnemorph-animations | `kit::mnanim` | the races' portraits, their idle loops decoded once into cells and drawn in half blocks |
+| mnemorph-animations | `kit::mnanim`, `kit::pixels` | the races' portraits: their idle loops decoded once into cells and drawn in half blocks, or their 256 px sources as real pixels — Kitty, iTerm2 or Sixel — resized once to their box |
 
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
 fails when the two differ.

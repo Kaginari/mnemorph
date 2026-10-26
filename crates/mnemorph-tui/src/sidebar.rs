@@ -574,7 +574,11 @@ fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
     let mut out: Lines = Vec::new();
-    if let Some(p) = mnanim::ready(race) {
+    if let Some(rows) = m.pictures.rows(PORTRAIT) {
+        // The picture goes over these rows (the view places it): plain cells of the page.
+        let blank = Line::from(Span::styled(" ".repeat(w), Style::new().bg(t.p.bg.color())));
+        out.extend(std::iter::repeat_n(blank, usize::from(rows)));
+    } else if let Some(p) = mnanim::ready(race) {
         let clock = if m.busy() {
             m.portrait_clock
         } else {
@@ -919,6 +923,23 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
         )));
     }
     out
+}
+
+/// The portrait's width, in cells.
+const PORTRAIT: u16 = 32;
+#[allow(clippy::cast_lossless)]
+const _: () = assert!(PORTRAIT as usize == mnanim::SIZE);
+
+/// Where the head's picture goes in a sidebar `w` cells wide and `h` rows tall, when it is a
+/// picture: its first column from the sidebar's left, its width and its rows, from the sidebar's
+/// first line.
+#[must_use]
+pub fn picture_box(m: &Model, w: usize, h: usize) -> Option<(u16, u16, u16)> {
+    let rows = m.pictures.rows(PORTRAIT)?;
+    (h >= HEAD_FROM && w >= usize::from(PORTRAIT)).then(|| {
+        let pad = u16::try_from((w - usize::from(PORTRAIT)) / 2).unwrap_or(0);
+        (pad, PORTRAIT, rows)
+    })
 }
 
 /// The sidebar's lines, `w` cells wide and at most `h` rows tall: the head and the vitals and the
