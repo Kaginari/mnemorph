@@ -96,13 +96,18 @@ A trace is
 - **source**: the evidence it points at, such as a journal entry, a gate verdict, a commit or a
   `file:line`.
 
-Every note file stays append-only (`merge=union`): a status change, a demotion or a tombstone is
-a new event naming the note it changes, and the current state is a fold over the events. Two
+Every note file stays append-only (`merge=union`, set through git's local `.git/info/attributes`
+when a session opens, so the world's own files stay the human's): a note is born by a `create`
+event, and a status change, a demotion or a tombstone is a `status` event, a confidence moved a
+`confidence` event, each naming the note it changes; the current state is a fold over the events.
+On a split, each heir's file receives the events of the notes whose source lies in its ground —
+a note with no path to read goes to every heir — and the old creature's file is kept whole. Two
 machines that both append never conflict, because the fold does not trust line order:
 
 - every event is one full line, written and synced before the writer returns, like a usage row;
 - events are folded in $(\text{time}, \text{event id})$ order, and the latest event sets the
-  status, so a demotion lowers what came before it;
+  status, so a demotion lowers what came before it; an event about a note never created is set
+  aside, and a second creation of one is ignored;
 - only events the order cannot separate (the same time and id, a merge's duplicate) take the
   stronger status: $\text{tombstoned} > \text{dormant} > \text{grounded} > \text{proposed}$.
 

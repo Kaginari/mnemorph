@@ -241,6 +241,26 @@ fn carry_out(
     relief: &Relief,
     seats: &[PathBuf],
 ) -> Result<(), String> {
+    // Personal memory survives the split, before any young is seated: each heir inherits the notes
+    // whose sources lie in its ground, and the old creature's file is kept whole. A failure undoes
+    // the heirs' files and seats nothing.
+    if let Act::Split { young } = &relief.act {
+        let files: Vec<_> = young
+            .iter()
+            .map(|(n, _)| world.join(mnemorph_memory::Tier::Personal(n.clone()).file()))
+            .collect();
+        let fresh: Vec<bool> = files.iter().map(|f| !f.exists()).collect();
+        if let Err(e) = mnemorph_memory::inherit(world, &c.name, young) {
+            for (f, new) in files.iter().zip(fresh) {
+                if new {
+                    let _ = fs::remove_file(f);
+                }
+            }
+            return Err(format!(
+                "the notes could not follow the split, so nothing was seated: {e}"
+            ));
+        }
+    }
     if let Act::Split { young } = &relief.act
         && let Err(e) = write_young(c, young, seats)
     {
@@ -249,6 +269,7 @@ fn carry_out(
         }
         return Err(e);
     }
+
     for (child, to) in &relief.children {
         let Some(k) = roster.creatures.get(child) else {
             continue;

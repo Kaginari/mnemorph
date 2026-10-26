@@ -1,0 +1,1 @@
+.mnemorph/memory/**/*.jsonl merge=union

@@ -229,3 +229,51 @@ fn relief_checks_first_and_keeps_every_claim_readable() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// Personal memory survives a split: each heir inherits the notes whose source lies in its half.
+#[test]
+fn a_split_hands_the_notes_to_the_heir_whose_half_holds_their_source() {
+    let w = world("notes");
+    doc(
+        &w,
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/a/, src/b/, src/c.rs\n",
+    );
+    let note = |id: &str, source: &str| mnemorph_memory::Change::Create {
+        text: format!("{id} holds"),
+        tags: vec![],
+        owner: Some("slime-s".into()),
+        polarity: mnemorph_memory::Polarity::Support,
+        salience: 0.5,
+        confidence: 0.7,
+        source: Some(source.into()),
+    };
+    let mine = mnemorph_memory::Tier::Personal("slime-s".into());
+    for (id, source) in [("of-a", "src/a/x.rs:3"), ("of-c", "src/c.rs")] {
+        mnemorph_memory::append(
+            &w,
+            &mine,
+            id,
+            mnemorph_memory::By::Record,
+            None,
+            note(id, source),
+        )
+        .unwrap();
+    }
+    relieve(&w, "slime-s", true).unwrap();
+    let notes_of = |name: &str| {
+        let back =
+            mnemorph_memory::read(&w, &mnemorph_memory::Tier::Personal(name.into())).unwrap();
+        mnemorph_memory::fold(&back.rows)
+            .into_keys()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(notes_of("slime-s-a"), ["of-a"]);
+    assert_eq!(notes_of("slime-s-b"), ["of-c"]);
+    assert_eq!(
+        notes_of("slime-s"),
+        ["of-a", "of-c"],
+        "the old file is kept whole"
+    );
+}
