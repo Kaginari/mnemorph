@@ -1232,6 +1232,7 @@ dependencies = [
  "mnemorph-wire",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

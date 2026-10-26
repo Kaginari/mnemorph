@@ -134,6 +134,12 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
         Facts::record(&w, &e).unwrap();
     }
     assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    // A compiled project's cold build may outrun the gate's limit: the note says which key.
+    assert!(said.contains("`gate.verify_secs`"), "{said}");
+    let python = world("suggest-python");
+    fs::write(python.join("pyproject.toml"), "[project]\nname = \"p\"\n").unwrap();
+    let said = missing_session_verify(&python, &Roster::load(&python)).unwrap();
+    assert!(!said.contains("verify_secs"), "{said}");
     // npm's placeholder test script suggests nothing.
     let bare = world("suggest-npm");
     fs::write(
@@ -150,4 +156,44 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
         "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
     );
     assert_eq!(missing_session_verify(&w, &Roster::load(&w)), None);
+}
+
+/// A workspace whose root is a package of its own is narrowed to that package; its name reaches
+/// the line only as a name Cargo accepts, never as words.
+#[test]
+fn a_multi_member_workspace_is_narrowed_to_its_root_package() {
+    use mnemorph_world::verify::{missing_session_verify, suggest};
+    let w = world("suggest-members");
+    let manifest = |name: &str| {
+        fs::write(
+            w.join("Cargo.toml"),
+            format!(
+                "[package]\nname = {name:?}\nversion = \"0.1.0\"\n\n[workspace]\nmembers = [\"crates/*\"]\n"
+            ),
+        )
+        .unwrap();
+    };
+    manifest("app_core");
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test -p app_core"));
+    let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
+    assert!(said.contains("`cargo test -p app_core`"), "{said}");
+    assert!(said.contains("`gate.verify_secs`"), "{said}");
+    // A name Cargo would refuse is no part of a suggested line.
+    for bad in ["x; rm -rf ~", "$(id)", "-p", "9lives", ""] {
+        manifest(bad);
+        assert_eq!(
+            suggest(&w).as_deref(),
+            Some("cargo test --workspace"),
+            "{bad:?}"
+        );
+    }
+    // A virtual workspace, or a package alone, keeps the workspace command.
+    fs::write(
+        w.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    fs::write(w.join("Cargo.toml"), "[package]\nname = \"solo\"\n").unwrap();
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
 }

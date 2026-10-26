@@ -53,15 +53,28 @@ const TEST_MARKERS: &[&str] = &[
     "@Test",
 ];
 
-/// The gate's configuration: the commands that must pass, and who must have written the
-/// landing.
-#[derive(Debug, Clone, Default)]
+/// The gate's configuration: the commands that must pass, how long each may run, and who must
+/// have written the landing.
+#[derive(Debug, Clone)]
 pub struct EndGate {
-    /// Verify commands, each run through `bash` with a 120 s limit.
+    /// Verify commands, each run through `bash` with [`EndGate::verify_secs`] as its limit.
     pub verify: Vec<String>,
+    /// How long each verify command may run, in seconds (`gate.verify_secs`, 120 unless the
+    /// configuration says): a command killed at it gave no result, so the claim is not verified.
+    pub verify_secs: u64,
     /// The commissioned creature whose landing this is; `None` in solo, where the whole
     /// repository is the soil and right author holds by construction.
     pub author: Option<Author>,
+}
+
+impl Default for EndGate {
+    fn default() -> Self {
+        Self {
+            verify: Vec::new(),
+            verify_secs: mnemorph_config::VERIFY_SECS,
+            author: None,
+        }
+    }
 }
 
 /// Who must have written what a landing changed: the creature, by the world's own answer.
@@ -376,7 +389,9 @@ impl EndGate {
     ) -> (Vec<String>, bool) {
         let mut failures = Vec::new();
         for command in &self.verify {
-            let args = json!({"command": command, "timeout_ms": 120_000}).to_string();
+            let args =
+                json!({"command": command, "timeout_ms": self.verify_secs.saturating_mul(1000)})
+                    .to_string();
             let o = call(tools, "bash", &args, cx);
             // A line that did not run, or was killed at its deadline, said nothing either way; a
             // crash is a failure.

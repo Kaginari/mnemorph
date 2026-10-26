@@ -171,15 +171,17 @@ pub struct Bound<'a> {
     pub attic: Option<&'a Path>,
 }
 
-/// The session's own end gate, as a commissioned body's: the verify lines of its card, and no test
-/// deleted or skipped; the whole repository is its soil, so no author is checked.
-fn session_gate(world: &Path, name: &str) -> crate::gate::EndGate {
+/// The session's own end gate, as a commissioned body's: the verify lines of its card, each given
+/// the configuration's `gate.verify_secs`, and no test deleted or skipped; the whole repository is
+/// its soil, so no author is checked.
+fn session_gate(world: &Path, name: &str, config: &Config) -> crate::gate::EndGate {
     crate::gate::EndGate {
         verify: mnemorph_world::Roster::load(world)
             .creatures
             .get(name)
             .map(|c| c.verify.clone())
             .unwrap_or_default(),
+        verify_secs: config.verify_secs(),
         author: None,
     }
 }
@@ -256,6 +258,7 @@ pub fn open_with(
         session: session_id.clone(),
         caps: capped.then_some(caps),
         stress_tokens: Some(config.context_stress_tokens()),
+        verify_secs: Some(config.verify_secs()),
         weights: Some(crate::solo::recall_weights(config)),
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
@@ -280,7 +283,7 @@ pub fn open_with(
             prefix: 0,
         },
     };
-    let gate = session_gate(world, &body.name);
+    let gate = session_gate(world, &body.name, config);
     let run = Run::new(body, limits, setup)
         .with_observer(observer)
         .with_gate(gate);

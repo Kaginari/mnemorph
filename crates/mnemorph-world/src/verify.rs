@@ -125,19 +125,38 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
 /// check, and no claim of a solo session is ever grounded. Only a command the harness itself picks
 /// from the project's manifest — never a model's words: an ontology fact is creatures' text, and a
 /// suggested line is one the human may paste. Only ever suggested: the card is the human's.
+///
+/// A Cargo workspace whose root is itself a package is narrowed to that package
+/// (`cargo test -p <name>`), its name taken only when it is a name Cargo itself accepts — letters,
+/// digits, `-` and `_` — so nothing but an identifier reaches the line. A compiled project's cold
+/// build can still outrun the gate's limit: [`missing_session_verify`] says so.
 #[must_use]
 pub fn suggest(world: &Path) -> Option<String> {
-    detected(world)
+    detected(world).map(|d| d.command)
+}
+
+/// A suggested command, and whether the project builds before it tests: a cold build may outrun
+/// the end gate's limit on each verify command.
+struct Detected {
+    command: String,
+    compiled: bool,
 }
 
 /// The test command a project's manifest names, by the first manifest found.
-fn detected(world: &Path) -> Option<String> {
+fn detected(world: &Path) -> Option<Detected> {
     let has = |f: &str| world.join(f).is_file();
+    let plain = |command: &str| Detected {
+        command: command.to_owned(),
+        compiled: false,
+    };
     if has("Cargo.toml") {
-        return Some("cargo test --workspace".into());
+        return Some(Detected {
+            command: cargo(world),
+            compiled: true,
+        });
     }
     if has("pyproject.toml") || has("setup.py") || has("pytest.ini") || has("tox.ini") {
-        return Some("python3 -m pytest -q".into());
+        return Some(plain("python3 -m pytest -q"));
     }
     if has("package.json") {
         // A suggestion only: a `"test"` script named in the manifest is enough to read.
@@ -155,30 +174,83 @@ fn detected(world: &Path) -> Option<String> {
         } else {
             "npm"
         };
-        return Some(format!("{runner} test"));
+        return Some(Detected {
+            command: format!("{runner} test"),
+            compiled: has("tsconfig.json"),
+        });
     }
     if has("go.mod") {
-        return Some("go test ./...".into());
+        return Some(Detected {
+            command: "go test ./...".into(),
+            compiled: true,
+        });
     }
     let make = fs::read_to_string(world.join("Makefile")).ok()?;
     make.lines()
         .any(|l| l.starts_with("test:"))
-        .then(|| "make test".into())
+        .then(|| plain("make test"))
 }
 
-/// The session's card has no verify line: what the end gate cannot then do, and the line to add.
+/// Cargo's test command: the root package alone when the root is a package of a workspace with
+/// members, else the workspace.
+fn cargo(world: &Path) -> String {
+    let manifest = fs::read_to_string(world.join("Cargo.toml"))
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok());
+    let Some(manifest) = manifest else {
+        return "cargo test --workspace".into();
+    };
+    let members = manifest
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(toml::Value::as_array)
+        .is_some_and(|m| !m.is_empty());
+    let package = manifest
+        .get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(toml::Value::as_str)
+        .filter(|n| cargo_name(n));
+    match package {
+        Some(name) if members => format!("cargo test -p {name}"),
+        _ => "cargo test --workspace".into(),
+    }
+}
+
+/// A package name Cargo accepts: 1 to 64 ASCII letters, digits, `-` and `_`, not led by a digit
+/// or a dash. Nothing a shell reads as more than a word.
+fn cargo_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+}
+
+/// The session's card has no verify line: what the end gate cannot then do, and the line to add —
+/// with, for a compiled project, the limit its cold build may need raised.
 #[must_use]
 pub fn missing_session_verify(world: &Path, roster: &Roster) -> Option<String> {
     let card = roster.creatures.get("rimuru")?;
     if !card.verify.is_empty() {
         return None;
     }
-    let advice = suggest(world).map_or_else(
+    let found = detected(world);
+    let advice = found.as_ref().map_or_else(
         || "add `- **Verify:** `<your test command>`` to it".to_owned(),
-        |c| format!("add `- **Verify:** `{c}`` to it"),
+        |d| format!("add `- **Verify:** `{}`` to it", d.command),
     );
+    let slow = if found.is_some_and(|d| d.compiled) {
+        "; each verify command has `gate.verify_secs` to finish (120 s unless set, at most 600), \
+         and a cold build of this project may need more: if the gate says NOT_VERIFIED, raise it \
+         in .mnemorph/config.toml"
+    } else {
+        ""
+    };
     Some(format!(
         "rimuru's card (.mnemorph/rimuru/rimuru/README.md) has no verify line: the session's end \
-         gate runs no check, so no claim of a solo session is ever grounded — {advice}"
+         gate runs no check, so no claim of a solo session is ever grounded — {advice}{slow}"
     ))
 }

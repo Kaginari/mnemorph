@@ -317,7 +317,11 @@ repository is its soil, so right author holds by construction. A card with no ve
 check, and then no claim of a solo session is ever grounded: `mnemorph memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
-model's words, since the human may paste it — for the human to add. The gate runs:
+model's words, since the human may paste it — for the human to add. A Cargo workspace whose root
+is a package of its own is narrowed to that package (`cargo test -p <name>`), the name taken only
+when it is one Cargo accepts, so nothing but an identifier reaches the line. For a compiled
+project (Cargo, Go, TypeScript) the suggestion also says that a cold build may outrun the limit
+on each verify command, and names the key that raises it. The gate runs:
 
 1. **Right author** — every path lies in the writer's own soil ([soil](02-races.md#soil--who-may-write-what));
    for a Slime's doc the gate diffs by line range: the verify block is the Orc's, the rest is the
@@ -335,8 +339,12 @@ model's words, since the human may paste it — for the human to add. The gate r
    never touches it, and the commission's report names it as another writer's. The grant is the
    one the body ran with, taken before it starts. With no guard, writers cannot be told apart, and every change in the tree is
    judged the body's.
-2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, 120 s
-   each. A line changed this turn is a hole and runs from the next turn (a Named Slime's own
+2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, each
+   within `gate.verify_secs` (120 s unless the configuration says; 10 to 600, the most the
+   `bash` tool grants a command), and within the ask's own clock. A cold build of a large compiled
+   project can take longer than 120 s; killed at the limit, it gives no result, so the landing is
+   NOT_VERIFIED until the key is raised. The tracked file may set it: the project knows its build,
+   and a longer limit runs the same classified, sandboxed command, only for longer. A line changed this turn is a hole and runs from the next turn (a Named Slime's own
    additions excepted). A check never writes: a verify run that changes the tree beyond what
    git ignores — a test run's build output — fails the landing whole, naming what it changed, with
    no second try (a retry would write nothing and pass what the first wrote as the body's work).
@@ -368,7 +376,7 @@ work or allow commands unguarded.
 
 **In solo mode** the gate judges what the run changed against the tree as it was when the ask
 arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
-verify commands, through the same classified and guarded `bash`, 120 s each), duties done (a
+verify commands, through the same classified and guarded `bash`, `gate.verify_secs` each), duties done (a
 non-empty answer) and tests intact: no test file deleted, and no test file — read whole, whatever
 its size — with more skip markers than before (`#[ignore`, `.skip(`, `.only(`, `.todo(`,
 `t.Skip(`, `t.Skipf(`, `@pytest.mark.skip`, …) or fewer tests (`#[test]`, `func Test`, `def
