@@ -111,3 +111,35 @@ fn only_its_own_orc_with_one_clean_line_never_through_a_link() {
     let _ = fs::remove_file(&outside);
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A session card with no verify line is said, with the line to add: the command the project's
+/// manifest names, or one creatures agreed on in the ontology, which comes first.
+#[test]
+fn a_session_card_without_verify_is_said_with_a_suggestion() {
+    use mnemorph_world::Facts;
+    use mnemorph_world::facts::from_unsaid;
+    use mnemorph_world::verify::{missing_session_verify, suggest};
+    let w = world("suggest");
+    assert_eq!(suggest(&w), None, "nothing to read");
+    fs::write(w.join("package.json"), r#"{"scripts": {"test": "vitest"}}"#).unwrap();
+    fs::write(w.join("pnpm-lock.yaml"), "").unwrap();
+    assert_eq!(suggest(&w).as_deref(), Some("pnpm test"));
+    fs::write(w.join("Cargo.toml"), "[workspace]\n").unwrap();
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
+    assert!(said.contains("`cargo test --workspace`"), "{said}");
+    // Two creatures agree on the root's test command: the ontology's word comes first.
+    for by in ["slime-a", "slime-b"] {
+        let e = from_unsaid("./Cargo.toml test=cargo nextest run", by, None).unwrap();
+        Facts::record(&w, &e).unwrap();
+    }
+    assert_eq!(suggest(&w).as_deref(), Some("cargo nextest run"));
+    // A card that has its line is never told.
+    doc(
+        &w,
+        "rimuru",
+        "rimuru",
+        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
+    );
+    assert_eq!(missing_session_verify(&w, &Roster::load(&w)), None);
+}
