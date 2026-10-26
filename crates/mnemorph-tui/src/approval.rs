@@ -133,11 +133,13 @@ impl Approval {
         self.total.get() > 0 && self.seen_to.get() >= self.total.get()
     }
 
-    /// Arm the card again from `at`, its choice cleared: a key that answers nothing.
+    /// Arm the card again from `at`, its choice cleared: a key that answers nothing. A card not
+    /// yet drawn stays unarmed — its first draw arms it, never a key that came before it.
     fn rearm(&mut self, at: Instant) {
         self.choice = None;
-        let t = self.armed.get().map_or(at, |t| t.max(at));
-        self.armed.set(Some(t));
+        if let Some(t) = self.armed.get() {
+            self.armed.set(Some(t.max(at)));
+        }
     }
 
     /// Text pasted while the card is open: never an answer.

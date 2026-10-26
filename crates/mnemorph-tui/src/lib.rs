@@ -3,7 +3,8 @@
 //!
 //! The kit ([`kit`]) holds the reusable parts, Charm's ecosystem rebuilt; [`app`] is the model,
 //! its messages, `update` and `view`; [`run`] owns the terminal, the session's driver and the
-//! loop; [`gate`] is the human gate as an approval card.
+//! loop; [`gate`] is the human gate as an approval card; [`sidebar`] the column beside the
+//! transcript.
 
 pub mod app;
 pub mod approval;
@@ -13,6 +14,7 @@ pub mod gate;
 pub mod kit;
 pub mod run;
 pub mod safe;
+pub mod sidebar;
 pub mod theme;
 pub mod transcript;
 pub mod view;

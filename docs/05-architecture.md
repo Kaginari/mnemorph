@@ -137,27 +137,34 @@ cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
 background as `COLORFGBG` reports it, else dark.
 
 ```
-╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash · ⠋ working ────────────────╮
-│ ▸ you  fix the collate bug in nested types                           │
-│                                                                      │
-│ ◆ rimuru                                                             │
-│   The collation is dropped in _parse_types:                          │
-│   ┌─ read sqlglot/parser.py:4120-4180 ──────────────── 61 lines ✓ ─┐ │
-│   ┌─ edit sqlglot/parser.py ───────────────────────────── +1 −1 ✓ ─┐ │
-│   │ - return this                                                  │ │
-│   │ + return self._parse_collate(this)                             │ │
-│   └────────────────────────────────────────────────────────────────┘ │
-│   ✓ end gate passed · 1 changed                                      │
-│ ╭──────────────────────────────────────────────────────────────────╮ │
-│ │ ›  a line now waits its turn                                     │ │
-│ ╰──────────────────────────────────────────────────────────────────╯ │
-╰─ $0.04 · 60.9k tok · ctx 41% · esc stop · enter queue · pgup scroll ─╯
+╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash · ⠋ working ────────────────────────────────────────────────────╮
+│                                                                          │ session ───────────────────── │
+│                                                                          │ $0.04 · 60.9k tok             │
+│                                                                          │ ctx ━━━━━━━━──────────── 41%  │
+│                                                                          │ deepseek-v4-flash             │
+│                                                                          │                               │
+│                                                                          │ memory ────────────────────── │
+│ ▸ you  fix the collate bug in nested types                               │ recalled 3 this ask           │
+│                                                                          │ grounded 5 · shared 2         │
+│ ◆ rimuru                                                                 │ ✓ “collations drop in nested  │
+│   The collation is dropped in _parse_types:                              │   types”                      │
+│   ┌─ edit sqlglot/parser.py ───────────────────────────────── +1 −1 ✓ ─┐ │                               │
+│   │ - return this                                                      │ │ files · 1 ─────────────────── │
+│   │ + return self._parse_collate(this)                                 │ │ M sqlglot/parser.py           │
+│   └────────────────────────────────────────────────────────────────────┘ │                               │
+│   ↳ orc-sql  is working on: judge                                        │ bodies · 2 · 2 live ───────── │
+│   ↳ slime-parser  bash pytest tests/test_parser.py                       │ ◆ rimuru            ⠋ working │
+│ ╭──────────────────────────────────────────────────────────────────────╮ │   ● orc-sql         ⠋ working │
+│ │ ›  a line now waits its turn                                         │ │     ● slime-parser     ⠋ bash │
+│ ╰──────────────────────────────────────────────────────────────────────╯ │                               │
+╰─ $0.04 · 60.9k tok · ctx 41% · esc stop · enter queue · pgup scroll · world ~/sqlglot ───────────────────╯
 ```
 
 | Part | What it shows |
 |---|---|
-| header | the session's body, its model, whether a turn runs or an approval waits |
-| transcript | the human's lines; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables); tool calls as cards — a spinner while they run, then ✓ or ✗, output folded to four lines, a diff for `edit`, `multiedit` and `patch`, a new file's head for `write`; the end gate's verdict |
+| header | Mnemorph's mark (the name drawn across the water races' blues), the session's body, its model, whether a turn runs or an approval waits |
+| transcript | the human's lines; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables); tool calls as cards — a spinner while they run, then ✓ or ✗, output folded to four lines, a diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; the end gate's verdict |
+| sidebar | **session**: the spend, the context as a gauge against the stress line, the model; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
 | approval card | the act that asks, its reasons and the paths it opens outside the world, under the gate's own border |
 | status bar | the spend in dollars and tokens, the context against its stress line (gold from 75%, alarm from 90%), the keys that matter now, the world |
@@ -167,7 +174,10 @@ background as `COLORFGBG` reports it, else dark.
 | Enter | send (queued while a turn runs) |
 | Alt+Enter, Shift+Enter, Ctrl+J | break the line |
 | ↑ ↓ | move between lines, then through the lines sent before |
-| PgUp PgDn, Shift+↑ ↓, Ctrl+Home End | scroll the transcript |
+| PgUp PgDn, Shift+↑ ↓, Ctrl+Home End, the wheel | scroll the transcript |
+| Alt+↑ ↓ | move the focus between tool cards, scrolling each into view |
+| Ctrl+T, a click on a card | expand the focused (or clicked) card's folded output, or fold it again; with none focused, the newest |
+| Ctrl+O | show or hide the sidebar |
 | Esc | stop the turn; back to the end of the transcript |
 | Ctrl+C | stop the turn, or leave when none runs |
 | y, n, then Enter | answer an approval; ↓ ↑ read a long act; Esc denies it |
@@ -175,12 +185,25 @@ background as `COLORFGBG` reports it, else dark.
 Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
 `/clear`, `/help`, `/quit`.
 
+The sidebar takes 32 columns on the right from a 100-column terminal up, and folds away below it.
+It shows only what the run or the world gives. The observer sends the chain of bodies each
+commissioned body's event came through (`Seen::From`), what recall gave the session's ask, and
+each `write`'s path; it never touches the disk on the session's task. The UI looks whether that
+path exists on a runtime thread, so a hung mount holds that thread, never the session. The look
+may race the write: "not there" proves the write created the file and marks it `A`, whenever the
+answer arrives; anything else leaves it `M`. An act's paths count once its result lands without
+error. The memory's standing (`mnemorph_memory::standing`, the same reading `memory status`
+prints) and the roster's races are read on a runtime thread at start and after each line
+finishes, each reading numbered so a late one never overwrites a newer one. The bodies' tree is
+indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
+
 **Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
 sequences a program prints and escapes every other control, bidi and zero-width character as
-`\u{…}` (`mnemorph_loop::hidden`). The approval card shows each field through
-`mnemorph_loop::shown`, the core's own rule for what a human approves, and takes an answer only
-from a key: a bare `y` or `n`, then a pause, then Enter. Keys are ignored for 300 ms after the card
-is first drawn, and so are keys the terminal read before it; any key that is not `y`, `n`, Enter
+`\u{…}` (`mnemorph_loop::hidden`); so does the sidebar, for every claim, path and body name it
+shows. The approval card shows each field through `mnemorph_loop::shown`, the core's own rule
+for what a human approves, and takes an answer only from a key: a bare `y` or `n`, then a pause,
+then Enter. Keys are ignored for 300 ms after the card is first drawn — a key that came before
+the first draw never arms it — and so are keys the terminal read before it; any key that is not `y`, `n`, Enter
 or a scroll — a paste too — clears the choice and arms the card again, so `okay` or `deploy` typed
 into it, or a `y` and a carriage return in one read, approve nothing. An act longer than the card
 scrolls inside it (↓ ↑, PgDn, End): its head shows, the cut marked, with its last line, and `y` is
@@ -190,13 +213,17 @@ card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending,
 SIGINT or SIGQUIT, and ten minutes of silence deny.
 
 A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM, SIGHUP,
-SIGINT and SIGQUIT leave as a quit does, the terminal given back.
+SIGINT and SIGQUIT leave as a quit does, the terminal given back. However the loop ends, every
+approval open or waiting is denied, and a terminal mode that cannot be set at start gives the
+terminal back before the error prints. A panic on the UI thread turns the mouse, bracketed paste
+and the keyboard flags off before its message prints.
 
 **It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
 out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive
 together become one frame, and frames come at most 30 a second. An idle UI wakes for nothing.
-A test draws a 2,000-message session and holds every frame under the 33 ms budget in a debug
-build.
+The wheel moves the scroll on the same spring as the keys, and the loop ticks only while it moves.
+A test draws a 2,000-message session with the sidebar open — every file it changed, forty
+bodies — and holds every frame under the 33 ms budget in a debug build.
 
 The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
 ecosystem:

@@ -1,6 +1,6 @@
 //! The frame: a rounded border naming the session and carrying the status bar, the transcript's
-//! visible window, the lines waiting their turn, the approval card and the input box. The
-//! sidebar's column is reserved here and drawn by a later view.
+//! visible window, the lines waiting their turn, the approval card and the input box, and the
+//! sidebar's column on the right ([`crate::sidebar`]).
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -20,11 +20,16 @@ const MIN: (u16, u16) = (24, 8);
 /// The most rows the input grows to.
 const INPUT_ROWS: usize = 6;
 
-/// The sidebar's width at a frame's width: none yet — the sidebar is a later view's — but the
-/// layout already splits for it.
+/// What a block of the transcript is drawn with, at `width`.
 #[must_use]
-pub fn sidebar_width(_width: u16) -> u16 {
-    0
+pub fn ctx(m: &Model, width: usize) -> Ctx<'_> {
+    Ctx {
+        theme: m.theme,
+        width,
+        frame: m.spinner.frame(),
+        spinner: m.spinner.view(),
+        me: &m.header.body,
+    }
 }
 
 /// Draw `m` into the frame.
@@ -53,12 +58,36 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         width: area.width.saturating_sub(4),
         height: area.height.saturating_sub(2),
     };
-    let side = sidebar_width(inner.width);
+    let side = m.sidebar.width(inner.width);
     let main = Rect {
         width: inner.width - side,
         ..inner
     };
     body(m, main, buf);
+    if side > 0 {
+        sidebar(
+            m,
+            Rect {
+                x: main.right(),
+                width: side,
+                ..inner
+            },
+            buf,
+        );
+    }
+}
+
+/// The sidebar in `area`: a quiet rule down its left edge, a space, its sections.
+fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
+    let rule = Span::styled("│", m.theme.line());
+    let w = usize::from(area.width.saturating_sub(3));
+    let lines = crate::sidebar::view(m, w, usize::from(area.height));
+    for y in area.y..area.bottom() {
+        buf.set_span(area.x + 1, y, &rule, 1);
+    }
+    for (y, line) in (area.y..area.bottom()).zip(&lines) {
+        buf.set_line(area.x + 3, y, line, area.width.saturating_sub(3));
+    }
 }
 
 /// The transcript, the queue, the card and the input, stacked in `area`.
@@ -93,14 +122,12 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         .collect();
     let below = input.len() + card.as_ref().map_or(0, Vec::len) + queued.len();
     let rows = usize::from(area.height).saturating_sub(below);
-    let ctx = Ctx {
-        theme: m.theme,
-        width: w,
-        frame: m.spinner.frame(),
-        spinner: m.spinner.view(),
-        me: &m.header.body,
-    };
-    let (window, top) = m.transcript.window(&ctx, rows, m.viewport.offset());
+    let ctx = ctx(m, w);
+    let crate::transcript::Window {
+        lines: window,
+        owners,
+        top,
+    } = m.transcript.window(&ctx, rows, m.viewport.offset());
     m.measured.set(top.unwrap_or(usize::MAX));
     // The transcript sits on the input: a short one is pushed down, as a chat reads.
     let top_row = area.y + to_u16(rows.saturating_sub(window.len()));
@@ -112,9 +139,18 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     // A stack taller than the area keeps its bottom: the card's choice and the input stay.
     let stack: Vec<&Line<'static>> = stack.collect();
     let skip = stack.len().saturating_sub(usize::from(area.height));
-    for (row, line) in (top_row.max(area.y)..area.bottom()).zip(stack.into_iter().skip(skip)) {
+    let first = top_row.max(area.y);
+    for (row, line) in (first..area.bottom()).zip(stack.into_iter().skip(skip)) {
         buf.set_line(area.x, row, line, area.width);
     }
+    // Each row's entry, for a click: the transcript's rows only, as drawn.
+    let mut hits = m.hits.borrow_mut();
+    hits.x = area.x;
+    hits.width = area.width;
+    hits.y = first;
+    hits.rows = rows;
+    hits.owners.clear();
+    hits.owners.extend(owners.into_iter().skip(skip));
     if !m.viewport.following() && rows > 0 {
         let note = Line::from(Span::styled(
             " ↓ pgdn · esc to the end ",
@@ -135,12 +171,13 @@ fn to_u16(n: usize) -> u16 {
 /// The top edge: Mnemorph, the body and its model; what holds the session, on the right.
 fn header(m: &Model, width: usize) -> Line<'static> {
     let t = &m.theme;
-    let mut spans = vec![
-        Span::styled("─ ", t.frame()),
-        Span::styled("◈ MNEMORPH", t.holo().add_modifier(Modifier::BOLD)),
-        Span::styled(" · ", t.frame()),
-        Span::styled(crate::safe::one_line(&m.header.body), t.rimuru()),
-    ];
+    let mut spans = vec![Span::styled("─ ", t.frame())];
+    spans.extend(mark(t));
+    spans.push(Span::styled(" · ", t.frame()));
+    spans.push(Span::styled(
+        crate::safe::one_line(&m.header.body),
+        t.rimuru(),
+    ));
     if width >= 50 {
         spans.push(Span::styled(" · ", t.frame()));
         spans.push(Span::styled(
@@ -165,18 +202,35 @@ fn header(m: &Model, width: usize) -> Line<'static> {
     truncate(Line::from(spans), width.saturating_sub(3))
 }
 
-/// Tokens, short: 950, 12.3k, 4.1M.
-fn short(n: u64) -> String {
-    // Display only: a rounding of a token count.
-    #[allow(clippy::cast_precision_loss)]
-    let f = n as f64;
-    if n < 1000 {
-        n.to_string()
-    } else if n < 1_000_000 {
-        format!("{:.1}k", f / 1e3)
-    } else {
-        format!("{:.1}M", f / 1e6)
+/// Mnemorph's mark: the hologram's diamond in the slimes' teal, the name drawn across the
+/// water races — Rimuru's blue to the named slime's pale cyan — as a gradient, one hue a letter.
+fn mark(t: &crate::theme::Theme) -> Vec<Span<'static>> {
+    const NAME: &str = "MNEMORPH";
+    let stops = [t.races.rimuru, t.races.slime, t.races.named_slime];
+    let mut spans = vec![Span::styled(
+        "◈ ",
+        t.race(mnemorph_races::Race::Slime)
+            .add_modifier(Modifier::BOLD),
+    )];
+    let last = NAME.len() - 1;
+    for (i, c) in NAME.chars().enumerate() {
+        // Display only: a letter's place along an eight-letter gradient.
+        #[allow(clippy::cast_precision_loss)]
+        let along = i as f32 / last as f32 * 2.0;
+        let (from, to, frac) = if along < 1.0 {
+            (stops[0], stops[1], along)
+        } else {
+            (stops[1], stops[2], along - 1.0)
+        };
+        let hue = t.readable(from.mix(to, frac));
+        spans.push(Span::styled(
+            c.to_string(),
+            ratatui::style::Style::new()
+                .fg(hue.color())
+                .add_modifier(Modifier::BOLD),
+        ));
     }
+    spans
 }
 
 /// The bottom edge: the spend, the context against its stress line, the keys that matter now,
@@ -196,15 +250,16 @@ fn status(m: &Model, width: usize) -> Line<'static> {
             },
             t.text(),
         ));
-        parts.push(Span::styled(format!("{} tok", short(u.tokens)), t.muted()));
+        parts.push(Span::styled(
+            format!("{} tok", crate::sidebar::short(u.tokens)),
+            t.muted(),
+        ));
     }
     if let Some(pct) = u.occupancy.saturating_mul(100).checked_div(u.stress_line) {
-        let style = match pct {
-            0..75 => t.muted(),
-            75..90 => t.gold(),
-            _ => t.alarm(),
-        };
-        parts.push(Span::styled(format!("ctx {pct}%"), style));
+        parts.push(Span::styled(
+            format!("ctx {pct}%"),
+            crate::sidebar::band(t, pct),
+        ));
     }
     let q = m.transcript.queued.len();
     if q > 0 {

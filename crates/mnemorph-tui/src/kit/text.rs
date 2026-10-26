@@ -50,6 +50,30 @@ pub fn clip(s: &str, width: usize) -> String {
     out
 }
 
+/// `s` cut to `width` cells from the left, starting with `…` when cut: a path keeps its name.
+#[must_use]
+pub fn clip_left(s: &str, width: usize) -> String {
+    if cells(s) <= width {
+        return s.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut kept: Vec<&str> = Vec::new();
+    let mut used = 0;
+    for g in s.graphemes(true).rev() {
+        let w = cells(g);
+        if used + w > width - 1 {
+            break;
+        }
+        kept.push(g);
+        used += w;
+    }
+    let mut out = String::from("…");
+    out.extend(kept.into_iter().rev());
+    out
+}
+
 /// A line cut to `width` cells, ending in `…` when cut; its spans keep their styles.
 #[must_use]
 pub fn truncate(line: Line<'static>, width: usize) -> Line<'static> {

@@ -177,8 +177,28 @@ pub fn summary(name: &str, input: &Value) -> String {
     clip(&one_line(&input.to_string()), 80)
 }
 
+/// Whether a call has something folded that expanding it would show: output past
+/// [`OUTPUT_LINES`], a diff past [`DIFF_LINES`], a written file past its head, a read's text.
+#[must_use]
+pub fn foldable(call: &Call) -> bool {
+    let Some(o) = &call.outcome else {
+        return false;
+    };
+    let lines = |s: &str| s.trim_end_matches('\n').lines().count();
+    if o.is_error {
+        return lines(&o.content) > OUTPUT_LINES;
+    }
+    match diff::of(&call.name, &call.input) {
+        Some(Change::Diff { lines, .. }) => lines.len() > DIFF_LINES,
+        Some(Change::NewFile { lines, head, .. }) => lines > head.len(),
+        None if call.name == "read" => !o.content.trim().is_empty(),
+        None => lines(&o.content) > OUTPUT_LINES,
+    }
+}
+
 /// A call as a card: its tool and summary set into the top edge, its state on the right — a
-/// spinner, ✓ or ✗ — and its diff or folded output inside.
+/// spinner, ✓ or ✗ — and its diff or folded output inside; expanded, all of it. The card holding
+/// the focus wears the accent on its border.
 fn card(call: &Call, w: usize, ctx: &Ctx<'_>) -> Lines {
     let t = &ctx.theme;
     let ok = call.outcome.as_ref().is_some_and(|o| !o.is_error);
@@ -188,6 +208,7 @@ fn card(call: &Call, w: usize, ctx: &Ctx<'_>) -> Lines {
     } else {
         None
     };
+    let open = call.expanded;
     let name_style = if failed { t.alarm() } else { t.holo() };
     let title = Line::from(vec![
         Span::styled(
@@ -209,7 +230,7 @@ fn card(call: &Call, w: usize, ctx: &Ctx<'_>) -> Lines {
         }
         Some(o) if o.is_error => {
             right.push(Span::styled("✗", t.alarm()));
-            folded(&o.content, o.cut, w, t.alarm(), t)
+            folded(&o.content, o.cut, w, t.alarm(), t, open)
         }
         Some(o) => {
             if let Some(c) = &change {
@@ -220,13 +241,19 @@ fn card(call: &Call, w: usize, ctx: &Ctx<'_>) -> Lines {
             }
             right.push(Span::styled("✓", t.ok()));
             match &change {
-                Some(c) => change_lines(c, w.saturating_sub(4), t),
-                None if call.name == "read" => Vec::new(),
-                None => folded(&o.content, o.cut, w, t.muted(), t),
+                Some(c) => change_lines(c, &call.input, w.saturating_sub(4), t, open),
+                None if call.name == "read" && !open => Vec::new(),
+                None => folded(&o.content, o.cut, w, t.muted(), t, open),
             }
         }
     };
-    let border = if failed { t.alarm() } else { t.frame() };
+    let border = if call.focused {
+        t.holo()
+    } else if failed {
+        t.alarm()
+    } else {
+        t.frame()
+    };
     Boxed::new()
         .border(Border::Normal, border)
         .padding(Sides::sym(0, 1))
@@ -237,35 +264,46 @@ fn card(call: &Call, w: usize, ctx: &Ctx<'_>) -> Lines {
         .render(body)
 }
 
-/// Output cut to [`OUTPUT_LINES`], the rest counted.
-fn folded(content: &str, cut: usize, w: usize, style: Style, t: &Theme) -> Lines {
+/// The line under folded lines: how many more, and how to see them.
+fn more_line(more: usize, cut: usize, t: &Theme) -> Option<Line<'static>> {
+    if more == 0 && cut == 0 {
+        return None;
+    }
+    let mut s = String::from("…");
+    if more > 0 {
+        let _ = write!(s, " +{more} lines");
+    }
+    if cut > 0 {
+        let _ = write!(s, " ({cut} bytes cut)");
+    }
+    let mut spans = vec![Span::styled(s, t.muted())];
+    if more > 0 {
+        spans.push(Span::styled(" · click to expand", t.frame()));
+    }
+    Some(Line::from(spans))
+}
+
+/// Output cut to [`OUTPUT_LINES`], the rest counted; `open`, all of it.
+fn folded(content: &str, cut: usize, w: usize, style: Style, t: &Theme, open: bool) -> Lines {
     let text = clean(content.trim_end_matches('\n'));
     if text.trim().is_empty() {
         return Vec::new();
     }
     let all: Vec<&str> = text.lines().collect();
     let inner = w.saturating_sub(4);
+    let shown = if open { all.len() } else { OUTPUT_LINES };
     let mut out: Lines = all
         .iter()
-        .take(OUTPUT_LINES)
+        .take(shown)
         .map(|l| Line::from(Span::styled(clip(l, inner), style)))
         .collect();
-    let more = all.len().saturating_sub(OUTPUT_LINES);
-    if more > 0 || cut > 0 {
-        let mut s = String::from("…");
-        if more > 0 {
-            let _ = write!(s, " +{more} lines");
-        }
-        if cut > 0 {
-            let _ = write!(s, " ({cut} bytes cut)");
-        }
-        out.push(Line::from(Span::styled(s, t.muted())));
-    }
+    out.extend(more_line(all.len().saturating_sub(shown), cut, t));
     out
 }
 
-/// A change's lines, each tinted to the card's inner width; long diffs fold.
-fn change_lines(c: &Change, inner: usize, t: &Theme) -> Lines {
+/// A change's lines, each tinted to the card's inner width; long diffs fold, and `open` shows
+/// them whole — a written file's every line, from the call's `input`.
+fn change_lines(c: &Change, input: &Value, inner: usize, t: &Theme, open: bool) -> Lines {
     let tint = |fg: crate::theme::Rgb| fg.mix(t.p.bg, 0.82).color();
     let add = (t.readable(t.races.elf), tint(t.readable(t.races.elf)));
     let del = (t.p.alarm, tint(t.p.alarm));
@@ -283,9 +321,10 @@ fn change_lines(c: &Change, inner: usize, t: &Theme) -> Lines {
         };
     match c {
         Change::Diff { lines, .. } => {
+            let shown = if open { lines.len() } else { DIFF_LINES };
             let mut out: Lines = lines
                 .iter()
-                .take(DIFF_LINES)
+                .take(shown)
                 .map(|l| match l {
                     DiffLine::Add(s) => line("+ ", s, Some(add)),
                     DiffLine::Del(s) => line("- ", s, Some(del)),
@@ -293,13 +332,7 @@ fn change_lines(c: &Change, inner: usize, t: &Theme) -> Lines {
                     DiffLine::Hunk(s) => Line::from(Span::styled(one_line(s), t.frame())),
                 })
                 .collect();
-            let more = lines.len().saturating_sub(DIFF_LINES);
-            if more > 0 {
-                out.push(Line::from(Span::styled(
-                    format!("… +{more} lines"),
-                    t.muted(),
-                )));
-            }
+            out.extend(more_line(lines.len().saturating_sub(shown), 0, t));
             out
         }
         Change::NewFile { path, lines, head } => {
@@ -308,17 +341,16 @@ fn change_lines(c: &Change, inner: usize, t: &Theme) -> Lines {
                 t.muted(),
             ))];
             let ext = path.rsplit('.').next().unwrap_or("");
-            let code = clean(&head.join("\n"));
+            let whole = input
+                .get("content")
+                .and_then(Value::as_str)
+                .filter(|_| open);
+            let shown = whole.map_or(head.len(), |w| w.lines().count());
+            let code = clean(&whole.map_or_else(|| head.join("\n"), str::to_owned));
             for spans in crate::kit::highlight::highlight(&code, ext, t, t.text()) {
                 out.push(crate::kit::text::truncate(Line::from(spans), inner));
             }
-            let more = lines.saturating_sub(head.len());
-            if more > 0 {
-                out.push(Line::from(Span::styled(
-                    format!("… +{more} lines"),
-                    t.muted(),
-                )));
-            }
+            out.extend(more_line(lines.saturating_sub(shown), 0, t));
             out
         }
     }

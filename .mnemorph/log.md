@@ -4866,3 +4866,49 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Left:** the commissioning chain on the card — the gate's ask names the body, not its line.
 - **Tests:** End then `y` refused, steps then `y` accepted; `okay⏎`, `deploy⏎`, `y\r` in one batch,
   a paste; two cards answered in order; the signal list; a pty run of SIGINT and SIGQUIT.
+
+---
+
+### [2026-10-26T21:14:06+01:00] rimuru — the terminal UI, part two: the sidebar and the mouse
+- **Asked:** the sidebar in the column part one reserved (session, memory, files, bodies),
+  Ctrl+O and a fold under ~100 columns; the wheel on the kit's spring, a click or a key to expand a
+  folded card; Fable's three minor items from part one's review; a small mark in the header.
+- **Built:**
+  - `sidebar`: four sections from what the observer and the world give, nothing guessed; files
+    marked A/M/D by the act (a `write` by whether its path existed, which the observer looks at on
+    the run's task before the act runs); bodies nested by the `Seen::From` chain, each in its
+    roster race's colour; every claim, path and name through `safe::one_line`;
+  - `mnemorph_memory::standing`: the reading `memory status` prints, now shared with the UI and
+    with the claim grounded last; the UI reads it and the roster through `Cmd::Survey` on a
+    runtime thread, at start and after each line;
+  - `kit`: a gauge (Bubbles' progress bar), `ViewportMsg::To`, `clip_left`;
+  - mouse capture; the transcript's window records each row's entry for a click; Alt+↑↓ moves the
+    focus between cards and scrolls it into view; Ctrl+T expands the focused card;
+  - the header's mark: MNEMORPH drawn across the water races' blues.
+- **Fixed:** `rearm` on a card not yet drawn no longer arms it from the key; every approval open
+  or waiting is denied however the loop ends; a terminal mode that fails after the terminal is
+  taken gives it back (`enter_with`).
+- **Tests:** each section with data and hostile text, the race colours and nesting, the toggle,
+  the fold at 99/100 columns, the wheel's spring, click and key expand/collapse, focus scrolling,
+  the three fixes, `standing`'s counts and latest claim; 2,000 messages with the sidebar open,
+  667 files and forty bodies, still ~3 ms a warm frame in a debug build.
+- **Learned:** a `write` result does not say whether it created the file; only a look before the
+  act tells A from M, and the observer runs at the right moment for it.
+
+---
+
+### [2026-10-26T22:05:00+01:00] rimuru — the terminal UI, part two: Fable's review
+- **Fable found:** the panic hook left mouse capture on; unordered surveys could overwrite a newer
+  reading with an older one; the bodies' depth-first order searched the whole list per body,
+  per frame; the observer stat a model-chosen path on the session's task, before the gate.
+- **Fixed:** `run::release` turns the mouse and bracketed paste off and pops the keyboard flags
+  once, from the hook or the drop; `Cmd::Survey(seq)` and `Msg::Surveyed { seq, .. }` drop stale
+  readings; `Bodies` keeps a name and parent→children index as events fold in, and `walk` is
+  lazy; the observer posts a `write`'s path (`Msg::Writes`) and `Cmd::Look` checks it on a runtime
+  thread.
+- **Learned:** a look off the session's task races the write it looks for. Only "not there" is
+  proof (the write created it), so the A mark may arrive late and upgrade an M; "there" proves
+  nothing.
+- **Tests:** release pops once and turns both modes off twice; a late survey is ignored; 3,030
+  bodies walk in tree order and draw under the frame budget; a look answered before or after the
+  result, a raced "there", a delete-then-write, a failed write.

@@ -36,6 +36,10 @@ pub struct Call {
     pub outcome: Option<Outcome>,
     /// The turn ended before it answered.
     pub stopped: bool,
+    /// Its folded output or diff shown whole.
+    pub expanded: bool,
+    /// It holds the focus: a key expands or folds it.
+    pub focused: bool,
 }
 
 /// One thing in the transcript.
@@ -121,6 +125,8 @@ pub struct Transcript {
     pub usage: Usage,
     /// The orders held on the shared work queue.
     pub held: u32,
+    /// The call holding the focus.
+    focus: Option<usize>,
 }
 
 impl Transcript {
@@ -274,6 +280,8 @@ impl Transcript {
             input,
             outcome: None,
             stopped: false,
+            expanded: false,
+            focused: false,
         }));
         self.running.insert(id.to_owned(), self.entries.len() - 1);
     }
@@ -297,6 +305,8 @@ impl Transcript {
             input: Value::Null,
             outcome: Some(outcome),
             stopped: false,
+            expanded: false,
+            focused: false,
         }));
     }
 
@@ -383,56 +393,144 @@ impl Transcript {
         }
     }
 
-    /// The window `height` lines tall, `offset` lines up from the tail, at `ctx`'s width; and
-    /// how far up the transcript goes, once a frame has laid it out to the top.
-    #[must_use]
-    pub fn window(&self, ctx: &Ctx<'_>, height: usize, offset: usize) -> (Lines, Option<usize>) {
-        let want = height + offset;
-        let mut tail: Vec<Lines> = Vec::new();
-        let mut have = 0;
-        if !self.streaming.trim().is_empty() {
-            let live = blocks::render(
-                &Entry::Assistant {
-                    text: self.streaming.clone(),
-                    head: !self.headed,
-                },
-                self.entries.last(),
-                ctx,
-            );
-            have += live.len();
-            tail.push(live);
-        }
+    /// Entry `i`'s lines at `ctx`, laid out once per width, theme and spinner frame.
+    fn laid(&self, i: usize, ctx: &Ctx<'_>) -> Lines {
         let mut cache = self.cache.borrow_mut();
+        let entry = &self.entries[i];
+        let frame = match entry {
+            Entry::Tool(c) if c.outcome.is_none() && !c.stopped => ctx.frame,
+            _ => 0,
+        };
+        let key = (ctx.width, ctx.theme.variant, frame);
+        let fresh = cache[i].as_ref().is_some_and(|l| l.key == key);
+        if !fresh {
+            let prev = i.checked_sub(1).map(|p| &self.entries[p]);
+            cache[i] = Some(Laid {
+                key,
+                lines: blocks::render(entry, prev, ctx),
+            });
+        }
+        cache[i]
+            .as_ref()
+            .map(|l| l.lines.clone())
+            .unwrap_or_default()
+    }
+
+    /// The text still streaming, laid out: never cached, it changes with every delta.
+    fn live(&self, ctx: &Ctx<'_>) -> Lines {
+        if self.streaming.trim().is_empty() {
+            return Vec::new();
+        }
+        blocks::render(
+            &Entry::Assistant {
+                text: self.streaming.clone(),
+                head: !self.headed,
+            },
+            self.entries.last(),
+            ctx,
+        )
+    }
+
+    /// The window `height` lines tall, `offset` lines up from the tail, at `ctx`'s width.
+    #[must_use]
+    pub fn window(&self, ctx: &Ctx<'_>, height: usize, offset: usize) -> Window {
+        let want = height + offset;
+        let mut tail: Vec<(Option<usize>, Lines)> = Vec::new();
+        let live = self.live(ctx);
+        let mut have = live.len();
+        tail.push((None, live));
         let mut i = self.entries.len();
         while i > 0 && have < want {
             i -= 1;
-            let entry = &self.entries[i];
-            let frame = match entry {
-                Entry::Tool(c) if c.outcome.is_none() && !c.stopped => ctx.frame,
-                _ => 0,
-            };
-            let key = (ctx.width, ctx.theme.variant, frame);
-            let fresh = cache[i].as_ref().is_some_and(|l| l.key == key);
-            if !fresh {
-                let prev = i.checked_sub(1).map(|p| &self.entries[p]);
-                cache[i] = Some(Laid {
-                    key,
-                    lines: blocks::render(entry, prev, ctx),
-                });
-            }
-            let lines = cache[i]
-                .as_ref()
-                .map(|l| l.lines.clone())
-                .unwrap_or_default();
+            let lines = self.laid(i, ctx);
             have += lines.len();
-            tail.push(lines);
+            tail.push((Some(i), lines));
         }
         let top = (i == 0).then(|| have.saturating_sub(height));
-        let all: Lines = tail.into_iter().rev().flatten().collect();
-        let end = all.len().saturating_sub(offset.min(all.len()));
+        let mut lines: Lines = Vec::with_capacity(have);
+        let mut owners: Vec<Option<usize>> = Vec::with_capacity(have);
+        for (owner, block) in tail.into_iter().rev() {
+            owners.extend(std::iter::repeat_n(owner, block.len()));
+            lines.extend(block);
+        }
+        let end = lines.len().saturating_sub(offset.min(lines.len()));
         let start = end.saturating_sub(height);
-        (all[start..end].to_vec(), top)
+        lines.truncate(end);
+        owners.truncate(end);
+        Window {
+            lines: lines.split_off(start),
+            owners: owners.split_off(start),
+            top,
+        }
     }
+
+    /// Entry `i`'s height and the lines below it to the tail, at `ctx`: where a scroll must go
+    /// to show it. Lays out only the entries from `i` down.
+    #[must_use]
+    pub fn place(&self, i: usize, ctx: &Ctx<'_>) -> (usize, usize) {
+        let below: usize = (i + 1..self.entries.len())
+            .map(|j| self.laid(j, ctx).len())
+            .sum::<usize>()
+            + self.live(ctx).len();
+        (self.laid(i, ctx).len(), below)
+    }
+
+    /// The tool calls, by entry, oldest first.
+    pub fn cards(&self) -> impl DoubleEndedIterator<Item = usize> + '_ {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| matches!(e, Entry::Tool(_)))
+            .map(|(i, _)| i)
+    }
+
+    /// The call holding the focus.
+    #[must_use]
+    pub fn focused(&self) -> Option<usize> {
+        self.focus
+    }
+
+    /// Give entry `i` the focus, or no entry: each call whose look changes is laid out again.
+    pub fn focus(&mut self, i: Option<usize>) {
+        let i = i.filter(|&i| matches!(self.entries.get(i), Some(Entry::Tool(_))));
+        if i == self.focus {
+            return;
+        }
+        for (at, on) in [(self.focus, false), (i, true)] {
+            if let Some(at) = at
+                && let Some(Entry::Tool(c)) = self.entries.get_mut(at)
+            {
+                c.focused = on;
+                self.touch(at);
+            }
+        }
+        self.focus = i;
+    }
+
+    /// Expand entry `i`'s folded output, or fold it again; `false` when it is not a call with
+    /// anything folded.
+    pub fn toggle(&mut self, i: usize) -> bool {
+        let Some(Entry::Tool(c)) = self.entries.get_mut(i) else {
+            return false;
+        };
+        if !blocks::foldable(c) {
+            return false;
+        }
+        c.expanded = !c.expanded;
+        self.touch(i);
+        true
+    }
+}
+
+/// What a frame shows of the transcript.
+#[derive(Debug, Clone, Default)]
+pub struct Window {
+    /// Its lines.
+    pub lines: Lines,
+    /// The entry each line belongs to; `None` for the text still streaming.
+    pub owners: Vec<Option<usize>>,
+    /// How far up the transcript goes, once a frame has laid it out to the top.
+    pub top: Option<usize>,
 }
 
 /// Whether `text` ends inside a fenced code block: a fence opens with three or more backticks

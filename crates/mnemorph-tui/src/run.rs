@@ -3,12 +3,12 @@
 //! coalesced to at most [`FPS`] a second, however fast the model streams.
 
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
-use mnemorph_loop::{Interrupt, Observer, Opened, Seen, Steer, StreamEvent};
+use mnemorph_loop::{Beat, Interrupt, Observer, Opened, Seen, Steer, StreamEvent};
 use mnemorph_server::protocol::Event;
 use ratatui::crossterm::event::{self as term, Event as TermEvent, KeyEventKind};
 use ratatui::crossterm::{execute, terminal};
@@ -50,24 +50,52 @@ impl FrameClock {
     }
 }
 
-/// The observer that turns what the run did into messages, as the server turns it into events:
-/// a commissioned body's beat is named by the innermost body it came from.
+/// The observer that turns what the run did into messages, as the server turns it into events: a
+/// commissioned body's beat comes with the chain of bodies it came through. It also tells the
+/// sidebar what recall gave the session's ask, and each `write`'s path — the UI looks at it off
+/// this task ([`Cmd::Look`]): the observer runs on the session's task and never touches the disk.
 #[must_use]
 pub fn observer(tx: Sender<Msg>) -> Observer {
     Arc::new(move |seen: &Seen| {
-        let mut below = None;
+        let mut chain = Vec::new();
         let mut inner = seen;
         while let Seen::From { body, seen, .. } = inner {
-            below = Some(body.clone());
+            chain.push(body.clone());
             inner = seen;
         }
+        match inner {
+            Seen::Beat(Beat::Recall { anchors, .. }) if chain.is_empty() => {
+                let _ = tx.send(Msg::Recalled(anchors.len()));
+            }
+            Seen::Beat(Beat::Model { content, .. }) => {
+                for (id, path) in content.iter().filter_map(written) {
+                    let _ = tx.send(Msg::Writes { id, path });
+                }
+            }
+            _ => {}
+        }
         for event in mnemorph_server::events(inner) {
-            let _ = tx.send(Msg::Event {
-                event,
-                below: below.clone(),
-            });
+            let msg = if chain.is_empty() {
+                Msg::Event { event, below: None }
+            } else {
+                Msg::Below {
+                    event,
+                    chain: chain.clone(),
+                }
+            };
+            let _ = tx.send(msg);
         }
     })
+}
+
+/// A journaled block that is a `write` call: its id and path.
+fn written(block: &serde_json::Value) -> Option<(String, String)> {
+    let s = |k: &str| block.get(k).and_then(serde_json::Value::as_str);
+    if s("type")? != "tool_use" || s("name")? != "write" {
+        return None;
+    }
+    let path = block.get("input")?.get("path")?.as_str()?;
+    Some((s("id")?.to_owned(), path.to_owned()))
 }
 
 /// The gate whose cards reach the loop through `tx`.
@@ -79,6 +107,7 @@ pub fn gate(tx: Sender<Msg>) -> Arc<TuiGate> {
 /// The session, driven on a runtime of its own: lines go in, messages come out.
 pub struct Host {
     tx: Sender<Msg>,
+    world: PathBuf,
     lines: tokio::sync::mpsc::UnboundedSender<String>,
     interrupt: Arc<Interrupt>,
     steer: Steer,
@@ -101,6 +130,7 @@ impl Host {
         let (lines, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let world = opened.world.clone();
         let mut session = opened.session;
+        let home = opened.world;
         let done = tx.clone();
         let deltas = tx.clone();
         let driver = runtime.spawn(async move {
@@ -120,6 +150,7 @@ impl Host {
         supervise(runtime.handle(), driver, tx.clone());
         Ok(Self {
             tx,
+            world: home,
             lines,
             interrupt,
             steer,
@@ -143,6 +174,21 @@ impl Host {
             Cmd::Interrupt => self.interrupt.fire(),
             Cmd::Answer(pending, answer) => {
                 let _ = pending.answer(answer);
+            }
+            Cmd::Look { id, path } => {
+                let (tx, world) = (self.tx.clone(), self.world.clone());
+                // A blocking thread of the runtime's: a hung mount holds it, never the session.
+                self.runtime.spawn_blocking(move || {
+                    let existed = world.join(&path).symlink_metadata().is_ok();
+                    let _ = tx.send(Msg::Prior { id, existed });
+                });
+            }
+            Cmd::Survey(seq) => {
+                let (tx, world) = (self.tx.clone(), self.world.clone());
+                self.runtime.spawn_blocking(move || {
+                    let survey = crate::sidebar::survey(&world);
+                    let _ = tx.send(Msg::Surveyed { seq, survey });
+                });
             }
             Cmd::Quit => return false,
         }
@@ -187,41 +233,91 @@ struct Screen(ratatui::DefaultTerminal);
 
 impl Screen {
     fn enter() -> std::io::Result<Self> {
-        let original = std::panic::take_hook();
-        let terminal = ratatui::try_init()?;
-        // A panic on the UI thread gives the terminal back before its message prints. One on
-        // another thread — the session's — is the UI's to report (`supervise`): the screen
-        // stays, and its message would only scribble over it.
-        let ui = std::thread::current().id();
-        std::panic::set_hook(Box::new(move |info| {
-            if std::thread::current().id() == ui {
-                ratatui::restore();
-                original(info);
-            }
-        }));
-        execute!(std::io::stdout(), term::EnableBracketedPaste)?;
+        enter_with(
+            || {
+                let original = std::panic::take_hook();
+                let terminal = ratatui::try_init()?;
+                // A panic on the UI thread gives the terminal back before its message prints.
+                // One on another thread — the session's — is the UI's to report (`supervise`):
+                // the screen stays, and its message would only scribble over it.
+                let ui = std::thread::current().id();
+                std::panic::set_hook(Box::new(move |info| {
+                    if std::thread::current().id() == ui {
+                        give_back();
+                        original(info);
+                    }
+                }));
+                Ok(Self(terminal))
+            },
+            Self::modes,
+        )
+    }
+
+    /// The terminal's modes: pasted text whole, the mouse's wheel and clicks, keys told apart.
+    fn modes() -> std::io::Result<()> {
+        let mut out = std::io::stdout();
+        execute!(out, term::EnableBracketedPaste, term::EnableMouseCapture)?;
         if terminal::supports_keyboard_enhancement().unwrap_or(false) {
             execute!(
-                std::io::stdout(),
+                out,
                 term::PushKeyboardEnhancementFlags(
                     term::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 )
             )?;
+            PUSHED.store(true, std::sync::atomic::Ordering::SeqCst);
         }
-        Ok(Self(terminal))
+        Ok(())
     }
+}
+
+/// Whether the keyboard enhancement flags are pushed: popped once, by whichever gives the
+/// terminal back first — the panic hook or the screen's drop.
+static PUSHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Unset the modes the UI set, into `out`: the keyboard flags popped if still pushed, the mouse
+/// and bracketed paste turned off. Safe to run twice: only the pop is once-only, and turning a
+/// mode off again does nothing.
+///
+/// # Errors
+///
+/// `out` cannot be written.
+pub fn release(out: &mut impl std::io::Write) -> std::io::Result<()> {
+    if PUSHED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        ratatui::crossterm::queue!(out, term::PopKeyboardEnhancementFlags)?;
+    }
+    ratatui::crossterm::queue!(out, term::DisableMouseCapture, term::DisableBracketedPaste)?;
+    out.flush()
+}
+
+/// The terminal given back whole: its modes, then raw mode and the alternate screen — before a
+/// panic's message prints, and on the screen's drop.
+fn give_back() {
+    let mut out = std::io::stdout();
+    let _ = release(&mut out);
+    ratatui::restore();
+    let _ = out.flush();
 }
 
 impl Drop for Screen {
     fn drop(&mut self) {
-        let mut out = std::io::stdout();
-        if terminal::supports_keyboard_enhancement().unwrap_or(false) {
-            let _ = execute!(out, term::PopKeyboardEnhancementFlags);
-        }
-        let _ = execute!(out, term::DisableBracketedPaste);
-        ratatui::restore();
-        let _ = out.flush();
+        give_back();
     }
+}
+
+/// Take the terminal with `take`, then set its modes with `modes`. The taken screen is owned
+/// before the modes are set: when setting them fails, it is dropped — the terminal given back —
+/// before the error returns.
+///
+/// # Errors
+///
+/// `take` or `modes` failed.
+pub fn enter_with<S>(
+    take: impl FnOnce() -> std::io::Result<S>,
+    modes: impl FnOnce() -> std::io::Result<()>,
+) -> std::io::Result<S> {
+    let screen = take()?;
+    modes()?;
+    Ok(screen)
 }
 
 /// Read the terminal's input on a thread of its own, as messages.
@@ -233,6 +329,7 @@ fn read_input(tx: Sender<Msg>) {
                     Msg::KeyAt(k, Instant::now())
                 }
                 TermEvent::Paste(s) => Msg::Paste(s),
+                TermEvent::Mouse(m) => Msg::Mouse(m),
                 TermEvent::Resize(w, h) => Msg::Resize(w, h),
                 _ => continue,
             };
@@ -284,10 +381,10 @@ pub fn run(model: Model, host: &Host, tx: Sender<Msg>, rx: &Receiver<Msg>) -> st
     }
     read_input(tx);
     let result = event_loop(&mut model, host, &mut screen.0, rx);
-    // An approval still open is denied: the human left without answering it.
-    if let Some(a) = model.gate.take() {
-        a.card
-            .answer(mnemorph_loop::GateAnswer::Deny("the human left".into()));
+    // However the loop ended, every approval still open or waiting is denied: the human left
+    // without answering it.
+    for cmd in app::leave(&mut model) {
+        host.run(cmd);
     }
     drop(screen);
     result
@@ -417,6 +514,51 @@ mod tests {
         for sig in [SIGTERM, SIGHUP, SIGINT, SIGQUIT] {
             assert!(QUIT_SIGNALS.contains(&sig), "{sig}");
         }
+    }
+
+    #[test]
+    fn a_mode_that_fails_after_the_terminal_is_taken_gives_it_back() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct Taken<'a>(&'a AtomicBool);
+        impl Drop for Taken<'_> {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let given_back = AtomicBool::new(false);
+        let r = enter_with(
+            || Ok(Taken(&given_back)),
+            || Err(std::io::Error::other("bracketed paste refused")),
+        );
+        assert!(r.is_err());
+        assert!(given_back.load(Ordering::SeqCst), "the terminal was kept");
+        let ok = AtomicBool::new(false);
+        let screen = enter_with(|| Ok(Taken(&ok)), || Ok(())).unwrap();
+        assert!(!ok.load(Ordering::SeqCst), "given back while in use");
+        drop(screen);
+    }
+
+    #[test]
+    fn releasing_turns_every_mode_off_and_pops_the_keys_once() {
+        PUSHED.store(true, std::sync::atomic::Ordering::SeqCst);
+        let mut first = Vec::new();
+        release(&mut first).unwrap();
+        let first = String::from_utf8(first).unwrap();
+        assert!(
+            first.contains("\x1b[<1u"),
+            "the keyboard flags popped: {first:?}"
+        );
+        assert!(first.contains("\x1b[?1000l"), "the mouse off: {first:?}");
+        assert!(
+            first.contains("\x1b[?2004l"),
+            "bracketed paste off: {first:?}"
+        );
+        // The hook, then the drop: the second release turns the modes off again, pops nothing.
+        let mut second = Vec::new();
+        release(&mut second).unwrap();
+        let second = String::from_utf8(second).unwrap();
+        assert!(!second.contains("\x1b[<1u"), "{second:?}");
+        assert!(second.contains("\x1b[?1000l") && second.contains("\x1b[?2004l"));
     }
 
     #[test]
