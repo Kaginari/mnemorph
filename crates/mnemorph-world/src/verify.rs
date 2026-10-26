@@ -126,10 +126,9 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
 /// from the project's manifest — never a model's words: an ontology fact is creatures' text, and a
 /// suggested line is one the human may paste. Only ever suggested: the card is the human's.
 ///
-/// A Cargo workspace whose root is itself a package is narrowed to that package
-/// (`cargo test -p <name>`), its name taken only when it is a name Cargo itself accepts — letters,
-/// digits, `-` and `_` — so nothing but an identifier reaches the line. A compiled project's cold
-/// build can still outrun the gate's limit: [`missing_session_verify`] says so.
+/// A Cargo project is suggested whole, `cargo test --workspace`: every member's tests, and no name
+/// read from its manifest. A compiled project's cold build can outrun the gate's limit:
+/// [`missing_session_verify`] says so.
 #[must_use]
 pub fn suggest(world: &Path) -> Option<String> {
     detected(world).map(|d| d.command)
@@ -151,7 +150,7 @@ fn detected(world: &Path) -> Option<Detected> {
     };
     if has("Cargo.toml") {
         return Some(Detected {
-            command: cargo(world),
+            command: "cargo test --workspace".into(),
             compiled: true,
         });
     }
@@ -189,44 +188,6 @@ fn detected(world: &Path) -> Option<Detected> {
     make.lines()
         .any(|l| l.starts_with("test:"))
         .then(|| plain("make test"))
-}
-
-/// Cargo's test command: the root package alone when the root is a package of a workspace with
-/// members, else the workspace.
-fn cargo(world: &Path) -> String {
-    let manifest = fs::read_to_string(world.join("Cargo.toml"))
-        .ok()
-        .and_then(|t| t.parse::<toml::Table>().ok());
-    let Some(manifest) = manifest else {
-        return "cargo test --workspace".into();
-    };
-    let members = manifest
-        .get("workspace")
-        .and_then(|w| w.get("members"))
-        .and_then(toml::Value::as_array)
-        .is_some_and(|m| !m.is_empty());
-    let package = manifest
-        .get("package")
-        .and_then(|p| p.get("name"))
-        .and_then(toml::Value::as_str)
-        .filter(|n| cargo_name(n));
-    match package {
-        Some(name) if members => format!("cargo test -p {name}"),
-        _ => "cargo test --workspace".into(),
-    }
-}
-
-/// A package name Cargo accepts: 1 to 64 ASCII letters, digits, `-` and `_`, not led by a digit
-/// or a dash. Nothing a shell reads as more than a word.
-fn cargo_name(name: &str) -> bool {
-    (1..=64).contains(&name.len())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
-        && name
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
 }
 
 /// The session's card has no verify line: what the end gate cannot then do, and the line to add —

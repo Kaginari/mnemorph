@@ -317,9 +317,8 @@ repository is its soil, so right author holds by construction. A card with no ve
 check, and then no claim of a solo session is ever grounded: `mnemorph memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
-model's words, since the human may paste it — for the human to add. A Cargo workspace whose root
-is a package of its own is narrowed to that package (`cargo test -p <name>`), the name taken only
-when it is one Cargo accepts, so nothing but an identifier reaches the line. For a compiled
+model's words, since the human may paste it — for the human to add. A Cargo project is suggested
+whole, `cargo test --workspace`, with no name read from its manifest. For a compiled
 project (Cargo, Go, TypeScript) the suggestion also says that a cold build may outrun the limit
 on each verify command, and names the key that raises it. The gate runs:
 
