@@ -4943,3 +4943,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   possible while only reasoning has been shown).
 - **Open (@?):** the server's protocol does not yet carry `Thinking`/`ToolInput`; the Ctrl+K
   palette and the per-body view (Ctrl+T in Isekai) are left for a later part.
+
+---
+
+### [2026-10-27T00:30:00+01:00] rimuru — the terminal UI, part three: Opus's review and the real portraits
+- **Art:** the eleven races' idle loops at 32 px (mnemorph-animations `df20cfa`,
+  `gen/mnanim.py --size 32`, 1.1 MB) replace the placeholder and its tint; the sidebar widens to
+  36 columns for the 32-column portrait, still folding below 100; the head keeps only the state
+  under it. 2,000 messages with the portrait playing: ~5.5 ms a streaming frame (debug).
+- **Opus found, fixed, tested:** ↑↓ from no pick landed on "Yes" and ↓ wrapped through it — now
+  from no pick to "No", clamped at the ends, and ↓ then Enter denies; a group with a stopped call
+  read "ok" — it counts "N stopped"; a retry that streamed reasoning twice left it doubled — the
+  journaled text replaces whatever streamed; a non-ASCII or overflowing frame could panic the
+  decoder — an error now; the toast drew over the approval — hidden while a card is open.
+- **Learned:** an arrow on a gate card is a pick like any other: its landing spot is a safety
+  default, and the safe default is the denial.

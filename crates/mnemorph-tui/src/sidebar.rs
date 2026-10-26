@@ -1,7 +1,7 @@
 //! The sidebar: a column beside the transcript, toggled with Ctrl+O and folded away on a narrow
-//! terminal, in Isekai's look: the working body's portrait at its head over the world, the model
-//! and the state, then four sections, each folded or opened by a click on its title (`▾` open,
-//! `▸` folded), each drawn only from what the observer or the world gave:
+//! terminal, in Isekai's look: the working body's portrait at its head over its state, then four
+//! sections, each folded or opened by a click on its title (`▾` open, `▸` folded), each drawn
+//! only from what the observer or the world gave:
 //!
 //! - **vitals** — the context against its stress line as a gauge, the tokens, the spend;
 //! - **memory** — the notes recalled for this ask, the grounded and shared counts, the claim
@@ -33,9 +33,9 @@ use crate::safe::one_line;
 use crate::theme::Theme;
 
 /// The sidebar's width, its gutter included.
-pub const WIDTH: u16 = 32;
+pub const WIDTH: u16 = 36;
 /// The sidebar's height, in rows, from which the portrait sits at its head.
-pub const HEAD_FROM: usize = 34;
+pub const HEAD_FROM: usize = 36;
 /// The narrowest frame that keeps the sidebar: below it, the transcript takes the whole width.
 pub const FOLD_BELOW: u16 = 100;
 
@@ -568,7 +568,8 @@ pub fn band(t: &Theme, pct: u64) -> Style {
 
 /// The head: the portrait of the body working now — Rimuru for the session, a commissioned
 /// body's race while it acts — centred, playing its idle loop while it works and still on its
-/// first frame otherwise; under it the world, the model and the state, centred too.
+/// first frame otherwise; under it the state, centred too (the world and the model are on the
+/// frame's edges).
 fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
@@ -586,16 +587,10 @@ fn head(m: &Model, w: usize) -> Lines {
             Line::from(spans)
         }));
     }
-    let world = m.header.world.rsplit('/').next().unwrap_or(&m.header.world);
     let centred = |spans: Vec<Span<'static>>| {
         let line = truncate(Line::from(spans), w);
         crate::kit::text::fit(line, w, crate::kit::text::Align::Center, Style::new())
     };
-    out.push(centred(vec![Span::styled(one_line(world), t.rimuru())]));
-    out.push(centred(vec![Span::styled(
-        one_line(&m.header.model),
-        t.muted(),
-    )]));
     let mut state = crate::activity::chip(m);
     if who != m.header.body {
         state.insert(

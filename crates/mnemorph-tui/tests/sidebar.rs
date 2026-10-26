@@ -612,7 +612,8 @@ fn many_bodies_walk_as_a_tree_and_stay_cheap_to_draw() {
     assert_eq!(walked[1], (2, "slime-0-0".to_owned()));
     assert_eq!(walked[100], (2, "slime-0-99".to_owned()));
     assert_eq!(walked[101], (1, "orc-1".to_owned()));
-    let mut t = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    // Tall enough for the portrait at the head and the bodies under it.
+    let mut t = Terminal::new(TestBackend::new(120, 52)).unwrap();
     t.draw(|f| view(&m, f)).unwrap();
     let start = std::time::Instant::now();
     for _ in 0..20 {

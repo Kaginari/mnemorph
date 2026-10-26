@@ -235,9 +235,12 @@ impl Approval {
         let rows = act_rows(h);
         // The whole act in view: ↑↓ pick an answer. Cut: they read it.
         let whole = self.act(w).len() <= rows;
+        // ↑↓ move the pick one answer, stopping at the ends; from no pick they land on "No" —
+        // never on "Yes" unasked.
+        let last = ANSWERS.len() - 1;
         let step = match code {
-            KeyCode::Down if whole => Some(1),
-            KeyCode::Up if whole => Some(ANSWERS.len() - 1),
+            KeyCode::Down if whole => Some(self.picked().map_or(1, |p| (p + 1).min(last))),
+            KeyCode::Up if whole => Some(self.picked().map_or(1, |p| p.saturating_sub(1))),
             _ => None,
         };
         let scroll = match code {
@@ -292,8 +295,7 @@ impl Approval {
                 }
             }
             _ => {
-                if let Some(s) = step {
-                    let next = self.picked().map_or(0, |p| (p + s) % ANSWERS.len());
+                if let Some(next) = step {
                     self.pick(next, at);
                 }
             }

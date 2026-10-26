@@ -95,7 +95,8 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         dim(buf, inner, t);
         modal(m, below_label, buf);
     }
-    if let Some(toast) = &m.toast {
+    // A toast never covers the approval: it waits under the card, unseen, until it is gone.
+    if let Some(toast) = m.toast.as_ref().filter(|_| m.gate.is_none()) {
         let lines = toast.view(t);
         let width = lines.first().map_or(0, crate::kit::text::line_cells);
         let left = below_label.right().saturating_sub(to_u16(width));

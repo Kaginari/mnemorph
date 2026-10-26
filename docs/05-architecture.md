@@ -166,12 +166,12 @@ background as `COLORFGBG` reports it, else dark.
 | header | Mnemorph's mark (the name drawn across the water races' blues), the session's body and its model on the left; the session's id and its state on the right — `○ idle`, `● running bash 3s`, `◆ waiting for you` |
 | panes | labelled in small capitals on their edges: ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ, ꜱᴇꜱꜱɪᴏɴ (the sidebar), ᴀꜱᴋ (the input) |
 | welcome | the card the conversation opens on: Rimuru's portrait (still), the name and tagline, the races as chips, the world, the model and the session in small capitals, the first keys |
-| transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
+| transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
-| sidebar | at its head, on a column 34 rows tall or more, the portrait of the body working now (Rimuru for the session, a commissioned body's race while it acts) over the world, the model and the state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
+| sidebar | at its head, on a column 36 rows tall or more, the portrait of the body working now (Rimuru for the session, a commissioned body's race while it acts) over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
 | approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
-| toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring |
+| toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring; never drawn over an open approval |
 | status bar | the spend in dollars and tokens, the context against its stress line (gold from 75%, alarm from 90%), the keys that matter now, the world |
 
 | Key | Does |
@@ -185,7 +185,7 @@ background as `COLORFGBG` reports it, else dark.
 | Ctrl+O | show or hide the sidebar |
 | Esc | stop the turn; back to the end of the transcript |
 | Ctrl+C | stop the turn, or leave when none runs |
-| 1 or y, 2 or n, 3, then Enter | answer an approval — yes, no, or no with a reason typed for the model; ↑ ↓ pick while the whole act shows, and read a long act otherwise; Esc denies it |
+| 1 or y, 2 or n, 3, then Enter | answer an approval — yes, no, or no with a reason typed for the model; ↑ ↓ move the pick while the whole act shows — from no pick to No, stopping at the ends, never onto Yes unasked — and read a long act otherwise; Esc denies it |
 
 Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
 `/clear`, `/help`, `/quit`.
@@ -201,19 +201,20 @@ server's protocol does not carry them): the reasoning shows as one line that upd
 `◌ thinking · 12s · …its latest words` — and folds to `✓ thought for 12s` when the answer or a
 call begins, its text a key away. A provider that keeps its reasoning in opaque blocks shows it
 when the turn's blocks are journaled: the thought is placed where the step began, timed to the
-step's first output. A call's card appears at its first byte, its summary filling in as its
+step's first output; it replaces whatever streamed, so a retry that streamed the reasoning again
+never leaves it doubled. A call's card appears at its first byte, its summary filling in as its
 arguments arrive, its class read by the classifier off the UI thread; its duration is the time
 to its result. Time is the model's clock, advanced by its ticks.
 
-The portraits are idle loops 24 pixels square (24 columns by 12 rows) in the `.mnanim.json`
-format of Kaginari/mnemorph-animations, embedded from `assets/anims/` and decoded once per race
-into every frame's cells by `kit::mnanim` (the half-block rule of that repository's player); a
-race without its own loop there wears a placeholder slime tinted toward its colour. The portrait
-plays at the loop's own pace, 16 frames a second, advanced by elapsed time under the 30-frame
+The portraits are each race's idle loop, 32 pixels square (32 columns by 16 rows, 48 frames), in
+the `.mnanim.json` format of Kaginari/mnemorph-animations, embedded from `assets/anims/` (its
+README names the commit and command they came from) and decoded once per race, on first use,
+into every frame's cells by `kit::mnanim` — the half-block rule of that repository's player; a
+malformed file is an error, never a panic. The portrait plays at the loop's own pace, 16 frames a second, advanced by elapsed time under the 30-frame
 cap, only while a body works and the portrait is on screen; idle, it rests on its first frame and
 the UI schedules no tick for it.
 
-The sidebar takes 32 columns on the right from a 100-column terminal up, and folds away below it.
+The sidebar takes 36 columns on the right from a 100-column terminal up, and folds away below it.
 It shows only what the run or the world gives. The observer sends the chain of bodies each
 commissioned body's event came through (`Seen::From`), what recall gave the session's ask, and
 each `write`'s path; it never touches the disk on the session's task. The UI looks whether that

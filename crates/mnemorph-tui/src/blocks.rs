@@ -464,10 +464,18 @@ fn group_card(g: &Group, w: usize, ctx: &Ctx<'_>) -> Lines {
         .iter()
         .filter(|c| c.outcome.as_ref().is_some_and(|o| o.is_error))
         .count();
+    // A call the turn ended before it answered is neither ok nor failed: it is counted apart.
+    let stopped = g
+        .calls
+        .iter()
+        .filter(|c| c.outcome.is_none() && c.stopped)
+        .count();
     let dot = if g.running() {
         Span::styled(format!("{} ", ctx.spinner), Style::new().fg(hue.color()))
     } else if failed > 0 {
         Span::styled("● ", t.alarm())
+    } else if stopped > 0 {
+        Span::styled("● ", t.muted())
     } else {
         Span::styled("● ", t.ok())
     };
@@ -494,56 +502,76 @@ fn group_card(g: &Group, w: usize, ctx: &Ctx<'_>) -> Lines {
         ]));
     } else {
         let total: Duration = g.calls.iter().filter_map(|c| c.took).sum();
-        rows.push(Line::from(vec![
-            elbow,
+        let mut spans = vec![elbow];
+        if failed > 0 {
+            spans.push(Span::styled(format!("{failed} failed"), t.alarm()));
+        }
+        if stopped > 0 {
             if failed > 0 {
-                Span::styled(format!("{failed} failed"), t.alarm())
-            } else {
-                Span::styled("ok", t.ok())
-            },
-            Span::styled(" · ", t.frame()),
-            Span::styled(took(total), t.muted()),
-            Span::styled(" · ", t.frame()),
-            Span::styled(
-                if g.expanded {
-                    "ctrl+t folds"
-                } else {
-                    "ctrl+t lists them"
-                },
-                t.muted(),
-            ),
-        ]));
+                spans.push(Span::styled(" · ", t.frame()));
+            }
+            spans.push(Span::styled(format!("{stopped} stopped"), t.muted()));
+        }
+        if failed == 0 && stopped == 0 {
+            spans.push(Span::styled("ok", t.ok()));
+        }
+        rows.push(Line::from(
+            [
+                spans,
+                vec![
+                    Span::styled(" · ", t.frame()),
+                    Span::styled(took(total), t.muted()),
+                    Span::styled(" · ", t.frame()),
+                    Span::styled(
+                        if g.expanded {
+                            "ctrl+t folds"
+                        } else {
+                            "ctrl+t lists them"
+                        },
+                        t.muted(),
+                    ),
+                ],
+            ]
+            .concat(),
+        ));
     }
     if g.expanded {
-        let inner = Slab::inner(w);
-        for c in &g.calls {
-            let (mark, style) = match &c.outcome {
-                None if c.stopped => ("◌", t.muted()),
-                None => (ctx.spinner, Style::new().fg(hue.color())),
-                Some(o) if o.is_error => ("✗", t.alarm()),
-                Some(_) => ("✓", t.ok()),
-            };
-            let mut spans = vec![
-                Span::raw("    "),
-                Span::styled(format!("{mark} "), style),
-                Span::styled(format!("{} ", c.name), t.muted()),
-                Span::styled(summary(&c.name, &c.input), t.text()),
-            ];
-            if let Some(o) = c.outcome.as_ref().filter(|o| !o.is_error) {
-                let n = o.content.trim_end_matches('\n').lines().count();
-                spans.push(Span::styled(format!(" · {n} lines"), t.muted()));
-            }
-            if let Some(d) = c.took {
-                spans.push(Span::styled(format!(" · {}", took(d)), t.muted()));
-            }
-            rows.push(crate::kit::text::truncate(Line::from(spans), inner));
-        }
+        rows.extend(group_rows(g, Slab::inner(w), hue, ctx));
     }
     let mut surface = Surface::card(t, Some(hue), TINT);
     if g.focused {
         surface.spine = Some(t.p.holo);
     }
     Slab::new(surface).band(1).render(rows, w)
+}
+
+/// A group's calls, each on its row: its mark, its tool and summary, its size and time.
+fn group_rows(g: &Group, inner: usize, hue: Rgb, ctx: &Ctx<'_>) -> Lines {
+    let t = &ctx.theme;
+    let mut out = Vec::new();
+    for c in &g.calls {
+        let (mark, style) = match &c.outcome {
+            None if c.stopped => ("◌", t.muted()),
+            None => (ctx.spinner, Style::new().fg(hue.color())),
+            Some(o) if o.is_error => ("✗", t.alarm()),
+            Some(_) => ("✓", t.ok()),
+        };
+        let mut spans = vec![
+            Span::raw("    "),
+            Span::styled(format!("{mark} "), style),
+            Span::styled(format!("{} ", c.name), t.muted()),
+            Span::styled(summary(&c.name, &c.input), t.text()),
+        ];
+        if let Some(o) = c.outcome.as_ref().filter(|o| !o.is_error) {
+            let n = o.content.trim_end_matches('\n').lines().count();
+            spans.push(Span::styled(format!(" · {n} lines"), t.muted()));
+        }
+        if let Some(d) = c.took {
+            spans.push(Span::styled(format!(" · {}", took(d)), t.muted()));
+        }
+        out.push(crate::kit::text::truncate(Line::from(spans), inner));
+    }
+    out
 }
 
 /// The reasoning: live, one line that updates in place — its duration and its latest words;

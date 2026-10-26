@@ -356,12 +356,12 @@ impl Transcript {
     }
 
     /// The model's turn, whole, carried reasoning in its blocks: the step's thought takes the
-    /// whole text, or — when nothing streamed — a thought is placed where the step began, its
+    /// whole text — what streamed may differ, or be doubled by a retry that streamed it again — or — when nothing streamed — a thought is placed where the step began, its
     /// duration the time to the step's first output.
     pub fn reasoned(&mut self, text: &str) {
         if let Some(i) = self.step.thought {
             if let Some(Entry::Thought(t)) = self.entries.get_mut(i)
-                && t.text.len() < text.len()
+                && t.text != text
             {
                 text.clone_into(&mut t.text);
                 self.touch(i);

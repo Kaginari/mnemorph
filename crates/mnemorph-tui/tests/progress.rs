@@ -739,3 +739,152 @@ fn a_turn_frame_by_frame() {
     assert!(frames[5].1.contains("✓ end gate · pass"));
     assert!(frames[6].1.contains("Approval · ⚠ the human gate"));
 }
+
+/// Past the card's arming, as a human would be.
+fn armed() {
+    std::thread::sleep(mnemorph_tui::approval::ARM + Duration::from_millis(30));
+}
+
+/// A pick, the pause a human takes, then Enter.
+fn after_pause(m: &mut Model) -> Vec<Cmd> {
+    std::thread::sleep(mnemorph_tui::approval::CONFIRM + Duration::from_millis(20));
+    update(m, Msg::Key(KeyEvent::from(KeyCode::Enter)))
+}
+
+fn approved(cmds: &[Cmd]) -> bool {
+    cmds.iter()
+        .any(|c| matches!(c, Cmd::Answer(_, mnemorph_loop::GateAnswer::Approve)))
+}
+
+#[test]
+fn arrows_never_land_on_yes_unasked() {
+    let key = |m: &mut Model, code| update(m, Msg::Key(KeyEvent::from(code)));
+    // ↓ from no pick is "No": Enter denies, it never approves.
+    let mut m = model();
+    update(&mut m, Msg::Gate(card("git push")));
+    screen(&mut m, 100, 32);
+    armed();
+    key(&mut m, KeyCode::Down);
+    let cmds = after_pause(&mut m);
+    assert!(!approved(&cmds), "{cmds:?}");
+    assert!(
+        matches!(
+            cmds.as_slice(),
+            [Cmd::Answer(_, mnemorph_loop::GateAnswer::Deny(_))]
+        ),
+        "{cmds:?}"
+    );
+    // ↓ again and again stops on the last answer; it never wraps round to "Yes".
+    let mut m = model();
+    update(&mut m, Msg::Gate(card("git push")));
+    screen(&mut m, 100, 32);
+    armed();
+    for _ in 0..5 {
+        key(&mut m, KeyCode::Down);
+    }
+    assert_eq!(
+        m.gate.as_ref().map(|a| (a.choice, a.why)),
+        Some((Some(false), true))
+    );
+    // ↑ from no pick is "No" too; only a second ↑, asked for, reaches "Yes".
+    let mut m = model();
+    update(&mut m, Msg::Gate(card("git push")));
+    screen(&mut m, 100, 32);
+    armed();
+    key(&mut m, KeyCode::Up);
+    assert_eq!(m.gate.as_ref().and_then(|a| a.choice), Some(false));
+    key(&mut m, KeyCode::Up);
+    assert_eq!(m.gate.as_ref().and_then(|a| a.choice), Some(true));
+    assert!(approved(&after_pause(&mut m)));
+}
+
+#[test]
+fn a_group_with_a_stopped_call_says_so() {
+    let mut m = model();
+    send(&mut m, "look");
+    ev(
+        &mut m,
+        Event::TurnStarted {
+            text: "look".into(),
+        },
+    );
+    for (id, path) in [("1", "a.py"), ("2", "b.py")] {
+        ev(
+            &mut m,
+            Event::ToolCall {
+                id: id.into(),
+                name: "read".into(),
+                input: json!({"path": path}),
+            },
+        );
+    }
+    ev(
+        &mut m,
+        Event::ToolResult {
+            id: "1".into(),
+            content: "x".into(),
+            is_error: false,
+            cut: 0,
+        },
+    );
+    ev(
+        &mut m,
+        Event::TurnEnded {
+            ending: "interrupted".into(),
+        },
+    );
+    let scr = screen(&mut m, 100, 32);
+    assert!(scr.contains("⎿ 1 stopped"), "{scr}");
+    assert!(!scr.contains("⎿ ok"), "{scr}");
+}
+
+#[test]
+fn a_retried_stream_does_not_double_the_thought() {
+    let mut m = model();
+    send(&mut m, "think");
+    ev(
+        &mut m,
+        Event::TurnStarted {
+            text: "think".into(),
+        },
+    );
+    // The first attempt streamed its reasoning, failed before any answer, and the retry
+    // streamed it again.
+    update(&mut m, Msg::Thinking("Two steps.".into()));
+    update(&mut m, Msg::Thinking("Two steps.".into()));
+    ev(
+        &mut m,
+        Event::TextDelta {
+            text: "Done.".into(),
+        },
+    );
+    update(&mut m, Msg::Reasoned("Two steps.".into()));
+    let thought = m.transcript.entries().iter().find_map(|e| match e {
+        Entry::Thought(t) => Some(t.text.clone()),
+        _ => None,
+    });
+    assert_eq!(thought.as_deref(), Some("Two steps."));
+}
+
+#[test]
+fn a_toast_never_covers_the_approval() {
+    let mut m = model();
+    ev(
+        &mut m,
+        Event::GateVerdict {
+            passed: true,
+            verdict: "PASS".into(),
+            changed: vec![],
+            failures: vec![],
+            unverified: vec![],
+        },
+    );
+    for _ in 0..20 {
+        tick(&mut m, 1.0 / 30.0);
+    }
+    assert!(screen(&mut m, 100, 32).contains("◆ end gate pass"));
+    update(&mut m, Msg::Gate(card("git push")));
+    let scr = screen(&mut m, 100, 32);
+    assert!(!scr.contains("◆ end gate pass"), "{scr}");
+    assert!(scr.contains("Approval · ⚠ the human gate"));
+}

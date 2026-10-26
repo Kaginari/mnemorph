@@ -3,9 +3,9 @@
 //! with half blocks — the rule of that repository's `player` (`Anim::cell`), rebuilt here in a
 //! few lines rather than depended on.
 //!
-//! The loops ship inside the binary (`assets/anims/`, [`FILES`]): a race's own idle loop at 24
-//! pixels where it has one, else a placeholder tinted toward its colour. Each is decoded once per
-//! process into its frames' cells, and kept: a frame of the UI only reads the cache.
+//! The loops ship inside the binary (`assets/anims/`, [`source`]): each race's idle loop at 32
+//! pixels. Each is decoded once per process, on its first use, into its frames' cells, and kept:
+//! a frame of the UI only reads the cache.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -72,6 +72,10 @@ impl Anim {
                 .ok_or_else(|| format!("no {k}"))
         };
         let (width, height) = (size("width")?, size("height")?);
+        let digits = width
+            .checked_mul(height)
+            .and_then(|n| n.checked_mul(2))
+            .ok_or("a frame too large")?;
         let palette = doc["palette"]
             .as_array()
             .ok_or("no palette")?
@@ -85,7 +89,10 @@ impl Anim {
             .iter()
             .map(|f| {
                 let hex = f.as_str().ok_or("a frame is not text")?;
-                if hex.len() != width * height * 2 {
+                if !hex.is_ascii() {
+                    return Err("a frame that is not hex");
+                }
+                if hex.len() != digits {
                     return Err("a frame of the wrong size");
                 }
                 (0..hex.len())
@@ -188,42 +195,28 @@ pub fn lines(rows: &[Vec<Cell>], under: Option<Rgb>) -> Lines {
 }
 
 /// The portraits' size, in pixels: as many cells across, half as many rows down.
-pub const SIZE: usize = 24;
+pub const SIZE: usize = 32;
 
-/// The embedded files, by stem: `<race>-24` for a race's own idle loop, `placeholder-24` for the
-/// stand-in every race without its own wears, tinted.
-pub const FILES: &[(&str, &str)] = &[(
-    "placeholder-24",
-    include_str!("../../assets/anims/placeholder-24.mnanim.json"),
-)];
-
-/// How far the placeholder's body, light and shadow lean toward a race's colour.
-const TINT: f32 = 0.85;
-
-/// The file `race`'s portrait is drawn from, and the tint over it: its own, untinted, or the
-/// placeholder tinted toward its colour.
+/// The embedded idle loop of `race`.
 #[must_use]
-pub fn source(race: Race) -> Option<(&'static str, Option<Rgb>)> {
-    let find = |stem: String| FILES.iter().find(|(n, _)| *n == stem).map(|(_, f)| *f);
-    if let Some(own) = find(format!("{}-{SIZE}", race.name())) {
-        return Some((own, None));
+pub fn source(race: Race) -> &'static str {
+    macro_rules! anim {
+        ($name:literal) => {
+            include_str!(concat!("../../assets/anims/", $name, ".mnanim.json"))
+        };
     }
-    find(format!("placeholder-{SIZE}")).map(|f| (f, Some(crate::theme::RACES.of(race))))
-}
-
-impl Anim {
-    /// The placeholder's body (palette entry 1), light (2) and shadow (4) leaned toward `hue`;
-    /// its eyes (3) kept.
-    fn tinted(mut self, hue: Rgb) -> Self {
-        for (i, c) in self.palette.iter_mut().enumerate() {
-            *c = match i {
-                0 => c.mix(hue, TINT),
-                1 => c.mix(hue.mix(Rgb(255, 255, 255), 0.6), TINT),
-                3 => c.mix(hue.mix(Rgb(0, 0, 0), 0.45), TINT),
-                _ => *c,
-            };
-        }
-        self
+    match race {
+        Race::Rimuru => anim!("rimuru"),
+        Race::Elf => anim!("elf"),
+        Race::Orc => anim!("orc"),
+        Race::Slime => anim!("slime"),
+        Race::Kijin => anim!("kijin"),
+        Race::DarkElf => anim!("dark-elf"),
+        Race::HighElf => anim!("high-elf"),
+        Race::HighOrc => anim!("high-orc"),
+        Race::NamedSlime => anim!("named-slime"),
+        Race::Oni => anim!("oni"),
+        Race::ArchDarkElf => anim!("arch-dark-elf"),
     }
 }
 
@@ -269,12 +262,7 @@ pub fn portrait(race: Race) -> Option<Arc<Loop>> {
         .entry(race)
         .or_insert_with(|| {
             DECODES.fetch_add(1, Ordering::Relaxed);
-            let (file, tint) = source(race)?;
-            let anim = Anim::parse(file).ok()?;
-            let anim = match tint {
-                Some(hue) => anim.tinted(hue),
-                None => anim,
-            };
+            let anim = Anim::parse(source(race)).ok()?;
             Some(Arc::new(Loop {
                 frames: (0..anim.frames.len()).map(|f| anim.cells(f)).collect(),
                 fps: anim.fps,
@@ -328,23 +316,27 @@ mod tests {
     }
 
     #[test]
-    fn every_embedded_file_decodes() {
-        for (name, file) in FILES {
-            let a = Anim::parse(file).unwrap_or_else(|e| panic!("{name}: {e}"));
-            assert_eq!((a.width, a.height), (SIZE, SIZE), "{name}");
+    fn every_embedded_loop_decodes_at_its_size() {
+        for race in Race::ALL {
+            let a = Anim::parse(source(race)).unwrap_or_else(|e| panic!("{race:?}: {e}"));
+            assert_eq!((a.width, a.height), (SIZE, SIZE), "{race:?}");
+            assert!(a.frames.len() > 1, "{race:?} is a loop");
         }
+        assert_ne!(portrait(Race::Orc), portrait(Race::Elf), "each its own");
     }
 
     #[test]
-    fn a_race_without_its_own_portrait_wears_the_placeholder_tinted() {
-        let (file, tint) = source(Race::Orc).unwrap();
-        assert_eq!(file, FILES[0].1);
-        assert_eq!(tint, Some(crate::theme::RACES.orc));
-        assert_ne!(
-            portrait(Race::Orc),
-            portrait(Race::Elf),
-            "each in its own colour"
-        );
+    fn a_malformed_frame_is_an_error_never_a_panic() {
+        let doc = |w: &str, frame: &str| {
+            format!(
+                r##"{{"format":"mnanim","version":1,"width":{w},"height":1,"palette":["#ffffff"],"frames":["{frame}"]}}"##
+            )
+        };
+        // Four bytes of text, a multi-byte character among them: not hex, and no slice panics.
+        assert!(Anim::parse(&doc("2", "0é0")).is_err());
+        assert!(Anim::parse(&doc("2", "é01")).is_err());
+        // A size whose frame length overflows is refused, not wrapped.
+        assert!(Anim::parse(&doc(&u64::MAX.to_string(), "00")).is_err());
     }
 
     #[test]
