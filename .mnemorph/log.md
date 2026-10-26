@@ -3586,3 +3586,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 03;
   - `held_before` was extracted to keep `order` under 100 lines.
 - **Next:** Fable checks Opus's review.
+
+---
+
+### [2026-10-26T01:45:15+01:00] rimuru — #191: Fable checked Opus
+- **Fable confirmed Opus:** safe to merge. A skipped path stays in the dispatcher's view and
+  floats up; solo is not narrowed, so nothing is skipped there. One LOW: the second
+  `context_for` leaked a `/tmp` scratch dir per commission.
+- **Fixed:**
+  - `Grant` (`Context::write_grant`) is taken from the child's real context before it runs, with
+    no second context;
+  - `Context::admits` and the grant share one `admits` function, so the two cannot drift.

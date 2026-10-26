@@ -362,40 +362,35 @@ impl Context {
     /// told apart, and every change may be its.
     #[must_use]
     pub fn could_have_written(&self, path: &Path) -> bool {
+        self.write_grant().could_have_written(path)
+    }
+
+    /// What this body is granted, kept apart from the context: taken before a commission runs,
+    /// the put-back after it reads the grant the body ran with.
+    #[must_use]
+    pub fn write_grant(&self) -> Grant {
         // Seatbelt guards only on macOS: anywhere else it is no guard at all.
         let guarded = match self.sandbox {
             Sandbox::None(_) => false,
             Sandbox::Seatbelt(_) => cfg!(target_os = "macos"),
             Sandbox::Guard(_) => true,
         };
-        if !self.narrowed || !guarded {
-            return true;
+        Grant {
+            confined: self.narrowed && guarded,
+            world: self.world.clone(),
+            soil: self.soil.clone(),
+            except: self.except.clone(),
+            root_files: self.root_files,
+            seat: self.seat.clone(),
+            build: self.build.clone(),
+            nest: self.nest.clone(),
         }
-        let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
-            && self.seat.is_some()
-            && path.parent() == self.seat.as_deref();
-        self.admits(path)
-            || own_plan
-            || self.build.iter().any(|b| path.starts_with(b))
-            || self.nest.as_ref().is_some_and(|n| path.starts_with(n))
     }
 
     /// Whether the soil admits `path`: the longest covering claim decides, a tie to the
     /// exclusion; a root file by `root_files`, unless a claim excludes it.
     fn admits(&self, path: &Path) -> bool {
-        let best = |claims: &[PathBuf]| {
-            claims
-                .iter()
-                .filter(|c| path.starts_with(c))
-                .map(|c| c.components().count())
-                .max()
-        };
-        let root = (self.root_files && path.parent() == Some(self.world.as_path())).then_some(0);
-        match (best(&self.soil).max(root), best(&self.except)) {
-            (Some(w), Some(e)) => w > e,
-            (Some(_), None) => true,
-            (None, _) => false,
-        }
+        admits(&self.world, &self.soil, &self.except, self.root_files, path)
     }
 
     /// The body's own seat, relative to the world: its `plan.md` there is the one record the
@@ -752,4 +747,62 @@ fn ways_on(owner_of: Option<&OwnerOf>, shown: &str) -> String {
         .map(|f| f(shown))
         .filter(|w| !w.is_empty())
         .map_or_else(String::new, |w| format!(". {w}"))
+}
+
+/// A body's grant: what its commands and its file tools may write, under the guard it ran with.
+#[derive(Debug, Clone)]
+pub struct Grant {
+    /// A commissioned body under a kernel guard: only then can writers be told apart.
+    confined: bool,
+    world: PathBuf,
+    soil: Vec<PathBuf>,
+    except: Vec<PathBuf>,
+    root_files: bool,
+    seat: Option<PathBuf>,
+    build: Vec<PathBuf>,
+    nest: Option<PathBuf>,
+}
+
+impl Grant {
+    /// Whether the body could have written `path` (absolute). Confined, only its soil, its own
+    /// plan, its build output and its scratch; otherwise anything, since writers cannot be told
+    /// apart.
+    #[must_use]
+    pub fn could_have_written(&self, path: &Path) -> bool {
+        if !self.confined {
+            return true;
+        }
+        let admits = admits(&self.world, &self.soil, &self.except, self.root_files, path);
+        let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
+            && self.seat.is_some()
+            && path.parent() == self.seat.as_deref();
+        admits
+            || own_plan
+            || self.build.iter().any(|b| path.starts_with(b))
+            || self.nest.as_ref().is_some_and(|n| path.starts_with(n))
+    }
+}
+
+/// Whether a soil admits `path`: the longest covering claim decides, a tie to the exclusion; a
+/// root file by `root_files`, unless a claim excludes it.
+fn admits(
+    world: &Path,
+    soil: &[PathBuf],
+    except: &[PathBuf],
+    root_files: bool,
+    path: &Path,
+) -> bool {
+    let best = |claims: &[PathBuf]| {
+        claims
+            .iter()
+            .filter(|c| path.starts_with(c))
+            .map(|c| c.components().count())
+            .max()
+    };
+    let root = (root_files && path.parent() == Some(world)).then_some(0);
+    match (best(soil).max(root), best(except)) {
+        (Some(w), Some(e)) => w > e,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
 }

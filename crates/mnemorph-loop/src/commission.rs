@@ -478,14 +478,15 @@ pub(crate) async fn order(
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
-    let grant = context_for(&c.world, &roster, &a.to).map(|k| k.inherit(cx));
+    let child_cx = child_cx.inherit(cx);
+    let grant = child_cx.write_grant();
     let mut child = child_run(
         c,
         &roster,
         &a.to,
         parent,
         slice,
-        child_cx.inherit(cx).with_body(&a.to),
+        child_cx.with_body(&a.to),
         model,
     )
     .with_interrupt(Arc::clone(interrupt))
@@ -503,7 +504,7 @@ pub(crate) async fn order(
     let (mut landed, put_back, others) = repair(
         c,
         cx,
-        grant.as_ref(),
+        &grant,
         &roster,
         &a.to,
         &before,
@@ -1154,7 +1155,7 @@ fn others_note(others: &[PathBuf]) -> Option<String> {
 fn repair(
     c: &Commissioner,
     cx: &Context,
-    its: Option<&Context>,
+    its: &mnemorph_tools::Grant,
     roster: &Roster,
     name: &str,
     before: &crate::gate::Tree,
@@ -1172,7 +1173,7 @@ fn repair(
         }
         // Another writer's change — one this body's guard would not let it make — is neither its
         // landing nor its to put back: a second session's work stays as that session left it.
-        if its.is_some_and(|k| !k.could_have_written(&c.world.join(&rel))) {
+        if !its.could_have_written(&c.world.join(&rel)) {
             others.push(rel);
             continue;
         }
