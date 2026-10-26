@@ -235,6 +235,10 @@ pub struct Run {
     recalled: Option<Beat>,
     /// The anchors recalled into this ask: what a run-ending failure reconsolidates.
     anchors: Vec<mnemorph_memory::Anchor>,
+    /// Where this ask's messages start: what it said and did, for what it cited.
+    ask_from: usize,
+    /// The ask's last FAIL, with the gate's journal heading: what its run-ending failure revises by.
+    failed_in_ask: Option<(Vec<String>, Option<String>)>,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
@@ -313,6 +317,8 @@ impl Run {
             folded_upto: 0,
             recalled: None,
             anchors: Vec::new(),
+            ask_from: 0,
+            failed_in_ask: None,
             passed: None,
             sent: (Vec::new(), 0),
             noticed: false,
@@ -845,11 +851,9 @@ impl Run {
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
-        // A run-ending failure — a check that wrote, or a second FAIL — reconsolidates what the
-        // run recalled, once; a first failure writes nothing, and a check that gave no result is
-        // no failure of what the body knew.
-        if verdict.wrote || (*retried && verdict.verdict() == crate::gate::Verdict::Fail) {
-            self.reconsolidate(&verdict.failures, &answer, heading.as_deref());
+        // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
+        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote {
+            self.failed_in_ask = Some((verdict.failures.clone(), heading));
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
         // wrote would pass as the body's. The landing fails whole.
@@ -880,6 +884,12 @@ impl Run {
             "failed"
         };
         if *retried {
+            // The last chance spent after a FAIL: what the ask recalled is reconsolidated, once.
+            // A first failure writes nothing; a check that wrote, or that gave no result, says
+            // nothing of what the body knew.
+            if let Some((failures, heading)) = self.failed_in_ask.take() {
+                self.reconsolidate(&failures, heading.as_deref());
+            }
             return Some(Ending::Failed(format!(
                 "the end gate {how} twice: {}",
                 said.join("; ")
@@ -956,14 +966,25 @@ impl Run {
         }
     }
 
-    /// One revise note per failed act, linking the anchors this ask recalled — 0.9 towards one the
-    /// body's answer named, 0.4 towards one merely recalled — citing the gate's journal entry.
-    fn reconsolidate(&mut self, acts: &[String], answer: &str, heading: Option<&str>) {
+    /// The ask's recalled anchors revised by its FAIL — 0.9 towards one the ask's text or acts
+    /// named, 0.4 towards one merely recalled — citing the gate's journal entry.
+    fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
+        // What the ask said and did — its text and its acts' arguments — names the anchors it cited.
+        let said: String = self.messages[self.ask_from.min(self.messages.len())..]
+            .iter()
+            .flat_map(|m| &m.content)
+            .map(|b| match b {
+                Block::Text { text, .. } => text.clone(),
+                Block::ToolUse { input, .. } => input.to_string(),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         let anchors: Vec<mnemorph_memory::Anchor> = self
             .anchors
             .iter()
             .map(|a| mnemorph_memory::Anchor {
-                cited: answer.contains(&a.id),
+                cited: said.contains(&a.id),
                 ..a.clone()
             })
             .collect();
@@ -1150,6 +1171,8 @@ impl Run {
 
     /// Open an ask: its preface, its journal row, then the recall row that follows it.
     fn open_ask(&mut self, text: &str) -> String {
+        self.ask_from = self.messages.len();
+        self.failed_in_ask = None;
         let text = self.preface(text);
         self.record(&Beat::Ask { text: text.clone() });
         if let Some(recall) = self.recalled.take() {

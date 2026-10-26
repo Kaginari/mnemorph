@@ -3780,3 +3780,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** memory `a_run_ending_failure_revises_what_it_rode_on`; solo
   `a_run_ending_failure_revises_the_note_it_rode_on` (0.9, cited, citing the FAIL entry).
 - **Not yet:** confidence gained by three passes after recall.
+
+---
+
+### [2026-10-26T03:25:25+01:00] rimuru — #197's review: Fable
+- **Fable found:**
+  - one revise per gate line (8 foreign paths gave 8 permanent notes);
+  - "cited" read only the final answer;
+  - a FAIL then NOT_VERIFIED wrote nothing, while a check that wrote blamed the notes;
+  - raw test tails became note text.
+- **Fixed:**
+  - one revise per failed rule, each line by its first line, capped;
+  - cited by scanning the ask's text and its acts' arguments (`ask_from`);
+  - the ask keeps its last FAIL (`failed_in_ask`) and reconsolidates by it when the last chance
+    is spent, whatever the second verdict; a check that wrote never reconsolidates;
+  - docs 08 say so.
+- **Tests:** eight lines of one rule give one note; citation through a tool's arguments.

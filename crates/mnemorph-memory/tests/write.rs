@@ -170,3 +170,41 @@ fn a_run_ending_failure_revises_what_it_rode_on() {
     assert!(mine.contains_key(&personal[0]));
     let _ = fs::remove_dir_all(&w);
 }
+
+/// One failed rule is one revise note, however many lines it failed by: eight foreign paths are
+/// one `right author` failure.
+#[test]
+fn one_rule_failed_on_many_lines_is_one_revise_note() {
+    use mnemorph_memory::{Anchor, revise};
+    let w = std::env::temp_dir().join(format!("mnemorph-revise-rules-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(&w).unwrap();
+    let acts: Vec<String> = (0..8)
+        .map(|i| format!("right author: `lib/x{i}.rs` is slime-b's, not slime-a's\nmore detail"))
+        .collect();
+    let made = revise(
+        &w,
+        "slime-a",
+        &acts,
+        &[Anchor {
+            id: "n".into(),
+            personal: false,
+            dissent: false,
+            cited: false,
+        }],
+        "log.md v",
+    )
+    .unwrap();
+    assert_eq!(made.len(), 1);
+    let n = &fold(&read(&w, &Tier::Shared).unwrap().rows)[&made[0]];
+    assert!(
+        n.text.starts_with("right author: `lib/x0.rs`"),
+        "{}",
+        n.text
+    );
+    assert!(
+        !n.text.contains("more detail"),
+        "only each line's first line"
+    );
+    let _ = fs::remove_dir_all(&w);
+}

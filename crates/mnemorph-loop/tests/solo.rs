@@ -383,12 +383,13 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
             json!({"path": "out.txt", "content": "broken\n"}),
         ),
         answer("done"),
+        // The note is named in an act's arguments, not in the answer: still cited.
         tool(
             "t2",
             "write",
-            json!({"path": "out.txt", "content": "still broken\n"}),
+            json!({"path": "out.txt", "content": format!("still broken, per {note}\n")}),
         ),
-        answer(&format!("done, as {note} says")),
+        answer("done"),
     ]));
     let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
     let ending = ask(&mut run, "make out.txt say broken, the build is red").await;
@@ -405,7 +406,7 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     assert_eq!(r.links[0].note, note);
     assert!(
         (r.links[0].weight - 0.9).abs() < 1e-9,
-        "cited by the answer"
+        "cited by an act's arguments"
     );
     assert!(
         r.proof.as_deref().unwrap().contains("gate: FAIL"),

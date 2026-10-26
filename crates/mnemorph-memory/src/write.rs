@@ -265,7 +265,7 @@ pub fn ground(
     })
 }
 
-/// Reconsolidate a run-ending failure: one revise note per failed act, grounded at once — the
+/// Reconsolidate a run-ending failure: one revise note per failed rule, grounded at once — the
 /// failure is an observed fact — salience 1.0, confidence 0.9, written by the gate citing its
 /// verdict. It links every anchor recalled into the failed run, 0.9 towards one the act cited, 0.4
 /// towards one merely recalled, and never a dissenting note: corrections do not breed corrections.
@@ -291,8 +291,30 @@ pub fn revise(
     } else {
         Tier::Personal(owner.to_owned())
     };
-    let mut made = Vec::new();
+    // One note per failed rule — `right author`, `traits hold`, … — not per line: a landing that
+    // touched eight foreign files failed one rule. Each line is kept by its first line, cut: the
+    // note says what failed, never a test's whole tail.
+    let mut rules: Vec<(String, Vec<String>)> = Vec::new();
     for act in acts {
+        let rule = act.split(':').next().unwrap_or(act).trim().to_owned();
+        let first: String = act
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take(160)
+            .collect();
+        match rules.iter_mut().find(|(r, _)| *r == rule) {
+            Some((_, lines)) => lines.push(first),
+            None => rules.push((rule, vec![first])),
+        }
+    }
+    let mut made = Vec::new();
+    for (_, lines) in rules {
+        let mut act: String = lines.join("; ");
+        if act.chars().count() > 600 {
+            act = act.chars().take(600).collect::<String>() + "…";
+        }
         let links = targets
             .iter()
             .map(|r| crate::note::Link {
@@ -312,7 +334,7 @@ pub fn revise(
             By::Gate,
             Some(verdict.to_owned()),
             Change::Create {
-                text: act.clone(),
+                text: act,
                 tags: vec!["failure".into()],
                 owner: Some(owner.to_owned()),
                 polarity: Polarity::Revise,
