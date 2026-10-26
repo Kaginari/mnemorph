@@ -42,6 +42,7 @@ Usage:
   mnemorph relief <name> [--apply]   split a strained creature's ground in two young, or retire it
   mnemorph memory status [--json]    note events that do not resolve, retired notes, recall loops
   mnemorph memory wake <note>        restore a note the gate retired
+  mnemorph memory confirm <claim>    vouch for a proposed claim: grounded and shared
 
 Options:
   --world <dir>    the world to work in (default: the current directory)

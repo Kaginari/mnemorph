@@ -4567,3 +4567,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   never share a mark with new ones, and old journals keep their order.
 - **Test:** `ids_of_one_millisecond_sort_in_the_order_made` (1100 ids); checked to fail
   unpadded.
+
+---
+
+### [2026-10-26T14:54:48+01:00] rimuru — the confirmed route, live
+- **Why:** the gap matrix's last dead route. `Proof::confirmed` had no caller (the `confirm`
+  function is pass-credit, a different act).
+- **Files:**
+  - mnemorphd: `memory confirm <claim>` finds the proposed claim in any creature's tier and
+    grounds it by `Proof::confirmed("the human's word")`; a body is refused, and an id no creature
+    proposes is refused with a pointer to `memory status`;
+  - `memory status` lists the 10 newest proposed claims per creature, each with its vouch
+    command (`proposed_of`, `PROPOSED_SHOWN`);
+  - the help in core and CLI;
+  - docs 08.
+- **Test:** listed with its vouch; a body and an unknown id refused; the human's confirm grounds
+  it in shared memory.
+
+---
+
+### [2026-10-26T14:58:31+01:00] rimuru — memory confirm, Fable's review
+- **Fable:** safe to merge. A body cannot forge a confirm: it could unset `MNEMORPH_BODY`, but
+  the tripwire puts back any change it makes under `.mnemorph/`, the same border as `wake` and
+  `onto settle`.
+- **Fixed:**
+  - `confirm` reads only `.jsonl` tiers, so a stray directory no longer aborts it;
+  - `memory status --json` gives proposed claims their own `proposed` field, not `pathologies`
+    (`print_memory_json`, moved out of `memory` for its length).
+- **Test:** the JSON field and a stray directory.

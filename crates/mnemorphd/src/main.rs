@@ -15,6 +15,7 @@ Usage: mnemorphd [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
+       mnemorphd memory confirm <claim> [--world <dir>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -472,21 +473,27 @@ fn memory(args: &[String]) -> ExitCode {
             },
             "status" if verb.is_none() => verb = Some(None),
             "wake" if verb.is_none() => match it.next() {
-                Some(id) => verb = Some(Some(id.clone())),
+                Some(id) => verb = Some(Some(("wake", id.clone()))),
                 None => return refused(&"wake needs the note's id"),
+            },
+            "confirm" if verb.is_none() => match it.next() {
+                Some(id) => verb = Some(Some(("confirm", id.clone()))),
+                None => return refused(&"confirm needs the claim's id"),
             },
             other => return refused(&format!("unknown argument `{other}`; see --help")),
         }
     }
     let Some(verb) = verb else {
-        return refused(&"memory needs a verb: status, or wake <note>");
+        return refused(&"memory needs a verb: status, wake <note> or confirm <claim>");
     };
     let Ok(cwd) = std::env::current_dir() else {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
-    if let Some(id) = verb {
-        return wake(&world, &id);
+    match verb {
+        Some(("confirm", id)) => return confirm(&world, &id),
+        Some((_, id)) => return wake(&world, &id),
+        None => {}
     }
     let report = match mnemorph_server::world::memory::status(&world) {
         Ok(r) => r,
@@ -516,23 +523,24 @@ fn memory(args: &[String]) -> ExitCode {
                     "retired, kept dormant: {id} — {text} (undo: mnemorph memory wake {id})"
                 ));
             }
+            // What waits for a route, newest first: the human may vouch for any of it. JSON
+            // gives it a field of its own: a claim waiting is no pathology.
+            if json {
+                continue;
+            }
+            let open = proposed_of(&world, name);
+            for (id, text) in open.iter().take(PROPOSED_SHOWN) {
+                seen.push(format!(
+                    "proposed: {id} — {text} (vouch: mnemorph memory confirm {id})"
+                ));
+            }
+            if open.len() > PROPOSED_SHOWN {
+                seen.push(format!("proposed: {} more", open.len() - PROPOSED_SHOWN));
+            }
         }
     }
     if json {
-        let rows: Vec<serde_json::Value> = rows
-            .iter()
-            .map(|(name, found, seen)| {
-                serde_json::json!({
-                    "creature": name,
-                    "frozen": !found.is_empty() && name != SHARED,
-                    "unproven": found.iter().map(|u| serde_json::json!({
-                        "file": u.file, "event": u.event, "note": u.note, "why": u.why,
-                    })).collect::<Vec<_>>(),
-                    "pathologies": seen,
-                })
-            })
-            .collect();
-        println!("{}", serde_json::Value::Array(rows));
+        print_memory_json(&world, &rows);
     } else if rows.is_empty() {
         println!("no creature has memory here yet");
     } else {
@@ -546,6 +554,91 @@ fn memory(args: &[String]) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// `memory status --json`: each creature's unproven writes, pathologies and proposed claims.
+fn print_memory_json(
+    world: &Path,
+    rows: &[(
+        String,
+        Vec<mnemorph_server::world::memory::Unproven>,
+        Vec<String>,
+    )],
+) {
+    use mnemorph_server::world::memory::audit::SHARED;
+    let rows: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|(name, found, seen)| {
+            serde_json::json!({
+                "creature": name,
+                "frozen": !found.is_empty() && name != SHARED,
+                "unproven": found.iter().map(|u| serde_json::json!({
+                    "file": u.file, "event": u.event, "note": u.note, "why": u.why,
+                })).collect::<Vec<_>>(),
+                "pathologies": seen,
+                "proposed": proposed_of(world, name).iter().map(|(id, text)| {
+                    serde_json::json!({"id": id, "text": text})
+                }).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::Value::Array(rows));
+}
+
+/// How many proposed claims `memory status` shows per creature.
+const PROPOSED_SHOWN: usize = 10;
+
+/// A creature's proposed claims, newest first: id and text.
+fn proposed_of(world: &Path, name: &str) -> Vec<(String, String)> {
+    use mnemorph_server::world::memory::{Status, Tier, fold, read};
+    let mut open: Vec<_> = read(world, &Tier::Personal(name.to_owned()))
+        .map(|r| fold(&r.rows))
+        .unwrap_or_default()
+        .into_values()
+        .filter(|n| n.status == Status::Proposed && n.owner.as_deref() == Some(name))
+        .collect();
+    open.sort_by_key(|n| std::cmp::Reverse(n.born));
+    open.into_iter()
+        .map(|n| (n.id, n.text.chars().take(100).collect()))
+        .collect()
+}
+
+/// `memory confirm <claim>`: the human vouches for a proposed claim — the **confirmed** route —
+/// and it is grounded and shared, citing their word. A body never confirms one.
+fn confirm(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::memory::{Proof, ground, proposed};
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: confirming a claim is the human's act, never a body's"
+        ));
+    }
+    let owners: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .collect()
+        })
+        .unwrap_or_default();
+    for owner in owners {
+        match proposed(world, &owner, id) {
+            Ok(Some(claim)) => {
+                return match ground(world, claim, &Proof::confirmed("the human's word")) {
+                    Ok(_) => {
+                        println!("confirmed {id}: {owner}'s claim, grounded and shared");
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => refused(&format!("{id} could not be grounded: {e}")),
+                };
+            }
+            Ok(None) => {}
+            Err(e) => return refused(&format!("{owner}'s memory cannot be read: {e}")),
+        }
+    }
+    refused(&format!(
+        "no creature holds `{id}` as a proposed claim: `mnemorph memory status` lists them"
+    ))
 }
 
 /// `memory wake <note>`: the human restores a note the gate retired. A body never wakes one.
