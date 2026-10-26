@@ -574,7 +574,7 @@ fn order_of(
 /// running its verify lines over it, citing the journal entry the gate wrote. None when its gate
 /// ran nothing — a child that wrote nothing itself passes untouched, whatever its commissions
 /// landed.
-fn checked_proof(
+pub(crate) fn checked_proof(
     to: &str,
     passed: Option<(&crate::gate::GateVerdict, Option<&str>)>,
 ) -> Option<mnemorph_memory::Proof> {
@@ -597,7 +597,7 @@ fn checked_proof(
 /// A child that did not answer, or whose gate proved nothing, keeps its words personal. Says what
 /// it did, as a note for the report, and returns each claim it left proposed, `(id, text)`: what
 /// the dispatcher may accept.
-fn remember(
+pub(crate) fn remember(
     world: &Path,
     to: &str,
     ending: &Ending,
@@ -655,7 +655,7 @@ fn remember(
 
 /// File an answering child's `@U territory` facts in its name, and return the triage its parent
 /// owes: for each new free fact that resembles older ones, a line naming them and how to label it.
-fn file_facts(world: &Path, ending: &Ending, by: &str) -> Vec<String> {
+pub(crate) fn file_facts(world: &Path, ending: &Ending, by: &str) -> Vec<String> {
     let Ending::Answered(text) = ending else {
         return Vec::new();
     };

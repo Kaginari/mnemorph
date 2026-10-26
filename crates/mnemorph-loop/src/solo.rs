@@ -33,7 +33,9 @@ may be deleted or skipped. If it fails, you get one chance to fix it.
 - If the ask is ambiguous, ask back rather than guess.
 
 When you are done, answer without calling a tool: what you did, what you verified, what is left — \
-briefly, in plain words.";
+briefly, in plain words. Then, one line each, what you learned that is written nowhere and the \
+next session should know: `@U law <path> <fact>` for a rule of a file you changed — name the path, \
+so this work's own tests can prove it — or `@U colony <fact>` for how this repository is worked.";
 
 /// The solo body for `model`, and its tools' context over `world`: Rimuru's voice, a Slime's
 /// shelf (read and write; nothing outward), the whole repository as soil.

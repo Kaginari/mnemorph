@@ -4329,3 +4329,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - compact.rs: `tail_from`'s assistant start and empty tail.
   - The resume test does not isolate the stale-reading case (its ledger's last row is already
     small); that path is three lines and reviewed.
+
+---
+
+### [2026-10-26T11:38:55+01:00] rimuru — a solo answer keeps its own claims
+- **Why** (the human, relaying a side agent, as the paid campaign started): only a commission's
+  report turned `@U` into notes. A solo answer kept nothing, so the campaign's `solo-carry` arm
+  would carry almost nothing. The Mnemorph arm was stopped a minute in, with no row written;
+  OpenCode's arm runs on.
+- **Files:**
+  - solo.rs: the prompt ends with `@U law <path> <fact>` / `@U colony <fact>` lines;
+  - run.rs `remember_own` at `end` on an answered ask, for a run that isn't commissioned (a
+    child's claims stay its dispatcher's): the answer is read as a report (`@S DONE` wrap), facts
+    are filed, and `commission::remember` runs with a checked proof only from this ask's passing
+    gate (`landed_in_ask`);
+  - commission.rs: `checked_proof`, `remember` and `file_facts` are now `pub(crate)`;
+  - docs 08.
+- **Test:** solo.rs: a solo answer's diff claim is grounded and shared, its colony claim stays
+  proposed, and shared memory holds one note.
