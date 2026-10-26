@@ -965,7 +965,15 @@ fn benches_are_known_by_their_command() {
 fn the_solo_prefix_stays_under_its_ceiling() {
     const CEILING_TOKENS: usize = 4000;
     let w = World::new("prefix-ceiling");
+    // The prompt carries the world's law: the ceiling holds with this repository's own.
+    let law = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.mnemorph/law.md");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::copy(law, w.world().join(".mnemorph/law.md")).unwrap();
     let (body, _) = mnemorph_loop::solo(&w.world(), "m");
+    assert!(
+        body.system.contains("## The crest"),
+        "the law is in the prompt"
+    );
     let tools: Vec<mnemorph_provider::Tool> = registry()
         .iter()
         .map(|t| mnemorph_provider::Tool {
