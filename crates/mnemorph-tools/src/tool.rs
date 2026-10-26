@@ -183,9 +183,18 @@ impl std::fmt::Debug for Context {
 pub(crate) struct Seen {
     pub(crate) window: (usize, usize),
     pub(crate) hash: u64,
+    /// The window was answered once already with a pointer to the earlier result: asked again, it
+    /// is shown, not pointed at a second time.
+    pub(crate) pointed: bool,
 }
 
 impl Context {
+    /// Forget which windows were read: the conversation no longer holds their text (a fold or a
+    /// compaction took it out), so a re-read must show it again, never point back at it.
+    pub fn forget_reads(&mut self) {
+        self.seen.clear();
+    }
+
     /// A body of `race` in `world` that may write under each prefix of `soil` (paths relative to
     /// the world are joined onto it). Its gate denies until [`Self::with_gate`] attaches a human.
     pub fn new(race: Race, world: impl AsRef<Path>, soil: &[impl AsRef<Path>]) -> Self {

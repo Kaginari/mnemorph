@@ -108,16 +108,37 @@ impl Tool for Read {
         let seen = Seen {
             window: (first, last),
             hash: hash(&bytes),
+            pointed: false,
         };
         let shown = cx.shown(&path);
-        if cx.seen.get(&path) == Some(&seen) {
+        let earlier = cx.seen.get(&path);
+        let same = earlier.is_some_and(|e| e.window == seen.window && e.hash == seen.hash);
+        // Once, the earlier result is pointed at — with where the file goes on. Asked again, the
+        // body did not find it: the window is shown, never pointed at a second time.
+        if same && !earlier.is_some_and(|e| e.pointed) {
+            let on = if last < total {
+                format!(
+                    " The file has {total} lines: read on with offset {}, or grep for what you need.",
+                    last + 1
+                )
+            } else {
+                String::new()
+            };
             let mut o = Outcome::ok(
                 format!(
-                    "`{shown}` lines {first}–{last} are unchanged since you last read them; that result still holds."
+                    "`{shown}` lines {first}–{last} are unchanged since you last read them; that \
+                     result still holds above.{on}"
                 ),
                 ToolClass::Read,
             );
             o.meta.unchanged = true;
+            cx.seen.insert(
+                path,
+                Seen {
+                    pointed: true,
+                    ..seen
+                },
+            );
             return o;
         }
         let mut out = String::new();

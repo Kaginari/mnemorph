@@ -1314,6 +1314,8 @@ impl Run {
                 && foldable(&self.messages, self.folded_upto, point) >= worth
             {
                 self.folded_upto = point;
+                // The folded results are gone from what is sent: a re-read shows them again.
+                self.cx.forget_reads();
                 self.record(&Beat::Warning {
                     text: format!("compacted: tool outputs before message {point} are sent folded"),
                 });
@@ -1339,6 +1341,8 @@ impl Run {
             return false;
         }
         self.folded_upto = point;
+        // The folded results are gone from what is sent: a re-read shows them again.
+        self.cx.forget_reads();
         self.last_occupancy = estimate;
         self.record(&Beat::Warning {
             text: format!(
@@ -1368,7 +1372,9 @@ impl Run {
             // The line sits below the window: room for one drain turn, unless a jump took it — and
             // a run drains once.
             let room = self.limits.window.saturating_sub(self.last_occupancy);
-            if self.compactions < self.limits.compactions && room >= u64::from(SALVAGE_TOKENS) * 2 {
+            // A compaction resends what the provider just accepted, with a short note: the window
+            // already held it. Only a drain, which adds a turn to a context past the line, needs room.
+            if self.compactions < self.limits.compactions {
                 return Some(Stop::Compact(why));
             }
             return if self.drains == 0 && room >= u64::from(SALVAGE_TOKENS) * 2 {
@@ -2219,6 +2225,8 @@ impl Run {
         self.folded_upto = 0;
         self.ask_from = 0;
         self.sent.0.clear();
+        // The conversation's reads are summarised away: a re-read shows them again.
+        self.cx.forget_reads();
         self.compactions += 1;
         self.record(&Beat::Warning {
             text: format!(

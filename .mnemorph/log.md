@@ -4395,3 +4395,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Test:** commission.rs: a throne with lanes is warned and answers.
 - **Fable confirmed:** guts and doom still bound a lone failing body (doom at 15 acts), and a
   re-read alternated with cheap acts is bounded by actBudget.
+
+---
+
+### [2026-10-26T13:00:05+01:00] rimuru — the bench found three bugs: no guard, a dead-end pointer, compaction blocked
+- **Context:** the campaign's Mnemorph rows (solo, sqlglot) lost to OpenCode, which passed
+  5 of 5. The human: "there's certainly a bug, we should find it."
+- **A, the bench build (mine):** after clearing the review target I rebuilt only `mnemorphd`.
+  With no `mnemorph-guard` beside it, every shell command was refused ("no kernel guard is in
+  force"), so every Mnemorph row since then measured the missing helper. Fixed in the bench: the
+  adapter refuses a build without a guard (Kaginari/bench #9).
+- **B, the read pointer:** a re-read of an unchanged window answered "that result still holds"
+  with no hint that the file goes on. DeepSeek re-read `parser.py` three times (it wanted line
+  6136), got the same pointer, and `repin` stopped the run. After a fold the pointer also named
+  text no longer sent.
+  - Fixed: the pointer comes once and says where the file continues (`Seen::pointed`); asked
+    again, the window is shown; a fold or compaction forgets reads (`Context::forget_reads`).
+- **C, compaction blocked:** a few 2000-line reads took the context to 230k, past the assumed
+  200k window. The room check then skipped compaction, though the provider had just accepted
+  that much. A compaction resends what was accepted, so it now needs no room; only the drain does.
+- **Tests:**
+  - loop.rs: pointer once with the continuation offset, then content; a stuck body still stops on
+    the `loop` stall;
+  - the window-edge drain test opts out of compaction.
