@@ -171,6 +171,19 @@ pub struct Bound<'a> {
     pub attic: Option<&'a Path>,
 }
 
+/// The session's own end gate, as a commissioned body's: the verify lines of its card, and no test
+/// deleted or skipped; the whole repository is its soil, so no author is checked.
+fn session_gate(world: &Path, name: &str) -> crate::gate::EndGate {
+    crate::gate::EndGate {
+        verify: mnemorph_world::Roster::load(world)
+            .creatures
+            .get(name)
+            .map(|c| c.verify.clone())
+            .unwrap_or_default(),
+        author: None,
+    }
+}
+
 /// [`open`] with the model given: the configuration still sets the guard, the limits and the
 /// decisions.
 ///
@@ -267,7 +280,10 @@ pub fn open_with(
             prefix: 0,
         },
     };
-    let run = Run::new(body, limits, setup).with_observer(observer);
+    let gate = session_gate(world, &body.name);
+    let run = Run::new(body, limits, setup)
+        .with_observer(observer)
+        .with_gate(gate);
     let run = equip(run, world, commissioner, capped.then_some(caps), decided);
     Ok(Opened {
         session: Session::new(run),

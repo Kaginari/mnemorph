@@ -978,7 +978,16 @@ impl Run {
         let (Some(gate), Some(before)) = (&self.gate, &self.before) else {
             return Some(Ending::Answered(answer));
         };
-        let verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        let mut verdict = gate.judge(before, &answer, &self.tools, &mut self.cx);
+        // A failure names paths the model chose: escaped once, here, before any channel shows it —
+        // the journal, the CLI, the note handed back, the ending, the human's approval card.
+        for f in verdict
+            .failures
+            .iter_mut()
+            .chain(verdict.unverified.iter_mut())
+        {
+            *f = shown(f);
+        }
         // A verify command Esc stopped is not a verdict: the ask ends, interrupted.
         if self.interrupt.take() {
             return Some(Ending::Interrupted);
@@ -993,12 +1002,30 @@ impl Run {
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
         });
+        let solo = gate.author.is_none();
         let heading = self.log_verdict(&verdict, *retried);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
+        // Only tests changed — one deleted, skipped or thinned, which the human may have asked
+        // for: no fault of what the body knew, and in solo, with the human at hand, theirs to allow.
+        let tests_only = !verdict.wrote
+            && verdict.unverified.is_empty()
+            && verdict
+                .failures
+                .iter()
+                .all(|f| f.starts_with("tests intact:"));
+        // Asked once an ask: a denial stands through the retry.
+        if solo && tests_only && !*retried && self.human_allows(&verdict.failures) {
+            return Some(Ending::Answered(answer));
+        }
         // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
-        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote {
+        // Outside solo, deleting or skipping the failing tests is the reward hack the rule is for:
+        // it reconsolidates like any failure.
+        if verdict.verdict() == crate::gate::Verdict::Fail
+            && !verdict.wrote
+            && !(solo && tests_only)
+        {
             self.failed_in_ask = Some((verdict.failures.clone(), heading));
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
@@ -1055,6 +1082,29 @@ impl Run {
             }],
         );
         None
+    }
+
+    /// The human's word on a landing that changed tests: asked on the approval gate, which a run
+    /// with no human attached always denies.
+    fn human_allows(&mut self, failures: &[String]) -> bool {
+        let ask = mnemorph_tools::Ask {
+            body: self.body.name.clone(),
+            race: self.body.race,
+            class: mnemorph_races::ToolClass::Destructive,
+            act: format!("land with tests changed — {}", card_list(failures)),
+            why: vec!["the end gate keeps tests intact unless the human allows it".into()],
+            outside: Vec::new(),
+        };
+        let allowed = matches!(self.cx.gate().ask(&ask), mnemorph_tools::Answer::Approve);
+        if allowed {
+            self.record(&Beat::Note {
+                text: format!(
+                    "the human allowed the tests' change: {}",
+                    failures.join("; ")
+                ),
+            });
+        }
+        allowed
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.
@@ -2477,3 +2527,40 @@ fn changed_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
         _ => Vec::new(),
     }
 }
+
+/// Failures as an approval card shows them, already [`shown`]: at most [`CARD_ITEMS`], the rest
+/// counted.
+fn card_list(failures: &[String]) -> String {
+    let mut shown: Vec<String> = failures.iter().take(CARD_ITEMS).cloned().collect();
+    if failures.len() > CARD_ITEMS {
+        shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
+    }
+    shown.join("; ")
+}
+
+/// A text a model's choice reaches, as a human is shown it: control characters, the bidi
+/// controls, zero-width and line-separator characters escaped, and a backslash doubled so an
+/// escape can never be mistaken for one written in a name.
+fn shown(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            let hidden = c.is_control()
+                || c == '\\'
+                || matches!(
+                    c,
+                    '\u{200B}'..='\u{200F}'
+                        | '\u{2028}'..='\u{202E}'
+                        | '\u{2060}'..='\u{2069}'
+                        | '\u{FEFF}'
+                );
+            if hidden {
+                c.escape_unicode().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+/// See [`card_list`].
+const CARD_ITEMS: usize = 5;

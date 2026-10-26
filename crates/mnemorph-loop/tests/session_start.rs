@@ -141,3 +141,75 @@ async fn the_first_ask_lists_the_minds_and_wear_brings_one_in() {
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(&attic);
 }
+
+/// The session's own body lands through the end gate, as a commissioned one does: its card's
+/// verify lines must pass, and a claim about what passed is grounded by the check.
+#[tokio::test]
+async fn the_session_lands_through_the_end_gate() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = std::env::temp_dir().join(format!("mnemorph-session-gate-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph/rimuru/rimuru")).unwrap();
+    fs::write(
+        w.join(".mnemorph/rimuru/rimuru/README.md"),
+        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
+    )
+    .unwrap();
+    // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
+    fs::write(
+        w.join(".mnemorph/config.local.toml"),
+        "[sandbox]\nallow_unguarded = true\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            serde_json::json!({"path": "out.txt", "content": "broken\n"}),
+        ),
+        ScriptedModel::text("Done."),
+        ScriptedModel::tool(
+            "w2",
+            "write",
+            serde_json::json!({"path": "out.txt", "content": "fixed\n"}),
+        ),
+        ScriptedModel::text("Fixed.\n@U law out.txt says fixed once the gate passes"),
+    ]));
+    let config = Config::load(&Paths::with_global(w.join("no-global.toml"), &w)).unwrap();
+    let attic = w.join("../mnemorph-session-gate-attic");
+    let mut opened = open_with(
+        &w,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    let ending = opened
+        .session
+        .run()
+        .ask("make out.txt say fixed", &mut |_| {})
+        .await;
+    assert!(
+        matches!(ending, mnemorph_loop::Ending::Answered(_)),
+        "{ending:?}"
+    );
+    assert_eq!(
+        model.requests().len(),
+        4,
+        "the gate sent the first answer back"
+    );
+    let mine = fold(&read(&w, &Tier::Personal("rimuru".into())).unwrap().rows);
+    let n = mine
+        .values()
+        .find(|n| n.text.starts_with("out.txt says fixed"))
+        .unwrap_or_else(|| panic!("{mine:?}"));
+    assert_eq!(n.status, Status::Grounded, "the check grounds it: {n:?}");
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+}

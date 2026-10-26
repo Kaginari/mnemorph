@@ -4645,3 +4645,76 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - The synonym case ("sixty minutes" for "one hour") ranks 2nd, saved by "entries".
 - **Docs 09:** quote the rate and its looseness. 0 of 8 is consistent with a miss rate of one in
   four (the 95% upper bound is ~31%), so the fixture should grow with real misses.
+
+---
+
+### [2026-10-26T16:06:34+01:00] rimuru — the session lands through the end gate
+- **Found while asking why the bench's solo worlds ground nothing:** `open.rs` never gave the
+  session run an `EndGate`; only commissioned children had one.
+  - The solo prompt promised "the end gate checks them", docs 02 promised solo runs under the end
+    gate, and `EndGate`'s own doc said `author` is "None in solo".
+  - So for any solo session: no gate on landings, no check for deleted or skipped tests, no
+    one-chance fix, and `passed_gate()` was always None. No claim could be grounded by the
+    checked route; #210's `remember_own` grounding was dead outside tests.
+- **Fix:** open.rs `session_gate` builds the run's `EndGate` from the verify lines of the
+  session body's card, with no author; docs 03 say where they come from.
+- **Test:** session_start `the_session_lands_through_the_end_gate`. Through `open_with`, the gate
+  sends a failing answer back, and the fixed answer's `@U law` claim is grounded. Checked to fail
+  with the gate detached.
+- **Bench consequence:** this campaign's Mnemorph arms ran without a session gate. A
+  `solo-carry` measured on a build with this fix also needs a `Verify:` line on the bench
+  world's Rimuru card.
+
+---
+
+### [2026-10-26T16:12:41+01:00] rimuru — the session gate, Fable's review
+- **Fable:** mergeable. Lanes are safe: `before` is refreshed with landed and put-back work. All
+  entry points (server, CLI) go through `open_with`. One behaviour change wanted a deliberate yes:
+  tests-intact now fails a solo session's legitimate test deletion or rename. The one retry can
+  only undo it, and a second FAIL reconsolidates the memory the ask cited.
+- **Decided:** in solo the human is at hand. A verdict failing on tests-intact alone is put to
+  them on the approval gate as a destructive act (`Run::human_allows`): allowed, it lands; denied,
+  or no human (`NoHuman`, the bench, headless), it fails as before. A tests-intact-only failure
+  never reconsolidates. Committees keep the strict rule (an author is set).
+- **Also:** `Context::gate()` is public for the loop; docs 03 state the solo exception and that
+  the session's verify lines are read at open (Fable's point 3).
+- **Test:** solo `a_deleted_test_is_the_humans_to_allow_in_solo` (approve lands, `NoHuman`
+  fails). Checked to fail with the approval disabled.
+- **Not done:** `Run::resume` has no gate, and no callers yet; it should take one when it gets
+  a caller (#204).
+
+---
+
+### [2026-10-26T16:16:04+01:00] rimuru — the gate waiver, Opus's security review
+- **Opus found:**
+  1. (medium) the approval card showed model-chosen paths raw, so a test file named with a newline
+     or an escape code could forge or hide card lines;
+  2. (low–med) skipping reconsolidation on tests-intact-only applied outside solo too, sparing the
+     classic reward hack (delete or skip the failing test) its memory cost.
+  - Nothing auto-approves (`NoHuman`, Terminal and the server's gate deny on silence), and
+    `Context::gate()` being public reaches only compiled-in tools.
+- **Fixed:**
+  1. run.rs `card_list` escapes control characters and caps the list at 5 plus a count;
+  2. reconsolidation is skipped only for `solo && tests_only`.
+- **Test:** solo `a_deleted_tests_name_cannot_forge_the_card` deletes through the shell (the
+  delete tool already refuses such a name). Checked to fail unescaped.
+- **Left, pre-existing:** the `Ending::Failed` text and the log carry the same raw path; hollowed
+  assertions with an unchanged test count pass tests-intact.
+
+---
+
+### [2026-10-26T16:20:04+01:00] rimuru — the gate waiver, Fable reviews Opus's review
+- **Fable found what Opus missed:**
+  1. The `Gate` beat is recorded before the ask, and the CLI renders it raw
+     (`transcript.ts`, `app.tsx`) one line above the escaped card. The same raw text reached
+     `Ending::Failed` and the note handed back. Escaping only the card was bypassed.
+  2. `is_control` misses the bidi overrides, zero-width characters and line separators.
+  3. A denied waiver was asked again on the retry.
+- **Fixed:**
+  1. `judge` escapes every failure and unverified line once, at the source, with `shown`, before
+     any beat, log, note, ending or card;
+  2. `shown` covers C0/C1, U+200B–200F, U+2028–202E, U+2060–2069 and U+FEFF, and doubles a
+     backslash (`\u{…}` throughout, unambiguous);
+  3. the waiver is asked once an ask (`!*retried`); `card_list` keeps the cap.
+- **Test:** the card test adds U+202E, asserts one ask, and checks the ending carries no raw
+  newline. Checked to fail with the source escape off.
