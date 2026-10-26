@@ -139,3 +139,106 @@ pub fn moved(before: &[u64], now: &[u64]) -> Option<usize> {
         .position(|(a, b)| a != b)
         .or_else(|| (now.len() < before.len()).then_some(now.len()))
 }
+
+/// The newest of the conversation a structured compaction keeps verbatim, in bytes of content.
+pub const KEEP_BYTES: usize = 40_000;
+
+/// A message's size in bytes of content: its text, its tool calls' arguments, its results.
+#[must_use]
+pub fn bytes(m: &Message) -> usize {
+    m.content
+        .iter()
+        .map(|b| match b {
+            Block::Text { text, .. } => text.len(),
+            Block::ToolUse { input, .. } => input.to_string().len(),
+            Block::ToolResult { content, .. } => content.len(),
+            Block::Opaque(_) => 0,
+        })
+        .sum()
+}
+
+/// Where the verbatim tail of a structured compaction starts: the earliest assistant turn from
+/// which the rest of `messages` fits in `budget` bytes — an assistant turn, so every tool result
+/// kept has its call beside it. `messages.len()` when even the last exchange does not fit.
+#[must_use]
+pub fn tail_from(messages: &[Message], budget: usize) -> usize {
+    let mut size = 0;
+    let mut from = messages.len();
+    for (i, m) in messages.iter().enumerate().rev() {
+        size += bytes(m);
+        if size > budget {
+            break;
+        }
+        if m.role == Role::Assistant {
+            from = i;
+        }
+    }
+    from
+}
+
+/// The conversation a structured compaction leaves: the ask with the body's summary of all that
+/// came before, then the newest `tail` verbatim.
+#[must_use]
+pub fn compacted(ask: &str, summary: &str, tail: &[Message]) -> Vec<Message> {
+    let mut out = vec![Message {
+        role: Role::User,
+        content: vec![Block::Text {
+            text: format!(
+                "{ask}\n\n[compacted — the conversation before this point, in your own summary; \
+                 the newest exchanges follow verbatim]\n\n{summary}"
+            ),
+            cache: false,
+        }],
+    }];
+    out.extend(tail.iter().cloned());
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compacted, tail_from};
+    use mnemorph_provider::{Block, Message, Role};
+
+    fn text(role: Role, t: &str) -> Message {
+        Message {
+            role,
+            content: vec![Block::Text {
+                text: t.into(),
+                cache: false,
+            }],
+        }
+    }
+
+    #[test]
+    fn the_tail_starts_at_an_assistant_turn_and_may_be_empty() {
+        let small = [
+            text(Role::User, "ask"),
+            text(Role::Assistant, "a"),
+            text(Role::User, "r"),
+            text(Role::Assistant, "b"),
+            text(Role::User, "s"),
+        ];
+        assert_eq!(
+            tail_from(&small, 1_000),
+            1,
+            "all but the ask fits, from the first assistant"
+        );
+        assert_eq!(
+            tail_from(&small, 2),
+            3,
+            "from the last assistant turn that fits"
+        );
+        let big = [
+            text(Role::Assistant, "a"),
+            text(Role::User, &"x".repeat(50_000)),
+        ];
+        assert_eq!(
+            tail_from(&big, 40_000),
+            2,
+            "a result past the budget: nothing kept"
+        );
+        let alone = compacted("ask", "## Goal\nx", &big[2..]);
+        assert_eq!(alone.len(), 1, "the head alone");
+        assert_eq!(alone[0].role, Role::User);
+    }
+}

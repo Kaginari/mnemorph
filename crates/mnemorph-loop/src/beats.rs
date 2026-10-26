@@ -54,6 +54,22 @@ pub enum Beat {
         #[serde(default)]
         verdict: String,
     },
+    /// A structured compaction: the body's summary of the conversation before it, and how many
+    /// of the newest messages were kept verbatim after it — what a resume rebuilds.
+    Compacted {
+        /// The summary, in its fixed sections.
+        summary: String,
+        /// The messages kept verbatim, counted from the end.
+        tail: usize,
+        /// What leads the compacted conversation: the ask as journaled, with the Minds'
+        /// manifest when the ask did not carry it.
+        #[serde(default)]
+        head: String,
+        /// The context the compacted conversation was estimated to carry: what a resume reads
+        /// instead of the summary turn's full reading.
+        #[serde(default)]
+        occupancy: u64,
+    },
     /// What recall gave a turn: the anchors it showed the body, and how many it cut above the
     /// floor — the turn's journal row a run-ending failure reconsolidates by.
     Recall {
@@ -153,6 +169,7 @@ pub fn json_block(v: &Value) -> Option<Block> {
 pub fn conversation(beats: &[Beat]) -> Vec<Message> {
     let mut messages: Vec<Message> = Vec::new();
     let mut pending: Vec<String> = Vec::new();
+    let mut asked = String::new();
     let close = |messages: &mut Vec<Message>, pending: &mut Vec<String>| {
         if pending.is_empty() {
             return;
@@ -171,6 +188,9 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
     for beat in beats {
         match beat {
             Beat::Ask { text } | Beat::Note { text } => {
+                if let Beat::Ask { text } = beat {
+                    text.clone_into(&mut asked);
+                }
                 close(&mut messages, &mut pending);
                 push_user(
                     &mut messages,
@@ -212,6 +232,17 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 );
             }
             Beat::End { .. } => close(&mut messages, &mut pending),
+            Beat::Compacted {
+                summary,
+                tail,
+                head,
+                ..
+            } => {
+                close(&mut messages, &mut pending);
+                let from = messages.len().saturating_sub(*tail);
+                let head = if head.is_empty() { &asked } else { head };
+                messages = crate::compact::compacted(head, summary, &messages[from..]);
+            }
             Beat::Gate { .. } | Beat::Warning { .. } | Beat::Guts { .. } | Beat::Recall { .. } => {}
         }
     }

@@ -333,7 +333,13 @@ async fn context_stress_checkpoints() {
         tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
         answer("never"),
     ]));
-    let mut run = w.run(model, limits());
+    let mut run = w.run(
+        model,
+        Limits {
+            compactions: 0,
+            ..limits()
+        },
+    );
     let e = ask(&mut run, "big").await;
     assert!(
         matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("context")),
@@ -1564,7 +1570,13 @@ async fn a_full_context_drains_its_unsaid_into_memory() {
             "@U territory src/parser keeps interval fractions whole\n@U colony run uv before pytest\nLeft: the docs.",
         ),
     ]));
-    let mut run = w.run(model.clone(), limits());
+    let mut run = w.run(
+        model.clone(),
+        Limits {
+            compactions: 0,
+            ..limits()
+        },
+    );
     let e = ask(&mut run, "big").await;
     let Ending::Checkpoint { why, salvage } = &e else {
         panic!("{e:?}");
@@ -1634,7 +1646,13 @@ async fn a_run_drains_once() {
         answer("@U colony run uv before pytest"),
         answer("never sent"),
     ]));
-    let mut run = w.run(model.clone(), limits());
+    let mut run = w.run(
+        model.clone(),
+        Limits {
+            compactions: 0,
+            ..limits()
+        },
+    );
     ask(&mut run, "big").await;
     let again = ask(&mut run, "and now?").await;
     assert!(
@@ -1651,4 +1669,134 @@ async fn a_run_drains_once() {
         .rows,
     );
     assert_eq!(notes.len(), 1, "no second set of notes");
+}
+
+/// What a compacting body writes: the fixed sections, a discovery on the wire.
+const SUMMARY: &str = "## Goal\nmap the repo\n## Instructions\nread only\n## Discoveries\n@U colony src/main.rs run uv before pytest\n## Accomplished\nglobbed the tree\n## Files\n@F src/main.rs the entry point\n## Todo\nread the tests";
+
+/// A full context with compactions left does not stop: the body summarises in fixed sections,
+/// its discoveries are kept, and the run goes on over the ask, that summary and the newest
+/// exchanges — and a resume rebuilds the very same conversation from the journal.
+#[tokio::test]
+async fn a_full_context_compacts_and_the_run_goes_on() {
+    let w = World::new("compact");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer(SUMMARY),
+        answer("done: the repo is mapped"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "map the repo").await;
+    assert_eq!(e, Ending::Answered("done: the repo is mapped".into()));
+    let requests = model.requests();
+    assert_eq!(
+        requests[1].tools, requests[0].tools,
+        "the summary turn sends the tools as any turn does: the cached prefix holds"
+    );
+    let after = &requests[2].messages;
+    let head = format!("{:?}", after[0]);
+    assert!(
+        head.contains("map the repo") && head.contains("[compacted"),
+        "{head}"
+    );
+    assert!(
+        head.contains("## Todo\\nread the tests"),
+        "the summary leads: {head}"
+    );
+    assert!(
+        after
+            .iter()
+            .any(|m| m.content.iter().any(|b| matches!(b, Block::ToolUse { .. }))),
+        "the newest exchange is kept verbatim"
+    );
+    let rows = w.journal().read().unwrap().rows;
+    assert!(
+        rows.iter()
+            .any(|b| matches!(b, Beat::Compacted { tail, .. } if *tail > 0))
+    );
+    assert_eq!(
+        conversation(&rows),
+        run.messages(),
+        "a resume rebuilds what was sent"
+    );
+    let notes = mnemorph_memory::fold(
+        &mnemorph_memory::read(
+            &w.world(),
+            &mnemorph_memory::Tier::Personal("slime-test".into()),
+        )
+        .unwrap()
+        .rows,
+    );
+    assert!(
+        notes
+            .values()
+            .any(|n| n.text == "src/main.rs run uv before pytest")
+    );
+}
+
+/// An ask that has spent its compactions drains at the next full context, as before.
+#[tokio::test]
+async fn spent_compactions_drain() {
+    let w = World::new("compact-spent");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer(SUMMARY),
+        tool_with("t2", "glob", json!({"pattern": "*"}), usage(185_000)),
+        answer("@U colony the second pass found nothing new"),
+    ]));
+    let mut run = w.run(
+        model.clone(),
+        Limits {
+            compactions: 1,
+            ..limits()
+        },
+    );
+    let e = ask(&mut run, "map the repo").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, salvage: Some(_) } if why.starts_with("context")),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 4, "one compaction, then the drain");
+}
+
+/// Two compactions in one ask: each leaves the head and its summary, the journal replays exactly
+/// what was sent, and a resume reads the compaction's own estimate — it does not compact the
+/// small conversation again.
+#[tokio::test]
+async fn two_compactions_replay_and_a_resume_reads_their_estimate() {
+    let w = World::new("compact-twice");
+    let model = Arc::new(ScriptedModel::new([
+        tool_with("t1", "glob", json!({"pattern": "*"}), usage(181_000)),
+        answer(SUMMARY),
+        tool_with("t2", "glob", json!({"pattern": "*"}), usage(182_000)),
+        answer(SUMMARY),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "map the repo").await;
+    assert_eq!(e, Ending::Answered("done".into()));
+    let rows = w.journal().read().unwrap().rows;
+    let tails: Vec<usize> = rows
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Compacted { tail, .. } => Some(*tail),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tails.len(), 2, "two compactions");
+    assert_eq!(
+        conversation(&rows),
+        run.messages(),
+        "the journal replays what was sent"
+    );
+    // A resume over this journal reads the last compaction's estimate, not a full reading.
+    let after = Arc::new(ScriptedModel::new([answer("resumed")]));
+    let mut resumed = Run::resume(body(), limits(), w.setup(after.clone())).unwrap();
+    let e = ask(&mut resumed, "and now?").await;
+    assert_eq!(
+        e,
+        Ending::Answered("resumed".into()),
+        "no compaction of the compacted"
+    );
+    assert_eq!(after.requests().len(), 1);
 }

@@ -4277,3 +4277,55 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - a memory-level test of `covers` and `ground`'s refusal.
 - **Left:** a world claim that names a changed file still grounds; that is inherent without
   reading claims.
+
+---
+
+### [2026-10-26T10:54:36+01:00] rimuru — #41: structured compaction
+- **Task:** #41, chosen by the human as "the mesh" to do before the bench. At the context line a
+  run compacted only by folding and then stopped, so long runs lost their steps.
+- **Files:**
+  - compact.rs: `KEEP_BYTES` (40,000); `bytes` (now public); `tail_from` (the earliest
+    assistant turn whose rest fits); `compacted` (the ask, the summary, the tail);
+  - beats.rs: `Beat::Compacted { summary, tail }`, replayed by `conversation`, which keeps the
+    last ask's text; the server ignores the beat;
+  - run.rs:
+    - `Stop::Compact` at the line while `compactions < Limits::compactions` (default
+      `COMPACTIONS` = 2) and the window has room;
+    - `compact()` runs `SUMMARY_NOTE` on a scratch copy (no tools, ledgered), rebuilds from
+      `ask_said`, records the beat, keeps `@U` through `keep_unsaid`, scales the occupancy,
+      resets the fold, `ask_from` and the prefix watch;
+    - a failed summary drains;
+    - `meet` holds the stop dispatch (`ask` was over 100 lines);
+  - docs 03.
+- **Tests:** loop.rs:
+  - a full context compacts and the run answers; the summary turn has no tools; the next
+    request leads with the ask and summary and keeps a tool call; the journal has `Compacted`;
+    `conversation(journal) == messages` (resume); the discovery is a proposed note;
+  - spent compactions drain;
+  - the old drain and context tests opt out with `compactions: 0`.
+
+---
+
+### [2026-10-26T11:03:45+01:00] rimuru — #209's review: Fable
+- **Verdict:** mergeable after #1; #2 before the bench runs on it.
+- **Fable found:**
+  1. a resume right after a compaction read the summary turn's full-context reading and
+     compacted the small conversation again;
+  2. the summary turn missed the cache, because clearing the tools invalidates the whole prefix,
+     costing up to 150k tokens at full price twice an ask;
+  3. a later ask's compaction lost the Minds' manifest;
+  4. a failed compaction drained regardless of `drains`, and said nothing.
+- **Fixed:**
+  - `Beat::Compacted` gains `head` and `occupancy` (serde default); resume reads the estimate
+    when a compaction follows the last model turn;
+  - the summary request is the run's own `request()`, with tools and marks, over the messages
+    plus the note, then restored;
+  - `manifest_said` keeps the manifest, and the head carries it when the ask did not;
+  - warnings on a timeout or an empty summary; `meet` drains only when `drains == 0`;
+  - docs 03.
+- **Tests:**
+  - loop.rs: two compactions with replay equality; a resume answers without compacting;
+    the summary turn's tools equal the previous turn's;
+  - compact.rs: `tail_from`'s assistant start and empty tail.
+  - The resume test does not isolate the stale-reading case (its ledger's last row is already
+    small); that path is three lines and reviewed.
