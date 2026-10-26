@@ -122,20 +122,12 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
 }
 
 /// A verify line for the session's own card, when it has none: without one the end gate runs no
-/// check, and no claim of a solo session is ever grounded. A `test=` fact about a file at the
-/// world's top — its manifest — that creatures agreed on or that was settled comes first; else the command the project's own
-/// manifest names. Only ever suggested: the card is the human's to change.
+/// check, and no claim of a solo session is ever grounded. Only a command the harness itself picks
+/// from the project's manifest — never a model's words: an ontology fact is creatures' text, and a
+/// suggested line is one the human may paste. Only ever suggested: the card is the human's.
 #[must_use]
 pub fn suggest(world: &Path) -> Option<String> {
-    use crate::facts::Status;
-    let agreed = crate::Facts::load(world).live().find_map(|f| {
-        let (k, v) = f.keyed.as_ref()?;
-        (k == "test"
-            && !f.about.contains('/')
-            && matches!(f.status(), Status::Settled | Status::Agreed))
-        .then(|| v.clone())
-    });
-    agreed.or_else(|| detected(world))
+    detected(world)
 }
 
 /// The test command a project's manifest names, by the first manifest found.
@@ -150,7 +142,10 @@ fn detected(world: &Path) -> Option<String> {
     if has("package.json") {
         // A suggestion only: a `"test"` script named in the manifest is enough to read.
         let text = fs::read_to_string(world.join("package.json")).ok()?;
-        if !(text.contains("\"scripts\"") && text.contains("\"test\"")) {
+        // npm's placeholder script always fails: no test to suggest.
+        if !(text.contains("\"scripts\"") && text.contains("\"test\""))
+            || text.contains("no test specified")
+        {
             return None;
         }
         let runner = if has("pnpm-lock.yaml") {

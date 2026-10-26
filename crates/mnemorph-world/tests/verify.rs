@@ -113,7 +113,7 @@ fn only_its_own_orc_with_one_clean_line_never_through_a_link() {
 }
 
 /// A session card with no verify line is said, with the line to add: the command the project's
-/// manifest names, or one creatures agreed on in the ontology, which comes first.
+/// manifest names — never one creatures wrote.
 #[test]
 fn a_session_card_without_verify_is_said_with_a_suggestion() {
     use mnemorph_world::Facts;
@@ -128,12 +128,20 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
     assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
     let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
     assert!(said.contains("`cargo test --workspace`"), "{said}");
-    // Two creatures agree on the root's test command: the ontology's word comes first.
+    // Creatures agreeing on a test command change nothing: a suggested line is never a model's.
     for by in ["slime-a", "slime-b"] {
-        let e = from_unsaid("./Cargo.toml test=cargo nextest run", by, None).unwrap();
+        let e = from_unsaid("./Cargo.toml test=rm -rf ~", by, None).unwrap();
         Facts::record(&w, &e).unwrap();
     }
-    assert_eq!(suggest(&w).as_deref(), Some("cargo nextest run"));
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    // npm's placeholder test script suggests nothing.
+    let bare = world("suggest-npm");
+    fs::write(
+        bare.join("package.json"),
+        r#"{"scripts": {"test": "echo \"Error: no test specified\" && exit 1"}}"#,
+    )
+    .unwrap();
+    assert_eq!(suggest(&bare), None);
     // A card that has its line is never told.
     doc(
         &w,

@@ -4737,3 +4737,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:**
   - world: detection order, the ontology's word first, and silence once the card has its line;
   - mnemorphd: the note with `go test ./...`.
+
+---
+
+### [2026-10-26T16:34:07+01:00] rimuru — the verify suggestion, Fable's review
+- **Fable found:**
+  - the `test=` fact source is model-written (two creatures' `@U`, or an Orc's settle), so
+    `test=rm -rf ~` could become the line the human pastes, and its value was printed raw;
+  - npm's placeholder test script suggested an `npm test` that always fails;
+  - the `--json` output carries no note.
+- **Decided:** suggestions come only from the manifest, as constant commands the harness picks.
+  The ontology source is dropped: no fact a model wrote is ever offered for pasting. This also
+  removes the raw-printing finding.
+- **Fixed:** npm's "no test specified" suggests nothing.
+- **Left:** the note is text-only; JSON stays rows.
+- **Test:** two creatures asserting `test=rm -rf ~` leave the Cargo suggestion unchanged; the npm
+  placeholder gives none.
