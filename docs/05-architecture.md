@@ -30,7 +30,7 @@ flowchart TB
       SANDBOX["sandbox<br/>landlock · seccomp · Seatbelt"]
       PROV["provider<br/>Anthropic · OpenAI-compatible"]
       LEDGER["ledger<br/>usage · value · budgets"]
-      MEM["memory<br/>tiers · recall · toolbox"]
+      MEM["memory<br/>tiers · recall · write rule"]
       CONFIG["config<br/>layers · origins · loosening"]
       SERVER --> LOOP
       LOOP --> CONFIG --> TOOLS
@@ -85,8 +85,8 @@ mnemorph/
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
 │  ├─ mnemorph-tools      tool impls, classifier, secret injection    (OS)
 │  ├─ mnemorph-config     TOML layers, origins, the gate's loosening  (files)
-│  ├─ mnemorph-memory     tiers, BM25 recall, toolbox manifest        (files)
-│  ├─ mnemorph-world      creatures, onto, dispatch, gate, evolution  (files)
+│  ├─ mnemorph-memory     tiers, BM25 recall, the write rule          (files)
+│  ├─ mnemorph-world      creatures, onto, dispatch, gate, Minds      (files)
 │  ├─ mnemorph-loop       the six beats, journal, resume              (all above)
 │  ├─ mnemorph-server     JSON-RPC, WebSocket, board assets           (network: loopback)
 │  └─ mnemorphd           the binary

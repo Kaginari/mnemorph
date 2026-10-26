@@ -1101,6 +1101,7 @@ fn child_run(
     // A creature that may dispatch is handed the same commissioner: the order goes on down.
     let dispatches = creature.race.shelf().contains(&ToolClass::Dispatch);
     let mut tools = registry();
+    tools.push(Box::new(crate::wear_tool::WearTool));
     if dispatches {
         tools.push(Box::new(CommissionTool));
     }
@@ -1135,7 +1136,9 @@ fn child_run(
         }),
     };
     let run_name = setup.caller.run.clone();
-    let mut child = Run::new(body, limits, setup).with_gate(gate);
+    let mut child = Run::new(body, limits, setup)
+        .with_gate(gate)
+        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name));
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();

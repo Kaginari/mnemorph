@@ -18,6 +18,7 @@ pub mod session;
 pub mod solo;
 pub mod stress;
 pub mod verify_tool;
+pub mod wear_tool;
 
 pub use beats::{Beat, conversation};
 pub use budget::{Caps, Left};

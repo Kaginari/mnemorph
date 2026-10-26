@@ -252,6 +252,8 @@ pub struct Run {
     landed_in_ask: Option<String>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
     opening: Option<String>,
+    /// The toolbox's manifest — the Minds the body may wear, priced — said with its first ask.
+    manifest: Option<String>,
     /// How often the run has drained: a full context drains once, and checkpoints plainly after.
     drains: u32,
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
@@ -338,6 +340,7 @@ impl Run {
             recall_trace: None,
             landed_in_ask: None,
             opening: None,
+            manifest: None,
             drains: 0,
             passed: None,
             sent: (Vec::new(), 0),
@@ -570,6 +573,14 @@ impl Run {
     #[must_use]
     pub fn with_opening(mut self, opening: Option<String>) -> Self {
         self.opening = opening;
+        self
+    }
+
+    /// The toolbox's manifest, said with the first ask: in the changing tail, never as tool
+    /// definitions, so the cached prefix holds whatever Minds the world has.
+    #[must_use]
+    pub fn with_manifest(mut self, manifest: Option<String>) -> Self {
+        self.manifest = manifest;
         self
     }
 
@@ -1323,6 +1334,11 @@ impl Run {
             )
         };
         let recalled = self.recall(text);
+        // The first ask carries the toolbox's manifest.
+        let asked = match self.manifest.take() {
+            Some(manifest) => format!("{manifest}\n\n{asked}"),
+            None => asked,
+        };
         // A fresh session's first ask opens with what earlier sessions learned.
         let asked = match self.opening.take() {
             Some(opening) => format!(
@@ -1699,6 +1715,24 @@ impl Run {
 
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
+        // A Mind is the world's: the loop reads it from there, in this body's name.
+        if name == crate::wear_tool::WEAR
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::wear_tool::WEAR)
+        {
+            // A body that can hand work down — any holding the commissioner — never wears a heavy
+            // Mind; none wears one bigger than half the room its context has left.
+            let room = self.limits.window.saturating_sub(self.last_occupancy);
+            return crate::wear_tool::run(
+                self.cx.world(),
+                &self.body.name,
+                input,
+                self.commissioner.is_some(),
+                room,
+            );
+        }
         // A Slime's verify line is the harness's to write, for the Orc it reports to.
         if name == crate::verify_tool::VERIFY
             && self
