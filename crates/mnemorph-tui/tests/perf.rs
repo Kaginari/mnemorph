@@ -114,6 +114,8 @@ fn two_thousand_messages_stay_smooth() {
     // The grammars load once per process, off the UI thread in the binary: not a frame's cost.
     let load = Instant::now();
     mnemorph_tui::kit::highlight::preload();
+    // The portraits decode at start, off the UI thread, as the binary does.
+    mnemorph_tui::kit::mnanim::warm();
     let load = load.elapsed();
     let mut m = session();
     assert!(m.transcript.entries().len() >= MESSAGES);

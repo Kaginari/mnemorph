@@ -475,6 +475,7 @@ fn portrait(race: Race, clock: Duration) -> Vec<String> {
 
 #[test]
 fn the_portrait_is_the_working_bodys_and_swaps_as_a_child_starts_and_stops() {
+    mnanim::warm();
     let mut m = model();
     update(&mut m, Msg::Resize(120, 40));
     send(&mut m, "judge it");
@@ -535,6 +536,7 @@ fn the_portrait_is_the_working_bodys_and_swaps_as_a_child_starts_and_stops() {
 
 #[test]
 fn the_portrait_plays_only_while_a_body_works_and_shows() {
+    mnanim::warm();
     let mut m = model();
     update(&mut m, Msg::Resize(120, 40));
     assert!(m.portrait_shown());
@@ -887,4 +889,69 @@ fn a_toast_never_covers_the_approval() {
     let scr = screen(&mut m, 100, 32);
     assert!(!scr.contains("◆ end gate pass"), "{scr}");
     assert!(scr.contains("Approval · ⚠ the human gate"));
+}
+
+#[test]
+fn two_working_children_keep_one_portrait_until_none_works() {
+    mnanim::warm();
+    let mut m = model();
+    update(&mut m, Msg::Resize(120, 40));
+    send(&mut m, "fan out");
+    ev(
+        &mut m,
+        Event::TurnStarted {
+            text: "fan out".into(),
+        },
+    );
+    let below = |m: &mut Model, chain: &[&str], event: Event| {
+        update(
+            m,
+            Msg::Below {
+                event,
+                chain: chain.iter().map(|s| (*s).to_owned()).collect(),
+            },
+        );
+    };
+    let start = |name: &str| Event::TurnStarted { text: name.into() };
+    let step = |id: &str| Event::ToolStart {
+        id: id.into(),
+        name: "read".into(),
+    };
+    below(&mut m, &["orc-a"], start("a"));
+    below(&mut m, &["slime-b"], start("b"));
+    assert_eq!(activity::actor(&m).0, "slime-b", "the newest that works");
+    tick(&mut m, 0.25);
+    let clock = m.portrait_clock;
+    assert!(clock > Duration::ZERO);
+    // Their events alternate: the portrait stays, its loop runs on.
+    for i in 0..6 {
+        let who = if i % 2 == 0 { "orc-a" } else { "slime-b" };
+        below(&mut m, &[who], step(&format!("{who}{i}")));
+        assert_eq!(activity::actor(&m).0, "slime-b", "event {i}");
+        assert_eq!(head(&m), portrait(Race::Slime, m.portrait_clock));
+    }
+    assert_eq!(m.portrait_clock, clock, "no event restarted the loop");
+    // The slime ends while the orc works: the orc's portrait, from its first frame.
+    below(
+        &mut m,
+        &["slime-b"],
+        Event::TurnEnded {
+            ending: "answered".into(),
+        },
+    );
+    assert_eq!(activity::actor(&m), ("orc-a".into(), Race::Orc));
+    assert_eq!(
+        m.portrait_clock,
+        Duration::ZERO,
+        "a real swap restarts the loop"
+    );
+    // Rimuru only when none works.
+    below(
+        &mut m,
+        &["orc-a"],
+        Event::TurnEnded {
+            ending: "answered".into(),
+        },
+    );
+    assert_eq!(activity::actor(&m), ("rimuru".into(), Race::Rimuru));
 }

@@ -252,23 +252,56 @@ pub fn decodes() -> usize {
     DECODES.load(Ordering::Relaxed)
 }
 
-/// `race`'s portrait, decoded on its first use, then read from the cache.
+fn cache() -> &'static Cache {
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// `race`'s portrait: decoded on its first use — about 24 ms for 48 frames, so never on the UI's
+/// thread: [`warm`] runs it on a blocking thread at start — then read from the cache. The lock is
+/// never held while it decodes.
 #[must_use]
 pub fn portrait(race: Race) -> Option<Arc<Loop>> {
-    static CACHE: OnceLock<Cache> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut cache = cache.lock().unwrap_or_else(PoisonError::into_inner);
-    cache
-        .entry(race)
-        .or_insert_with(|| {
-            DECODES.fetch_add(1, Ordering::Relaxed);
-            let anim = Anim::parse(source(race)).ok()?;
-            Some(Arc::new(Loop {
-                frames: (0..anim.frames.len()).map(|f| anim.cells(f)).collect(),
-                fps: anim.fps,
-            }))
+    if let Some(done) = cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&race)
+    {
+        return done.clone();
+    }
+    DECODES.fetch_add(1, Ordering::Relaxed);
+    let decoded = Anim::parse(source(race)).ok().map(|anim| {
+        Arc::new(Loop {
+            frames: (0..anim.frames.len()).map(|f| anim.cells(f)).collect(),
+            fps: anim.fps,
         })
+    });
+    cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .entry(race)
+        .or_insert(decoded)
         .clone()
+}
+
+/// `race`'s portrait if it is decoded already, else `None`: what a frame draws. It never decodes,
+/// so the UI never waits on one; until [`warm`] has reached the race, the portrait is simply not
+/// drawn.
+#[must_use]
+pub fn ready(race: Race) -> Option<Arc<Loop>> {
+    cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&race)
+        .cloned()
+        .flatten()
+}
+
+/// Decode every race's portrait into the cache, Rimuru first: for a blocking thread at start.
+pub fn warm() {
+    for race in Race::ALL {
+        let _ = portrait(race);
+    }
 }
 
 #[cfg(test)]

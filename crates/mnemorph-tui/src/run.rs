@@ -181,6 +181,8 @@ impl Host {
             .enable_all()
             .build()
             .map_err(|e| format!("runtime: {e}"))?;
+        // The races' portraits decode off the UI thread, once, while the session starts.
+        runtime.spawn_blocking(crate::kit::mnanim::warm);
         let interrupt = opened.session.interrupt();
         let steer = opened.session.steer();
         let (lines, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();

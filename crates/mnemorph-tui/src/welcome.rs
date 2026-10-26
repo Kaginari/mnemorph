@@ -21,7 +21,7 @@ pub fn card(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let inner = Slab::inner(w);
     // Rimuru's portrait, still on its first frame.
-    let art = mnanim::portrait(mnemorph_races::Race::Rimuru)
+    let art = mnanim::ready(mnemorph_races::Race::Rimuru)
         .and_then(|p| p.frames.first().map(|f| mnanim::lines(f, None)))
         .unwrap_or_default();
     let room = inner.saturating_sub(mnanim::SIZE + 2);

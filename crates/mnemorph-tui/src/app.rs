@@ -329,6 +329,22 @@ impl Model {
 
 /// Apply `msg` to `m`; the commands it returns are the runtime's to run.
 pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
+    let cmds = apply(m, msg);
+    settle_actor(m);
+    cmds
+}
+
+/// The portrait follows the body working now; it starts its loop from the first frame only when
+/// that body really changes, never on an event of the one already shown.
+fn settle_actor(m: &mut Model) {
+    let (now, _) = crate::activity::actor(m);
+    if m.activity.actor.as_deref() != Some(now.as_str()) {
+        m.activity.actor = Some(now);
+        m.portrait_clock = Duration::ZERO;
+    }
+}
+
+fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
         Msg::Key(key) => keys(m, key, Instant::now()),
         Msg::KeyAt(key, at) => keys(m, key, at),
@@ -352,7 +368,6 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Tick(dt) => tick(m, dt),
         Msg::Event { event, below } => session_event(m, event, below),
         Msg::Below { event, chain } => {
-            acting(m, &event, &chain);
             fold(m, &event, &chain);
             Vec::new()
         }
@@ -401,7 +416,6 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             m.outstanding = m.outstanding.saturating_sub(1);
             if !m.busy() {
                 m.activity.since = None;
-                m.activity.actor = None;
             }
             m.transcript.held = held;
             // A finished line may have grounded notes or born creatures: read the world again.
@@ -410,7 +424,6 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Crashed(why) => {
             m.outstanding = 0;
             m.activity.since = None;
-            m.activity.actor = None;
             m.transcript.push(Entry::Ending(format!("failed: {why}")));
             deny_all(m, "the session stopped")
         }
@@ -483,11 +496,9 @@ fn status(m: &mut Model, event: &Event) {
                 m.activity.base_tokens = m.transcript.usage.tokens;
             }
             m.activity.ended = false;
-            m.activity.actor = None;
         }
         Event::TurnEnded { .. } => {
             m.activity.ended = true;
-            m.activity.actor = None;
         }
         Event::GateVerdict { verdict, .. } => {
             let t = &m.theme;
@@ -499,22 +510,6 @@ fn status(m: &mut Model, event: &Event) {
             m.toast = Some(Toast::new(format!("◆ end gate {word}"), hue));
         }
         _ => {}
-    }
-}
-
-/// A commissioned body's event: the body acting now is the innermost whose turn runs; when it
-/// ends, the one that commissioned it acts again.
-fn acting(m: &mut Model, event: &Event, chain: &[String]) {
-    match event {
-        Event::TurnEnded { .. } => {
-            m.activity.actor = chain
-                .len()
-                .checked_sub(1)
-                .and_then(|n| chain.get(..n))
-                .and_then(|outer| outer.last().cloned());
-        }
-        Event::Usage { .. } | Event::Held { .. } => {}
-        _ => m.activity.actor = chain.last().cloned(),
     }
 }
 

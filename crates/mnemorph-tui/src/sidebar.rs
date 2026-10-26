@@ -574,7 +574,7 @@ fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
     let mut out: Lines = Vec::new();
-    if let Some(p) = mnanim::portrait(race) {
+    if let Some(p) = mnanim::ready(race) {
         let clock = if m.busy() {
             m.portrait_clock
         } else {

@@ -499,6 +499,23 @@ async fn reasoning_and_call_extras_go_back() {
             },
         ]
     );
+    // The whole answer, pinned: the reasoning kept to replay, the call's extras, the call.
+    assert_eq!(
+        r.content,
+        [
+            Block::Opaque(json!({"type": "openai.reasoning_content", "text": "let me see"})),
+            Block::Opaque(json!({
+                "type": "openai.tool_call_extra",
+                "id": "c1",
+                "fields": {"extra_content": {"google": {"thought_signature": "sig"}}}
+            })),
+            Block::ToolUse {
+                id: "c1".into(),
+                name: "read".into(),
+                input: json!({})
+            },
+        ]
+    );
     let mut next = request(vec![user("a")]);
     next.messages.push(Message {
         role: Role::Assistant,

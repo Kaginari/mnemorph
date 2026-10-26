@@ -195,7 +195,10 @@ token: the phase is read from the model — an approval on the card, a call whos
 stream (`calling grep`), a call running (`running bash: pytest -q`), the answer streaming
 (`writing`), the context past its stress line with the next answer not begun (`compacting`), else
 `thinking` — and a commissioned body that acts (its events come through `Seen::From`) puts its
-own name and tool there, and its portrait at the sidebar's head, until its turn ends. The providers hand the stream reasoning as it comes
+own name and tool there, and its portrait at the sidebar's head, until its turn ends: the body
+shown is the newest that still works, so siblings working at once never take the portrait from
+each other, and the session's own shows only when none does; the loop restarts only when the
+body shown changes. The providers hand the stream reasoning as it comes
 and a call's arguments piece by piece (`StreamEvent::Thinking`, `StreamEvent::ToolInput`; the
 server's protocol does not carry them): the reasoning shows as one line that updates in place —
 `◌ thinking · 12s · …its latest words` — and folds to `✓ thought for 12s` when the answer or a
@@ -208,8 +211,9 @@ to its result. Time is the model's clock, advanced by its ticks.
 
 The portraits are each race's idle loop, 32 pixels square (32 columns by 16 rows, 48 frames), in
 the `.mnanim.json` format of Kaginari/mnemorph-animations, embedded from `assets/anims/` (its
-README names the commit and command they came from) and decoded once per race, on first use,
-into every frame's cells by `kit::mnanim` — the half-block rule of that repository's player; a
+README names the commit and command they came from) and decoded once per race into every
+frame's cells by `kit::mnanim`, on a blocking thread at start — a frame only reads the cache and
+never decodes, so a race not yet ready is simply not drawn — — the half-block rule of that repository's player; a
 malformed file is an error, never a panic. The portrait plays at the loop's own pace, 16 frames a second, advanced by elapsed time under the 30-frame
 cap, only while a body works and the portrait is on screen; idle, it rests on its first frame and
 the UI schedules no tick for it.

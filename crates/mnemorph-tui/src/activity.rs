@@ -28,7 +28,7 @@ pub struct Activity {
     pub base_tokens: u64,
     /// The turn ended; the next one to start restarts the count.
     pub ended: bool,
-    /// The commissioned body acting now, innermost; `None` when the session acts itself.
+    /// The body the portrait last showed: a change of body restarts its loop.
     pub actor: Option<String>,
 }
 
@@ -121,13 +121,30 @@ pub fn race_of(m: &Model, name: &str) -> Race {
         .unwrap_or(Race::Slime)
 }
 
-/// The body acting now and its race: a commissioned body while one acts, else the session's.
+/// The body working now and its race: the newest commissioned body that works, else the
+/// session's.
 #[must_use]
 pub fn actor(m: &Model) -> (String, Race) {
-    match &m.activity.actor {
-        Some(name) => (name.clone(), race_of(m, name)),
-        None => (m.header.body.clone(), Race::Rimuru),
+    working(m).map_or_else(
+        || (m.header.body.clone(), Race::Rimuru),
+        |name| (name.to_owned(), race_of(m, name)),
+    )
+}
+
+/// The newest commissioned body whose turn runs, while the session's does: one body's event
+/// never takes the portrait from a sibling that still works, and the session shows only when
+/// none does.
+fn working(m: &Model) -> Option<&str> {
+    if !m.busy() {
+        return None;
     }
+    m.sidebar
+        .bodies
+        .list()
+        .iter()
+        .rev()
+        .find(|b| b.state == crate::sidebar::State::Working)
+        .map(|b| b.name.as_str())
 }
 
 /// The time the turn has run.
@@ -214,7 +231,7 @@ pub fn strip(m: &Model, w: usize) -> Lines {
 
 /// What the acting body does, in words: the session's phase, or a commissioned body's tool.
 fn doing(m: &Model, phase: &Phase) -> String {
-    let Some(name) = &m.activity.actor else {
+    let Some(name) = working(m) else {
         return phase.words();
     };
     m.sidebar
@@ -222,7 +239,7 @@ fn doing(m: &Model, phase: &Phase) -> String {
         .list()
         .iter()
         .rev()
-        .find(|b| &b.name == name)
+        .find(|b| b.name == name)
         .and_then(|b| b.doing.as_deref())
         .map_or_else(
             || "working".to_owned(),

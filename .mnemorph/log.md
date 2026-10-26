@@ -4958,3 +4958,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   decoder — an error now; the toast drew over the approval — hidden while a card is open.
 - **Learned:** an arrow on a gate card is a pick like any other: its landing spot is a safety
   default, and the safe default is the denial.
+
+---
+
+### [2026-10-27T01:15:00+01:00] rimuru — the terminal UI, part three: Fable's follow-ups
+- **Fable found, fixed, tested:** the portrait followed the last event's body, so two working
+  children thrashed it and an ending fell back to Rimuru mid-run — now it is the newest body still
+  working (`sidebar.bodies`), else the session's, and the loop restarts only on a real change; each
+  race decoded lazily on the UI thread (~24 ms) — now `mnanim::warm` decodes all eleven on a
+  blocking thread at start and frames only read the cache (`ready`), drawing nothing until then;
+  the streaming refactor is pinned by the whole assembled content of a stream with reasoning and a
+  call, for both providers.
+- **Learned:** "who acts" is a state, not an event: read it from the bodies' standing, never from
+  whichever one spoke last.
