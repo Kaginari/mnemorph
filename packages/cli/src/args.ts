@@ -39,7 +39,8 @@ Usage:
   mnemorph q list|show|add|claim|touch|requeue|close …   the shared work queue
   mnemorph housekeep [--heal]        what is broken in the roster; --heal fixes what is mechanical
   mnemorph relief <name> [--apply]   split a strained creature's ground in two young, or retire it
-  mnemorph memory status [--json]    note events that do not resolve, and whose writes they freeze
+  mnemorph memory status [--json]    note events that do not resolve, retired notes, recall loops
+  mnemorph memory wake <note>        restore a note the gate retired
 
 Options:
   --world <dir>    the world to work in (default: the current directory)

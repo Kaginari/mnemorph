@@ -376,6 +376,21 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     )
     .unwrap()
     .note;
+    // Recalled beside it, never named by the body: shown in the ask, yet not cited.
+    let bystander = mnemorph_memory::ground(
+        &w.world(),
+        mnemorph_memory::propose(
+            &w.world(),
+            "slime-other",
+            "the build is red when out.txt is stale",
+            vec![],
+            None,
+        )
+        .unwrap(),
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap()
+    .note;
     let model = Arc::new(ScriptedModel::new([
         tool(
             "t1",
@@ -402,11 +417,15 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
     assert_eq!(revises.len(), 1, "one per failed act: {revises:?}");
     let r = revises[0];
     assert_eq!(r.status, Status::Grounded);
-    assert_eq!(r.links.len(), 1);
-    assert_eq!(r.links[0].note, note);
+    assert_eq!(r.links.len(), 2, "{:?}", r.links);
+    let weight = |id: &str| r.links.iter().find(|l| l.note == id).unwrap().weight;
     assert!(
-        (r.links[0].weight - 0.9).abs() < 1e-9,
+        (weight(&note) - 0.9).abs() < 1e-9,
         "cited by an act's arguments"
+    );
+    assert!(
+        (weight(&bystander) - 0.4).abs() < 1e-9,
+        "shown in the ask's own message, never named by the body"
     );
     assert!(
         r.proof.as_deref().unwrap().contains("gate: FAIL"),

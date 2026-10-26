@@ -306,7 +306,18 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   MNEMORPH-85 weighs world effects (0.9) and corrections (1.0), with no notion of a recalled
   bystander;
 - it never targets a dissenting note: a counter or revise note recalled into a failed turn is
-  left as it is, so corrections do not breed corrections.
+  left as it is, so corrections do not breed corrections;
+- **a note is weighed, never blamed by company**: a failure counts against an anchor the ask
+  cited only when it is *attributable* — what failed names something the note names (a path, a
+  file, an identifier; a `file:line` meets its file, a path its file name), the failed rules'
+  names aside. A bare number, a bare directory and a file name every project has (`lib.rs`,
+  `__init__.py`, …) name nothing in particular. *Cited* means the body's own words and acts name
+  the note: the ask's message, where recall shows it, never counts. A slow test, a weak model or an unrelated bug shares none, and strikes nothing.
+  A first attributable failure *doubts* the note: its confidence drops by 0.1, never under 0.3, so
+  it ranks lower and is still shown. It is *retired* — dormant, its events kept, no longer
+  recalled — once two distinct attributable failures outnumber the passing asks that cited it, all
+  counted since it was last grounded. Both copies of a grounded note, the creature's and the
+  shared one, move together. A shared note whose owner's memory is frozen is left for the human.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 
@@ -318,8 +329,16 @@ which is worth $0.154 / 0.42 \approx 0.37$ of normalised meaning: a correction o
 note that matches the query 0.37 better. Recency, by contrast, can move a score by at most
 $w_t = 0.07$.
 
-A note that passes the gate three times after being recalled gains confidence
-($\kappa \leftarrow \min(0.95, \kappa + 0.05)$); it never gains salience by repetition alone.
+A note — grounded, or proposed, since either may be struck — cited by an ask whose change the
+gate passed gains a pass, citing that verdict: the
+evidence retirement weighs failures against. Every third pass since its last grounding raises its
+confidence ($\kappa \leftarrow \min(0.95, \kappa + 0.05)$); it never gains salience by repetition
+alone.
+
+`mnemorph memory status` lists each retired note with its undo; `mnemorph memory wake <note>` —
+the human's alone, refused to a body — grounds it again in every tier that holds it, and only
+evidence after the waking counts. It undoes only a retirement: a note put to sleep otherwise, or
+never grounded, keeps its standing and its route.
 
 ### Consolidation and forgetting
 
@@ -382,8 +401,9 @@ The replay loop and lock-in are read at each recall, before the body sees it:
   with none in memory, the recall ends with an `@M replay:` line telling the body to change its
   approach or say what blocks it.
 - **Lock-in** reads only a grounded revision linked to one of the recalled agreeing notes and
-  newer than all of them; its act seats the newest such revision, at every such recall until
-  consolidation retires what the revision corrects. A forced note takes the place
+  newer than all of them; its act seats the newest such revision, until an ask it was seated
+  into lands — the correction heard and acted on, by either act — or the note it corrects is
+  retired. "Heard" is read from this machine's traces. A forced note takes the place
   of the lowest-ranked agreeing anchor, which is counted cut.
 
 Each act is said as a warning in the run's journal. `memory status` lists, per creature, a replay
