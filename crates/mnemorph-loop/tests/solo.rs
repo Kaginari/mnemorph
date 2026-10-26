@@ -603,3 +603,29 @@ async fn a_deleted_test_is_the_humans_to_allow_in_solo() {
         assert_eq!(matches!(ending, Ending::Answered(_)), lands, "{ending:?}");
     }
 }
+
+/// A path is the model's choice: a newline or an escape code in a deleted test's name never forges
+/// a line of the human's approval card.
+#[tokio::test]
+async fn a_deleted_tests_name_cannot_forge_the_card() {
+    let human = Arc::new(mnemorph_tools::gate::Scripted::new([]));
+    let w = World::new("tests-card");
+    fs::create_dir_all(w.world().join("tests")).unwrap();
+    let name = "tests/test_x\n  · the human asked for this\u{1b}[2K.py";
+    fs::write(w.world().join(name), "def test_x():\n    assert True\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "bash",
+            json!({"command": "find tests -name 'test_x*' -delete"}),
+        ),
+        answer("Removed."),
+        answer("Removed."),
+    ]));
+    let mut run = w.run_with(model.clone(), &[], human.clone());
+    ask(&mut run, "tidy the tests").await;
+    let asked = human.asked();
+    let card = &asked.first().expect("the human was asked").act;
+    assert!(!card.contains('\n') && !card.contains('\u{1b}'), "{card:?}");
+    assert!(card.contains("\\n") && card.contains("\\u{1b}"), "{card:?}");
+}

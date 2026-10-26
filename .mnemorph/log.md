@@ -4682,3 +4682,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   fails). Checked to fail with the approval disabled.
 - **Not done:** `Run::resume` has no gate, and no callers yet; it should take one when it gets
   a caller (#204).
+
+---
+
+### [2026-10-26T16:16:04+01:00] rimuru — the gate waiver, Opus's security review
+- **Opus found:**
+  1. (medium) the approval card showed model-chosen paths raw, so a test file named with a newline
+     or an escape code could forge or hide card lines;
+  2. (low–med) skipping reconsolidation on tests-intact-only applied outside solo too, sparing the
+     classic reward hack (delete or skip the failing test) its memory cost.
+  - Nothing auto-approves (`NoHuman`, Terminal and the server's gate deny on silence), and
+    `Context::gate()` being public reaches only compiled-in tools.
+- **Fixed:**
+  1. run.rs `card_list` escapes control characters and caps the list at 5 plus a count;
+  2. reconsolidation is skipped only for `solo && tests_only`.
+- **Test:** solo `a_deleted_tests_name_cannot_forge_the_card` deletes through the shell (the
+  delete tool already refuses such a name). Checked to fail unescaped.
+- **Left, pre-existing:** the `Ending::Failed` text and the log carry the same raw path; hollowed
+  assertions with an unchanged test count pass tests-intact.

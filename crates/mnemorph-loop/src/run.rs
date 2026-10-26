@@ -1010,7 +1010,12 @@ impl Run {
             return Some(Ending::Answered(answer));
         }
         // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
-        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote && !tests_only {
+        // Outside solo, deleting or skipping the failing tests is the reward hack the rule is for:
+        // it reconsolidates like any failure.
+        if verdict.verdict() == crate::gate::Verdict::Fail
+            && !verdict.wrote
+            && !(solo && tests_only)
+        {
             self.failed_in_ask = Some((verdict.failures.clone(), heading));
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
@@ -1076,7 +1081,7 @@ impl Run {
             body: self.body.name.clone(),
             race: self.body.race,
             class: mnemorph_races::ToolClass::Destructive,
-            act: format!("land with tests changed — {}", failures.join("; ")),
+            act: format!("land with tests changed — {}", card_list(failures)),
             why: vec!["the end gate keeps tests intact unless the human allows it".into()],
             outside: Vec::new(),
         };
@@ -2512,3 +2517,31 @@ fn changed_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
         _ => Vec::new(),
     }
 }
+
+/// Failures as an approval card shows them: control characters escaped — a path is the model's
+/// choice, and a newline or an escape code in one could forge a line of the card — and at most
+/// [`CARD_ITEMS`] of them, the rest counted.
+fn card_list(failures: &[String]) -> String {
+    let mut shown: Vec<String> = failures
+        .iter()
+        .take(CARD_ITEMS)
+        .map(|f| {
+            f.chars()
+                .flat_map(|c| {
+                    if c.is_control() {
+                        c.escape_debug().collect::<Vec<_>>()
+                    } else {
+                        vec![c]
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    if failures.len() > CARD_ITEMS {
+        shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
+    }
+    shown.join("; ")
+}
+
+/// See [`card_list`].
+const CARD_ITEMS: usize = 5;
