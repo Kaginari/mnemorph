@@ -52,6 +52,7 @@ impl World {
                 name: "slime-a".into(),
                 roster: roster.clone(),
             }),
+            ..Default::default()
         };
         let mut cx = context_for(&self.0, roster, "slime-a")
             .unwrap()
@@ -196,6 +197,7 @@ fn a_verify_line_that_writes_fails_the_gate() {
                 name: "slime-a".into(),
                 roster: roster.clone(),
             }),
+            ..Default::default()
         };
         let mut cx = context_for(&w.0, &roster, "slime-a")
             .unwrap()
@@ -247,6 +249,7 @@ fn a_check_that_gave_no_result_is_not_verified() {
                 name: "slime-a".into(),
                 roster: roster.clone(),
             }),
+            ..Default::default()
         };
         let mut cx = context_for(&w.0, &roster, "slime-a")
             .unwrap()
@@ -279,6 +282,42 @@ fn a_check_that_gave_no_result_is_not_verified() {
     let crashed = judge(vec!["kill -SEGV $$".into()], true);
     assert_eq!(crashed.verdict(), Verdict::Fail, "{crashed:?}");
     assert_eq!(Verdict::NotVerified.word(), "NOT_VERIFIED");
+}
+
+/// Each verify line runs for the gate's `verify_secs`: a line still running at the limit is
+/// killed and gave no result, so the landing is not verified; one that ends inside it passes.
+#[test]
+fn a_verify_line_runs_for_the_gates_limit() {
+    let w = World::new("verify-secs");
+    let roster = Roster::load(&w.0);
+    let judge = |verify: &str, verify_secs: u64| {
+        let before = snapshot(&w.0);
+        fs::write(w.0.join("src/mine.rs"), format!("{verify}\n")).unwrap();
+        let gate = EndGate {
+            verify: vec![verify.to_owned()],
+            verify_secs,
+            author: Some(Author {
+                name: "slime-a".into(),
+                roster: roster.clone(),
+            }),
+        };
+        let mut cx = context_for(&w.0, &roster, "slime-a")
+            .unwrap()
+            .with_sandbox(Sandbox::None("the gate's judgement is under test".into()))
+            .with_unguarded(true);
+        gate.judge(&before, "done", &registry(), &mut cx)
+    };
+    assert_eq!(EndGate::default().verify_secs, 120);
+    let slow = judge("sleep 3", 1);
+    assert_eq!(slow.verdict(), Verdict::NotVerified, "{slow:?}");
+    assert!(
+        slow.unverified[0].contains("`sleep 3` gave no result"),
+        "{slow:?}"
+    );
+    let quick = judge("sleep 0.2", 1);
+    assert_eq!(quick.verdict(), Verdict::Pass, "{quick:?}");
+    let given = judge("sleep 3", 5);
+    assert_eq!(given.verdict(), Verdict::Pass, "{given:?}");
 }
 
 /// A write outside the soil names who owns the path and the ways on: route to a sibling's
@@ -360,6 +399,7 @@ fn another_writers_change_is_not_the_bodys_under_a_guard() {
                 name: "slime-a".into(),
                 roster: roster.clone(),
             }),
+            ..Default::default()
         };
         let mut cx = context_for(&w.0, &roster, "slime-a")
             .unwrap()

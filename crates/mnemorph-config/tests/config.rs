@@ -386,6 +386,42 @@ fn the_context_stress_line_defaults_and_can_be_set() {
     assert_eq!(g.load().unwrap().context_stress_tokens(), 90_000);
 }
 
+#[test]
+fn the_verify_limit_defaults_is_bounded_and_a_tracked_file_may_set_it() {
+    let g = Ground::new("verify-secs");
+    let c = g.load().unwrap();
+    assert_eq!(c.verify_secs(), 120);
+    assert_eq!(
+        c.get("gate.verify_secs").unwrap().origin.layer,
+        Layer::Default
+    );
+    // The project knows its own build: the tracked file sets it, the local file wins over it.
+    g.tracked("[gate]\nverify_secs = 600\n");
+    assert_eq!(g.load().unwrap().verify_secs(), 600);
+    g.local("[gate]\nverify_secs = 10\n");
+    assert_eq!(g.load().unwrap().verify_secs(), 10);
+    for (bad, file) in [("9", "config.local.toml"), ("601", "config.local.toml")] {
+        g.local(&format!("[gate]\nverify_secs = {bad}\n"));
+        let e = g.load().unwrap_err();
+        assert!(
+            e.contains(file) && e.contains("gate.verify_secs is a count of seconds from 10 to 600"),
+            "{e}"
+        );
+    }
+    g.local("");
+    g.tracked("[gate]\nverify_secs = 0\n");
+    let e = g.load().unwrap_err();
+    assert!(
+        e.contains("config.toml") && e.contains("from 10 to 600"),
+        "{e}"
+    );
+    assert_eq!(
+        mnemorph_config::VERIFY_SECS_RANGE,
+        10..=600,
+        "at most what the bash tool grants a command"
+    );
+}
+
 fn day(y: i64, m: u8, d: u8) -> Day {
     Day::new(y, m, d).unwrap()
 }

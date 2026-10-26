@@ -134,6 +134,12 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
         Facts::record(&w, &e).unwrap();
     }
     assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    // A compiled project's cold build may outrun the gate's limit: the note says which key.
+    assert!(said.contains("`gate.verify_secs`"), "{said}");
+    let python = world("suggest-python");
+    fs::write(python.join("pyproject.toml"), "[project]\nname = \"p\"\n").unwrap();
+    let said = missing_session_verify(&python, &Roster::load(&python)).unwrap();
+    assert!(!said.contains("verify_secs"), "{said}");
     // npm's placeholder test script suggests nothing.
     let bare = world("suggest-npm");
     fs::write(
@@ -150,4 +156,22 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
         "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
     );
     assert_eq!(missing_session_verify(&w, &Roster::load(&w)), None);
+}
+
+/// A Cargo workspace is suggested whole — every member's tests — and nothing from its manifest
+/// reaches the line: a package name is an agent's words, never pasted. A compiled project is told
+/// its cold build may need `gate.verify_secs`.
+#[test]
+fn a_cargo_workspace_is_suggested_whole_and_never_by_its_names() {
+    use mnemorph_world::verify::{missing_session_verify, suggest};
+    let w = world("suggest-members");
+    fs::write(
+        w.join("Cargo.toml"),
+        "[package]\nname = \"x; rm -rf ~\"\n\n[workspace]\nmembers = [\"crates/*\"]\n",
+    )
+    .unwrap();
+    assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
+    let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
+    assert!(!said.contains("rm -rf"), "{said}");
+    assert!(said.contains("`gate.verify_secs`"), "{said}");
 }
