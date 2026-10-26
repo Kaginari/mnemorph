@@ -3569,3 +3569,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 03.
 - **Test:** `another_writers_change_is_not_the_bodys_under_a_guard`, guarded and unguarded. No
   end-to-end put-back test: a scripted run cannot make a second session write mid-run.
+
+---
+
+### [2026-10-26T01:37:34+01:00] rimuru — #191's security review: Opus
+- **Opus found:** no full laundering hole. The predicate matches the real grant or is more
+  generous, symlinks are resolved, and a missing guard runs nothing.
+  - LOW: `repair` rebuilt the grant after the run (a changed `.gitignore` moves the build grant);
+  - LOW: skipped changes were named nowhere;
+  - INFO: Seatbelt off macOS runs unguarded but read as guarded.
+- **Fixed:**
+  - the grant is captured before the child runs and passed to `repair`;
+  - `repair` returns another writer's changes, and the report says "[another writer changed, left
+    as it is: …]";
+  - Seatbelt counts as a guard only on macOS;
+  - docs 03;
+  - `held_before` was extracted to keep `order` under 100 lines.
+- **Next:** Fable checks Opus's review.

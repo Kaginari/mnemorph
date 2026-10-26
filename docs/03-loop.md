@@ -294,8 +294,9 @@ Runs on the body's own writes (minus what its Courts already landed on their own
    landing that ends a finding is not blocked by it ([ontology](09-ontology.md#findings)). Writes are
    attributed per body: under a kernel guard a commissioned body's commands write only what it is
    granted — its soil, its build output, its scratch, its plan — so a change outside that, a
-   second session's on the same world, is not its to answer for, and a failed landing's put-back
-   never touches it. With no guard, writers cannot be told apart, and every change in the tree is
+   second session's on the same world, is not its to answer for, a failed landing's put-back
+   never touches it, and the commission's report names it as another writer's. The grant is the
+   one the body ran with, taken before it starts. With no guard, writers cannot be told apart, and every change in the tree is
    judged the body's.
 2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, 120 s
    each. A line changed this turn is a hole and runs from the next turn (a Named Slime's own

@@ -478,6 +478,7 @@ pub(crate) async fn order(
     let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
+    let grant = context_for(&c.world, &roster, &a.to).map(|k| k.inherit(cx));
     let mut child = child_run(
         c,
         &roster,
@@ -490,9 +491,7 @@ pub(crate) async fn order(
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
     // What the world held before the child, to put back what it changes off its ground.
-    let held = cx
-        .attic()
-        .and_then(|attic| attic.snapshot("before a commission").ok());
+    let held = held_before(cx);
     let before = snapshot(&c.world);
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
     drop(seat);
@@ -501,9 +500,10 @@ pub(crate) async fn order(
     // Court work counts only when the child answered: a failed landing is put back whole.
     let answered = matches!(ending, Ending::Answered(_));
     let courts = if answered { child.courts() } else { Vec::new() };
-    let (mut landed, put_back) = repair(
+    let (mut landed, put_back, others) = repair(
         c,
         cx,
+        grant.as_ref(),
         &roster,
         &a.to,
         &before,
@@ -515,7 +515,11 @@ pub(crate) async fn order(
     landed.sort();
     landed.dedup();
     let failed = child.failed_acts();
-    let notes: Vec<String> = granted.into_iter().chain(rode).collect();
+    let notes: Vec<String> = granted
+        .into_iter()
+        .chain(rode)
+        .chain(others_note(&others))
+        .collect();
     let report = report_for(
         c, &roster, &a.to, &ending, failed, notes, &landed, &put_back,
     );
@@ -1127,34 +1131,49 @@ fn report_of(
     report.emit(DEFAULT_CAP, None)
 }
 
+/// The attic's snapshot of the world before a commission, to put back from.
+fn held_before(cx: &Context) -> Option<mnemorph_tools::Snapshot> {
+    cx.attic()
+        .and_then(|attic| attic.snapshot("before a commission").ok())
+}
+
+/// The note for what another writer changed while the child ran: named, and left as it is.
+fn others_note(others: &[PathBuf]) -> Option<String> {
+    (!others.is_empty()).then(|| {
+        let shown: Vec<String> = others.iter().map(|p| p.display().to_string()).collect();
+        format!(
+            "[another writer changed, left as it is: {}]",
+            shown.join(", ")
+        )
+    })
+}
+
 /// Split what the child changed: its landing (and its commissions'), kept only when it answered;
 /// and everything else, put back from the attic, or removed when it was new.
 #[allow(clippy::too_many_arguments)]
 fn repair(
     c: &Commissioner,
     cx: &Context,
+    its: Option<&Context>,
     roster: &Roster,
     name: &str,
     before: &crate::gate::Tree,
     held: Option<&mnemorph_tools::Snapshot>,
     courts: &[PathBuf],
     answered: bool,
-) -> (Vec<PathBuf>, Vec<(PathBuf, bool)>) {
+) -> (Vec<PathBuf>, Vec<(PathBuf, bool)>, Vec<PathBuf>) {
     let me = Owner::Creature(name.to_owned());
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
-    // The child's own grant, under the guard it ran with: what it could have written.
-    let its = context_for(&c.world, roster, name).map(|k| k.inherit(cx));
+    let mut others = Vec::new();
     for rel in changed(before, &c.world) {
         if courts.contains(&rel) {
             continue;
         }
         // Another writer's change — one this body's guard would not let it make — is neither its
         // landing nor its to put back: a second session's work stays as that session left it.
-        if its
-            .as_ref()
-            .is_some_and(|k| !k.could_have_written(&c.world.join(&rel)))
-        {
+        if its.is_some_and(|k| !k.could_have_written(&c.world.join(&rel))) {
+            others.push(rel);
             continue;
         }
         let shown = rel.to_string_lossy().into_owned();
@@ -1177,7 +1196,7 @@ fn repair(
         };
         put_back.push((rel, restored));
     }
-    (landed, put_back)
+    (landed, put_back, others)
 }
 
 /// A run id's suffix: unique within the session.

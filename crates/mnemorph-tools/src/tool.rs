@@ -362,7 +362,13 @@ impl Context {
     /// told apart, and every change may be its.
     #[must_use]
     pub fn could_have_written(&self, path: &Path) -> bool {
-        if !self.narrowed || matches!(self.sandbox, Sandbox::None(_)) {
+        // Seatbelt guards only on macOS: anywhere else it is no guard at all.
+        let guarded = match self.sandbox {
+            Sandbox::None(_) => false,
+            Sandbox::Seatbelt(_) => cfg!(target_os = "macos"),
+            Sandbox::Guard(_) => true,
+        };
+        if !self.narrowed || !guarded {
             return true;
         }
         let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
