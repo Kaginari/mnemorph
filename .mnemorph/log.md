@@ -4664,3 +4664,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Bench consequence:** this campaign's Mnemorph arms ran without a session gate. A
   `solo-carry` measured on a build with this fix also needs a `Verify:` line on the bench
   world's Rimuru card.
+
+---
+
+### [2026-10-26T16:12:41+01:00] rimuru — the session gate, Fable's review
+- **Fable:** mergeable. Lanes are safe: `before` is refreshed with landed and put-back work. All
+  entry points (server, CLI) go through `open_with`. One behaviour change wanted a deliberate yes:
+  tests-intact now fails a solo session's legitimate test deletion or rename. The one retry can
+  only undo it, and a second FAIL reconsolidates the memory the ask cited.
+- **Decided:** in solo the human is at hand. A verdict failing on tests-intact alone is put to
+  them on the approval gate as a destructive act (`Run::human_allows`): allowed, it lands; denied,
+  or no human (`NoHuman`, the bench, headless), it fails as before. A tests-intact-only failure
+  never reconsolidates. Committees keep the strict rule (an author is set).
+- **Also:** `Context::gate()` is public for the loop; docs 03 state the solo exception and that
+  the session's verify lines are read at open (Fable's point 3).
+- **Test:** solo `a_deleted_test_is_the_humans_to_allow_in_solo` (approve lands, `NoHuman`
+  fails). Checked to fail with the approval disabled.
+- **Not done:** `Run::resume` has no gate, and no callers yet; it should take one when it gets
+  a caller (#204).

@@ -38,8 +38,19 @@ impl World {
     }
 
     fn run(&self, model: Arc<ScriptedModel>, verify: &[&str]) -> Run {
+        self.run_with(model, verify, Arc::new(mnemorph_tools::NoHuman))
+    }
+
+    /// [`Self::run`], with the human answering on `human`.
+    fn run_with(
+        &self,
+        model: Arc<ScriptedModel>,
+        verify: &[&str],
+        human: Arc<dyn mnemorph_tools::Gate>,
+    ) -> Run {
         let (body, cx) = solo(&self.world(), "claude-sonnet-5-5");
         let cx = cx
+            .with_gate(human)
             .with_sandbox(Sandbox::None("solo tests run unguarded".into()))
             .with_unguarded(true)
             .with_attic(
@@ -557,4 +568,38 @@ async fn a_claim_another_creature_made_from_other_evidence_is_corroborated() {
         Status::Grounded,
         "both voices"
     );
+}
+
+/// In solo the human is at hand: a landing that fails only because a test was deleted — which the
+/// ask may have asked for — is theirs to allow. With no human attached it fails, as ever.
+#[tokio::test]
+async fn a_deleted_test_is_the_humans_to_allow_in_solo() {
+    for (human, lands) in [
+        (
+            Arc::new(mnemorph_tools::gate::Scripted::new([
+                mnemorph_tools::Answer::Approve,
+            ])) as Arc<dyn mnemorph_tools::Gate>,
+            true,
+        ),
+        (
+            Arc::new(mnemorph_tools::NoHuman) as Arc<dyn mnemorph_tools::Gate>,
+            false,
+        ),
+    ] {
+        let w = World::new(if lands { "tests-allowed" } else { "tests-kept" });
+        fs::create_dir_all(w.world().join("tests")).unwrap();
+        fs::write(
+            w.world().join("tests/test_old.py"),
+            "def test_old():\n    assert True\n",
+        )
+        .unwrap();
+        let model = Arc::new(ScriptedModel::new([
+            tool("t1", "delete", json!({"path": "tests/test_old.py"})),
+            answer("Removed the obsolete test, as asked."),
+            answer("I cannot keep it and remove it."),
+        ]));
+        let mut run = w.run_with(model.clone(), &[], human);
+        let ending = ask(&mut run, "remove the obsolete test tests/test_old.py").await;
+        assert_eq!(matches!(ending, Ending::Answered(_)), lands, "{ending:?}");
+    }
 }

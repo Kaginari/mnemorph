@@ -993,12 +993,24 @@ impl Run {
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
         });
+        let solo = gate.author.is_none();
         let heading = self.log_verdict(&verdict, *retried);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
+        // Only tests changed — one deleted, skipped or thinned, which the human may have asked
+        // for: no fault of what the body knew, and in solo, with the human at hand, theirs to allow.
+        let tests_only = !verdict.wrote
+            && verdict.unverified.is_empty()
+            && verdict
+                .failures
+                .iter()
+                .all(|f| f.starts_with("tests intact:"));
+        if solo && tests_only && self.human_allows(&verdict.failures) {
+            return Some(Ending::Answered(answer));
+        }
         // A FAIL is what a run-ending failure reconsolidates by: kept until the ask ends.
-        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote {
+        if verdict.verdict() == crate::gate::Verdict::Fail && !verdict.wrote && !tests_only {
             self.failed_in_ask = Some((verdict.failures.clone(), heading));
         }
         // A check that wrote is no failure to fix: it would write nothing on a retry, and what it
@@ -1055,6 +1067,29 @@ impl Run {
             }],
         );
         None
+    }
+
+    /// The human's word on a landing that changed tests: asked on the approval gate, which a run
+    /// with no human attached always denies.
+    fn human_allows(&mut self, failures: &[String]) -> bool {
+        let ask = mnemorph_tools::Ask {
+            body: self.body.name.clone(),
+            race: self.body.race,
+            class: mnemorph_races::ToolClass::Destructive,
+            act: format!("land with tests changed — {}", failures.join("; ")),
+            why: vec!["the end gate keeps tests intact unless the human allows it".into()],
+            outside: Vec::new(),
+        };
+        let allowed = matches!(self.cx.gate().ask(&ask), mnemorph_tools::Answer::Approve);
+        if allowed {
+            self.record(&Beat::Note {
+                text: format!(
+                    "the human allowed the tests' change: {}",
+                    failures.join("; ")
+                ),
+            });
+        }
+        allowed
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.

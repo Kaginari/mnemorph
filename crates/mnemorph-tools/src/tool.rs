@@ -556,7 +556,10 @@ impl Context {
         &self.home
     }
 
-    pub(crate) fn gate(&self) -> &dyn Gate {
+    /// The human approval gate the tools ask; the loop asks it too, for what the end gate leaves
+    /// to the human.
+    #[must_use]
+    pub fn gate(&self) -> &dyn Gate {
         self.gate.as_ref()
     }
 
