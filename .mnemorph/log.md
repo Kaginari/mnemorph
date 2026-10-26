@@ -3473,3 +3473,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 09.
 - **Test:** `a_date_or_a_change_note_in_a_living_doc_is_doc_provenance`. On Mnemorph's own world
   it finds nothing.
+
+---
+
+### [2026-10-26T01:13:53+01:00] rimuru — #188's review: Fable
+- **Fable found:**
+  - `as of` matched inside "schemas of";
+  - `'s order`, `added by` and `changed on` are mostly legitimate prose;
+  - inline backticks were not skipped.
+- **Fixed:**
+  - `has_phrase` matches words of their own;
+  - the three prose-prone phrases are dropped;
+  - backtick spans are skipped like fences;
+  - docs 09;
+  - the test now carries those false positives and stays at 2 findings.
+- **Lesson again:** a scripted edit stopped at a missed anchor, and the test still passed because
+  its own edit had not landed yet. Each edit was grepped before trusting the run.

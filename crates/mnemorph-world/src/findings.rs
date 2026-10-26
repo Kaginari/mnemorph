@@ -451,12 +451,9 @@ it to one in its Minds field, mark it `- **Shared:** yes`, or retire it"
 /// What a change note says: the phrases that date a living doc or credit its edits.
 const CHANGE_NOTES: &[&str] = &[
     "added on",
-    "added by",
     "updated on",
-    "changed on",
     "edited on",
-    "as of ",
-    "'s order",
+    "as of",
     "at the request of",
     "per the human",
 ];
@@ -487,13 +484,17 @@ pub fn provenance(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
             if fenced {
                 continue;
             }
-            let lower = line.to_lowercase();
-            let said = has_date(line).map(|d| format!("the date {d}")).or_else(|| {
-                CHANGE_NOTES
-                    .iter()
-                    .find(|p| lower.contains(*p))
-                    .map(|p| format!("a change note (`{}`)", p.trim()))
-            });
+            // Inline code is code: a dated path or a version in backticks says nothing of the doc.
+            let prose: String = line.split('`').step_by(2).collect::<Vec<_>>().join(" ");
+            let lower = prose.to_lowercase();
+            let said = has_date(&prose)
+                .map(|d| format!("the date {d}"))
+                .or_else(|| {
+                    CHANGE_NOTES
+                        .iter()
+                        .find(|p| has_phrase(&lower, p))
+                        .map(|p| format!("a change note (`{}`)", p.trim()))
+                });
             if let Some(said) = said {
                 out.push(Finding {
                     code: "doc-provenance",
@@ -528,5 +529,14 @@ fn has_date(line: &str) -> Option<&str> {
             && edge(i.checked_sub(1).and_then(|k| b.get(k)))
             && edge(b.get(i + 10));
         is.then(|| &line[i..i + 10])
+    })
+}
+
+/// Whether `phrase` stands in `text` as words of its own: `as of` is not `schemas of`.
+fn has_phrase(text: &str, phrase: &str) -> bool {
+    text.match_indices(phrase).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + phrase.len()..].chars().next();
+        before.is_none_or(|c| !c.is_alphanumeric()) && after.is_none_or(|c| !c.is_alphanumeric())
     })
 }

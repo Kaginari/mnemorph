@@ -350,13 +350,13 @@ fn a_date_or_a_change_note_in_a_living_doc_is_doc_provenance() {
     std::fs::create_dir_all(w.join(".mnemorph/slime/s")).unwrap();
     std::fs::write(
         w.join(".mnemorph/law.md"),
-        "# Law\n\nWrite tests first.\nAdded on the human's order.\n",
+        "# Law\n\nWrite tests first.\nAdded on the human's order.\nSchemas of the wire, in the caller's order; fields added by the parser.\n",
     )
     .unwrap();
     std::fs::write(
         w.join(".mnemorph/slime/s/README.md"),
         "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n\n## Notes\n\
-         Owns the parser since 2026-10-24.\nPort 8080-1234 and v2026-10-24x are no dates.\n\
+         Owns the parser since 2026-10-24.\nPort 8080-1234 and v2026-10-24x are no dates, nor `log/2026-10-24.md`.\n\
          ```\nlet released = \"2026-01-01\";\n```\n",
     )
     .unwrap();
