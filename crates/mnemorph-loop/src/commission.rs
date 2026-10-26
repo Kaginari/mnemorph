@@ -168,6 +168,7 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
 @W <path> for each path you wrote\n\
 @F <file:line> <claim> for each finding\n\
+@U law <path> <fact> for a rule of a file you changed — name the path: your gate's tests can then prove it\n\
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),

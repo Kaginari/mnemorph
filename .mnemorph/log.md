@@ -4247,3 +4247,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - write.rs: the new signature.
 - **Note:** this is a unit-level drive of the post-landing path, not 50 scripted model turns.
   The gate itself is covered by the loop's gate tests.
+
+---
+
+### [2026-10-26T10:22:14+01:00] rimuru — #208: claims name their file; status counts what is shared
+- **Why** (the human, relaying a side agent): with checked scoped to the diff, a cheap model's
+  unnamed claims never reach shared memory, so the bench could show little from memory.
+- **Done:**
+  - the child prompt asks `@U law <path> <fact>` for a rule of a changed file, and the drain asks
+    to name the file, so the work's own tests can prove the claim;
+  - `mnemorphd memory status` opens with "memory: N note(s) shared and grounded; personal:
+    P proposed, G grounded" (`standing`);
+  - docs 08.
+- **Tests:** mnemorphd tests/memory.rs expect the standing line.
+- **Noted:** `the_clock_reaches_a_running_command` failed once at load 8.4 and passed twice
+  alone in 0.5 s; it is a timing test.

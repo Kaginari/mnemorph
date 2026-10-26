@@ -497,6 +497,7 @@ fn memory(args: &[String]) -> ExitCode {
     } else if rows.is_empty() {
         println!("no creature has memory here yet");
     } else {
+        println!("{}", standing(&world));
         for (name, found, seen) in &rows {
             print_memory(name, found, seen);
         }
@@ -522,6 +523,38 @@ fn wake(world: &Path, id: &str) -> ExitCode {
         }
         Err(e) => refused(&e),
     }
+}
+
+/// How much of the world's memory stands: grounded in shared memory, and kept personal — the
+/// first number to read after a run, since only shared notes reach other bodies.
+fn standing(world: &Path) -> String {
+    use mnemorph_server::world::memory::{Status, Tier, fold, read};
+    let count = |tier: &Tier, status: Status| {
+        read(world, tier).map_or(0, |r| {
+            fold(&r.rows)
+                .values()
+                .filter(|n| n.status == status)
+                .count()
+        })
+    };
+    let shared = count(&Tier::Shared, Status::Grounded);
+    let (mut proposed, mut grounded) = (0, 0);
+    if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
+        for e in rd.filter_map(Result::ok) {
+            if let Some(name) = e
+                .path()
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+            {
+                let tier = Tier::Personal(name);
+                proposed += count(&tier, Status::Proposed);
+                grounded += count(&tier, Status::Grounded);
+            }
+        }
+    }
+    format!(
+        "memory: {shared} note(s) shared and grounded; personal: {proposed} proposed, {grounded} grounded"
+    )
 }
 
 /// One creature's `memory status` lines: clear, or what does not resolve and what its recalls show.

@@ -300,7 +300,11 @@ it the checked route observes nothing, and it needs **accepted**, **corroborated
 diff has to slip past a test written without it; that is why a pass with no verify line is not a
 route at all. A **checked** proof carries what its diff changed, and grounds only a claim that names
 one of those paths (by its specific terms: `src/a.rs:12` names `src/a.rs`, a path names its file);
-any other claim of the landing stays proposed, offered for the commissioner to accept.
+any other claim of the landing stays proposed, offered for the commissioner to accept. A
+commissioned body is asked to name the file a claim is about (`@U law <path> <fact>`), and the
+drain asks the same, so a claim about the work can be proven by the work's own tests. `memory
+status` opens with how much of the world's memory stands — shared and grounded, personal and
+proposed — the first number to read after a run, since only shared notes reach other bodies.
 
 ### Reconsolidation
 

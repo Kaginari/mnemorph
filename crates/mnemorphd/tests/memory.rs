@@ -45,10 +45,7 @@ fn a_hand_edit_is_named_and_fails_the_status() {
     .unwrap();
     let (code, out) = status(&world, false);
     assert_eq!(code, Some(1));
-    assert!(
-        out.starts_with("slime-a: frozen — 1 note event(s)"),
-        "{out}"
-    );
+    assert!(out.contains("\nslime-a: frozen — 1 note event(s)"), "{out}");
     assert!(
         out.contains("event e2  note n1: a standing claimed by a plain record"),
         "{out}"
@@ -107,6 +104,9 @@ fn a_retired_note_is_listed_and_the_human_wakes_it() {
         String::from_utf8_lossy(&human.stderr)
     );
     let (_, out) = status(&world, false);
-    assert_eq!(out, "slime-a: clear\n");
+    assert_eq!(
+        out,
+        "memory: 0 note(s) shared and grounded; personal: 0 proposed, 1 grounded\nslime-a: clear\n"
+    );
     let _ = fs::remove_dir_all(&world);
 }
