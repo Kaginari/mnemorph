@@ -1,6 +1,7 @@
 //! The runtime: the session hosted in-process, the terminal owned and always given back, and
 //! the loop — receive a message, update, run the commands, draw when dirty — with frames
-//! coalesced to at most [`FPS`] a second, however fast the model streams.
+//! coalesced to at most [`FPS`] a second, however fast the model streams. After each frame the
+//! [`Placer`] sends the portraits' pictures the frame wants, when they changed.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ use ratatui::crossterm::{execute, terminal};
 
 use crate::app::{self, Cmd, Header, Model, Msg};
 use crate::gate::TuiGate;
+use crate::pictures::Placer;
 
 /// The most frames drawn a second.
 pub const FPS: u64 = 30;
@@ -461,7 +463,10 @@ pub fn run(model: Model, host: &Host, tx: Sender<Msg>, rx: &Receiver<Msg>) -> st
         model.size = (size.width, size.height);
     }
     read_input(tx);
-    let result = event_loop(&mut model, host, &mut screen.0, rx);
+    let mut placer = Placer::new(&model.pictures);
+    let result = event_loop(&mut model, host, &mut screen.0, rx, &mut placer);
+    // A Kitty picture outlives the text under it: deleted before the screen is given back.
+    let _ = placer.clear(&mut std::io::stdout());
     // However the loop ended, every approval still open or waiting is denied: the human left
     // without answering it.
     for cmd in app::leave(&mut model) {
@@ -476,6 +481,7 @@ fn event_loop(
     host: &Host,
     terminal: &mut ratatui::DefaultTerminal,
     rx: &Receiver<Msg>,
+    placer: &mut Placer,
 ) -> std::io::Result<()> {
     let mut clock = FrameClock::default();
     let mut dirty = true;
@@ -483,7 +489,12 @@ fn event_loop(
     loop {
         let now = Instant::now();
         if dirty && clock.wait(now).is_zero() {
-            terminal.draw(|f| app::view(model, f))?;
+            let mut out = std::io::stdout();
+            placer.before(model.gate.is_some(), &mut out)?;
+            let frame = terminal.draw(|f| app::view(model, f))?;
+            // The pictures after the text: sent only when what is wanted changed.
+            let size = (frame.area.width, frame.area.height);
+            placer.sync(&model.pictures.wanted(), size, frame.buffer, &mut out)?;
             clock.drew(now);
             dirty = false;
         }

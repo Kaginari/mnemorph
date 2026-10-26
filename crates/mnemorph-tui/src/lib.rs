@@ -5,7 +5,8 @@
 //! its messages, `update` and `view`; [`run`] owns the terminal, the session's driver and the
 //! loop; [`gate`] is the human gate as an approval card; [`sidebar`] the column beside the
 //! transcript; [`activity`] the living status — what the session does now, in words; [`welcome`]
-//! the card the conversation opens on.
+//! the card the conversation opens on; [`probe`] asks the terminal what it can draw, and
+//! [`pictures`] places the races' portraits over the cells as real pixels where it can.
 
 pub mod activity;
 pub mod app;
@@ -14,6 +15,8 @@ pub mod blocks;
 pub mod diff;
 pub mod gate;
 pub mod kit;
+pub mod pictures;
+pub mod probe;
 pub mod run;
 pub mod safe;
 pub mod sidebar;

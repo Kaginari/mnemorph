@@ -4971,3 +4971,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   call, for both providers.
 - **Learned:** "who acts" is a state, not an event: read it from the bodies' standing, never from
   whichever one spoke last.
+
+---
+
+### [2026-10-26T23:58:00+01:00] rimuru — the terminal UI, part four: the portraits in real pixels
+- **Task:** draw the races' portraits through terminal image protocols, as sharp as their 256 px
+  source; the half-block portrait becomes the fallback.
+- **Files:** `probe.rs` (the start-up probe: `TIOCGWINSZ`, `CSI 16 t`, XTVERSION, Kitty's query,
+  DA1 last; `poll` on `/dev/tty`, 200 ms, no reader thread left behind), `kit/pixels.rs` (replies,
+  the choice Kitty → iTerm2 → Sixel → half blocks, the box math, Lanczos pictures, the three
+  encoders, a median-cut quantizer for Sixel), `pictures.rs` (what a frame wants, the placer that
+  sends, moves and erases), `assets/portraits/` (mnemorph-animations `df20cfa`), `--probe`,
+  `MNEMORPH_TUI_IMAGES`.
+- **Chose:** our own layer over `ratatui-image` 11: its probe reads stdin on a thread that
+  outlives its timeout (it would eat the UI's first keys), it ranks Sixel over iTerm2 for xterm.js,
+  and its pictures live in a cell's symbol, out of reach of the approval and of exact erasing.
+- **Tests:** the choice from xterm.js's replies with and without `;4`, a Kitty OK, none; the env
+  override; 32 columns of 8 × 17 → 256 × 255; Kitty chunks and terminators, iTerm2 and Sixel
+  payloads; nothing wanted or sent under an open approval, back after it; no re-send on an
+  unchanged frame; the fold, the short column, half blocks; the probe's timeout.
+- **Learned:** a terminal image is not a cell: the view must say where pictures go, and the
+  runtime must erase what text cannot cover — by id under Kitty, by writing the cells again
+  under Sixel and iTerm2.
+- **Open (@?):** not yet seen in a real terminal by the human; under Kitty a move re-sends the
+  PNG (upload once and place by id is the animation's seam).

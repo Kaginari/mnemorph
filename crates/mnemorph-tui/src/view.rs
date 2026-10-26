@@ -17,6 +17,7 @@ use crate::blocks::Ctx;
 use crate::kit::keyhelp::{Binding, KeyHelp};
 use crate::kit::style::{Border, Sides, Style as Boxed};
 use crate::kit::text::{Lines, cells, clip, small_caps, truncate};
+use crate::pictures::{Art, Slot, Want};
 use crate::theme::Rgb;
 
 /// The smallest frame worth drawing.
@@ -42,6 +43,7 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
     let area = f.area();
     let buf = f.buffer_mut();
     let t = &m.theme;
+    m.pictures.wants.borrow_mut().clear();
     Block::new().style(t.page()).render(area, buf);
     if area.width < MIN.0 || area.height < MIN.1 {
         let msg = Line::from(Span::styled(
@@ -92,6 +94,8 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         );
     }
     if m.gate.is_some() {
+        // The approval never sits under a picture: while it is open, none is wanted.
+        m.pictures.wants.borrow_mut().clear();
         dim(buf, inner, t);
         modal(m, below_label, buf);
     }
@@ -103,6 +107,12 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
         for (row, line) in (below_label.y..below_label.bottom()).zip(&lines) {
             buf.set_line(left, row, line, to_u16(width));
         }
+        // Nor does a picture sit over the toast.
+        let over = Rect::new(left, below_label.y, to_u16(width), to_u16(lines.len()));
+        m.pictures
+            .wants
+            .borrow_mut()
+            .retain(|w| w.area.intersection(over).is_empty());
     }
 }
 
@@ -194,6 +204,15 @@ fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
     for (y, line) in (top..area.bottom()).zip(&lines) {
         buf.set_line(area.x + 3, y, line, area.width.saturating_sub(3));
     }
+    let h = usize::from(area.height.saturating_sub(1));
+    if let Some((pad, cols, rows)) = crate::sidebar::picture_box(m, w, h) {
+        m.pictures.want(Want {
+            slot: Slot::Sidebar,
+            art: Art::Still(crate::activity::actor(m).1),
+            area: Rect::new(area.x + 3 + pad, top, cols, rows),
+            bg: m.theme.p.bg,
+        });
+    }
     let mut hits = m.hits.borrow_mut();
     hits.side_x = area.x + 3;
     hits.side_w = area.width.saturating_sub(3);
@@ -230,6 +249,7 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         lines: window,
         owners,
         top,
+        head: head_skip,
     } = m.transcript.window(&ctx, rows, m.viewport.offset(), &head);
     m.measured.set(top.unwrap_or(usize::MAX));
     // The transcript sits on the input: a short one is pushed down, as a chat reads.
@@ -241,6 +261,9 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     let first = top_row.max(area.y);
     for (row, line) in (first..area.bottom()).zip(stack.into_iter().skip(skip)) {
         buf.set_line(area.x, row, line, area.width);
+    }
+    if let Some(n) = head_skip {
+        welcome_art(m, area, buf, (n, skip, first, window.len()));
     }
     // Each row's entry, for a click: the transcript's rows only, as drawn.
     let mut hits = m.hits.borrow_mut();
@@ -259,7 +282,51 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
             + area
                 .width
                 .saturating_sub(to_u16(cells(" ↓ pgdn · esc to the end ")));
-        buf.set_line(x, area.y + to_u16(rows) - 1, &note, area.width);
+        let y = area.y + to_u16(rows) - 1;
+        buf.set_line(x, y, &note, area.width);
+        let over = Rect::new(x, y, area.right().saturating_sub(x), 1);
+        m.pictures
+            .wants
+            .borrow_mut()
+            .retain(|w| w.area.intersection(over).is_empty());
+    }
+}
+
+/// The welcome's portrait as a picture: wanted where the card's art rows are all on screen;
+/// where only some are, those rows get its half blocks, cut to the picture's height. `at` is the
+/// window's layout: how many head lines lie above it, the stack's skipped lines, the first row
+/// drawn and the window's visible lines.
+fn welcome_art(m: &Model, area: Rect, buf: &mut Buffer, at: (usize, usize, u16, usize)) {
+    let (above, skip, first, shown) = at;
+    let cols = crate::welcome::COLS;
+    let Some(rows) = m.pictures.rows(cols) else {
+        return;
+    };
+    let (line, col) = crate::welcome::ART_AT;
+    if usize::from(area.width) < usize::from(col + cols) + crate::kit::slab::FRAME {
+        return;
+    }
+    // The screen row of the card's line `k`, when it is drawn.
+    let row_of = |k: usize| -> Option<u16> {
+        let idx = k.checked_sub(above)?;
+        (idx >= skip && idx < shown).then(|| first + to_u16(idx - skip))
+    };
+    let x = area.x + col;
+    let rows_on: Vec<Option<u16>> = (0..usize::from(rows)).map(|r| row_of(line + r)).collect();
+    if let (Some(Some(y)), true) = (rows_on.first(), rows_on.iter().all(Option::is_some)) {
+        m.pictures.want(Want {
+            slot: Slot::Welcome,
+            art: Art::Still(mnemorph_races::Race::Rimuru),
+            area: Rect::new(x, *y, cols, rows),
+            bg: crate::welcome::face(&m.theme),
+        });
+        return;
+    }
+    let still = crate::welcome::still();
+    for (y, l) in rows_on.iter().zip(&still) {
+        if let Some(y) = y {
+            buf.set_line(x, *y, l, cols);
+        }
     }
 }
 

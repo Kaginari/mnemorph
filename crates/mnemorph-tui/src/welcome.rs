@@ -15,15 +15,45 @@ use crate::theme::Rgb;
 /// The tagline under the name.
 pub const TAGLINE: &str = "an agent harness · the world remembers in documents";
 
+/// The portrait's width, in cells.
+pub const COLS: u16 = 32;
+#[allow(clippy::cast_lossless)]
+const _: () = assert!(COLS as usize == mnanim::SIZE);
+
+/// Where the portrait sits in the card: its line, its column.
+pub const ART_AT: (usize, u16) = (1, 2);
+
+/// The card's face: the background its portrait's picture is laid on.
+#[must_use]
+pub fn face(t: &crate::theme::Theme) -> Rgb {
+    surface(t).face
+}
+
+fn surface(t: &crate::theme::Theme) -> Surface {
+    Surface::card(t, Some(t.races.dark_elf), 0.08)
+}
+
+/// Rimuru's portrait, still on its first frame, in half blocks.
+#[must_use]
+pub fn still() -> Lines {
+    mnanim::ready(mnemorph_races::Race::Rimuru)
+        .and_then(|p| p.frames.first().map(|f| mnanim::lines(f, None)))
+        .unwrap_or_default()
+}
+
 /// The welcome card, `w` cells wide.
 #[must_use]
 pub fn card(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let inner = Slab::inner(w);
-    // Rimuru's portrait, still on its first frame.
-    let art = mnanim::ready(mnemorph_races::Race::Rimuru)
-        .and_then(|p| p.frames.first().map(|f| mnanim::lines(f, None)))
-        .unwrap_or_default();
+    // Rimuru's portrait: a picture over plain rows (the view places it), else its first frame
+    // in half blocks.
+    let art = match m.pictures.rows(COLS) {
+        Some(rows) => {
+            std::iter::repeat_n(Line::from(" ".repeat(mnanim::SIZE)), usize::from(rows)).collect()
+        }
+        None => still(),
+    };
     let room = inner.saturating_sub(mnanim::SIZE + 2);
     let chip = |name: &str, hue: Rgb| {
         Span::styled(
@@ -94,5 +124,5 @@ pub fn card(m: &Model, w: usize) -> Lines {
         keys.push(Span::styled(format!(" {what}   "), t.muted()));
     }
     rows.push(truncate(Line::from(keys), inner));
-    Slab::new(Surface::card(t, Some(t.races.dark_elf), 0.08)).render(rows, w)
+    Slab::new(surface(t)).render(rows, w)
 }

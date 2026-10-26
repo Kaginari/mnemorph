@@ -197,6 +197,8 @@ pub struct Model {
     /// How long the sidebar's portrait has played: it moves only while a body works and the
     /// portrait is on screen.
     pub portrait_clock: Duration,
+    /// The portraits as real pixels, where the terminal draws them: still, never played.
+    pub pictures: crate::pictures::Pictures,
 }
 
 /// The surveys: the next one's number, and the newest whose reading was applied.
@@ -256,6 +258,7 @@ impl Model {
             toast: None,
             session_id: String::new(),
             portrait_clock: Duration::ZERO,
+            pictures: crate::pictures::Pictures::default(),
         }
     }
 
@@ -267,10 +270,11 @@ impl Model {
             && usize::from(self.size.1.saturating_sub(3)) >= crate::sidebar::HEAD_FROM
     }
 
-    /// Whether the portrait plays: a body works, and the portrait is on screen.
+    /// Whether the portrait plays: a body works, and the portrait is on screen in half blocks —
+    /// a picture in real pixels is still.
     #[must_use]
     pub fn portrait_plays(&self) -> bool {
-        self.busy() && self.portrait_shown()
+        self.busy() && self.portrait_shown() && !self.pictures.active()
     }
 
     /// Whether a turn runs.
