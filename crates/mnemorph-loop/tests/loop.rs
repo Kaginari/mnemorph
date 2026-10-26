@@ -1849,3 +1849,29 @@ async fn two_compactions_replay_and_a_resume_reads_their_estimate() {
     );
     assert_eq!(after.requests().len(), 1);
 }
+
+/// An ask that names a path the ontology holds facts on carries them: the `@ONTO` line, contested
+/// first, so the body sees what creatures learned there — and both sides when they disagree.
+#[tokio::test]
+async fn an_ask_naming_a_path_carries_its_facts() {
+    use mnemorph_world::facts::{Event, from_unsaid};
+    let w = World::new("onto-view");
+    fs::create_dir_all(w.world().join("src")).unwrap();
+    fs::write(w.world().join("src/build.rs"), "fn main() {}\n").unwrap();
+    for (text, by) in [
+        ("build=cargo test", "slime-a"),
+        ("build=cargo nextest run", "slime-b"),
+    ] {
+        let e: Event = from_unsaid(&format!("src/ {text}"), by, None).unwrap();
+        mnemorph_world::Facts::record(&w.world(), &e).unwrap();
+    }
+    let model = Arc::new(ScriptedModel::new([answer("noted")]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "fix the build script in src/build.rs").await;
+    let first = format!("{:?}", model.requests()[0].messages.last());
+    assert!(first.contains("@ONTO src/"), "{first}");
+    assert!(
+        first.contains("contested"),
+        "both sides of a disagreement: {first}"
+    );
+}

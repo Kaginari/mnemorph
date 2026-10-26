@@ -110,3 +110,46 @@ fn a_retired_note_is_listed_and_the_human_wakes_it() {
     );
     let _ = fs::remove_dir_all(&world);
 }
+
+/// The human settles a contested fact; a body is never let do it, and an unknown id is refused.
+#[test]
+fn the_human_settles_a_fact_and_a_body_cannot() {
+    use mnemorph_server::world::Facts;
+    use mnemorph_server::world::facts::{Event, from_unsaid};
+    let world = std::env::temp_dir().join(format!("mnemorph-onto-settle-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&world);
+    fs::create_dir_all(world.join("src")).unwrap();
+    let said = from_unsaid("src/ build=cargo test", "slime-a", None).unwrap();
+    let Event::Support { id, .. } = &said else {
+        panic!("{said:?}");
+    };
+    let id = id.clone();
+    Facts::record(&world, &said).unwrap();
+    let w = world.to_str().unwrap();
+    let bin = env!("CARGO_BIN_EXE_mnemorphd");
+    let body = Command::new(bin)
+        .args(["onto", "settle", &id, "--world", w])
+        .env("MNEMORPH_BODY", "slime-a")
+        .output()
+        .unwrap();
+    assert_eq!(body.status.code(), Some(2));
+    let unknown = Command::new(bin)
+        .args(["onto", "settle", "nope", "--world", w])
+        .env_remove("MNEMORPH_BODY")
+        .output()
+        .unwrap();
+    assert_eq!(unknown.status.code(), Some(2));
+    let human = Command::new(bin)
+        .args(["onto", "settle", &format!("#{id}"), "--world", w])
+        .env_remove("MNEMORPH_BODY")
+        .output()
+        .unwrap();
+    assert!(
+        human.status.success(),
+        "{}",
+        String::from_utf8_lossy(&human.stderr)
+    );
+    let f = &Facts::load(&world).facts[&id];
+    assert!(f.settled);
+    let _ = fs::remove_dir_all(&world);
+}

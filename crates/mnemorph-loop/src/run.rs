@@ -211,6 +211,11 @@ pub const SALVAGE_TOKENS: u32 = 4096;
 /// How many structured compactions one ask may take before a full context drains.
 pub const COMPACTIONS: u32 = 2;
 
+/// The most paths an ask's `@ONTO` lines cover, and the facts each shows.
+const ONTO_PATHS: usize = 6;
+/// See [`ONTO_PATHS`].
+const ONTO_FACTS: usize = 3;
+
 /// What the body is asked when the context is full and the run can go on: a summary that replaces
 /// the conversation, in fixed sections, its discoveries and files on the wire.
 const SUMMARY_NOTE: &str = "The context is full. Write the summary that will replace this \
@@ -1522,6 +1527,14 @@ impl Run {
             ),
             None => asked,
         };
+        // What the ontology holds of the paths this ask concerns: contested facts with both sides.
+        let asked = match self.onto_view(text) {
+            Some(view) => format!(
+                "The ontology on these paths — facts creatures learned, contested ones with both \
+                 sides; a [stale] fact's code moved since it was said:\n{view}\n\n{asked}"
+            ),
+            None => asked,
+        };
         if recalled.is_empty() {
             asked
         } else {
@@ -1531,6 +1544,42 @@ impl Run {
                 recalled.join("\n")
             )
         }
+    }
+
+    /// The `@ONTO` lines for the paths an ask concerns — a commissioned body's soil, and every
+    /// path the ask names that exists — when the ontology holds a fact on any of them.
+    fn onto_view(&self, text: &str) -> Option<String> {
+        let world = self.cx.world();
+        let facts = mnemorph_world::Facts::load(world);
+        if facts.facts.is_empty() {
+            return None;
+        }
+        let roster = mnemorph_world::Roster::load(world);
+        let mut paths: Vec<String> = Vec::new();
+        if self.caller.commission.is_some()
+            && let Some(soil) = mnemorph_world::soil::soil(&roster, &self.body.name)
+        {
+            paths.extend(soil.write.iter().cloned());
+        }
+        for t in mnemorph_memory::text::specific_terms(text) {
+            let t = t.split(':').next().unwrap_or(&t).to_owned();
+            if world.join(&t).exists() && !paths.contains(&t) {
+                paths.push(t);
+            }
+        }
+        paths.truncate(ONTO_PATHS);
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        let owner_of = |p: &str| match mnemorph_world::own(&roster, p) {
+            mnemorph_world::Owner::Creature(n) => n,
+            mnemorph_world::Owner::Harness => "the harness".into(),
+            mnemorph_world::Owner::Human => "the human".into(),
+            mnemorph_world::Owner::Unowned => "nobody".into(),
+        };
+        let lines = facts.projection(world, owner_of, &refs, ONTO_FACTS);
+        lines
+            .iter()
+            .any(|l| l.contains(" · ") || l.starts_with("@ONTO -"))
+            .then(|| lines.join("\n"))
     }
 
     /// Recall for an ask: the body's own notes and the shared ones, ranked for its text, as `@M`
@@ -2286,6 +2335,7 @@ impl Run {
             if u.kind == Some(mnemorph_wire::UnsaidKind::Territory) {
                 if let Some(event) =
                     mnemorph_world::facts::from_unsaid(&u.text, &self.body.name, None)
+                        .map(|e| mnemorph_world::facts::anchored(self.cx.world(), e))
                 {
                     match mnemorph_world::Facts::record(self.cx.world(), &event) {
                         Ok(()) => filed += 1,

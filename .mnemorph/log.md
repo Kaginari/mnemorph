@@ -4465,3 +4465,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
     stay `["failure"]`;
   - the lock-in loop test now asserts the revision is recalled (on its borrowed words);
   - the pathology lock-in test clears `lent` to keep covering a revision that misses the floor.
+
+---
+
+### [2026-10-26T13:45:13+01:00] rimuru — the mesh live: facts anchored, shown, settled
+- **Why:** the gap matrix's top three mesh gaps were one theme. The outer layer was built and
+  tested, but on the live path it had no input (anchors), no output (`@ONTO`) and no closure
+  (settle).
+- **Files:**
+  - world facts.rs: `anchored` (a fact with no anchor is anchored at its `about`); `digest`
+    hashes a whole file too;
+  - commission.rs + run.rs: both `from_unsaid` callers file `anchored` facts;
+  - commission.rs `file_verdicts`: `@V settle #<id>` from an Orc records `Settle` with its proof
+    (others are refused and told);
+  - run.rs `onto_view`: the `@ONTO` projection for a commissioned body's soil and every existing
+    path the ask names (up to 6 paths, 3 facts each), in the preface beside `@M`, only when there
+    is a fact;
+  - mnemorphd `onto settle <id>`, the human's (a body is refused); the CLI's help;
+  - docs 09.
+- **Tests:**
+  - world facts: anchored, then stale once its file changes;
+  - mnemorphd: the human settles, a body and an unknown id are refused;
+  - loop: an ask naming a path carries `@ONTO` with the contested fact;
+  - commission: an Orc's `@V settle` settles exactly the fact it names.
+- **Not done:** the owner's gated landing citing `#id` as a third settle route.

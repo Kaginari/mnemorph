@@ -274,6 +274,12 @@ pub fn digest(world: &Path, at: &str) -> Option<String> {
             .collect();
         return Some(hash(&cited.join("\n")));
     }
+    // A file is anchored by its whole text: what it says now is what the fact was said about.
+    if world.join(at).is_file() {
+        return std::fs::read_to_string(world.join(at))
+            .ok()
+            .map(|t| hash(&t));
+    }
     let mut names: Vec<String> = std::fs::read_dir(world.join(at))
         .ok()?
         .filter_map(Result::ok)
@@ -281,6 +287,40 @@ pub fn digest(world: &Path, at: &str) -> Option<String> {
         .collect();
     names.sort();
     Some(hash(&names.join("\n")))
+}
+
+/// A fact asserted with no anchor of its own is anchored where it is about, with the digest of
+/// what is there now — the file's text, the directory's listing — so that when the code moves
+/// under it, the fact reads stale instead of standing as true.
+#[must_use]
+pub fn anchored(world: &Path, event: Event) -> Event {
+    match event {
+        Event::Support {
+            id,
+            about,
+            text,
+            by,
+            source: None,
+        } => {
+            let at = about.trim_end_matches('/').to_owned();
+            let at = if world.join(&at).is_dir() {
+                format!("{at}/")
+            } else {
+                at
+            };
+            Event::Support {
+                source: Some(Anchor {
+                    digest: digest(world, &at),
+                    at,
+                }),
+                id,
+                about,
+                text,
+                by,
+            }
+        }
+        other => other,
+    }
 }
 
 /// Read one `@U territory …` payload, said by `by`, into its event: `<about> <key>=<value>`,

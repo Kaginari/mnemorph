@@ -254,7 +254,8 @@ fact it collides with. The status table then applies unchanged, and no one had t
 of a `file:line`, the listing of a directory, a commit (which never drifts), a journal entry (never
 either). When the digest no longer matches, the fact reads **stale** wherever it is shown, and
 `onto check` raises a `stale-fact` finding. Staleness is computed, not stored, so it never adds a
-counter; a creature that asserts the fact again re-anchors it. Most contradictions in a codebase
+counter; a creature that asserts the fact again re-anchors it. A fact said with no anchor of its
+own is anchored where it is about — the file's text, the directory's listing — at filing. Most contradictions in a codebase
 are a fact written before the code moved, and this catches them with a hash.
 
 **3. Triage on collision.** A free fact lands through its body's parent (the Orc, for a Slime).
@@ -292,9 +293,11 @@ measure the second, and the parent's own verdicts are what the value ledger scor
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
 proof: a landing by the path's owner that passed its gate and cites the fact, the Orc's verdict
-naming it, or the human. A creature's projection (`@ONTO`,
-[communication](04-communication.md#the-wire-envelope)) shows a contested fact with both sides,
-the way recall always seats one dissenting note.
+naming it (`@V settle #<id>` in its report), or the human (`mnemorph onto settle <id>`). A
+creature's projection (`@ONTO`, [communication](04-communication.md#the-wire-envelope)) shows a
+contested fact with both sides, the way recall always seats one dissenting note: each ask carries
+it, beside the recalled notes, for the paths it concerns — a commissioned body's soil and every
+existing path the ask names — when the ontology holds a fact on any of them.
 
 The events are `.mnemorph/ontology/facts.jsonl`, harness soil, folded in the order written: a
 `support` (id, path, text, who, evidence), a `counter` naming an id, a `settle` with its proof,

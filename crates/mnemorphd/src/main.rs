@@ -10,6 +10,7 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 Usage: mnemorphd [--world <dir>]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--world <dir>]
+       mnemorphd onto settle <fact-id> [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
@@ -122,9 +123,9 @@ fn onto(args: &[String]) -> ExitCode {
     let mut paths = Vec::new();
     let mut words = args.iter();
     let command = match words.next().map(String::as_str) {
-        Some(c @ ("owner" | "check")) => c,
+        Some(c @ ("owner" | "check" | "settle")) => c,
         Some(other) => return fail(&format!("onto has no `{other}`; see --help")),
-        None => return fail("onto needs a command: owner or check; see --help"),
+        None => return fail("onto needs a command: owner, check or settle; see --help"),
     };
     while let Some(w) = words.next() {
         if w == "--world" {
@@ -143,6 +144,9 @@ fn onto(args: &[String]) -> ExitCode {
     }
     if command == "check" && !paths.is_empty() {
         return fail("onto check takes no paths: it checks the whole world");
+    }
+    if command == "settle" {
+        return settle(world.as_deref(), &paths);
     }
     let Ok(cwd) = std::env::current_dir() else {
         return fail("the current directory cannot be read");
@@ -414,6 +418,41 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
                 i.ask
             )
         };
+    }
+}
+
+/// `onto settle <id>`: the human settles a contested fact — besides an Orc's verdict, the one act
+/// that does; recency never settles. A body never runs it.
+fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
+    use mnemorph_server::world::Facts;
+    use mnemorph_server::world::facts::Event;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: settling a fact is the human's or an Orc's"
+        ));
+    }
+    let [id] = ids else {
+        return refused(&"onto settle takes one fact id: `#<id>` or `<id>`");
+    };
+    let id = id.trim_start_matches('#');
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, w));
+    if !Facts::load(&world).facts.contains_key(id) {
+        return refused(&format!("no fact `#{id}` in this world's ontology"));
+    }
+    let event = Event::Settle {
+        id: id.to_owned(),
+        by: "human".into(),
+        proof: "the human's word".into(),
+    };
+    match Facts::record(&world, &event) {
+        Ok(()) => {
+            println!("settled #{id}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&format!("the settle could not be filed: {e}")),
     }
 }
 
