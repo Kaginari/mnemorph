@@ -4202,3 +4202,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Test:** commission.rs. An `Accepting` model reads the minted id from the Elf's report and
   accepts one of two claims. The accepted one is grounded and shared at 0.6 with its proof; the
   other stays personal and proposed. It fails without `accept` (checked).
+
+---
+
+### [2026-10-26T10:10:12+01:00] rimuru — #207's review: Fable
+- **Fable found:**
+  - **a body could ground its own words:** `commissioned` took the order's `to` before the order
+    ran, so a refused order to itself qualified it, and with a drained claim's id from recall it
+    could accept its own claim;
+  - **the ids were cut first:** the offer rode the `other` prose line, which `emit` cuts first
+    past 2048 bytes;
+  - the id parse was fragile;
+  - the whole model line went into the proof.
+- **Fixed:**
+  - `Order::offered` carries exactly the `(owner, id)` pairs a report offered; the run keeps them
+    per ask (`acceptable`), and `accept` grounds only those;
+  - the offer is a hole (`accept? <id> «text» — … @V accept <id>`), which is never cut;
+  - `accept` reads every id on a line, trims punctuation and warns on a bare line;
+  - the proof cites `<body> accepted <id> in run <run>`;
+  - docs 08.
+- **Tests:** commission.rs: a body can't accept its own claim through a refused self-order; a
+  report long past the cut still offers and grounds.

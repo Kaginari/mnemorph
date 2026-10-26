@@ -1726,10 +1726,73 @@ async fn a_findings_commission_s_accepted_claim_is_shared_and_the_rest_stay_pers
             .proof
             .as_deref()
             .unwrap()
-            .starts_with("accepted: rimuru accepted it in run"),
+            .starts_with(&format!("accepted: rimuru accepted {} in run", caps.id)),
         "{:?}",
         shared_caps.proof
     );
     assert_eq!(cache.status, Status::Proposed, "not accepted: personal");
     assert!(!shared.contains_key(&cache.id), "never shared");
+}
+
+/// A body never grounds its own words: a refused order to itself offers nothing, so accepting its
+/// own proposed claim grounds nothing.
+#[tokio::test]
+async fn a_body_cannot_accept_its_own_claim() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("self-accept");
+    let own =
+        mnemorph_memory::propose(&w.0, "rimuru", "the API caps at 100 a minute", vec![], None)
+            .unwrap()
+            .note;
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "rimuru", "ask": "check yourself", "office": "findings"}),
+        ),
+        ScriptedModel::text(&format!("Checked.\n@V accept {own}")),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("look", &mut |_| {}).await;
+    let mine = fold(&read(&w.0, &Tier::Personal("rimuru".into())).unwrap().rows);
+    assert_eq!(
+        mine[&own].status,
+        Status::Proposed,
+        "its own words stay proposed"
+    );
+    assert!(!fold(&read(&w.0, &Tier::Shared).unwrap().rows).contains_key(&own));
+}
+
+/// The offer is a hole, never cut: a report long past the cut still offers its claims, and an
+/// accepted one is shared.
+#[tokio::test]
+async fn a_long_report_still_offers_its_claims() {
+    use mnemorph_memory::{Status, Tier, fold, read};
+    let w = World::new("long-offer");
+    let prose = "The rate limit is documented in several places, read them all. ".repeat(60);
+    let model = Arc::new(Accepting {
+        inner: ScriptedModel::new([
+            ScriptedModel::tool(
+                "c1",
+                "commission",
+                json!({"to": "elf-e", "ask": "how fast may we call the API?", "office": "findings"}),
+            ),
+            ScriptedModel::text(&format!(
+                "@S DONE\n{prose}\n@U colony the API caps at 100 calls a minute\n@E"
+            )),
+        ]),
+        claim: "the API caps",
+    });
+    let mut run = w.rimuru_dyn(model.clone());
+    run.ask("find the API's rate limit", &mut |_| {}).await;
+    let personal = fold(&read(&w.0, &Tier::Personal("elf-e".into())).unwrap().rows);
+    let caps = personal
+        .values()
+        .find(|n| n.text.starts_with("the API caps"))
+        .unwrap();
+    assert_eq!(
+        caps.status,
+        Status::Grounded,
+        "accepted though the report was cut"
+    );
 }
