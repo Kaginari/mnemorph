@@ -248,14 +248,7 @@ impl Transcript {
             return;
         };
         let done = &self.streaming[..cut + 2];
-        let fences = done
-            .lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                t.starts_with("```") || t.starts_with("~~~")
-            })
-            .count();
-        if fences % 2 == 1 {
+        if open_fence(done) {
             return;
         }
         let done = done.to_owned();
@@ -442,6 +435,38 @@ impl Transcript {
     }
 }
 
+/// Whether `text` ends inside a fenced code block: a fence opens with three or more backticks
+/// or tildes and closes only with a run of the same character at least as long, alone on its
+/// line — so a four-backtick fence holding three backticks stays open.
+fn open_fence(text: &str) -> bool {
+    let mut open: Option<(char, usize)> = None;
+    for line in text.lines() {
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        if indent > 3 {
+            continue;
+        }
+        let t = &line[indent..];
+        let Some(c) = t.chars().next().filter(|c| *c == '`' || *c == '~') else {
+            continue;
+        };
+        let run = t.chars().take_while(|x| *x == c).count();
+        if run < 3 {
+            continue;
+        }
+        let rest = &t[run..];
+        match open {
+            None if !(c == '`' && rest.contains('`')) => open = Some((c, run)),
+            Some((fence_char, fence_len))
+                if fence_char == c && run >= fence_len && rest.trim().is_empty() =>
+            {
+                open = None;
+            }
+            _ => {}
+        }
+    }
+    open.is_some()
+}
+
 fn first_line(text: &str) -> String {
     let line = text.lines().next().unwrap_or("");
     crate::kit::text::clip(line, 100)
@@ -480,6 +505,19 @@ mod tests {
                 head: false
             })
         );
+    }
+
+    #[test]
+    fn a_long_fence_holding_a_short_one_stays_open() {
+        assert!(open_fence("````md\n```rust\nfn a() {}\n```\n"));
+        assert!(!open_fence("````md\n```\n````\n"));
+        assert!(open_fence("~~~\n```\n"));
+        assert!(!open_fence("```\na\n```\n"));
+        let mut t = Transcript::default();
+        delta(&mut t, "````md\n```rust\nx\n```\n\nstill inside\n\n");
+        assert!(t.entries.is_empty(), "nothing leaves from inside the fence");
+        delta(&mut t, "````\n\nafter");
+        assert_eq!(t.entries.len(), 1);
     }
 
     #[test]

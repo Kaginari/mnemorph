@@ -13,14 +13,12 @@ use crate::app::Model;
 use crate::blocks::Ctx;
 use crate::kit::keyhelp::{Binding, KeyHelp};
 use crate::kit::style::{Border, Sides, Style as Boxed};
-use crate::kit::text::{Lines, cells, clip, truncate, wrap_text};
+use crate::kit::text::{Lines, cells, clip, truncate};
 
 /// The smallest frame worth drawing.
 const MIN: (u16, u16) = (24, 8);
 /// The most rows the input grows to.
 const INPUT_ROWS: usize = 6;
-/// The most rows of an act the approval card shows.
-const ACT_ROWS: usize = 6;
 
 /// The sidebar's width at a frame's width: none yet — the sidebar is a later view's — but the
 /// layout already splits for it.
@@ -67,16 +65,22 @@ pub fn draw(m: &Model, f: &mut Frame<'_>) {
 fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     let theme = &m.theme;
     let w = usize::from(area.width);
-    let input = input_box(m, w);
-    let card = m
-        .gate
-        .as_ref()
-        .map(|(c, choice)| gate_card(m, c, *choice, w));
+    let now = std::time::Instant::now();
+    // While an approval waits it takes the input's place: the input takes no keys then.
+    let card = m.gate.as_ref().map(|a| {
+        a.drawn(now);
+        a.view(theme, w, usize::from(area.height), now)
+    });
+    let input = if card.is_some() {
+        Vec::new()
+    } else {
+        input_box(m, w)
+    };
     let queued: Lines = m
         .transcript
         .queued
         .iter()
-        .take(3)
+        .take(if card.is_some() { 0 } else { 3 })
         .map(|q| {
             truncate(
                 Line::from(vec![
@@ -105,7 +109,10 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         .chain(&queued)
         .chain(card.iter().flatten())
         .chain(&input);
-    for (row, line) in (top_row..).zip(stack) {
+    // A stack taller than the area keeps its bottom: the card's choice and the input stay.
+    let stack: Vec<&Line<'static>> = stack.collect();
+    let skip = stack.len().saturating_sub(usize::from(area.height));
+    for (row, line) in (top_row.max(area.y)..area.bottom()).zip(stack.into_iter().skip(skip)) {
         buf.set_line(area.x, row, line, area.width);
     }
     if !m.viewport.following() && rows > 0 {
@@ -329,76 +336,5 @@ fn input_box(m: &Model, w: usize) -> Lines {
         .border(Border::Rounded, border)
         .padding(Sides::sym(0, 1))
         .width(w)
-        .render(lines)
-}
-
-/// The approval card: the gate's own frame and words, the act and its reasons as the core
-/// escaped them, and the choice — made, then confirmed.
-fn gate_card(m: &Model, card: &crate::gate::Card, choice: Option<bool>, w: usize) -> Lines {
-    let t = &m.theme;
-    let inner = w.saturating_sub(4);
-    let mut lines: Lines = wrap_text(
-        &format!("{} asks to run this {} act:", card.body, card.class),
-        inner,
-        t.text(),
-    );
-    let act = wrap_text(
-        &card.act,
-        inner.saturating_sub(2),
-        t.text().add_modifier(Modifier::BOLD),
-    );
-    let more = act.len().saturating_sub(ACT_ROWS);
-    for l in act.into_iter().take(ACT_ROWS) {
-        let mut spans = vec![Span::styled("  ", t.text())];
-        spans.extend(l.spans);
-        lines.push(Line::from(spans));
-    }
-    if more > 0 {
-        lines.push(Line::from(Span::styled(
-            format!("  … +{more} lines"),
-            t.muted(),
-        )));
-    }
-    for why in &card.why {
-        lines.extend(wrap_text(&format!("· {why}"), inner, t.muted()));
-    }
-    if !card.outside.is_empty() {
-        let text = format!("opens outside the world: {}", card.outside.join(", "));
-        lines.extend(wrap_text(&text, inner, t.alarm()));
-    }
-    lines.push(Line::from(""));
-    let pick = |on: bool, key: &str| {
-        let bold = t.gold().add_modifier(Modifier::BOLD);
-        let style = if on {
-            bold.add_modifier(Modifier::REVERSED)
-        } else {
-            bold
-        };
-        Span::styled(format!(" {key} "), style)
-    };
-    let next = if choice.is_some() {
-        "  enter confirms · esc denies"
-    } else {
-        "  choose, then enter · esc denies"
-    };
-    lines.push(truncate(
-        Line::from(vec![
-            pick(choice == Some(true), "y"),
-            Span::styled(" run it once  ", t.text()),
-            pick(choice == Some(false), "n"),
-            Span::styled(" deny", t.text()),
-            Span::styled(next, t.muted()),
-        ]),
-        inner,
-    ));
-    Boxed::new()
-        .border(Border::Thick, t.gold())
-        .padding(Sides::sym(0, 1))
-        .width(w)
-        .title(Line::from(Span::styled(
-            "⚠ the human gate",
-            t.gold().add_modifier(Modifier::BOLD),
-        )))
-        .title_right(Line::from(Span::styled("silence denies", t.muted())))
         .render(lines)
 }

@@ -4780,3 +4780,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   end to end; 2,000 messages under 33 ms a frame in a debug build.
 - **Left for part two:** the sidebar (its column is reserved in the layout), mouse scrolling,
   expanding a folded card.
+
+---
+
+### [2026-10-26T19:25:11+01:00] rimuru — the terminal UI, the security review's round
+- **Opus found:** an act cut at six rows could hide its tail from the approval card; `y`…Enter
+  typed ahead approved; card and input could overflow a short terminal; SIGTERM/SIGHUP left the
+  terminal raw; an expired card stayed; entities (`&#x202E;`) decoded after escaping; a panicked
+  session kept the UI busy; a four-backtick fence holding three read as closed.
+- **Fixed:**
+  - `approval`: the act scrolls in the card, head, cut and last line shown; `y` refused until
+    read to its end; keys ignored for 300 ms after the first draw and keys stamped before it; only
+    a bare `y`/`n`, then Enter; a countdown, and the card leaves at its deadline;
+  - the card takes the input's place, lines drop by priority, the stack is clipped to the area;
+  - signal-hook (already under crossterm) turns SIGTERM/SIGHUP into a quit; a panic off the UI
+    thread no longer restores the terminal under a live UI; `supervise` reports the session
+    task's panic;
+  - the Markdown renderer escapes each parsed text; fences track their character and length;
+  - the palette's names are destructured exhaustively.
+- **Tests:** each finding has one (`tests/ui.rs`, `run.rs`, `transcript.rs`, `markdown.rs`);
+  a pty run checked SIGTERM exits cleanly.

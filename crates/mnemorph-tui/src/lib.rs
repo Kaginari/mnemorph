@@ -6,6 +6,7 @@
 //! loop; [`gate`] is the human gate as an approval card.
 
 pub mod app;
+pub mod approval;
 pub mod blocks;
 pub mod diff;
 pub mod gate;

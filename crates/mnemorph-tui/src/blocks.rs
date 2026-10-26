@@ -68,7 +68,8 @@ pub fn render(entry: &Entry, prev: Option<&Entry>, ctx: &Ctx<'_>) -> Lines {
             } else if matches!(prev, Some(Entry::Tool(_) | Entry::Verdict { .. })) {
                 out.push(gap());
             }
-            let md = markdown::render(&clean(text), w - INDENT, t);
+            // The renderer makes each parsed text safe: entities decode before they are escaped.
+            let md = markdown::render(text, w - INDENT, t);
             out.extend(indented(md));
         }
         Entry::Tool(call) => out.extend(indented(card(call, w - INDENT, ctx))),

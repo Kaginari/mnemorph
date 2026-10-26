@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
+use std::time::Instant;
 
 use mnemorph_loop::{Gate, GateAnswer, GateAsk, shown};
 use mnemorph_tools::gate::Pending;
@@ -28,6 +29,8 @@ pub struct Card {
     pub outside: Vec<String>,
     /// Where the answer goes.
     pub pending: Arc<Pending>,
+    /// When silence denies: the gate's own wait, from the moment it asked.
+    pub deadline: Instant,
 }
 
 impl Card {
@@ -50,6 +53,7 @@ impl Card {
                 .map(|p| shown(&p.display().to_string()))
                 .collect(),
             pending,
+            deadline: Instant::now() + GATE_WAIT,
         }
     }
 

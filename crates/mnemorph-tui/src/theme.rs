@@ -125,40 +125,67 @@ pub const RACES: Races = Races {
 };
 
 impl Palette {
-    /// Every field with its name in the TypeScript source.
+    /// Every field with its name in the TypeScript source. The destructuring is exhaustive: a
+    /// field added here and not named fails to compile.
     #[must_use]
     pub fn named(&self) -> Vec<(&'static str, Rgb)> {
+        let Self {
+            bg,
+            panel,
+            panel_raised,
+            line,
+            text,
+            text_muted,
+            holo,
+            alarm,
+            gold,
+        } = *self;
         vec![
-            ("bg", self.bg),
-            ("panel", self.panel),
-            ("panelRaised", self.panel_raised),
-            ("line", self.line),
-            ("text", self.text),
-            ("textMuted", self.text_muted),
-            ("holo", self.holo),
-            ("alarm", self.alarm),
-            ("gold", self.gold),
+            ("bg", bg),
+            ("panel", panel),
+            ("panelRaised", panel_raised),
+            ("line", line),
+            ("text", text),
+            ("textMuted", text_muted),
+            ("holo", holo),
+            ("alarm", alarm),
+            ("gold", gold),
         ]
     }
 }
 
 impl Races {
-    /// Every race with its name in the TypeScript source.
+    /// Every race with its name in the TypeScript source, destructured exhaustively as
+    /// [`Palette::named`] is.
     #[must_use]
     pub fn named(&self) -> Vec<(&'static str, Rgb)> {
+        let Self {
+            rimuru,
+            elf,
+            orc,
+            slime,
+            kijin,
+            dark_elf,
+            high_elf,
+            high_orc,
+            named_slime,
+            oni,
+            arch_dark_elf,
+            veldora,
+        } = *self;
         vec![
-            ("rimuru", self.rimuru),
-            ("elf", self.elf),
-            ("orc", self.orc),
-            ("slime", self.slime),
-            ("kijin", self.kijin),
-            ("darkElf", self.dark_elf),
-            ("highElf", self.high_elf),
-            ("highOrc", self.high_orc),
-            ("namedSlime", self.named_slime),
-            ("oni", self.oni),
-            ("archDarkElf", self.arch_dark_elf),
-            ("veldora", self.veldora),
+            ("rimuru", rimuru),
+            ("elf", elf),
+            ("orc", orc),
+            ("slime", slime),
+            ("kijin", kijin),
+            ("darkElf", dark_elf),
+            ("highElf", high_elf),
+            ("highOrc", high_orc),
+            ("namedSlime", named_slime),
+            ("oni", oni),
+            ("archDarkElf", arch_dark_elf),
+            ("veldora", veldora),
         ]
     }
 }

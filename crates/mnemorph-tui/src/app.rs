@@ -3,7 +3,7 @@
 //! off the UI thread, whose results come back as messages — and a [`view`] that draws it.
 
 use std::cell::Cell;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use mnemorph_loop::GateAnswer;
 use mnemorph_server::protocol::Event;
@@ -12,6 +12,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::sync::Arc;
 
+use crate::approval::{Approval, Decision};
 use crate::gate::Card;
 use crate::kit::spinner::{FRAME_MS, Spinner};
 use crate::kit::textarea::{Outcome, TextArea};
@@ -22,8 +23,10 @@ use crate::transcript::{Entry, Transcript};
 /// What reaches the model.
 #[derive(Debug, Clone)]
 pub enum Msg {
-    /// A key.
+    /// A key, pressed now.
     Key(KeyEvent),
+    /// A key, stamped when the terminal read it: the input thread's keys.
+    KeyAt(KeyEvent, Instant),
     /// Text pasted whole.
     Paste(String),
     /// The terminal's new size.
@@ -44,6 +47,10 @@ pub enum Msg {
         /// The orders held.
         held: u32,
     },
+    /// The session's task ended without finishing its line: it panicked or is gone.
+    Crashed(String),
+    /// The process was told to end (SIGTERM, SIGHUP): leave, the terminal restored.
+    Terminate,
 }
 
 /// Work for the runtime.
@@ -87,8 +94,8 @@ pub struct Model {
     pub viewport: Viewport,
     /// The spinner of calls in flight.
     pub spinner: Spinner,
-    /// The act waiting for the human, and the choice made on it so far.
-    pub gate: Option<(Card, Option<bool>)>,
+    /// The act waiting for the human.
+    pub gate: Option<Approval>,
     /// Lines sent and not yet finished.
     pub outstanding: usize,
     /// The terminal's size.
@@ -136,9 +143,20 @@ impl Model {
             Some(Duration::from_millis(16))
         } else if self.busy() || self.transcript.running() {
             Some(Duration::from_millis(FRAME_MS))
+        } else if self.gate.is_some() {
+            // The card's countdown, and its deadline.
+            Some(Duration::from_secs(1))
         } else {
             None
         }
+    }
+
+    /// The transcript column's width and height at the terminal's size.
+    #[must_use]
+    pub fn main_area(&self) -> (usize, usize) {
+        let inner = self.size.0.saturating_sub(4);
+        let w = inner - crate::view::sidebar_width(inner);
+        (usize::from(w), usize::from(self.size.1.saturating_sub(2)))
     }
 
     /// Write a line of its own into the transcript.
@@ -150,7 +168,8 @@ impl Model {
 /// Apply `msg` to `m`; the commands it returns are the runtime's to run.
 pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
-        Msg::Key(key) => keys(m, key),
+        Msg::Key(key) => keys(m, key, Instant::now()),
+        Msg::KeyAt(key, at) => keys(m, key, at),
         Msg::Paste(text) => {
             if m.gate.is_none() {
                 m.input.insert(&text);
@@ -159,6 +178,10 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         }
         Msg::Resize(w, h) => {
             m.size = (w, h);
+            let (mw, mh) = m.main_area();
+            if let Some(a) = &mut m.gate {
+                a.fit(mw, mh);
+            }
             Vec::new()
         }
         Msg::Tick(dt) => {
@@ -169,20 +192,22 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
                 m.spin -= Duration::from_millis(FRAME_MS);
                 m.spinner.update();
             }
-            Vec::new()
+            expire(m, Instant::now())
         }
         Msg::Event { event, below } => {
             let ended = below.is_none() && matches!(event, Event::TurnEnded { .. });
             m.transcript.fold(&event, below.as_deref());
             // An approval still open when its turn ends is a question no one asks any more.
-            if ended && let Some((card, _)) = m.gate.take() {
-                return vec![deny(&card, "the turn ended before the human answered")];
+            if ended && let Some(a) = m.gate.take() {
+                return vec![deny(&a.card, "the turn ended before the human answered")];
             }
             Vec::new()
         }
         Msg::Gate(card) => {
-            // Every approval starts unchosen: a key typed as it appears approves nothing.
-            m.gate = Some((card, None));
+            // Every approval starts unchosen and unarmed: a key typed as it appears approves
+            // nothing.
+            let (w, h) = m.main_area();
+            m.gate = Some(Approval::new(card, w, h));
             m.viewport.update(ViewportMsg::Bottom);
             Vec::new()
         }
@@ -191,24 +216,55 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             m.transcript.held = held;
             Vec::new()
         }
+        Msg::Crashed(why) => {
+            m.outstanding = 0;
+            m.transcript.push(Entry::Ending(format!("failed: {why}")));
+            m.gate
+                .take()
+                .map(|a| deny(&a.card, "the session stopped"))
+                .into_iter()
+                .collect()
+        }
+        Msg::Terminate => {
+            let mut cmds: Vec<Cmd> = m
+                .gate
+                .take()
+                .map(|a| deny(&a.card, "the terminal UI was told to end"))
+                .into_iter()
+                .collect();
+            cmds.push(Cmd::Quit);
+            cmds
+        }
     }
+}
+
+/// The card leaves at its deadline: the core has denied the act by then.
+fn expire(m: &mut Model, now: Instant) -> Vec<Cmd> {
+    if m.gate.as_ref().is_some_and(|a| now >= a.card.deadline)
+        && let Some(a) = m.gate.take()
+    {
+        m.transcript
+            .push(Entry::Warning("denied: no answer in time".into()));
+        return vec![deny(&a.card, "no answer in time")];
+    }
+    Vec::new()
 }
 
 fn deny(card: &Card, why: &str) -> Cmd {
     Cmd::Answer(Arc::clone(&card.pending), GateAnswer::Deny(why.into()))
 }
 
-fn keys(m: &mut Model, key: KeyEvent) -> Vec<Cmd> {
+fn keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if ctrl && key.code == KeyCode::Char('c') {
         // Ctrl+C always does something: it denies an open approval and stops the turn, or quits.
-        if let Some((card, _)) = m.gate.take() {
-            return vec![deny(&card, "the human stopped the turn"), Cmd::Interrupt];
+        if let Some(a) = m.gate.take() {
+            return vec![deny(&a.card, "the human stopped the turn"), Cmd::Interrupt];
         }
         return vec![if m.busy() { Cmd::Interrupt } else { Cmd::Quit }];
     }
     if m.gate.is_some() {
-        return gate_keys(m, key);
+        return gate_keys(m, key, at);
     }
     m.viewport.set_max(m.measured.get());
     let page = usize::from(m.size.1 / 2).max(1);
@@ -238,35 +294,20 @@ fn keys(m: &mut Model, key: KeyEvent) -> Vec<Cmd> {
     Vec::new()
 }
 
-/// An approval is chosen, then confirmed: `y` or `n`, then Enter; Esc denies at once.
-fn gate_keys(m: &mut Model, key: KeyEvent) -> Vec<Cmd> {
-    let Some((card, choice)) = &mut m.gate else {
+/// A key while an approval waits: the card decides, or not yet.
+fn gate_keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
+    let (w, h) = m.main_area();
+    let Some(a) = &mut m.gate else {
         return Vec::new();
     };
-    match key.code {
-        KeyCode::Char('y' | 'Y') => *choice = Some(true),
-        KeyCode::Char('n' | 'N') => *choice = Some(false),
-        KeyCode::Esc => {
-            let cmd = deny(card, "the human said no");
+    match a.key(key, at, w, h) {
+        Decision::Open => Vec::new(),
+        Decision::Answered(answer) => {
+            let cmd = Cmd::Answer(Arc::clone(&a.card.pending), answer);
             m.gate = None;
-            return vec![cmd];
+            vec![cmd]
         }
-        KeyCode::Enter => match choice {
-            Some(true) => {
-                let cmd = Cmd::Answer(Arc::clone(&card.pending), GateAnswer::Approve);
-                m.gate = None;
-                return vec![cmd];
-            }
-            Some(false) => {
-                let cmd = deny(card, "the human said no");
-                m.gate = None;
-                return vec![cmd];
-            }
-            None => {}
-        },
-        _ => {}
     }
-    Vec::new()
 }
 
 /// A line the human sent: a command, or an ask that runs now or waits its turn.

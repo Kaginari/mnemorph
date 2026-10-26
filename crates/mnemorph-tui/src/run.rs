@@ -78,6 +78,7 @@ pub fn gate(tx: Sender<Msg>) -> Arc<TuiGate> {
 
 /// The session, driven on a runtime of its own: lines go in, messages come out.
 pub struct Host {
+    tx: Sender<Msg>,
     lines: tokio::sync::mpsc::UnboundedSender<String>,
     interrupt: Arc<Interrupt>,
     steer: Steer,
@@ -100,9 +101,11 @@ impl Host {
         let (lines, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let world = opened.world.clone();
         let mut session = opened.session;
-        runtime.spawn(async move {
+        let done = tx.clone();
+        let deltas = tx.clone();
+        let driver = runtime.spawn(async move {
             while let Some(line) = rx.recv().await {
-                let streaming = tx.clone();
+                let streaming = deltas.clone();
                 let mut on = move |e: StreamEvent| {
                     let event = match e {
                         StreamEvent::Text(text) => Event::TextDelta { text },
@@ -111,10 +114,12 @@ impl Host {
                     let _ = streaming.send(Msg::Event { event, below: None });
                 };
                 session.drive(&line, &mut on).await;
-                let _ = tx.send(Msg::Done { held: held(&world) });
+                let _ = done.send(Msg::Done { held: held(&world) });
             }
         });
+        supervise(runtime.handle(), driver, tx.clone());
         Ok(Self {
+            tx,
             lines,
             interrupt,
             steer,
@@ -126,7 +131,9 @@ impl Host {
     pub fn run(&self, cmd: Cmd) -> bool {
         match cmd {
             Cmd::Ask(line) => {
-                let _ = self.lines.send(line);
+                if self.lines.send(line).is_err() {
+                    let _ = self.tx.send(Msg::Crashed("the session is gone".into()));
+                }
             }
             Cmd::Steer(line) => self
                 .steer
@@ -150,6 +157,24 @@ impl Host {
     }
 }
 
+/// Watch the session's task: when it ends by a panic, the UI is told, so it never waits on a
+/// turn that will not finish.
+pub fn supervise(rt: &tokio::runtime::Handle, task: tokio::task::JoinHandle<()>, tx: Sender<Msg>) {
+    rt.spawn(async move {
+        if let Err(e) = task.await
+            && e.is_panic()
+        {
+            let p = e.into_panic();
+            let why = p
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| p.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic".into());
+            let _ = tx.send(Msg::Crashed(format!("the session stopped: {why}")));
+        }
+    });
+}
+
 /// The orders held on `world`'s shared work queue.
 fn held(world: &Path) -> u32 {
     use mnemorph_loop::world::queue::State;
@@ -162,8 +187,18 @@ struct Screen(ratatui::DefaultTerminal);
 
 impl Screen {
     fn enter() -> std::io::Result<Self> {
-        // ratatui's init also hooks panics to restore the terminal before the message prints.
+        let original = std::panic::take_hook();
         let terminal = ratatui::try_init()?;
+        // A panic on the UI thread gives the terminal back before its message prints. One on
+        // another thread — the session's — is the UI's to report (`supervise`): the screen
+        // stays, and its message would only scribble over it.
+        let ui = std::thread::current().id();
+        std::panic::set_hook(Box::new(move |info| {
+            if std::thread::current().id() == ui {
+                ratatui::restore();
+                original(info);
+            }
+        }));
         execute!(std::io::stdout(), term::EnableBracketedPaste)?;
         if terminal::supports_keyboard_enhancement().unwrap_or(false) {
             execute!(
@@ -194,7 +229,9 @@ fn read_input(tx: Sender<Msg>) {
     std::thread::spawn(move || {
         while let Ok(ev) = term::read() {
             let msg = match ev {
-                TermEvent::Key(k) if k.kind != KeyEventKind::Release => Msg::Key(k),
+                TermEvent::Key(k) if k.kind != KeyEventKind::Release => {
+                    Msg::KeyAt(k, Instant::now())
+                }
                 TermEvent::Paste(s) => Msg::Paste(s),
                 TermEvent::Resize(w, h) => Msg::Resize(w, h),
                 _ => continue,
@@ -206,12 +243,31 @@ fn read_input(tx: Sender<Msg>) {
     });
 }
 
+/// SIGTERM and SIGHUP end the UI as a quit does: the gate denied, the terminal given back.
+#[cfg(unix)]
+fn signals(tx: Sender<Msg>) {
+    use signal_hook::consts::{SIGHUP, SIGTERM};
+    let Ok(mut signals) = signal_hook::iterator::Signals::new([SIGTERM, SIGHUP]) else {
+        return;
+    };
+    std::thread::spawn(move || {
+        if signals.forever().next().is_some() {
+            let _ = tx.send(Msg::Terminate);
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn signals(_tx: Sender<Msg>) {}
+
 /// Run the UI over an opened session until the human leaves.
 ///
 /// # Errors
 ///
 /// The terminal cannot be set up or drawn to.
 pub fn run(model: Model, host: &Host, tx: Sender<Msg>, rx: &Receiver<Msg>) -> std::io::Result<()> {
+    // Before the screen is taken: a signal from then on finds the terminal given back.
+    signals(tx.clone());
     let mut screen = Screen::enter()?;
     let mut model = model;
     if let Ok(size) = screen.0.size() {
@@ -220,8 +276,9 @@ pub fn run(model: Model, host: &Host, tx: Sender<Msg>, rx: &Receiver<Msg>) -> st
     read_input(tx);
     let result = event_loop(&mut model, host, &mut screen.0, rx);
     // An approval still open is denied: the human left without answering it.
-    if let Some((card, _)) = model.gate.take() {
-        card.answer(mnemorph_loop::GateAnswer::Deny("the human left".into()));
+    if let Some(a) = model.gate.take() {
+        a.card
+            .answer(mnemorph_loop::GateAnswer::Deny("the human left".into()));
     }
     drop(screen);
     result
@@ -325,6 +382,23 @@ mod tests {
             Duration::from_millis(13)
         );
         assert!(c.wait(t0 + Duration::from_millis(40)).is_zero());
+    }
+
+    #[test]
+    fn a_panicking_session_is_reported_not_waited_on() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (tx, rx) = channel();
+        let task = rt.spawn(async { panic!("boom") });
+        supervise(rt.handle(), task, tx);
+        rt.block_on(async { tokio::time::sleep(Duration::from_millis(50)).await });
+        let msg = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(
+            matches!(&msg, Msg::Crashed(why) if why.contains("boom")),
+            "{msg:?}"
+        );
     }
 
     #[test]

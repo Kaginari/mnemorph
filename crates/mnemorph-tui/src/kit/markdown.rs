@@ -2,6 +2,9 @@
 //! [`StyleSheet`] the theme derives — headings, emphasis, inline and fenced code (highlighted),
 //! lists, quotes, links, rules and simple tables. Partial Markdown, as it streams, renders as
 //! well as whole: an open fence is a code block to the end, an open emphasis is its characters.
+//!
+//! Every text the parser yields is made safe ([`crate::safe::clean`]) after it is parsed, so a
+//! character spelled as an entity (`&#x202E;`) shows escaped like one written raw.
 
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Modifier, Style};
@@ -9,6 +12,7 @@ use ratatui::text::{Line, Span};
 
 use super::highlight::highlight;
 use super::text::{Align, Lines, cells, fit, line_cells, truncate, wrap};
+use crate::safe::clean;
 use crate::theme::Theme;
 
 /// The styles Markdown is drawn in.
@@ -143,15 +147,16 @@ impl Renderer<'_> {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
             Event::Text(text) => {
+                let text = clean(&text);
                 if let Some((_, code)) = &mut self.code {
                     code.push_str(&text);
                 } else {
                     self.push(&text, Style::new());
                 }
             }
-            Event::Code(text) => self.push(&text, self.sheet.code),
+            Event::Code(text) => self.push(&clean(&text), self.sheet.code),
             Event::Html(text) | Event::InlineHtml(text) => {
-                self.push(text.trim_end_matches('\n'), self.sheet.link_url);
+                self.push(&clean(text.trim_end_matches('\n')), self.sheet.link_url);
             }
             Event::SoftBreak => self.push(" ", Style::new()),
             Event::HardBreak => self.inline.push(Vec::new()),
@@ -165,7 +170,9 @@ impl Renderer<'_> {
             Event::TaskListMarker(done) => {
                 self.push(if done { "☑ " } else { "☐ " }, self.sheet.bullet);
             }
-            Event::FootnoteReference(name) => self.push(&format!("[{name}]"), self.sheet.link),
+            Event::FootnoteReference(name) => {
+                self.push(&format!("[{}]", clean(&name)), self.sheet.link);
+            }
             _ => {}
         }
     }
@@ -224,7 +231,7 @@ impl Renderer<'_> {
             Tag::Strikethrough => self.styles.push(self.sheet.strike),
             Tag::Link { dest_url, .. } => {
                 self.styles.push(self.sheet.link);
-                self.links.push(dest_url.to_string());
+                self.links.push(crate::safe::one_line(&dest_url));
             }
             Tag::Table(aligns) => {
                 self.flush();
@@ -515,6 +522,22 @@ mod tests {
         let out = texts("- the quick brown fox jumps", 14);
         assert_eq!(out[0], "• the quick");
         assert!(out[1].starts_with("  "), "{out:?}");
+    }
+
+    #[test]
+    fn an_entity_shows_escaped_like_the_character() {
+        let out = texts("a &#x202E;b `&#27;` [x](http://e/&#8203;)", 60).join("\n");
+        assert!(
+            !out.contains('\u{202e}') && !out.contains('\u{200b}'),
+            "{out:?}"
+        );
+        assert!(out.contains("\\u{202e}b"), "{out:?}");
+        assert!(
+            out.contains("&#27;"),
+            "inline code keeps the entity as written: {out:?}"
+        );
+        let out = texts("&#27;[2J", 60).join("");
+        assert!(out.contains("\\u{1b}[2J"), "{out:?}");
     }
 
     #[test]

@@ -170,7 +170,7 @@ background as `COLORFGBG` reports it, else dark.
 | PgUp PgDn, Shift+↑ ↓, Ctrl+Home End | scroll the transcript |
 | Esc | stop the turn; back to the end of the transcript |
 | Ctrl+C | stop the turn, or leave when none runs |
-| y, n, then Enter | answer an approval; Esc denies it |
+| y, n, then Enter | answer an approval; ↓ ↑ read a long act; Esc denies it |
 
 Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
 `/clear`, `/help`, `/quit`.
@@ -179,7 +179,15 @@ Slash commands: `/send <text>` steers the running turn at its next tool step, `/
 sequences a program prints and escapes every other control, bidi and zero-width character as
 `\u{…}` (`mnemorph_loop::hidden`). The approval card shows each field through
 `mnemorph_loop::shown`, the core's own rule for what a human approves, and takes an answer only
-from a key: `y` or `n`, then Enter. Esc, Ctrl+C, the turn ending and ten minutes of silence deny.
+from a key: a bare `y` or `n`, then Enter — any other key clears the choice, so `yes` or `you…`
+typed ahead approves nothing. Keys are ignored for 300 ms after the card is first drawn, and so are
+keys the terminal read before it. An act longer than the card scrolls inside it (↓ ↑, PgDn, End):
+its head shows, the cut marked, with its last line, and `y` is refused until the act has been read
+to its end. The card counts down to its deadline and leaves at it. Esc, Ctrl+C, the turn ending,
+SIGTERM or SIGHUP, and ten minutes of silence deny.
+
+A panic in the session's task ends its turn as a failure and frees the UI; SIGTERM and SIGHUP
+leave as a quit does, the terminal given back.
 
 **It stays fast in a long session.** Each entry is laid out once per width and kept; a frame lays
 out only the entries it shows, counted up from the end. Stream deltas and tool events that arrive
