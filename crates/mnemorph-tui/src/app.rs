@@ -199,6 +199,8 @@ pub struct Model {
     pub portrait_clock: Duration,
     /// The portraits as real pixels, where the terminal draws them: still, never played.
     pub pictures: crate::pictures::Pictures,
+    /// The window after a probe that timed out, in which its replies may still arrive as keys.
+    pub late: crate::probe::Late,
 }
 
 /// The surveys: the next one's number, and the newest whose reading was applied.
@@ -259,6 +261,7 @@ impl Model {
             session_id: String::new(),
             portrait_clock: Duration::ZERO,
             pictures: crate::pictures::Pictures::default(),
+            late: crate::probe::Late::default(),
         }
     }
 
@@ -348,10 +351,19 @@ fn settle_actor(m: &mut Model) {
     }
 }
 
+/// A key, unless it is part of a probe's late reply, or comes while one may still arrive and a
+/// card is open: never an answer the human did not give.
+fn late_or(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
+    if m.late.drops(&key, at, m.gate.is_some()) {
+        return Vec::new();
+    }
+    keys(m, key, at)
+}
+
 fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
-        Msg::Key(key) => keys(m, key, Instant::now()),
-        Msg::KeyAt(key, at) => keys(m, key, at),
+        Msg::Key(key) => late_or(m, key, Instant::now()),
+        Msg::KeyAt(key, at) => late_or(m, key, at),
         Msg::Paste(text) => {
             match &mut m.gate {
                 // A paste into the card is never an answer: it arms the card again.

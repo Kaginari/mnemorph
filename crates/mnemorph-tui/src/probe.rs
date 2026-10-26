@@ -14,6 +14,8 @@
 
 use std::time::{Duration, Instant};
 
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
 use crate::kit::pixels::{self, Caps, Choice, Replies};
 
 /// The longest the probe waits for the terminal.
@@ -69,6 +71,66 @@ pub fn exchange(tty: &mut impl Tty, timeout: Duration) -> (String, bool) {
     }
 }
 
+/// How long after a probe that timed out its replies may still arrive.
+pub const LATE: Duration = Duration::from_secs(2);
+
+/// The replies of a probe that timed out, arriving late: the UI's input reads them as keys —
+/// XTVERSION's `ESC P` as Alt+P, Kitty's `ESC _` as Alt+_, their `ESC \` as Alt+\, the rest as
+/// plain characters, a `1` among them, the approval card's "yes". For [`LATE`] after such a
+/// probe, keys shaped like a reply are dropped, and no key reaches an open card.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Late {
+    until: Option<Instant>,
+    inside: bool,
+}
+
+impl Late {
+    /// The window after a probe that gave up at `at`.
+    #[must_use]
+    pub fn after(at: Instant) -> Self {
+        Self {
+            until: Some(at + LATE),
+            inside: false,
+        }
+    }
+
+    /// Whether late replies may still arrive at `at`.
+    #[must_use]
+    pub fn active(&self, at: Instant) -> bool {
+        self.until.is_some_and(|u| at < u)
+    }
+
+    /// Whether `key`, arriving at `at`, is dropped: part of a late reply, or any key while a
+    /// card is open (`card`) in the window.
+    pub fn drops(&mut self, key: &KeyEvent, at: Instant, card: bool) -> bool {
+        if !self.active(at) {
+            self.inside = false;
+            return false;
+        }
+        let alt = key.modifiers.contains(KeyModifiers::ALT);
+        let reply = match key.code {
+            // A string reply opens (DCS, APC) …
+            KeyCode::Char('P' | 'p' | '_') if alt => {
+                self.inside = true;
+                true
+            }
+            // … and closes (ST).
+            KeyCode::Char('\\') if alt => {
+                self.inside = false;
+                true
+            }
+            // The escape of a reply split across reads.
+            KeyCode::Esc => true,
+            _ if self.inside => true,
+            KeyCode::Char('[') if alt => true,
+            // The shapes of `CSI ? … c` and `CSI 6 ; h ; w t` read as characters.
+            KeyCode::Char(c) => c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't'),
+            _ => false,
+        };
+        reply || card
+    }
+}
+
 /// What the terminal can draw, as `MNEMORPH_TUI_IMAGES` (read through `env`) allows: probed on
 /// the controlling terminal when the output is one, else half blocks.
 #[must_use]
@@ -97,6 +159,13 @@ pub fn probe(env: &impl Fn(&str) -> Option<String>) -> Caps {
     };
     caps.notes.extend(note);
     caps
+}
+
+/// A cell's size in pixels now, from the window's size alone (`TIOCGWINSZ`, no query): read again
+/// on a resize, since a font zoom changes it. `None` when the terminal gives no pixels.
+#[must_use]
+pub fn cell_now() -> Option<(u16, u16)> {
+    unix::Terminal::open()?.window()?.cell()
 }
 
 #[cfg(unix)]
@@ -284,6 +353,56 @@ mod tests {
             Protocol::Blocks,
             "half blocks after a timeout"
         );
+    }
+
+    /// The keys the UI's input reads for `reply`, as crossterm parses an escape and a character.
+    fn keys(reply: &str) -> Vec<KeyEvent> {
+        let mut out = Vec::new();
+        let mut chars = reply.chars();
+        while let Some(c) = chars.next() {
+            out.push(if c == '\x1b' {
+                match chars.next() {
+                    Some(n) => KeyEvent::new(KeyCode::Char(n), KeyModifiers::ALT),
+                    None => KeyEvent::from(KeyCode::Esc),
+                }
+            } else {
+                KeyEvent::from(KeyCode::Char(c))
+            });
+        }
+        out
+    }
+
+    #[test]
+    fn late_replies_are_dropped_and_the_card_takes_no_key() {
+        let t0 = Instant::now();
+        let mut late = Late::after(t0);
+        let soon = t0 + Duration::from_millis(500);
+        // Kitty's reply carries a `1`: every key of it dropped, on a card or not.
+        for reply in [
+            "\x1b_Gi=31;OK\x1b\\",
+            "\x1bP>|xterm.js(6.1.0-beta.304)\x1b\\",
+            "\x1b[6;17;8t",
+            "\x1b[?1;2;4c",
+            "?1;2c",
+            "6;17;8t",
+        ] {
+            for k in keys(reply) {
+                assert!(late.drops(&k, soon, false), "{reply:?}: {k:?} passed");
+            }
+        }
+        // A word typed in the window passes, but no key reaches an open card.
+        let a = KeyEvent::from(KeyCode::Char('a'));
+        assert!(!late.drops(&a, soon, false));
+        assert!(late.drops(&a, soon, true));
+        assert!(late.drops(&KeyEvent::from(KeyCode::Char('1')), soon, true));
+        // After the window, everything passes: a `1` answers a card again.
+        let later = t0 + LATE + Duration::from_millis(1);
+        assert!(!late.drops(&KeyEvent::from(KeyCode::Char('1')), later, true));
+        // No probe timed out: nothing is ever dropped.
+        let mut none = Late::default();
+        for k in keys("\x1b_Gi=31;OK\x1b\\") {
+            assert!(!none.drops(&k, soon, true));
+        }
     }
 
     #[test]

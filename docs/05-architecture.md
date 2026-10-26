@@ -226,7 +226,10 @@ sharp as their source — each race's 256 px PNG, embedded from `assets/portrait
 size (`CSI 16 t`), its name (XTVERSION), Kitty's graphics query, and the device attributes (DA1)
 last — every terminal answers DA1, so its reply ends the wait. It waits at most 200 ms with
 `poll` on the calling thread, leaves no thread reading the input, and flushes a half-reply when
-the time runs out. `kit::pixels` reads the replies and chooses:
+the time runs out. A reply that comes later still reaches the UI's input as keys — `ESC P` and
+`ESC _` read as Alt+P and Alt+_, the rest as characters, Kitty's `1` among them — so for two
+seconds after a probe that timed out, keys shaped like a reply are dropped, and no key reaches an
+open approval card. `kit::pixels` reads the replies and chooses:
 
 1. **Kitty** when its query answered OK;
 2. **iTerm2's inline images** when the terminal is xterm.js (VS Code), iTerm2 or WezTerm, by its
@@ -242,7 +245,10 @@ the replies as they came, and the choice.
 A picture is built once per race, box size and background: the PNG laid on the background at
 its own size, then Lanczos-resized to a square exactly `cols × cell width` by `rows × cell
 height` pixels — 32 columns of 8 × 17 px cells are 256 × 255 px in 15 rows — centred, so the
-terminal never rescales it; its encoding is cached. Every byte of an image sequence comes from
+terminal never rescales it; its encoding is cached. iTerm2's inline images are given their box
+in cells, so a font zoom never leaves the picture spilling past its box; on a resize the cell's
+size is read again from the window (`TIOCGWINSZ`), and when it changed every picture is built
+again at the new size. Every byte of an image sequence comes from
 those embedded files and from numbers, never from the model or the world.
 
 A terminal image lies over the cells, and text drawn after it does not cover it, so the view
@@ -252,8 +258,9 @@ compares that with what the terminal shows. An unchanged picture is never sent a
 or moved is erased first — Kitty deletes it by id, and under Sixel and iTerm2 the cells under its
 old box are written again from the frame just drawn — then the new one is sent at its box with
 the cursor saved and restored. While an approval is open no picture is wanted, so the card never
-sits under one; under Kitty, whose pictures float over the text, they are deleted before the
-frame that opens it. A toast or the scroll note never sits under one either. A resize redraws
+sits under one; under Kitty they are placed below the text (`z=-1`), so text drawn over one
+always shows, and they are deleted before the frame that opens the card besides. A panic deletes
+Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
 the screen, so each picture is sent again; the sidebar's toggle, its fold below 100 columns and
 the welcome scrolling move or remove theirs. In pixels a portrait is still — the working body's
 race, swapped when it changes — and asks no ticks. The welcome card's portrait is a picture too

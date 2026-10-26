@@ -4995,3 +4995,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   under Sixel and iTerm2.
 - **Open (@?):** not yet seen in a real terminal by the human; under Kitty a move re-sends the
   PNG (upload once and place by id is the animation's seam).
+
+---
+
+### [2026-10-27T00:40:00+01:00] rimuru — the terminal UI, part four: Opus's four lows
+- **Fixed, tested:** Kitty pictures are placed below the text (`z=-1`), so the approval card
+  shows over one even where a delete is ignored; replies of a timed-out probe arriving late as
+  keys (Alt+P / Alt+_ … Alt+\, `?…c`, `…t`) are dropped for two seconds, and no key reaches an
+  open card then; iTerm2 images are sized in cells, and the cell is read again from
+  `TIOCGWINSZ` on a resize (a font zoom rebuilds the pictures); a panic deletes Kitty's
+  pictures before the terminal is given back, once.
+- **Learned:** a probe's reply has no owner after its timeout: whatever reads the input next
+  takes it as typing, so the window after a timeout is the probe's to guard.

@@ -181,6 +181,16 @@ pub struct Window {
     pub ypx: u16,
 }
 
+impl Window {
+    /// A cell's size in pixels, when the window gives its pixels.
+    #[must_use]
+    pub fn cell(self) -> Option<(u16, u16)> {
+        (self.xpx > 0 && self.ypx > 0 && self.cols > 0 && self.rows > 0)
+            .then(|| (self.xpx / self.cols, self.ypx / self.rows))
+            .filter(|(x, y)| *x > 0 && *y > 0)
+    }
+}
+
 /// What the probe found, and what follows from it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Caps {
@@ -310,12 +320,7 @@ pub fn decide(
     choice: Choice,
     env: &impl Fn(&str) -> Option<String>,
 ) -> Caps {
-    let cell = replies.cell.or_else(|| {
-        let w = window?;
-        (w.xpx > 0 && w.ypx > 0 && w.cols > 0 && w.rows > 0)
-            .then(|| (w.xpx / w.cols, w.ypx / w.rows))
-            .filter(|(x, y)| *x > 0 && *y > 0)
-    });
+    let cell = replies.cell.or_else(|| window.and_then(Window::cell));
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
     let mut notes = Vec::new();
     let (protocol, why) = match choice {
@@ -448,8 +453,9 @@ pub fn png_bytes(img: &RgbImage) -> Vec<u8> {
 pub const KITTY_CHUNK: usize = 4096;
 
 /// Kitty: transmit and display `png` as image `id`, over `cols` × `rows` cells from the cursor,
-/// in chunks of [`KITTY_CHUNK`]; the cursor stays (`C=1`) and the terminal answers nothing
-/// (`q=2`).
+/// in chunks of [`KITTY_CHUNK`]; the cursor stays (`C=1`), the terminal answers nothing (`q=2`),
+/// and the picture lies below the text (`z=-1`): text drawn over it — the approval card's —
+/// always shows, even in a terminal that ignored the picture's deletion.
 #[must_use]
 pub fn kitty(png: &[u8], cols: u16, rows: u16, id: u32) -> String {
     let data = STANDARD.encode(png);
@@ -466,7 +472,7 @@ pub fn kitty(png: &[u8], cols: u16, rows: u16, id: u32) -> String {
         if i == 0 {
             let _ = write!(
                 out,
-                "\x1b_Ga=T,f=100,i={id},c={cols},r={rows},C=1,q=2,m={more};{c}\x1b\\"
+                "\x1b_Ga=T,f=100,i={id},c={cols},r={rows},z=-1,C=1,q=2,m={more};{c}\x1b\\"
             );
         } else {
             let _ = write!(out, "\x1b_Gq=2,m={more};{c}\x1b\\");
@@ -481,11 +487,13 @@ pub fn kitty_delete(id: u32) -> String {
     format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\")
 }
 
-/// iTerm2's inline image: `png`, `w` × `h` pixels — its own size, never scaled — the cursor kept.
+/// iTerm2's inline image: `png` over `cols` × `rows` cells, the cursor kept. The box is given in
+/// cells, not pixels: when the font is zoomed, the terminal fits the picture to the cells it
+/// covers now, so it never spills past its box nor leaves part of it uncovered.
 #[must_use]
-pub fn iterm(png: &[u8], w: u32, h: u32) -> String {
+pub fn iterm(png: &[u8], cols: u16, rows: u16) -> String {
     format!(
-        "\x1b]1337;File=inline=1;size={};width={w}px;height={h}px;preserveAspectRatio=0;doNotMoveCursor=1:{}\x07",
+        "\x1b]1337;File=inline=1;size={};width={cols};height={rows};preserveAspectRatio=1;doNotMoveCursor=1:{}\x07",
         png.len(),
         STANDARD.encode(png)
     )
@@ -766,13 +774,13 @@ mod tests {
     }
 
     #[test]
-    fn kitty_payloads_are_chunked_and_terminated() {
+    fn kitty_payloads_are_chunked_terminated_and_below_the_text() {
         let data = vec![7u8; 10_000];
         let s = kitty(&data, 32, 15, 9);
         let parts: Vec<&str> = s.split("\x1b\\").filter(|p| !p.is_empty()).collect();
         let b64 = STANDARD.encode(&data).len();
         assert_eq!(parts.len(), b64.div_ceil(KITTY_CHUNK));
-        assert!(parts[0].starts_with("\x1b_Ga=T,f=100,i=9,c=32,r=15,C=1,q=2,m=1;"));
+        assert!(parts[0].starts_with("\x1b_Ga=T,f=100,i=9,c=32,r=15,z=-1,C=1,q=2,m=1;"));
         for p in &parts[1..parts.len() - 1] {
             assert!(p.starts_with("\x1b_Gq=2,m=1;"), "{p:.20}");
         }
@@ -792,9 +800,12 @@ mod tests {
     }
 
     #[test]
-    fn iterm_payloads_say_their_size_and_end_with_bel() {
-        let s = iterm(&[1, 2, 3, 4], 256, 255);
-        assert!(s.starts_with("\x1b]1337;File=inline=1;size=4;width=256px;height=255px;"));
+    fn iterm_payloads_size_in_cells_and_end_with_bel() {
+        let s = iterm(&[1, 2, 3, 4], 32, 15);
+        assert!(s.starts_with(
+            "\x1b]1337;File=inline=1;size=4;width=32;height=15;preserveAspectRatio=1;"
+        ));
+        assert!(!s.contains("px"), "cells, never pixels");
         assert!(s.ends_with(":AQIDBA==\x07"));
         assert_eq!(s.matches('\x07').count(), 1);
     }

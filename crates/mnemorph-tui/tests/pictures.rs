@@ -216,3 +216,32 @@ fn without_images_the_portraits_are_half_blocks_and_play() {
     m.outstanding = 1;
     assert!(m.portrait_plays());
 }
+
+#[test]
+fn a_late_probe_reply_never_answers_a_card_nor_types() {
+    let mut m = model(Protocol::Blocks);
+    let t0 = std::time::Instant::now();
+    m.late = mnemorph_tui::probe::Late::after(t0);
+    let soon = t0 + std::time::Duration::from_millis(300);
+    // Kitty's reply, late, as the input reads it: Alt+_, `Gi=31;OK`, Alt+\.
+    let mut reply = vec![KeyEvent::new(
+        KeyCode::Char('_'),
+        ratatui::crossterm::event::KeyModifiers::ALT,
+    )];
+    reply.extend("Gi=31;OK".chars().map(|c| KeyEvent::from(KeyCode::Char(c))));
+    reply.push(KeyEvent::new(
+        KeyCode::Char('\\'),
+        ratatui::crossterm::event::KeyModifiers::ALT,
+    ));
+    for k in &reply {
+        assert!(update(&mut m, Msg::KeyAt(*k, soon)).is_empty());
+    }
+    assert_eq!(m.input.text(), "", "nothing typed");
+    m.outstanding = 1;
+    update(&mut m, Msg::Gate(card()));
+    for k in [KeyCode::Char('1'), KeyCode::Char('y'), KeyCode::Enter] {
+        let cmds = update(&mut m, Msg::KeyAt(KeyEvent::from(k), soon));
+        assert!(cmds.is_empty(), "{k:?} reached the card");
+    }
+    assert!(m.gate.is_some(), "the card still waits for the human");
+}

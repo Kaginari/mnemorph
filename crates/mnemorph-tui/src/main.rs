@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use mnemorph_tui::app::Model;
 use mnemorph_tui::kit::highlight;
 use mnemorph_tui::pictures::Pictures;
-use mnemorph_tui::probe::probe;
+use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
 
@@ -97,6 +97,9 @@ fn main() -> ExitCode {
         model.info(format!("portraits: {note}"));
     }
     model.pictures = Pictures::new(caps.protocol, caps.cell);
+    if caps.timed_out {
+        model.late = Late::after(std::time::Instant::now());
+    }
     let host = match Host::start(opened, tx.clone()) {
         Ok(h) => h,
         Err(e) => return fail(&e),

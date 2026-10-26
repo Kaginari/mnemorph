@@ -376,6 +376,8 @@ pub fn release(out: &mut impl std::io::Write) -> std::io::Result<()> {
 /// panic's message prints, and on the screen's drop.
 fn give_back() {
     let mut out = std::io::stdout();
+    // A Kitty picture outlives the text under it: deleted while the screen is still the UI's.
+    let _ = crate::pictures::release(&mut out);
     let _ = release(&mut out);
     ratatui::restore();
     let _ = out.flush();
@@ -521,6 +523,7 @@ fn event_loop(
         if model.next_tick().is_some_and(|t| last_tick.elapsed() >= t) {
             msgs.push(Msg::Tick(last_tick.elapsed()));
         }
+        let resized = msgs.iter().any(|m| matches!(m, Msg::Resize(..)));
         for msg in msgs {
             if matches!(msg, Msg::Tick(_)) {
                 last_tick = Instant::now();
@@ -531,6 +534,14 @@ fn event_loop(
                     return Ok(());
                 }
             }
+        }
+        // A font zoom resizes the window and changes the cell: the pictures follow it.
+        if resized
+            && model.pictures.active()
+            && let Some(cell) = crate::probe::cell_now()
+        {
+            model.pictures.cell = Some(cell);
+            placer.set_cell(cell);
         }
         if model.next_tick().is_none() {
             last_tick = Instant::now();

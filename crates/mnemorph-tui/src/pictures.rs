@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use mnemorph_races::Race;
 use ratatui::buffer::Buffer;
@@ -125,6 +126,36 @@ impl Pictures {
     }
 }
 
+/// The slots whose Kitty picture is on screen, one bit each: what a panic, which never reaches
+/// the placer, deletes on its way out ([`release`]).
+static KITTY_SHOWN: AtomicU8 = AtomicU8::new(0);
+
+impl Slot {
+    fn bit(self) -> u8 {
+        match self {
+            Self::Sidebar => 1,
+            Self::Welcome => 2,
+        }
+    }
+}
+
+/// Delete every Kitty picture still on screen, into `out`: for the panic hook and the screen's
+/// drop, before the terminal is given back. Safe to run twice, and after the placer's own
+/// [`Placer::clear`]: what is deleted once is never deleted again.
+///
+/// # Errors
+///
+/// `out` cannot be written.
+pub fn release(out: &mut impl Write) -> std::io::Result<()> {
+    let shown = KITTY_SHOWN.swap(0, Ordering::SeqCst);
+    for slot in [Slot::Sidebar, Slot::Welcome] {
+        if shown & slot.bit() != 0 {
+            out.write_all(pixels::kitty_delete(slot.id()).as_bytes())?;
+        }
+    }
+    out.flush()
+}
+
 /// A picture on screen: what it shows, and the terminal's size when it was sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Shown {
@@ -166,6 +197,14 @@ impl Placer {
         }
     }
 
+    /// A cell is now `cell` pixels (a font zoom): every picture is built again at the new size.
+    pub fn set_cell(&mut self, cell: (u16, u16)) {
+        if cell != self.cell {
+            self.cell = cell;
+            self.cache.clear();
+        }
+    }
+
     /// Whether a picture is on screen.
     #[must_use]
     pub fn showing(&self) -> bool {
@@ -195,6 +234,7 @@ impl Placer {
     pub fn clear(&mut self, out: &mut impl Write) -> std::io::Result<()> {
         if self.protocol == Some(Protocol::Kitty) {
             for s in &self.shown {
+                KITTY_SHOWN.fetch_and(!s.want.slot.bit(), Ordering::SeqCst);
                 out.write_all(pixels::kitty_delete(s.want.slot.id()).as_bytes())?;
             }
             out.flush()?;
@@ -225,6 +265,7 @@ impl Placer {
         for g in &gone {
             match protocol {
                 Protocol::Kitty => {
+                    KITTY_SHOWN.fetch_and(!g.want.slot.bit(), Ordering::SeqCst);
                     out.write_all(pixels::kitty_delete(g.want.slot.id()).as_bytes())?;
                 }
                 _ => repaint(buf, g.want.area, out)?,
@@ -246,6 +287,9 @@ impl Placer {
             write!(out, "\x1b7\x1b[{};{}H", w.area.y + 1, w.area.x + 1)?;
             out.write_all(payload.as_bytes())?;
             out.write_all(b"\x1b8")?;
+            if protocol == Protocol::Kitty {
+                KITTY_SHOWN.fetch_or(w.slot.bit(), Ordering::SeqCst);
+            }
             self.sends += 1;
             wrote = true;
             self.shown.push(Shown { want: *w, size });
@@ -273,7 +317,7 @@ impl Placer {
                 w.area.height,
                 w.slot.id(),
             ),
-            Protocol::Iterm => pixels::iterm(&pixels::png_bytes(&img), px_w, px_h),
+            Protocol::Iterm => pixels::iterm(&pixels::png_bytes(&img), w.area.width, w.area.height),
             Protocol::Sixel => pixels::sixel(&img),
             Protocol::Blocks => return None,
         };
@@ -474,6 +518,48 @@ mod tests {
         pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
         assert_eq!(pl.sends, 2);
         assert_eq!(pl.builds, 1);
+    }
+
+    #[test]
+    fn a_new_cell_size_builds_every_picture_again() {
+        let mut pl = placer(Protocol::Iterm);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
+        pl.set_cell((8, 17));
+        pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
+        assert_eq!(pl.builds, 1, "the same cell: from the cache");
+        // Zoomed: cells of 10 x 21 px, and the window's size changed with them.
+        pl.set_cell((10, 21));
+        pl.sync(&wants, (50, 25), &buf, &mut Vec::new()).unwrap();
+        assert_eq!((pl.builds, pl.sends), (2, 3));
+    }
+
+    #[test]
+    fn a_panic_deletes_the_kitty_pictures_once() {
+        let mut pl = placer(Protocol::Kitty);
+        let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
+        let wants = [
+            want(Slot::Sidebar, Race::Rimuru, 30, 1),
+            want(Slot::Welcome, Race::Rimuru, 2, 4),
+        ];
+        pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
+        // The panic hook, then the screen's drop: deleted once, then nothing.
+        let mut first = Vec::new();
+        release(&mut first).unwrap();
+        let first = String::from_utf8(first).unwrap();
+        assert!(first.contains(&pixels::kitty_delete(Slot::Sidebar.id())));
+        assert!(first.contains(&pixels::kitty_delete(Slot::Welcome.id())));
+        let mut second = Vec::new();
+        release(&mut second).unwrap();
+        assert_eq!(second, b"");
+        // The normal way out leaves nothing for the hook either.
+        pl.sync(&wants[..1], (60, 31), &buf, &mut Vec::new())
+            .unwrap();
+        pl.clear(&mut Vec::new()).unwrap();
+        let mut after = Vec::new();
+        release(&mut after).unwrap();
+        assert_eq!(after, b"");
     }
 
     #[test]
