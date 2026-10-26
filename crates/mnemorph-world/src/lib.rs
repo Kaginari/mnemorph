@@ -19,7 +19,9 @@ pub mod worth;
 pub use dispatch::{Ask, Hop, Refused, dispatch};
 pub use doc::{Creature, parse};
 pub use facts::{Facts, Status as FactStatus};
-pub use findings::{Finding, Severity, check, fact_findings, mind_findings, prose_claims};
+pub use findings::{
+    Finding, Severity, check, fact_findings, mind_findings, prose_claims, provenance,
+};
 pub use graph::{Bond, Graph};
 pub use own::{Owner, Ownership, Rule, WORKSPACE, explain, own};
 pub use queue::{Queue, Refusal as QueueRefusal};

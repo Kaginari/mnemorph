@@ -3459,3 +3459,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `solo_steps` 150 and 100; `Stress::for_steps(100)` takes 100 turns and stalls at
   101; a 30-step body keeps 40. The lanes condition has no end-to-end test (Session hides its
   limits).
+
+---
+
+### [2026-10-26T01:06:10+01:00] rimuru — the provenance lint (#10)
+- **Task:** #10's lesson "provenance lives only in log.md; a lint refuses dates and change notes
+  in law, canon and creature docs".
+- **Files:**
+  - findings.rs `provenance(roster, world)`: `doc-provenance` (medium) for an ISO date or a
+    change-note phrase in `.mnemorph/law.md` or any creature doc, fenced code aside, one per line;
+  - `has_date` is a word-bounded `YYYY-MM-DD` (19xx/20xx), with no regex dependency;
+  - mnemorphd adds it to `onto check`;
+  - docs 09.
+- **Test:** `a_date_or_a_change_note_in_a_living_doc_is_doc_provenance`. On Mnemorph's own world
+  it finds nothing.

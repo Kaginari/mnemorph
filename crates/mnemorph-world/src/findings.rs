@@ -447,3 +447,86 @@ it to one in its Minds field, mark it `- **Shared:** yes`, or retire it"
     found.sort_by(|a, b| a.at.cmp(&b.at));
     found
 }
+
+/// What a change note says: the phrases that date a living doc or credit its edits.
+const CHANGE_NOTES: &[&str] = &[
+    "added on",
+    "added by",
+    "updated on",
+    "changed on",
+    "edited on",
+    "as of ",
+    "'s order",
+    "at the request of",
+    "per the human",
+];
+
+/// `doc-provenance`: a date or a change note in a living doc — the law, a creature's doc. Its
+/// provenance belongs in `log.md`, the one append-only record: in a living doc it costs tokens
+/// every session and teaches nothing. Fenced code is left alone. One finding per line.
+#[must_use]
+pub fn provenance(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
+    let mut docs: Vec<(String, Vec<String>)> = vec![(".mnemorph/law.md".to_owned(), Vec::new())];
+    docs.extend(
+        roster
+            .creatures
+            .values()
+            .map(|c| (c.doc(), vec![c.name.clone()])),
+    );
+    let mut out = Vec::new();
+    for (rel, creatures) in docs {
+        let Ok(text) = std::fs::read_to_string(world.join(&rel)) else {
+            continue;
+        };
+        let mut fenced = false;
+        for (n, line) in text.lines().enumerate() {
+            if line.trim_start().starts_with("```") {
+                fenced = !fenced;
+                continue;
+            }
+            if fenced {
+                continue;
+            }
+            let lower = line.to_lowercase();
+            let said = has_date(line).map(|d| format!("the date {d}")).or_else(|| {
+                CHANGE_NOTES
+                    .iter()
+                    .find(|p| lower.contains(*p))
+                    .map(|p| format!("a change note (`{}`)", p.trim()))
+            });
+            if let Some(said) = said {
+                out.push(Finding {
+                    code: "doc-provenance",
+                    severity: Severity::Medium,
+                    at: format!("{rel}:{}", n + 1),
+                    paths: Vec::new(),
+                    creatures: creatures.clone(),
+                    message: format!(
+                        "{rel} carries {said}: provenance lives only in log.md — a living doc says \
+what is, not when or on whose word it changed"
+                    ),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// A date written `YYYY-MM-DD`, 19xx or 20xx, standing as a word of its own.
+fn has_date(line: &str) -> Option<&str> {
+    let b = line.as_bytes();
+    (0..b.len().saturating_sub(9)).find_map(|i| {
+        let w = &b[i..i + 10];
+        let digits = |r: std::ops::Range<usize>| w[r].iter().all(u8::is_ascii_digit);
+        let edge = |j: Option<&u8>| j.is_none_or(|c| !c.is_ascii_alphanumeric());
+        let is = digits(0..4)
+            && digits(5..7)
+            && digits(8..10)
+            && w[4] == b'-'
+            && w[7] == b'-'
+            && (w.starts_with(b"19") || w.starts_with(b"20"))
+            && edge(i.checked_sub(1).and_then(|k| b.get(k)))
+            && edge(b.get(i + 10));
+        is.then(|| &line[i..i + 10])
+    })
+}
