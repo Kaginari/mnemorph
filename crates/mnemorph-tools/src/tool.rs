@@ -126,6 +126,10 @@ impl Outcome {
     }
 }
 
+/// Who owns a path of the world, relative to it, as a refusal names them: a creature's name,
+/// `the human`, `the harness` — or `None` when nobody does.
+pub type OwnerOf = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
 /// Where a body works: who it is, the world it may read, the soil it may write, the gate it
 /// asks, and what it already read.
 pub struct Context {
@@ -134,6 +138,8 @@ pub struct Context {
     soil: Vec<PathBuf>,
     /// The body's own seat, absolute: the one place under `.mnemorph` its plan is written.
     seat: Option<PathBuf>,
+    /// Who owns what, for a refusal to name: set where the world's roster is known.
+    owner_of: Option<OwnerOf>,
     /// Claims inside the soil that are not the body's: the longest claim that covers a path
     /// decides, and on a tie the exclusion wins.
     except: Vec<PathBuf>,
@@ -192,6 +198,7 @@ impl Context {
             world,
             soil,
             seat: None,
+            owner_of: None,
             except: Vec::new(),
             root_files: false,
             narrowed: false,
@@ -371,6 +378,14 @@ impl Context {
     #[must_use]
     pub fn with_seat(mut self, seat: impl AsRef<Path>) -> Self {
         self.seat = Some(real(&self.world.join(seat.as_ref())));
+        self
+    }
+
+    /// Who owns a path, so a write outside the soil is refused with its owner named and the
+    /// ways on: route, widen, birth.
+    #[must_use]
+    pub fn with_owner_of(mut self, owner_of: OwnerOf) -> Self {
+        self.owner_of = Some(owner_of);
         self
     }
 
@@ -598,10 +613,11 @@ impl Context {
             Ok(path)
         } else {
             let soil: Vec<String> = self.soil.iter().map(|s| self.shown(s)).collect();
+            let shown = self.shown(&path);
             Err(format!(
-                "`{}` is outside your soil; you may write under: {}",
-                self.shown(&path),
-                soil.join(", ")
+                "`{shown}` is outside your soil; you may write under: {}{}",
+                soil.join(", "),
+                ways_on(self.owner_of.as_ref(), &shown)
             ))
         }
     }
@@ -703,4 +719,24 @@ fn private_scratch() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The ways on from a write outside the soil, by who owns the path — unknown when the context
+/// was given no roster.
+fn ways_on(owner_of: Option<&OwnerOf>, shown: &str) -> String {
+    let Some(owner_of) = owner_of else {
+        return String::new();
+    };
+    match owner_of(shown) {
+        Some(who) if who == "the human" || who == "the harness" => format!(
+            ". It is {who}'s: no body writes it — say in your report what should change there"
+        ),
+        Some(who) => format!(
+            ". It is {who}'s. Route: say so in your report, and the parent commissions {who}; \
+or widen: ask for it in your own ground"
+        ),
+        None => ". Nobody owns it. Birth: say so in your report, and Rimuru founds its keeper; \
+or widen: ask for it in your own ground"
+            .to_owned(),
+    }
 }

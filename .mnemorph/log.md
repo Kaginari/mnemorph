@@ -3459,3 +3459,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `solo_steps` 150 and 100; `Stress::for_steps(100)` takes 100 turns and stalls at
   101; a 30-step body keeps 40. The lanes condition has no end-to-end test (Session hides its
   limits).
+
+---
+
+### [2026-10-26T01:11:17+01:00] rimuru — refusals name the owner and the ways on (#10)
+- **Task:** #10's lesson "an out-of-territory refusal names the owner and carries the three arms
+  (widen, birth, route)".
+- **Files:**
+  - tools: `OwnerOf` and `Context::with_owner_of`; `ways_on` adds the owner and the arms to the
+    soil refusal. The tools stay below the world: the lookup is a closure;
+  - commission.rs `context_for` fills it from `explain`: a domain is routed, never written, so
+    ground only a domain covers reads as nobody's (birth);
+  - docs 02.
+- **Test:** `a_refusal_names_the_owner_and_the_ways_on`: a sibling's file routes, a domain-only
+  file is a birth, and the human's file names no route.

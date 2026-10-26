@@ -1207,11 +1207,24 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
             })
         })
         .collect();
+    let known = roster.clone();
+    // A domain is routed, never written: ground only an Orc's domain covers has no keeper.
+    let owner_of: mnemorph_tools::OwnerOf = std::sync::Arc::new(move |rel: &str| {
+        let o = explain(&known, rel);
+        match o.owner {
+            Owner::Creature(_) if o.rule == Rule::Domain => None,
+            Owner::Creature(c) => Some(c),
+            Owner::Human => Some("the human".to_owned()),
+            Owner::Harness => Some("the harness".to_owned()),
+            Owner::Unowned => None,
+        }
+    });
     Some(
         Context::new(creature.race, world, &none)
             .with_soil(&s.write, &s.except, s.root_files)
             .with_build(&build)
-            .with_seat(&creature.seat),
+            .with_seat(&creature.seat)
+            .with_owner_of(owner_of),
     )
 }
 
