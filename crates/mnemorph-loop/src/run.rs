@@ -206,6 +206,8 @@ pub const STRESS_TOKENS: u64 = 150_000;
 pub const NOTICE_PCT: u64 = 75;
 /// The share of the stress line at which old tool outputs fold.
 pub const COMPACT_PCT: u64 = 60;
+/// The notes recall shows an ask: the page's budget of anchors.
+pub const RECALL_K: usize = 6;
 
 /// One body's run.
 pub struct Run {
@@ -1115,14 +1117,57 @@ impl Run {
         text.clone_into(&mut self.asked);
         self.unheld = None;
         let woken = std::mem::take(&mut self.woken);
-        if woken.is_empty() {
+        let asked = if woken.is_empty() {
             text.to_owned()
         } else {
             format!(
                 "While you waited, the shared queue ran:\n- {}\n\n{text}",
                 woken.join("\n- ")
             )
+        };
+        let recalled = self.recall(text);
+        if recalled.is_empty() {
+            asked
+        } else {
+            format!(
+                "Recalled from memory (a proposed note is unproven):\n{}\n\n{asked}",
+                recalled.join("\n")
+            )
         }
+    }
+
+    /// Recall for an ask: the body's own notes and the shared ones, ranked for its text, as `@M`
+    /// lines; what was shown is journaled as the turn's anchors. Nothing when memory holds nothing
+    /// that matches, or cannot be read.
+    fn recall(&mut self, text: &str) -> Vec<String> {
+        let world = self.cx.world().to_path_buf();
+        let roster = mnemorph_world::Roster::load(&world);
+        let race = self.body.race.base();
+        let kin = |name: &str| {
+            roster
+                .creatures
+                .get(name)
+                .is_some_and(|c| c.race.base() == race)
+        };
+        let Ok(memory) = mnemorph_memory::gather(&world, &self.body.name, kin) else {
+            return Vec::new();
+        };
+        let now = mnemorph_memory::store::now_ms();
+        let r = mnemorph_memory::recall(
+            text,
+            &memory.notes,
+            now,
+            RECALL_K,
+            &mnemorph_memory::Weights::default(),
+        );
+        if r.anchors.is_empty() {
+            return Vec::new();
+        }
+        self.record(&Beat::Recall {
+            anchors: r.anchors.iter().map(|h| h.note.id.clone()).collect(),
+            cut: r.cut,
+        });
+        mnemorph_memory::lines(&r, &memory.personal)
     }
 
     /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,

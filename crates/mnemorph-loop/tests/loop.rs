@@ -1334,3 +1334,69 @@ async fn every_act_journals_its_guts_reading_and_instruments() {
     // The readings never reach the model: the rebuilt conversation is the run's own.
     assert_eq!(conversation(&rows), run.messages());
 }
+
+/// Each ask recalls from the body's own notes and the shared ones: a matching grounded note is
+/// shown as an `@M` line with its text, and the turn's anchors are journaled; an ask that matches
+/// nothing adds nothing.
+#[tokio::test]
+async fn an_ask_recalls_what_memory_holds_and_journals_the_anchors() {
+    let w = World::new("recall");
+    let claim = mnemorph_memory::propose(
+        &w.world(),
+        "slime-other",
+        "the tokenizer keeps interval fractions whole",
+        vec![],
+        None,
+    )
+    .unwrap();
+    let grounded = mnemorph_memory::ground(
+        &w.world(),
+        claim,
+        &mnemorph_memory::Proof::confirmed("the human"),
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([answer("noted"), answer("fine")]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "why does the tokenizer split interval fractions").await;
+    ask(&mut run, "rename the button colour").await;
+    let text_of = |i: usize| -> String {
+        model.requests()[i]
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == mnemorph_provider::Role::User)
+            .unwrap()
+            .content
+            .iter()
+            .filter_map(|b| match b {
+                Block::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let first = text_of(0);
+    assert!(
+        first.contains(&format!(
+            "@M {} shared grounded support: the tokenizer keeps interval fractions whole",
+            grounded.note
+        )),
+        "{first}"
+    );
+    assert!(first.contains("@M -0 dissent: none selected"), "{first}");
+    assert!(
+        !text_of(1).contains("@M"),
+        "an ask that matches nothing adds nothing"
+    );
+    let recalls: Vec<Vec<String>> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Recall { anchors, .. } => Some(anchors),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(recalls, [vec![grounded.note.clone()]]);
+}

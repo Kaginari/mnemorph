@@ -54,6 +54,14 @@ pub enum Beat {
         #[serde(default)]
         verdict: String,
     },
+    /// What recall gave a turn: the anchors it showed the body, and how many it cut above the
+    /// floor — the turn's journal row a run-ending failure reconsolidates by.
+    Recall {
+        /// The recalled notes' ids, best first.
+        anchors: Vec<String>,
+        /// How many cleared the floor and were cut.
+        cut: usize,
+    },
     /// One act as the guts read it, with the instruments a learned value model will train on.
     /// Journaled for the record, never fed back to the model.
     Guts {
@@ -204,7 +212,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 );
             }
             Beat::End { .. } => close(&mut messages, &mut pending),
-            Beat::Gate { .. } | Beat::Warning { .. } | Beat::Guts { .. } => {}
+            Beat::Gate { .. } | Beat::Warning { .. } | Beat::Guts { .. } | Beat::Recall { .. } => {}
         }
     }
     close(&mut messages, &mut pending);
