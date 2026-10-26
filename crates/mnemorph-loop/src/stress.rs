@@ -357,7 +357,8 @@ impl Stress {
         };
         if self.failed_streak > ESCALATE_AFTER {
             out.push(Signal::Escalate);
-            // Said once a streak: a body with no one to hand the turn to is warned, not hounded.
+            // A new streak starts: a body with no one to hand the turn to is warned every third
+            // failure in a row, not at each one.
             self.failed_streak = 0;
         }
         if o.meta.unchanged {

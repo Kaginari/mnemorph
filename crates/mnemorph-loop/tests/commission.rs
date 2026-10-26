@@ -1806,3 +1806,23 @@ async fn a_long_report_still_offers_its_claims() {
         "accepted though the report was cut"
     );
 }
+
+/// A throne with lanes answers the human: three failed acts in a row warn it — it may commission
+/// on its next turn — instead of ending its turn with no one to take it.
+#[tokio::test]
+async fn a_throne_with_lanes_is_warned_not_ended_by_failed_acts() {
+    let w = World::new("throne-warned");
+    let mut replies: Vec<_> = (0..3)
+        .map(|i| ScriptedModel::tool(&format!("r{i}"), "read", json!({"path": "missing.txt"})))
+        .collect();
+    replies.push(ScriptedModel::text("missing.txt is not in this world"));
+    let model = Arc::new(ScriptedModel::new(replies));
+    let mut run = w.rimuru(model.clone());
+    let ending = run.ask("read missing.txt", &mut |_| {}).await;
+    assert_eq!(
+        ending,
+        Ending::Answered("missing.txt is not in this world".into())
+    );
+    let told = format!("{:?}", model.requests()[3].messages.last());
+    assert!(told.contains("[escalate]"), "{told}");
+}

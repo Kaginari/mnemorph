@@ -2103,12 +2103,10 @@ impl Run {
                         salvage: None,
                     });
                 }
-                // A body alone — answering the human, with no lane below — has no one to hand
-                // the turn to: it is told to change its approach, and the doom checkpoint, the
-                // stalls and its steps still bound it.
-                Signal::Escalate
-                    if self.commissioner.is_none() && self.caller.commission.is_none() =>
-                {
+                // A body answering the human has no one above to hand the turn to: it is told
+                // to change its approach — a throne with lanes may commission on its next turn —
+                // and the doom checkpoint, the stalls and its steps still bound it.
+                Signal::Escalate if self.caller.commission.is_none() => {
                     let text = "[escalate] More than two failed acts in a row, and no one to hand \
                                 this to. Stop, read the errors and the ask again, and change \
                                 approach — or end the turn and say what blocks you."

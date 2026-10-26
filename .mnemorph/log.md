@@ -4379,3 +4379,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - stress.rs: interleaved re-reads never stall, three back to back do.
 - **Not changed:** solo's 100 steps (task 08 stopped there; OpenCode used 137). It is the human's
   call.
+
+---
+
+### [2026-10-26T12:30:57+01:00] rimuru — #211's review: Fable
+- **Verdict:** safe to merge for the solo bench.
+- **Fable found:** a throne with lanes still dead-ended, because `escalate()` hands off only
+  unheld acts and context checkpoints. Also, "said once a streak" overstated it: the warning
+  comes every third failure.
+- **Fixed:**
+  - the warning applies whenever no one is above (`caller.commission` is None), throne with
+    lanes included;
+  - the comment is corrected;
+  - docs 03 drop "with nothing landed" for repin.
+- **Test:** commission.rs: a throne with lanes is warned and answers.
+- **Fable confirmed:** guts and doom still bound a lone failing body (doom at 15 acts), and a
+  re-read alternated with cheap acts is bounded by actBudget.
