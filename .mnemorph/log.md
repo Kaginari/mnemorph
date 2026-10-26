@@ -4774,6 +4774,35 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   The project knows its own build; the human's local file still wins.
 - **Tests:** the key's default, bounds and layers; the gate kills `sleep 3` at 1 s (NOT_VERIFIED)
   and passes it at 5 s; the root-package narrowing, and names Cargo would refuse kept out.
+### [2026-10-26T19:17:57+01:00] rimuru — a call with broken arguments is answered, not fatal
+- **Found by the bench:** the checked arm's task 09 ended after 51 calls with "the stream could not
+  be read: tool read's arguments: EOF while parsing". The model streamed a finished `read` call
+  whose JSON was cut short. Both providers made that a fatal `Error::Decode`, unless the stop was
+  `MaxTokens`. docs/lessons.md (M4) promises such a call is answered with a named error and never
+  run.
+- **Fix:**
+  - provider `MALFORMED`: openai.rs and anthropic.rs keep the call, with its raw text and the
+    parse error under that key;
+  - `finish()` can no longer fail and returns a `Response`;
+  - loop `call_one` answers a `MALFORMED` input "this call's arguments were not valid JSON (…);
+    nothing ran — send the call again".
+- **Tests:**
+  - provider: a stream ending `{"path": ` gives a kept call, not an error;
+  - solo: the call is answered and the run goes on to its answer.
+
+---
+
+### [2026-10-26T19:48:32+01:00] rimuru — broken arguments, Fable's review
+- **Fable:** safe.
+  - The replay encodes the marker as a valid object.
+  - Every reader before `call_one` treats it as a plain object.
+  - The loop detector still counts identical repeats.
+- **Follow-ups done:**
+  - the error names the tool, as lessons.md promises;
+  - the echoed error is capped at 200 characters, and a non-string error is "unreadable";
+  - OpenAI warns when it drops a call cut by max_tokens, as Anthropic does;
+  - an Anthropic test;
+  - the solo test writes a README and asserts `read` never ran.
 
 ---
 

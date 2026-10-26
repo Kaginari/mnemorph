@@ -271,3 +271,24 @@ async fn the_end_is_required_and_errors_are_named() {
         }
     );
 }
+
+/// A finished call whose arguments are no JSON is the model's slip: kept, its text under
+/// `MALFORMED`, for the loop to answer — the response is never an error that ends the run.
+#[tokio::test]
+async fn a_call_with_broken_arguments_is_kept_for_the_loop_to_answer() {
+    let body = chunks(&[
+        json!({"id": "c-1", "model": "m", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": "t1", "type": "function", "function": {"name": "read", "arguments": "{\"path\": "}}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+    let r = client(&script, Some("sk-or"))
+        .complete(&request(), &mut |_| {})
+        .await
+        .expect("a broken call is no stream error");
+    let [Block::ToolUse { name, input, .. }] = r.content.as_slice() else {
+        panic!("{:?}", r.content);
+    };
+    assert_eq!(name, "read");
+    assert_eq!(input[mnemorph_provider::MALFORMED], "{\"path\": ");
+    assert!(input["error"].as_str().unwrap().contains("EOF"));
+}
