@@ -325,6 +325,121 @@ fn edit_is_strict_and_says_where() {
     );
 }
 
+/// One edit on `file` at `src/f.txt`: the outcome and what the file holds after.
+fn edit_once(name: &str, file: &str, old: &str, new: &str) -> (Outcome, String) {
+    let w = World::new(name);
+    w.put("src/f.txt", file);
+    let mut cx = w.cx();
+    let args = serde_json::json!({"path": "src/f.txt", "old_string": old, "new_string": new});
+    let o = run(&mut cx, "edit", &args.to_string());
+    (o, w.get("src/f.txt"))
+}
+
+/// With no exact match, each forgiving rung takes its one region, keeps the file's line endings
+/// and indentation, and says what it forgave and where.
+#[test]
+fn each_forgiving_rung_takes_one_region_and_says_so() {
+    let cases: [(&str, &str, &str, &str, &str, &str); 6] = [
+        (
+            "line endings",
+            "a\r\nb\r\nc\r\n",
+            "a\nb\n",
+            "x\ny\n",
+            "x\r\ny\r\nc\r\n",
+            "forgiven: line endings (CRLF) at lines 1–2",
+        ),
+        (
+            "trailing",
+            "fn a() {  \n    x;\n}\n",
+            "fn a() {\n    x;",
+            "fn a() {\n    y;",
+            "fn a() {\n    y;\n}\n",
+            "forgiven: trailing whitespace at lines 1–2",
+        ),
+        (
+            "trailing, CRLF",
+            "a  \r\nb\r\n",
+            "a\nb",
+            "c\nd",
+            "c\r\nd\r\n",
+            "forgiven: trailing whitespace at lines 1–2",
+        ),
+        (
+            "inner",
+            "let  x =\t1;\nlet y = 2;\n",
+            "let x = 1;",
+            "let x = 3;",
+            "let x = 3;\nlet y = 2;\n",
+            "forgiven: inner whitespace at line 1",
+        ),
+        (
+            "indentation",
+            "fn f() {\n    if x {\n        go();\n    }\n}\n",
+            "if x {\n    go();\n}",
+            "if x {\n    go();\n    stop();\n}",
+            "fn f() {\n    if x {\n        go();\n        stop();\n    }\n}\n",
+            "forgiven: indentation (+4 spaces) at lines 2–4",
+        ),
+        (
+            "indentation, tabs",
+            "fn f() {\n\tif x {\n\t\tgo();\n\t}\n}\n",
+            "if x {\n    go();\n}",
+            "if x {\n    go();\n    stop();\n}",
+            "fn f() {\n\tif x {\n\t\tgo();\n\t\tstop();\n\t}\n}\n",
+            "forgiven: indentation (4-space levels as tabs, at 1 tab) at lines 2–4",
+        ),
+    ];
+    for (i, (what, file, old, new, after, note)) in cases.into_iter().enumerate() {
+        let (o, got) = edit_once(&format!("forgive-{i}"), file, old, new);
+        assert!(!o.is_error && o.content.contains(note), "{what}: {o:?}");
+        assert_eq!(got, after, "{what}");
+        assert_eq!(o.meta.wrote.len(), 1, "{what}");
+    }
+}
+
+/// Two places matching a rung are a guess: the edit fails, names both, and writes nothing.
+#[test]
+fn a_forgiving_rung_with_two_places_names_both_and_writes_nothing() {
+    let cases: [(&str, &str, &str, &str); 4] = [
+        ("line endings", "a\r\nb\r\na\r\nb\r\n", "a\nb", "lines 1, 3"),
+        (
+            "trailing whitespace",
+            "x  \ny\nx \ny\n",
+            "x\ny",
+            "lines 1, 3",
+        ),
+        ("inner whitespace", "a  b\nc\na\tb\n", "a b", "lines 1, 3"),
+        (
+            "indentation",
+            "  go();\n  stop();\nz\n\tgo();\n\tstop();\n",
+            "go();\nstop();",
+            "lines 1, 4",
+        ),
+    ];
+    for (i, (rung, file, old, lines)) in cases.into_iter().enumerate() {
+        let (o, got) = edit_once(&format!("forgive-many-{i}"), file, old, "new");
+        assert!(
+            o.is_error
+                && o.meta.edit_miss
+                && o.content
+                    .contains(&format!("forgiving {rung}, it matches 2 places ({lines})")),
+            "{rung}: {o:?}"
+        );
+        assert!(o.meta.wrote.is_empty(), "{rung}");
+        assert_eq!(got, file, "{rung}: nothing was written");
+    }
+}
+
+/// An exact match is never reported as forgiven, and several exact matches stay the strict error.
+#[test]
+fn an_exact_match_forgives_nothing() {
+    let (o, got) = edit_once("forgive-exact", "a  \nb\n", "a  \nb", "c\nd");
+    assert!(!o.is_error && !o.content.contains("forgiven"), "{o:?}");
+    assert_eq!(got, "c\nd\n");
+    let (o, _) = edit_once("forgive-exact-many", "go();\n  go();\n", "go();", "x");
+    assert!(o.is_error && o.content.contains("occurs 2 times"), "{o:?}");
+}
+
 #[test]
 fn glob_lists_honours_gitignore_and_skips_git() {
     let w = World::new("glob");

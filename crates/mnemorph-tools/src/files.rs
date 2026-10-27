@@ -13,6 +13,7 @@ use regex::RegexBuilder;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::forgive::Ladder;
 use crate::tool::{Context, Outcome, Seen, Tool, args};
 
 /// Lines a read returns when the call names no limit.
@@ -295,16 +296,19 @@ fn refused(r: Refused) -> Outcome {
     o
 }
 
+/// What one replacement made of a file.
+struct Replaced {
+    text: String,
+    count: usize,
+    first_line: usize,
+    /// What a forgiving rung forgave, and where; `None` for an exact match.
+    forgiven: Option<String>,
+}
+
 /// Replace `old` with `new` in `text` under edit's rules: exactly one match, or every match with
-/// `all`. Returns the new text, the count replaced and the first line touched; an error names the
-/// closest line for no match, or the lines of several.
-fn replace(
-    text: &str,
-    old: &str,
-    new: &str,
-    all: bool,
-    shown: &str,
-) -> Result<(String, usize, usize), Refused> {
+/// `all`. With no exact match, the forgiving ladder may find exactly one region (see `forgive`).
+/// An error names the closest line for no match, or the lines of several.
+fn replace(text: &str, old: &str, new: &str, all: bool, shown: &str) -> Result<Replaced, Refused> {
     if old.is_empty() {
         return Err("`old_string` is empty; to create or replace a whole file, use write".into());
     }
@@ -315,6 +319,28 @@ fn replace(
     let line_of = |byte: usize| text[..byte].matches('\n').count() + 1;
     match at.len() {
         0 => {
+            match crate::forgive::ladder(text, old, new) {
+                Ladder::One(f) => {
+                    return Ok(Replaced {
+                        text: f.text,
+                        count: 1,
+                        first_line: f.first_line,
+                        forgiven: Some(f.note),
+                    });
+                }
+                Ladder::Many { rung, lines } => {
+                    let lines: Vec<String> = lines.iter().map(ToString::to_string).collect();
+                    return Err(Refused {
+                        why: format!(
+                            "`old_string` does not occur exactly in `{shown}`; forgiving {rung}, it matches {} places (lines {}). Add context to make it unique.",
+                            lines.len(),
+                            lines.join(", ")
+                        ),
+                        miss: true,
+                    });
+                }
+                Ladder::Nothing => {}
+            }
             let (n, line) = closest_line(text, old);
             return Err(Refused {
                 why: format!(
@@ -340,7 +366,12 @@ fn replace(
     } else {
         text.replacen(old, new, 1)
     };
-    Ok((updated, if all { at.len() } else { 1 }, line_of(at[0])))
+    Ok(Replaced {
+        text: updated,
+        count: if all { at.len() } else { 1 },
+        first_line: line_of(at[0]),
+        forgiven: None,
+    })
 }
 
 // ── edit ────────────────────────────────────────────────────────────────────
@@ -364,7 +395,7 @@ impl Tool for Edit {
     }
 
     fn description(&self) -> &'static str {
-        "Replace `old_string` with `new_string` in a file inside your soil. `old_string` must match exactly once (or set `replace_all`); no match names the closest line, several matches name their lines."
+        "Replace `old_string` with `new_string` in a file inside your soil. `old_string` must match exactly once (or set `replace_all`); several exact matches name their lines. With no exact match, the same lines are looked for with line endings, then trailing whitespace, then inner whitespace, then indentation forgiven: a rung is taken only when exactly one place matches it (the replacement keeps the file's line endings and indentation, and the result says what was forgiven, where); several places name their lines; when nothing matches, the closest line is named."
     }
 
     fn schema(&self) -> Value {
@@ -411,18 +442,23 @@ impl Tool for Edit {
             },
             Err(e) => return Outcome::error(format!("cannot read `{shown}`: {e}")),
         };
-        let (updated, n, first_line) =
-            match replace(&text, &a.old_string, &a.new_string, a.replace_all, &shown) {
-                Ok(r) => r,
-                Err(e) => return refused(e),
-            };
+        let r = match replace(&text, &a.old_string, &a.new_string, a.replace_all, &shown) {
+            Ok(r) => r,
+            Err(e) => return refused(e),
+        };
+        let (updated, n, first_line) = (r.text, r.count, r.first_line);
         keep(cx);
         if let Err(e) = crate::beneath::write(cx.world(), &path, updated.as_bytes()) {
             return Outcome::error(format!("cannot write `{shown}`: {e}"));
         }
         cx.seen.remove(&path);
         let mut o = Outcome::ok(
-            format!("edited `{shown}`: {n} replacement(s), from line {first_line}"),
+            match r.forgiven {
+                Some(f) => format!(
+                    "edited `{shown}`: {n} replacement(s), from line {first_line}; forgiven: {f}"
+                ),
+                None => format!("edited `{shown}`: {n} replacement(s), from line {first_line}"),
+            },
             ToolClass::Write,
         );
         (o.meta.lines_added, o.meta.lines_removed) = line_delta(&text, &updated);
@@ -558,11 +594,15 @@ impl Tool for MultiEdit {
             ));
         };
         let mut total = 0;
+        let mut forgiven: Vec<String> = Vec::new();
         for (i, e) in a.edits.iter().enumerate() {
             match replace(&text, &e.old_string, &e.new_string, e.replace_all, &shown) {
-                Ok((t, n, _)) => {
-                    text = t;
-                    total += n;
+                Ok(r) => {
+                    text = r.text;
+                    total += r.count;
+                    if let Some(f) = r.forgiven {
+                        forgiven.push(format!("edit {}: {f}", i + 1));
+                    }
                 }
                 Err(why) => {
                     return refused(Refused {
@@ -588,10 +628,18 @@ impl Tool for MultiEdit {
         }
         cx.seen.remove(&path);
         let mut o = Outcome::ok(
-            format!(
-                "edited `{shown}`: {} edit(s), {total} replacement(s)",
-                a.edits.len()
-            ),
+            if forgiven.is_empty() {
+                format!(
+                    "edited `{shown}`: {} edit(s), {total} replacement(s)",
+                    a.edits.len()
+                )
+            } else {
+                format!(
+                    "edited `{shown}`: {} edit(s), {total} replacement(s); forgiven: {}",
+                    a.edits.len(),
+                    forgiven.join("; ")
+                )
+            },
             ToolClass::Write,
         );
         (o.meta.lines_added, o.meta.lines_removed) =
