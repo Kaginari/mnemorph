@@ -5017,3 +5017,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   resize (the old box repainted) until a size returns; a moving box is erased and its picture
   held back until it has stayed put 150 ms — a scroll sends none per frame.
 - **Learned:** an input filter that names a key shape must also name its modifiers.
+
+---
+
+### [2026-10-27T09:11:37+01:00] rimuru — solo: find and read with the tools, the root named
+- **Why:** on the bench, solo bodies spent calls finding where they stood (`pwd`,
+  `find / -maxdepth 3 -name sqlglot`, `cd /tmp`) and sometimes searched or read through bash
+  (`grep -rn … | grep …`, `cat … | head`) instead of the grep and read tools.
+- **Fix:** solo.rs SOLO_PROMPT says to find with glob and grep and read with read, and that bash is
+  for running things (tests, builds, scripts); the body's system prompt ends with the repository
+  root's absolute path.
+- **Check:** one regression task on the bench (below), comparing tool use and calls with the
+  campaign's run of the same task.
