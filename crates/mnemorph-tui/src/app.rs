@@ -197,8 +197,11 @@ pub struct Model {
     /// How long the sidebar's portrait has played: it moves only while a body works and the
     /// portrait is on screen.
     pub portrait_clock: Duration,
-    /// The portraits as real pixels, where the terminal draws them: still, never played.
+    /// The portraits as real pixels, where the terminal draws them.
     pub pictures: crate::pictures::Pictures,
+    /// The base race of the body seen ascending: its ascension plays at the portrait's clock's
+    /// start, then the risen form's idle loop.
+    pub ascending: Option<mnemorph_races::Race>,
     /// The window after a probe that timed out, in which its replies may still arrive as keys.
     pub late: crate::probe::Late,
 }
@@ -261,6 +264,7 @@ impl Model {
             session_id: String::new(),
             portrait_clock: Duration::ZERO,
             pictures: crate::pictures::Pictures::default(),
+            ascending: None,
             late: crate::probe::Late::default(),
         }
     }
@@ -273,11 +277,34 @@ impl Model {
             && usize::from(self.size.1.saturating_sub(3)) >= crate::sidebar::HEAD_FROM
     }
 
-    /// Whether the portrait plays: a body works, and the portrait is on screen in half blocks —
-    /// a picture in real pixels is still.
+    /// Whether the portrait plays: a body works, and the portrait is on screen.
     #[must_use]
     pub fn portrait_plays(&self) -> bool {
-        self.busy() && self.portrait_shown() && !self.pictures.active()
+        self.busy() && self.portrait_shown()
+    }
+
+    /// The clip the portrait plays now, and how far into it: the working body's idle loop, or
+    /// its ascension once seen, then the risen form's loop.
+    #[must_use]
+    pub fn playing(&self) -> (crate::kit::mnanim::Clip, Duration) {
+        use crate::kit::mnanim::{self, Clip};
+        let race = crate::activity::actor(self).1;
+        if let Some(clip) = self.ascending.and_then(Clip::ascension) {
+            let once = mnanim::length(16, clip.frames());
+            if self.portrait_clock < once {
+                return (clip, self.portrait_clock);
+            }
+            return (clip.then(), self.portrait_clock.saturating_sub(once));
+        }
+        (Clip::Idle(race), self.portrait_clock)
+    }
+
+    /// The working body was seen ascending from `base`: its ascension plays, once, from now.
+    pub fn ascend(&mut self, base: mnemorph_races::Race) {
+        if base.ascends_to().is_some() {
+            self.ascending = Some(base);
+            self.portrait_clock = Duration::ZERO;
+        }
     }
 
     /// Whether a turn runs.
@@ -293,8 +320,10 @@ impl Model {
         if self.viewport.animating() || self.toast.is_some() {
             Some(Duration::from_millis(16))
         } else if self.portrait_plays() {
-            // The portrait's own pace, 16 frames a second; the frame cap still holds.
-            Some(Duration::from_millis(1000 / 16))
+            // The portrait's pace: 16 frames a second, 8 when each is its pixels sent again.
+            Some(Duration::from_millis(
+                1000 / u64::from(self.pictures.fps().max(1)),
+            ))
         } else if self.busy() || self.transcript.running() {
             Some(Duration::from_millis(FRAME_MS))
         } else if self.gate.is_some() {
@@ -343,11 +372,25 @@ pub fn update(m: &mut Model, msg: Msg) -> Vec<Cmd> {
 
 /// The portrait follows the body working now; it starts its loop from the first frame only when
 /// that body really changes, never on an event of the one already shown.
+///
+/// The same body seen again as the risen form of the race it had — no event says so yet, but
+/// the survey re-reads each creature's race — is an ascension: it plays once ([`Model::ascend`]).
 fn settle_actor(m: &mut Model) {
-    let (now, _) = crate::activity::actor(m);
+    let (now, race) = crate::activity::actor(m);
     if m.activity.actor.as_deref() != Some(now.as_str()) {
         m.activity.actor = Some(now);
+        m.activity.race = Some(race);
+        m.ascending = None;
         m.portrait_clock = Duration::ZERO;
+    } else if let Some(was) = m.activity.race.replace(race)
+        && was != race
+    {
+        if was.ascends_to() == Some(race) {
+            m.ascend(was);
+        } else {
+            m.ascending = None;
+            m.portrait_clock = Duration::ZERO;
+        }
     }
 }
 

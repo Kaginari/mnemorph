@@ -171,7 +171,7 @@ background as `COLORFGBG` reports it, else dark.
 |---|---|
 | header | Mnemorph's mark (the name drawn across the water races' blues), the session's body and its model on the left; the session's id and its state on the right — `○ idle`, `● running bash 3s`, `◆ waiting for you` |
 | panes | labelled in small capitals on their edges: ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ, ꜱᴇꜱꜱɪᴏɴ (the sidebar), ᴀꜱᴋ (the input) |
-| welcome | the card the conversation opens on, scrolling with the transcript: the MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
+| welcome | the card the conversation opens on: on first run it sits at the top of the conversation, like a header, and scrolls away with the transcript as messages come — a short transcript fills from the top, the room it leaves below it, above the input. The MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
 | transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
 | sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
@@ -215,18 +215,31 @@ never leaves it doubled. A call's card appears at its first byte, its summary fi
 arguments arrive, its class read by the classifier off the UI thread; its duration is the time
 to its result. Time is the model's clock, advanced by its ticks.
 
-The portraits are each race's idle loop, 32 pixels square (32 columns by 16 rows, 48 frames), in
-the `.mnanim.json` format of Kaginari/mnemorph-animations, embedded from `assets/anims/` (its
-README names the commit and command they came from) and decoded once per race into every
-frame's cells by `kit::mnanim`, on a blocking thread at start — a frame only reads the cache and
-never decodes, so a race not yet ready is simply not drawn — — the half-block rule of that repository's player; a
-malformed file is an error, never a panic. The portrait plays at the loop's own pace, 16 frames a second, advanced by elapsed time under the 30-frame
-cap, only while a body works and the portrait is on screen; idle, it rests on its first frame and
-the UI schedules no tick for it.
+The portraits are the races' animations from Kaginari/mnemorph-animations, drawn natively at
+256 pixels in its `.mnanim.json` format v2 (a JSON header and palette, the frames in an 8-bit
+indexed PNG sprite sheet): each race's idle loop (48 frames at 16 fps, seamless) and the five
+ascensions (80 frames, played once), embedded from `assets/anims/256px/` (its README names the
+commit). `kit::mnanim` and `kit::glyphs` are vendored from that repository's player crate — the
+repository is private, so CI could not fetch it as a dependency. Without real pixels a clip is
+decoded once into glyph cells, 32 columns by 16 rows, each cell the best two-colour split of its
+sub-pixels: octants (2 × 4 a cell) where the terminal draws them itself whatever the font (Kitty,
+Ghostty), sextants (2 × 3) in WezTerm and foot, quadrants (2 × 2, block elements every font has)
+elsewhere, half blocks on the Linux console; `MNEMORPH_TUI_GLYPHS=half|quadrants|sextants|octants`
+overrides it. The idle loops decode on a blocking thread at start, an ascension on a thread of its
+own the first time it plays — a frame only reads the cache and never decodes, so a clip not yet
+ready is simply not drawn; a malformed file is an error, never a panic. A clip plays at its own
+pace, advanced by elapsed time under the 30-frame cap, only while a body works and the portrait
+is on screen; idle, the UI schedules no tick for it.
 
-**The portraits in real pixels.** Where the terminal draws images, the portraits are pictures as
-sharp as their source — each race's 256 px PNG, embedded from `assets/portraits/` (mnemorph-animations
-`df20cfa`) — and the half blocks above are the fallback. At start, before the alternate screen,
+**Ascensions.** No event names an ascension yet: the sidebar's survey re-reads each creature's
+race, and the body shown seen again as the risen form of the race it had is one. Its ascension
+plays once from its start (`Model::ascend`, the hook an ascension event will call), then the risen
+form's idle loop.
+
+**The portraits in real pixels.** Where the terminal draws images, a working body's clip plays as
+real pixels — its 256 px frames as the animations' player shows them with `--native`, one frame
+pixel a screen pixel — and Veldora, at rest, is her still 256 px PNG from `assets/portraits/`;
+the glyphs above are the fallback. At start, before the alternate screen,
 `probe` asks the terminal on `/dev/tty` in raw mode: the window's pixels (`TIOCGWINSZ`), a cell's
 size (`CSI 16 t`), its name (XTVERSION), Kitty's graphics query, and the device attributes (DA1)
 last — every terminal answers DA1, so its reply ends the wait. It waits at most 200 ms with
@@ -242,37 +255,49 @@ Control is never a reply: Ctrl+C and Esc always reach the UI, so they stop, quit
    name or the environment, and images are on — DA1 lists 4, or iTerm2 or WezTerm, which always
    draw them. A PNG in full colour, smaller than Sixel, so it is preferred where both exist;
 3. **Sixel** when DA1 lists 4;
-4. **half blocks** otherwise — and whenever a cell's size in pixels is unknown, or inside tmux.
+4. **glyphs** otherwise — and whenever a cell's size in pixels is unknown, or inside tmux.
 
 `MNEMORPH_TUI_IMAGES` overrides it: `auto` (the default), `kitty`, `iterm`, `sixel`, `blocks`, or
-`off` — half blocks, nothing asked of the terminal. `mnemorph-tui --probe` prints what was found,
+`off` — glyphs, nothing asked of the terminal. `mnemorph-tui --probe` prints what was found,
 the replies as they came, and the choice.
 
-A picture is built once per race, box size and background: the PNG laid on the background at
-its own size, then Lanczos-resized to a square exactly `cols × cell width` by `rows × cell
-height` pixels — 32 columns of 8 × 17 px cells are 256 × 255 px in 15 rows — centred, so the
-terminal never rescales it; its encoding is cached. iTerm2's inline images are given their box
+The portrait's box is 32 columns, and as many rows as make it square — or, when its columns hold
+256 pixels, enough rows for 256: 32 columns of 8 × 17 px cells (VS Code) are 256 × 272 px in 16
+rows. Every picture is exactly the box's pixels, so the terminal never rescales it. A clip's frame
+is laid on the background one pixel a screen pixel, centred, and shrunk (Lanczos) only when the
+box is smaller than 256; Veldora's PNG is laid on the background and Lanczos-resized to the
+largest square in the box. A clip's frames are encoded on a thread of their own, once per clip,
+protocol, box and background (a reel, a few kept), the frame due first; a frame not encoded yet
+is waited for with the old one still up, so the UI's thread never encodes and typing never
+stalls. A still is built once and cached. iTerm2's inline images are given their box
 in cells, so a font zoom never leaves the picture spilling past its box; on a resize the cell's
 size is read again from the window (`TIOCGWINSZ`), and when it changed every picture is built
 again at the new size. Sixel draws exactly the pixels it was built for: where the window gives no
-pixels, a resize leaves no size to trust, so the portraits fall back to half blocks — the old
+pixels, a resize leaves no size to trust, so the portraits fall back to glyphs — the old
 picture's box written again — until a size returns. Every byte of an image sequence comes from
 those embedded files and from numbers, never from the model or the world.
 
 A terminal image lies over the cells, and text drawn after it does not cover it, so the view
 draws plain cells of the picture's background where it goes and names the picture it wants
-(`pictures::Want`: the slot, the race, the box, the background). After each frame `Placer`
-compares that with what the terminal shows. An unchanged picture is never sent again; one gone
+(`pictures::Want`: the slot, the art — Veldora, or a clip's frame — the box, the background). After each frame `Placer`
+compares that with what the terminal shows. An unchanged picture is never sent again. A clip's next frame over the same box replaces the old
+one with nothing erased in between, so nothing flickers. Under **Kitty** each frame is
+transmitted once under its own image id (`a=t`) and placed by id after (`a=p`): the next frame is
+placed, then the old one's placement taken down (`a=d,d=i`, its data kept for the loop's next
+turn), a few bytes a frame, so the clip plays at its own 16 frames a second. Under **iTerm2** and
+**Sixel** a frame is its pixels sent again — about 67 KB as an iTerm2 image, 86 KB as Sixel — so the clip plays at 8 frames a second
+(every other frame, the loop still three seconds), a frame sent only when it changes. VS Code's
+terminal, with images on, draws iTerm2's inline images. A picture gone
 or moved is erased first — Kitty deletes it by id, and under Sixel and iTerm2 the cells under its
 old box are written again from the frame just drawn — then the new one is sent at its box with
 the cursor saved and restored. While an approval is open no picture is wanted, so the card never
 sits under one; under Kitty they are placed below the text (`z=-1`), so text drawn over one
-always shows, and they are deleted before the frame that opens the card besides. A panic deletes
-Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
+always shows, and they are deleted before the frame that opens the card besides. On leaving, every Kitty frame stored is freed by its id; a panic deletes
+Kitty's pictures and frees the frames' id range too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
 the screen, so each picture is sent again; the sidebar's toggle and its fold below 100 columns
 move or remove theirs. A box that moved is erased and its picture held
-back until the box has stayed put for 150 ms, so a moving box never sends a picture once a frame. In pixels a portrait is still — Veldora at rest, the working body's
-race during a turn, swapped when it changes — and asks no ticks. Pictures are the sidebar's alone.
+back until the box has stayed put for 150 ms, so a moving box never sends a picture once a frame. At rest Veldora is still and asks no ticks; a new working body starts its clip from its first
+frame. Pictures are the sidebar's alone.
 
 **The wordmark.** The welcome card opens on MNEMORPH in block letters, five rows tall, from a
 small font in `welcome.rs`: full and half blocks (`█ ▀ ▄`) and spaces only, each cell one
@@ -282,14 +307,12 @@ Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal — made read
 page as every race hue is. The wordmark is 62 cells and the card's frame takes 6, so it shows on a
 card 68 cells wide or more — a terminal of 72 columns or more with the sidebar folded, 108 or more
 with it open; on a narrower card one line, `◈ MNEMORPH`, in the same gradient, stands in.
-(A Kitty-only animation would upload each frame once under its own id and switch placements by
-id; `pictures::Art` is where it would be named.)
 
 A terminal that gives no cell size gives its text area in pixels (`CSI 14 t`) more often than
 not; the cell is that area over the window's cells, in either order (VTE answers width first):
 the one the window divides exactly, a text area being whole cells, then the one nearest twice as
 tall as wide. VTE lists Sixel in its device attributes when its Sixel is on; a VTE that does not
-draws half blocks, and `--probe` names its version (`VTE_VERSION`) and what would give images.
+draws glyphs, and `--probe` names its version (`VTE_VERSION`) and what would give images.
 
 To see the pictures in VS Code's terminal, turn on `terminal.integrated.enableImages` in the
 settings and reload the window: xterm.js then lists Sixel in DA1, and Mnemorph draws iTerm2's
@@ -352,7 +375,7 @@ ecosystem:
 | Harmonica | `kit::spring`, `kit::toast` | a critically damped spring: the transcript scrolls smoothly, a toast fades |
 | Glamour | `kit::markdown`, `kit::highlight` | Markdown drawn from a stylesheet the theme derives; code highlighted by syntect's grammars, in colours taken from the palette |
 | Isekai's depth | `kit::slab`, `kit::shimmer` | raised panels — a spine, a lit top edge, a shaded bevel, a cast shadow, every tone stepped from the palette — and a crest of light sweeping a busy word |
-| mnemorph-animations | `kit::mnanim`, `kit::pixels` | the races' portraits: their idle loops decoded once into cells and drawn in half blocks, or their 256 px sources as real pixels — Kitty, iTerm2 or Sixel — resized once to their box |
+| mnemorph-animations | `kit::mnanim`, `kit::glyphs`, `kit::pixels` | the races' animations, drawn natively at 256 px: sent as real pixels — Kitty, iTerm2 or Sixel — one frame pixel a screen pixel, or decoded once into glyph cells, octants down to half blocks |
 
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
 fails when the two differ.

@@ -491,6 +491,79 @@ mod tests {
         assert!(!text.contains("can't be grounded"));
     }
 
+    /// The screen row the wordmark's first row is drawn on, if it is.
+    fn wordmark_row(text: &str) -> Option<usize> {
+        let first = &wordmark_rows()[0];
+        text.lines().position(|l| l.contains(first.as_str()))
+    }
+
+    /// The rows the welcome card draws above the wordmark: its own top edge.
+    fn above_wordmark(m: &Model) -> usize {
+        let first = &wordmark_rows()[0];
+        card(m, 80)
+            .iter()
+            .position(|l| crate::kit::text::plain(l).contains(first.as_str()))
+            .expect("the card holds the wordmark")
+    }
+
+    fn tick(m: &mut Model) {
+        update(m, Msg::Tick(std::time::Duration::from_millis(50)));
+    }
+
+    #[test]
+    fn on_first_run_the_welcome_opens_the_conversation_at_the_top() {
+        // The frame's top edge, then the conversation's label: the transcript's first row is 2.
+        const TOP: usize = 2;
+        for open in [true, false] {
+            let mut m = model(Variant::Dark);
+            m.sidebar.open = open;
+            m.info("deepseek-v4-flash via deepseek · sandbox bwrap");
+            let (text, _) = screen(&mut m, 120, 40);
+            let row = wordmark_row(&text).expect("the wordmark is drawn");
+            assert_eq!(row, TOP + above_wordmark(&m), "open {open}:\n{text}");
+            // The room the short transcript leaves is below it, above the input.
+            let input = text
+                .lines()
+                .position(|l| l.contains("ask, or /help"))
+                .expect("the input");
+            assert!(
+                input > row + 20,
+                "open {open}: the input stays at the bottom:\n{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_welcome_scrolls_away_and_comes_back_at_the_top_of_the_history() {
+        let mut m = model(Variant::Dark);
+        let (text, _) = screen(&mut m, 120, 40);
+        assert!(wordmark_row(&text).is_some());
+        for i in 0..500 {
+            m.info(format!("message {i}"));
+        }
+        let (text, _) = screen(&mut m, 120, 40);
+        assert_eq!(wordmark_row(&text), None, "scrolled out:\n{text}");
+        assert!(text.contains("message 499"), "the newest shows");
+        // To the top of the history: the welcome first, where it opened.
+        update(
+            &mut m,
+            Msg::Key(ratatui::crossterm::event::KeyEvent::new(
+                ratatui::crossterm::event::KeyCode::Home,
+                ratatui::crossterm::event::KeyModifiers::CONTROL,
+            )),
+        );
+        for _ in 0..200 {
+            let _ = screen(&mut m, 120, 40);
+            tick(&mut m);
+        }
+        let (text, _) = screen(&mut m, 120, 40);
+        assert_eq!(
+            wordmark_row(&text),
+            Some(2 + above_wordmark(&m)),
+            "\n{text}"
+        );
+    }
+
     #[test]
     fn no_picture_is_wanted_for_the_welcome() {
         let mut m = model(Variant::Dark);

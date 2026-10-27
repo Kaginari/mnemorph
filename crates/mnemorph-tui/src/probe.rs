@@ -167,6 +167,7 @@ pub fn probe(env: &impl Fn(&str) -> Option<String>) -> Caps {
             "the output is not a terminal"
         });
         c.choice = choice;
+        c.glyphs = pixels::glyphs(None, env);
         c
     };
     caps.notes.extend(note);

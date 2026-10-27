@@ -30,6 +30,8 @@ pub struct Activity {
     pub ended: bool,
     /// The body the portrait last showed: a change of body restarts its loop.
     pub actor: Option<String>,
+    /// Its race as last seen: a change to its risen form is an ascension.
+    pub race: Option<Race>,
 }
 
 /// What the session is doing.
