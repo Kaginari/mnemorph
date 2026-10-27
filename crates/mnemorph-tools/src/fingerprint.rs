@@ -685,6 +685,67 @@ fn target(top: &Path) -> Result<String, String> {
     Ok(hex(&h.finalize()))
 }
 
+/// The one URL `remote` pushes to from the repository at `dir`, as git resolves it (`insteadOf`
+/// applied) from the repository's own configuration — no global or system file, fixed words, no
+/// input. A remote with more than one push URL, or a push URL that is not its fetch URL (a
+/// `pushurl`, a `pushInsteadOf`), is no post's push: where it goes is not where it reads from.
+///
+/// # Errors
+///
+/// Why the remote has no single push URL equal to its fetch URL, or git could not say.
+pub(crate) fn push_url(dir: &Path, remote: &str) -> Result<String, String> {
+    let run = |args: &[&str]| -> Result<String, String> {
+        let out = Command::new("git")
+            .args(["--no-optional-locks", "-c", "core.hooksPath=/dev/null"])
+            .args(args)
+            .current_dir(dir)
+            .env_clear()
+            .envs(scrubbed_env())
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+        if out.status.success() {
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        } else {
+            Err(format!(
+                "git {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    };
+    let pushes = run(&["remote", "get-url", "--push", "--all", "--", remote])?;
+    let fetch = run(&["remote", "get-url", "--", remote])?;
+    match pushes.lines().collect::<Vec<_>>().as_slice() {
+        [url] if *url == fetch.trim_end_matches('\n') => Ok((*url).to_owned()),
+        [_] => Err(format!(
+            "remote `{remote}` pushes somewhere other than it fetches from (a pushurl or pushInsteadOf)"
+        )),
+        urls => Err(format!(
+            "remote `{remote}` has {} push URLs, not one",
+            urls.len()
+        )),
+    }
+}
+
+/// A URL as an approval card shows it: any credentials in it hidden, every control character
+/// escaped.
+pub(crate) fn shown_url(url: &str) -> String {
+    let bare = match url.split_once("://") {
+        Some((scheme, rest)) => {
+            let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+            match authority.rsplit_once('@') {
+                Some((_, host)) => format!("{scheme}://…@{host}{path}"),
+                None => url.to_owned(),
+            }
+        }
+        None => url.to_owned(),
+    };
+    bare.escape_debug().to_string()
+}
+
 /// The environment that tells `gh` which repository and host to act on.
 const GH_TARGET: &[&str] = &["GH_REPO", "GH_HOST"];
 

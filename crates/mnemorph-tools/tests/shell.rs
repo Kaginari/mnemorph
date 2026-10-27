@@ -781,6 +781,19 @@ fn build_links_scratch_many_grants_and_truncate() {
 )]
 fn a_kijin_does_only_its_posts_acts() {
     let w = World::new("posts");
+    // A repository whose `origin` pushes where it fetches from: a push's target resolves.
+    for args in [
+        &["init", "-q"][..],
+        &["remote", "add", "origin", "https://example.com/o/r.git"],
+    ] {
+        let ok = std::process::Command::new("git")
+            .args(args)
+            .current_dir(w.world())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
     let as_post = |body: &str, gate: Arc<Scripted>| w.cx(Race::Kijin, gate).with_body(body);
     // Refused, never asked: a forge's deploy, a deploy's push, a scout's push.
     for (body, command, act, route) in [

@@ -382,8 +382,8 @@ act after it `other`.
 
 | Kind | Read from |
 |---|---|
-| `fetch` | `curl`, `wget`, `aria2c`, `httpie` with only allowlisted options (a GET, nothing sent, no hook, no config file); `git fetch`/`clone`/`pull`/`ls-remote` with allowlisted options and plain remotes (no `--upload-pack`, no `ext::` or `fd::`); `gh` reads (`view`, `list`, `status`, `checks`, a plain `gh api` GET); `kubectl get` (never a secret: that is refused), `helm status`; DNS lookups |
-| `push-branch` | `git push <remote> refs/heads/<name>`, or `HEAD:refs/heads/<name>`, or `<name>:refs/heads/<name>`: one branch named in full — a short name (`v1.0` may be a tag), no refspec, `--follow-tags` or two refspecs are `other` |
+| `fetch` | `curl`, `wget`, `aria2c`, `httpie` with only allowlisted options (a GET, nothing sent, no hook, no config file), their output paths (`-o`, `-O`, `-P`, `-d`) judged as writes — outside the world, `other`; `git fetch`/`clone`/`pull`/`ls-remote` with allowlisted options and plain remotes (no `--upload-pack`, no `ext::` or `fd::`); `gh` reads (`view`, `list`, `status`, `checks`, a plain `gh api` GET); `kubectl get` (never a secret: that is refused), `helm status`; DNS lookups |
+| `push-branch` | `git push <remote> refs/heads/<name>`, or `HEAD:refs/heads/<name>`, or `<name>:refs/heads/<name>`: one branch named in full, to a configured remote's name — a URL in its place, a short name (`v1.0` may be a tag), no refspec, `--follow-tags` or two refspecs are `other`. Before the human is asked, the remote's push URL is resolved from the repository's own configuration and shown on the card; a remote with a `pushurl`, a `pushInsteadOf` or more than one push URL is `other` |
 | `pull-request` | `gh pr create`, `edit`, `ready`, `close`, `reopen` |
 | `comment` | `gh pr comment`, `gh issue comment` |
 | `label` | label flags on `gh pr`/`gh issue edit`, `gh label` |

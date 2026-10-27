@@ -1,5 +1,7 @@
 //! One simple command, by name: wrappers unwrapped, then the table.
 
+use std::path::Path;
+
 use mnemorph_races::OutwardKind::{
     Comment, Deploy, Fetch, Install, Label, Publish, PullRequest, PushBranch, PushTag, RerunCi,
     Rollback, WriteOutside,
@@ -9,7 +11,7 @@ use mnemorph_races::{OutwardKind, ToolClass};
 
 use super::paths::Act;
 use super::words::Lit;
-use super::{Kind, Rule, Tally, Walker, base_name};
+use super::{Kind, Push, Rule, Tally, Walker, base_name};
 
 /// Commands that only look.
 const READS: &[&str] = &[
@@ -634,6 +636,9 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
                 OutwardKind::Other
             };
             t.reach(kind, Outward, format!("`{name}` reaches the network"));
+            for path in outputs(name, args) {
+                w.touch(&path, Act::Modify, &format!("`{name}`'s download"), t);
+            }
         }
         _ if SECRET_STORES.contains(&name) => {
             t.refuse(Rule::SecretStore, format!("`{name}` reads secrets"));
@@ -762,6 +767,8 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
     // reads; `-c` and `--config-env` set its config outright.
     let mut global = false;
     let mut configured = false;
+    // The repository it runs in: the working directory, moved by each `-C`.
+    let mut dir = w.cwd.clone();
     while let Some(Some(a)) = args.get(i).map(|a| a.text.as_deref()) {
         if !a.starts_with('-') {
             break;
@@ -775,6 +782,13 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
                 )
             });
         global |= !inside;
+        if inside {
+            let to = args
+                .get(i + 1)
+                .and_then(|d| d.text.as_deref())
+                .unwrap_or("");
+            dir = super::paths::join(dir.as_deref(), to);
+        }
         i += if matches!(
             a,
             "-C" | "-c" | "--git-dir" | "--work-tree" | "--namespace" | "--exec-path"
@@ -842,7 +856,7 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
                     "`git -c` sets the config the push runs with (`core.sshCommand`, a URL)",
                 );
             }
-            push(&words, plain, t);
+            push(&words, plain, dir.as_deref(), t);
         }
         "fetch" | "pull" | "clone" | "ls-remote" => {
             t.reach(
@@ -863,7 +877,7 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
                 let kind = if plain
                     && words[1..]
                         .iter()
-                        .all(|w| matches!(*w, "-v" | "-p" | "--prune" | "-n") || remote_ok(w))
+                        .all(|w| matches!(*w, "-v" | "-p" | "--prune" | "-n") || remote_name(w))
                 {
                     Fetch
                 } else {
@@ -1093,7 +1107,7 @@ const PUSH_QUIET: &[&str] = &[
 /// branch pushed onto another name, more than one refspec, a helper program or a push option on
 /// the remote: destructive. An option it does not know is destructive too, so a word only ever
 /// raises the class.
-fn push(words: &[&str], plain: bool, t: &mut Tally) {
+fn push(words: &[&str], plain: bool, dir: Option<&Path>, t: &mut Tally) {
     let mut why: Option<String> = None;
     let mut positional = Vec::new();
     for w in words {
@@ -1130,12 +1144,27 @@ fn push(words: &[&str], plain: bool, t: &mut Tally) {
     // A branch push is the forge's only when it cannot mean more than it says: one remote, one
     // `refs/heads/` refspec, nothing in the command that changes how git runs.
     let branch =
-        matches!(positional.as_slice(), [remote, spec] if remote_ok(remote) && branch_spec(spec));
+        matches!(positional.as_slice(), [remote, spec] if remote_name(remote) && branch_spec(spec));
+    // Where it goes is the remote's configured URL: the gate resolves it before the human is
+    // asked, so the repository it runs in must be known.
+    let pushed = |t: &mut Tally| {
+        if let (Some(dir), Some(remote)) = (dir, positional.first()) {
+            t.pushes.push(Push {
+                dir: dir.to_path_buf(),
+                remote: (*remote).to_owned(),
+            });
+        }
+    };
+    let plain = plain && dir.is_some();
     match why {
-        Some(reason) if plain && tags_only(words) => t.reach(PushTag, Destructive, reason),
+        Some(reason) if plain && tags_only(words) => {
+            pushed(t);
+            t.reach(PushTag, Destructive, reason);
+        }
         // A forced, deleting or mirroring push is held by no post.
         Some(reason) => t.reach(OutwardKind::Other, Destructive, reason),
         None if plain && branch => {
+            pushed(t);
             t.reach(PushBranch, Outward, "`git push` leaves the machine");
         }
         None => t.reach(
@@ -1155,13 +1184,27 @@ fn ref_name(r: &str) -> bool {
         && !r.contains("..")
 }
 
-/// A remote named plainly: no transport helper (`ext::`, `fd::`), no option.
-fn remote_ok(remote: &str) -> bool {
+/// A fetch operand named plainly: a remote or a URL, but no transport helper (`ext::`, `fd::`)
+/// and no option.
+fn fetch_operand_ok(operand: &str) -> bool {
+    !operand.is_empty()
+        && !operand.starts_with('-')
+        && !operand.contains("::")
+        && !operand.starts_with("ext:")
+        && !operand.starts_with("fd:")
+}
+
+/// A configured remote's name, and nothing a URL or an option could be: ASCII letters, digits,
+/// `-`, `_` and `.`, at most 100 bytes, not starting with `-` or `.`. A push or a typed act names
+/// its remote this way, so the remote's URL is what the configuration says.
+#[must_use]
+pub fn remote_name(remote: &str) -> bool {
     !remote.is_empty()
-        && !remote.starts_with('-')
-        && !remote.contains("::")
-        && !remote.starts_with("ext:")
-        && !remote.starts_with("fd:")
+        && remote.len() <= 100
+        && !remote.starts_with(['-', '.'])
+        && remote
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
 /// `refs/heads/X`, `HEAD:refs/heads/X` or `X:refs/heads/X`: one branch, named in full.
@@ -1190,8 +1233,8 @@ fn tags_only(words: &[&str]) -> bool {
         .copied()
         .collect();
     match positional.as_slice() {
-        [remote, "tag", t] => remote_ok(remote) && ref_name(t),
-        [remote, r] => remote_ok(remote) && r.strip_prefix("refs/tags/").is_some_and(ref_name),
+        [remote, "tag", t] => remote_name(remote) && ref_name(t),
+        [remote, r] => remote_name(remote) && r.strip_prefix("refs/tags/").is_some_and(ref_name),
         _ => false,
     }
 }
@@ -1248,6 +1291,99 @@ fn web_url(w: &str) -> bool {
     !w.contains("://") || w.starts_with("http://") || w.starts_with("https://")
 }
 
+/// `curl`'s allowlisted options that take a value.
+const CURL_VALUES: &[&str] = &[
+    "-o",
+    "--output",
+    "-m",
+    "--max-time",
+    "--connect-timeout",
+    "--retry",
+    "--retry-delay",
+    "--max-redirs",
+    "-A",
+    "--user-agent",
+    "-r",
+    "--range",
+];
+
+/// `wget`'s allowlisted options that take a value.
+const WGET_VALUES: &[&str] = &[
+    "-O",
+    "--output-document",
+    "-P",
+    "--directory-prefix",
+    "-T",
+    "--timeout",
+    "-t",
+    "--tries",
+];
+
+/// `aria2c`'s allowlisted options that take a value.
+const ARIA2C_VALUES: &[&str] = &[
+    "-d",
+    "--dir",
+    "-o",
+    "--out",
+    "-x",
+    "--max-connection-per-server",
+    "-s",
+    "--split",
+];
+
+/// The paths a download writes, as its options name them (`curl -o`, `wget -O`/`-P`,
+/// `aria2c -d`/`-o`): each is judged like any written path. `-` is standard output.
+fn outputs(name: &str, args: &[Lit]) -> Vec<Lit> {
+    let (values, wanted): (&[&str], &[&str]) = match name {
+        "curl" => (CURL_VALUES, &["-o", "--output"]),
+        "wget" => (
+            WGET_VALUES,
+            &["-O", "--output-document", "-P", "--directory-prefix"],
+        ),
+        "aria2c" => (ARIA2C_VALUES, &["-d", "--dir", "-o", "--out"]),
+        _ => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let Some(w) = a.text.as_deref() else { continue };
+        if w.starts_with("--") {
+            match w.split_once('=') {
+                Some((n, v)) if wanted.contains(&n) => out.push(lit(v)),
+                None if values.contains(&w) => {
+                    if let Some(v) = it.next()
+                        && wanted.contains(&w)
+                    {
+                        out.push(v.clone());
+                    }
+                }
+                _ => {}
+            }
+        } else if let Some(short) = w.strip_prefix('-').filter(|s| !s.is_empty()) {
+            for (k, c) in short.char_indices() {
+                let flag = format!("-{c}");
+                if !values.contains(&flag.as_str()) {
+                    continue;
+                }
+                let rest = &short[k + c.len_utf8()..];
+                let value = if rest.is_empty() {
+                    it.next().cloned()
+                } else {
+                    Some(lit(rest))
+                };
+                if let Some(v) = value
+                    && wanted.contains(&flag.as_str())
+                {
+                    out.push(v);
+                }
+                break;
+            }
+        }
+    }
+    out.retain(|v| v.text.as_deref() != Some("-"));
+    out
+}
+
 /// Whether a network command only reads: a lookup, or a plain GET whose every option is on the
 /// command's allowlist.
 #[allow(
@@ -1302,20 +1438,7 @@ fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
                     "--http1.1",
                     "--http2",
                 ],
-                &[
-                    "-o",
-                    "--output",
-                    "-m",
-                    "--max-time",
-                    "--connect-timeout",
-                    "--retry",
-                    "--retry-delay",
-                    "--max-redirs",
-                    "-A",
-                    "--user-agent",
-                    "-r",
-                    "--range",
-                ],
+                CURL_VALUES,
                 web_url,
             )
         }
@@ -1334,31 +1457,13 @@ fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
                 "--no-verbose",
                 "--https-only",
             ],
-            &[
-                "-O",
-                "--output-document",
-                "-P",
-                "--directory-prefix",
-                "-T",
-                "--timeout",
-                "-t",
-                "--tries",
-            ],
+            WGET_VALUES,
             web_url,
         ),
         "aria2c" => allowed(
             words,
             &["-q", "--quiet", "-c", "--continue"],
-            &[
-                "-d",
-                "--dir",
-                "-o",
-                "--out",
-                "-x",
-                "--max-connection-per-server",
-                "-s",
-                "--split",
-            ],
+            ARIA2C_VALUES,
             web_url,
         ),
         "http" | "https" | "xh" => match words {
@@ -1402,7 +1507,7 @@ fn fetch_kind(words: &[Option<&str>], plain: bool) -> OutwardKind {
                 "--no-progress",
             ],
             &["--depth", "--shallow-since", "-b", "--branch", "--filter"],
-            remote_ok,
+            fetch_operand_ok,
         );
     if ok { Fetch } else { OutwardKind::Other }
 }

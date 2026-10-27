@@ -280,7 +280,8 @@ fn a_changed_target_is_asked_again() {
 }
 
 /// A write in the world can reroute an approved push without touching HEAD, the diff or the
-/// command: each way is a changed target.
+/// command: each way is a changed target — asked again, or, when the push no longer goes where
+/// its remote fetches from, no post's push at all.
 #[test]
 fn a_rerouted_push_is_asked_again() {
     let reroutes: [&[&str]; 3] = [
@@ -317,11 +318,81 @@ fn a_rerouted_push_is_asked_again() {
             "{reroute:?}"
         );
         let asked = gate.asked();
-        assert_eq!(asked.len(), 2, "{reroute:?}");
-        assert!(
-            asked[1].why[0].contains("the target changed"),
-            "{reroute:?}"
+        if i == 0 {
+            assert_eq!(asked.len(), 2, "{reroute:?}");
+            assert!(
+                asked[1].why[0].contains("the target changed"),
+                "{reroute:?}"
+            );
+        } else {
+            assert_eq!(asked.len(), 1, "{reroute:?}");
+            assert!(
+                o.content
+                    .contains("pushes somewhere other than it fetches from"),
+                "{reroute:?}: {o:?}"
+            );
+        }
+    }
+}
+
+/// The card says where a push goes: the remote's one push URL, resolved before the human is
+/// asked.
+#[test]
+fn the_card_shows_where_a_push_goes() {
+    let w = World::new("card-url");
+    let gate = Late::new(vec![(None, Answer::Deny("just looking".into()))]);
+    let o = push(&mut w.cx(gate.clone()));
+    assert!(o.meta.denied, "{o:?}");
+    let want = format!(
+        "pushes to {} (remote `origin`)",
+        w.root.join("origin.git").display()
+    );
+    let asked = gate.asked();
+    assert!(asked[0].why.contains(&want), "{:?}", asked[0].why);
+}
+
+/// A push URL set before approval — a `pushurl`, a `pushInsteadOf`, a second push URL — would
+/// send the push where the card's remote does not read from: no post's push, refused before the
+/// human is asked.
+#[test]
+fn a_push_url_set_before_approval_is_no_posts_push() {
+    let reroutes: [&[&str]; 3] = [
+        &["config", "remote.origin.pushurl", "ELSEWHERE"],
+        &["config", "url.ELSEWHERE.pushInsteadOf", "ORIGIN"],
+        &[
+            "remote",
+            "set-url",
+            "--add",
+            "--push",
+            "origin",
+            "ELSEWHERE",
+        ],
+    ];
+    for (i, reroute) in reroutes.iter().enumerate() {
+        let w = World::new(&format!("preset{i}"));
+        let origin = w.root.join("origin.git").to_str().unwrap().to_owned();
+        let elsewhere = w.root.join("elsewhere.git").to_str().unwrap().to_owned();
+        let args: Vec<String> = reroute
+            .iter()
+            .map(|a| {
+                a.replace("ELSEWHERE", &elsewhere)
+                    .replace("ORIGIN", &origin)
+            })
+            .collect();
+        git(
+            &w.world(),
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
         );
+        let gate = Late::new(vec![(None, Answer::Approve)]);
+        let o = push(&mut w.cx(gate.clone()));
+        assert!(
+            o.is_error
+                && o.content.contains("`other` is not in the kijin-forge post")
+                && o.content.contains("remote `origin`"),
+            "{reroute:?}: {o:?}"
+        );
+        assert!(gate.asked().is_empty(), "{reroute:?}: the gate was asked");
+        assert!(!w.pushed_to("origin.git") && !w.pushed_to("elsewhere.git"));
     }
 }
 

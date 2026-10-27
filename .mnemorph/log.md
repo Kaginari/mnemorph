@@ -5580,3 +5580,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Merged with #240:** `PostJournal` knows its post and `commit` refuses an act the post does not
   hold (`a_journal_commits_only_its_posts_acts`); the untyped-command receipt test uses a forge
   command.
+
+---
+
+### [2026-10-27T19:24:46+01:00] rimuru — #239, Fable's last three: where a push goes, a remote by name, a download's path
+- **Done:** a branch or tag push's remote is resolved before the gate (repository config only):
+  one push URL equal to the fetch URL, shown on the card (credentials hidden, escaped), else
+  `other`; a push names a configured remote (`mnemorph_tools::remote_name`, shared with typed
+  acts), a URL in its place is `other`; `curl`/`wget`/`aria2c` output paths are judged as
+  writes. Docs 02.
+- **Tests:** fingerprint `the_card_shows_where_a_push_goes`,
+  `a_push_url_set_before_approval_is_no_posts_push`; corpus rows for URL remotes and outputs;
+  each guard disabled fails its test.

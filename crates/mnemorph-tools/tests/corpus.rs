@@ -182,6 +182,25 @@ fn outward_acts_by_kind() {
             &[Other],
         ),
         ("sudo ls", &[Other]),
+        // A push names a configured remote: a URL in its place is no post's.
+        ("git push https://github.com/o/r refs/heads/x", &[Other]),
+        ("git push git@github.com:o/r refs/heads/x", &[Other]),
+        ("git push origin.x refs/heads/x", &[PushBranch]),
+        // A download's output is a written path.
+        ("curl -o - https://example.com", &[Fetch]),
+        ("curl -o out.json https://example.com", &[Fetch]),
+        ("curl -o /tmp/x https://example.com", &[Fetch, Other]),
+        ("curl -sSo /tmp/x https://example.com", &[Fetch, Other]),
+        ("curl --output=/tmp/x https://example.com", &[Fetch, Other]),
+        ("wget -O /tmp/x https://example.com", &[Fetch, Other]),
+        ("wget -qO/tmp/x https://example.com", &[Fetch, Other]),
+        ("wget -P /tmp/d https://example.com", &[Fetch, Other]),
+        (
+            "wget --directory-prefix=/tmp/d https://example.com",
+            &[Fetch, Other],
+        ),
+        ("aria2c -d /tmp/d https://example.com/a", &[Fetch, Other]),
+        ("curl -o \"$F\" https://example.com", &[Fetch, Other]),
         ("echo hi > ~/.bashrc", &[Other]),
         ("echo hi > \"$f\"", &[Other]),
         ("git push --force origin main", &[Other]),
@@ -259,6 +278,17 @@ fn outward_acts_by_kind() {
     ] {
         assert_eq!(classify_acts(cmd, &rooted).1, [want], "{cmd}");
     }
+    // A download into a credential is refused like any write there.
+    assert!(matches!(
+        classify(
+            "curl -o ~/.ssh/authorized_keys https://example.com",
+            &place()
+        ),
+        Verdict::Refuse {
+            rule: mnemorph_tools::Rule::Credential,
+            ..
+        }
+    ));
     // A cluster's secrets are a secret store, not a fetch.
     for cmd in [
         "kubectl get secret db",

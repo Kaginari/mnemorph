@@ -14,7 +14,9 @@ pub mod tool;
 mod tripwire;
 
 pub use attic::{Act, Attic, Conflict, Held, Restore, Snapshot, State};
-pub use classify::{Place, Rule, Verdict, classify, classify_acts};
+pub use classify::{
+    Place, Push, Rule, Verdict, classify, classify_acts, classify_reach, remote_name,
+};
 pub use fingerprint::Fingerprint;
 pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 /// What a sandboxed command may touch, for a harness process the tools do not start.

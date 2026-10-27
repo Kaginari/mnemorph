@@ -13,6 +13,7 @@
 //! can lower what the words before it already earned.
 
 mod commands;
+pub use commands::remote_name;
 pub(crate) mod paths;
 mod words;
 
@@ -185,6 +186,23 @@ pub fn classify(command: &str, place: &Place) -> Verdict {
 /// one kind: one the classifier cannot name is [`OutwardKind::Other`].
 #[must_use]
 pub fn classify_acts(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>) {
+    let (verdict, acts, _) = classify_reach(command, place);
+    (verdict, acts)
+}
+
+/// A branch or tag push the classifier read as a post's act: the repository it runs in and the
+/// remote it names, whose URL the gate resolves before the human is asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Push {
+    /// The repository's directory.
+    pub dir: PathBuf,
+    /// The configured remote's name.
+    pub remote: String,
+}
+
+/// [`classify_acts`], with the pushes whose remotes the gate resolves.
+#[must_use]
+pub fn classify_reach(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>, Vec<Push>) {
     let mut walker = Walker {
         place,
         cwd: Some(place.cwd.clone()),
@@ -198,7 +216,8 @@ pub fn classify_acts(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>
         acts.push(OutwardKind::Other);
     }
     acts.sort_unstable();
-    (tally.verdict(), acts)
+    let pushes = std::mem::take(&mut tally.pushes);
+    (tally.verdict(), acts, pushes)
 }
 
 /// How far `sh -c` and `eval` strings nest before the classifier stops reading and refuses.
@@ -224,6 +243,8 @@ pub(crate) struct Tally {
     pub(crate) outside: Vec<PathBuf>,
     /// The kinds of outward act found.
     acts: Vec<OutwardKind>,
+    /// The pushes read as a post's act.
+    pub(crate) pushes: Vec<Push>,
 }
 
 impl Tally {
@@ -281,6 +302,7 @@ impl Tally {
         for kind in other.acts {
             self.act(kind);
         }
+        self.pushes.extend(other.pushes);
         for p in other.outside {
             if !self.outside.contains(&p) {
                 self.outside.push(p);
@@ -546,8 +568,10 @@ impl Walker<'_> {
             kind = commands::classify(self, &argv[..k], &mut part);
             if k < argv.len() {
                 part.acts.clear();
+                part.pushes.clear();
             } else if self.tainted && !part.acts.is_empty() {
                 part.acts = vec![OutwardKind::Other];
+                part.pushes.clear();
             }
             t.absorb(part);
         }

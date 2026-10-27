@@ -133,12 +133,7 @@ pub struct Planned {
 
 /// A plain configured remote name: `origin`, `upstream`.
 fn remote_ok(remote: &str) -> bool {
-    !remote.is_empty()
-        && remote.len() <= 100
-        && !remote.starts_with(['-', '.'])
-        && remote
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    mnemorph_tools::remote_name(remote)
 }
 
 /// A plain branch name: ASCII letters, digits, `-`, `_`, `.` and `/` between components; no
