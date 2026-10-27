@@ -106,3 +106,13 @@ test('resume opens a session on a stopped run; runs lists them through the core'
     raw: true,
   });
 });
+
+test('incident hands its words to the core whole', () => {
+  expect(parse(['--world', 'w', 'incident', 'open', 'forge', 'abc', '--why', 'wrong pr'])).toEqual({
+    kind: 'onto',
+    words: ['incident', 'open', 'forge', 'abc', '--why', 'wrong pr'],
+    world: 'w',
+    core: undefined,
+    raw: true,
+  });
+});

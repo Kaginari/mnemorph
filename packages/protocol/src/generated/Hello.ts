@@ -35,7 +35,8 @@ session: string,
 run: string, 
 /**
  * The configuration's holes — keys it did not take, and why — under a cap, the usage
- * ledger's lines that cannot be read, and each outward act a probe left in `reconcile`.
+ * ledger's lines that cannot be read, each outward act a probe left in `reconcile`, and each
+ * open incident with the receipts it is missing.
  */
 holes: Array<string>, 
 /**

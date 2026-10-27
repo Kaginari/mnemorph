@@ -405,14 +405,14 @@ act after it `other`.
 - **The act runner** (`mnemorph_config::Runner`) is the one path a typed act takes. A Kijin asks
   for one through its `outward` tool, with a typed act — `{kind: "push-new-branch", remote,
   name}`, `{kind: "add-label", repo, pr, label}` or `{kind: "comment", repo, pr, body}`, and an
-  optional `key` — never a command string; an untyped outward command still goes through `bash`,
+  optional `key` (a comment may also name `tells`, below) — or `{kind: "undo", receipt}` — never a command string; an untyped outward command still goes through `bash`,
   where it is a destructive `Command`. The steps run in this order, and none can be skipped:
 
   | # | Step | What stops the act |
   |---|---|---|
   | 1 | the post check (`Planned::check_post`) | a kind the post does not hold: refused before anything is read or asked |
   | 2 | the plan's fingerprint | a world that cannot be read |
-  | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet | a key given to another request; an earlier act of the same request in `reconcile`; the branch or label already there |
+  | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet | a key given to another request; an earlier act of the same request in `reconcile`; an open incident on the same target; the branch or label already there |
   | 4 | the gate: **always the human** — Oni envelopes are not honoured before M11, and the card says so | a denial |
   | 5 | the fingerprint, rechecked just before the spawn | a world that moved: nothing is journaled, and the gate is asked again (three times at most) |
   | 6 | `commit`: the intent journaled under the request's key | a row that cannot be written: nothing runs |
@@ -477,8 +477,8 @@ act after it `other`.
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
   never counts. A `reconcile` is shown to the human
   (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
-  `outwardCleanRate` counts against — and, from M11, what suspends the envelope that covered the
-  act and may make an Oni fall.
+  `outwardCleanRate` counts against — and what the human may mark an incident, which suspends the
+  envelope that covered the act and, from M11, may make an Oni fall.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
   outward act is typed, and for a small closed set of kinds the harness renders both the command
   and its undo from the act's own fields; the gate runs the stored command exactly:
@@ -497,7 +497,7 @@ act after it `other`.
   ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
   undo is never a string the model writes, so it is never declared or verified: it is derived, and
   it runs as an act of its own, through the gate. An undo is rendered only for an `observed`
-  act, and only while what it left is still its own (`Runner::undo`): a label is removed only when
+  act, and only while what it left is still its own (`Runner::undo_command`): a label is removed only when
   the one label event since the act was pinned is its add, by the login `gh` acts as, and the
   pull request still carries it — a label someone added between the pin and the act, whose add
   then did nothing, is never removed. Anything uncertain moves the act to `reconcile` instead.
@@ -510,6 +510,54 @@ act after it `other`.
   destructive until an expiry runner can end what it starts (M11). Also M11: resolving a remote's
   URL at act time, so a `pushurl` or `insteadOf` in the repository's config cannot retarget a
   push.
+- **An undo runs through the same pipeline** (`Runner::undo`; the Kijin asks with `{kind:
+  "undo", receipt}`), for an act `observed` or in `reconcile`, never for an undo:
+
+  | # | Step | What stops the undo |
+  |---|---|---|
+  | 1 | the post check — the act undone must be the post's | an act off the post, a command, an undo |
+  | 2 | the undo's fingerprint | a world that cannot be read |
+  | 3 | where it goes: the act's pinned push URLs or host, read again; what the act left, still its own — a label's one add since the pin by `gh`'s login, a comment by that login on the act's pull request with the act's body (a branch is leased instead) | a remote or host retargeted since the act; a label or comment no longer certainly its own (the act moves to `reconcile`) |
+  | 4 | the gate: **always the human** — no envelope covers an undo (`Uncovered::Undo`) | a denial: nothing runs, nothing is journaled, no incident opens |
+  | 5 | the recheck at the spawn | a world that moved: asked again |
+  | 6 | the incident opened (a rollback), and the undo's intent journaled — its own receipt, its rows naming the act (`undoes`) | a record that cannot be written: nothing runs |
+  | 7 | the harness-rendered undo — `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>`, `gh pr edit --remove-label`, `gh api -X DELETE …/comments/<id>` — never a model's string | — |
+  | 8 | `ran`: an exit other than 0 is `reconcile` | — |
+  | 9 | a probe that must see the effect **gone**: the branch on no push URL, the label not carried, no comment of the pull request with that id (an edited one is still there) | anything else is `reconcile` |
+
+  Only then is the undo `observed`, and the act's own journal is corrected: a `corrected` row,
+  appended and naming the undo (`by`), supersedes its earlier rows — never an edit. A failed
+  undo is `reconcile`, never undone. An effect the probe already sees gone (the human removed it
+  by hand) runs nothing: the human approves recording it, and the probe must see it gone again.
+- **A rolled-back or corrected act closes on four receipts.** An incident opens in the witness,
+  outside the world (`<post>.incidents.jsonl`), keyed to the act's receipt: when the human
+  approves an undo (a rollback), or marks an act as one — a `reconcile`, or an observed act that
+  was wrong (a correction) — with `mnemorph incident open <post> <act>`. It closes only when all
+  four receipts exist, each with its evidence:
+
+  | Receipt | Evidence |
+  |---|---|
+  | 1. undone | the undo's receipt, `observed` in the witness, undoing this act |
+  | 2. journal corrected | the act's `corrected` row in the witness, naming that undo |
+  | 3. downstream told | a typed `comment` act naming the incident (`tells: <act>`), `observed` in the witness, committed after the incident opened; on the act's pull request for a label or a comment, on any the human approves for a branch |
+  | 4. lesson | a test or a `Verify:` line in the world, or a Thought, checked to exist when recorded (`mnemorph incident lesson <post> <act> test <path> \| verify <path>:<line> \| thought <id>`) and kept with its SHA-256 |
+
+  Every receipt is read again from the witness and the post's intents whenever the incident is
+  read: an entry naming a receipt the witness does not hold as described counts for nothing, and
+  rows a body writes into the world's journal are never read. While it is open, `mnemorph status`
+  lists it with the receipts it misses, and:
+  - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which M11's gate
+    asks before it honours an envelope): every envelope one of whose patterns reads the act, or
+    that the incident names; incidents that cannot be read suspend every envelope;
+  - **its target takes no new act of the post**: the same branch on a push URL it shares, or the
+    same pull request — label or comment — is refused before the gate, with the incident and what
+    it misses named; only the comment that tells of it is admitted. The target, not the post: the
+    act that went wrong is not repeated, and nothing lands between the undo and the telling, while
+    the post's other work goes on, its standing permission already suspended. Once closed, the
+    same request is asked again as a new act.
+
+  A `reconcile` that is no incident — the act is fine as it stands — the human settles with
+  `mnemorph incident settle <post> <act>`: a `settled` row, nothing undone, and it leaves the list.
 - **A rollback is a lease on what the act left.** `kijin-deploy` rolls back only while the
   version deployed is still the one its act deployed: the post journal's deploy (the
   environment, the version before, ours) against what the target reports now. A later deploy, by

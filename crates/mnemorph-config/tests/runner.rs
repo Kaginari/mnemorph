@@ -7,14 +7,15 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mnemorph_config::{
-    Act, ENVELOPES_UNWIRED, Hands, Observer, Planned, PostJournal, Probe, Refusal, Request, Row,
-    Runner, Sandboxed, Seen, State, reconciling,
+    Act, Cause, ENVELOPES_UNWIRED, Envelope, Hands, Incident, Lesson, Observer, Planned,
+    PostJournal, Probe, Refusal, Request, Row, Runner, Sandboxed, Seen, State, reconciling,
 };
-use mnemorph_ledger::{Journal, Timestamp};
+use mnemorph_ledger::{Day, Journal, Timestamp};
 use mnemorph_races::{Post, Race, ToolClass};
 use mnemorph_tools::shell::{BeforeSpawn, Spawned};
 use mnemorph_tools::{Answer, Ask, Context, Fingerprint, Gate, Outcome, Sandbox};
@@ -38,7 +39,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 #[derive(Default)]
 struct Human {
     asks: Mutex<Vec<Ask>>,
-    deny: bool,
+    deny: AtomicBool,
     /// Run on the n-th ask (from 1), before answering.
     meanwhile: Mutex<Option<Meanwhile>>,
 }
@@ -62,7 +63,7 @@ impl Gate for Human {
         if let Some(f) = self.meanwhile.lock().unwrap().as_mut() {
             f(n);
         }
-        if self.deny {
+        if self.deny.load(Ordering::SeqCst) {
             Answer::Deny("no".into())
         } else {
             Answer::Approve
@@ -139,6 +140,17 @@ impl Fixture {
         Runner::new(&cx, self.journal(Post::Forge), probe, hands).act(request)
     }
 
+    /// Undo act `receipt` as `kijin-forge`, through `probe` and `hands`.
+    fn undo(
+        &self,
+        receipt: &str,
+        probe: &dyn Probe,
+        hands: &dyn Hands,
+    ) -> Result<mnemorph_config::Report, Refusal> {
+        let cx = self.cx("kijin-forge");
+        Runner::new(&cx, self.journal(Post::Forge), probe, hands).undo(receipt)
+    }
+
     /// Push `feat/x` the harness's way: the real sandboxed spawn, the real probe.
     fn push(&self) -> Result<mnemorph_config::Report, Refusal> {
         self.act(&push_request(), &self.observer(), &Sandboxed)
@@ -174,6 +186,7 @@ fn push_request() -> Request {
             name: "feat/x".into(),
         },
         key: None,
+        tells: None,
     }
 }
 
@@ -341,6 +354,7 @@ fn an_untyped_command_is_not_the_runners() {
             &Request {
                 act: Act::Command("gh pr merge 3".into()),
                 key: None,
+                tells: None,
             },
             &f.observer(),
             &Sandboxed,
@@ -357,7 +371,7 @@ fn an_untyped_command_is_not_the_runners() {
 fn a_denied_act_runs_nothing_and_journals_nothing() {
     let mut f = Fixture::new();
     f.human = Arc::new(Human {
-        deny: true,
+        deny: AtomicBool::new(true),
         ..Human::default()
     });
     assert!(matches!(f.push(), Err(Refusal::Denied(_))));
@@ -459,6 +473,12 @@ struct ForgeState {
     cut: bool,
     /// Die before the act, its intent journaled.
     cut_before: bool,
+    /// Undos spawned.
+    undos: usize,
+    /// An undo changes nothing.
+    noop_undo: bool,
+    /// What an undo exits with.
+    undo_exit: i32,
 }
 
 impl Forge {
@@ -474,6 +494,19 @@ impl Forge {
         let id = 4000 + s.comments.len() as u64;
         s.comments.push((id, body.to_owned(), author.to_owned()));
         id
+    }
+
+    fn remove_label(&self, label: &str, actor: &str) {
+        let mut s = self.state.lock().unwrap();
+        if s.labels.iter().any(|l| l.eq_ignore_ascii_case(label)) {
+            s.labels.retain(|l| !l.eq_ignore_ascii_case(label));
+            s.events.push((
+                "unlabeled".into(),
+                actor.into(),
+                label.into(),
+                Timestamp::now().to_string(),
+            ));
+        }
     }
 
     fn add_label(&self, label: &str, actor: &str) {
@@ -552,6 +585,32 @@ impl Hands for Forge {
             !self.state.lock().unwrap().cut_before,
             "the harness was killed before the act"
         );
+        if planned.is_undo() {
+            let (noop, exit) = {
+                let s = self.state.lock().unwrap();
+                (s.noop_undo, s.undo_exit)
+            };
+            if !noop {
+                match planned.act() {
+                    Act::AddLabel { label, .. } => self.remove_label(label, self.login),
+                    Act::Comment { .. } => {
+                        let id: u64 = planned
+                            .command()
+                            .rsplit('/')
+                            .next()
+                            .unwrap()
+                            .parse()
+                            .unwrap();
+                        self.state.lock().unwrap().comments.retain(|c| c.0 != id);
+                    }
+                    other => panic!("not a forge act: {other:?}"),
+                }
+            }
+            self.state.lock().unwrap().undos += 1;
+            let mut out = Outcome::ok(String::new(), ToolClass::Outward);
+            out.meta.exit = Some(exit);
+            return Spawned::Ran(out);
+        }
         let printed = match planned.act() {
             Act::AddLabel { label, .. } => {
                 self.add_label(label, self.login);
@@ -586,6 +645,7 @@ fn comment(body: &str, key: Option<&str>) -> Request {
             body: body.into(),
         },
         key: key.map(str::to_owned),
+        tells: None,
     }
 }
 
@@ -597,6 +657,7 @@ fn label(name: &str) -> Request {
             label: name.into(),
         },
         key: None,
+        tells: None,
     }
 }
 
@@ -689,7 +750,7 @@ fn a_label_is_undone_only_while_it_is_still_the_acts_own() {
     let cx = f.cx("kijin-forge");
     let runner = Runner::new(&cx, f.journal(Post::Forge), &forge, &forge);
     assert_eq!(
-        runner.undo(&ours.receipt).unwrap(),
+        runner.undo_command(&ours.receipt).unwrap(),
         "gh pr edit 12 --repo me/proj --remove-label ready"
     );
 
@@ -705,7 +766,7 @@ fn a_label_is_undone_only_while_it_is_still_the_acts_own() {
     assert_eq!(report.state, State::Observed);
     let cx = f.cx("kijin-forge");
     let runner = Runner::new(&cx, f.journal(Post::Forge), &*theirs, &*theirs);
-    let err = runner.undo(&report.receipt).unwrap_err();
+    let err = runner.undo_command(&report.receipt).unwrap_err();
     assert!(
         matches!(&err, Refusal::Refused(w) if w.contains("added by someone-else")),
         "{err:?}"
@@ -721,7 +782,7 @@ fn a_label_whose_events_cannot_be_read_is_not_undone() {
     let report = f.act(&label("ready"), &forge, &forge).unwrap();
     let cx = f.cx("kijin-forge");
     let err = Runner::new(&cx, f.journal(Post::Forge), &Dark, &forge)
-        .undo(&report.receipt)
+        .undo_command(&report.receipt)
         .unwrap_err();
     assert!(matches!(err, Refusal::Refused(_)), "{err:?}");
     assert_eq!(f.states().last(), Some(&State::Reconcile));
@@ -854,4 +915,465 @@ fn a_command_that_cannot_start_after_its_intent_is_probed_and_the_lock_let_go() 
     // The lock is free: the next act runs, and is asked anew.
     assert_eq!(f.push().unwrap().state, State::Observed);
     assert_eq!(f.human.asked(), 2);
+}
+
+// --- Rollback and closure -------------------------------------------------------------------
+
+fn tells(body: &str, of: &str) -> Request {
+    Request {
+        tells: Some(of.to_owned()),
+        ..comment(body, None)
+    }
+}
+
+impl Fixture {
+    fn incident(&self, act: &str) -> Incident {
+        self.journal(Post::Forge)
+            .incident(act)
+            .unwrap()
+            .expect("an incident on the act")
+    }
+
+    fn incidents(&self) -> Vec<Incident> {
+        self.journal(Post::Forge).incidents().unwrap()
+    }
+
+    /// A lesson written in the world: a test.
+    fn lesson(&self, act: &str) -> Incident {
+        fs::create_dir_all(self.world.join("tests")).unwrap();
+        fs::write(
+            self.world.join("tests/rollback.rs"),
+            "#[test]\nfn the_label_waits_for_review() {}\n",
+        )
+        .unwrap();
+        let lesson = Lesson::test(&self.world, "tests/rollback.rs").unwrap();
+        self.journal(Post::Forge).lesson(act, lesson).unwrap()
+    }
+}
+
+fn envelope(allow: &str) -> Envelope {
+    let today = Day::new(2026, 10, 27).unwrap();
+    Envelope {
+        name: "forge".into(),
+        allow: vec![allow.to_owned()],
+        signed: today.plus(-1),
+        expires: today.plus(29),
+        uses: None,
+        revoked: None,
+    }
+}
+
+#[test]
+fn an_undo_runs_only_once_the_human_approves_and_is_done_when_the_branch_is_gone() {
+    let f = Fixture::new();
+    let act = f.push().unwrap().receipt;
+    // Denied: nothing runs, nothing is journaled, no incident opens.
+    f.human.deny.store(true, Ordering::SeqCst);
+    let denied = f.undo(&act, &f.observer(), &Sandboxed).unwrap_err();
+    assert!(matches!(denied, Refusal::Denied(_)), "{denied:?}");
+    assert_eq!(f.remote_branch().as_deref(), Some(f.head.as_str()));
+    assert_eq!(f.rows().len(), 3);
+    assert_eq!(f.incidents(), []);
+    // Approved: the harness's undo, leased on the pushed commit; the probe sees the branch gone.
+    f.human.deny.store(false, Ordering::SeqCst);
+    let undo = f.undo(&act, &f.observer(), &Sandboxed).unwrap();
+    assert_eq!(undo.state, State::Observed, "{undo:?}");
+    assert!(f.remote_branch().is_none());
+    let asks = f.human.asks.lock().unwrap().clone();
+    assert_eq!(asks.len(), 3, "push, denied undo, approved undo");
+    let card = &asks[2];
+    assert!(card.fingerprint.is_some());
+    assert!(
+        card.act
+            .contains(&format!("--force-with-lease=refs/heads/feat/x:{}", f.head)),
+        "{}",
+        card.act
+    );
+    assert!(
+        card.why[0].starts_with("the undo of `git push"),
+        "{:?}",
+        card.why
+    );
+    // The undo's rows name the act; the act's own row is superseded, appended, by `corrected`.
+    let rows = f.rows();
+    let undo_rows: Vec<&Row> = rows.iter().filter(|r| r.act == undo.receipt).collect();
+    assert_eq!(
+        undo_rows.iter().map(|r| r.state).collect::<Vec<_>>(),
+        [State::Committed, State::PendingObservation, State::Observed]
+    );
+    assert!(
+        undo_rows
+            .iter()
+            .all(|r| r.undoes.as_deref() == Some(act.as_str()))
+    );
+    let last = rows.last().unwrap();
+    assert_eq!(
+        (last.act.as_str(), last.state),
+        (act.as_str(), State::Corrected)
+    );
+    assert_eq!(last.by.as_deref(), Some(undo.receipt.as_str()));
+    // Receipts (1) and (2); the incident stays open.
+    let inc = f.incident(&act);
+    assert_eq!(inc.cause, Cause::Rollback);
+    assert_eq!(inc.undone.as_deref(), Some(undo.receipt.as_str()));
+    assert!(inc.corrected.is_some());
+    assert_eq!(inc.missing(), ["downstream told", "lesson"]);
+    // A corrected act is undone no more.
+    let again = f.undo(&act, &f.observer(), &Sandboxed).unwrap_err();
+    assert!(
+        matches!(&again, Refusal::Refused(w) if w.contains("is corrected")),
+        "{again:?}"
+    );
+}
+
+#[test]
+fn an_undo_whose_lease_fails_is_reconcile_and_never_undone() {
+    let f = Fixture::new();
+    let act = f.push().unwrap().receipt;
+    // Someone moves the branch after the act: the lease on the pushed commit refuses the delete.
+    git(&f.world, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    git(
+        &f.world,
+        &["push", "-q", "-f", "origin", "HEAD:refs/heads/feat/x"],
+    );
+    let moved = f.remote_branch().unwrap();
+    assert_ne!(moved, f.head);
+    let undo = f.undo(&act, &f.observer(), &Sandboxed).unwrap();
+    assert_eq!(undo.state, State::Reconcile, "{undo:?}");
+    assert_ne!(undo.exit, Some(0));
+    assert_eq!(
+        f.remote_branch(),
+        Some(moved),
+        "someone else's branch was deleted"
+    );
+    assert!(!f.states().contains(&State::Corrected));
+    let inc = f.incident(&act);
+    assert_eq!(inc.undone, None);
+    assert_eq!(inc.corrected, None);
+    assert!(inc.is_open());
+}
+
+#[test]
+fn an_undo_whose_effect_is_still_seen_is_reconcile() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    // It exits 0 and leaves the label: the exit is not the receipt.
+    forge.state.lock().unwrap().noop_undo = true;
+    let undo = f.undo(&act, &forge, &forge).unwrap();
+    assert_eq!((undo.state, undo.exit), (State::Reconcile, Some(0)));
+    assert_eq!(forge.state.lock().unwrap().labels, ["ready"]);
+    let inc = f.incident(&act);
+    assert_eq!((inc.undone, inc.corrected), (None, None));
+}
+
+#[test]
+fn an_undo_that_exits_other_than_0_is_reconcile_even_when_the_effect_is_gone() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    forge.state.lock().unwrap().undo_exit = 1;
+    let undo = f.undo(&act, &forge, &forge).unwrap();
+    assert_eq!(undo.state, State::Reconcile);
+    assert_eq!(forge.state.lock().unwrap().labels, Vec::<String>::new());
+    assert!(!f.states().contains(&State::Corrected));
+    assert_eq!(f.incident(&act).undone, None);
+}
+
+#[test]
+fn an_incident_stays_open_with_three_receipts_and_closes_with_the_fourth() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    let undo = f.undo(&act, &forge, &forge).unwrap();
+    assert_eq!(undo.state, State::Observed, "{undo:?}");
+    assert_eq!(forge.state.lock().unwrap().labels, Vec::<String>::new());
+    // (3) downstream told, through the runner like any comment.
+    let told = f
+        .act(
+            &tells("The `ready` label was a mistake: removed.", &act),
+            &forge,
+            &forge,
+        )
+        .unwrap();
+    assert_eq!(told.state, State::Observed);
+    let inc = f.incident(&act);
+    assert_eq!(inc.told.as_deref(), Some(told.receipt.as_str()));
+    assert_eq!(inc.missing(), ["lesson"]);
+    assert!(inc.is_open(), "three receipts closed the incident");
+    // (4) the lesson closes it.
+    let inc = f.lesson(&act);
+    assert!(matches!(inc.lesson, Some(Lesson::Test { .. })), "{inc:?}");
+    assert_eq!(inc.missing(), Vec::<&str>::new());
+    assert!(!inc.is_open());
+    assert_ne!(inc.line(), "");
+}
+
+#[test]
+fn receipts_forged_in_the_world_or_unbacked_by_the_witness_count_for_nothing() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    // A comment made before any incident, not telling of one.
+    let early = f
+        .act(&comment("Looks good.", None), &forge, &forge)
+        .unwrap()
+        .receipt;
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    forge.state.lock().unwrap().noop_undo = true;
+    assert_eq!(
+        f.undo(&act, &forge, &forge).unwrap().state,
+        State::Reconcile
+    );
+    // A body writes what would be receipts (1) and (2) into the world's journal.
+    let world = Journal::<Row>::new(f.journal(Post::Forge).path());
+    let mut undone = Row {
+        undoes: Some(act.clone()),
+        ..Row {
+            act: "f0f0f0f0f0f0".into(),
+            state: State::Observed,
+            at: Timestamp::now(),
+            command: None,
+            target: Vec::new(),
+            plan: None,
+            exit: Some(0),
+            expect: None,
+            probe: None,
+            seen: None,
+            why: Some("the probe saw the effect gone".into()),
+            undoes: None,
+            by: None,
+        }
+    };
+    world.append(&undone).unwrap();
+    undone.act.clone_from(&act);
+    undone.state = State::Corrected;
+    undone.undoes = None;
+    undone.by = Some("f0f0f0f0f0f0".into());
+    world.append(&undone).unwrap();
+    // And entries naming receipts the witness does not hold as such: a made-up undo, an observed
+    // act that is no undo, and a comment that told of nothing.
+    let file = f.witness.with_extension("incidents.jsonl");
+    let at = serde_json::to_value(Timestamp::now()).unwrap();
+    let mut text = fs::read_to_string(&file).unwrap();
+    for (event, receipt) in [
+        ("undone", "f0f0f0f0f0f0"),
+        ("undone", act.as_str()),
+        ("told", early.as_str()),
+        ("told", act.as_str()),
+    ] {
+        text.push_str(
+            &serde_json::json!({"event": event, "act": act, "receipt": receipt, "at": at})
+                .to_string(),
+        );
+        text.push('\n');
+    }
+    fs::write(&file, text).unwrap();
+    let inc = f.incident(&act);
+    assert_eq!(inc.missing().len(), 4, "a forged receipt counted: {inc:?}");
+}
+
+#[test]
+fn an_open_incident_suspends_the_envelopes_that_read_its_act_until_it_closes() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let labels = envelope("gh pr edit * --repo me/proj --add-label *");
+    let branches = envelope("git push origin feat/*");
+    let journal = f.journal(Post::Forge);
+    assert!(!journal.suspends(&labels));
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    assert!(
+        !journal.suspends(&labels),
+        "an act with no incident suspended its envelope"
+    );
+    f.undo(&act, &forge, &forge).unwrap();
+    assert!(journal.suspends(&labels));
+    assert!(
+        !journal.suspends(&branches),
+        "an envelope that never read the act was suspended"
+    );
+    f.act(&tells("Removed the label.", &act), &forge, &forge)
+        .unwrap();
+    assert!(
+        journal.suspends(&labels),
+        "suspension lifted before the fourth receipt"
+    );
+    f.lesson(&act);
+    assert!(!journal.suspends(&labels), "suspension kept after closure");
+    // Incidents that cannot be read suspend every envelope.
+    fs::remove_file(f.witness.with_extension("incidents.jsonl")).unwrap();
+    fs::create_dir(f.witness.with_extension("incidents.jsonl")).unwrap();
+    assert!(journal.suspends(&branches));
+}
+
+#[test]
+fn a_new_act_on_the_target_of_an_open_incident_is_refused_until_it_closes() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    f.undo(&act, &forge, &forge).unwrap();
+    let asked = f.human.asked();
+    for request in [label("ready"), label("other"), comment("Done.", None)] {
+        let err = f.act(&request, &forge, &forge).unwrap_err();
+        assert!(
+            matches!(&err, Refusal::Refused(w) if w.contains("is open on this target")),
+            "{err:?}"
+        );
+    }
+    assert_eq!(f.human.asked(), asked, "a refused act reached the gate");
+    // Another target is not the incident's.
+    assert_eq!(f.push().unwrap().state, State::Observed);
+    // A comment that tells of nothing open is refused.
+    let err = f
+        .act(&tells("x", "f0f0f0f0f0f0"), &forge, &forge)
+        .unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("no open incident")),
+        "{err:?}"
+    );
+    f.act(&tells("Removed the label.", &act), &forge, &forge)
+        .unwrap();
+    f.lesson(&act);
+    // Closed: the same request is asked again as a new act.
+    let again = f.act(&label("ready"), &forge, &forge).unwrap();
+    assert!(!again.replayed);
+    assert_eq!(again.state, State::Observed);
+}
+
+#[test]
+fn a_comment_is_undone_only_while_it_is_still_the_acts_own() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f
+        .act(&comment("Ready.", None), &forge, &forge)
+        .unwrap()
+        .receipt;
+    // Edited since the act: not undone, and the human is not asked.
+    let asked = f.human.asked();
+    let body = forge.state.lock().unwrap().comments[0].1.clone();
+    forge.state.lock().unwrap().comments[0].1 = "Ready, says someone else.".into();
+    let err = f.undo(&act, &forge, &forge).unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("edited")),
+        "{err:?}"
+    );
+    assert_eq!(f.human.asked(), asked);
+    assert_eq!(f.states().last(), Some(&State::Reconcile));
+    assert_eq!(forge.state.lock().unwrap().undos, 0);
+    // Its own again: a `reconcile` is undone too, after approval, and the comment is gone.
+    forge.state.lock().unwrap().comments[0].1 = body;
+    let undo = f.undo(&act, &forge, &forge).unwrap();
+    assert_eq!(undo.state, State::Observed, "{undo:?}");
+    assert_eq!(forge.state.lock().unwrap().comments.len(), 0);
+    assert_eq!(f.human.asked(), asked + 1);
+}
+
+#[test]
+fn the_human_marks_a_reconcile_an_incident_or_settles_it_as_none() {
+    let f = Fixture::new();
+    cut_short(|| {
+        let _ = f.act(&push_request(), &f.observer(), &Cut { act: true });
+    });
+    f.act(&push_request(), &Dark, &Sandboxed).unwrap_err();
+    let act = f.rows()[0].act.clone();
+    assert_eq!(f.states().last(), Some(&State::Reconcile));
+    let journal = f.journal(Post::Forge);
+    // Settled as no incident: a `settled` row, nothing undone.
+    let g = Fixture::new();
+    cut_short(|| {
+        let _ = g.act(&push_request(), &g.observer(), &Cut { act: true });
+    });
+    g.act(&push_request(), &Dark, &Sandboxed).unwrap_err();
+    let other = g.rows()[0].act.clone();
+    g.journal(Post::Forge)
+        .settle(&other, Some("I pushed it by hand"))
+        .unwrap();
+    assert_eq!(g.states().last(), Some(&State::Settled));
+    assert_eq!(g.incidents(), []);
+    // Marked an incident: all four receipts missing, its reason escaped on the human's line.
+    let inc = journal
+        .open_incident(&act, Some("pushed\nto the wrong remote"))
+        .unwrap();
+    assert_eq!(inc.cause, Cause::Reconcile);
+    assert_eq!(inc.missing().len(), 4);
+    let line = inc.line();
+    assert!(
+        line.contains("missing undone, journal corrected, downstream told, lesson"),
+        "{line}"
+    );
+    assert!(
+        line.contains("pushed\\nto") && !line.contains('\n'),
+        "{line}"
+    );
+    // An incident is not settled, nor opened twice.
+    assert!(journal.settle(&act, None).is_err());
+    assert!(journal.open_incident(&act, None).is_err());
+    // A reconcile is undone like an observed act, only once approved.
+    let undo = f.undo(&act, &f.observer(), &Sandboxed).unwrap();
+    assert_eq!(undo.state, State::Observed, "{undo:?}");
+    assert!(f.remote_branch().is_none());
+    assert_eq!(f.incident(&act).cause, Cause::Reconcile);
+}
+
+#[test]
+fn a_lesson_must_be_written_in_the_world() {
+    let f = Fixture::new();
+    for bad in ["../outside.rs", "/etc/passwd", "missing.rs", ""] {
+        assert!(Lesson::test(&f.world, bad).is_err(), "{bad}");
+    }
+    fs::write(f.world.join("card.md"), "# Card\nVerify: cargo test -p x\n").unwrap();
+    assert!(Lesson::verify(&f.world, "card.md", 1).is_err());
+    assert!(Lesson::verify(&f.world, "card.md", 3).is_err());
+    assert!(matches!(
+        Lesson::verify(&f.world, "card.md", 2),
+        Ok(Lesson::Verify { line: 2, .. })
+    ));
+    std::os::unix::fs::symlink("/etc/hostname", f.world.join("link.rs")).unwrap();
+    assert!(Lesson::test(&f.world, "link.rs").is_err());
+    assert!(Lesson::thought("a b", "text").is_err());
+    assert!(Lesson::thought("19a-ff", " ").is_err());
+    assert!(Lesson::thought("19a-ff", "Ask before labelling.").is_ok());
+    // No incident, no lesson.
+    let lesson = Lesson::verify(&f.world, "card.md", 2).unwrap();
+    assert!(
+        f.journal(Post::Forge)
+            .lesson("f0f0f0f0f0f0", lesson)
+            .is_err()
+    );
+}
+
+#[test]
+fn an_effect_already_gone_is_recorded_undone_once_approved_and_nothing_runs() {
+    let f = Fixture::new();
+    let act = f.push().unwrap().receipt;
+    // The human deletes the branch by hand.
+    git(&f.remote, &["update-ref", "-d", "refs/heads/feat/x"]);
+    let undo = f.undo(&act, &f.observer(), &Broken).unwrap();
+    assert_eq!(undo.state, State::Observed, "{undo:?}");
+    let asks = f.human.asks.lock().unwrap().clone();
+    assert_eq!(asks.len(), 2);
+    assert!(asks[1].act.contains("nothing runs"), "{}", asks[1].act);
+    let inc = f.incident(&act);
+    assert_eq!(inc.undone.as_deref(), Some(undo.receipt.as_str()));
+    assert!(inc.corrected.is_some());
+}
+
+#[test]
+fn an_undo_whose_remote_now_points_elsewhere_is_refused_before_the_gate() {
+    let f = Fixture::new();
+    let act = f.push().unwrap().receipt;
+    let other = f.remote.with_file_name("other.git");
+    fs::create_dir_all(&other).unwrap();
+    git(&other, &["init", "-q", "--bare"]);
+    git(
+        &f.world,
+        &["remote", "set-url", "origin", other.to_str().unwrap()],
+    );
+    let err = f.undo(&act, &f.observer(), &Sandboxed).unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("the undo would go to")),
+        "{err:?}"
+    );
+    assert_eq!(f.human.asked(), 1);
+    assert_eq!(f.remote_branch().as_deref(), Some(f.head.as_str()));
+    assert_eq!(f.incidents(), []);
 }

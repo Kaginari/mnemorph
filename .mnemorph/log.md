@@ -5627,3 +5627,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** config `runner`: foreign identical comment, label/body refusals and the card's
   indent, two runners, a replay after the branch was deleted, a spawn that fails after its
   intent (probed `absent`, lock let go). Author, comma and re-probe guards disabled fail theirs.
+
+---
+
+### [2026-10-27T20:28:54+01:00] rimuru — #103: receipt-based closure for rolled-back outward acts
+- **Done:** `Runner::undo` (the Kijin's `outward {kind: "undo", receipt}`) runs the
+  harness-rendered undo of an act `observed` or in `reconcile`: post check, fingerprint, the act's
+  pinned push URLs or host read again (retargeted → refused), what it left still its own (label
+  events, comment author and body; a branch leased on its commit), the human always
+  (`Uncovered::Undo`), recheck, incident opened and the undo's intent journaled, the undo, `ran`,
+  and a probe that must see the effect gone (a comment by its id). A failed undo is `reconcile`;
+  an effect already gone runs nothing, once approved. New states `corrected` (the act's
+  superseding row, `by` the undo) and `settled`. `mnemorph_config::closure`: incidents in
+  `<post>.incidents.jsonl` beside the witness, closed only on four receipts each re-read from the
+  witness and intents (undone, corrected, a `tells` comment observed, a lesson checked to exist
+  with its SHA-256). While open: `suspended(world, envelope)` for M11's gate (unreadable → every
+  envelope), and new acts on the same target refused but the telling comment. `mnemorph incident
+  list|open|settle|lesson`; open incidents in the hello's holes (`mnemorph status`). Docs 02, 05,
+  roadmap.
+- **Tests:** config `runner`: undo only after approval (branch gone, receipts 1–2), lease failure,
+  exit 0 with the effect left, exit 1 with it gone, open at 3 of 4 and closed at 4, forged world
+  rows and unbacked entries, suspension lifted on close, target refused until close, comment
+  edited, reconcile marked or settled, effect already gone, retargeted remote, lessons; mnemorphd
+  `incident` under a temporary `XDG_STATE_HOME`. Eleven guards disabled one by one: each fails its
+  test.
+- **Learned:** an undo's "gone" probe is not the cut act's "landed" probe read backwards: an
+  edited comment no longer matches by body, so "not ours" would have read as "gone". A guard
+  behind another guard needs a test that isolates it (exit 0 leaving the effect; exit 1 removing
+  it).
