@@ -73,7 +73,8 @@ pub struct Opened {
     /// The run's id: its journal is `.mnemorph/instruments/loop/<run>.jsonl`.
     pub run_id: String,
     /// The configuration's holes — keys it did not take, and why — under a cap, the usage
-    /// ledger's lines that cannot be read, and each outward act a probe left in `reconcile`.
+    /// ledger's lines that cannot be read, each outward act a probe left in `reconcile`, and each open
+    /// incident with the receipts it is missing.
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps, when they set any.
     pub budget: Option<crate::budget::Left>,
@@ -391,6 +392,8 @@ fn build(
             .chain(unread)
             // An outward act whose effect a probe did not see waits for the human.
             .chain(mnemorph_config::reconciling(world))
+            // An incident stays open until its four receipts are recorded.
+            .chain(mnemorph_config::incidents(world))
             .collect(),
         budget,
         key: None,

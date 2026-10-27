@@ -283,8 +283,12 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
 - Posts in order: `forge` (git push, PRs via `gh`), `ci` (CI as an instrument), `scout` (OSV
   mirror), `release`, `deploy`.
 
+- A rolled-back or corrected act is an incident until four receipts close it — undone, journal
+  corrected, downstream told, a lesson — its envelope suspended and its target refused meanwhile.
+
 **Exit:** a branch pushed and a PR opened through `kijin-forge` with one gate prompt; a cut run
-mid-act is probed first — settled if it landed, gated again if not — never replayed.
+mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
+only once the human approves it, and its incident closes only on four receipts.
 
 ### M10 — Dark Elf · M
 
@@ -305,7 +309,8 @@ witnesses, seals, and the seal lifts only when the fix includes the witness.
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). Their bounds are already config's (signed,
   expiring within `oni.envelope_days`, a use cap, revocable, `Envelope::admits`); M11 adds the
-  ledger's use rows and the gate reading `admits` at the moment of use
+  ledger's use rows and the gate reading `admits` — and `suspended`, an open incident on an act
+  the envelope reads — at the moment of use
   ([#88](https://github.com/Kaginari/mnemorph/issues/88)).
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.

@@ -8,6 +8,7 @@ pub mod compact;
 pub mod council;
 pub mod decisions;
 pub mod gate;
+pub mod incident;
 pub mod model;
 pub mod open;
 pub mod queue_tool;

@@ -47,6 +47,7 @@ Usage:
   mnemorph memory status [--json]    note events that do not resolve, retired notes, recall loops
   mnemorph memory wake <note>        restore a note the gate retired
   mnemorph memory confirm <claim>    vouch for a proposed claim: grounded and shared
+  mnemorph incident list|open|settle|lesson …   rolled-back acts and their four receipts
 
 Options:
   --world <dir>    the world to work in (default: the current directory)
@@ -93,7 +94,7 @@ export function parse(argv: string[]): Command {
   }
   if (
     first !== -1 &&
-    ['q', 'housekeep', 'relief', 'memory', 'runs'].includes(argv[first] as string)
+    ['q', 'housekeep', 'relief', 'memory', 'runs', 'incident'].includes(argv[first] as string)
   ) {
     let qWorld: string | undefined;
     let qCore: string | undefined;

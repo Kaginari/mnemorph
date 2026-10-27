@@ -55,7 +55,8 @@ pub struct Hello {
     /// The run's id.
     pub run: String,
     /// The configuration's holes — keys it did not take, and why — under a cap, the usage
-    /// ledger's lines that cannot be read, and each outward act a probe left in `reconcile`.
+    /// ledger's lines that cannot be read, each outward act a probe left in `reconcile`, and each
+    /// open incident with the receipts it is missing.
     pub holes: Vec<String>,
     /// What the session may spend under the human's caps; `null` when they set none.
     pub budget: Option<Budget>,

@@ -17,6 +17,9 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
        mnemorphd memory confirm <claim> [--world <dir>]
+       mnemorphd incident list | open <post> <act> [--why <text>] | settle <post> <act>
+                 [--why <text>] | lesson <post> <act> test <path> | verify <path>:<line>
+                 | thought <id>   [--world <dir>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -42,6 +45,15 @@ last ask.
 a hand edit, a bad merge, an import that skipped its checks. Recall ignores such an event and
 the creature's memory writes stay frozen until the event is removed or re-proved; it exits 1
 while any is found.
+
+`incident` is the human's door to the Kijin's incidents. An outward act that was rolled back or
+corrected stays an open incident until four receipts are recorded: undone (its undo observed),
+journal corrected, downstream told (a comment that `tells` of it) and a lesson. `list` shows each
+open incident and what it is missing; `open` marks an act in reconcile, or an observed act that was
+wrong, as an incident; `settle` closes a reconcile that is no incident; `lesson` records the
+fourth receipt — a test or a verify line changed in the world since the incident opened, or a
+Thought born since — after showing the change and asking for `y`. The post is
+`forge` or `kijin-forge`, and so on. A body never runs it.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -89,6 +101,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("runs") {
         return runs(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("incident") {
+        return incident(&all[1..]);
     }
     let mut resume = None;
     let mut args = all.into_iter();
@@ -786,6 +801,91 @@ fn print_memory(name: &str, found: &[mnemorph_server::world::memory::Unproven], 
 fn refused(e: &dyn std::fmt::Display) -> ExitCode {
     let _ = writeln!(std::io::stderr(), "mnemorphd: refused: {e}");
     ExitCode::from(2)
+}
+
+/// `incident …`: the human lists the Kijin's open incidents, marks one, settles a reconcile that
+/// is none, or records an incident's lesson. A body never does.
+fn incident(args: &[String]) -> ExitCode {
+    use mnemorph_server::incident;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: an incident is the human's to mark, settle or close"
+        ));
+    }
+    let mut world = None;
+    let mut why = None;
+    let mut words = Vec::new();
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            "--why" => match it.next() {
+                Some(v) => why = Some(v.clone()),
+                None => return refused(&"--why needs a value"),
+            },
+            _ => words.push(w.clone()),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    // The witness is found again by the world's path, as the session names it.
+    let world = match world.canonicalize() {
+        Ok(w) if w.is_dir() => w,
+        Ok(w) => return refused(&format!("{} is not a directory", w.display())),
+        Err(e) => return refused(&format!("{}: {e}", world.display())),
+    };
+    let done = |r: Result<String, String>| match r {
+        Ok(line) => {
+            println!("{line}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    };
+    match words.as_slice() {
+        [verb] if verb == "list" => {
+            let open = incident::list(&world);
+            if open.is_empty() {
+                println!("no incident is open");
+            }
+            for line in &open {
+                println!("{line}");
+            }
+            ExitCode::SUCCESS
+        }
+        [verb, post, act, rest @ ..] => {
+            let post = match incident::post(post) {
+                Ok(p) => p,
+                Err(e) => return refused(&e),
+            };
+            match (verb.as_str(), rest) {
+                ("open", []) => done(incident::open(&world, post, act, why.as_deref())),
+                ("settle", []) => done(incident::settle(&world, post, act, why.as_deref())),
+                ("lesson", rest) => match incident::lesson(&world, post, act, rest) {
+                    Ok((lesson, change)) => {
+                        // The human reads what the lesson changed before it is recorded.
+                        println!("{change}");
+                        print!("record {lesson} as the lesson of act {act}? [y/N] ");
+                        let _ = std::io::stdout().flush();
+                        let mut answer = String::new();
+                        let _ = std::io::stdin().read_line(&mut answer);
+                        if answer.trim().eq_ignore_ascii_case("y") {
+                            done(incident::record(&world, post, act, lesson))
+                        } else {
+                            refused(&"the lesson was not recorded")
+                        }
+                    }
+                    Err(e) => refused(&e),
+                },
+                _ => refused(&"see --help: incident list | open | settle | lesson"),
+            }
+        }
+        _ => refused(&"incident needs a verb: list, open, settle or lesson; see --help"),
+    }
 }
 
 /// `q …`: the shared work queue, for the human. Inside a body's command it refuses: a body moves

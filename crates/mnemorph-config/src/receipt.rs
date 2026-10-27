@@ -90,6 +90,13 @@ pub enum State {
     /// asked again as a new act.
     #[serde(rename = "absent")]
     Absent,
+    /// An act the harness put back: its undo's probe saw the effect gone. The row supersedes the
+    /// act's earlier ones, appended, never edited, and names the undo (`by`).
+    #[serde(rename = "corrected")]
+    Corrected,
+    /// A `reconcile` the human settled as no incident: nothing is undone, and it leaves their list.
+    #[serde(rename = "settled")]
+    Settled,
 }
 
 impl fmt::Display for State {
@@ -101,6 +108,8 @@ impl fmt::Display for State {
             State::Reconcile => "reconcile",
             State::Unobserved => "unobserved",
             State::Absent => "absent",
+            State::Corrected => "corrected",
+            State::Settled => "settled",
         })
     }
 }
@@ -715,6 +724,12 @@ pub struct Row {
     /// Why the act is in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub why: Option<String>,
+    /// On an undo's rows: the receipt of the act it undoes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undoes: Option<String>,
+    /// On a `corrected` row: the receipt of the undo whose probe saw the effect gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 impl Row {
@@ -731,6 +746,8 @@ impl Row {
             probe: None,
             seen: None,
             why: None,
+            undoes: None,
+            by: None,
         }
     }
 }
@@ -774,6 +791,8 @@ impl Receipt {
 pub struct PostJournal {
     /// The post whose acts it journals: it commits no other.
     pub(crate) post: Post,
+    /// The world it is in: where an incident's lesson is read.
+    pub(crate) world: PathBuf,
     journal: Journal<Row>,
     pub(crate) witness: Option<Journal<Row>>,
 }
@@ -801,7 +820,7 @@ pub(crate) fn private_file(path: &Path) -> io::Result<fs::File> {
 /// Hold a witness's lock: the file opened (made if need be, private to the human) and locked
 /// whole until dropped. The tripwire rebuilds the journal under the same lock, so no row lands
 /// between its read and its write.
-fn lock(witness: &Path) -> io::Result<fs::File> {
+pub(crate) fn lock(witness: &Path) -> io::Result<fs::File> {
     let f = private_file(witness)?;
     f.lock()?;
     Ok(f)
@@ -816,7 +835,7 @@ pub fn post_journal(world: &Path, post: Post) -> PathBuf {
         .join("post.jsonl")
 }
 
-fn receipt_id(command: &str) -> String {
+pub(crate) fn receipt_id(command: &str) -> String {
     static N: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -830,7 +849,7 @@ fn receipt_id(command: &str) -> String {
 }
 
 /// The act's command as the journal keeps it.
-fn command_line(command: &str) -> String {
+pub(crate) fn command_line(command: &str) -> String {
     let short: String = command.chars().take(COMMAND_CHARS).collect();
     let mut line = excerpt(short.as_bytes(), COMMAND_CHARS * 4);
     if command.chars().count() > COMMAND_CHARS {
@@ -846,6 +865,7 @@ impl PostJournal {
     pub fn of(world: &Path, post: Post) -> Self {
         Self {
             post,
+            world: world.to_path_buf(),
             journal: Journal::new(post_journal(world, post)),
             witness: kijin_witness(world, post.creature()).map(Journal::new),
         }
@@ -1113,6 +1133,8 @@ impl PostJournal {
                 State::Reconcile => t.reconcile += 1,
                 State::Unobserved => t.unobserved += 1,
                 State::Absent => t.absent += 1,
+                State::Corrected => t.corrected += 1,
+                State::Settled => t.settled += 1,
             }
         }
         Ok(t)
@@ -1121,7 +1143,7 @@ impl PostJournal {
 
 /// Each act's latest row in `journal`, in the order the acts were first journaled; and the
 /// numbers of lines that did not read.
-fn fold(journal: &Journal<Row>) -> io::Result<(Vec<Row>, Vec<usize>)> {
+pub(crate) fn fold(journal: &Journal<Row>) -> io::Result<(Vec<Row>, Vec<usize>)> {
     let back = journal.read()?;
     let mut order: Vec<String> = Vec::new();
     let mut last: BTreeMap<String, Row> = BTreeMap::new();
@@ -1152,6 +1174,10 @@ pub struct Tally {
     pub open: u32,
     /// Cut acts the probe found never landed.
     pub absent: u32,
+    /// Acts put back by an undo whose probe saw the effect gone.
+    pub corrected: u32,
+    /// `reconcile`s the human settled as no incident.
+    pub settled: u32,
 }
 
 /// One line per act any post of `world` holds in `reconcile`, for the human (`mnemorph status`),

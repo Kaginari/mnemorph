@@ -20,11 +20,15 @@
 //! act: a typed act is `observed` only when a read-only probe sees its effect ([`PostJournal`]).
 //! The act runner ([`Runner`], the Kijin's `outward` tool) is the one path a typed act takes:
 //! post, plan, pin, gate, recheck, intent, act, result, probe, receipt.
+//! An act it undoes ([`Runner::undo`]) is an [`Incident`] until four receipts close it — undone,
+//! journal corrected, downstream told, a lesson — and while it is open the envelopes that read the
+//! act are [`suspended`].
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
 //! is an error that names its file.
 
+mod closure;
 mod outward;
 mod receipt;
 mod runner;
@@ -40,6 +44,7 @@ use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
+pub use closure::{Cause, Incident, Lesson, RECEIPTS, incidents, suspended};
 pub use outward::{
     Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan,
 };

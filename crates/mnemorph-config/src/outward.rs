@@ -127,8 +127,11 @@ pub struct Planned {
     class: ToolClass,
     why: Vec<String>,
     outside: Vec<PathBuf>,
-    /// The kinds of outward act the classifier read in the command.
+    /// The kinds of outward act the classifier read in the command — for an undo, in the act it
+    /// undoes, so the post that may do an act is the post that may put it back.
     acts: Vec<OutwardKind>,
+    /// Whether this is the undo of `act`, not `act` itself.
+    undo: bool,
 }
 
 /// A plain configured remote name: `origin`, `upstream`.
@@ -337,7 +340,98 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
         why,
         outside,
         acts,
+        undo: false,
     })
+}
+
+/// Plan the undo of an act that left `done`: its command rendered by the harness from the act's
+/// own fields and what it left ([`Planned::undo`]), read by the classifier like any command, and
+/// never below `outward`. The post check reads the act it undoes.
+///
+/// # Errors
+///
+/// [`Malformed`] when the act is not a typed one whose undo the harness derives, what it left is
+/// not of it, or the guard refuses the undo's command.
+pub(crate) fn plan_undo(act: &Act, done: &Done, place: &Place) -> Result<Planned, Malformed> {
+    let original = plan(act, place)?;
+    let argv = undo_argv(act, done).map_err(|e| Malformed::Refused(e.to_string()))?;
+    let command = line(&argv);
+    let (verdict, _) = classify_acts(&command, place);
+    let (read, mut why, outside) = match verdict {
+        Verdict::Run {
+            class,
+            why,
+            outside,
+        } => (class, why, outside),
+        Verdict::Refuse { reason, .. } => return Err(Malformed::Refused(reason)),
+    };
+    why.insert(0, format!("the undo of `{}`", original.command));
+    let class = match read {
+        ToolClass::Destructive => ToolClass::Destructive,
+        _ => ToolClass::Outward,
+    };
+    Ok(Planned {
+        act: act.clone(),
+        argv,
+        command,
+        class,
+        why,
+        outside,
+        acts: original.acts,
+        undo: true,
+    })
+}
+
+/// The undo's argv, rendered from the act's own fields and what it left behind.
+fn undo_argv(act: &Act, done: &Done) -> Result<Vec<String>, NoUndo> {
+    Ok(match (act, done) {
+        (Act::PushNewBranch { remote, name }, Done::Pushed { sha }) if sha_ok(sha) => owned(&[
+            "git",
+            "push",
+            remote,
+            "--delete",
+            &format!("refs/heads/{name}"),
+            &format!("--force-with-lease=refs/heads/{name}:{sha}"),
+        ]),
+        (Act::AddLabel { repo, pr, label }, Done::Labelled) => owned(&[
+            "gh",
+            "pr",
+            "edit",
+            &pr.to_string(),
+            "--repo",
+            repo,
+            "--remove-label",
+            label,
+        ]),
+        (Act::Comment { repo, .. }, Done::Commented { id }) => owned(&[
+            "gh",
+            "api",
+            "-X",
+            "DELETE",
+            &format!("repos/{repo}/issues/comments/{id}"),
+        ]),
+        (Act::Command(_), _) => return Err(NoUndo::Command),
+        _ => return Err(NoUndo::Mismatch),
+    })
+}
+
+/// The words an envelope pattern is read against for `act`: for a branch `git push <remote>
+/// <name>`, for the others the rendered argv; `None` for a command, or fields that do not render.
+pub(crate) fn face_of(act: &Act) -> Option<Vec<String>> {
+    match act {
+        Act::PushNewBranch { remote, name } => Some(owned(&["git", "push", remote, name])),
+        _ => render(act).ok().flatten(),
+    }
+}
+
+/// Whether one of `envelope`'s patterns reads `act` — whatever its time, count or class: the
+/// question a suspension asks of an act already done.
+pub(crate) fn envelope_reads(envelope: &Envelope, act: &Act) -> bool {
+    let Some(face) = face_of(act) else {
+        return false;
+    };
+    let face: Vec<&str> = face.iter().map(String::as_str).collect();
+    envelope.allow.iter().any(|p| matches(p, &face))
 }
 
 /// A full hex object name: 40 digits (SHA-1) or 64 (SHA-256), lower case.
@@ -381,9 +475,20 @@ impl Planned {
         &self.why
     }
 
-    /// How the act will be put back, as the card says it before the act runs.
+    /// Whether this is the undo of [`Self::act`], planned by the harness ([`crate::Runner::undo`]),
+    /// not the act itself.
+    #[must_use]
+    pub fn is_undo(&self) -> bool {
+        self.undo
+    }
+
+    /// How the act will be put back, as the card says it before the act runs; `None` for an undo,
+    /// which nothing puts back but the human.
     #[must_use]
     pub fn undo_plan(&self) -> Option<String> {
+        if self.undo {
+            return None;
+        }
         match &self.act {
             Act::PushNewBranch { remote, name } => Some(format!(
                 "delete branch {name} on {remote}, only while it still holds the pushed commit"
@@ -403,36 +508,7 @@ impl Planned {
     ///
     /// [`NoUndo`] for a command, or a record of another kind of act or without a full commit.
     pub fn undo(&self, done: &Done) -> Result<String, NoUndo> {
-        let argv = match (&self.act, done) {
-            (Act::PushNewBranch { remote, name }, Done::Pushed { sha }) if sha_ok(sha) => owned(&[
-                "git",
-                "push",
-                remote,
-                "--delete",
-                &format!("refs/heads/{name}"),
-                &format!("--force-with-lease=refs/heads/{name}:{sha}"),
-            ]),
-            (Act::AddLabel { repo, pr, label }, Done::Labelled) => owned(&[
-                "gh",
-                "pr",
-                "edit",
-                &pr.to_string(),
-                "--repo",
-                repo,
-                "--remove-label",
-                label,
-            ]),
-            (Act::Comment { repo, .. }, Done::Commented { id }) => owned(&[
-                "gh",
-                "api",
-                "-X",
-                "DELETE",
-                &format!("repos/{repo}/issues/comments/{id}"),
-            ]),
-            (Act::Command(_), _) => return Err(NoUndo::Command),
-            _ => return Err(NoUndo::Mismatch),
-        };
-        Ok(line(&argv))
+        undo_argv(&self.act, done).map(|argv| line(&argv))
     }
 
     /// What a comment act left behind, read from what `gh pr comment` printed: the comment's URL
@@ -443,6 +519,9 @@ impl Planned {
         let Act::Comment { repo, pr, .. } = &self.act else {
             return None;
         };
+        if self.undo {
+            return None;
+        }
         let head = format!("https://{host}/{repo}/pull/{pr}#issuecomment-");
         let id = printed.lines().find_map(|l| l.trim().strip_prefix(&head))?;
         if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
@@ -487,6 +566,8 @@ impl Planned {
 pub enum Uncovered {
     /// The act is destructive: it always goes to the human.
     Destructive,
+    /// The act is an undo: the human decides every undo.
+    Undo,
     /// The act does not leave the machine; an envelope covers only outward acts.
     NotOutward(ToolClass),
     /// The envelope is not in force.
@@ -503,6 +584,7 @@ impl fmt::Display for Uncovered {
             Uncovered::Destructive => {
                 f.write_str("destructive acts always ask, whatever the envelope says")
             }
+            Uncovered::Undo => f.write_str("an undo always asks the human"),
             Uncovered::NotOutward(class) => {
                 write!(f, "a {class} act is not an envelope's to cover")
             }
@@ -518,12 +600,16 @@ impl fmt::Display for Uncovered {
 impl Envelope {
     /// Whether the envelope covers a planned act on `today`, after `used` acts it already
     /// covered. A destructive act is refused first, before the envelope's own time, count or
-    /// patterns are read; only a typed act can be outward, so only a typed act is ever covered.
+    /// patterns are read; only a typed act can be outward, so only a typed act is ever covered, and
+    /// never its undo.
     ///
     /// # Errors
     ///
     /// The [`Uncovered`] reason.
     pub fn covers(&self, act: &Planned, today: Day, used: u64) -> Result<(), Uncovered> {
+        if act.is_undo() {
+            return Err(Uncovered::Undo);
+        }
         match act.class() {
             ToolClass::Destructive => return Err(Uncovered::Destructive),
             ToolClass::Outward => {}
