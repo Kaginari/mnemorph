@@ -5497,6 +5497,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the reviewers' failed-push case was wider: a lease is never checked when there is
   nothing to send, so exit 0 proved nothing there either — the pin-time read closes it.
 
+---
+
 ### [2026-10-27T18:27:41+01:00] rimuru — the TUI: the races' 256 px animations, and the welcome at the top
 - **Done:** the sidebar plays the working body's clip from mnemorph-animations `ff8af6d`
   (`assets/anims/256px/`, v2 sprite sheets; the eleven idles and five ascensions, 7.8 MB in,
