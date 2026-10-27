@@ -173,6 +173,7 @@ function Gate({ request, choice }: { request: GateRequest; choice: 'y' | 'n' | u
       {request.outside.length > 0 ? (
         <Text color={p.alarm}>{`  opens outside the world: ${request.outside.join(', ')}`}</Text>
       ) : null}
+      {request.plan ? <Text color={p.textMuted}>{`  bound to ${request.plan}`}</Text> : null}
       <Text>
         <Text bold inverse={choice === 'y'}>
           {' y '}

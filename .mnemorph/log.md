@@ -5268,6 +5268,56 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T16:51:34+01:00] rimuru — #92: a gate approval binds to a plan fingerprint, rechecked at the spawn
+- **Done:** `mnemorph_tools::Fingerprint` (module `fingerprint`): the act, HEAD, the diff (index as
+  listed, tracked bytes and mode bit, untracked-not-ignored; a world with no repository: every
+  file its ignore files leave in) and the target (branch, every ref, `remote.*`/`branch.*`/
+  `push.*`/`url.*` config, each remote's resolved push URLs, `GH_REPO`/`GH_HOST`), read through a deaf git and hashed by the harness one component at a
+  time, no symlink followed, no blocking open. `Ask.fingerprint`; the bash tool binds every
+  approved command and recomputes right before `spawn`: a mismatch runs nothing and asks again
+  ("the world changed since approval", what moved), three re-asks at most. The short form on the
+  TUI card (escaped), the terminal card, the CLI card and `gate/ask`'s `plan`; the result keeps
+  the plan the act ran against and every stale one. Docs 02, 04, 05 (Sandbox).
+- **Tests:** tools `fingerprint.rs` — diff A approved, diff B at the spawn: re-asked, never pushed;
+  HEAD moved, target changed and a push rerouted by `set-url`, `pushurl` or `pushInsteadOf`
+  (each a Write in the world) re-asked; an unchanged world runs once; a churning world never
+  runs; a second approval binds anew. With the recheck disabled 6 of the 9 fail (the other three
+  check the fingerprint alone or the unchanged world). TUI: the plan on the hostile card, escaped.
+- **Learned:** a world inside a larger repository sees the empty files the harness makes for an
+  approved outside path; the recheck reads them as the absence the human was shown.
+  - Measured: the recheck reads this repository (550 tracked files, 21 MB) in about 0.1 s.
+
+---
+
+### [2026-10-27T17:09:09+01:00] rimuru — #92, reviewed: the plan binds git's executables and the publish files, and fails closed
+- **Done:** a fifth part, **git**: the whole `config --list` (includes expanded) and the bytes of
+  the git dir's `config`, `config.worktree`, `hooks/`, `info/` (common dir too) and a `.git`
+  file. Any git command failing is no plan: the gate is not asked, or the approved command does
+  not run (a quiet "no commit"/"detached" excepted). The diff binds `.npmrc`, `.yarnrc(.yml)`,
+  `.env`, `.env.*`, `.cargo/config(.toml)` by name, ignored or not, and follows submodules (their
+  HEAD and tree, depth 8). A file is read no further than its size at the open. Doc 05 names
+  what stays unbound (ignored code an act runs, other shipped ignored output, the tripwire's
+  concurrency hole) and the follow-ups: bind the shipped list, stat-bind files over a size cap,
+  a cross-court lock from recheck to spawn (world, then attic).
+- **Tests:** tools `fingerprint.rs` — a `pre-push` hook, `core.sshCommand`, `alias.push` and
+  `info/exclude` planted after approval re-ask; an ignored `.npmrc`/`.env.local` change re-asks; a
+  corrupt index refuses before the gate; a dirty submodule re-asks. Recheck disabled: 9 of 13 fail
+  (the corrupt index refuses before any recheck; the other three need no recheck).
+- **Learned:** the tripwire's `Snapshot` reads with `fs::read` (following, blocking) and covers
+  `.mnemorph/`, which churns with every court: the plan walks the same git pieces with its own non-blocking reader.
+
+---
+
+### [2026-10-27T17:19:57+01:00] rimuru — #92, reviewed again: repositories inside the world are bound whole
+- **Done:** a submodule, an untracked repository (`ls-files -o` lists it as its folder) and the
+  repository any folder the command names lies in (`git -C vendor`, `cd vendor`,
+  `--git-dir=vendor/.git`, ignored or not) are bound as the world's own: HEAD and tree in the
+  diff, `git_pieces` in git, `target` in target; eight deep. Doc 05.
+- **Tests:** tools `a_repository_inside_the_world_is_bound_whole` — `remote set-url` and a planted
+  `pre-push` in a submodule, an untracked and an ignored repository each re-ask, nothing pushed;
+  `ignored_yarnrc_and_cargo_config_are_part_of_the_plan`. Recheck disabled: 10 of 15 fail.
+- **Learned:** a word naming a path inside `.git` has no work tree: git refuses `--show-toplevel`
+  there, so it is resolved to the repository it belongs to.
 ### [2026-10-27T16:43:12+01:00] rimuru — #90: a guarded attic restore — an undo only while the files are as the act left them
 - **Done:** mnemorph-tools `Attic::seal(before, why) -> Act` snapshots what an act left;
   `Attic::restore(&Act, paths) -> Result<Restore, String>` diffs the act's two trees, compares each

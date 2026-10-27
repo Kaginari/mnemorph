@@ -176,7 +176,7 @@ background as `COLORFGBG` reports it, else dark.
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
 | sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
-| approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
+| approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, the plan its approval binds to, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
 | toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring; never drawn over an open approval |
 | status bar | the spend in dollars and tokens, the context against its stress line (gold from 75%, alarm from 90%), the keys that matter now, the world |
 
@@ -500,6 +500,60 @@ flowchart LR
     the sandbox can name it (and removed again if the command fails). An approved delete
     outside the world stays refused: the kernel ties deletion to the folder, and the folder is
     not opened.
+  - **An approval is bound to a plan.** The human may answer minutes after the ask while other
+    courts keep working, so what they approve is the world they were shown: a fingerprint
+    (`mnemorph_tools::Fingerprint`) of the command and five parts. **head** — the commit HEAD
+    names. **diff** — the index as listed, every tracked file's bytes and mode bit, each
+    submodule's own HEAD and working tree, every untracked file git does not ignore, and, by
+    name whatever the ignore rules say, the files that steer a publish or carry its secrets
+    (`.npmrc`, `.yarnrc`, `.yarnrc.yml`, `.env`, `.env.*`, `.cargo/config`,
+    `.cargo/config.toml`, in the root and in every folder that holds the world's files).
+    **git** — git's whole configuration as git reads it (every scope, includes expanded) and the
+    bytes of the git directory's `config`, `config.worktree`, `hooks/` and `info/` (the common
+    directory's too, in a worktree) and of a `.git` file: a hook, a `core.sshCommand` or an
+    alias planted after the approval would run with the act. **target** — the branch HEAD
+    names, every ref and its commit, the `remote.*`, `branch.*`, `push.*` and `url.*`
+    configuration, each remote's push URLs as git resolves them (`insteadOf` and
+    `pushInsteadOf` applied), and `GH_REPO` and `GH_HOST`, where `gh` acts when the command
+    names no `-R`. Every repository inside the world's is bound the same way, its tree in the
+    diff, its configuration and executables in git, its target in target: a submodule, an
+    untracked repository, and the repository any folder the command names lies in (`git -C
+    vendor`, `cd vendor`, `--git-dir=vendor/.git`), ignored or not — eight deep at most. A write inside the world needs no approval, so `git remote set-url`, a
+    `pushurl` or an `insteadOf` can reroute an approved push without touching HEAD, the diff or
+    the command: the target is what catches it. The short form, `plan 3f9a1c2e4b5d · head
+    1a2b3c4d · diff 5d6e7f8a · git 0c1d2e3f · target 9a8b7c6d`, is on the approval card and in
+    `gate/ask`.
+    Every command the gate approves is bound: outward and destructive acts, and a guard rule the
+    human turned into a question. A write inside the world asks no one, so there is no approval
+    to bind; an ask that spawns nothing (a landing with its tests changed) is judged on the
+    verify run just made. The bash tool prepares everything — the approved paths, the
+    tripwire's and the attic's snapshots, the sandboxed command — then recomputes the
+    fingerprint and spawns at once. Any difference and nothing runs: the gate asks again, its
+    first reason "the world changed since approval" with each part that moved (`head moved
+    1a2b3c4d → 9e8f7a6b`), and a second approval binds to the world as it is then. After three
+    such re-asks the command is refused. A plan that cannot be read — any git command failing,
+    a corrupt index, a broken submodule — is no plan: the gate is not asked, or the approved
+    command does not run. The tool's result — the run's journal — keeps the plan the act ran
+    against and every plan that went stale.
+    The fingerprint reads through git with its fsmonitor, hooks and untracked cache off, lists
+    the index without refreshing it and hashes the files itself, opening each from its root
+    following no symlink, without blocking, and reading no further than the size the file had
+    when opened: nothing in the world runs, and no link, pipe or growing file swapped in leads
+    the harness out or holds it. A world with no repository binds to every file its ignore files
+    leave in, and the publish files by name.
+    What stays unbound: what git ignores beyond the publish files — ignored *code* an act runs
+    (a `prepublishOnly` script reaching into `node_modules/.bin`, scripts in ignored folders)
+    and other ignored output an act ships (a deploy's build); and the window between the
+    recheck reading a file and the kernel starting the command. Concurrency is the tripwire's
+    hole: it restores the protected files after a command ends, never while it runs, so another
+    court's long command, the human or another harness may write in that window — `.git`'s
+    hooks and configuration included. A court that changes the world without pause keeps the
+    command from ever running, never makes it run unseen.
+    Still to come: binding the list an act actually ships (`npm pack --dry-run
+    --ignore-scripts`, `cargo package --list`, a docker build context); binding files over a
+    size cap by their `stat` instead of their bytes, rather than reading them whole; and a
+    process lock across courts, held exclusively from the recheck to the spawn (taken world
+    first, then attic), which closes the window.
   - **Limits** — no core dumps, files up to 4 GiB, at most 8192 processes for the user; and no
     new namespaces: `unshare` and a `clone` carrying a namespace flag fail, `clone3` reports
     itself missing so the C library falls back to `clone`.

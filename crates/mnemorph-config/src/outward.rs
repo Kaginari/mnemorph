@@ -439,6 +439,8 @@ impl Planned {
             act: self.command.clone(),
             why,
             outside: self.outside.clone(),
+            // The plan binds where a command is spawned: the bash tool takes and rechecks it.
+            fingerprint: None,
         }
     }
 

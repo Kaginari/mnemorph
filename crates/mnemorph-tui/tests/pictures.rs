@@ -50,6 +50,7 @@ fn card() -> Card {
             act: "git push".into(),
             why: vec!["reaches beyond the world".into()],
             outside: vec![],
+            fingerprint: None,
         },
         Pending::new(),
     )

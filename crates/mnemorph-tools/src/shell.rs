@@ -21,6 +21,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::classify::{Place, Verdict, classify};
+use crate::fingerprint::Fingerprint;
 use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool, args};
 use crate::tripwire::Snapshot;
@@ -94,74 +95,170 @@ impl Tool for Bash {
                 "no kernel guard is in force ({reason}), so the command did not run; to run commands unguarded, set `sandbox.allow_unguarded = true` in your local or global config"
             ));
         }
-        let (class, outside) = match admit(&a.command, cx) {
-            Ok(admitted) => admitted,
-            Err(refused) => return refused,
-        };
         let timeout = a
             .timeout_ms
             .map_or(DEFAULT_TIMEOUT, Duration::from_millis)
             .min(MAX_TIMEOUT);
-        let network = matches!(class, ToolClass::Outward | ToolClass::Destructive);
-        // An approved act may write the outside paths it named; an unapproved one never has any.
-        let opened = if network { outside } else { Vec::new() };
-        // The shared shelf exists before the snapshot, so a queue the human starts while the
-        // command runs is not taken for a directory the command made.
-        let _ = std::fs::create_dir_all(cx.world().join(".mnemorph/shared"));
-        if let Err(e) = std::fs::create_dir_all(cx.world().join(".mnemorph/tmp")) {
-            return Outcome::error(format!(
-                "could not prepare the command's temporary directory: {e}"
-            ));
-        }
-        let made = match make_approved(&opened) {
-            Ok(m) => m,
-            Err(e) => return Outcome::error(e),
-        };
-        let mut before = Snapshot::take(cx.world());
-        // What the command may take away is kept first; a failed snapshot is said, not fatal: the
-        // attic is recovery, the guard is containment.
-        let line: String = a.command.chars().take(200).collect();
-        let kept = cx
-            .attic()
-            .map(|attic| attic.snapshot(&format!("before bash: {line}")));
-        let ran = match run(&a.command, cx, timeout, network, &opened) {
-            Ok(r) => r,
-            Err(e) => return Outcome::error(format!("could not start bash: {e}")),
-        };
-        // A command that failed leaves no empty file behind it.
-        if ran.timed_out || ran.interrupted || ran.code != Some(0) {
-            for path in &made {
-                if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
-                    let _ = fs::remove_file(path);
+        // Every approval is bound to the world it was given in: a world that changed before the
+        // spawn runs nothing and is asked again, a bounded number of times.
+        let mut changed: Vec<String> = Vec::new();
+        let mut notes: Vec<String> = Vec::new();
+        for _ in 0..=MAX_REASKS {
+            let admitted = match admit(&a.command, cx, &changed) {
+                Ok(admitted) => admitted,
+                Err(mut refused) => {
+                    for note in &notes {
+                        let _ = write!(refused.content, "\n[{note}]");
+                    }
+                    return refused;
                 }
+            };
+            match attempt(&a.command, cx, timeout, admitted) {
+                Attempt::Ran(mut out) => {
+                    for note in &notes {
+                        let _ = write!(out.content, "\n[{note}]");
+                    }
+                    return out;
+                }
+                Attempt::Changed { approved, now } => {
+                    changed = approved.changes(&now);
+                    notes.push(format!(
+                        "the world changed since approval of plan {}, so the command did not run and the gate asked again: {}",
+                        approved.id(),
+                        changed.join("; ")
+                    ));
+                }
+                Attempt::Failed(out) => return out,
             }
         }
-        // The command's whole process group is dead: nothing can race the restore.
-        if class == ToolClass::Destructive {
-            before.release_deleted_repository();
-        }
-        let tripped = before.restore();
-        let attic_note = attic_note(cx, kept.as_ref(), class);
-        let mut out = Outcome::ok(ran.render(), class);
-        out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
-        out.meta.exit = ran.code;
-        out.meta.timed_out = ran.timed_out;
-        if let Some(note) = attic_note {
+        let mut out = Outcome::error(format!(
+            "the world changed between each approval and the spawn, {} times: the command did not run",
+            MAX_REASKS + 1
+        ));
+        for note in &notes {
             let _ = write!(out.content, "\n[{note}]");
-        }
-        if !tripped.is_empty() {
-            out.is_error = true;
-            out.content.push_str("\n[the command changed protected files — git's executable configuration or the world's records; ");
-            out.content.push_str(&tripped.join("; "));
-            out.content.push(']');
         }
         out
     }
 }
 
+/// How many times an approval whose world changed before the spawn is asked again.
+const MAX_REASKS: usize = 3;
+
+/// What the classifier and the gate let through.
+struct Admitted {
+    class: ToolClass,
+    /// The outside paths the command named, opened only when the act was approved.
+    outside: Vec<PathBuf>,
+    /// The plan the human approved, when the gate was asked.
+    plan: Option<Fingerprint>,
+}
+
+/// One try at running an admitted command.
+enum Attempt {
+    /// It ran: the result to give the body.
+    Ran(Outcome),
+    /// The world no longer matched the approved plan at the spawn: nothing ran.
+    Changed {
+        approved: Fingerprint,
+        now: Fingerprint,
+    },
+    /// It could not be prepared or started.
+    Failed(Outcome),
+}
+
+fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -> Attempt {
+    let Admitted {
+        class,
+        outside,
+        plan,
+    } = admitted;
+    let network = matches!(class, ToolClass::Outward | ToolClass::Destructive);
+    // An approved act may write the outside paths it named; an unapproved one never has any.
+    let opened = if network { outside } else { Vec::new() };
+    // The shared shelf exists before the snapshot, so a queue the human starts while the
+    // command runs is not taken for a directory the command made.
+    let _ = std::fs::create_dir_all(cx.world().join(".mnemorph/shared"));
+    if let Err(e) = std::fs::create_dir_all(cx.world().join(".mnemorph/tmp")) {
+        return Attempt::Failed(Outcome::error(format!(
+            "could not prepare the command's temporary directory: {e}"
+        )));
+    }
+    let made = match make_approved(&opened) {
+        Ok(m) => m,
+        Err(e) => return Attempt::Failed(Outcome::error(e)),
+    };
+    let mut before = Snapshot::take(cx.world());
+    // What the command may take away is kept first; a failed snapshot is said, not fatal: the
+    // attic is recovery, the guard is containment.
+    let line: String = command.chars().take(200).collect();
+    let kept = cx
+        .attic()
+        .map(|attic| attic.snapshot(&format!("before bash: {line}")));
+    let bound = plan.as_ref().map(|plan| (plan, made.as_slice()));
+    let ran = match run(command, cx, timeout, network, &opened, bound) {
+        Ok(r) => r,
+        Err(stale @ (Spawn::Changed(_) | Spawn::Unreadable(_))) => {
+            // Nothing ran: the files made for it go, and nothing is restored over the world.
+            for path in &made {
+                if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
+                    let _ = fs::remove_file(path);
+                }
+            }
+            return match (stale, plan) {
+                (Spawn::Changed(now), Some(approved)) => Attempt::Changed { approved, now },
+                (Spawn::Unreadable(e), _) => Attempt::Failed(Outcome::error(format!(
+                    "the world could not be read again before the spawn, so the approved command did not run: {e}"
+                ))),
+                _ => Attempt::Failed(Outcome::error("the command did not run")),
+            };
+        }
+        Err(Spawn::Io(e)) => {
+            return Attempt::Failed(Outcome::error(format!("could not start bash: {e}")));
+        }
+    };
+    // A command that failed leaves no empty file behind it.
+    if ran.timed_out || ran.interrupted || ran.code != Some(0) {
+        for path in &made {
+            if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+    // The command's whole process group is dead: nothing can race the restore.
+    if class == ToolClass::Destructive {
+        before.release_deleted_repository();
+    }
+    let tripped = before.restore();
+    let attic_note = attic_note(cx, kept.as_ref(), class);
+    let mut out = Outcome::ok(ran.render(), class);
+    out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
+    out.meta.exit = ran.code;
+    out.meta.timed_out = ran.timed_out;
+    // The journal keeps, with the act, the plan the human approved it against.
+    if let Some(plan) = &plan {
+        let _ = write!(
+            out.content,
+            "\n[approved by the human against {}, unchanged at the spawn]",
+            plan.short()
+        );
+    }
+    if let Some(note) = attic_note {
+        let _ = write!(out.content, "\n[{note}]");
+    }
+    if !tripped.is_empty() {
+        out.is_error = true;
+        out.content.push_str("\n[the command changed protected files — git's executable configuration or the world's records; ");
+        out.content.push_str(&tripped.join("; "));
+        out.content.push(']');
+    }
+    Attempt::Ran(out)
+}
+
 /// Whether the command may run, and at what class: classified, shelved, asked when it must be.
-/// Returns the class and the outside paths it named, or the refusal to give the body.
-fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outcome> {
+/// Returns the class, the outside paths it named and the plan an approval was bound to, or the
+/// refusal to give the body. `changed` is what made an earlier approval of the same command stale.
+fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Outcome> {
     let place = Place {
         world: cx.world().to_path_buf(),
         home: cx.home().to_path_buf(),
@@ -197,24 +294,52 @@ fn admit(command: &str, cx: &Context) -> Result<(ToolClass, Vec<PathBuf>), Outco
         } => (class, why, outside, false),
     };
     check_class(cx.race(), class).map_err(Outcome::unheld)?;
-    if asked || matches!(class, ToolClass::Outward | ToolClass::Destructive) {
-        let ask = Ask {
-            body: cx.body().to_owned(),
-            race: cx.race(),
+    if !(asked || matches!(class, ToolClass::Outward | ToolClass::Destructive)) {
+        return Ok(Admitted {
             class,
-            act: command.to_owned(),
-            why,
-            outside: outside.clone(),
-        };
-        if let Answer::Deny(reason) = cx.gate().ask(&ask) {
-            let mut denied = Outcome::error(format!(
-                "the human gate did not approve this {class} command: {reason}"
-            ));
-            denied.meta.denied = true;
-            return Err(denied);
-        }
+            outside,
+            plan: None,
+        });
     }
-    Ok((class, outside))
+    let mut why = why;
+    if !changed.is_empty() {
+        why.insert(
+            0,
+            format!(
+                "the world changed since approval — {}; approving again binds to the world as it is now",
+                changed.join("; ")
+            ),
+        );
+    }
+    // The plan is taken before the human is asked: what they approve is the world they were shown.
+    // A plan that cannot be read is no plan: nothing is put to the human, and nothing runs.
+    let plan = Fingerprint::of(command, cx.world()).map_err(|e| {
+        Outcome::error(format!(
+            "the plan this {class} command would be approved against could not be read, so the gate was not asked and the command did not run: {e}"
+        ))
+    })?;
+    let ask = Ask {
+        body: cx.body().to_owned(),
+        race: cx.race(),
+        class,
+        act: command.to_owned(),
+        why,
+        outside: outside.clone(),
+        fingerprint: Some(plan.clone()),
+    };
+    if let Answer::Deny(reason) = cx.gate().ask(&ask) {
+        let mut denied = Outcome::error(format!(
+            "the human gate did not approve this {class} command ({}): {reason}",
+            plan.short()
+        ));
+        denied.meta.denied = true;
+        return Err(denied);
+    }
+    Ok(Admitted {
+        class,
+        outside,
+        plan: Some(plan),
+    })
 }
 
 /// What the attic says after a command: the files it deleted and where they are kept, a
@@ -362,15 +487,34 @@ impl Ran {
     }
 }
 
+/// Why a command did not start.
+enum Spawn {
+    /// The world no longer matched the approved plan: this is what it is now.
+    Changed(Fingerprint),
+    /// The world could not be read again: no plan to compare, so nothing runs.
+    Unreadable(String),
+    /// The process could not be started.
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for Spawn {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
 /// Run `command` in the context's sandbox: the world writable, a private temporary directory
-/// inside it, the network open only for an approved outward or destructive act.
+/// inside it, the network open only for an approved outward or destructive act. An approved
+/// command runs only if the world still matches the approved plan at the moment of the spawn,
+/// the files the harness made for it read as the absence they were when it was approved.
 fn run(
     command: &str,
     cx: &Context,
     timeout: Duration,
     network: bool,
     opened: &[PathBuf],
-) -> std::io::Result<Ran> {
+    approved: Option<(&Fingerprint, &[PathBuf])>,
+) -> Result<Ran, Spawn> {
     let tmp = cx.scratch();
     std::fs::create_dir_all(&tmp)?;
     let mut policy = Policy::new(cx.world(), cx.home(), &tmp, network);
@@ -403,6 +547,14 @@ fn run(
             },
         )
         .env("TMPDIR", &tmp);
+    // The recheck is the last thing before the spawn: everything else is already prepared, so
+    // the window in which the world can change unseen is the recheck's own reading of it.
+    if let Some((approved, made)) = approved {
+        let now = Fingerprint::of_except(command, cx.world(), made).map_err(Spawn::Unreadable)?;
+        if now != *approved {
+            return Err(Spawn::Changed(now));
+        }
+    }
     let mut child = cmd.spawn()?;
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());

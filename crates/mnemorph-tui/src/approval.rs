@@ -351,6 +351,13 @@ impl Approval {
                     .map(|l| (4, l)),
             );
         }
+        if let Some(plan) = &self.card.plan {
+            parts.extend(
+                wrap_text(&format!("bound to {plan}"), inner, t.muted())
+                    .into_iter()
+                    .map(|l| (2, l)),
+            );
+        }
         for why in &self.card.why {
             parts.extend(
                 wrap_text(&format!("· {why}"), inner, t.muted())

@@ -1164,6 +1164,8 @@ impl Run {
             act: format!("land with tests changed — {}", card_list(failures)),
             why: vec!["the end gate keeps tests intact unless the human allows it".into()],
             outside: Vec::new(),
+            // Nothing is spawned on this answer: the landing it allows is the one just verified.
+            fingerprint: None,
         };
         let allowed = matches!(self.cx.gate().ask(&ask), mnemorph_tools::Answer::Approve);
         if allowed {

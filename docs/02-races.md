@@ -369,7 +369,9 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
-  replayed; it is gated again.
+  replayed; it is gated again. The approval is bound to the plan the human saw — the commit, the
+  working tree and the target ([the sandbox](05-architecture.md#sandbox)) — and rechecked
+  just before the act: a world that changed meanwhile runs nothing and is asked again.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
   outward act is typed, and for a small closed set of kinds the harness renders both the command
   and its undo from the act's own fields; the gate runs the stored command exactly:

@@ -23,7 +23,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use mnemorph_loop::{Beat, Gate, GateAnswer, GateAsk, Observer, Opened, Seen, StreamEvent};
+use mnemorph_loop::{
+    Beat, Gate, GateAnswer, GateAsk, GateFingerprint, Observer, Opened, Seen, StreamEvent,
+};
 use serde_json::{Value, json};
 
 use crate::protocol::{
@@ -198,6 +200,7 @@ impl Gate for ClientGate {
                 .iter()
                 .map(|p| p.display().to_string())
                 .collect(),
+            plan: ask.fingerprint.as_ref().map(GateFingerprint::short),
         };
         core.send(&json!({"jsonrpc": "2.0", "id": format!("gate-{id}"), "method": "gate/ask", "params": request}));
         let answer = rx

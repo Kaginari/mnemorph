@@ -16,7 +16,7 @@ const DIR: OFlags = OFlags::RDONLY
 
 /// The parent directory of `path` (a resolved path under `world`), opened without following a
 /// symlink, and the file name in it. `create` makes missing directories on the way.
-fn parent(world: &Path, path: &Path, create: bool) -> io::Result<(OwnedFd, String)> {
+pub(crate) fn parent(world: &Path, path: &Path, create: bool) -> io::Result<(OwnedFd, String)> {
     let rel = path
         .strip_prefix(world)
         .map_err(|_| io::Error::new(io::ErrorKind::PermissionDenied, "outside the world"))?;

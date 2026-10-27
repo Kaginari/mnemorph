@@ -361,7 +361,7 @@ sequenceDiagram
     D--)CLI: event/usage {tokens, cacheRead, usd, spentWt}
     end
     rect rgba(212,175,55,0.22)
-    D->>CLI: gate/ask {body, race, class, act, why, outside}
+    D->>CLI: gate/ask {body, race, class, act, why, outside, plan}
     CLI-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
@@ -381,7 +381,9 @@ world, model, provider, session, run, holes, budget}`; a client that speaks anot
 rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
-`{race, class, act, why, outside}`, and the client answers `{allow, reason?}`. A `usage` event
+`{race, class, act, why, outside, plan?}`, and the client answers `{allow, reason?}`. `plan` is
+the short form of the plan a command's approval binds to
+([the sandbox](05-architecture.md#sandbox)); an ask that spawns nothing has none. A `usage` event
 carries the turn's tokens, cache reads and writes, its price, and the run's spend and context
 against its stress line, for the status line. A `held` event, sent once the session's queued
 lines and their wake are done, carries how many orders the shared work queue holds; the hello
