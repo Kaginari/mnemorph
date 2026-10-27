@@ -5717,3 +5717,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   PR 10), so there was no line-based link to migrate; journaled ids are read as written.
 - **Learned:** a claim-less finding's `witness:a.rs:3` read as its location — the property test
   over the tail found it on its first run.
+
+---
+
+### [2026-10-27T21:32:32+01:00] rimuru — #247, Fable's review: a Dark Elf's id recomputed, never trusted
+- **Done:** fingerprint is SHA-256 (ten hex) over length-framed fields; `address()` framed the
+  same way (FNV kept), journaled ids read as written. `Report::dark_elf(record)` recomputes each
+  id from its record's root cause; a mismatch reads back `forged id:` as `@?`; only it makes a
+  `Proven`. The file rule is ASCII: no absolute, `.`, `..` or empty segment.
+- **Learned:** a fingerprint that the body states is only a shape; the harness must derive it.

@@ -253,8 +253,11 @@ proptest! {
         let r = Report { status: "DONE".into(), holes: vec![nv.clone()], ..Report::default() };
         let text = r.to_string();
         prop_assert_eq!(text.split(BREAKS).count(), 3, "@S, one @?, @E");
-        let back = Report::parse(&text).expect("on the wire").dark_elf();
-        prop_assert!(back.findings.is_empty());
+        let read = Report::parse(&text).expect("on the wire");
+        prop_assert!(read.findings.is_empty());
+        let back = read.dark_elf(|_| None);
+        prop_assert!(back.proven().is_empty());
+        let back = back.report;
         prop_assert_eq!(&back.holes, &vec![Hole::parse(&norm(&nv.to_string()))]);
         let (b, p) = (norm(&blocker), norm(&plan));
         let clean = !b.is_empty() && !p.is_empty()

@@ -25,7 +25,7 @@ pub use commission::{Ask, Commission, DEFAULT_CAP, Office, parse_budget};
 pub use forge::{Forge, ForgeKind, forges_of};
 pub use hole::Hole;
 pub use report::{
-    COURIER_BYTES, Courier, Enqueue, FIELD_BYTES, Finding, Report, Unsaid, UnsaidKind, Word,
-    enqueues_of, fingerprint, one_line,
+    COURIER_BYTES, Courier, DarkElfReport, Enqueue, FIELD_BYTES, Finding, Proven, Report,
+    RootCause, Unsaid, UnsaidKind, Word, enqueues_of, fingerprint, one_line, repo_path,
 };
 pub use tag::invisible;

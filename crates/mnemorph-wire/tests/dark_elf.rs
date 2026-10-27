@@ -1,7 +1,7 @@
 //! The Dark Elf's finding fields: the record, the line-free fingerprint, and the needs-validation
 //! verdict.
 
-use mnemorph_wire::{Finding, Hole, Report, fingerprint};
+use mnemorph_wire::{Finding, Hole, Report, RootCause, fingerprint, repo_path};
 
 fn relay(r: &Report) -> Report {
     Report::parse(&r.to_string()).expect("on the wire")
@@ -82,35 +82,72 @@ fn an_at_f_inside_a_claim_stays_a_claim() {
     assert_eq!(back.findings, [f]);
 }
 
+fn root(speciality: &str, class: &str, file: &str, symbol: &str) -> RootCause {
+    RootCause {
+        speciality: speciality.into(),
+        class: class.into(),
+        file: file.into(),
+        symbol: symbol.into(),
+    }
+}
+
+fn base() -> RootCause {
+    root(
+        "dark-elf-agent",
+        "wire-framing",
+        "src/report.rs",
+        "Finding::parse",
+    )
+}
+
+fn fp(r: &RootCause) -> String {
+    r.fingerprint().expect("a fingerprint")
+}
+
+/// A finding that keeps the whole contract for `r`.
+fn proven(r: &RootCause, line: u32) -> Finding {
+    Finding {
+        id: Some(fp(r)),
+        at: Some(format!("{}:{line}", r.file)),
+        claim: "a claim can forge a tail".into(),
+        witness: Some("poc.rs".into()),
+        rec: Some(REC.into()),
+    }
+}
+
 #[test]
 fn the_fingerprint_is_pinned() {
+    // SHA-256 of `14:dark-elf-agent12:wire-framing34:crates/mnemorph-wire/src/report.rs14:Finding::parse`.
     assert_eq!(
         fingerprint(
             "dark-elf-agent",
             "wire-framing",
             "crates/mnemorph-wire/src/report.rs",
             "Finding::parse"
-        ),
-        "0c7349f326"
+        )
+        .as_deref(),
+        Some("5d5cbfde4d")
     );
 }
 
 #[test]
-fn the_fingerprint_survives_a_line_shift_and_normalisation() {
-    let fp = fingerprint(
-        "dark-elf-agent",
-        "wire-framing",
-        "src/report.rs",
-        "Finding::parse",
-    );
-    let at = |line: u32| Finding {
-        id: Some(fp.clone()),
-        at: Some(format!("src/report.rs:{line}")),
-        claim: "a claim can forge a tail".into(),
-        witness: Some("poc.rs".into()),
-        rec: Some(REC.into()),
+fn no_field_can_move_a_separator() {
+    let a = fingerprint("s", "c", "a|b", "c");
+    let b = fingerprint("s", "c", "a", "b|c");
+    assert_eq!(a.as_deref(), Some("ce6b174c86"));
+    assert_eq!(b.as_deref(), Some("e1f3bf3a18"));
+    let at = |at: &str, claim: &str| Finding {
+        at: Some(at.into()),
+        claim: claim.into(),
+        ..Finding::default()
     };
-    let (before, after) = (at(120), at(161));
+    assert_ne!(at("a|b", "c").address(), at("a", "b|c").address());
+}
+
+#[test]
+fn the_fingerprint_survives_a_line_shift_and_normalisation() {
+    let r = base();
+    let (before, after) = (proven(&r, 120), proven(&r, 161));
     assert_eq!(before.id, after.id, "a moved line keeps its id");
     assert_ne!(
         before.address(),
@@ -137,47 +174,63 @@ fn the_fingerprint_survives_a_line_shift_and_normalisation() {
             "Finding::parse\n",
         ),
     ] {
-        assert_eq!(fingerprint(speciality, class, file, symbol), fp);
+        assert_eq!(fingerprint(speciality, class, file, symbol), Some(fp(&r)));
     }
 }
 
 #[test]
 fn the_fingerprint_changes_with_the_root_cause() {
-    let base = fingerprint(
-        "dark-elf-agent",
-        "wire-framing",
-        "src/report.rs",
-        "Finding::parse",
-    );
+    let b = base();
     for other in [
-        fingerprint(
-            "dark-elf-harness",
-            "wire-framing",
-            "src/report.rs",
-            "Finding::parse",
-        ),
-        fingerprint(
-            "dark-elf-agent",
-            "prompt-injection",
-            "src/report.rs",
-            "Finding::parse",
-        ),
-        fingerprint(
-            "dark-elf-agent",
-            "wire-framing",
-            "src/hole.rs",
-            "Finding::parse",
-        ),
-        fingerprint(
-            "dark-elf-agent",
-            "wire-framing",
-            "src/report.rs",
-            "Finding::render",
-        ),
+        RootCause {
+            speciality: "dark-elf-harness".into(),
+            ..b.clone()
+        },
+        RootCause {
+            class: "prompt-injection".into(),
+            ..b.clone()
+        },
+        RootCause {
+            file: "src/hole.rs".into(),
+            ..b.clone()
+        },
+        RootCause {
+            symbol: "Finding::render".into(),
+            ..b.clone()
+        },
     ] {
-        assert_ne!(other, base);
-        assert_eq!(other.len(), 10);
+        assert_ne!(fp(&other), fp(&b));
+        assert_eq!(fp(&other).len(), 10);
     }
+}
+
+#[test]
+fn a_file_outside_the_rule_has_no_fingerprint() {
+    for file in [
+        "/etc/passwd",
+        "\\etc\\passwd",
+        "C:/src/a.rs",
+        "C:src/a.rs",
+        "src/../a.rs",
+        "..",
+        "src/./a.rs",
+        "src//a.rs",
+        "src/",
+        "",
+        "  ",
+        "./",
+        "src/my file.rs",
+        "src/caf\u{e9}.rs",
+        "src/cafe\u{301}.rs",
+        "src/a\u{0}.rs",
+    ] {
+        assert_eq!(repo_path(file), None, "{file:?}");
+        assert_eq!(fingerprint("s", "c", file, "x"), None, "{file:?}");
+    }
+    for (speciality, class, symbol) in [("", "c", "x"), ("s", " ", "x"), ("s", "c", "")] {
+        assert_eq!(fingerprint(speciality, class, "a.rs", symbol), None);
+    }
+    assert_eq!(repo_path(" ./src\\a.rs ").as_deref(), Some("src/a.rs"));
 }
 
 #[test]
@@ -213,38 +266,38 @@ fn a_needs_validation_with_a_severity_is_a_hole_of_its_own() {
 
 #[test]
 fn needs_validation_is_never_a_finding() {
-    let proven = Finding {
-        id: Some("0c7349f326".into()),
-        at: Some("src/a.rs:4".into()),
-        claim: "the input is trusted".into(),
-        witness: Some("poc.rs".into()),
-        rec: Some(REC.into()),
-    };
-    let with = Report::parse(&format!(
-        "@S DONE\n@F {}\n@? nv #1234567890 blocker:x plan:y\n@E 1",
-        done(vec![proven.clone()], vec![])
-            .to_string()
-            .lines()
-            .nth(1)
-            .unwrap()[3..]
-            .to_owned()
-    ))
-    .expect("on the wire")
-    .dark_elf();
-    let without = relay(&done(vec![proven], vec![])).dark_elf();
-    assert_eq!(with.findings, without.findings, "an nv moves no count");
-    assert!(matches!(with.holes[..], [Hole::Nv { .. }]));
+    let r = base();
+    let f = proven(&r, 4);
+    let line = done(vec![f.clone()], vec![]).to_string();
+    let f_line = line.lines().nth(1).expect("the @F line");
+    let nv = "@? nv #1234567890 blocker:x plan:y";
+    let records = |_: &str| Some(r.clone());
+    let with = Report::parse(&format!("@S DONE\n{f_line}\n{nv}\n@E 1"))
+        .expect("on the wire")
+        .dark_elf(records);
+    let without = relay(&done(vec![f], vec![])).dark_elf(records);
+    assert_eq!(with.proven(), without.proven(), "an nv moves no count");
+    assert_eq!(with.proven().len(), 1);
+    assert!(matches!(with.report.holes[..], [Hole::Nv { .. }]));
+    // No reading of an nv line, tagged or raw, builds a finding.
+    for text in [
+        format!("@S DONE\n{nv}"),
+        "S|DONE\n?|nv #1234567890 blocker:x plan:y".into(),
+    ] {
+        let back = Report::parse_raw(&text).expect("on the wire");
+        assert!(back.findings.is_empty(), "nothing proven or found");
+        assert!(matches!(back.holes[..], [Hole::Nv { .. }]), "{text}");
+        assert!(
+            back.dark_elf(records).proven().is_empty(),
+            "nothing proven or found"
+        );
+    }
 }
 
 #[test]
 fn a_dark_elf_finding_without_its_contract_is_a_hole() {
-    let whole = Finding {
-        id: Some("0c7349f326".into()),
-        at: Some("src/a.rs:4".into()),
-        claim: "c".into(),
-        witness: Some("poc.rs".into()),
-        rec: Some(REC.into()),
-    };
+    let r = base();
+    let whole = proven(&r, 4);
     let broken = [
         Finding {
             id: None,
@@ -265,12 +318,44 @@ fn a_dark_elf_finding_without_its_contract_is_a_hole() {
     ];
     let mut all = vec![whole.clone()];
     all.extend(broken.iter().cloned());
-    let back = relay(&done(all, vec![])).dark_elf();
-    assert_eq!(back.findings, [whole]);
-    assert_eq!(back.holes.len(), broken.len());
+    let back = relay(&done(all, vec![])).dark_elf(|_| Some(r.clone()));
+    assert_eq!(back.proven().len(), 1);
+    assert_eq!(back.proven()[0].finding(), &whole);
+    assert_eq!(back.proven()[0].root(), &r);
+    assert!(back.report.findings.is_empty(), "nothing proven or found");
+    assert_eq!(back.report.holes.len(), broken.len());
     assert!(
-        back.holes
+        back.report
+            .holes
             .iter()
             .all(|h| matches!(h, Hole::Other(t) if t.starts_with("unproven: ")))
     );
+}
+
+#[test]
+fn a_self_declared_id_is_a_hole() {
+    let r = base();
+    let other = RootCause {
+        symbol: "Finding::render".into(),
+        ..r.clone()
+    };
+    // The id is well-shaped, but it is another root cause's.
+    let forged = Finding {
+        id: Some(fp(&other)),
+        ..proven(&r, 4)
+    };
+    let back = relay(&done(vec![forged.clone()], vec![])).dark_elf(|_| Some(r.clone()));
+    assert!(back.proven().is_empty(), "nothing proven or found");
+    assert!(matches!(&back.report.holes[..], [Hole::Other(t)] if t.starts_with("forged id: ")));
+    // A record that cannot be read proves nothing either.
+    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| None);
+    assert!(back.proven().is_empty(), "nothing proven or found");
+    assert!(matches!(&back.report.holes[..], [Hole::Other(t)] if t.starts_with("no record: ")));
+    // A record whose file is refused has no fingerprint to match.
+    let bad = RootCause {
+        file: "../escape.rs".into(),
+        ..r.clone()
+    };
+    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| Some(bad.clone()));
+    assert!(back.proven().is_empty(), "nothing proven or found");
 }

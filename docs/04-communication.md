@@ -143,32 +143,43 @@ The grammar's readings, all of them:
 - **A finding's claim** whose first word would read as an id or a location, or whose last word
   would read as a witness or a record, is fenced with `—` when emitted and read back as written;
   its whitespace is folded to single spaces, and an empty id is no id. `Finding::address` gives a
-  finding with no id a stable ten-hex id from its location, claim and witness.
+  finding with no id a stable ten-hex id: the first ten hex of the 64-bit FNV-1a of its location,
+  claim and witness, each framed as `<byte length>:<field>` so no field can move a boundary. An
+  address or id already journaled is read as written, never re-derived.
 - **A finding's tail has a fixed order: `witness:` then `rec:`** (M10). The reader strips the last
   word first when it opens `rec:`, then the last word left when it opens `witness:`; whatever
   stays is the claim. A claim that would end in a word opening `witness:` or `rec:` is fenced like
   any other, so a claim never lends a finding a witness or a record; a finding with no claim and no
   location fences its tail when the tail's first word would read as a location.
 - **A Dark Elf's finding is never addressed by its line** (M10). Its id is the root-cause
-  fingerprint: ten hex digits, the first ten of the 64-bit FNV-1a, as `address` takes them, of
-  `<speciality>|<class>|<file>|<symbol>` — the speciality's full name, the playbook's class id, the
-  file as a repository-relative path with `/` separators and no `./`, and the symbol as the code
-  names it, each trimmed and its whitespace folded to single spaces. So the same weakness keeps its
-  id across runs and after its line moves, and the later fix that upholds it is linked by that id;
-  an id already journaled is read as written, never re-derived. A `@F` from a Dark Elf with no
-  fingerprint, no witness or no record is read back as `@?` (`Report::dark_elf`), and an `@? nv`
-  that carries a severity is read as a hole of its own: the grammar is exact, `nv`, the
-  fingerprint, `blocker:`, `plan:`, nothing between, and the blocker ends at its first word
-  opening `plan:` — so a word opening `severity:` before `plan:` breaks it.
+  fingerprint: ten hex digits, the first ten of the SHA-256 of four fields, each framed as
+  `<byte length>:<field>` — the speciality's full name, the playbook's class id, the file and the
+  symbol as the code names it. Each is trimmed, its whitespace folded to single spaces, and none
+  may be empty. The file is read with `\` as `/` and its leading `./` dropped, then refused unless
+  it is printable ASCII with no space, not absolute (no leading `/`, no `:` in its first segment),
+  and every segment is non-empty and neither `.` nor `..`; a refused file has no fingerprint (an
+  ASCII rule, so no two spellings of one name, such as NFC and NFD, can both pass). So the same
+  weakness keeps its id across runs and after its line moves, and the later fix that upholds it is
+  linked by that id.
+- **A Dark Elf's id is recomputed, never trusted** (M10). The harness reads a Dark Elf's report
+  through `Report::dark_elf`, the only maker of a `Proven` finding — the one type a score or a seal
+  takes: each `@F`'s record, at its `rec:` path, gives the root cause, and the finding is proven
+  only when it has a witness and a record and its stated id is the fingerprint derived from that
+  record. Any other `@F` is read back as `@?` — `unproven:` (no fingerprint-shaped id, witness or
+  record), `no record:` (the record cannot be read) or `forged id:` (the ids differ) — a claim,
+  never a finding. A `@? nv` is a hole on every reading, never a finding, and one that carries a
+  severity is read as a hole of its own: the grammar is exact, `nv`, the fingerprint, `blocker:`,
+  `plan:`, nothing between, and the blocker ends at its first word opening `plan:` — so a word
+  opening `severity:` before `plan:` breaks it.
 - **`@CAP 0`** is refused like any bad value: it never means "no ceiling".
 - Fields are trimmed; `@ASK +unsaid` alone is an empty ask with the flag set.
 
 Council answers (`@INSTRUCT`, `@SPLIT`, `@ESCALATE`) are not wire tags yet: the loop that sends
 them (M5) defines them, here, when it lands.
 
-In code the wire is one crate (`mnemorph-wire`, no dependencies) with a parser and an encoder that
-round-trip; property tests hold `parse(emit(r)) == r` for any report, an exact `@E`, and a cut
-that never loses what must stay.
+In code the wire is one crate (`mnemorph-wire`, no I/O, its one dependency `sha2` for the
+fingerprint) with a parser and an encoder that round-trip; property tests hold
+`parse(emit(r)) == r` for any report, an exact `@E`, and a cut that never loses what must stay.
 
 ### Dispatch rules, all compiled in
 

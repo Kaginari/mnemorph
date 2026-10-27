@@ -163,18 +163,19 @@ impl Finding {
     #[must_use]
     pub fn address(&self) -> String {
         let claim = self.claim.split_whitespace().collect::<Vec<_>>().join(" ");
-        let key = format!(
-            "{}|{claim}|{}",
+        let key = framed(&[
             self.at.as_deref().unwrap_or(""),
-            self.witness.as_deref().unwrap_or("")
-        );
-        ten_hex(&key)
+            &claim,
+            self.witness.as_deref().unwrap_or(""),
+        ]);
+        format!("{:016x}", fnv::fnv64a(key.as_bytes()))[..10].to_owned()
     }
 
-    /// Whether this finding keeps the Dark Elf's contract on the wire: a fingerprint for its id,
-    /// a witness and a record. One that does not is read back as a hole ([`Report::dark_elf`]).
+    /// Whether this finding carries the Dark Elf's contract on the wire: a fingerprint-shaped id,
+    /// a witness and a record. The shape alone proves nothing: [`Report::dark_elf`] recomputes
+    /// the id from the record.
     #[must_use]
-    pub fn is_dark_elf(&self) -> bool {
+    pub fn has_dark_elf_parts(&self) -> bool {
         self.id.as_deref().is_some_and(is_fingerprint)
             && self.witness.as_deref().is_some_and(|w| !w.is_empty())
             && self.rec.as_deref().is_some_and(|r| !r.is_empty())
@@ -243,9 +244,13 @@ fn take_tail(words: &mut Vec<&str>, field: &str) -> Option<String> {
     Some(value)
 }
 
-/// The first ten hex digits of the 64-bit FNV-1a of `key`.
-fn ten_hex(key: &str) -> String {
-    format!("{:016x}", fnv::fnv64a(key.as_bytes()))[..10].to_owned()
+/// The fields framed for a hash: each as `<byte length>:<field>`, so no field's content can
+/// move a boundary between fields.
+fn framed(fields: &[&str]) -> String {
+    fields.iter().fold(String::new(), |mut key, f| {
+        let _ = write!(key, "{}:{f}", f.len());
+        key
+    })
 }
 
 /// Ten lowercase hex digits: the shape of a fingerprint.
@@ -253,25 +258,105 @@ fn is_fingerprint(id: &str) -> bool {
     id.len() == 10 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// A Dark Elf finding's root-cause fingerprint: ten hex digits, the first ten of the 64-bit
-/// FNV-1a of `<speciality>|<class>|<file>|<symbol>`. Each field is trimmed and its whitespace
-/// folded to single spaces; the file is read as a repository-relative path with `/` separators
-/// and no leading `./`. No line, body or severity enters it, so the same weakness keeps its id
-/// across runs and after its line moves.
+/// A Dark Elf finding's root cause, as its record states it: what its fingerprint is made of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootCause {
+    /// The speciality's full name (`dark-elf-agent`).
+    pub speciality: String,
+    /// The playbook's class id.
+    pub class: String,
+    /// The file, repository-relative.
+    pub file: String,
+    /// The symbol, as the code names it.
+    pub symbol: String,
+}
+
+impl RootCause {
+    /// Its fingerprint, or `None` when a field is refused (see [`fingerprint`]).
+    #[must_use]
+    pub fn fingerprint(&self) -> Option<String> {
+        fingerprint(&self.speciality, &self.class, &self.file, &self.symbol)
+    }
+}
+
+/// A Dark Elf finding's root-cause fingerprint: ten hex digits, the first ten of the SHA-256 of
+/// the four fields framed as `<byte length>:<field>` each, in the order speciality, class, file,
+/// symbol. Each field is trimmed and its whitespace folded to single spaces, and none may be
+/// empty. The file is normalised by [`repo_path`]; a file it refuses has no fingerprint. No line,
+/// body or severity enters it, so the same weakness keeps its id across runs and after its line
+/// moves.
 #[must_use]
-pub fn fingerprint(speciality: &str, class: &str, file: &str, symbol: &str) -> String {
+pub fn fingerprint(speciality: &str, class: &str, file: &str, symbol: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
     let fold = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    let file = fold(file).replace('\\', "/");
+    let (speciality, class, symbol) = (fold(speciality), fold(class), fold(symbol));
+    let file = repo_path(file)?;
+    if [&speciality, &class, &symbol].iter().any(|f| f.is_empty()) {
+        return None;
+    }
+    let digest = Sha256::digest(framed(&[&speciality, &class, &file, &symbol]).as_bytes());
+    Some(digest[..5].iter().fold(String::new(), |mut hex, b| {
+        let _ = write!(hex, "{b:02x}");
+        hex
+    }))
+}
+
+/// A fingerprint's file, normalised: trimmed, `\` read as `/`, leading `./` dropped. It is then
+/// refused unless it is printable ASCII with no space, not absolute (no leading `/`, no `:` in its
+/// first segment), and every segment is non-empty and neither `.` nor `..`.
+#[must_use]
+pub fn repo_path(file: &str) -> Option<String> {
+    let file = file.trim().replace('\\', "/");
     let mut file = file.as_str();
     while let Some(rest) = file.strip_prefix("./") {
         file = rest;
     }
-    ten_hex(&format!(
-        "{}|{}|{file}|{}",
-        fold(speciality),
-        fold(class),
-        fold(symbol)
-    ))
+    let ascii = file.bytes().all(|b| b.is_ascii_graphic());
+    let mut segments = file.split('/');
+    let drive = segments.next().is_some_and(|first| first.contains(':'));
+    let bad = file
+        .split('/')
+        .any(|s| s.is_empty() || s == "." || s == "..");
+    (ascii && !drive && !bad).then(|| file.to_owned())
+}
+
+/// A Dark Elf finding whose id the harness recomputed from its record. Only
+/// [`Report::dark_elf`] makes one, so whatever scores or seals findings can take nothing else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Proven {
+    finding: Finding,
+    root: RootCause,
+}
+
+impl Proven {
+    /// The finding as the wire carried it; its id is its root cause's fingerprint.
+    #[must_use]
+    pub fn finding(&self) -> &Finding {
+        &self.finding
+    }
+
+    /// The root cause its record states.
+    #[must_use]
+    pub fn root(&self) -> &RootCause {
+        &self.root
+    }
+}
+
+/// A Dark Elf's report as the harness reads it: its proven findings, and the rest of the report
+/// with no finding left in it — every line that was not proven rides as a hole.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DarkElfReport {
+    /// The report; its `findings` are always empty.
+    pub report: Report,
+    proven: Vec<Proven>,
+}
+
+impl DarkElfReport {
+    /// The findings whose ids match their records: the only ones that count.
+    #[must_use]
+    pub fn proven(&self) -> &[Proven] {
+        &self.proven
+    }
 }
 
 /// `file:line` or `file:line-line`, with a non-empty file part.
@@ -453,20 +538,33 @@ impl Report {
         seen.then_some(r)
     }
 
-    /// Reads this report as a Dark Elf's: every finding that breaks the contract — no
-    /// fingerprint for its id, no witness or no record — becomes a hole, a suspicion that is never
-    /// a finding.
+    /// Reads this report as a Dark Elf's. Each finding's record is looked up by its `rec:` path
+    /// (`record` reads it; `None` when it is missing or broken) and its id recomputed from the
+    /// root cause there. A finding is proven only when it has a witness and a record and its
+    /// stated id is that fingerprint; any other becomes a hole — a suspicion, never a finding.
     #[must_use]
-    pub fn dark_elf(mut self) -> Self {
-        let (kept, unproven): (Vec<_>, Vec<_>) =
-            self.findings.into_iter().partition(Finding::is_dark_elf);
-        self.findings = kept;
-        self.holes.extend(
-            unproven
-                .iter()
-                .map(|f| Hole::Other(format!("unproven: {}", f.render()))),
-        );
-        self
+    pub fn dark_elf(mut self, mut record: impl FnMut(&str) -> Option<RootCause>) -> DarkElfReport {
+        let mut proven = Vec::new();
+        for f in std::mem::take(&mut self.findings) {
+            let why = if f.has_dark_elf_parts() {
+                match f.rec.as_deref().and_then(&mut record) {
+                    None => "no record",
+                    Some(root) if root.fingerprint() == f.id => {
+                        proven.push(Proven { finding: f, root });
+                        continue;
+                    }
+                    Some(_) => "forged id",
+                }
+            } else {
+                "unproven"
+            };
+            self.holes
+                .push(Hole::Other(format!("{why}: {}", f.render())));
+        }
+        DarkElfReport {
+            report: self,
+            proven,
+        }
     }
 
     /// Whether `text` is a whole report: on the wire, and its `@E` equal to its byte length.
