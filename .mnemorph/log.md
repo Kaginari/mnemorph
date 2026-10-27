@@ -5292,6 +5292,53 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T16:41:09+01:00] rimuru — #101: an outward plan with no declared undo is destructive
+- **Done:** mnemorph-config module `outward`: the Kijin's plan step typed — `Act` (command,
+  `Undo::{Rollback, Revert, None}`, `Effect::{Once, Standing { expires }}`), `plan` classes it
+  into a `Planned` (only `plan` makes one): an outward act with no undo, or a standing effect with
+  no expiry or one more than a year out, is `destructive`; the classifier's patterns stay the
+  first reading. An undo is checked one level deep: not empty, not the act again, not refused,
+  outward, not destructive. `Envelope::covers` refuses a destructive act before time, count or
+  patterns, and matches patterns word by word, never a command that chains, expands or globs.
+  `Planned::ask` puts `no undo — destructive` first on the card. Docs 02 (Kijin, envelopes,
+  classes). gate.rs untouched; the gate calls `covers` when it honours envelopes (M11).
+- **Tests:** config `outward.rs` — no undo is destructive and a matching, in-force envelope still
+  refuses it; a standing effect with no or a far expiry is destructive; an undone act is covered;
+  malformed undos refused; the pattern list a second line; the matcher. With the classification
+  removed three fail; with the envelope's destructive guard removed the same three; with the undo
+  check removed the malformed test fails.
+- **Learned:** the classifier calls a branch delete destructive, so a new branch's only undo is
+  refused: a `feat/*` push envelope covers a push only with an outward undo (a revert), else asks.
+
+---
+
+### [2026-10-27T17:02:07+01:00] rimuru — #101, reviewed (Opus, Fable on Opus): the undo is the harness's; pushes and `gh api` read closer
+- **Done:** a model-written undo string could be outward and fake (`gh help`), and the real undos
+  (deletes) are destructive, so `check_undo` and `Effect` are gone. `Act` is typed:
+  `PushNewBranch` (create-only lease), `AddLabel`, `Comment` — the harness renders the command
+  and, from `Done` (pushed sha, comment id read only from this act's own URL), the undo; the repo
+  pinned in the act. `Command(String)` outward is destructive, no envelope covers it. Envelope
+  patterns are read against the act's words (printable ASCII, no `:` `'` `"` or shell character).
+  Classifier: `git push` outward only as one plain branch push (unknown options, every ref outside
+  `refs/heads/`, renames, multiple refspecs, `--all`, `--receive-pack`, `-o` destructive; the
+  create-only lease is not); `gh api` writes on any non-GET method, field, `--input` or graphql.
+  vet fills an in-word `*` with a plain name. Docs 02. Standing effects and remote-URL
+  resolution: M11.
+- **Tests:** config `outward.rs` (6), corpus rows for every refspec and `gh api` hole. Disabled
+  one at a time — command class, envelope guard, refspec parse, `gh api`, word check, branch-name
+  check — each fails its test.
+- **Learned:** the classifier takes the highest class over every argument prefix, so a guard must
+  read a flag with nothing after it yet as nothing, or every `-X GET` reads as a write.
+
+---
+
+### [2026-10-27T17:11:56+01:00] rimuru — #101, Fable's last read: a push destination is the source's own branch
+- **Done:** `refspec` takes a destination only as the source itself, `refs/heads/<source>`, or
+  any `refs/heads/` branch for `HEAD`; `feat/x:refs/heads/main` and `HEAD:main` are destructive.
+- **Tests:** corpus rows for both, and the two accepted forms.
+
+---
+
 ### [2026-10-27T17:18:44+01:00] rimuru — the wire: prose that reads as a tag rides escaped
 - **Done:** a report's prose lines (`other`) and a commission's body were emitted as written, so a
   prose `@S` read back as a second status (CI's `no_field_forges_a_line`, shrunk to `other = "@S"`);

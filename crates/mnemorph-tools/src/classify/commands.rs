@@ -683,35 +683,7 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
         | "cat-file" | "describe" | "shortlog" | "grep" | "rev-list" | "help" | "version"
         | "whatchanged" | "range-diff" | "merge-base" | "for-each-ref" | "show-ref"
         | "check-ignore" | "count-objects" => {}
-        "push" => {
-            let refspec_force = words
-                .iter()
-                .any(|w| !w.starts_with('-') && (w.starts_with('+') || w.starts_with(':')));
-            let tags = words
-                .iter()
-                .any(|w| w.starts_with("refs/tags/") || *w == "tag");
-            if any(&[
-                "--force",
-                "--force-with-lease",
-                "--force-if-includes",
-                "--mirror",
-                "--delete",
-                "--tags",
-                "--follow-tags",
-                "--prune",
-            ]) || short('f')
-                || short('d')
-                || refspec_force
-                || tags
-            {
-                t.raise(
-                    Destructive,
-                    "a force, delete, mirror or tag push rewrites what others see",
-                );
-            } else {
-                t.raise(Outward, "`git push` leaves the machine");
-            }
-        }
+        "push" => push(&words, t),
         "fetch" | "pull" | "clone" | "ls-remote" | "send-email" | "request-pull" | "archive"
             if sub != "archive" || any(&["--remote"]) =>
         {
@@ -833,21 +805,13 @@ fn gh(words: &[Option<&str>], t: &mut Tally) {
         t.refuse(Rule::SecretStore, "`gh auth token` prints a credential");
         return;
     }
-    let method_delete = ws
-        .windows(2)
-        .any(|p| matches!(p[0], "-X" | "--method") && p[1].eq_ignore_ascii_case("delete"))
-        || ws.iter().any(|w| {
-            w.strip_prefix("--method=")
-                .or_else(|| w.strip_prefix("-X"))
-                .is_some_and(|m| m.eq_ignore_ascii_case("delete"))
-        });
     let destructive = match pair {
         (_, "delete")
         | ("release", "create" | "upload" | "edit")
         | ("repo", "archive" | "rename" | "transfer")
         | ("secret" | "variable", "set" | "remove") => true,
         ("repo", "edit") => ws.iter().any(|w| w.starts_with("--visibility")),
-        ("api", _) => method_delete,
+        ("api", _) => api_writes(words),
         _ => false,
     };
     if destructive {
@@ -861,4 +825,121 @@ fn gh(words: &[Option<&str>], t: &mut Tally) {
     } else {
         t.raise(Outward, "`gh` reaches GitHub");
     }
+}
+
+/// `git push`: outward only as one plain branch push. A force of any kind but the create-only
+/// lease, a delete, a mirror, every branch or tag at once, a tag or a ref outside `refs/heads/`, a
+/// branch pushed onto another name, more than one refspec, a helper program or a push option on
+/// the remote: destructive. An option it does not know is destructive too, so a word only ever
+/// raises the class.
+fn push(words: &[&str], t: &mut Tally) {
+    const QUIET: &[&str] = &[
+        "-u",
+        "--set-upstream",
+        "-q",
+        "--quiet",
+        "-v",
+        "--verbose",
+        "--progress",
+        "--no-progress",
+        "--porcelain",
+        "-n",
+        "--dry-run",
+        "--atomic",
+        "--no-verify",
+    ];
+    let mut why: Option<String> = None;
+    let mut positional = Vec::new();
+    for w in words {
+        if let Some(lease) = w.strip_prefix("--force-with-lease=") {
+            // `<ref>:` with nothing expected: the ref must not exist, so nothing is overwritten.
+            let create_only = lease
+                .strip_suffix(':')
+                .is_some_and(|r| r.starts_with("refs/heads/") && !r.contains(':'));
+            if !create_only {
+                why.get_or_insert_with(|| format!("`{w}` may overwrite a branch"));
+            }
+        } else if let Some(flags) = w.strip_prefix('-') {
+            let short_quiet = !flags.starts_with('-')
+                && !flags.is_empty()
+                && flags.chars().all(|c| matches!(c, 'u' | 'q' | 'v' | 'n'));
+            if !QUIET.contains(w) && !short_quiet {
+                why.get_or_insert_with(|| {
+                    format!("`git push {w}` forces, deletes, mirrors or reaches past a branch")
+                });
+            }
+        } else {
+            positional.push(*w);
+        }
+    }
+    let refspecs = positional.get(1..).unwrap_or_default();
+    if refspecs.len() > 1 {
+        why.get_or_insert_with(|| "a push of more than one refspec".to_owned());
+    }
+    if let Some(spec) = refspecs.first()
+        && let Some(reason) = refspec(spec)
+    {
+        why.get_or_insert(reason);
+    }
+    match why {
+        Some(reason) => t.raise(Destructive, reason),
+        None => t.raise(Outward, "`git push` leaves the machine"),
+    }
+}
+
+/// Why one push refspec is more than a plain branch push, if it is.
+fn refspec(spec: &str) -> Option<String> {
+    let plain = |r: &str| {
+        !r.is_empty() && !r.contains(['*', '+', ':', '^', '~', '?', '[', '\\']) && !r.contains("..")
+    };
+    let (src, dst) = match spec.split_once(':') {
+        Some((src, dst)) => (src, Some(dst)),
+        None => (spec, None),
+    };
+    let src_ok =
+        plain(src) && (!src.starts_with("refs/") || src.starts_with("refs/heads/")) && src != "tag";
+    // A destination is the source's own branch, or any branch for `HEAD`: never another name.
+    let dst_ok = dst.is_none_or(|d| {
+        let heads = d.strip_prefix("refs/heads/");
+        plain(d)
+            && (d == src
+                || heads == Some(src)
+                || (src == "HEAD" && heads.is_some_and(|b| !b.is_empty())))
+    });
+    (!src_ok || !dst_ok).then(|| {
+        format!("`{spec}` forces, deletes, renames or reaches a tag or a ref outside the branches")
+    })
+}
+
+/// `gh api`: only a plain GET reads. Any other method, a field or an input body (which make it a
+/// POST), or GraphQL (a mutation cannot be told from a query by its words) writes on GitHub.
+fn api_writes(words: &[Option<&str>]) -> bool {
+    let mut i = 0;
+    while i < words.len() {
+        let Some(w) = words[i] else {
+            i += 1;
+            continue;
+        };
+        // A method known only at run time is not a GET; a flag with nothing after it yet (a
+        // prefix of the arguments) names none.
+        let method = if matches!(w, "-X" | "--method") {
+            i += 1;
+            words.get(i).map(|m| m.unwrap_or("?"))
+        } else {
+            w.strip_prefix("--method=")
+                .or_else(|| w.strip_prefix("-X").filter(|m| !m.is_empty()))
+        };
+        if method.is_some_and(|m| !m.eq_ignore_ascii_case("get")) {
+            return true;
+        }
+        let field = ["-f", "-F", "--field", "--raw-field", "--input"]
+            .iter()
+            .any(|f| w == *f || w.starts_with(&format!("{f}=")))
+            || ((w.starts_with("-f") || w.starts_with("-F")) && !w.starts_with("--"));
+        if field || w == "graphql" {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
