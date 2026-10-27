@@ -281,7 +281,8 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
   deserialisation, process execution, path handling, network input, dependency manifests), the
   gate's verdict reads `PASS (challenge pending)` and the harness opens the challenge itself,
   from a reserved share of the session envelope: one commission for each Dark Elf speciality
-  whose surfaces the written paths touch, and only those ([routing](#-dark-elf--the-adversary)).
+  whose surfaces the written paths touch, and the generalist when they touch two or more — only
+  those ([routing](#-dark-elf--the-adversary)).
   Rimuru cannot skip it, nor choose who answers.
 - **Holds** the session's budget envelope and carves each commission's slice from it.
 - **Turn.** Read the ask → if ambiguous, ask the human → plan deck → dispatch (in parallel when
@@ -609,13 +610,28 @@ the race's; the speciality says what it hunts.
 | `dark-elf-web` | servers, `packages/protocol`, HTTP and auth in a user's world | a proof-of-concept on loopback | loopback tests |
 | `dark-elf-law` | `log.md`, gate verdicts, envelopes, caps, retries, background work | a proof-of-concept test, a journal check | read-only |
 
-The plain **`dark-elf`** is the generalist. It is routed no landing: it writes the threat model at
-each Orc's birth, and reviews the attack chains that cross surfaces — a weakness on one speciality's
-ground that only becomes an attack through another's.
+The plain **`dark-elf`** is the generalist. It owns no surface and no class: it writes the threat
+model at each Orc's birth, and reviews the attack chains that cross surfaces — a weakness on one
+speciality's ground that only becomes an attack through another's — so it is routed exactly the
+landings that touch two specialities' surfaces or more.
+
+The compiled surfaces are path globs (`*` inside one segment, `**` across any number); a world adds
+its own in a Dark Elf's doc, as a `Surfaces` field of paths ([fields](09-ontology.md)). The classes
+are the playbooks' headings, each owned once:
+
+| Speciality | Compiled surfaces | Attack classes |
+|---|---|---|
+| `dark-elf-harness` | `crates/*sandbox*/**`, `crates/mnemorph-tools/**`, `crates/mnemorph-tui/**`, `crates/mnemorph-loop/src/gate.rs`, `crates/mnemorph-config/src/runner.rs`, `crates/mnemorph-config/src/outward.rs` | sandbox-escape, toctou, path-traversal, command-injection, approval-binding, terminal-escape, memory-safety |
+| `dark-elf-agent` | `crates/mnemorph-wire/**`, `crates/mnemorph-provider/**`, `crates/mnemorph-memory/**`, `crates/mnemorph-loop/src/{commission,run,sequence}.rs`, `crates/mnemorph-world/src/minds.rs` | prompt-injection, tool-argument-injection, wire-forgery, frame-confusion, mcp-identity, memory-poisoning |
+| `dark-elf-supply` | `**/Cargo.toml`, `**/Cargo.lock`, `**/package.json`, `**/pnpm-lock.yaml`, `**/package-lock.json`, `**/yarn.lock`, `**/go.mod`, `**/go.sum`, `**/Dockerfile`, `**/*.Dockerfile`, `.github/workflows/**`, `.github/actions/**`, `.cargo/**`, `deny.toml`, `rust-toolchain.toml`, `pnpm-workspace.yaml` | known-vulnerability, dependency-confusion, workflow-injection, hook-laundering, release-integrity, container-image |
+| `dark-elf-secrets` | `crates/mnemorph-config/**`, `crates/mnemorph-ledger/src/journal.rs`, `crates/mnemorph-loop/src/beats.rs`, `**/.env`, `**/.env.*`, `**/*.pem`, `**/*.key`, `**/*credential*`, `**/*secret*` | secret-exposure, credential-grant, redaction-gap, data-isolation, weak-crypto |
+| `dark-elf-web` | `crates/mnemorph-server/**`, `crates/mnemorphd/**`, `packages/protocol/**`, `packages/board/**`, `packages/sdk/**` | auth-bypass, cross-site-request, client-injection, request-forgery, unsafe-deserialisation, cloud-identity |
+| `dark-elf-law` | `crates/mnemorph-races/**`, `docs/02-races.md`, `**/log.md`, `crates/mnemorph-ledger/src/{envelope,caps}.rs`, `crates/mnemorph-loop/src/budget.rs`, `crates/mnemorph-provider/src/retry.rs`, `crates/mnemorph-world/src/verify.rs` | resource-exhaustion, unbounded-delegation, detached-work, ledger-integrity, phantom-effect |
 
 **Routing.** The harness routes each landing at the gate — `route(written paths) → specialities` —
-and commissions only the specialities whose surfaces those paths touch: a landing on two surfaces
-opens two bodies, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
+and commissions only the specialities whose surfaces those paths touch, in the table's order, and
+the generalist after them when there are two or more: a landing on two surfaces opens two bodies
+and the generalist, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
 The landing's `PASS (challenge pending)` clears only when every routed speciality has filed a
 valid coverage ledger for it; a speciality that files none, or one that does not validate, leaves
 the challenge pending, and a verified finding from any of them goes the way of every finding.

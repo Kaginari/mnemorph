@@ -329,3 +329,89 @@ fn a_kijin_name_matches_its_race_and_its_directory() {
         );
     }
 }
+
+/// A Dark Elf's speciality is read from its name, so only a Dark Elf — an Arch Dark Elf too —
+/// bears a `dark-elf` name; and only a Dark Elf names Surfaces.
+#[test]
+fn a_dark_elf_name_matches_its_race() {
+    let w = World::new("dark-elf-names");
+    w.doc(
+        "dark-elf",
+        "agent",
+        "# dark-elf-agent\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "arch-dark-elf",
+        "supply",
+        "# dark-elf-supply\n\n- **Race:** arch-dark-elf\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "dark-elf",
+        "general",
+        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "orc",
+        "web",
+        "# dark-elf-web\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
+    );
+    w.doc(
+        "kijin",
+        "scout",
+        "# kijin-scout\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "elf",
+        "dark",
+        "# dark-elf\n\n- **Race:** high-elf\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "slime",
+        "x",
+        "# slime-x\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Surfaces:** api/\n",
+    );
+    let r = Roster::load(&w.0);
+    for name in ["dark-elf-agent", "dark-elf-supply", "kijin-scout"] {
+        assert!(r.creatures.contains_key(name), "{name}: {:?}", r.problems);
+    }
+    assert!(!r.creatures.contains_key("dark-elf-web"));
+    assert!(!r.creatures.contains_key("slime-x"));
+    for want in [
+        "`dark-elf-web` is a dark elf's name, but the doc's race is orc",
+        "`dark-elf` is a dark elf's name, but the doc's race is high-elf",
+        "only a dark elf names Surfaces; a slime is routed no landing",
+    ] {
+        assert!(
+            r.problems.iter().any(|p| p.contains(want)),
+            "{want}: {:?}",
+            r.problems
+        );
+    }
+}
+
+/// A world adds a speciality's surfaces in its Dark Elf's doc; routing reads them beside the
+/// compiled ones, and two specialities touched bring the generalist.
+#[test]
+fn a_dark_elf_doc_adds_surfaces_to_the_route() {
+    use mnemorph_races::Speciality::{General, Supply, Web};
+    let w = World::new("dark-elf-surfaces");
+    w.doc(
+        "dark-elf",
+        "web",
+        "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** api/ ./auth.py\n",
+    );
+    w.doc(
+        "dark-elf",
+        "spare",
+        "# dark-elf-web-2\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** lib/\n",
+    );
+    let r = Roster::load(&w.0);
+    assert_eq!(r.creatures["dark-elf-web"].surfaces, ["api/", "auth.py"]);
+    assert_eq!(r.route(&["api/login.rs"]), [Web]);
+    assert_eq!(
+        r.route(&["./auth.py", "Cargo.lock"]),
+        [Supply, Web, General]
+    );
+    // A name that holds no speciality is routed nothing, whatever its doc declares.
+    assert_eq!(r.route(&["lib/x.rs", "src/main.rs"]), Vec::new());
+}

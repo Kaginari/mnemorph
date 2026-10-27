@@ -5701,3 +5701,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   fingerprint as ten-hex FNV-1a over normalised fields, `plan:` as `nv`'s last field.
 - **Learned:** the book is built from `docs/` alone: a relative link above it is a dead link to
   VitePress, so a repository-root file is linked by its GitHub URL.
+
+---
+
+### [2026-10-27T21:19:40+01:00] rimuru — M10 PR 2: the Dark Elf's specialities and routing in the race law
+- **Done:** `mnemorph_races::Speciality` (six hunters and the `dark-elf` generalist), `of` by
+  exact name; 35 attack classes, each owned by one speciality (a law test lists the table);
+  compiled surfaces as path globs; `route`/`route_with` — the hunters a written path touches,
+  the generalist added when two or more are. The world: a Dark Elf's `Surfaces` field adds
+  doc-declared surfaces (`Roster::route`); the roster refuses a `dark-elf` name on a race whose
+  base is not Dark Elf (an Arch Dark Elf's is fine), and `Surfaces` on any other race. 02 gains
+  the surface and class table; 09 the field.
+- **Learned:** the generalist is routed by the cross-surface rule alone, so the book's "routed no
+  landing" became "routed exactly the landings that touch two specialities or more".
