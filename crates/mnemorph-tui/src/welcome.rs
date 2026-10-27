@@ -6,8 +6,10 @@
 //! The wordmark is drawn in text alone — `█ ▀ ▄` and spaces, each cell one foreground colour on
 //! the card's face — so it is as sharp as the font in every terminal, and scrolls with the
 //! transcript like any line. Pictures are the sidebar's alone. Across its width the letters run
-//! the races' colours: Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal. Where
-//! the wordmark does not fit the card, a one-line `◈ MNEMORPH` in the same gradient stands in.
+//! the races' colours: Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal. The
+//! wordmark is 62 cells, so it shows on a card 68 wide or more (its frame takes 6): a terminal of
+//! 72 columns with the sidebar folded, 108 with it open. On a narrower card a one-line
+//! `◈ MNEMORPH` in the same gradient stands in.
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -397,7 +399,10 @@ mod tests {
         assert!(wordmark(&t, wordmark_width() - 1).is_none());
         let mut m = model(Variant::Dark);
         let first = |w: usize| crate::kit::text::plain(&card(&m, w)[1]);
-        // Under 60 columns: one line, in the gradient.
+        // A card narrower than the wordmark and its frame: one line, in the gradient.
+        assert_eq!((wordmark_width(), Slab::inner(68)), (62, 62));
+        assert!(first(67).contains("◈ MNEMORPH"), "{}", first(67));
+        assert!(first(68).contains(&wordmark_rows()[0]), "{}", first(68));
         assert!(first(58).contains("◈ MNEMORPH"), "{}", first(58));
         assert!(first(40).contains("◈ MNEMORPH"));
         for w in [80, 120, 200] {
@@ -408,6 +413,22 @@ mod tests {
         for w in [80, 120, 200] {
             let (text, _) = screen(&mut m, w, 60);
             assert!(text.contains(&wordmark_rows()[0]), "{w} columns: {text}");
+        }
+    }
+
+    #[test]
+    fn the_wordmark_shows_from_72_columns_folded_and_108_open() {
+        for (open, narrow, wide) in [(false, 71u16, 72u16), (true, 107, 108)] {
+            let mut m = model(Variant::Dark);
+            m.sidebar.open = open;
+            let (text, _) = screen(&mut m, narrow, 60);
+            assert!(!text.contains(&wordmark_rows()[0]), "{narrow}: {text}");
+            assert!(
+                text.lines().filter(|l| l.contains("◈ MNEMORPH")).count() >= 2,
+                "{narrow}: the header's mark and the card's line: {text}"
+            );
+            let (text, _) = screen(&mut m, wide, 60);
+            assert!(text.contains(&wordmark_rows()[0]), "{wide}: {text}");
         }
     }
 

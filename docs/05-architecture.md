@@ -274,8 +274,9 @@ small font in `welcome.rs`: full and half blocks (`█ ▀ ▄`) and spaces only
 foreground colour on the card's face, so it is as crisp as the terminal's font everywhere and
 scrolls with the transcript with nothing to withdraw. Its columns run the races' gradient —
 Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal — made readable on the light
-page as every race hue is. Where the card is narrower than the wordmark (below about 60 columns),
-one line, `◈ MNEMORPH`, in the same gradient, stands in.
+page as every race hue is. The wordmark is 62 cells and the card's frame takes 6, so it shows on a
+card 68 cells wide or more — a terminal of 72 columns or more with the sidebar folded, 108 or more
+with it open; on a narrower card one line, `◈ MNEMORPH`, in the same gradient, stands in.
 (A Kitty-only animation would upload each frame once under its own id and switch placements by
 id; `pictures::Art` is where it would be named.)
 
@@ -332,8 +333,8 @@ together become one frame, and frames come at most 30 a second. An idle UI wakes
 The wheel moves the scroll on the same spring as the keys, and the loop ticks only while it moves.
 A test draws a 2,000-message session with the sidebar open — every file it changed, forty
 bodies, the activity strip drawn and the portrait playing — and holds every warm frame under the
-33 ms budget in a debug build; the cold first frame, which fills the layout caches once, keeps a
-cold-start margin (under 250 ms).
+33 ms budget in a debug build; the cold first frame and the first after a resize, which fill the
+layout caches once, keep a cold-start margin (under 250 ms).
 
 The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
 ecosystem:

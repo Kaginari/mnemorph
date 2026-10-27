@@ -5169,3 +5169,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a portrait in half blocks cannot be made sharp; text glyphs in one colour a cell
   can. The header's mark already reads `◈ MNEMORPH`: a test of the card's fallback reads the card,
   not the screen.
+
+---
+
+### [2026-10-27T17:30:00+01:00] rimuru — #232, reviewed: the wordmark's real threshold; the resize frame's cold-start margin
+- **Done:** the docs and welcome.rs state the rule — the 62-cell wordmark shows on a card 68 wide
+  or more: a terminal of 72 columns folded, 108 with the sidebar open; perf's first frame after a
+  resize keeps the 250 ms cold-start margin, warm, streaming and paging frames still under 33 ms.
+- **Tests:** `the_wordmark_shows_from_72_columns_folded_and_108_open` (71/72, 107/108); the
+  fallback test pins 67/68 on the card.
