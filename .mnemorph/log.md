@@ -5704,6 +5704,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T21:19:40+01:00] rimuru — M10 PR 2: the Dark Elf's specialities and routing in the race law
+- **Done:** `mnemorph_races::Speciality` (six hunters and the `dark-elf` generalist), `of` by
+  exact name; 35 attack classes, each owned by one speciality (a law test lists the table);
+  compiled surfaces as path globs; `route`/`route_with` — the hunters a written path touches,
+  the generalist added when two or more are. The world: a Dark Elf's `Surfaces` field adds
+  doc-declared surfaces (`Roster::route`); the roster refuses a `dark-elf` name on a race whose
+  base is not Dark Elf (an Arch Dark Elf's is fine), and `Surfaces` on any other race. 02 gains
+  the surface and class table; 09 the field.
+- **Learned:** the generalist is routed by the cross-surface rule alone, so the book's "routed no
+  landing" became "routed exactly the landings that touch two specialities or more".
+
+---
+
 ### [2026-10-27T21:20:52+01:00] rimuru — Dark Elf PR 3: the wire's finding fields
 - **Done:** `Finding.rec`, emitted and read in the fixed tail order `witness:` then `rec:`;
   a claim ending in either, or in the fence, is fenced, and a claim-less finding fences a tail
@@ -5717,6 +5730,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   PR 10), so there was no line-based link to migrate; journaled ids are read as written.
 - **Learned:** a claim-less finding's `witness:a.rs:3` read as its location — the property test
   over the tail found it on its first run.
+
+---
+
+### [2026-10-27T21:30:18+01:00] rimuru — #246, Fable's review: no dead field, no unrouted law ground
+- **Done:** the generalist is routed a world's declared `Surfaces` (its catch-all); law owns
+  `crates/mnemorph-world/**`, `crates/mnemorph-ledger/**` and the loop's route, session and solo;
+  hook-laundering moves to harness, the classifier's ground; `Roster::route` reads paths through
+  `own::normal`; 02's surface table drops brace globs the matcher never read.
+- **Learned:** a surface table is a list of what a landing can rewrite unseen — the roster and
+  ownership are the law's ground as much as the race crate is.
 
 ---
 

@@ -94,7 +94,7 @@ fn root(speciality: &str, class: &str, file: &str, symbol: &str) -> RootCause {
 fn base() -> RootCause {
     root(
         "dark-elf-agent",
-        "wire-framing",
+        "wire-forgery",
         "src/report.rs",
         "Finding::parse",
     )
@@ -117,16 +117,16 @@ fn proven(r: &RootCause, line: u32) -> Finding {
 
 #[test]
 fn the_fingerprint_is_pinned() {
-    // SHA-256 of `14:dark-elf-agent12:wire-framing34:crates/mnemorph-wire/src/report.rs14:Finding::parse`.
+    // SHA-256 of `14:dark-elf-agent12:wire-forgery34:crates/mnemorph-wire/src/report.rs14:Finding::parse`.
     assert_eq!(
         fingerprint(
             "dark-elf-agent",
-            "wire-framing",
+            "wire-forgery",
             "crates/mnemorph-wire/src/report.rs",
             "Finding::parse"
         )
         .as_deref(),
-        Some("5d5cbfde4d")
+        Some("b40756ab8a")
     );
 }
 
@@ -157,19 +157,19 @@ fn the_fingerprint_survives_a_line_shift_and_normalisation() {
     for (speciality, class, file, symbol) in [
         (
             " dark-elf-agent ",
-            "wire-framing",
+            "wire-forgery",
             "./src/report.rs",
             "Finding::parse",
         ),
         (
             "dark-elf-agent",
-            "wire-framing",
+            "wire-forgery",
             "src\\report.rs",
             " Finding::parse",
         ),
         (
             "dark-elf-agent",
-            "wire-framing",
+            "wire-forgery",
             "././src/report.rs",
             "Finding::parse\n",
         ),

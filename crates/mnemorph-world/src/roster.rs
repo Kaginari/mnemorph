@@ -7,9 +7,9 @@ use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
 use std::path::Path;
 
-use mnemorph_races::Race;
+use mnemorph_races::{Race, Speciality};
 
-use crate::doc::{Creature, parse};
+use crate::doc::{Creature, covers, parse};
 
 /// The creatures of a world, by name, and the docs that could not be read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,6 +45,19 @@ fn misnamed_kijin(c: &Creature, seat: &Path) -> Option<String> {
         format!(
             "a kijin's heading is `kijin-` and its directory: `{want}`, not `{}`",
             c.name
+        )
+    })
+}
+
+/// Why a doc's name and race disagree on a Dark Elf speciality, if they do: the speciality is
+/// read from the name (`dark-elf-supply`), so only a Dark Elf, ascended or not, bears a
+/// `dark-elf` name.
+fn misnamed_dark_elf(c: &Creature) -> Option<String> {
+    let named = c.name == "dark-elf" || c.name.starts_with("dark-elf-");
+    (named && c.race.base() != Race::DarkElf).then(|| {
+        format!(
+            "`{}` is a dark elf's name, but the doc's race is {}",
+            c.name, c.race
         )
     })
 }
@@ -98,7 +111,9 @@ impl Roster {
                 text.hash(&mut hasher);
                 match parse(&text, &rel) {
                     Ok(c) => {
-                        if let Some(why) = misnamed_kijin(&c, &seat) {
+                        if let Some(why) =
+                            misnamed_kijin(&c, &seat).or_else(|| misnamed_dark_elf(&c))
+                        {
                             roster.problems.push(format!("{}: {why}", rel.display()));
                         } else if RESERVED.contains(&c.name.as_str()) {
                             roster.problems.push(format!(
@@ -123,6 +138,23 @@ impl Roster {
         }
         roster.fingerprint = hasher.finish();
         roster
+    }
+
+    /// The Dark Elf specialities a landing's written paths are routed to: the compiled surfaces,
+    /// and the Surfaces each living speciality's doc adds ([`mnemorph_races::route_with`]). Each
+    /// path is normalised as ownership reads it (`./`, `//`, `..`, `\\`); one that does not
+    /// normalise is matched as written.
+    #[must_use]
+    pub fn route<P: AsRef<str>>(&self, paths: &[P]) -> Vec<Speciality> {
+        let paths: Vec<String> = paths
+            .iter()
+            .map(|p| crate::own::normal(p.as_ref()).unwrap_or_else(|| p.as_ref().to_owned()))
+            .collect();
+        mnemorph_races::route_with(&paths, |s, path| {
+            self.living()
+                .filter(|c| Speciality::of(&c.name) == Some(s))
+                .any(|c| c.surfaces.iter().any(|claim| covers(claim, path)))
+        })
     }
 
     /// The living creatures: retired ones own nothing and command no one.

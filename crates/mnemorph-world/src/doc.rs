@@ -24,6 +24,9 @@ pub struct Creature {
     pub post: Vec<String>,
     /// An Elf's lane: the paths it plans across. It owns nothing.
     pub lane: Vec<String>,
+    /// A Dark Elf's surfaces beyond its speciality's compiled ones: the paths whose landings it
+    /// is routed. It owns nothing.
+    pub surfaces: Vec<String>,
     /// Its verify lines.
     pub verify: Vec<String>,
     /// The Minds it wears.
@@ -148,6 +151,7 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         domain: Vec::new(),
         post: Vec::new(),
         lane: Vec::new(),
+        surfaces: Vec::new(),
         verify: Vec::new(),
         minds: Vec::new(),
         retired: false,
@@ -168,6 +172,7 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
             "Territory",
             "Domain",
             "Post",
+            "Surfaces",
             "Verify",
             "Minds",
             "Retired",
@@ -191,6 +196,8 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
             c.domain.extend(claims(v, "Domain", seat)?);
         } else if let Some(v) = field(line, "Post") {
             c.post.extend(claims(v, "Post", seat)?);
+        } else if let Some(v) = field(line, "Surfaces") {
+            c.surfaces.extend(claims(v, "Surfaces", seat)?);
         } else if let Some(v) = field(line, "Verify") {
             // A blank verify line judges nothing: it is no verify line.
             let line = v.trim_matches('`').trim();
@@ -209,6 +216,20 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
         }
     }
     c.race = race.ok_or_else(|| format!("{}: the doc has no `Race` field", seat.display()))?;
+    ground(&mut c, territory, seat)?;
+    Ok(c)
+}
+
+/// Settles a creature's ground by its race: Territory is a Slime's zone or an Elf's lane, and
+/// only a Dark Elf names Surfaces.
+fn ground(c: &mut Creature, territory: Vec<String>, seat: &Path) -> Result<(), String> {
+    if !c.surfaces.is_empty() && c.race.base() != Race::DarkElf {
+        return Err(format!(
+            "{}: only a dark elf names Surfaces; a {} is routed no landing",
+            seat.display(),
+            c.race.name()
+        ));
+    }
     // Territory is the zone a Slime writes; for an Elf it is only the lane it plans across.
     let territory = territory.into_iter();
     match c.race.base() {
@@ -224,13 +245,14 @@ pub fn parse(text: &str, seat: &Path) -> Result<Creature, String> {
                     match c.race.base() {
                         Race::Orc => "Domain",
                         Race::Kijin => "Post",
+                        Race::DarkElf => "Surfaces",
                         _ => "nothing: it owns no ground",
                     }
                 ));
             }
         }
     }
-    Ok(c)
+    Ok(())
 }
 
 /// Where a creature's seat directory is, for a doc found at `doc` (`…/README.md`).
