@@ -5865,6 +5865,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T23:11:08+01:00] rimuru — two binaries explained
+- The human chose to keep `mnemorph` and `mnemorphd`. README and docs/05 now say why there are two (a person or script vs a program that is not Rust; upkeep with the server) and which to run for what.
+
+---
+
 ### [2026-10-27T23:12:22+01:00] rimuru — #251, Fable's review: witness strength, located traces, one count per root cause
 - **Done:** `witness-strength` (from high up, a witness the harness re-reads — a test, a scanner's
   output, or a command's captured `output` with its hash; a bare command caps at medium);
