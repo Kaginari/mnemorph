@@ -86,7 +86,7 @@ who said them and on what evidence ([ontology](09-ontology.md)).
 | `@F #<id> <file:line> <claim> [witness:<path>] [rec:<path>]` | one finding; the id lets a later fix, contest or seal point at it. A Dark Elf's id is its root-cause fingerprint, which holds no line, and `rec:` points at its record ([the finding contract](02-races.md#-dark-elf--the-adversary)) |
 | `@V <claim> <evidence>` | a verdict; a parent landing a free territory fact labels it `@V #<new-id> support\|counter\|refines #<id>` or `@V #<new-id> distinct` ([ontology](09-ontology.md#catching-what-nobody-flags)) |
 | `@W <path>` | a path written |
-| `@? <hole>` | something unresolved — never guessed; four grammars are typed: `@CAP <n>: <k> lines cut — full report at <path>`, `contest #<id>: <reason>`, `budget: need ~<n> wt, have <m> wt`, and, from M10, a Dark Elf's `nv #<fingerprint> blocker:<fact> plan:<check>` — a finding that needs validation: no severity, never a finding, never a seal |
+| `@? <hole>` | something unresolved — never guessed; four grammars are typed: `@CAP <n>: <k> lines cut — full report at <path>`, `contest #<id>: <reason>`, `budget: need ~<n> wt, have <m> wt`, and, from M10, a Dark Elf's `nv #<fingerprint> blocker:<fact> plan:<check>` — a finding that needs validation: no severity, never a finding, never a seal; `plan:` is its last field and runs to the line's end |
 | `@U law\|colony <fact>` · `@U territory <about> <key>=<value>` · `@U territory <about> <fact>` · `@U territory <about> !#<fact-id> <reason>` | the unsaid; a territory fact names the path it is about, keyed or free, and may counter another fact by id ([ontology](09-ontology.md#facts-who-said-what)) |
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
@@ -141,12 +141,19 @@ The grammar's readings, all of them:
   is prose, not an order.
 - **An untyped `@U`** whose first word is `law`, `colony` or `territory` reads as typed.
 - **A finding's claim** whose first word would read as an id or a location, or whose last word
-  would read as a witness, is fenced with `—` when emitted and read back as written; its
-  whitespace is folded to single spaces, and an empty id is no id. `Finding::address` gives a
+  would read as a witness or a record, is fenced with `—` when emitted and read back as written;
+  its whitespace is folded to single spaces, and an empty id is no id. `Finding::address` gives a
   finding with no id a stable ten-hex id from its location, claim and witness.
-- **A Dark Elf's finding is never addressed by its line** (M10). Its id is the root-cause fingerprint —
-  the hash of its speciality, attack class, file and symbol — so the same weakness keeps its id
-  across runs and after its line moves, and the later fix that upholds it is linked by that id. A
+- **A finding's tail has a fixed order: `witness:` then `rec:`** (M10). The reader strips the last
+  word first when it opens `rec:`, then the last word left when it opens `witness:`; whatever
+  stays is the claim. A claim that would end in a word opening `witness:` or `rec:` is fenced like
+  any other, so a claim never lends a finding a witness or a record.
+- **A Dark Elf's finding is never addressed by its line** (M10). Its id is the root-cause
+  fingerprint: ten hex digits, the first ten of the 64-bit FNV-1a, as `address` takes them, of
+  `<speciality>|<class>|<file>|<symbol>` — the speciality's full name, the playbook's class id, the
+  file as a repository-relative path with `/` separators and no `./`, and the symbol as the code
+  names it, each trimmed and its whitespace folded to single spaces. So the same weakness keeps its
+  id across runs and after its line moves, and the later fix that upholds it is linked by that id. A
   `@F` from a Dark Elf with no fingerprint, no witness or no record is read back as `@?`, and an
   `@? nv` that carries a severity is read as a hole of its own.
 - **`@CAP 0`** is refused like any bad value: it never means "no ceiling".

@@ -5689,3 +5689,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   holds every race to the law's number.
 - **Learned:** the codex left two rules ahead of the code — `rises` for an Oni does not read
   `envelope_corrections`, and `meter` ranks every race on reports — both M11's to align.
+
+---
+
+### [2026-10-27T21:07:25+01:00] rimuru — #245, Fable's review: the codex made true in code, the wire's finding tail fixed
+- **Done:** `rises` for an Oni needs zero envelope corrections; `meter` ranks a Dark Elf on
+  findings and a Kijin on outward acts (law tests for both; mnemorph-races at 100% regions). 02:
+  a `dark-elf-` name refused on a race whose base is not Dark Elf; a landing's challenge clears
+  when every routed speciality filed a valid ledger; playbooks each ≤ 8 KB; probation's fall from
+  M11. 04: the tail's order `witness:` then `rec:`, a claim ending in either fenced, the
+  fingerprint as ten-hex FNV-1a over normalised fields, `plan:` as `nv`'s last field.
+- **Learned:** the book is built from `docs/` alone: a relative link above it is a dead link to
+  VitePress, so a repository-root file is linked by its GitHub URL.

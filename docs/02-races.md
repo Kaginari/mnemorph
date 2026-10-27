@@ -597,7 +597,7 @@ dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru. It
 creature, each with its surfaces and its attack classes compiled into the law
 (`mnemorph_races::Speciality`). A speciality is read from the name by exact match
 (`Speciality::of`): `dark-elf-agent-2` holds none, and is routed nothing; the roster refuses a
-`dark-elf-` name on another race. The race stays `DarkElf`: the shelf, the soil and the score are
+`dark-elf-` name on a race whose base is not Dark Elf. The race stays `DarkElf`: the shelf, the soil and the score are
 the race's; the speciality says what it hunts.
 
 | Speciality | Surfaces it is routed (compiled; a world adds its own in its docs) | Witness | Runs (offline) |
@@ -616,13 +616,16 @@ ground that only becomes an attack through another's.
 **Routing.** The harness routes each landing at the gate — `route(written paths) → specialities` —
 and commissions only the specialities whose surfaces those paths touch: a landing on two surfaces
 opens two bodies, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
+The landing's `PASS (challenge pending)` clears only when every routed speciality has filed a
+valid coverage ledger for it; a speciality that files none, or one that does not validate, leaves
+the challenge pending, and a verified finding from any of them goes the way of every finding.
 Each attack class has exactly one owning speciality, so two specialities never hunt the same
 class on the same paths.
 
 **Playbooks.** Each speciality's attack classes are a **playbook compiled into the law**
 (`mnemorph-races`), not a Mind: a Mind is writable inside the world it would audit. Per class it
 gives the invariant, where to look, the witness that proves a break, and what is not a finding.
-Only the routed speciality's playbook loads, at most 8 KB of it. A world adds its own surfaces in
+Only the routed speciality's playbook loads, each ≤ 8 KB. A world adds its own surfaces in
 its docs; it never removes a class. The playbooks adapt Cloudflare's security-audit-skill (MIT;
 [notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 
@@ -732,7 +735,7 @@ probation; if it does not recover, it falls back to its base race. Nothing is er
 and the doc carry over both ways.
 
 **Technical detail.** From M11, bars are evaluated after every report fold over the value
-ledger's 28-day window; the bars themselves are compiled already (`rises`, `falls`, `recovers`).
+ledger's 28-day window; the bars themselves are compiled (`rises`, `falls`, `recovers`).
 The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
 
 | Form | From | Rises when | Grants | Falls when |
@@ -750,12 +753,14 @@ How a fall is read (`mnemorph-races`, `falls`):
 - **A rate below its fall bar starts probation**, and only on a full recent record — ten reports,
   or ten findings for an Arch Dark Elf. The fall bars sit well under the rise bars, so a body
   that just rose never reads as falling.
-- **Probation ends at the fall bar.** Over at least five reports since it began (findings for an
-  Arch Dark Elf), a rate back at or above its fall bar, with no event, recovers the form; five
-  reports without that, and the creature falls. Recovering to the bar it fell at ends probation;
+- **Probation ends at the fall bar** (`recovers`). Over at least five reports since it began
+  (findings for an Arch Dark Elf), a rate back at or above its fall bar, with no event, recovers
+  the form; from M11, the fold that reads it ends probation with a fall once five have passed
+  without that. Recovering to the bar it fell at ends probation;
   rising again after a fall still needs the rise bar.
-- **A meter is ranked on the race's own unit**: reports, findings for a Dark Elf, outward acts for
-  a Kijin. Fewer than five of them: the meter is shown, never ranked.
+- **A meter is ranked on the race's own unit** (`meter`, by base race): reports, findings for a
+  Dark Elf and an Arch Dark Elf, outward acts for a Kijin and an Oni. Fewer than five of them:
+  the meter is shown, never ranked.
 - **Every meter has an ok bar and a warn bar**: warn ≥ 70 for the Orc and the Kijin, whose acts
   reach the gate or the outside, and warn ≥ 50 for every other race; below warn it reads low.
 

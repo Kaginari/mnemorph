@@ -48,7 +48,8 @@ pub struct Signals {
     pub precision: f64,
 }
 
-/// Fewer reports than this: shown, never ranked.
+/// Fewer than this of the race's own unit (reports; findings for a Dark Elf, outward acts for a
+/// Kijin): shown, never ranked.
 const MIN_RECORD: u32 = 5;
 /// Reports a rise needs; the same count of findings for a Dark Elf.
 const RISE_RECORD: u32 = 20;
@@ -116,7 +117,12 @@ pub fn meter(race: Race, s: &Signals) -> Meter {
         Race::DarkElf => ("Upheld", s.upheld_rate, 80.0, 50.0),
         _ => ("Asks done", s.ask_done_rate, 80.0, 50.0),
     };
-    let band = if s.reports < MIN_RECORD {
+    let record = match race.base() {
+        Race::DarkElf => s.findings,
+        Race::Kijin => s.outward_acts,
+        _ => s.reports,
+    };
+    let band = if record < MIN_RECORD {
         Band::Unranked
     } else if value >= ok {
         Band::Ok
@@ -144,7 +150,10 @@ pub fn rises(risen: Race, s: &Signals) -> bool {
                 && s.hole_rate <= 5.0
         }
         Race::Oni => {
-            s.outward_acts >= RISE_OUTWARD && s.outward_clean_rate >= 95.0 && s.rollbacks == 0
+            s.outward_acts >= RISE_OUTWARD
+                && s.outward_clean_rate >= 95.0
+                && s.rollbacks == 0
+                && s.envelope_corrections == 0
         }
         Race::ArchDarkElf => {
             s.findings >= RISE_RECORD && s.upheld_rate >= 80.0 && s.precision >= 85.0
