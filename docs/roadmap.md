@@ -344,8 +344,9 @@ In order:
 11. the law audit's checks ([#104](https://github.com/Kaginari/mnemorph/issues/104)) and the
     gold-set hooks ([#106](https://github.com/Kaginari/mnemorph/issues/106))
 
-Built: rungs 1 to 3 — the specialities, each one's attack classes compiled with its surfaces,
-`route`, and the wire's finding fields.
+Built: rungs 1 to 4 — the specialities, each one's attack classes compiled with its surfaces,
+`route`, the wire's finding fields, and the finding record with its validator
+(`mnemorph-proving`).
 
 **Exit:** on a seeded vulnerable fixture repo, the routed specialities find the planted flaws
 with witnesses, each verified by a fresh verifier, seal, and the seal lifts only when the fix

@@ -11,9 +11,10 @@ covers, as its licence asks.
 - **What Mnemorph adapts:** the Dark Elf's audit discipline — its playbooks of attack classes,
   the finding contract (a line-free root-cause fingerprint, the "needs validation" verdict,
   severity capped at demonstrated impact), the coverage ledger and independent verification
-  ([races](docs/02-races.md#-dark-elf--the-adversary)). The playbooks are rewritten in
-  Mnemorph's own words and format, not copied; a playbook taken from a later upstream commit
-  moves the pin above.
+  ([races](docs/02-races.md#-dark-elf--the-adversary)), and the rules of its
+  `validate-findings.cjs` that `crates/mnemorph-proving` holds a finding record to. The playbooks
+  and the validator are rewritten in Mnemorph's own words, format and language, not copied;
+  material taken from a later upstream commit moves the pin above.
 
 ```text
 MIT License

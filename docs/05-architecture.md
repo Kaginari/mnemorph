@@ -32,6 +32,7 @@ flowchart TB
       LEDGER["ledger<br/>usage · value · budgets"]
       MEM["memory<br/>tiers · recall · write rule"]
       CONFIG["config<br/>layers · origins · loosening"]
+      PROVING["proving<br/>Dark Elf records · validator"]
       SERVER --> LOOP
       D --> SERVER
       TUI --> SERVER
@@ -51,13 +52,15 @@ flowchart TB
       WORLD --> LEDGER
       WORLD --> MEM
       MEM --> LEDGER
+      PROVING --> WIRE
+      PROVING --> RACES
     end
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
     class BOARD,SDK,PROTO ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class TUI,D,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
+    class TUI,D,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG,PROVING rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SANDBOX gate
     style ts fill:#fdf2f8,stroke:#db2777
@@ -84,6 +87,7 @@ mnemorph/
 │  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
 │  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
+│  ├─ mnemorph-proving    Dark Elf finding records, the validator     (reads the tree)
 │  ├─ mnemorph-provider   streaming clients, retry ladder, caching,   (network)
 │  │                      System One decisions with an LLM fallback
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)

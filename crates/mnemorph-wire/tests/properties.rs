@@ -255,7 +255,7 @@ proptest! {
         prop_assert_eq!(text.split(BREAKS).count(), 3, "@S, one @?, @E");
         let read = Report::parse(&text).expect("on the wire");
         prop_assert!(read.findings.is_empty());
-        let back = read.dark_elf(|_| None);
+        let back = read.dark_elf(|_| Err("no record".into()));
         prop_assert!(back.proven().is_empty());
         let back = back.report;
         prop_assert_eq!(&back.holes, &vec![Hole::parse(&norm(&nv.to_string()))]);
