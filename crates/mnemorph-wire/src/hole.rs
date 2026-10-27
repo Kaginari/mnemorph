@@ -1,4 +1,4 @@
-//! `@?` holes: what a body could not settle. Three grammars ride holes; anything else is prose.
+//! `@?` holes: what a body could not settle. Four grammars ride holes; anything else is prose.
 
 use std::fmt;
 
@@ -28,6 +28,16 @@ pub enum Hole {
         /// Weighted tokens left.
         have: u64,
     },
+    /// `nv #<fingerprint> blocker:<fact> plan:<check>`: a Dark Elf's finding that needs
+    /// validation — no severity, never a finding, never a seal.
+    Nv {
+        /// The root-cause fingerprint, without `#`: ten lowercase hex digits.
+        fingerprint: String,
+        /// The exact fact that blocks the proof; it ends at its first word opening `plan:`.
+        blocker: String,
+        /// The check that would settle it; the last field, it runs to the line's end.
+        plan: String,
+    },
     /// Anything else, in the body's own words.
     Other(String),
 }
@@ -39,6 +49,7 @@ impl Hole {
         Self::cut(text)
             .or_else(|| Self::contest(text))
             .or_else(|| Self::budget(text))
+            .or_else(|| Self::nv(text))
             .unwrap_or_else(|| Hole::Other(text.to_owned()))
     }
 
@@ -73,6 +84,31 @@ impl Hole {
         })
     }
 
+    /// The exact grammar, nothing between its fields: a severity anywhere before `plan:` makes
+    /// the line a hole of its own.
+    fn nv(text: &str) -> Option<Hole> {
+        let rest = text.strip_prefix("nv #")?;
+        let (fingerprint, rest) = rest.split_once(' ')?;
+        let rest = rest.strip_prefix("blocker:")?;
+        let at = plan_at(rest)?;
+        let (blocker, plan) = (rest[..at].trim(), rest[at + "plan:".len()..].trim());
+        let fingerprint_ok = fingerprint.len() == 10
+            && fingerprint
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        let severity = blocker
+            .split_whitespace()
+            .any(|w| w.to_ascii_lowercase().starts_with("severity:"));
+        if !fingerprint_ok || blocker.is_empty() || plan.is_empty() || severity {
+            return None;
+        }
+        Some(Hole::Nv {
+            fingerprint: fingerprint.to_owned(),
+            blocker: blocker.to_owned(),
+            plan: plan.to_owned(),
+        })
+    }
+
     fn budget(text: &str) -> Option<Hole> {
         let rest = text.strip_prefix("budget: need ~")?;
         let (need, rest) = rest.split_once(" wt, have ")?;
@@ -97,9 +133,22 @@ impl fmt::Display for Hole {
             }
             Hole::Contest { finding, reason } => write!(f, "contest #{finding}: {reason}"),
             Hole::Budget { need, have } => write!(f, "budget: need ~{need} wt, have {have} wt"),
+            Hole::Nv {
+                fingerprint,
+                blocker,
+                plan,
+            } => write!(f, "nv #{fingerprint} blocker:{blocker} plan:{plan}"),
             Hole::Other(text) => f.write_str(text),
         }
     }
+}
+
+/// Where the first whitespace-led word opening `plan:` starts in `text`, at its `p`.
+fn plan_at(text: &str) -> Option<usize> {
+    text.char_indices()
+        .filter(|&(i, c)| c.is_whitespace() && text[i + c.len_utf8()..].starts_with("plan:"))
+        .map(|(i, c)| i + c.len_utf8())
+        .next()
 }
 
 #[cfg(test)]

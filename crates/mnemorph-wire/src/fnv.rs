@@ -1,5 +1,6 @@
-//! FNV-1a, 64 bits: the content address the wire uses for drafts and courier envelopes. Small
-//! enough to own, so the wire stays free of dependencies.
+//! FNV-1a, 64 bits: the content address the wire uses for drafts, courier envelopes and finding
+//! addresses. Small enough to own; only a Dark Elf's fingerprint, which a body could try to
+//! collide, takes SHA-256.
 
 const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const PRIME: u64 = 0x0000_0100_0000_01b3;
