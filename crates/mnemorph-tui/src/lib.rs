@@ -24,5 +24,6 @@ pub mod safe;
 pub mod sidebar;
 pub mod theme;
 pub mod transcript;
+pub mod tty_gate;
 pub mod view;
 pub mod welcome;

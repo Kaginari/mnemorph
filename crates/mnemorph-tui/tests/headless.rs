@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use mnemorph_loop::open::{Bound, open_with};
 use mnemorph_loop::{Config, Paths, ScriptedModel};
-use mnemorph_tui::headless;
+use mnemorph_tui::headless::{self, Options};
 use serde_json::{Value, json};
 
 struct World(PathBuf);
@@ -34,6 +34,16 @@ impl World {
 
     /// Run `ask` with the model's `replies`: the exit code, stdout and stderr.
     fn run(&self, model: ScriptedModel, json: bool) -> (u8, String, String) {
+        self.run_with(model, Options { json, escape: true }, |_| {})
+    }
+
+    /// As [`World::run`], printing as `options` says; `before` is handed the run's interrupt.
+    fn run_with(
+        &self,
+        model: ScriptedModel,
+        options: Options,
+        before: impl FnOnce(Arc<mnemorph_loop::Interrupt>),
+    ) -> (u8, String, String) {
         let model = Arc::new(model);
         let config =
             Config::load(&Paths::with_global(self.0.join("no-global.toml"), &self.0)).unwrap();
@@ -52,11 +62,12 @@ impl World {
             |_| None,
         )
         .unwrap();
+        before(opened.session.interrupt());
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let code = headless::run(
             opened,
             "make out.txt say fixed",
-            json,
+            options,
             (tx, rx),
             &mut out,
             &mut err,
@@ -209,4 +220,55 @@ fn a_gated_act_is_denied_and_said_escaped() {
         (0, "I could not remove it.\n"),
         "{err}"
     );
+}
+
+/// The answer on stdout: escaped as the app escapes it on a terminal, as written when piped.
+#[test]
+fn the_answer_is_escaped_on_a_terminal_and_raw_when_piped() {
+    let answer = "col\tumn \u{1b}[31mred\u{1b}[0m done";
+    for (escape, want) in [
+        (true, "col umn red done\n"),
+        (false, "col\tumn \u{1b}[31mred\u{1b}[0m done\n"),
+    ] {
+        let w = World::new(if escape { "tty-out" } else { "piped-out" });
+        fs::write(w.0.join("out.txt"), "fixed\n").unwrap();
+        let (code, out, err) = w.run_with(
+            ScriptedModel::new([ScriptedModel::text(answer)]),
+            Options {
+                json: false,
+                escape,
+            },
+            |_| {},
+        );
+        assert_eq!(code, 0, "{err}");
+        assert_eq!(out, want);
+    }
+}
+
+/// Ctrl+C fires the run's interrupt: the running command and what it started are stopped, the
+/// turn ends interrupted, and the run exits 1.
+#[test]
+fn an_interrupt_stops_the_command_and_exits_1() {
+    let w = World::new("interrupt");
+    let started = std::time::Instant::now();
+    let (code, out, err) = w.run_with(
+        ScriptedModel::new([
+            ScriptedModel::tool("b1", "bash", json!({"command": "sleep 30"})),
+            ScriptedModel::text("never"),
+        ]),
+        Options::default(),
+        |interrupt| {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                interrupt.fire();
+            });
+        },
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "the command was stopped"
+    );
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(out, "");
+    assert_eq!(err.lines().last(), Some("mnemorph: interrupted"), "{err}");
 }

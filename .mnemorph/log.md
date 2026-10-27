@@ -5834,3 +5834,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   dropped; slime-cli's territory is the binary's crate; the in-repo bench runs `mnemorph run`.
 - **Learned:** worktrees sharing one `CARGO_TARGET_DIR` can reuse another checkout's artifact of
   a path crate (same name, newer mtime): touching the sources forces the rebuild.
+
+---
+
+### [2026-10-27T22:43:47+01:00] rimuru — #250, Fable's review: the tty card, raw stdout when piped, Ctrl+C
+- **Done:** `--gate-tty` asks through `tty_gate`: the card escaped by `shown`, the act whole,
+  typeahead flushed (`tcdrain` then `tcflush`) after the card is shown, only `y`/`yes` approves,
+  end of input or an error denies, `GATE_WAIT` as deadline; Ctrl+C fires the interrupt and denies
+  a waiting card (exit 1); the answer is escaped only on a terminal stdout.
+- **Learned:** a gate that was never live hides its gaps — the first caller inherits them.

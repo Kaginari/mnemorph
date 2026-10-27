@@ -2,7 +2,7 @@ packages:
   - packages/*
   - site
 
-# Dependencies allowed to run install scripts. esbuild (tsup, vite) fetches its platform binary.
+# Dependencies allowed to run install scripts. esbuild (vite) fetches its platform binary.
 allowBuilds:
   esbuild: true
 

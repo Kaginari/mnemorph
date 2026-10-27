@@ -88,18 +88,24 @@ fn ask_once(ask: Option<String>, world: Option<PathBuf>, json: bool, gate_tty: b
         Err(e) => return fail(&e, 2),
     };
     let (tx, rx) = headless::channel();
-    let opened = mnemorph_loop::open(
-        &world,
-        headless::gate(tx.clone(), gate_tty),
-        headless::observer(tx.clone()),
-        |v| std::env::var(v).ok(),
-    );
+    let gate = headless::gate(tx.clone(), gate_tty);
+    let opened = mnemorph_loop::open(&world, gate.clone(), headless::observer(tx.clone()), |v| {
+        std::env::var(v).ok()
+    });
     let opened = match opened {
         Ok(o) => o,
         Err(e) => return fail(&e, 2),
     };
+    #[cfg(unix)]
+    if let Err(e) = headless::on_ctrl_c(opened.session.interrupt(), gate) {
+        return fail(&format!("ctrl+c could not be caught: {e}"), 2);
+    }
+    let options = headless::Options {
+        json,
+        escape: std::io::stdout().is_terminal(),
+    };
     let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr());
-    match headless::run(opened, ask, json, (tx, rx), &mut out, &mut err) {
+    match headless::run(opened, ask, options, (tx, rx), &mut out, &mut err) {
         Ok(code) => ExitCode::from(code),
         Err(e) => fail(&e, 1),
     }

@@ -155,19 +155,27 @@ to resume is refused in plain text, before the terminal is taken. `mnemorphd run
 `mnemorph run "<ask>"` asks once, without the app, through the same session: the same opening,
 loop and end gate. With no ask, or `-`, it reads the ask from stdin. Progress — the streamed text,
 each call, a failed result, warnings, the end gate's verdict — goes to stderr, escaped as the app
-escapes it; the answer alone goes to stdout. Any ending but an answer is said on stderr's last line
+escapes it; the answer alone goes to stdout, escaped the same way when stdout is a terminal and as
+the model wrote it when piped. Any ending but an answer is said on stderr's last line
 as `mnemorph: <ending>` (`checkpoint: …`, `escalate: …`, `failed: …`, `interrupted`).
 
 | Exit | When |
 |---|---|
 | 0 | answered, the end gate passed |
-| 1 | failed — a failed end gate included — escalated, or interrupted |
+| 1 | failed — a failed end gate included — escalated, or interrupted (Ctrl+C) |
 | 2 | the command line did not read, or the session could not open |
 | 3 | stopped at a checkpoint: `mnemorph resume <run>` goes on |
 
 No one is there to approve a gated act, so `run` denies every one and says so on stderr
 (`mnemorph: denied <class> act …`); with `--gate-tty` it puts each to you on the terminal
-(`/dev/tty`) instead, where silence still denies. It never approves on its own.
+(`/dev/tty`) instead. That card shows the whole act, with every part a model chose escaped by the
+core's rule, so no carriage return or escape code can redraw what is approved; keys typed before
+the card reached the screen are thrown away; only `y` or `yes` typed after it approves, and
+anything else, the end of input or ten minutes of silence denies. It never approves on its own.
+
+Ctrl+C stops the run as Esc stops the app's turn: the interrupt fires, a running command and
+everything it started are killed, a question on the terminal is denied, the turn ends
+`interrupted` in the journal, and `run` exits 1.
 
 `--json` writes every event to stdout as a JSON line — the protocol's event, named by `type`
 (`turnStarted`, `textDelta`, `toolCall`, `toolResult`, `note`, `warning`, `usage`,

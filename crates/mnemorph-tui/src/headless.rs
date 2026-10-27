@@ -6,13 +6,14 @@
 //! human asked to be put the question on the terminal.
 
 use std::io::Write;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use mnemorph_loop::{Ending, GateAnswer, GateAsk, Observer, Opened, Seen, StreamEvent};
 use mnemorph_server::SESSION_BODY;
 use mnemorph_server::protocol::Event;
+use mnemorph_tools::Pending;
 use serde_json::{Value, json};
 
 use crate::blocks::summary;
@@ -59,23 +60,67 @@ pub fn observer(tx: Sender<Out>) -> Observer {
 }
 
 /// The gate of a run with no app: it denies every act, and says so — unless `tty`, when it puts
-/// the question to the human on the controlling terminal, where silence still denies. It never
-/// approves on its own.
+/// the question to the human on the controlling terminal ([`crate::tty_gate`]), where silence
+/// still denies. It never approves on its own.
 pub struct Headless {
     tx: Sender<Out>,
     tty: bool,
+    /// The question on the terminal now, for an interrupt to deny.
+    waiting: Mutex<Option<Arc<Pending>>>,
 }
 
 /// The gate for `mnemorph run`.
 #[must_use]
 pub fn gate(tx: Sender<Out>, tty: bool) -> Arc<Headless> {
-    Arc::new(Headless { tx, tty })
+    Arc::new(Headless {
+        tx,
+        tty,
+        waiting: Mutex::new(None),
+    })
+}
+
+impl Headless {
+    /// Deny the question on the terminal, if one waits: the human interrupted the run.
+    pub fn cancel(&self) {
+        let waiting = self
+            .waiting
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(p) = waiting {
+            let _ = p.answer(GateAnswer::Deny("the human interrupted the run".into()));
+        }
+    }
+
+    fn on_tty(&self, ask: &GateAsk) -> GateAnswer {
+        #[cfg(unix)]
+        {
+            let tty = match crate::tty_gate::DevTty::open() {
+                Ok(t) => t,
+                Err(e) => return GateAnswer::Deny(format!("no terminal to ask on: {e}")),
+            };
+            let pending = Pending::new();
+            *self.waiting.lock().unwrap_or_else(PoisonError::into_inner) =
+                Some(Arc::clone(&pending));
+            let answer = crate::tty_gate::put(tty, ask, crate::gate::GATE_WAIT, &pending);
+            self.waiting
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            answer
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = ask;
+            GateAnswer::Deny("no terminal to ask on here".into())
+        }
+    }
 }
 
 impl mnemorph_loop::Gate for Headless {
     fn ask(&self, ask: &GateAsk) -> GateAnswer {
         let answer = if self.tty {
-            mnemorph_loop::Gate::ask(&mnemorph_tools::gate::Terminal::default(), ask)
+            self.on_tty(ask)
         } else {
             GateAnswer::Deny(
                 "mnemorph run has no human to approve it; ask in a session instead, or run with \
@@ -93,6 +138,28 @@ impl mnemorph_loop::Gate for Headless {
         }
         answer
     }
+}
+
+/// Ctrl+C stops the run as Esc stops the app's turn: the interrupt fires — a running command and
+/// everything it started are killed, the turn ends `interrupted` in the journal — and a question
+/// waiting on the terminal is denied. The run then exits 1.
+///
+/// # Errors
+///
+/// The handler could not be installed.
+#[cfg(unix)]
+pub fn on_ctrl_c(
+    interrupt: Arc<mnemorph_loop::Interrupt>,
+    gate: Arc<Headless>,
+) -> std::io::Result<()> {
+    let mut signals = signal_hook::iterator::Signals::new([signal_hook::consts::SIGINT])?;
+    std::thread::spawn(move || {
+        for _ in signals.forever() {
+            interrupt.fire();
+            gate.cancel();
+        }
+    });
+    Ok(())
 }
 
 /// The exit code of an ending: 0 answered (the end gate passed), 3 a checkpoint, else 1.
@@ -116,6 +183,16 @@ struct Progress {
     gate: Option<Value>,
 }
 
+/// How `run` prints.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Options {
+    /// Every event as a JSON line on stdout, then a `result` line.
+    pub json: bool,
+    /// Stdout is a terminal: the answer is escaped as the app escapes it. Piped, it goes out as
+    /// the model wrote it.
+    pub escape: bool,
+}
+
 /// Run `ask` on `opened`'s session, its observer, stream and gate sending to `tx`/`rx`, printing to
 /// `out` and `err`. Returns the exit code.
 ///
@@ -125,7 +202,7 @@ struct Progress {
 pub fn run(
     opened: Opened,
     ask: &str,
-    json: bool,
+    Options { json, escape }: Options,
     (tx, rx): (Sender<Out>, Receiver<Out>),
     out: &mut dyn Write,
     err: &mut dyn Write,
@@ -199,7 +276,11 @@ pub fn run(
         });
         let _ = writeln!(out, "{result}");
     } else if let Some(Ending::Answered(answer)) = ending {
-        let answer = clean(answer);
+        let answer = if escape {
+            clean(answer)
+        } else {
+            answer.clone()
+        };
         let _ = write!(out, "{answer}");
         if !answer.ends_with('\n') {
             let _ = writeln!(out);
