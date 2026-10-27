@@ -300,14 +300,17 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
 - A rolled-back or corrected act is an incident until four receipts close it — undone, journal
   corrected, downstream told, a lesson — its envelope suspended and its target refused meanwhile.
 
-Built: typed outward acts (`PushNewBranch`, `AddLabel`, `Comment`) and the `outward` tool, the
-plan fingerprint an approval binds to, receipts with a read-only probe, the act runner with
-request keys and the probe of a cut act, per-post journals, and closure on four receipts. In
-progress: the typed pull-request act, so a branch and its pull request take one approval.
+Built: typed outward acts (`PushNewBranch`, `OpenPullRequest`, `AddLabel`, `Comment`) and the
+`outward` tool, the plan fingerprint an approval binds to, receipts with a read-only probe, the
+act runner with request keys and the probe of a cut act, per-post journals, closure on four
+receipts, and a push and its pull request under one approval, each act receipted and undone on
+its own ([races](02-races.md)).
 
 **Exit:** a branch pushed and a PR opened through `kijin-forge` with one gate prompt; a cut run
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
+
+The exit is met against a stub forge; a live run remains.
 
 ### M10 — Dark Elf · M
 

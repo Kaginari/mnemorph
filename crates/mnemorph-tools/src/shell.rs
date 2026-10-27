@@ -113,7 +113,7 @@ impl Tool for Bash {
                     return refused;
                 }
             };
-            match attempt(&a.command, cx, timeout, admitted, None) {
+            match attempt(&a.command, cx, timeout, admitted, None, None) {
                 Spawned::Ran(mut out) => {
                     for note in &notes {
                         let _ = write!(out.content, "\n[{note}]");
@@ -178,7 +178,9 @@ pub type BeforeSpawn<'a> = &'a mut dyn FnMut() -> Result<(), String>;
 /// gate admitted: in the context's sandbox with the network open, between the tripwire's
 /// snapshots and after the attic's, and only if the world still matches `plan` at the spawn.
 /// `before` runs between that recheck and the spawn — the Kijin's act runner journals its intent
-/// there — and its refusal stops the spawn. The kernel guard is the caller's to require.
+/// there — and its refusal stops the spawn. `stdin`, when given, is what the command reads on
+/// its standard input — bytes the harness holds, never a file in the world another command could
+/// swap; without it the input is empty. The kernel guard is the caller's to require.
 pub fn spawn_approved(
     command: &str,
     cx: &Context,
@@ -186,6 +188,7 @@ pub fn spawn_approved(
     class: ToolClass,
     plan: Fingerprint,
     before: BeforeSpawn<'_>,
+    stdin: Option<&[u8]>,
 ) -> Spawned {
     let admitted = Admitted {
         class,
@@ -198,6 +201,7 @@ pub fn spawn_approved(
         timeout.min(MAX_TIMEOUT),
         admitted,
         Some(before),
+        stdin,
     )
 }
 
@@ -207,6 +211,7 @@ fn attempt(
     timeout: Duration,
     admitted: Admitted,
     before_spawn: Option<BeforeSpawn<'_>>,
+    stdin: Option<&[u8]>,
 ) -> Spawned {
     let Admitted {
         class,
@@ -236,7 +241,16 @@ fn attempt(
         .attic()
         .map(|attic| attic.snapshot(&format!("before bash: {line}")));
     let bound = plan.as_ref().map(|plan| (plan, made.as_slice()));
-    let ran = match run(command, cx, timeout, network, &opened, bound, before_spawn) {
+    let ran = match run(
+        command,
+        cx,
+        timeout,
+        network,
+        &opened,
+        bound,
+        before_spawn,
+        stdin,
+    ) {
         Ok(r) => r,
         Err(stale @ (Spawn::Changed(_) | Spawn::Unreadable(_) | Spawn::Held(_))) => {
             // Nothing ran: the files made for it go, and nothing is restored over the world.
@@ -573,6 +587,7 @@ impl From<std::io::Error> for Spawn {
 /// inside it, the network open only for an approved outward or destructive act. An approved
 /// command runs only if the world still matches the approved plan at the moment of the spawn,
 /// the files the harness made for it read as the absence they were when it was approved.
+#[allow(clippy::too_many_arguments)]
 fn run(
     command: &str,
     cx: &Context,
@@ -581,6 +596,7 @@ fn run(
     opened: &[PathBuf],
     approved: Option<(&Fingerprint, &[PathBuf])>,
     before_spawn: Option<BeforeSpawn<'_>>,
+    stdin: Option<&[u8]>,
 ) -> Result<Ran, Spawn> {
     let tmp = cx.scratch();
     std::fs::create_dir_all(&tmp)?;
@@ -598,7 +614,11 @@ fn run(
         .sandbox()
         .command(&policy, "bash", &["--noprofile", "--norc", "-c", command]);
     cmd.current_dir(cx.world())
-        .stdin(Stdio::null())
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0)
@@ -626,6 +646,14 @@ fn run(
         before().map_err(Spawn::Held)?;
     }
     let mut child = cmd.spawn()?;
+    // The input is written on its own thread and then closed: a command that reads it slowly, or
+    // not at all, never blocks the harness's wait.
+    if let (Some(bytes), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        let bytes = bytes.to_vec();
+        thread::spawn(move || {
+            let _ = std::io::Write::write_all(&mut pipe, &bytes);
+        });
+    }
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
     // The call's own limit, or the run's clock, whichever comes first.

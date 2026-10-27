@@ -594,7 +594,9 @@ flowchart LR
     that shows the planned effect makes the act `observed`; anything else is `reconcile`
     ([races](02-races.md)). The Kijin's act runner (`mnemorph_config::Runner`, its `outward`
     tool) spawns through the bash tool's own path (`mnemorph_tools::shell::spawn_approved`):
-    the sandbox, the tripwire's and the attic's snapshots, and the plan rechecked at the spawn —
+    the sandbox, the tripwire's and the attic's snapshots, the plan rechecked at the spawn, and
+    any text the act sends (a pull request's description) on the command's standard input from
+    the approved bytes, never a file in the world —
     with the act's intent journaled between that recheck and the spawn, so an act whose world
     moved journals nothing and is asked again. An undo (`Runner::undo`) takes the same path, the
     human always asked, and is done only when a probe sees the effect gone; its incident

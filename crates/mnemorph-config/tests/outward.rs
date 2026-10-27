@@ -1,7 +1,8 @@
 //! The Kijin's plan step: an outward act whose undo the harness cannot derive is destructive.
 
 use mnemorph_config::{
-    Act, COVERED_TEXT, Done, Envelope, Lapse, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan,
+    Act, COVERED_TEXT, Done, Envelope, Lapse, Malformed, NO_UNDO, NoUndo, Planned, TITLE_CHARS,
+    Uncovered, plan,
 };
 use mnemorph_ledger::Day;
 use mnemorph_races::{Race, ToolClass};
@@ -320,4 +321,138 @@ fn a_typed_act_is_checked_against_the_post() {
     let deploy = planned(&Act::Command("kubectl apply -f d.yaml".into()));
     assert_eq!(deploy.check_post("kijin-deploy"), Ok(()));
     assert!(deploy.check_post("kijin-forge").is_err());
+}
+
+fn pull(title: &str, body: &str) -> Act {
+    Act::OpenPullRequest {
+        repo: "me/proj".into(),
+        base: "main".into(),
+        head: "feat/undo".into(),
+        title: title.into(),
+        body: body.into(),
+    }
+}
+
+#[test]
+fn a_pull_request_renders_a_fixed_argv_its_description_on_its_input_and_its_undo_a_close() {
+    let body = "Adds the undo.\n\n- one\n- two";
+    let p = planned(&pull("Add the undo", body));
+    assert_eq!(p.class(), ToolClass::Outward, "{:?}", p.why());
+    assert_eq!(
+        p.command(),
+        "gh pr create --repo me/proj --base main --head feat/undo --title 'Add the undo' --body-file -"
+    );
+    // The description goes to `gh` on its input, from the act's own approved bytes; nothing else
+    // reads any, and an undo none.
+    assert_eq!(p.stdin(), Some(body.as_bytes()));
+    assert_eq!(planned(&comment("hi")).stdin(), None);
+    // The card shows the title and the description itself, not only the file.
+    assert!(
+        p.why().iter().any(|w| w == "title: Add the undo"),
+        "{:?}",
+        p.why()
+    );
+    assert!(p.why().iter().any(|w| w.ends_with(body)), "{:?}", p.why());
+    assert!(
+        p.undo_plan()
+            .unwrap()
+            .starts_with("close this pull request on me/proj")
+    );
+    assert_eq!(
+        p.undo(&Done::Opened { number: 7 }).unwrap(),
+        "gh pr close 7 --repo me/proj"
+    );
+    for other in [
+        Done::Opened { number: 0 },
+        Done::Labelled,
+        Done::Commented { id: 7 },
+    ] {
+        assert_eq!(p.undo(&other), Err(NoUndo::Mismatch), "{other:?}");
+    }
+    // What `gh pr create` printed names the number only on the pinned host, in the act's repository.
+    assert_eq!(
+        p.opened("https://github.com/me/proj/pull/7\n", "github.com"),
+        Some(Done::Opened { number: 7 })
+    );
+    for printed in [
+        "https://github.com/me/other/pull/7",
+        "https://evil.example/me/proj/pull/7",
+        "https://github.com/me/proj/pull/7x",
+        "https://github.com/me/proj/pull/0",
+    ] {
+        assert_eq!(p.opened(printed, "github.com"), None, "{printed}");
+    }
+}
+
+#[test]
+fn an_untyped_gh_pr_create_stays_destructive() {
+    let p = planned(&Act::Command(
+        "gh pr create --repo me/proj --base main --head feat/undo --title t --body-file b.md"
+            .into(),
+    ));
+    assert_eq!(p.class(), ToolClass::Destructive);
+    assert_eq!(p.why()[0], NO_UNDO);
+    assert_eq!(p.undo_plan(), None);
+}
+
+#[test]
+fn a_pull_request_title_or_description_that_reads_otherwise_or_runs_long_is_refused() {
+    let long = "t".repeat(TITLE_CHARS);
+    assert!(plan(&pull(&long, "b"), &Place::new("/world", "/home")).is_ok());
+    for (act, field) in [
+        (pull(&format!("{long}t"), "b"), "title"),
+        (pull("two\nlines", "b"), "title"),
+        (pull("tab\there", "b"), "title"),
+        (pull("evil \u{202E}txt.exe", "b"), "title"),
+        (pull("zero\u{200B}width", "b"), "title"),
+        (pull("bell\u{7}", "b"), "title"),
+        (pull("  ", "b"), "title"),
+        (pull("t", "hidden \u{2066}text\u{2069}"), "body"),
+        (pull("t", "line\u{2028}separator"), "body"),
+        (pull("t", "escape \u{1b}[31m"), "body"),
+        (pull("t", &"x".repeat(65_537)), "body"),
+        (pull("t", " "), "body"),
+    ] {
+        assert!(
+            matches!(refused(&act), Malformed::Field(f, _) if f == field),
+            "{act:?}"
+        );
+    }
+    let with = |repo: &str, base: &str, head: &str| Act::OpenPullRequest {
+        repo: repo.into(),
+        base: base.into(),
+        head: head.into(),
+        title: "t".into(),
+        body: "b".into(),
+    };
+    for (act, field) in [
+        (with("me", "main", "feat/x"), "repo"),
+        (with("me/proj", "refs/heads/main", "feat/x"), "base"),
+        (with("me/proj", "main", "--force"), "head"),
+        (with("me/proj", "main", "me:feat/x"), "head"),
+        (with("me/proj", "main", "main"), "head"),
+    ] {
+        assert!(
+            matches!(refused(&act), Malformed::Field(f, _) if f == field),
+            "{act:?}"
+        );
+    }
+}
+
+#[test]
+fn an_envelope_reads_a_pull_requests_description_not_its_file() {
+    let pattern = "gh pr create --repo me/proj --base main --head feat/* --title * --body-file *";
+    // The description is a word of the face like a comment's: one with a quote is never matched.
+    let plain = planned(&pull("Add the undo", "Adds the undo."));
+    assert_eq!(envelope(&[pattern]).covers(&plain, today(), 0), Ok(()));
+    let quoted = planned(&pull("undo", "it's"));
+    assert_eq!(
+        envelope(&[pattern]).covers(&quoted, today(), 0),
+        Err(Uncovered::NoPattern)
+    );
+    let long = planned(&pull("undo", &"x".repeat(COVERED_TEXT + 1)));
+    assert_eq!(
+        envelope(&[pattern]).covers(&long, today(), 0),
+        Err(Uncovered::TooLong)
+    );
 }
