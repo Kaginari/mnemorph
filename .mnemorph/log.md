@@ -5020,6 +5020,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T09:09:21+01:00] rimuru — VS Code images detected by the graphics query
+- **Found in the human's terminal:**
+  - VS Code's xterm.js with `terminal.integrated.enableImages` on still answers DA1 `?1;2c`,
+    with no `4`;
+  - the probe read that as "images off" and drew half-blocks;
+  - `--probe` showed iterm2 yes and drawing blocks.
+- **Fix:**
+  - probe.rs QUERIES sends XTSMGRAPHICS (`CSI ? 1 ; 1 ; 0 S`) before DA1;
+  - kit/pixels.rs `graphics()` reads a success answer (`CSI ? 1 ; 0 ; n S`);
+  - `Replies.graphics` counts as images on (iTerm2 in its family, Sixel outside it).
+- **Test:** `a_graphics_answer_turns_images_on_where_da1_is_silent`.
+- **Unconfirmed:** that VS Code answers the query (its image add-on documents XTSMGRAPHICS); the
+  human's `--probe` will tell.
 ### [2026-10-27T09:11:37+01:00] rimuru — solo: find and read with the tools, the root named
 - **Why:** on the bench, solo bodies spent calls finding where they stood (`pwd`,
   `find / -maxdepth 3 -name sqlglot`, `cd /tmp`) and sometimes searched or read through bash

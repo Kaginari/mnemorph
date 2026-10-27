@@ -22,7 +22,8 @@ use crate::kit::pixels::{self, Caps, Choice, Replies};
 pub const TIMEOUT: Duration = Duration::from_millis(200);
 
 /// The queries, DA1 last.
-pub const QUERIES: &str = "\x1b[>0q\x1b[16t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
+pub const QUERIES: &str =
+    "\x1b[>0q\x1b[16t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[?1;1;0S\x1b[c";
 
 /// A terminal to ask: send bytes, then wait up to a while for some back.
 pub trait Tty {
@@ -130,9 +131,10 @@ impl Late {
             }
             KeyCode::Char('[') if alt => true,
             KeyCode::Char(_) if plain && self.inside => true,
-            // The shapes of `CSI ? … c` and `CSI 6 ; h ; w t` read as characters.
+            // The shapes of `CSI ? … c`, `CSI 6 ; h ; w t` and `CSI ? 1 ; 0 ; n S` read as
+            // characters.
             KeyCode::Char(c) if plain => {
-                c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't')
+                c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't' | 'S')
             }
             _ => false,
         };
@@ -393,6 +395,7 @@ mod tests {
             "\x1bP>|xterm.js(6.1.0-beta.304)\x1b\\",
             "\x1b[6;17;8t",
             "\x1b[?1;2;4c",
+            "\x1b[?1;0;256S",
             "?1;2c",
             "6;17;8t",
         ] {

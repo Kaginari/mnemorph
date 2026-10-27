@@ -102,6 +102,9 @@ pub struct Replies {
     /// The primary device attributes (DA1), when they came: every terminal answers them, so they
     /// mark the end of the replies.
     pub attributes: Option<Vec<u16>>,
+    /// A graphics query (XTSMGRAPHICS, the colour registers) answered with success: a terminal
+    /// whose image layer is on, though its DA1 may not say so — VS Code's xterm.js is one.
+    pub graphics: bool,
 }
 
 /// The Kitty graphics query's image id: the probe's alone.
@@ -124,11 +127,13 @@ impl Replies {
         });
         let kitty = reply.contains(&format!("\x1b_Gi={QUERY_ID};OK"));
         let attributes = attributes(reply);
+        let graphics = graphics(reply);
         Self {
             name,
             cell,
             kitty,
             attributes,
+            graphics,
         }
     }
 
@@ -144,6 +149,27 @@ fn between<'a>(s: &'a str, open: &str, close: &str) -> Option<&'a str> {
     let from = s.find(open)? + open.len();
     let len = s[from..].find(close)?;
     Some(&s[from..from + len])
+}
+
+/// Whether `reply` holds a successful XTSMGRAPHICS answer: `ESC [ ? 1 ; 0 ; n S` (item 1, the
+/// colour registers; status 0, success).
+#[must_use]
+pub fn graphics(reply: &str) -> bool {
+    let mut rest = reply;
+    while let Some(at) = rest.find("\x1b[?") {
+        let body = &rest[at + 3..];
+        let end = body
+            .find(|c: char| !(c.is_ascii_digit() || c == ';'))
+            .unwrap_or(body.len());
+        if body[end..].starts_with('S') {
+            let parts: Vec<&str> = body[..end].split(';').collect();
+            if parts.first() == Some(&"1") && parts.get(1) == Some(&"0") {
+                return true;
+            }
+        }
+        rest = body;
+    }
+    false
 }
 
 /// The primary device attributes in `reply`: `ESC [ ? a ; b … c`.
@@ -327,7 +353,7 @@ pub fn decide(
         Choice::Off => (Protocol::Blocks, "images off".to_owned()),
         Choice::Force(p) => (p, "as MNEMORPH_TUI_IMAGES asks".to_owned()),
         Choice::Auto => {
-            let on = replies.sixel() || replies.kitty || native;
+            let on = replies.sixel() || replies.kitty || replies.graphics || native;
             if replies.kitty {
                 (
                     Protocol::Kitty,
@@ -338,8 +364,11 @@ pub fn decide(
                     Protocol::Iterm,
                     "an iTerm2-image terminal with images on".into(),
                 )
-            } else if replies.sixel() {
-                (Protocol::Sixel, "DA1 lists Sixel".into())
+            } else if replies.sixel() || replies.graphics {
+                (
+                    Protocol::Sixel,
+                    "the terminal answers Sixel's queries".into(),
+                )
             } else if iterm_family {
                 (
                     Protocol::Blocks,
@@ -847,5 +876,22 @@ mod tests {
         let r = Replies::parse("\x1bP>|evil\x07\x08name\x1b\\");
         assert_eq!(r.name.as_deref(), Some("evilname"));
         assert_eq!(escaped("\x1b[c"), "\\u{1b}[c");
+    }
+
+    /// VS Code's xterm.js with images on answers the graphics query, though its DA1 lists no
+    /// Sixel: images are on, drawn as iTerm2's inline images. A failing answer leaves them off.
+    #[test]
+    fn a_graphics_answer_turns_images_on_where_da1_is_silent() {
+        let on = format!("{XTERM_JS}\x1b[?1;0;256S\x1b[?1;2c");
+        assert!(Replies::parse(&on).graphics);
+        assert_eq!(chosen(&on, Choice::Auto, &[]), Protocol::Iterm);
+        let failed = format!("{XTERM_JS}\x1b[?1;3;0S\x1b[?1;2c");
+        assert!(!Replies::parse(&failed).graphics);
+        assert_eq!(chosen(&failed, Choice::Auto, &[]), Protocol::Blocks);
+        // A terminal outside the iTerm2 family that answers it draws Sixel.
+        assert_eq!(
+            chosen("\x1b[6;20;10t\x1b[?1;0;256S\x1b[?62c", Choice::Auto, &[]),
+            Protocol::Sixel
+        );
     }
 }
