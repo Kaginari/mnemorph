@@ -17,6 +17,8 @@ pub use attic::{Act, Attic, Conflict, Held, Restore, Snapshot, State};
 pub use classify::{Place, Rule, Verdict, classify};
 pub use fingerprint::Fingerprint;
 pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
+/// What a sandboxed command may touch, for a harness process the tools do not start.
+pub use mnemorph_sandbox::Policy;
 /// The sandbox a context runs commands in, as the context takes it.
 pub use mnemorph_sandbox::Sandbox;
 pub use pinned::remove_created;

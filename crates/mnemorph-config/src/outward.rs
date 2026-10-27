@@ -331,11 +331,17 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
 }
 
 /// A full hex object name: 40 digits (SHA-1) or 64 (SHA-256), lower case.
-fn sha_ok(sha: &str) -> bool {
+pub(crate) fn sha_ok(sha: &str) -> bool {
     matches!(sha.len(), 40 | 64) && sha.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 impl Planned {
+    /// The act, as the plan took it.
+    #[must_use]
+    pub fn act(&self) -> &Act {
+        &self.act
+    }
+
     /// The command, exactly as the gate runs it.
     #[must_use]
     pub fn command(&self) -> &str {

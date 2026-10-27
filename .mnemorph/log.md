@@ -5461,3 +5461,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** wire `the_first_status_and_close_win`, `invisible_characters_cannot_hide_a_tag`,
   `a_never_cut_field_is_bounded`; `hostile()` gains zero-width, bidi, NBSP, U+3000, FS/GS,
   `@CAP`/`@ROOT`; `round_trip` at 2048 cases.
+
+---
+
+### [2026-10-27T18:01:54+01:00] rimuru — #93: an outward act's receipt is observed, never an exit code
+- **Done:** `mnemorph_config::PostJournal` (`.mnemorph/kijin/<post>/post.jsonl`): rows
+  `committed` → `pending observation` → `observed` | `reconcile`; a `Command` is `unobserved`.
+  `Planned::pin` reads the push URLs (insteadOf applied), HEAD and the `gh` host with the plan;
+  `Observer` runs fixed probes on the pin (`git ls-remote`, `gh api --method GET` labels /
+  comment by id with the body's SHA-256), outside every repository, 30 s, inside the guard with
+  only its scratch writable. `reconciling` feeds the hello's holes (`mnemorph status`);
+  `Tally` is the hook M11 folds into `outward_clean_rate`, the envelope's suspension and the
+  Oni fall. Docs 02, 05.
+- **Tests:** config `receipt` (local bare repos, a fake `Probe` for `gh`): match → observed;
+  moved or missing branch, missing label, edited or misplaced comment, exit ≠ 0, timeout →
+  reconcile; `remote set-url` after the act still probes the pinned URL; a `-`-leading pushurl
+  is not pinned; credentials never reach the journal; the guard keeps a probe from writing.
+  server `an_act_in_reconcile_is_shown_to_the_human`. With the judgement disabled, 6 of 12 fail.
+- **Learned:** nothing executes a typed act yet: the receipt is the API that executor calls
+  (pin with the plan, commit, run, `ran`, `observe`).

@@ -372,6 +372,30 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   replayed; it is gated again. The approval is bound to the plan the human saw — the commit, the
   working tree and the target ([the sandbox](05-architecture.md#sandbox)) — and rechecked
   just before the act: a world that changed meanwhile runs nothing and is asked again.
+- **An act is done when its effect is seen, never because its command exited 0.** Its post
+  journal row moves `committed` (approved, its target pinned) → `pending observation` (it ran:
+  its exit and what it left) → `observed` or `reconcile`. The harness — never the model — then
+  runs a read-only probe for the act's kind, a fixed argv whose arguments are the act's own
+  checked fields and the target pinned when the act was committed (the push URLs git resolved
+  then, the commit HEAD named, the `gh` host), never read again from configuration a body can
+  write:
+
+  | Kind | The probe | `observed` when |
+  |---|---|---|
+  | `PushNewBranch` | `git ls-remote <pinned URL> refs/heads/<name>`, for every push URL | the branch is there at the pushed commit |
+  | `AddLabel` | `gh api --method GET repos/<repo>/issues/<pr>/labels` | the pull request carries the label |
+  | `Comment` | `gh api --method GET repos/<repo>/issues/comments/<id>` | the comment is on that pull request, its body's SHA-256 the act's |
+
+  Anything else — a different commit, a missing label, an edited comment, a probe that fails,
+  times out (30 s) or prints what does not read, an act that left no id — is `reconcile`, never
+  `observed`. The probe runs outside every repository with no input, git limited to the `https`,
+  `http`, `ssh`, `git` and `file` transports, and inside the kernel guard when one is in force:
+  the network open, nothing writable but its own scratch directory. The row keeps the probe,
+  its output (1 KiB at most, escaped, credentials in URLs blanked) and when. A `Command` has no
+  probe: its receipt is `unobserved`, and says so. A `reconcile` is shown to the human
+  (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
+  `outwardCleanRate` counts against — and, from M11, what suspends the envelope that covered the
+  act and may make an Oni fall.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
   outward act is typed, and for a small closed set of kinds the harness renders both the command
   and its undo from the act's own fields; the gate runs the stored command exactly:
@@ -407,7 +431,7 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
   (`.mnemorph/kijin/<post>/post.jsonl`): the last known state of the outside (last CI run, the
-  deployed version per environment, open PRs). Every new body of that post reads it first.
+  deployed version per environment, open PRs) and each outward act's receipt. Every new body of that post reads it first.
 - **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
   checks the real CI state instead of trusting a doc (Nature 9).
 - **Score** `0.5·outwardCleanRate + 0.3·verifyGreenRate + 0.2·landRate`, where
