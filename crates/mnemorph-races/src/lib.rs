@@ -13,7 +13,7 @@ mod speciality;
 mod value;
 
 pub use dispatch::{DispatchContext, Refusal, Route, may_dispatch};
-pub use playbook::{MAX_CLASS, MAX_SPECIALITY, brief, for_landing, playbook};
+pub use playbook::{CHAINS, MAX_CLASS, MAX_SPECIALITY, brief, for_landing, playbook};
 pub use race::{ModelTier, Race};
 pub use shelf::{
     Gate, OutwardKind, Post, PostRefusal, ShelfRefusal, Soil, ToolClass, check_class, check_post,

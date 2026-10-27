@@ -688,11 +688,13 @@ these fields:
 
 A class's playbook is at most 1.5 KiB and a speciality's together at most 8 KiB, held by the
 crate's tests. **The loading rule:** a routed body is given only its own speciality's
-playbooks (`mnemorph_races::for_landing`), and of those only the classes the surfaces it was
-routed make relevant — each compiled surface names its classes (`Cargo.lock`: known
-vulnerability and dependency confusion; `crates/mnemorph-tui/**`: approval binding and terminal
-escape), a surface the world declared loads every class the speciality owns, and the generalist
-loads none. No compiled surface loads its speciality's whole playbook. The coverage ledger still
+playbooks (`mnemorph_races::for_landing`), and of those only the classes its written paths make
+relevant — each compiled surface names its classes (`Cargo.lock`: known vulnerability and
+dependency confusion; `crates/mnemorph-tui/**`: approval binding and terminal escape), a path is
+placed on every compiled surface whose glob holds it, and a path none holds, on a surface the
+world declared, loads every class the speciality owns. The generalist owns no class: its brief
+is a fixed one on chains (`CHAINS`, at most 1.5 KiB) — a write-capable surface feeding an outward
+act, an input surface feeding the wire, a config surface feeding the sandbox. No compiled surface loads its speciality's whole playbook. The coverage ledger still
 asks an entry for every owned class: a class the surfaces leave unloaded is ruled out there with
 its fact, as any other. A world adds its own surfaces in its docs; it never removes a class. The
 playbooks adapt Cloudflare's security-audit-skill (MIT;

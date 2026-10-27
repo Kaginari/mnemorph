@@ -243,5 +243,96 @@ fn the_brief_holds_the_loaded_playbooks() {
     assert!(text.contains("\n\n### terminal-escape\n"));
     assert!(!text.contains("### toctou"));
     assert!(text.ends_with("\n\n"));
-    assert_eq!(brief(Speciality::General, &["src/auth/"]), "");
+    assert_eq!(
+        brief(Speciality::Harness, &["src/auth/"])
+            .matches("\n### ")
+            .count(),
+        8
+    );
+    assert_eq!(brief::<&str>(Speciality::Harness, &[]), "");
+}
+
+/// Routing hands written paths, not globs: each is placed on the compiled surfaces that hold it.
+#[test]
+fn written_paths_load_their_surfaces_classes() {
+    let names = |s: Speciality, paths: &[&str]| -> Vec<&'static str> {
+        for_landing(s, paths)
+            .into_iter()
+            .map(|(c, _)| c.name())
+            .collect()
+    };
+    assert_eq!(
+        names(Speciality::Harness, &["crates/mnemorph-tui/src/card.rs"]),
+        ["approval-binding", "terminal-escape"]
+    );
+    assert_eq!(
+        names(Speciality::Supply, &["./crates/mnemorph-races/Cargo.toml"]),
+        ["known-vulnerability", "dependency-confusion"]
+    );
+    assert_eq!(
+        names(Speciality::Law, &[".mnemorph/log.md"]),
+        ["ledger-integrity"]
+    );
+    // A path two compiled surfaces hold loads both surfaces' classes.
+    assert_eq!(
+        names(
+            Speciality::Secrets,
+            &["crates/mnemorph-config/src/secrets.rs"]
+        ),
+        [
+            "secret-exposure",
+            "credential-grant",
+            "redaction-gap",
+            "data-isolation"
+        ]
+    );
+    assert_eq!(
+        names(
+            Speciality::Harness,
+            &["crates/mnemorph-config/src/runner.rs"]
+        ),
+        [
+            "toctou",
+            "command-injection",
+            "approval-binding",
+            "hook-laundering"
+        ]
+    );
+    // A path no compiled surface holds lies on a declared one: every owned class.
+    assert_eq!(
+        names(Speciality::Web, &["api/auth.rs"]).len(),
+        Speciality::Web.classes().len()
+    );
+    for s in Speciality::HUNTERS {
+        for surface in s.surfaces() {
+            let path = surface.replace("**", "x/y").replace('*', "z");
+            let loaded = for_landing(s, &[path.as_str()]);
+            assert!(loaded.len() < s.classes().len(), "{s}: {path} loads all");
+        }
+    }
+}
+
+/// The generalist owns no class; its brief is the chains it hunts across surfaces.
+#[test]
+fn the_generalist_is_briefed_on_chains() {
+    assert!(CHAINS.starts_with("### chains\n"));
+    assert!(CHAINS.len() <= MAX_CLASS, "{} bytes", CHAINS.len());
+    for ch in CHAINS.chars() {
+        assert!(
+            ch == '\n' || (ch.is_ascii() && !ch.is_ascii_control()),
+            "{ch:?}"
+        );
+    }
+    let text = brief(
+        Speciality::General,
+        &[
+            "crates/mnemorph-tools/src/write.rs",
+            ".github/workflows/ci.yml",
+        ],
+    );
+    assert!(text.starts_with("## Playbooks (dark-elf)\n\n### chains\n"));
+    assert!(text.contains("outward act"));
+    assert!(text.len() <= MAX_CLASS + 64);
+    assert_eq!(brief::<&str>(Speciality::General, &[]), "");
+    assert_eq!(for_landing(Speciality::General, &["src/auth/"]), []);
 }

@@ -11,7 +11,7 @@
 //!
 //! Adapted from Cloudflare's security-audit-skill (MIT; see `THIRD-PARTY-NOTICES.md`).
 
-use crate::speciality::{AttackClass, Speciality};
+use crate::speciality::{AttackClass, Speciality, glob};
 
 /// The most bytes one class's playbook may hold.
 pub const MAX_CLASS: usize = 1536;
@@ -198,37 +198,51 @@ fn relevant(surface: &str) -> Option<&'static [AttackClass]> {
     Some(classes)
 }
 
-/// The playbooks `speciality`'s body is given for a landing that touched `surfaces` of its: each
-/// surface the law compiles for it loads the classes that surface makes relevant, and any other —
-/// one the world declared — loads every class the speciality owns, since nothing narrows it. Only
-/// owned classes load, each once, in the speciality's order; the generalist loads none.
+/// The playbooks `speciality`'s body is given for a landing, by what it touched: written paths
+/// (`crates/mnemorph-tui/src/card.rs`) or the routed surfaces' globs themselves. Each one the
+/// law's compiled surfaces for the speciality hold loads the classes those surfaces make relevant;
+/// one no compiled surface holds — on a surface the world declared — loads every class the
+/// speciality owns, since nothing narrows it. Only owned classes load, each once, in the
+/// speciality's order; the generalist loads none (its brief is [`CHAINS`]).
 #[must_use]
 pub fn for_landing<S: AsRef<str>>(
     speciality: Speciality,
     surfaces: &[S],
 ) -> Vec<(AttackClass, &'static str)> {
-    let owned = speciality.classes();
     let wanted = |class: AttackClass| {
         surfaces.iter().any(|s| {
-            let s = s.as_ref();
-            let compiled = speciality.surfaces().contains(&s);
-            match relevant(s).filter(|_| compiled) {
-                Some(classes) => classes.contains(&class),
-                None => true,
-            }
+            let s = s.as_ref().trim_start_matches("./");
+            let mut held = speciality
+                .surfaces()
+                .iter()
+                .filter(|&&g| g == s || glob(g, s))
+                .peekable();
+            held.peek().is_none() || held.any(|g| relevant(g).is_some_and(|cs| cs.contains(&class)))
         })
     };
-    owned
+    speciality
+        .classes()
         .iter()
         .filter(|&&c| wanted(c))
         .map(|&c| (c, c.playbook()))
         .collect()
 }
 
+/// The generalist's brief: how to look for the chains that cross the touched specialities'
+/// surfaces. It owns no class, so this is its whole playbook.
+pub const CHAINS: &str = include_str!("../playbooks/general/chains.md");
+
 /// The playbook block of a routed body's prompt: its speciality's relevant playbooks under one
-/// heading, or empty when none loads.
+/// heading — the generalist's, [`CHAINS`] — or empty when none loads.
 #[must_use]
 pub fn brief<S: AsRef<str>>(speciality: Speciality, surfaces: &[S]) -> String {
+    if speciality == Speciality::General {
+        return if surfaces.is_empty() {
+            String::new()
+        } else {
+            format!("## Playbooks ({speciality})\n\n{}\n\n", CHAINS.trim_end())
+        };
+    }
     let loaded = for_landing(speciality, surfaces);
     if loaded.is_empty() {
         return String::new();

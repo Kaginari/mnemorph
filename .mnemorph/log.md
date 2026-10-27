@@ -5940,3 +5940,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   Regression line; races region coverage 100%.
 - **Learned:** a markdown file per class keeps the text reviewable as text and its size the bytes
   a body is given; a Rust table would hide both behind escapes.
+
+---
+
+### [2026-10-28T00:03:41+01:00] rimuru — #254, Fable's review: playbooks loaded by written path, plant-then-read, scoped probes, the generalist's chains
+- **Done:** `for_landing` places each written path on the compiled globs that hold it (a glob
+  itself still reads as its surface; none holding it means a declared surface: every owned
+  class). credential-grant's Check plants a fake credential in a temp HOME or fixture, never
+  reads real ones; sandbox-escape connects only to its own loopback listener and signals only its
+  own child. `CHAINS` (`playbooks/general/chains.md`, 960 B) is the generalist's brief. Docs 02.
+- **Tests:** real paths load their surfaces' classes; no compiled surface's sample path loads a
+  whole speciality; the generalist's brief non-empty and within 1.5 KiB; coverage 100%.
+- **Learned:** routing speaks in written paths; an API keyed by glob strings silently falls back
+  to loading everything.
