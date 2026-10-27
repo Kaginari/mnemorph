@@ -113,6 +113,7 @@ reads every creature.
 | `Territory` | a Slime; an Elf | a Slime's zone, the paths it writes; an Elf's lane, the paths it plans across — owning nothing |
 | `Domain` | an Orc | the paths it routes and judges, never writes |
 | `Post` | a Kijin | the files and directories its outward acts own (CI, release, deploy) |
+| `Surfaces` | a Dark Elf | paths whose landings its speciality is routed, beyond the compiled ones — owning nothing |
 | `Verify` | a creature with a gate | one verify line per field |
 | `Minds` | any | the Minds it wears |
 | `Retired` | any | `yes`: it owns and commands nothing; its seat and claims are skipped |
