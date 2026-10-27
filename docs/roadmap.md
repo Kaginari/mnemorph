@@ -336,7 +336,7 @@ In order:
 3. wire: the line-free fingerprint, `rec:`, `@? nv`
 4. proving: the finding record and its validator
 5. proving: the coverage ledger and its validator
-6. races: the six compiled playbooks
+6. races: the compiled playbooks, one per class, loaded by speciality and surface
 7. loop: challenge routing from the reserve
 8. loop: independent verification
 9. test: the seeded fixture repository
@@ -344,9 +344,10 @@ In order:
 11. the law audit's checks ([#104](https://github.com/Kaginari/mnemorph/issues/104)) and the
     gold-set hooks ([#106](https://github.com/Kaginari/mnemorph/issues/106))
 
-Built: rungs 1 to 4 — the specialities, each one's attack classes compiled with its surfaces,
-`route`, the wire's finding fields, and the finding record with its validator
-(`mnemorph-proving`).
+Built: rungs 1 to 6 — the specialities, each one's attack classes compiled with its surfaces,
+`route`, the wire's finding fields, the finding record and the coverage ledger with their
+validators (`mnemorph-proving`), and the compiled playbooks, one per class, loaded by speciality
+and surface (`for_landing`).
 
 **Exit:** on a seeded vulnerable fixture repo, the routed specialities find the planted flaws
 with witnesses, each verified by a fresh verifier, seal, and the seal lifts only when the fix
