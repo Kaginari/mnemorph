@@ -7,7 +7,9 @@ use std::sync::Arc;
 
 use mnemorph_races::Race;
 use mnemorph_tools::gate::Scripted;
-use mnemorph_tools::{Attic, Context, Outcome, Sandbox, Snapshot, call, registry};
+use mnemorph_tools::{
+    Act, Attic, Context, Outcome, Restore, Sandbox, Snapshot, State, call, registry,
+};
 
 struct Ground {
     root: PathBuf,
@@ -100,7 +102,11 @@ fn a_deleted_folder_is_reported_and_comes_back() {
         "{o:?}"
     );
     assert!(!g.world().join("src").exists());
-    g.attic().restore(&tree_of(&o), &["src"]).unwrap();
+    let act = g.attic().seal(tree_of(&o), "after rm").unwrap();
+    assert_eq!(
+        g.attic().restore(&act, &["src"]).unwrap(),
+        Restore::Restored(vec!["src/a.rs".into(), "src/b.rs".into()])
+    );
     assert_eq!(
         fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
         "fn a() {}\n"
@@ -165,15 +171,19 @@ fn an_overwritten_file_comes_back() {
         .nth(1)
         .unwrap()
         .to_owned();
-    attic
-        .restore(
-            &Snapshot {
+    let act = attic
+        .seal(
+            Snapshot {
                 tree,
                 skipped: Vec::new(),
             },
-            &["src/a.rs"],
+            "after a write",
         )
         .unwrap();
+    assert!(matches!(
+        attic.restore(&act, &["src/a.rs"]).unwrap(),
+        Restore::Restored(_)
+    ));
     assert_eq!(
         fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
         "fn a() {}\n"
@@ -204,20 +214,13 @@ fn old_snapshots_are_pruned_and_the_newest_stays() {
     let g = Ground::new("prune-age");
     let (attic, old, new) = two_snapshots(&g);
     attic.prune(now() + DAY).unwrap();
-    assert!(
-        attic.restore(&old, &["src/a.rs"]).is_ok(),
-        "a day later both are kept"
-    );
+    assert!(attic.holds(&old, "src/a.rs"), "a day later both are kept");
     attic.prune(now() + 15 * DAY).unwrap();
     assert!(
-        attic.restore(&old, &["src/a.rs"]).is_err(),
+        !attic.holds(&old, "src/a.rs"),
         "past the window the old one is gone"
     );
-    attic.restore(&new, &["src/a.rs"]).unwrap();
-    assert_eq!(
-        fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
-        "fn a2() {}\n"
-    );
+    assert!(attic.holds(&new, "src/a.rs"));
 }
 
 /// Over its size, the attic drops the oldest snapshots first — never the newest.
@@ -227,8 +230,8 @@ fn the_size_cap_drops_the_oldest() {
     let (attic, old, new) = two_snapshots(&g);
     let attic = attic.with_limits(14, 0);
     attic.prune(now()).unwrap();
-    assert!(attic.restore(&old, &["src/a.rs"]).is_err());
-    assert!(attic.restore(&new, &["src/a.rs"]).is_ok());
+    assert!(!attic.holds(&old, "src/a.rs"));
+    assert!(attic.holds(&new, "src/a.rs"));
 }
 
 /// A kept `.git` object the world itself no longer has ages out with the window.
@@ -443,4 +446,220 @@ fn only_the_current_form_of_git_is_kept() {
         g.world().join(".git").is_dir(),
         "the directory came back, not the old file"
     );
+}
+
+/// An act on the ground's world, sealed: `act` runs between the two snapshots.
+fn sealed(g: &Ground, act: impl FnOnce(&Path)) -> (Attic, Act) {
+    let attic = g.attic();
+    let before = attic.snapshot("before the act").unwrap();
+    act(&g.world());
+    let act = attic.seal(before, "after the act").unwrap();
+    (attic, act)
+}
+
+fn conflicts(r: Restore) -> Vec<(String, State, State)> {
+    match r {
+        Restore::Conflict(c) => c.into_iter().map(|c| (c.path, c.left, c.now)).collect(),
+        Restore::Restored(p) => panic!("restored {p:?}, expected a conflict"),
+    }
+}
+
+fn read(g: &Ground, rel: &str) -> String {
+    fs::read_to_string(g.world().join(rel)).unwrap()
+}
+
+/// A later edit is the later writer's: the undo is refused, names the path, and keeps the edit.
+#[test]
+fn a_restore_after_a_concurrent_edit_is_refused() {
+    let g = Ground::new("guard-edit");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    fs::write(g.world().join("src/a.rs"), "the human\n").unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert_eq!(c.len(), 1, "{c:?}");
+    assert_eq!(c[0].0, "src/a.rs");
+    assert!(
+        matches!((&c[0].1, &c[0].2), (State::File { blob: l, .. }, State::File { blob: n, .. }) if l != n),
+        "{c:?}"
+    );
+    assert_eq!(read(&g, "src/a.rs"), "the human\n");
+    let log = fs::read_to_string(attic.dir().join("snapshots.log")).unwrap();
+    assert!(
+        log.lines().last().unwrap().contains("refused: `src/a.rs`"),
+        "the refusal is journaled: {log}"
+    );
+}
+
+/// A deletion since the act is a conflict: the undo does not bring back what someone removed.
+#[test]
+fn a_later_deletion_is_a_conflict() {
+    let g = Ground::new("guard-rm");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    fs::remove_file(g.world().join("src/a.rs")).unwrap();
+    let c = conflicts(attic.restore(&act, &["src/a.rs"]).unwrap());
+    assert!(
+        matches!(&c[..], [(p, State::File { .. }, State::Absent)] if p == "src/a.rs"),
+        "{c:?}"
+    );
+    assert!(!g.world().join("src/a.rs").exists());
+}
+
+/// A mode changed since the act is a conflict, the content being the same.
+#[test]
+fn a_later_mode_change_is_a_conflict() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let g = Ground::new("guard-mode");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    let a = g.world().join("src/a.rs");
+    fs::set_permissions(&a, fs::Permissions::from_mode(0o755)).unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert!(
+        matches!(
+            &c[..],
+            [(
+                _,
+                State::File {
+                    executable: false,
+                    ..
+                },
+                State::File {
+                    executable: true,
+                    ..
+                }
+            )]
+        ),
+        "{c:?}"
+    );
+    assert_eq!(read(&g, "src/a.rs"), "the act\n");
+}
+
+/// A symlink made where the act deleted a file is a conflict: the undo neither writes through
+/// it nor replaces it.
+#[test]
+fn a_new_symlink_is_a_conflict() {
+    let g = Ground::new("guard-link");
+    let outside = g.root.join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let (attic, act) = sealed(&g, |w| fs::remove_file(w.join("src/b.rs")).unwrap());
+    std::os::unix::fs::symlink(outside.join("b.rs"), g.world().join("src/b.rs")).unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert!(
+        matches!(&c[..], [(p, State::Absent, State::Link { target })] if p == "src/b.rs" && *target == outside.join("b.rs")),
+        "{c:?}"
+    );
+    assert!(
+        fs::symlink_metadata(g.world().join("src/b.rs"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        !outside.join("b.rs").exists(),
+        "nothing written through the link"
+    );
+}
+
+/// A directory swapped for a symlink leading out of the world: the path beyond it is a
+/// conflict, even when the file out there holds what the act left.
+#[test]
+fn a_symlinked_directory_is_never_gone_through() {
+    let g = Ground::new("guard-beyond");
+    let outside = g.root.join("outside");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    fs::rename(g.world().join("src"), &outside).unwrap();
+    std::os::unix::fs::symlink(&outside, g.world().join("src")).unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert!(
+        c.iter()
+            .any(|(p, _, now)| p == "src/a.rs" && *now == State::Beyond { lead: "src".into() }),
+        "{c:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(outside.join("a.rs")).unwrap(),
+        "the act\n"
+    );
+    assert!(
+        fs::symlink_metadata(g.world().join("src"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+/// Nothing changed since the act: the undo puts the world back exactly as it was — what the act
+/// changed, deleted, created, made executable or turned into a directory.
+#[test]
+fn an_unchanged_state_restores_exactly() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let g = Ground::new("guard-exact");
+    fs::write(g.world().join("run.sh"), "echo hi\n").unwrap();
+    let (attic, act) = sealed(&g, |w| {
+        fs::write(w.join("src/a.rs"), "the act\n").unwrap();
+        fs::remove_file(w.join("src/b.rs")).unwrap();
+        fs::create_dir(w.join("src/b.rs")).unwrap();
+        fs::write(w.join("src/b.rs/inner.rs"), "inside\n").unwrap();
+        fs::write(w.join("new.rs"), "new\n").unwrap();
+        std::os::unix::fs::symlink("src/a.rs", w.join("link")).unwrap();
+        fs::set_permissions(w.join("run.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+    });
+    let Restore::Restored(paths) = attic.restore(&act, &[]).unwrap() else {
+        panic!("refused");
+    };
+    assert_eq!(paths.len(), 6, "{paths:?}");
+    assert_eq!(
+        attic.snapshot("after the undo").unwrap().tree,
+        act.before.tree
+    );
+    assert_eq!(read(&g, "src/a.rs"), "fn a() {}\n");
+    assert_eq!(read(&g, "src/b.rs"), "fn b() {}\n");
+    assert!(!g.world().join("new.rs").exists());
+    assert!(fs::symlink_metadata(g.world().join("link")).is_err());
+    let mode = fs::metadata(g.world().join("run.sh"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o100, 0);
+}
+
+/// One path changed since the act, and nothing at all is undone.
+#[test]
+fn a_partial_conflict_restores_nothing() {
+    let g = Ground::new("guard-partial");
+    let (attic, act) = sealed(&g, |w| {
+        fs::write(w.join("src/a.rs"), "act a\n").unwrap();
+        fs::write(w.join("src/b.rs"), "act b\n").unwrap();
+        fs::write(w.join("new.rs"), "new\n").unwrap();
+    });
+    fs::write(g.world().join("src/b.rs"), "human b\n").unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert_eq!(
+        c.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
+        ["src/b.rs"]
+    );
+    assert_eq!(read(&g, "src/a.rs"), "act a\n");
+    assert_eq!(read(&g, "src/b.rs"), "human b\n");
+    assert_eq!(read(&g, "new.rs"), "new\n");
+    // Only the untouched path, asked for alone, is undone.
+    assert_eq!(
+        attic.restore(&act, &["src/a.rs"]).unwrap(),
+        Restore::Restored(vec!["src/a.rs".into()])
+    );
+    assert_eq!(read(&g, "src/a.rs"), "fn a() {}\n");
+}
+
+/// A path that is not plain and inside the world is refused before anything is read.
+#[test]
+fn a_path_outside_the_world_is_refused() {
+    let g = Ground::new("guard-path");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "x\n").unwrap());
+    for bad in [
+        "../x",
+        "/etc/passwd",
+        "src/../../x",
+        "",
+        "src//a.rs",
+        ".git/config",
+    ] {
+        assert!(attic.restore(&act, &[bad]).is_err(), "{bad}");
+    }
+    assert_eq!(read(&g, "src/a.rs"), "x\n");
 }

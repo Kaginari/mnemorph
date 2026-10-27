@@ -1395,6 +1395,9 @@ fn repair(
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
     let mut others = Vec::new();
+    // The act is sealed once, when the first path needs putting back: the attic undoes a path
+    // only while it is still as the child left it.
+    let mut sealed: Option<Option<mnemorph_tools::Act>> = None;
     for rel in changed(before, &c.world) {
         if courts.contains(&rel) {
             continue;
@@ -1413,9 +1416,15 @@ fn repair(
         }
         let restored = if before.has(&rel) {
             match (cx.attic(), held) {
-                (Some(attic), Some(snap)) if attic.holds(snap, &shown) => {
-                    attic.restore(snap, &[shown.as_str()]).is_ok()
-                }
+                (Some(attic), Some(snap)) if attic.holds(snap, &shown) => sealed
+                    .get_or_insert_with(|| attic.seal(snap.clone(), "after a commission").ok())
+                    .as_ref()
+                    .is_some_and(|act| {
+                        matches!(
+                            attic.restore(act, &[shown.as_str()]),
+                            Ok(mnemorph_tools::Restore::Restored(_))
+                        )
+                    }),
                 _ => false,
             }
         } else {

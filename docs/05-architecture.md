@@ -541,7 +541,22 @@ flowchart LR
   repository elsewhere: that file is kept, and put back when a command deletes it. A nested
   repository is kept as git keeps one, by its commit's name and none of its files, so the attic
   never says it holds one: a delete of it is told it was not kept. Two runs on one world take the attic in
-  turn — a lock around every snapshot and restore — never colliding on its index. The attic's
+  turn — a lock around every snapshot and restore — never colliding on its index. An undo
+  is guarded, in the spirit of `git push --force-with-lease`: an act is sealed — a second
+  snapshot taken when it ends — and an undo touches only what the act changed between the two,
+  and only if every such path is still as the act left it: the same blob, the same mode, a link
+  to the same target, or still nothing. One path changed since, by another court or the human,
+  and nothing at all is undone: the later writer is kept, and the outcome
+  (`Restore::Conflict`) names each path with what the act left and what is there now. There is
+  no override. A path the act created is removed, and one it changed or deleted is written back
+  by git's checkout of exactly those paths, read literally. A path reached through a symlink,
+  or under a file the act did not leave, is a conflict — git's checkout replaces such a link
+  rather than following it, so it would destroy the later writer's — and so is a directory
+  holding anything the undo would not remove. A path too large for either snapshot cannot be
+  undone, and a nested repository's gitlink never is. Every outcome is written to the attic's
+  log. The comparison and the writes share the attic's lock, not the world's: a writer outside
+  the attic that changes a path between the two is not seen. Directories the act made stay,
+  empty. A commission seals its child's act before it puts a stray back. The attic's
   git runs deaf to every configuration but its own: no hooks, no filters, no attributes, no
   fsmonitor from the world or the human's files.
   It prunes itself at most once a day: snapshots older than `attic.keep_days` (14) go, then the

@@ -5265,3 +5265,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   session ending with nothing to resume unlinks its lock file while holding it. Docs 03.
 - **Tests:** loop `a_hostile_journal_is_shown_escaped`, `a_run_that_cannot_be_held_opens_no_session`,
   `a_probe_never_refuses_and_finished_locks_go`.
+
+---
+
+### [2026-10-27T16:43:12+01:00] rimuru — #90: a guarded attic restore — an undo only while the files are as the act left them
+- **Done:** mnemorph-tools `Attic::seal(before, why) -> Act` snapshots what an act left;
+  `Attic::restore(&Act, paths) -> Result<Restore, String>` diffs the act's two trees, compares each
+  changed path now (blob, exec bit, a link's target, absence) to what the act left, and refuses
+  the whole undo (`Restore::Conflict`, each path with left/now `State`) on any difference; else
+  removes what the act created and checks out the rest with literal pathspecs. A path beyond a
+  symlink or a file the act did not leave, and a directory holding more than the undo removes,
+  are conflicts; paths that are not plain and inside the world are errors. Outcomes go to the
+  attic's log. No override. Commission's stray put-back seals the child's act and uses it.
+  `mnemorph_tools::rollback`: `Deployment`, `Deployed`, `roll_back` — a deploy rolls back only
+  while the deployed version is ours. Docs 05 (the attic), 02 (Kijin rollback).
+- **Tests:** tools `attic.rs` — concurrent edit refused and named; later deletion, mode change, a
+  new symlink, a symlinked directory each a conflict; an unchanged state restores to the very
+  tree before; a partial conflict restores nothing; bad paths refused. With the comparison
+  disabled, the six guard tests fail. `rollback` unit tests.
+- **Learned:** `git checkout <tree> -- p` never follows a symlinked directory — it unlinks it and
+  makes a directory, and with a directory in the way it removes the subtree: safe for the world's
+  border, destructive for a later writer, so both are checked before git runs.

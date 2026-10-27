@@ -370,6 +370,14 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
   replayed; it is gated again.
+- **A rollback is a lease on what the act left.** `kijin-deploy` rolls back only while the
+  version deployed is still the one its act deployed: the post journal's deploy (`Deployed`:
+  the environment, the version before, ours) against what the target reports now
+  (`mnemorph_tools::rollback`). A later deploy, by the human or another run, is kept: the
+  rollback is refused (`Rollback::Conflict`), names the version deployed now, and is journaled
+  like any result. There is no override. Files follow the same rule in the attic
+  ([architecture](05-architecture.md)): an undo writes nothing unless every path is still as
+  the act left it.
 - **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**

@@ -3,8 +3,9 @@
 //! Before every command and every file write the working tree is snapshotted into the attic's own
 //! git object store — outside the world, so the kernel guard lets no command touch it. Only
 //! changed files are hashed again, and ignored files (`node_modules`, `target`) are left out: they
-//! rebuild. A deletion is reported with the snapshot that holds it, and any path restores from
-//! it.
+//! rebuild. A deletion is reported with the snapshot that holds it. An act sealed with a second
+//! snapshot when it ends can be undone, but only while every path it changed is still as it left
+//! it: a later writer is kept, and the undo is refused whole.
 //!
 //! The world's own `.git` cannot be snapshotted that way, so its objects — immutable, named by
 //! their hash — are hard-linked into the attic and its refs copied: an `rm -rf .git` unlinks the
@@ -14,6 +15,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Write as _;
+use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -40,6 +42,135 @@ pub struct Snapshot {
     pub tree: String,
     /// Files too large to keep, left out of this snapshot.
     pub skipped: Vec<String>,
+}
+
+/// An act as the attic kept it: the snapshot before it, and the one it left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Act {
+    /// The world before the act.
+    pub before: Snapshot,
+    /// The world as the act left it.
+    pub after: Snapshot,
+}
+
+/// What a path is, as an undo compares it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum State {
+    /// Nothing there.
+    Absent,
+    /// A regular file: its content's blob id, and whether it is executable.
+    File {
+        /// The content's git blob id.
+        blob: String,
+        /// The owner's execute bit.
+        executable: bool,
+    },
+    /// A symlink, and where it points.
+    Link {
+        /// The link's target, as written.
+        target: PathBuf,
+    },
+    /// A directory where a file or a link was.
+    Dir,
+    /// A fifo, a socket or a device.
+    Other,
+    /// Reached only through `lead`, a symlink or a file the act did not leave.
+    Beyond {
+        /// The leading path that is not a directory.
+        lead: String,
+    },
+}
+
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            State::Absent => f.write_str("nothing"),
+            State::File { blob, executable } => write!(
+                f,
+                "{} file {}",
+                if *executable { "an executable" } else { "a" },
+                &blob[..blob.len().min(12)]
+            ),
+            State::Link { target } => write!(f, "a symlink to {}", target.display()),
+            State::Dir => f.write_str("a directory"),
+            State::Other => f.write_str("a special file"),
+            State::Beyond { lead } => write!(f, "a path beyond `{lead}`, not a directory"),
+        }
+    }
+}
+
+/// A path changed since the act: what the act left there, and what is there now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conflict {
+    /// The path, relative to the world.
+    pub path: String,
+    /// What the act left.
+    pub left: State,
+    /// What is there now.
+    pub now: State,
+}
+
+impl std::fmt::Display for Conflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "`{}`: the act left {}, now {}",
+            self.path, self.left, self.now
+        )
+    }
+}
+
+/// An undo's outcome.
+#[must_use]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Restore {
+    /// Every path was as the act left it, and is as it was before; these paths changed.
+    Restored(Vec<String>),
+    /// Some path changed since the act; nothing was undone.
+    Conflict(Vec<Conflict>),
+}
+
+/// One path an act changed: its tree entry before and after (`None`: absent).
+struct Change {
+    path: String,
+    before: Option<Entry>,
+    after: Option<Entry>,
+}
+
+struct Entry {
+    mode: String,
+    oid: String,
+}
+
+/// Whether every non-directory under `dir` (at `rel` in the world) is a path this undo removes.
+fn only_undone(dir: &Path, rel: &str, undone: &std::collections::HashSet<&str>) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    entries.into_iter().all(|e| {
+        let Ok(e) = e else { return false };
+        let Ok(kind) = e.file_type() else {
+            return false;
+        };
+        let name = e.file_name();
+        let Some(name) = name.to_str() else {
+            return false;
+        };
+        let child = format!("{rel}/{name}");
+        if kind.is_dir() {
+            only_undone(&e.path(), &child, undone)
+        } else {
+            undone.contains(child.as_str())
+        }
+    })
+}
+
+/// A relative path with no empty, `.` or `..` component, and not inside `.git`.
+fn plain(p: &str) -> bool {
+    !p.is_empty()
+        && !p.starts_with('/')
+        && p.split('/')
+            .all(|c| !c.is_empty() && c != "." && c != ".." && c != ".git")
 }
 
 /// What the attic never keeps, whatever the world ignores: build output and dependencies
@@ -375,20 +506,262 @@ impl Attic {
             })
     }
 
-    /// Put `paths` back as they were in `snap` (all of them when `paths` is empty).
+    /// Close an act: snapshot what it left, beside the snapshot taken before it. Only a sealed
+    /// act can be undone, because an undo first checks that the world is still as the act left
+    /// it.
     ///
     /// # Errors
     ///
-    /// Git fails, or a path was not in the snapshot.
-    pub fn restore(&self, snap: &Snapshot, paths: &[&str]) -> Result<(), String> {
-        let _held = self.lock()?;
-        let mut args = vec!["checkout", snap.tree.as_str(), "--"];
-        if paths.is_empty() {
-            args.push(".");
-        } else {
-            args.extend_from_slice(paths);
+    /// The snapshot fails.
+    pub fn seal(&self, before: Snapshot, why: &str) -> Result<Act, String> {
+        let after = self.snapshot(why)?;
+        Ok(Act { before, after })
+    }
+
+    /// Undo `act` on `paths` (everything it changed when `paths` is empty), but only if each
+    /// path it changed there is still as the act left it — content, mode, a link's target, or
+    /// its absence. One path changed since, by anyone, and nothing is undone: the later writer
+    /// is kept and every such path is named. A path the act created is removed; one it changed
+    /// or deleted is written back. Nothing outside the world, and nothing reached through a
+    /// symlink, is touched: a path under a symlink or a file the act did not leave is a
+    /// conflict. The outcome is written to the attic's log.
+    ///
+    /// # Errors
+    ///
+    /// A path is not a plain relative path inside the world, a changed path was too large for
+    /// either snapshot to keep, a snapshot is gone, or git or the filesystem fails.
+    pub fn restore(&self, act: &Act, paths: &[&str]) -> Result<Restore, String> {
+        for p in paths {
+            if *p != "." && !plain(p) {
+                return Err(format!(
+                    "`{p}` is not a plain relative path inside the world"
+                ));
+            }
         }
-        self.ok(&args).map(|_| ())
+        let _held = self.lock()?;
+        let changes: Vec<Change> = self
+            .changes(act)?
+            .into_iter()
+            .filter(|c| {
+                paths.is_empty()
+                    || paths
+                        .iter()
+                        .any(|p| *p == "." || c.path == *p || c.path.starts_with(&format!("{p}/")))
+            })
+            .collect();
+        for c in &changes {
+            if !plain(&c.path) {
+                return Err(format!("the attic names `{}`, not a plain path", c.path));
+            }
+            if act.before.skipped.contains(&c.path) || act.after.skipped.contains(&c.path) {
+                return Err(format!(
+                    "`{}` was too large for the attic to keep, so the act cannot be undone there",
+                    c.path
+                ));
+            }
+        }
+        let undone: std::collections::HashSet<&str> =
+            changes.iter().map(|c| c.path.as_str()).collect();
+        let now = self.states(&changes, &undone)?;
+        let mut conflicts = Vec::new();
+        for (c, now) in changes.iter().zip(now) {
+            let left = self.state_in_tree(c.after.as_ref())?;
+            if left != now {
+                conflicts.push(Conflict {
+                    path: c.path.clone(),
+                    left,
+                    now,
+                });
+            }
+        }
+        if !conflicts.is_empty() {
+            let named: Vec<String> = conflicts.iter().map(ToString::to_string).collect();
+            self.journal(act, &format!("refused: {}", named.join("; ")));
+            return Ok(Restore::Conflict(conflicts));
+        }
+        // Every path is as the act left it: what it created goes, then what it changed or
+        // deleted comes back — by git, which never writes through a symlink.
+        for c in changes.iter().filter(|c| c.before.is_none()) {
+            let at = self.world.join(&c.path);
+            if fs::symlink_metadata(&at).is_ok() {
+                fs::remove_file(&at).map_err(|e| format!("{}: {e}", c.path))?;
+            }
+        }
+        let back: Vec<&str> = changes
+            .iter()
+            .filter(|c| c.before.is_some())
+            .map(|c| c.path.as_str())
+            .collect();
+        for chunk in back.chunks(200) {
+            let mut args = vec![
+                "--literal-pathspecs",
+                "checkout",
+                act.before.tree.as_str(),
+                "--",
+            ];
+            args.extend_from_slice(chunk);
+            self.ok(&args)?;
+        }
+        let restored: Vec<String> = changes.into_iter().map(|c| c.path).collect();
+        self.journal(act, &format!("restored: {}", restored.join(", ")));
+        Ok(Restore::Restored(restored))
+    }
+
+    /// What `act` changed, path by path; a nested repository's gitlink is never held, so never
+    /// undone.
+    fn changes(&self, act: &Act) -> Result<Vec<Change>, String> {
+        let raw = self.ok_bytes(&[
+            "diff-tree",
+            "-r",
+            "-z",
+            "--no-renames",
+            act.before.tree.as_str(),
+            act.after.tree.as_str(),
+        ])?;
+        let mut fields = raw.split('\0');
+        let mut out = Vec::new();
+        while let Some(meta) = fields.next().filter(|m| !m.is_empty()) {
+            let path = fields
+                .next()
+                .ok_or("git diff-tree: a change without a path")?;
+            let parts: Vec<&str> = meta.trim_start_matches(':').split(' ').collect();
+            let [old_mode, new_mode, old_oid, new_oid, ..] = parts[..] else {
+                return Err(format!("git diff-tree: unreadable `{meta}`"));
+            };
+            if old_mode == "160000" || new_mode == "160000" {
+                continue;
+            }
+            let entry = |mode: &str, oid: &str| {
+                (mode != "000000").then(|| Entry {
+                    mode: mode.to_owned(),
+                    oid: oid.to_owned(),
+                })
+            };
+            out.push(Change {
+                path: path.to_owned(),
+                before: entry(old_mode, old_oid),
+                after: entry(new_mode, new_oid),
+            });
+        }
+        Ok(out)
+    }
+
+    /// The state a tree entry records.
+    fn state_in_tree(&self, entry: Option<&Entry>) -> Result<State, String> {
+        Ok(match entry {
+            None => State::Absent,
+            Some(e) if e.mode == "120000" => {
+                let out = self
+                    .git(&["cat-file", "blob", &e.oid])
+                    .map_err(|e| format!("git: {e}"))?;
+                if !out.status.success() {
+                    return Err(format!("the attic lost the link `{}`", e.oid));
+                }
+                State::Link {
+                    target: PathBuf::from(std::ffi::OsString::from_vec(out.stdout)),
+                }
+            }
+            Some(e) => State::File {
+                blob: e.oid.clone(),
+                executable: e.mode == "100755",
+            },
+        })
+    }
+
+    /// The state of each changed path in the world now. A leading component that is not a
+    /// directory hides the path, unless the act itself left it there and this undo removes it.
+    fn states(
+        &self,
+        changes: &[Change],
+        undone: &std::collections::HashSet<&str>,
+    ) -> Result<Vec<State>, String> {
+        let mut states = Vec::with_capacity(changes.len());
+        let mut files = Vec::new();
+        for (i, c) in changes.iter().enumerate() {
+            let state = self.state_now(&c.path, undone)?;
+            if matches!(state, State::File { .. }) {
+                files.push((i, c.path.as_str()));
+            }
+            states.push(state);
+        }
+        let blobs = self.hash_files(&files.iter().map(|(_, p)| *p).collect::<Vec<_>>())?;
+        for ((i, _), hashed) in files.into_iter().zip(blobs) {
+            if let State::File { blob, .. } = &mut states[i] {
+                *blob = hashed;
+            }
+        }
+        Ok(states)
+    }
+
+    /// One path's state now, its blob left empty for a file (hashed in one batch after).
+    fn state_now(
+        &self,
+        rel: &str,
+        undone: &std::collections::HashSet<&str>,
+    ) -> Result<State, String> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let parts: Vec<&str> = rel.split('/').collect();
+        for depth in 1..parts.len() {
+            let lead = parts[..depth].join("/");
+            match fs::symlink_metadata(self.world.join(&lead)) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::Absent),
+                Err(e) => return Err(format!("{lead}: {e}")),
+                Ok(m) if m.is_dir() => {}
+                Ok(_) if undone.contains(lead.as_str()) => return Ok(State::Absent),
+                Ok(_) => return Ok(State::Beyond { lead }),
+            }
+        }
+        let at = self.world.join(rel);
+        Ok(match fs::symlink_metadata(&at) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => State::Absent,
+            Err(e) => return Err(format!("{rel}: {e}")),
+            Ok(m) if m.file_type().is_symlink() => State::Link {
+                target: fs::read_link(&at).map_err(|e| format!("{rel}: {e}"))?,
+            },
+            Ok(m) if m.is_file() => State::File {
+                blob: String::new(),
+                executable: m.permissions().mode() & 0o100 != 0,
+            },
+            // A directory holding only what this undo removes is gone once it runs; anything
+            // else in it is a later writer's, which git's checkout would sweep away.
+            Ok(m) if m.is_dir() && only_undone(&at, rel, undone) => State::Absent,
+            Ok(m) if m.is_dir() => State::Dir,
+            Ok(_) => State::Other,
+        })
+    }
+
+    /// The blob ids of `paths` (regular files, relative to the world), byte for byte.
+    fn hash_files(&self, paths: &[&str]) -> Result<Vec<String>, String> {
+        let mut out = Vec::with_capacity(paths.len());
+        for chunk in paths.chunks(200) {
+            let mut args = vec!["hash-object", "--no-filters", "--"];
+            args.extend_from_slice(chunk);
+            let ids = self.ok(&args)?;
+            out.extend(ids.lines().map(str::to_owned));
+        }
+        if out.len() == paths.len() {
+            Ok(out)
+        } else {
+            Err("git hash-object: an id short".into())
+        }
+    }
+
+    /// Write an undo's outcome to the attic's log.
+    fn journal(&self, act: &Act, what: &str) {
+        if let Ok(mut log) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.dir.join("snapshots.log"))
+        {
+            let _ = writeln!(
+                log,
+                "{} restore {}..{} {}",
+                mnemorph_now(),
+                act.before.tree,
+                act.after.tree,
+                what.replace('\n', " ")
+            );
+        }
     }
 
     /// Keep the world's repository: hard links to its objects (immutable), copies of its refs.
