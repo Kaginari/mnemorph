@@ -504,10 +504,9 @@ pub(crate) async fn order(
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
-    // What the world held before the child, to put back what it changes off its ground.
-    let held = held_before(cx);
-    let before = snapshot(&c.world);
+    let (held, before) = (held_before(cx), snapshot(&c.world));
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
+    let act = sealed(cx, held);
     drop(seat);
     // Metis's decision is booked against the commission, as a bench read is against its run.
     let spent = child.spent_wt().saturating_add(route_wt);
@@ -521,7 +520,7 @@ pub(crate) async fn order(
         &roster,
         &a.to,
         &before,
-        sealed(cx, held).as_ref(),
+        act.as_ref(),
         &courts,
         answered,
     );
@@ -1360,7 +1359,8 @@ fn report_of(
     report.emit(DEFAULT_CAP, None)
 }
 
-/// The attic's snapshot of the world before a commission, to put back from.
+/// The attic's snapshot of the world before a commission, to put back from what the child
+/// changes off its ground.
 fn held_before(cx: &Context) -> Option<mnemorph_tools::Snapshot> {
     cx.attic()
         .and_then(|attic| attic.snapshot("before a commission").ok())

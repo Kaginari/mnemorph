@@ -5304,3 +5304,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (comparison off, `NOFOLLOW`/resolve flags off): 11 tests fail.
 - **Learned:** re-checking metadata before a path-based write is still check-then-act; only a
   pinned handle closes it. Open (@?): repair's n restores read n diffs — batch later.
+
+---
+
+### [2026-10-27T17:18:51+01:00] rimuru — #90, Fable's last three: a planted temp name survives, EPERM walks, seal before the seat goes
+- **Done:** `pinned::put` names its temporary from 128 bits of `/dev/urandom` and unlinks it on a
+  failed fill only when the creation itself did not find the name taken; `openat2` falling back to
+  the walk on EPERM too (seccomp); commission seals the act before `drop(seat)`.
+- **Tests:** pinned `a_planted_file_at_the_temporary_name_survives`. `the_clock_reaches_a_running_command`
+  failed once locally under load and passed on rerun (timing).

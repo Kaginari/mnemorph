@@ -68,7 +68,8 @@ pub(crate) fn parent(root: &OwnedFd, parts: &[&str], create: bool) -> io::Result
             ResolveFlags::BENEATH | ResolveFlags::NO_SYMLINKS,
         ) {
             Ok(fd) => return Ok(fd),
-            Err(Errno::NOSYS | Errno::NOENT | Errno::AGAIN) => {}
+            // No `openat2` here (an old kernel, or a container's seccomp filter): walk.
+            Err(Errno::NOSYS | Errno::PERM | Errno::NOENT | Errno::AGAIN) => {}
             Err(e) => return Err(e.into()),
         }
     }
@@ -203,23 +204,27 @@ pub(crate) fn unlink(dir: &OwnedFd, name: &str) -> io::Result<()> {
     }
 }
 
-/// Put `name` in `dir` from a temporary sibling written by `fill`: renamed over what is there
-/// when `replace`, else only where nothing is (a directory of empty directories in the way is
-/// removed first). The temporary goes again on any failure.
+/// Put `name` in `dir` from a temporary sibling, named at random, that `fill` creates
+/// exclusively (`O_EXCL`, or `symlinkat`) and writes: renamed over what is there when `replace`,
+/// else only where nothing is (a directory of empty directories in the way is removed first).
+/// The temporary goes again on a failure — only when this call created it: a name already taken
+/// fails the creation, and what was there stays.
 pub(crate) fn put(
     dir: &OwnedFd,
     name: &str,
     replace: bool,
     fill: impl FnOnce(&OwnedFd, &str) -> io::Result<()>,
 ) -> io::Result<()> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let tmp = format!(
-        ".mnemorph-restore-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    );
-    let placed = fill(dir, &tmp).and_then(|()| {
+    let tmp = temp_name()?;
+    if let Err(e) = fill(dir, &tmp) {
+        // Creating is the only step of a fill that can find the name taken; anything after it
+        // failed on the file this call made.
+        if e.kind() != io::ErrorKind::AlreadyExists {
+            let _ = rustix::fs::unlinkat(dir, tmp.as_str(), AtFlags::empty());
+        }
+        return Err(e);
+    }
+    let placed = (|| {
         match stat(dir, name)? {
             Some(s) if kind(&s) == FileType::Directory => remove_empty_tree(dir, name)?,
             _ => {}
@@ -235,11 +240,27 @@ pub(crate) fn put(
                 RenameFlags::NOREPLACE,
             )?)
         }
-    });
+    })();
     if placed.is_err() {
         let _ = rustix::fs::unlinkat(dir, tmp.as_str(), AtFlags::empty());
     }
     placed
+}
+
+/// A temporary's name: 128 random bits from the kernel, so no one can plant it ahead.
+fn temp_name() -> io::Result<String> {
+    #[cfg(test)]
+    if let Some(name) = tests::PLANTED.with(std::cell::RefCell::take) {
+        return Ok(name);
+    }
+    let mut bits = [0u8; 16];
+    io::Read::read_exact(&mut File::open("/dev/urandom")?, &mut bits)?;
+    let mut name = String::from(".mnemorph-restore-");
+    for b in bits {
+        use std::fmt::Write as _;
+        let _ = write!(name, "{b:02x}");
+    }
+    Ok(name)
 }
 
 /// A new file `tmp` in `dir`, created exclusively, filled from `content`, its mode set.
@@ -302,10 +323,38 @@ pub fn remove_created(world: &Path, rel: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::fs;
     use std::path::Path;
 
-    use super::remove_created;
+    use super::{put, remove_created, root, write_new};
+
+    thread_local! {
+        /// The temporary name the next `put` takes, when a test plants one.
+        pub(super) static PLANTED: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+
+    /// A file already at the temporary's name is not this call's: the creation fails, and the
+    /// file stays as it was.
+    #[test]
+    fn a_planted_file_at_the_temporary_name_survives() {
+        let dir = std::env::temp_dir().join(format!("mnemorph-planted-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".planted"), "someone else's").unwrap();
+        PLANTED.with(|p| *p.borrow_mut() = Some(".planted".into()));
+        let fd = root(&dir).unwrap();
+        let r = put(&fd, "x", false, |d, tmp| {
+            write_new(d, tmp, &mut &b"ours"[..], false)
+        });
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            fs::read_to_string(dir.join(".planted")).unwrap(),
+            "someone else's"
+        );
+        assert!(!dir.join("x").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_removal_never_goes_through_a_swapped_parent() {
