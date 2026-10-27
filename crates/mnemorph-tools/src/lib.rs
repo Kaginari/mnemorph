@@ -4,6 +4,7 @@ pub mod attic;
 mod beneath;
 pub mod classify;
 pub mod files;
+mod forgive;
 pub mod gate;
 pub mod patch;
 mod pinned;

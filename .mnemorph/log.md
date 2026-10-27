@@ -5313,3 +5313,74 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   the walk on EPERM too (seccomp); commission seals the act before `drop(seat)`.
 - **Tests:** pinned `a_planted_file_at_the_temporary_name_survives`. `the_clock_reaches_a_running_command`
   failed once locally under load and passed on rerun (timing).
+
+---
+
+### [2026-10-27T16:50:55+01:00] rimuru — #45: a forgiving edit — one candidate only, and it says what it forgave
+- **Done:** mnemorph-tools `forgive`: with no exact match, `edit` (and each `multiedit` edit) climbs
+  line endings → trailing whitespace → inner whitespace → indentation, taking a rung only when exactly
+  one region matches; two or more stop the ladder, name each line, write nothing (an edit miss); none
+  matching keeps the closest-line error. Indentation matches level by level and re-indents the
+  replacement in the file's tabs or spaces; line endings stay the file's. The result reads e.g.
+  "forgiven: indentation (+4 spaces) at lines 2–4". No anchor matching. A rung stops past 20M line
+  comparisons (strict). Docs: lessons.md, the edit tool's description.
+- **Tests:** tools `each_forgiving_rung_takes_one_region_and_says_so` (CRLF and tabs kept),
+  `a_forgiving_rung_with_two_places_names_both_and_writes_nothing` (with the uniqueness check
+  disabled — first candidate taken — it fails), `an_exact_match_forgives_nothing`.
+- **Learned:** the edit tool lives in files.rs, not patch.rs (patch applies unified diffs).
+
+---
+
+### [2026-10-27T16:59:44+01:00] rimuru — #236, reviewed: meaningful whitespace stays strict
+- **Done:** the inner-whitespace rung refuses a changed run inside a quote (odd `"`, `'` or backtick
+  count before it); Markdown files keep trailing whitespace strict (a hard break); indentation levels
+  are read from `old_string` alone, a half-step replacement line keeps its extra spaces, and in a
+  tab-indented file stays strict. Docs: lessons.md, the edit description.
+- **Tests:** tools `meaningful_whitespace_is_never_forgiven`.
+
+---
+
+### [2026-10-27T16:41:09+01:00] rimuru — #101: an outward plan with no declared undo is destructive
+- **Done:** mnemorph-config module `outward`: the Kijin's plan step typed — `Act` (command,
+  `Undo::{Rollback, Revert, None}`, `Effect::{Once, Standing { expires }}`), `plan` classes it
+  into a `Planned` (only `plan` makes one): an outward act with no undo, or a standing effect with
+  no expiry or one more than a year out, is `destructive`; the classifier's patterns stay the
+  first reading. An undo is checked one level deep: not empty, not the act again, not refused,
+  outward, not destructive. `Envelope::covers` refuses a destructive act before time, count or
+  patterns, and matches patterns word by word, never a command that chains, expands or globs.
+  `Planned::ask` puts `no undo — destructive` first on the card. Docs 02 (Kijin, envelopes,
+  classes). gate.rs untouched; the gate calls `covers` when it honours envelopes (M11).
+- **Tests:** config `outward.rs` — no undo is destructive and a matching, in-force envelope still
+  refuses it; a standing effect with no or a far expiry is destructive; an undone act is covered;
+  malformed undos refused; the pattern list a second line; the matcher. With the classification
+  removed three fail; with the envelope's destructive guard removed the same three; with the undo
+  check removed the malformed test fails.
+- **Learned:** the classifier calls a branch delete destructive, so a new branch's only undo is
+  refused: a `feat/*` push envelope covers a push only with an outward undo (a revert), else asks.
+
+---
+
+### [2026-10-27T17:02:07+01:00] rimuru — #101, reviewed (Opus, Fable on Opus): the undo is the harness's; pushes and `gh api` read closer
+- **Done:** a model-written undo string could be outward and fake (`gh help`), and the real undos
+  (deletes) are destructive, so `check_undo` and `Effect` are gone. `Act` is typed:
+  `PushNewBranch` (create-only lease), `AddLabel`, `Comment` — the harness renders the command
+  and, from `Done` (pushed sha, comment id read only from this act's own URL), the undo; the repo
+  pinned in the act. `Command(String)` outward is destructive, no envelope covers it. Envelope
+  patterns are read against the act's words (printable ASCII, no `:` `'` `"` or shell character).
+  Classifier: `git push` outward only as one plain branch push (unknown options, every ref outside
+  `refs/heads/`, renames, multiple refspecs, `--all`, `--receive-pack`, `-o` destructive; the
+  create-only lease is not); `gh api` writes on any non-GET method, field, `--input` or graphql.
+  vet fills an in-word `*` with a plain name. Docs 02. Standing effects and remote-URL
+  resolution: M11.
+- **Tests:** config `outward.rs` (6), corpus rows for every refspec and `gh api` hole. Disabled
+  one at a time — command class, envelope guard, refspec parse, `gh api`, word check, branch-name
+  check — each fails its test.
+- **Learned:** the classifier takes the highest class over every argument prefix, so a guard must
+  read a flag with nothing after it yet as nothing, or every `-X GET` reads as a write.
+
+---
+
+### [2026-10-27T17:11:56+01:00] rimuru — #101, Fable's last read: a push destination is the source's own branch
+- **Done:** `refspec` takes a destination only as the source itself, `refs/heads/<source>`, or
+  any `refs/heads/` branch for `HEAD`; `feat/x:refs/heads/main` and `HEAD:main` are destructive.
+- **Tests:** corpus rows for both, and the two accepted forms.
