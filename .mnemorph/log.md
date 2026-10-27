@@ -5318,6 +5318,54 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   `ignored_yarnrc_and_cargo_config_are_part_of_the_plan`. Recheck disabled: 10 of 15 fail.
 - **Learned:** a word naming a path inside `.git` has no work tree: git refuses `--show-toplevel`
   there, so it is resolved to the repository it belongs to.
+### [2026-10-27T16:43:12+01:00] rimuru — #90: a guarded attic restore — an undo only while the files are as the act left them
+- **Done:** mnemorph-tools `Attic::seal(before, why) -> Act` snapshots what an act left;
+  `Attic::restore(&Act, paths) -> Result<Restore, String>` diffs the act's two trees, compares each
+  changed path now (blob, exec bit, a link's target, absence) to what the act left, and refuses
+  the whole undo (`Restore::Conflict`, each path with left/now `State`) on any difference; else
+  removes what the act created and checks out the rest with literal pathspecs. A path beyond a
+  symlink or a file the act did not leave, and a directory holding more than the undo removes,
+  are conflicts; paths that are not plain and inside the world are errors. Outcomes go to the
+  attic's log. No override. Commission's stray put-back seals the child's act and uses it.
+  `mnemorph_tools::rollback`: `Deployment`, `Deployed`, `roll_back` — a deploy rolls back only
+  while the deployed version is ours. Docs 05 (the attic), 02 (Kijin rollback).
+- **Tests:** tools `attic.rs` — concurrent edit refused and named; later deletion, mode change, a
+  new symlink, a symlinked directory each a conflict; an unchanged state restores to the very
+  tree before; a partial conflict restores nothing; bad paths refused. With the comparison
+  disabled, the six guard tests fail. `rollback` unit tests.
+- **Learned:** `git checkout <tree> -- p` never follows a symlinked directory — it unlinks it and
+  makes a directory, and with a directory in the way it removes the subtree: safe for the world's
+  border, destructive for a later writer, so both are checked before git runs.
+
+---
+
+### [2026-10-27T17:05:26+01:00] rimuru — #90, reviewed (Opus, then Fable): the attic's undo owns its writes
+- **Done:** `restore` no longer runs `git checkout` (its cached leading-path check then
+  unlink/create through the parent could be led out by a swap). New private `pinned`: parents by
+  `openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)`, else an `O_NOFOLLOW|O_DIRECTORY` walk; content
+  from one `cat-file --batch` into an exclusive temp, `fchmod`, `renameat` (`NOREPLACE` where the
+  act left nothing); `symlinkat`; `unlinkat` never on a directory; only empty dirs removed. Files
+  hashed only when a regular file of the left size, opened `O_NONBLOCK|O_NOFOLLOW`, hashed from the
+  fd. `Attic::hold`/`restore_held`; `remove_created` for commission's new-file removal; the act
+  sealed when `child.ask` returns; a part-way failure journaled. The rollback module dropped: the
+  deploy rule stays in 02 as M9 work. Docs 05, 02.
+- **Tests:** racer hook swaps `src` for a symlink between check and write: nothing outside written
+  or removed; fifo and oversized file are conflicts, unread; pinned removal test. Guards disabled
+  (comparison off, `NOFOLLOW`/resolve flags off): 11 tests fail.
+- **Learned:** re-checking metadata before a path-based write is still check-then-act; only a
+  pinned handle closes it. Open (@?): repair's n restores read n diffs — batch later.
+
+---
+
+### [2026-10-27T17:18:51+01:00] rimuru — #90, Fable's last three: a planted temp name survives, EPERM walks, seal before the seat goes
+- **Done:** `pinned::put` names its temporary from 128 bits of `/dev/urandom` and unlinks it on a
+  failed fill only when the creation itself did not find the name taken; `openat2` falling back to
+  the walk on EPERM too (seccomp); commission seals the act before `drop(seat)`.
+- **Tests:** pinned `a_planted_file_at_the_temporary_name_survives`. `the_clock_reaches_a_running_command`
+  failed once locally under load and passed on rerun (timing).
+
+---
+
 ### [2026-10-27T16:50:55+01:00] rimuru — #45: a forgiving edit — one candidate only, and it says what it forgave
 - **Done:** mnemorph-tools `forgive`: with no exact match, `edit` (and each `multiedit` edit) climbs
   line endings → trailing whitespace → inner whitespace → indentation, taking a rung only when exactly
