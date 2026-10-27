@@ -422,10 +422,12 @@ flowchart LR
     and `.gradle/wrapper` (not `settings.xml` or `gradle.properties`); and each Node nvm
     installed, its `bin`, `lib` and `include` (not `etc/npmrc`). A cache not named is
     unreadable. A toolchain path that is a link resolving onto, inside or above a credential
-    path grants nothing. Two config files stay readable because their tools cannot run without
-    them, and both can hold a secret: `.cargo/config.toml` (a `[registry] token`) and
-    `.gitconfig` (an `http.extraHeader` bearer token) — keep such tokens in the credential files
-    instead. Seatbelt reads the same list and denies the credential paths besides. Writes: the world, the command's temporary directory
+    path grants nothing; Landlock resolves links again when a file is opened, so a link inside a
+    granted cache leads nowhere either. Of `~/go`, only `bin` and `pkg` (not `src`, the human's
+    projects). Some configs stay readable because their tools cannot run without them, and each
+    can hold a secret: `.cargo/config.toml` (a `[registry] token`), the remote URL in each cargo
+    git dependency's `.cargo/git/db/*/config`, and `.gitconfig` (an `http.extraHeader` bearer
+    token) — keep such tokens in the credential files instead. Seatbelt reads the same list and denies the credential paths besides. Writes: the world, the command's temporary directory
     inside it, and a few devices — for solo. A commissioned creature's commands are granted
     exactly what its soil admits, and the rest of the world is read-only to them: landlock can
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a

@@ -5144,3 +5144,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:**
   - The "above" half of the link check also guards the list itself: a tree named whole that
     holds a credential is refused even when no test names it.
+
+---
+
+### [2026-10-27T14:40:00+01:00] rimuru — #184, Fable's review of the review
+- **Fable found:** `~/go` (GOPATH) was granted whole, so `go/src` (the human's projects, their
+  `.env`) was readable; `.cargo/git/db/*/config` holds remote URLs that may embed a token; no test
+  proved a link inside a granted cache leads nowhere.
+- **Fixed:** `go/bin` and `go/pkg` only; the cargo git-db configs documented as an accepted risk
+  beside `config.toml`; the escape test plants `.cache/uv/x → .ssh` and reads the key through it.
+- **Test:** the policy test names `go` and `go/src` as never granted whole; the escape test's
+  read through the link is refused (Landlock resolves at open time).

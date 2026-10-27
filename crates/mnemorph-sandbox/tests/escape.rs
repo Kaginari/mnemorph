@@ -198,7 +198,10 @@ fn toolchain_credentials_cannot_be_read_but_their_caches_can() {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
+    // A link inside a granted cache leads to the keys: Landlock resolves it when the file opens.
+    std::os::unix::fs::symlink(g.path("home/.ssh"), g.path("home/.cache/uv/x")).unwrap();
     for script in [
+        "cat ~/.cache/uv/x/id_ed25519",
         "cat ~/.cargo/credentials.toml",
         "cat ~/.cache/huggingface/token",
         "cat ~/.config/git/credentials",
@@ -211,6 +214,7 @@ fn toolchain_credentials_cannot_be_read_but_their_caches_can() {
         let (ok, out) = g.run(&g.policy(false), script);
         assert!(
             !ok && !out.contains("TOKEN")
+                && !out.contains("PRIVATE KEY")
                 && !out.lines().any(|l| l == "credentials.toml" || l == "token"),
             "{script}: {out}"
         );

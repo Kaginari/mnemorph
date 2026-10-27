@@ -89,6 +89,8 @@ fn cargo_and_the_cache_are_read_part_by_part() {
         ".gradle",
         ".m2",
         ".nvm",
+        "go",
+        "go/src",
     ] {
         assert!(!p.read.contains(&home.join(tree)), "{tree} is named whole");
     }

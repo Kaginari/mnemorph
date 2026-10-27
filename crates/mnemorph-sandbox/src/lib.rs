@@ -64,8 +64,9 @@ pub const HOME_TOOLCHAINS: &[&str] = &[
     // Not `.cargo` whole: `credentials.toml` holds the crates.io tokens. Cargo reads its
     // binaries, the registry's index and sources, git dependencies and its config; its locks and
     // usage database (`.package-cache`, `.global-cache`) are written, which a read grant does
-    // not give anyway, and cargo goes on without them. Its config can hold a `[registry] token`
-    // too: cargo cannot build without its config, so that risk is accepted and stays readable.
+    // not give anyway, and cargo goes on without them. Its config can hold a `[registry] token`,
+    // and each git dependency's `git/db/*/config` its remote URL, which may embed a token: cargo
+    // cannot build without them, so that risk is accepted and they stay readable.
     ".cargo/bin",
     ".cargo/registry",
     ".cargo/git",
@@ -117,7 +118,10 @@ pub const HOME_TOOLCHAINS: &[&str] = &[
     ".config/git/config",
     ".config/git/ignore",
     ".config/git/attributes",
-    "go",
+    // Of `~/go` (GOPATH), the installed binaries and the module cache: `go/src` holds the
+    // human's own projects and their `.env` files.
+    "go/bin",
+    "go/pkg",
     // Not `.gradle` and `.m2` whole: `gradle.properties`, `settings.xml` and
     // `settings-security.xml` hold repository passwords.
     ".gradle/caches",
