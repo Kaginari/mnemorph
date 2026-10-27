@@ -5120,3 +5120,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:**
   - A read grant on a toolchain tree is a read grant on every secret a tool drops in it; name
     what builds use instead.
+
+---
+
+### [2026-10-27T14:10:00+01:00] rimuru — #184, Opus's review: the rest of the class
+- **Opus found:** `.config/git` (git's credential store), `.m2` and `.gradle` (`settings.xml`,
+  `settings-security.xml`, `gradle.properties`) and `.nvm` (`versions/node/*/etc/npmrc`) were
+  granted whole; `.cargo/config.toml` and `.gitconfig` can hold tokens; `Policy::existing`
+  granted wherever a toolchain link led.
+- **Fixed:**
+  1. `.config/git/{config,ignore,attributes}`, and `.config/git/credentials` in `HOME_CREDENTIALS`;
+  2. `.m2/repository`, `.gradle/caches`, `.gradle/wrapper`;
+  3. each nvm Node's `bin`, `lib`, `include`, listed when the policy is made;
+  4. `.cargo/config.toml` and `.gitconfig` stay readable, documented as an accepted risk;
+  5. a home toolchain rule resolving onto, inside or above a credential is dropped and kept in
+     `Policy::refused`.
+- **Test:** the escape test reads none of the new credentials and reads the caches beside them;
+  `each_nvm_node_is_read_without_its_npmrc`; `a_toolchain_linked_to_a_credential_is_refused`.
+  Disable-and-run: each whole tree back fails 2–3 tests; the link check off fails its test;
+  `.config/git` whole is caught by the link check alone, and with it off fails 4.
+- **Measured:** node, npm (`npm ls`, `config get`), pnpm and git run with the narrowed grants;
+  npm goes on when its global npmrc is unreadable.
+- **Learned:**
+  - The "above" half of the link check also guards the list itself: a tree named whole that
+    holds a credential is refused even when no test names it.
