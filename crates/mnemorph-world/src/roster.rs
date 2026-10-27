@@ -26,6 +26,29 @@ pub struct Roster {
 /// Names no creature may take: the human and the harness stand over every body.
 const RESERVED: &[&str] = &[crate::queue::HUMAN, crate::queue::HARNESS];
 
+/// Why a doc's name and race disagree on a Kijin post, if they do: the post is read from the
+/// name (`kijin-forge`), so only a Kijin bears a `kijin-` name, and a Kijin's is `kijin-` and its
+/// directory.
+fn misnamed_kijin(c: &Creature, seat: &Path) -> Option<String> {
+    let kijin = c.race.base() == Race::Kijin;
+    if !kijin {
+        return c.name.starts_with("kijin-").then(|| {
+            format!(
+                "`{}` is a kijin's name, but the doc's race is {}",
+                c.name, c.race
+            )
+        });
+    }
+    let dir = seat.file_name()?.to_string_lossy();
+    let want = format!("kijin-{dir}");
+    (c.name != want).then(|| {
+        format!(
+            "a kijin's heading is `kijin-` and its directory: `{want}`, not `{}`",
+            c.name
+        )
+    })
+}
+
 impl Roster {
     /// Read every `.mnemorph/<race>/<name>/README.md` of `world`.
     #[must_use]
@@ -75,7 +98,9 @@ impl Roster {
                 text.hash(&mut hasher);
                 match parse(&text, &rel) {
                     Ok(c) => {
-                        if RESERVED.contains(&c.name.as_str()) {
+                        if let Some(why) = misnamed_kijin(&c, &seat) {
+                            roster.problems.push(format!("{}: {why}", rel.display()));
+                        } else if RESERVED.contains(&c.name.as_str()) {
                             roster.problems.push(format!(
                                 "{}: `{}` is reserved: it names who stands over every body",
                                 rel.display(),

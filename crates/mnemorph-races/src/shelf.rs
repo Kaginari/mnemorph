@@ -154,7 +154,7 @@ pub enum Post {
     Release,
     /// Deploy: deploys, verifies health, rolls back.
     Deploy,
-    /// Forge: pushes branches, opens and updates pull requests, reads issues.
+    /// Forge: pushes branches, opens and updates pull requests, comments, labels, reads issues.
     Forge,
     /// Scout: keeps the advisory mirror, watches upstream releases, and is agent-mcp — the MCP
     /// catalog's curator and the conduit of every MCP call.
@@ -181,6 +181,179 @@ impl Post {
             Post::Forge => "kijin-forge",
             Post::Scout => "kijin-scout",
         }
+    }
+
+    /// The post a creature holds, by its name: `kijin-forge` holds the forge. Any other name
+    /// holds none.
+    #[must_use]
+    pub fn of(creature: &str) -> Option<Post> {
+        Post::ALL.into_iter().find(|p| p.creature() == creature)
+    }
+
+    /// The outward acts this post may do. Anything else is refused before the gate is asked.
+    #[must_use]
+    pub fn acts(self) -> &'static [OutwardKind] {
+        use OutwardKind::{
+            Comment, Deploy, Fetch, Label, Publish, PullRequest, PushBranch, PushTag, RerunCi,
+            Rollback, WriteOutside,
+        };
+        match self {
+            Post::Ci => &[Fetch, RerunCi],
+            Post::Release => &[Fetch, PushTag, Publish],
+            Post::Deploy => &[Fetch, Deploy, Rollback, WriteOutside],
+            Post::Forge => &[Fetch, PushBranch, PullRequest, Comment, Label],
+            Post::Scout => &[Fetch],
+        }
+    }
+}
+
+/// A kind of outward act: what the shell classifier reads a command as doing beyond the world.
+/// Every outward command has at least one; one the classifier cannot name is [`Other`], which
+/// no post holds.
+///
+/// [`Other`]: OutwardKind::Other
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum OutwardKind {
+    /// Read from outside and write nothing there: a GET, a fetch or clone, a CI log, an issue.
+    Fetch,
+    /// Push one branch, plainly: no force, no delete, no tag.
+    PushBranch,
+    /// Open, edit, ready, close or reopen a pull request.
+    PullRequest,
+    /// Comment on a pull request or an issue.
+    Comment,
+    /// Add or remove a label, or manage the repository's labels.
+    Label,
+    /// Re-run a CI workflow run.
+    RerunCi,
+    /// Push a tag.
+    PushTag,
+    /// Publish to a registry, push an image, or create, edit or delete a release.
+    Publish,
+    /// Apply, upgrade or scale a deployment (`kubectl`, `helm`).
+    Deploy,
+    /// Roll a deployment back.
+    Rollback,
+    /// Write or delete outside the world on this machine, or at a path known only at run time.
+    WriteOutside,
+    /// Install packages or tools from a registry.
+    Install,
+    /// Any other outward act: a socket, a remote shell, a forced push, a write through an API.
+    Other,
+}
+
+impl OutwardKind {
+    /// Every kind.
+    pub const ALL: [OutwardKind; 13] = [
+        OutwardKind::Fetch,
+        OutwardKind::PushBranch,
+        OutwardKind::PullRequest,
+        OutwardKind::Comment,
+        OutwardKind::Label,
+        OutwardKind::RerunCi,
+        OutwardKind::PushTag,
+        OutwardKind::Publish,
+        OutwardKind::Deploy,
+        OutwardKind::Rollback,
+        OutwardKind::WriteOutside,
+        OutwardKind::Install,
+        OutwardKind::Other,
+    ];
+
+    /// The posts that hold this kind.
+    #[must_use]
+    pub fn holders(self) -> Vec<Post> {
+        Post::ALL
+            .into_iter()
+            .filter(|p| p.acts().contains(&self))
+            .collect()
+    }
+
+    /// The one post that holds this kind; `None` when no post or several do.
+    #[must_use]
+    pub fn sole_post(self) -> Option<Post> {
+        match self.holders()[..] {
+            [post] => Some(post),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for OutwardKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            OutwardKind::Fetch => "fetch",
+            OutwardKind::PushBranch => "push-branch",
+            OutwardKind::PullRequest => "pull-request",
+            OutwardKind::Comment => "comment",
+            OutwardKind::Label => "label",
+            OutwardKind::RerunCi => "rerun-ci",
+            OutwardKind::PushTag => "push-tag",
+            OutwardKind::Publish => "publish",
+            OutwardKind::Deploy => "deploy",
+            OutwardKind::Rollback => "rollback",
+            OutwardKind::WriteOutside => "write-outside",
+            OutwardKind::Install => "install",
+            OutwardKind::Other => "other",
+        })
+    }
+}
+
+/// Checks a Kijin's outward acts against its post, the body named `body`. A body holding no post
+/// may do no outward act.
+///
+/// # Errors
+///
+/// The first act its post does not hold, with the post that does.
+pub fn check_post(body: &str, acts: &[OutwardKind]) -> Result<(), PostRefusal> {
+    let post = Post::of(body);
+    match acts
+        .iter()
+        .find(|a| post.is_none_or(|p| !p.acts().contains(a)))
+    {
+        Some(&act) => Err(PostRefusal {
+            body: body.to_owned(),
+            post,
+            act,
+        }),
+        None => Ok(()),
+    }
+}
+
+/// An outward act refused because the Kijin's post does not hold it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostRefusal {
+    /// The body that asked.
+    pub body: String,
+    /// Its post; `None` when its name holds none.
+    pub post: Option<Post>,
+    /// The act its post lacks.
+    pub act: OutwardKind,
+}
+
+impl fmt::Display for PostRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let refused = match self.post {
+            Some(post) => {
+                let acts: Vec<String> = post.acts().iter().map(ToString::to_string).collect();
+                format!(
+                    "the outward act `{}` is not in the {} post (its acts: {})",
+                    self.act,
+                    post.creature(),
+                    acts.join(", ")
+                )
+            }
+            None => format!(
+                "`{}` holds no kijin post, so it does no outward act (`{}` refused)",
+                self.body, self.act
+            ),
+        };
+        let route = match self.act.holders()[..] {
+            [] => "no post holds it; the human does it".to_owned(),
+            [holder] => format!("route it to {}", holder.creature()),
+            _ => "every kijin post holds it".to_owned(),
+        };
+        write!(f, "{refused}: {route}")
     }
 }
 

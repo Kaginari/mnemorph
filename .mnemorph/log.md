@@ -5533,3 +5533,62 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** pictures `a_reel_let_go_frees_its_kitty_frames_and_a_stored_frame_is_refreshed`,
   `an_unfocused_window_pauses_the_portrait`; run `releasing_turns_every_mode_off…` checks
   `?1004l`.
+
+---
+
+### [2026-10-27T18:01:10+01:00] rimuru — #18 decision 1: each Kijin post's outward acts are compiled in
+- **Done:** `mnemorph_races::OutwardKind` (fetch, push-branch, pull-request, comment, label,
+  rerun-ci, push-tag, publish, deploy, rollback, write-outside, install, other) and
+  `Post::acts`: ci fetch + rerun-ci; release fetch + push-tag + publish; deploy fetch + deploy +
+  rollback + write-outside; forge fetch + push-branch + pull-request + comment + label (M2);
+  scout fetch only. `Post::of` reads the post from the creature's name; `check_post` refuses
+  an act the post lacks, and every act of a body that holds no post. The classifier tags each
+  outward raise with its kind (`classify_acts`, the same walk); an untagged outward raise is
+  `other`, and the kinds are the whole command's, never a prefix's. `kubectl` and `helm` are
+  read (were `write`). The bash tool checks the post after the shelf, before the gate.
+  Territory stays doc-declared. Docs 02 (the posts table, the kinds table).
+- **Tests:** shell `a_kijin_does_only_its_posts_acts` (forge's deploy, deploy's push, scout's
+  push refused unasked; each post's acts reach the gate; no post refused); corpus
+  `outward_acts_by_kind`, `every_outward_row_names_its_acts`; law
+  `the_posts_acts_as_the_book_lists_them`, `a_post_holds_only_its_acts`. With the check
+  disabled in `shell.rs`, the shell test fails.
+- **Learned:** a destructive raise is outward only sometimes, so it gets no default kind: each
+  outward one (forced push, publishes, outside deletes, uninstalls) is tagged by hand. A plain
+  `git push origin v1.0` of a tag still reads as a branch push (the classifier cannot tell).
+
+---
+
+### [2026-10-27T18:35:14+01:00] rimuru — #239, reviewed (Opus, Fable): a kind is read only from the command's own words
+- **Done:** push-branch only for one `refs/heads/X` (or `HEAD:`/`X:` onto it) to a plain
+  remote; a bare push, a short name, `--follow-tags`, `--tags`, two refspecs, `ext::`, any
+  git global but `-C` into the world are `other`; `git -c … push` is destructive. A walk-wide
+  taint — an assignment or `env` prefix, `export`/`read`/`set`…, a loop variable, a function,
+  `source`, `cd`, a `git config`/`remote`/upstream write — makes every later outward act
+  `other`. Fetch is allowlisted (git, curl, wget, aria2c, httpie). `sudo` is `other`;
+  `kubectl` naming secrets is refused (secret-store). `write-outside` only under
+  `Context::with_deploy_roots`, never a home dotfile; run-time paths `other`. Typed acts get
+  `Planned::check_post`. Escalation goes to the Kijin of the act's sole post, else the human.
+  The roster refuses a `kijin-` name on another race and a Kijin heading that is not
+  `kijin-<dir>`. Docs 02.
+- **Tests:** corpus `outward_acts_by_kind` (every hole as a row), shell
+  `a_kijin_does_only_its_posts_acts`, commission `an_act_of_no_single_post_stays_with_the_human`,
+  queue `a_kijin_name_matches_its_race_and_its_directory`, config
+  `a_typed_act_is_checked_against_the_post`.
+- **Learned:** what a command's words name is not what it runs: the shell line before it and the
+  repository's config steer it. A persisted `remote.*.pushurl` or `push.followTags` from an
+  earlier call is still read only by the gate's fingerprint, not by the kind.
+- **Merged with #240:** `PostJournal` knows its post and `commit` refuses an act the post does not
+  hold (`a_journal_commits_only_its_posts_acts`); the untyped-command receipt test uses a forge
+  command.
+
+---
+
+### [2026-10-27T19:24:46+01:00] rimuru — #239, Fable's last three: where a push goes, a remote by name, a download's path
+- **Done:** a branch or tag push's remote is resolved before the gate (repository config only):
+  one push URL equal to the fetch URL, shown on the card (credentials hidden, escaped), else
+  `other`; a push names a configured remote (`mnemorph_tools::remote_name`, shared with typed
+  acts), a URL in its place is `other`; `curl`/`wget`/`aria2c` output paths are judged as
+  writes. Docs 02.
+- **Tests:** fingerprint `the_card_shows_where_a_push_goes`,
+  `a_push_url_set_before_approval_is_no_posts_push`; corpus rows for URL remotes and outputs;
+  each guard disabled fails its test.

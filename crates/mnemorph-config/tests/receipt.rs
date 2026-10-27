@@ -473,9 +473,7 @@ fn a_comment_is_observed_only_by_its_id_with_its_body() {
 #[test]
 fn an_untyped_command_is_unobserved_and_says_so() {
     let f = Fixture::new();
-    let planned = f.planned(&Act::Command(
-        "curl -X POST https://example.com/deploy".into(),
-    ));
+    let planned = f.planned(&Act::Command("gh pr ready 7 --repo example.com/o/r".into()));
     assert_eq!(planned.class(), ToolClass::Destructive);
     let pin = planned.pin(&f.world, &f.observer()).unwrap();
     assert_eq!(pin, Pin::Unpinned);
@@ -489,7 +487,7 @@ fn an_untyped_command_is_unobserved_and_says_so() {
     // The model's text is not kept in the tracked journal: its program and digest are.
     let committed = f.rows()[0].command.clone().unwrap();
     assert!(
-        committed.starts_with("curl … (an untyped command, sha256 "),
+        committed.starts_with("gh … (an untyped command, sha256 "),
         "{committed}"
     );
     assert!(!committed.contains("example.com"), "{committed}");
@@ -746,4 +744,21 @@ fn a_comment_on_an_enterprise_host_is_recorded_and_probed_there() {
         State::Observed
     );
     assert_eq!(fake.asked.borrow()[0][3], "git.corp.example");
+}
+
+/// A post's journal commits only its post's acts: what the post does not hold never runs.
+#[test]
+fn a_journal_commits_only_its_posts_acts() {
+    let f = Fixture::new();
+    let planned = f.planned(&Act::Command("kubectl apply -f d.yaml".into()));
+    let e = f
+        .journal()
+        .commit(&planned, Pin::Unpinned, None)
+        .unwrap_err();
+    assert!(
+        e.to_string()
+            .contains("`deploy` is not in the kijin-forge post"),
+        "{e}"
+    );
+    assert!(f.rows().is_empty(), "nothing was journaled");
 }

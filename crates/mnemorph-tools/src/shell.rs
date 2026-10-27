@@ -14,13 +14,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use mnemorph_races::{ToolClass, check_class};
+use mnemorph_races::{OutwardKind, Race, ToolClass, check_class, check_post};
 use mnemorph_sandbox::Policy;
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::classify::{Place, Verdict, classify};
+use crate::classify::{Place, Verdict, classify_reach};
 use crate::fingerprint::Fingerprint;
 use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool, args};
@@ -263,8 +263,10 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
         world: cx.world().to_path_buf(),
         home: cx.home().to_path_buf(),
         cwd: cx.world().to_path_buf(),
+        roots: cx.deploy_roots().to_vec(),
     };
-    let (class, why, outside, asked) = match classify(command, &place) {
+    let (verdict, acts, pushes) = classify_reach(command, &place);
+    let (class, why, outside, asked) = match verdict {
         Verdict::Refuse {
             rule,
             reason,
@@ -294,6 +296,10 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
         } => (class, why, outside, false),
     };
     check_class(cx.race(), class).map_err(Outcome::unheld)?;
+    // A Kijin does only its post's outward acts: anything else is refused before the gate.
+    if cx.race().base() == Race::Kijin {
+        check_post(cx.body(), &acts).map_err(|e| Outcome::error(e.to_string()))?;
+    }
     if !(asked || matches!(class, ToolClass::Outward | ToolClass::Destructive)) {
         return Ok(Admitted {
             class,
@@ -302,6 +308,21 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
         });
     }
     let mut why = why;
+    // A push goes where its remote's configuration says: resolved now, shown on the card, and
+    // no post's act unless it pushes exactly where it fetches from.
+    for push in &pushes {
+        let url = crate::fingerprint::push_url(&push.dir, &push.remote).map_err(|e| {
+            let refused = check_post(cx.body(), &[OutwardKind::Other])
+                .err()
+                .map_or_else(String::new, |r| format!("{r}: "));
+            Outcome::error(format!("{refused}{e}"))
+        })?;
+        why.push(format!(
+            "pushes to {} (remote `{}`)",
+            crate::fingerprint::shown_url(&url),
+            push.remote
+        ));
+    }
     if !changed.is_empty() {
         why.insert(
             0,

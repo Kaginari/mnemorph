@@ -1917,7 +1917,7 @@ impl Run {
         }
     }
 
-    /// The body below the throne, of `race`, first by name.
+    /// The bodies below the throne, of `race`, by name.
     fn below(&self, roster: &mnemorph_world::Roster, race: Race) -> Vec<String> {
         let mut names: Vec<String> = roster
             .living()
@@ -1947,7 +1947,16 @@ impl Run {
         let stress =
             matches!(&ending, Ending::Checkpoint { why, .. } if why.starts_with("context"));
         let (to, handoff, signal) = if let Some((tool, input)) = self.unheld.clone() {
-            let Some(kijin) = self.below(&roster, Race::Kijin).into_iter().next() else {
+            // The act goes to the one Kijin whose post holds it; an act held by several posts or
+            // none, or a Kijin missing for its post, stays with the human.
+            let Some(post) = sole_post(&tool, &input, &c.world) else {
+                return ending;
+            };
+            let Some(kijin) = self
+                .below(&roster, Race::Kijin)
+                .into_iter()
+                .find(|k| *k == post.creature())
+            else {
                 return ending;
             };
             let handoff = format!(
@@ -2753,6 +2762,22 @@ pub fn shown(text: &str) -> String {
 
 /// See [`card_list`].
 const CARD_ITEMS: usize = 5;
+
+/// The one post that holds every outward act of a refused `bash` call, read by the classifier;
+/// `None` for any other tool, an act no post or several posts hold, or acts of different posts.
+fn sole_post(tool: &str, input: &str, world: &std::path::Path) -> Option<mnemorph_races::Post> {
+    if tool != "bash" {
+        return None;
+    }
+    let args: serde_json::Value = serde_json::from_str(input).ok()?;
+    let command = args.get("command")?.as_str()?;
+    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
+    let (_, acts) =
+        mnemorph_tools::classify_acts(command, &mnemorph_tools::Place::new(world, home));
+    let mut posts = acts.iter().map(|a| a.sole_post());
+    let first = posts.next()??;
+    posts.all(|p| p == Some(first)).then_some(first)
+}
 
 #[cfg(test)]
 mod tests {

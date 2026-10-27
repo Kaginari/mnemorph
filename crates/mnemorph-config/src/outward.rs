@@ -15,8 +15,8 @@ use std::fmt;
 use std::path::PathBuf;
 
 use mnemorph_ledger::Day;
-use mnemorph_races::{Race, ToolClass};
-use mnemorph_tools::{Ask, Place, Verdict, classify};
+use mnemorph_races::{OutwardKind, PostRefusal, Race, ToolClass, check_post};
+use mnemorph_tools::{Ask, Place, Verdict, classify_acts};
 
 use crate::{Envelope, Lapse};
 
@@ -127,16 +127,13 @@ pub struct Planned {
     class: ToolClass,
     why: Vec<String>,
     outside: Vec<PathBuf>,
+    /// The kinds of outward act the classifier read in the command.
+    acts: Vec<OutwardKind>,
 }
 
 /// A plain configured remote name: `origin`, `upstream`.
 fn remote_ok(remote: &str) -> bool {
-    !remote.is_empty()
-        && remote.len() <= 100
-        && !remote.starts_with(['-', '.'])
-        && remote
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    mnemorph_tools::remote_name(remote)
 }
 
 /// A plain branch name: ASCII letters, digits, `-`, `_`, `.` and `/` between components; no
@@ -302,7 +299,8 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
         (None, Act::Command(c)) if !c.trim().is_empty() => c.clone(),
         (None, _) => return Err(Malformed::Empty),
     };
-    let (read, mut why, outside) = match classify(&command, place) {
+    let (verdict, acts) = classify_acts(&command, place);
+    let (read, mut why, outside) = match verdict {
         Verdict::Run {
             class,
             why,
@@ -327,6 +325,7 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
         class,
         why,
         outside,
+        acts,
     })
 }
 
@@ -346,6 +345,16 @@ impl Planned {
     #[must_use]
     pub fn command(&self) -> &str {
         &self.command
+    }
+
+    /// Whether the Kijin named `body` may do this act: every kind of outward act in it must be
+    /// its post's, as for a command it runs itself.
+    ///
+    /// # Errors
+    ///
+    /// The [`PostRefusal`] naming the first kind its post does not hold.
+    pub fn check_post(&self, body: &str) -> Result<(), PostRefusal> {
+        check_post(body, &self.acts)
     }
 
     /// Its class: the classifier's, raised to `destructive` for a command the harness cannot

@@ -13,6 +13,7 @@
 //! can lower what the words before it already earned.
 
 mod commands;
+pub use commands::remote_name;
 pub(crate) mod paths;
 mod words;
 
@@ -24,7 +25,7 @@ use brush_parser::ast::{
     SimpleCommand,
 };
 use brush_parser::{Parser, ParserOptions};
-use mnemorph_races::ToolClass;
+use mnemorph_races::{OutwardKind, ToolClass};
 
 use paths::{Act, locate};
 use words::{Lit, expand};
@@ -38,6 +39,9 @@ pub struct Place {
     pub home: PathBuf,
     /// The directory the command starts in.
     pub cwd: PathBuf,
+    /// The directories outside the world a deploy may write: a write anywhere else outside is
+    /// no post's act.
+    pub roots: Vec<PathBuf>,
 }
 
 impl Place {
@@ -48,7 +52,15 @@ impl Place {
             cwd: world.clone(),
             world,
             home: home.into(),
+            roots: Vec::new(),
         }
+    }
+
+    /// The directories outside the world a deploy may write.
+    #[must_use]
+    pub fn with_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+        self.roots = roots.into_iter().collect();
+        self
     }
 }
 
@@ -166,14 +178,46 @@ impl Verdict {
 /// Classify one command line run at `place`.
 #[must_use]
 pub fn classify(command: &str, place: &Place) -> Verdict {
+    classify_acts(command, place).0
+}
+
+/// Classify one command line run at `place`, with the kinds of outward act it does — what a
+/// Kijin's post is checked against. A command whose class is `outward` always names at least
+/// one kind: one the classifier cannot name is [`OutwardKind::Other`].
+#[must_use]
+pub fn classify_acts(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>) {
+    let (verdict, acts, _) = classify_reach(command, place);
+    (verdict, acts)
+}
+
+/// A branch or tag push the classifier read as a post's act: the repository it runs in and the
+/// remote it names, whose URL the gate resolves before the human is asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Push {
+    /// The repository's directory.
+    pub dir: PathBuf,
+    /// The configured remote's name.
+    pub remote: String,
+}
+
+/// [`classify_acts`], with the pushes whose remotes the gate resolves.
+#[must_use]
+pub fn classify_reach(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>, Vec<Push>) {
     let mut walker = Walker {
         place,
         cwd: Some(place.cwd.clone()),
         depth: 0,
+        tainted: false,
     };
     let mut tally = Tally::default();
     walker.source(command, &mut tally);
-    tally.verdict()
+    let mut acts = std::mem::take(&mut tally.acts);
+    if tally.class == Some(ToolClass::Outward) && acts.is_empty() {
+        acts.push(OutwardKind::Other);
+    }
+    acts.sort_unstable();
+    let pushes = std::mem::take(&mut tally.pushes);
+    (tally.verdict(), acts, pushes)
 }
 
 /// How far `sh -c` and `eval` strings nest before the classifier stops reading and refuses.
@@ -197,10 +241,35 @@ pub(crate) struct Tally {
     why: Vec<String>,
     refused: Option<(Rule, String)>,
     pub(crate) outside: Vec<PathBuf>,
+    /// The kinds of outward act found.
+    acts: Vec<OutwardKind>,
+    /// The pushes read as a post's act.
+    pub(crate) pushes: Vec<Push>,
 }
 
 impl Tally {
+    /// Raise the class. An outward raise that names no kind is [`OutwardKind::Other`]: an act
+    /// the classifier cannot name is held by no post.
     pub(crate) fn raise(&mut self, class: ToolClass, why: impl Into<String>) {
+        if class == ToolClass::Outward {
+            self.act(OutwardKind::Other);
+        }
+        self.lift(class, why);
+    }
+
+    /// Raise the class for an outward act of a known kind.
+    pub(crate) fn reach(&mut self, kind: OutwardKind, class: ToolClass, why: impl Into<String>) {
+        self.act(kind);
+        self.lift(class, why);
+    }
+
+    fn act(&mut self, kind: OutwardKind) {
+        if !self.acts.contains(&kind) {
+            self.acts.push(kind);
+        }
+    }
+
+    fn lift(&mut self, class: ToolClass, why: impl Into<String>) {
         if class != ToolClass::Read {
             self.why.push(why.into());
         }
@@ -230,6 +299,10 @@ impl Tally {
         {
             self.class = Some(c);
         }
+        for kind in other.acts {
+            self.act(kind);
+        }
+        self.pushes.extend(other.pushes);
         for p in other.outside {
             if !self.outside.contains(&p) {
                 self.outside.push(p);
@@ -272,6 +345,10 @@ pub(crate) struct Walker<'p> {
     /// The working directory; `None` once a `cd` went somewhere the classifier cannot read.
     pub(crate) cwd: Option<PathBuf>,
     depth: u8,
+    /// Something earlier in the command, or a prefix of this one, changed what a later command
+    /// runs with: a variable assigned or exported, a function defined, git's config written, a
+    /// script sourced, the directory changed. Every outward act after it is no post's.
+    pub(crate) tainted: bool,
 }
 
 impl Walker<'_> {
@@ -345,6 +422,7 @@ impl Walker<'_> {
                 Kind::default()
             }
             Command::Function(f) => {
+                self.tainted = true;
                 let mut names = Vec::new();
                 collect_names(&f.body.0, &mut names);
                 if names.iter().any(|n| *n == f.fname.value) {
@@ -370,7 +448,10 @@ impl Walker<'_> {
 
     fn compound(&mut self, c: &CompoundCommand, t: &mut Tally) {
         match c {
-            CompoundCommand::Arithmetic(_) | CompoundCommand::ArithmeticForClause(_) => {}
+            // An arithmetic assignment or a loop variable changes what later commands run with.
+            CompoundCommand::Arithmetic(_) | CompoundCommand::ArithmeticForClause(_) => {
+                self.tainted = true;
+            }
             CompoundCommand::BraceGroup(b) => self.list(&b.list, t),
             CompoundCommand::Subshell(s) => {
                 let saved = self.cwd.clone();
@@ -378,6 +459,7 @@ impl Walker<'_> {
                 self.cwd = saved;
             }
             CompoundCommand::ForClause(f) => {
+                self.tainted = true;
                 for w in f.values.iter().flatten() {
                     self.word_subs(&w.value, t);
                 }
@@ -440,7 +522,11 @@ impl Walker<'_> {
                 CommandPrefixOrSuffixItem::AssignmentWord(_, w) if after_name => {
                     words.push(&w.value);
                 }
-                CommandPrefixOrSuffixItem::AssignmentWord(_, w) => self.word_subs(&w.value, t),
+                CommandPrefixOrSuffixItem::AssignmentWord(_, w) => {
+                    // `GIT_SSH_COMMAND=… git fetch`: the variable changes what the command runs.
+                    self.tainted = true;
+                    self.word_subs(&w.value, t);
+                }
                 CommandPrefixOrSuffixItem::ProcessSubstitution(_, sub) => {
                     let saved = self.cwd.clone();
                     self.list(&sub.list, t);
@@ -470,14 +556,23 @@ impl Walker<'_> {
             return Kind::default();
         }
         if argv[0].text.as_deref() == Some("cd") {
+            self.tainted = true;
             self.cd(&argv[1..]);
             return Kind::default();
         }
         // Arguments only tighten: the class is the highest over every prefix of the arguments.
         let mut kind = Kind::default();
+        // The acts are the whole command's: a prefix's (`gh` alone) is not what runs.
         for k in 1..=argv.len() {
             let mut part = Tally::default();
             kind = commands::classify(self, &argv[..k], &mut part);
+            if k < argv.len() {
+                part.acts.clear();
+                part.pushes.clear();
+            } else if self.tainted && !part.acts.is_empty() {
+                part.acts = vec![OutwardKind::Other];
+                part.pushes.clear();
+            }
             t.absorb(part);
         }
         kind
@@ -567,7 +662,7 @@ impl Walker<'_> {
     /// Judge one path the command reads, modifies or deletes.
     pub(crate) fn touch(&self, lit: &Lit, act: Act, what: &str, t: &mut Tally) {
         let spot = locate(lit.text.as_deref(), self.cwd.as_deref(), self.place);
-        paths::judge(&spot, act, what, t);
+        paths::judge(&spot, act, what, self.place, t);
     }
 }
 

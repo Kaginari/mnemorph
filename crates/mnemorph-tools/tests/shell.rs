@@ -32,8 +32,12 @@ impl World {
         self.root.join("outside")
     }
 
+    /// A body of `race`; a Kijin here is the deploy post, whose acts include writing outside,
+    /// under the deploy root it was given.
     fn cx(&self, race: Race, gate: Arc<Scripted>) -> Context {
         Context::new(race, self.world(), &["src"])
+            .with_body("kijin-deploy")
+            .with_deploy_roots(&[self.outside()])
             .with_gate(gate)
             .with_home("/h")
             .with_sandbox(Sandbox::None(
@@ -210,8 +214,12 @@ fn bash_runs_inside_the_guard() {
         "cat \"$1\"/.ssh/id_ed25519\n",
     )
     .unwrap();
+    // A write the classifier cannot see: a script's own redirect, to the path it is handed.
+    fs::write(w.world().join("src/sneak.sh"), "echo sneaky > \"$1\"\n").unwrap();
     let cx = |race, gate| {
         Context::new(race, w.world(), &["src"])
+            .with_body("kijin-deploy")
+            .with_deploy_roots(&[w.outside()])
             .with_gate(gate)
             .with_home(&home)
             .with_sandbox(Sandbox::Guard(guard.clone()))
@@ -246,7 +254,7 @@ fn bash_runs_inside_the_guard() {
     let o = bash(
         &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
         &format!(
-            "echo new > {}; f={}; echo sneaky > \"$f\"",
+            "echo new > {}; bash src/sneak.sh {}",
             fresh.display(),
             sibling.display()
         ),
@@ -269,7 +277,7 @@ fn bash_runs_inside_the_guard() {
     let o = bash(
         &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
         &format!(
-            "echo hi > {}; f={}; echo sneaky > \"$f\"",
+            "echo hi > {}; bash src/sneak.sh {}",
             marker.display(),
             w.root.join("elsewhere").display()
         ),
@@ -762,4 +770,155 @@ fn build_links_scratch_many_grants_and_truncate() {
         fs::read_to_string(w.world().join("lib/zone.rs")).unwrap(),
         "zone\n"
     );
+}
+
+/// Each post does its own outward acts and no other: what it does not hold is refused before
+/// the gate is asked, naming the post, the act and the post that holds it.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table per verdict: refused, asked, refused for its words"
+)]
+fn a_kijin_does_only_its_posts_acts() {
+    let w = World::new("posts");
+    // A repository whose `origin` pushes where it fetches from: a push's target resolves.
+    for args in [
+        &["init", "-q"][..],
+        &["remote", "add", "origin", "https://example.com/o/r.git"],
+    ] {
+        let ok = std::process::Command::new("git")
+            .args(args)
+            .current_dir(w.world())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
+    let as_post = |body: &str, gate: Arc<Scripted>| w.cx(Race::Kijin, gate).with_body(body);
+    // Refused, never asked: a forge's deploy, a deploy's push, a scout's push.
+    for (body, command, act, route) in [
+        (
+            "kijin-forge",
+            "kubectl apply -f deploy.yaml",
+            "deploy",
+            "kijin-deploy",
+        ),
+        (
+            "kijin-deploy",
+            "git push origin refs/heads/feat/x",
+            "push-branch",
+            "kijin-forge",
+        ),
+        (
+            "kijin-scout",
+            "git push origin refs/heads/feat/x",
+            "push-branch",
+            "kijin-forge",
+        ),
+        (
+            "kijin-ci",
+            "gh pr comment 7 --body hi",
+            "comment",
+            "kijin-forge",
+        ),
+        (
+            "kijin-forge",
+            "gh release create v1.0.0",
+            "publish",
+            "kijin-release",
+        ),
+    ] {
+        let gate = Arc::new(Scripted::new([Answer::Approve]));
+        let o = bash(&mut as_post(body, gate.clone()), command);
+        assert!(
+            o.is_error
+                && o.content
+                    .contains(&format!("`{act}` is not in the {body} post"))
+                && o.content.contains(&format!("route it to {route}")),
+            "{body}: {command}: {o:?}"
+        );
+        assert!(
+            gate.asked().is_empty(),
+            "{body}: {command}: the gate was asked"
+        );
+    }
+    // Each post's own acts reach the gate (denied there, so nothing leaves).
+    for (body, command) in [
+        ("kijin-forge", "git push origin refs/heads/feat/x"),
+        (
+            "kijin-forge",
+            "gh pr create --title t --body b --label ready",
+        ),
+        ("kijin-forge", "gh pr comment 7 --body hi"),
+        ("kijin-forge", "gh issue edit 7 --add-label bug"),
+        ("kijin-ci", "gh run view 42 --log"),
+        ("kijin-ci", "gh run rerun 42"),
+        ("kijin-release", "git push origin refs/tags/v1.0.0"),
+        ("kijin-release", "cargo publish"),
+        ("kijin-deploy", "kubectl apply -f deploy.yaml"),
+        ("kijin-deploy", "kubectl rollout undo deployment/web"),
+        ("kijin-deploy", "curl -fsS https://example.com/health"),
+        ("kijin-scout", "git clone https://github.com/google/osv.git"),
+    ] {
+        let gate = Arc::new(Scripted::new([Answer::Deny("not now".into())]));
+        let o = bash(&mut as_post(body, gate.clone()), command);
+        assert!(
+            o.is_error && o.content.contains("not now"),
+            "{body}: {command}: {o:?}"
+        );
+        assert_eq!(gate.asked().len(), 1, "{body}: {command}");
+    }
+    // What its words do not say alone is no post's act, whoever asks: refused, never asked.
+    for (body, command) in [
+        (
+            "kijin-forge",
+            "git -c core.sshCommand=x push origin refs/heads/x",
+        ),
+        ("kijin-forge", "git push origin"),
+        ("kijin-forge", "git push origin v1.0"),
+        (
+            "kijin-forge",
+            "git config core.sshCommand x && git push origin refs/heads/x",
+        ),
+        ("kijin-forge", "GIT_SSH_COMMAND=x git fetch origin"),
+        ("kijin-scout", "GIT_SSH_COMMAND=x git fetch origin"),
+        ("kijin-forge", "GH_CONFIG_DIR=/x gh pr comment 7 --body hi"),
+        ("kijin-scout", "wget -qe post_data=x https://example.com"),
+        ("kijin-scout", "curl --expand-data x https://example.com"),
+        ("kijin-scout", "git fetch --upload-pack=x origin"),
+        ("kijin-scout", "git clone 'ext::sh -c x' d"),
+        ("kijin-deploy", "echo hi > ~/.bashrc"),
+    ] {
+        let gate = Arc::new(Scripted::new([Answer::Approve]));
+        let o = bash(&mut as_post(body, gate.clone()), command);
+        assert!(
+            o.is_error
+                && o.content.contains("`other` is not in the")
+                && o.content.contains("no post holds it"),
+            "{body}: {command}: {o:?}"
+        );
+        assert!(
+            gate.asked().is_empty(),
+            "{body}: {command}: the gate was asked"
+        );
+    }
+    // A Kijin with no post, or a name that is no post, does no outward act.
+    for body in ["", "kijin-k", "kijin-forge-2"] {
+        let gate = Arc::new(Scripted::new([Answer::Approve]));
+        let o = bash(
+            &mut as_post(body, gate.clone()),
+            "curl -fsS https://example.com",
+        );
+        assert!(
+            o.is_error && o.content.contains("holds no kijin post"),
+            "{body:?}: {o:?}"
+        );
+        assert!(gate.asked().is_empty(), "{body:?}");
+    }
+    // What leaves nothing behind is no outward act: it runs for any Kijin.
+    let o = bash(
+        &mut as_post("kijin-k", Arc::new(Scripted::new([]))),
+        "echo inside",
+    );
+    assert_eq!(o.content, "inside\n", "{o:?}");
 }

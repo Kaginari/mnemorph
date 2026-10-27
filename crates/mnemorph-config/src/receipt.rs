@@ -735,6 +735,8 @@ impl Receipt {
 /// the witness alone, so a row a body forges never counts.
 #[derive(Debug, Clone)]
 pub struct PostJournal {
+    /// The post whose acts it journals: it commits no other.
+    post: Post,
     journal: Journal<Row>,
     witness: Option<Journal<Row>>,
 }
@@ -792,6 +794,7 @@ impl PostJournal {
     #[must_use]
     pub fn of(world: &Path, post: Post) -> Self {
         Self {
+            post,
             journal: Journal::new(post_journal(world, post)),
             witness: kijin_witness(world, post.creature()).map(Journal::new),
         }
@@ -837,8 +840,12 @@ impl PostJournal {
     ///
     /// # Errors
     ///
-    /// The pin is not of this act, or the row cannot be written: the act must not run.
+    /// The act is not this post's, the pin is not of this act, or the row cannot be written:
+    /// the act must not run.
     pub fn commit(&self, planned: &Planned, pin: Pin, plan: Option<&str>) -> io::Result<Receipt> {
+        planned
+            .check_post(self.post.creature())
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let fits = matches!(
             (planned.act(), &pin),
             (Act::PushNewBranch { .. }, Pin::Push { .. })
