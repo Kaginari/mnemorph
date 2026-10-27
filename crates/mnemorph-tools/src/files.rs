@@ -319,7 +319,10 @@ fn replace(text: &str, old: &str, new: &str, all: bool, shown: &str) -> Result<R
     let line_of = |byte: usize| text[..byte].matches('\n').count() + 1;
     match at.len() {
         0 => {
-            match crate::forgive::ladder(text, old, new) {
+            let markdown = std::path::Path::new(shown).extension().is_some_and(|e| {
+                e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown")
+            });
+            match crate::forgive::ladder(text, old, new, markdown) {
                 Ladder::One(f) => {
                     return Ok(Replaced {
                         text: f.text,
@@ -395,7 +398,7 @@ impl Tool for Edit {
     }
 
     fn description(&self) -> &'static str {
-        "Replace `old_string` with `new_string` in a file inside your soil. `old_string` must match exactly once (or set `replace_all`); several exact matches name their lines. With no exact match, the same lines are looked for with line endings, then trailing whitespace, then inner whitespace, then indentation forgiven: a rung is taken only when exactly one place matches it (the replacement keeps the file's line endings and indentation, and the result says what was forgiven, where); several places name their lines; when nothing matches, the closest line is named."
+        "Replace `old_string` with `new_string` in a file inside your soil. `old_string` must match exactly once (or set `replace_all`); several exact matches name their lines. With no exact match, the same lines are looked for with line endings, then trailing whitespace, then inner whitespace, then indentation forgiven (never spaces inside a quoted string, nor trailing spaces in Markdown): a rung is taken only when exactly one place matches it (the replacement keeps the file's line endings and indentation, and the result says what was forgiven, where); several places name their lines; when nothing matches, the closest line is named."
     }
 
     fn schema(&self) -> Value {

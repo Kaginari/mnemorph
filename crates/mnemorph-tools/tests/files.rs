@@ -327,12 +327,67 @@ fn edit_is_strict_and_says_where() {
 
 /// One edit on `file` at `src/f.txt`: the outcome and what the file holds after.
 fn edit_once(name: &str, file: &str, old: &str, new: &str) -> (Outcome, String) {
+    edit_at(name, "src/f.txt", file, old, new)
+}
+
+/// One edit on `file` at `path`: the outcome and what the file holds after.
+fn edit_at(name: &str, path: &str, file: &str, old: &str, new: &str) -> (Outcome, String) {
     let w = World::new(name);
-    w.put("src/f.txt", file);
+    w.put(path, file);
     let mut cx = w.cx();
-    let args = serde_json::json!({"path": "src/f.txt", "old_string": old, "new_string": new});
+    let args = serde_json::json!({"path": path, "old_string": old, "new_string": new});
     let o = run(&mut cx, "edit", &args.to_string());
-    (o, w.get("src/f.txt"))
+    (o, w.get(path))
+}
+
+/// Whitespace that carries meaning stays strict: a run inside a quoted string, trailing spaces in
+/// Markdown (a hard break); a replacement line between levels is kept in spaces, and stays strict
+/// in a tab-indented file.
+#[test]
+fn meaningful_whitespace_is_never_forgiven() {
+    let file = "let s = \"a  b\";\n";
+    let (o, got) = edit_once(
+        "forgive-quote",
+        file,
+        "let s = \"a b\";",
+        "let s = \"a c\";",
+    );
+    assert!(o.is_error && o.content.contains("closest line"), "{o:?}");
+    assert_eq!(got, file);
+    let file = "let  s = 'x';\n";
+    let (o, _) = edit_once("forgive-quote-out", file, "let s = 'x';", "let s = 'y';");
+    assert!(
+        !o.is_error && o.content.contains("inner whitespace"),
+        "{o:?}"
+    );
+
+    let file = "# T\nline  \nnext\n";
+    let (o, got) = edit_at("forgive-md", "src/f.md", file, "line\nnext", "l\nn");
+    assert!(o.is_error && o.meta.wrote.is_empty(), "{o:?}");
+    assert_eq!(got, file);
+    let (o, _) = edit_at("forgive-txt", "src/f.txt", file, "line\nnext", "l\nn");
+    assert!(
+        !o.is_error && o.content.contains("trailing whitespace"),
+        "{o:?}"
+    );
+
+    let old = "if x {\n    go();\n}";
+    let new = "if x {\n    go(a,\n      b);\n}";
+    let (o, got) = edit_once(
+        "forgive-half",
+        "fn f() {\n    if x {\n        go();\n    }\n}\n",
+        old,
+        new,
+    );
+    assert!(o.content.contains("indentation (+4 spaces)"), "{o:?}");
+    assert_eq!(
+        got,
+        "fn f() {\n    if x {\n        go(a,\n          b);\n    }\n}\n"
+    );
+    let file = "fn f() {\n\tif x {\n\t\tgo();\n\t}\n}\n";
+    let (o, got) = edit_once("forgive-half-tabs", file, old, new);
+    assert!(o.is_error && o.meta.wrote.is_empty(), "{o:?}");
+    assert_eq!(got, file);
 }
 
 /// With no exact match, each forgiving rung takes its one region, keeps the file's line endings

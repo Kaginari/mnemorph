@@ -4,15 +4,15 @@
 //! several stop the ladder and name their lines, since picking one would be a guess. A taken rung
 //! says what it forgave and where, so the body learns it and the journal keeps it. There is no
 //! first-and-last-line anchoring: it can match a region that only looks right at its ends.
-
-use std::borrow::Cow;
+//! Whitespace that carries meaning is never forgiven: a run inside a quoted string, and trailing
+//! spaces in Markdown (a hard line break).
 
 /// The most line comparisons a rung may make (file lines × `old_string` lines); past it the edit
 /// stays strict, so a huge file never costs a quadratic search.
 const MAX_WORK: usize = 20_000_000;
 
-/// How a rung reads a line before comparing it.
-type Key = fn(&str) -> Cow<'_, str>;
+/// How a rung compares a file line with an `old_string` line.
+type Same<'a> = &'a dyn Fn(&str, &str) -> bool;
 
 /// What a forgiving rung made of the file.
 pub(crate) struct Forgiven {
@@ -37,8 +37,9 @@ pub(crate) enum Ladder {
     Nothing,
 }
 
-/// Climb the ladder for `old` → `new` in `text`, whose exact search found nothing.
-pub(crate) fn ladder(text: &str, old: &str, new: &str) -> Ladder {
+/// Climb the ladder for `old` → `new` in `text`, whose exact search found nothing; `markdown` keeps
+/// trailing whitespace strict.
+pub(crate) fn ladder(text: &str, old: &str, new: &str, markdown: bool) -> Ladder {
     if let Some(l) = line_endings(text, old, new) {
         return l;
     }
@@ -66,12 +67,14 @@ pub(crate) fn ladder(text: &str, old: &str, new: &str) -> Ladder {
     } else {
         new_n.split('\n').collect()
     };
-    let rungs: [(&'static str, Key); 2] = [
-        ("trailing whitespace", |l| Cow::Borrowed(l.trim_end())),
-        ("inner whitespace", squeeze),
+    let trailing = |a: &str, b: &str| !markdown && a.trim_end() == b.trim_end();
+    let inner = |a: &str, b: &str| matches!((squeeze(a, markdown), squeeze(b, markdown)), (Some(x), Some(y)) if x == y);
+    let rungs: [(&'static str, Same<'_>); 2] = [
+        ("trailing whitespace", &trailing),
+        ("inner whitespace", &inner),
     ];
-    for (rung, key) in rungs {
-        let found = windows(&lines, &olds, |a, b| key(a) == key(b));
+    for (rung, same) in rungs {
+        let found = windows(&lines, &olds, same);
         match found.as_slice() {
             [] => {}
             [at] => {
@@ -81,7 +84,7 @@ pub(crate) fn ladder(text: &str, old: &str, new: &str) -> Ladder {
             many => return many_of(rung, many),
         }
     }
-    indentation(&lines, &olds, &news)
+    indentation(&lines, &olds, &news, markdown)
 }
 
 /// The first rung: the text matches once its `\r\n` are read as `\n`; the replacement takes the
@@ -134,24 +137,36 @@ fn line_endings(text: &str, old: &str, new: &str) -> Option<Ladder> {
 }
 
 /// A line with every run of spaces and tabs after its indentation read as one space, and none at
-/// its end; the indentation is kept as it is.
-fn squeeze(l: &str) -> Cow<'_, str> {
+/// its end (kept as it is in `markdown`); the indentation is kept as it is. `None` when a run that
+/// would change sits inside a quote (an odd count of `"`, `'` or `` ` `` before it on the line):
+/// a string's spaces are its content.
+fn squeeze(l: &str, markdown: bool) -> Option<String> {
     let t = l.trim_end();
     let lead = t.len() - t.trim_start_matches([' ', '\t']).len();
     let mut s = t[..lead].to_owned();
-    let mut gap = false;
+    let mut run = String::new();
+    let mut quotes = [0usize; 3];
     for c in t[lead..].chars() {
         if c == ' ' || c == '\t' {
-            gap = true;
-        } else {
-            if gap {
-                s.push(' ');
-            }
-            gap = false;
-            s.push(c);
+            run.push(c);
+            continue;
         }
+        if !run.is_empty() {
+            if run != " " && quotes.iter().any(|q| q % 2 == 1) {
+                return None;
+            }
+            s.push(' ');
+            run.clear();
+        }
+        if let Some(q) = ['"', '\'', '`'].iter().position(|&q| q == c) {
+            quotes[q] += 1;
+        }
+        s.push(c);
     }
-    Cow::Owned(s)
+    if markdown {
+        s.push_str(&l[t.len()..]);
+    }
+    Some(s)
 }
 
 /// A file line without the `\r` of its `\r\n`.
@@ -217,15 +232,9 @@ fn lead(l: &str) -> &str {
     &l[..l.len() - l.trim_start_matches([' ', '\t']).len()]
 }
 
-/// The indentation of the non-blank `lines`, with `also` counted for the step only; `None` when
-/// tabs and spaces are mixed.
-fn indent_of(lines: &[&str], also: &[&str]) -> Option<Indent> {
+/// The indentation of the non-blank `lines`; `None` when tabs and spaces are mixed.
+fn indent_of(lines: &[&str]) -> Option<Indent> {
     let leads: Vec<&str> = lines
-        .iter()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| lead(l))
-        .collect();
-    let extra: Vec<&str> = also
         .iter()
         .filter(|l| !l.trim().is_empty())
         .map(|l| lead(l))
@@ -236,11 +245,7 @@ fn indent_of(lines: &[&str], also: &[&str]) -> Option<Indent> {
         return None;
     }
     let common = leads.iter().map(|l| l.len()).min().unwrap_or(0);
-    let unit = leads
-        .iter()
-        .chain(&extra)
-        .map(|l| l.len().abs_diff(common))
-        .fold(0, gcd);
+    let unit = leads.iter().map(|l| l.len().abs_diff(common)).fold(0, gcd);
     Some(Indent { common, tabs, unit })
 }
 
@@ -257,15 +262,24 @@ fn level(l: &str, ind: &Indent) -> usize {
 }
 
 /// The last rung: the same lines at another indentation, matched level by level; the replacement
-/// is moved by the same amount, in the file's own indentation (tabs or spaces).
-fn indentation(lines: &[&str], olds: &[&str], news: &[&str]) -> Ladder {
-    let Some(model) = indent_of(olds, news) else {
+/// is moved by the same amount, in the file's own indentation (tabs or spaces). Levels are read
+/// from `old_string` alone; a replacement line between levels keeps its extra spaces in a
+/// space-indented file and stays strict in a tab-indented one.
+fn indentation(lines: &[&str], olds: &[&str], news: &[&str], markdown: bool) -> Ladder {
+    let Some(model) = indent_of(olds) else {
         return Ladder::Nothing;
     };
     let mut found: Vec<(usize, Indent)> = Vec::new();
-    for i in windows(lines, olds, |a, b| a.trim() == b.trim()) {
+    let same = |a: &str, b: &str| {
+        if markdown {
+            a.trim_start() == b.trim_start()
+        } else {
+            a.trim() == b.trim()
+        }
+    };
+    for i in windows(lines, olds, same) {
         let window: Vec<&str> = lines[i..i + olds.len()].iter().map(|l| body(l)).collect();
-        let Some(file) = indent_of(&window, &[]) else {
+        let Some(file) = indent_of(&window) else {
             continue;
         };
         let same = window
@@ -287,6 +301,16 @@ fn indentation(lines: &[&str], olds: &[&str], news: &[&str]) -> Ladder {
             );
         }
     };
+    // The replacement's step: `old_string`'s, else the one its lines and the replacement's share.
+    let unit = match model.unit {
+        0 => news
+            .iter()
+            .chain(olds)
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| lead(l).len().abs_diff(model.common))
+            .fold(0, gcd),
+        u => u,
+    };
     // The file's step: the window's, else the file's first indented line's style, else the model's.
     let tabs = file.tabs
         || (file.common == 0
@@ -295,47 +319,41 @@ fn indentation(lines: &[&str], olds: &[&str], news: &[&str]) -> Ladder {
                 .iter()
                 .find(|l| !lead(body(l)).is_empty())
                 .is_some_and(|l| l.starts_with('\t')));
-    let step = if tabs {
-        "\t".to_owned()
-    } else {
-        " ".repeat(match (file.unit, model.unit) {
-            (0, 0) => 4,
-            (0, m) if !model.tabs => m,
-            (0, _) => 4,
-            (f, _) => f,
-        })
+    let step = match (tabs, file.unit, unit) {
+        (true, _, _) => 1,
+        (false, 0, 0) => 4,
+        (false, 0, m) if !model.tabs => m,
+        (false, 0, _) => 4,
+        (false, f, _) => f,
     };
     let pad = if tabs { "\t" } else { " " };
-    let put: Vec<String> = news
+    let put: Option<Vec<String>> = news
         .iter()
         .map(|l| {
             if l.trim().is_empty() {
-                return String::new();
+                return Some(String::new());
             }
             let w = lead(l).len();
             let rest = l.trim_start_matches([' ', '\t']);
-            let file_lead = match model.unit {
-                0 => pad.repeat(file.common),
-                u if w >= model.common && (w - model.common).is_multiple_of(u) => {
-                    format!(
-                        "{}{}",
-                        pad.repeat(file.common),
-                        step.repeat((w - model.common) / u)
-                    )
-                }
-                u if w < model.common && (model.common - w).is_multiple_of(u) => {
-                    let down = (model.common - w) / u * step.len();
-                    pad.repeat(file.common.saturating_sub(down))
-                }
-                _ => format!(
-                    "{}{}",
-                    pad.repeat(file.common),
-                    " ".repeat(w.saturating_sub(model.common))
-                ),
+            let (levels, extra) = match unit {
+                0 => (0, 0),
+                u => (w.abs_diff(model.common) / u, w.abs_diff(model.common) % u),
             };
-            format!("{file_lead}{rest}")
+            // A line between levels keeps its extra spaces; tabs cannot hold them.
+            if extra > 0 && tabs {
+                return None;
+            }
+            let width = if w >= model.common {
+                file.common + levels * step + extra
+            } else {
+                file.common.checked_sub(levels * step + extra)?
+            };
+            Some(format!("{}{rest}", pad.repeat(width)))
         })
         .collect();
+    let Some(put) = put else {
+        return Ladder::Nothing;
+    };
     let what = shift(&model, &file, tabs);
     let mut f = splice(lines, at, olds.len(), &put, "indentation");
     f.note = format!("indentation ({what}) at {}", span(at + 1, at + olds.len()));

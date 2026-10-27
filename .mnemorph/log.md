@@ -5280,3 +5280,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   `a_forgiving_rung_with_two_places_names_both_and_writes_nothing` (with the uniqueness check
   disabled — first candidate taken — it fails), `an_exact_match_forgives_nothing`.
 - **Learned:** the edit tool lives in files.rs, not patch.rs (patch applies unified diffs).
+
+---
+
+### [2026-10-27T16:59:44+01:00] rimuru — #236, reviewed: meaningful whitespace stays strict
+- **Done:** the inner-whitespace rung refuses a changed run inside a quote (odd `"`, `'` or backtick
+  count before it); Markdown files keep trailing whitespace strict (a hard break); indentation levels
+  are read from `old_string` alone, a half-step replacement line keeps its extra spaces, and in a
+  tab-indented file stays strict. Docs: lessons.md, the edit description.
+- **Tests:** tools `meaningful_whitespace_is_never_forgiven`.
