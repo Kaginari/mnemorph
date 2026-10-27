@@ -16,13 +16,15 @@
 //!
 //! The Kijin's plan step lives beside the envelopes it is read against: an outward act is typed,
 //! and only a kind whose undo the harness derives can be covered; every other outward act is
-//! destructive, which no envelope covers ([`plan`], [`Envelope::covers`]).
+//! destructive, which no envelope covers ([`plan`], [`Envelope::covers`]). Its receipt follows the
+//! act: a typed act is `observed` only when a read-only probe sees its effect ([`PostJournal`]).
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
 //! is an error that names its file.
 
 mod outward;
+mod receipt;
 mod write;
 
 use std::collections::BTreeMap;
@@ -36,6 +38,10 @@ use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
 pub use outward::{Act, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan};
+pub use receipt::{
+    Observer, PROBE_TIMEOUT, Pin, PostJournal, Probe, Receipt, Row, SEEN_BYTES, Seen, State, Tally,
+    excerpt, post_journal, reconciling, redact,
+};
 pub use write::{revoke, set};
 
 /// The compiled defaults: the lowest layer, and the reference `config explain` shows.
