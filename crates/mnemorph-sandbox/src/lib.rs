@@ -22,10 +22,9 @@ pub mod linux;
 mod macos;
 
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
-/// them, Seatbelt hides them even inside a readable tree, and the shell classifier refuses
-/// commands that name them. Landlock cannot hide a path inside a tree it reads: those inside a
-/// toolchain — `.cargo/credentials*`, and those under `.cache` — stay readable on Linux until
-/// those trees are narrowed to what builds need.
+/// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
+/// commands that name them. Landlock cannot hide a path inside a tree it reads, so the toolchain
+/// trees that hold one — `.cargo`, `.cache` — are granted part by part ([`HOME_TOOLCHAINS`]).
 pub const HOME_CREDENTIALS: &[&str] = &[
     ".ssh",
     ".aws",
@@ -46,7 +45,8 @@ pub const HOME_CREDENTIALS: &[&str] = &[
     "Library/Keychains",
     // uv's `uv auth` logins, beside the interpreters and tools the toolchains name.
     ".local/share/uv/credentials",
-    // Hugging Face's login tokens — its model cache stays readable — and git's credential cache.
+    // Hugging Face's login tokens — its model cache, `hub`, stays readable — and git's
+    // credential-cache socket.
     ".cache/huggingface/token",
     ".cache/huggingface/stored_tokens",
     ".cache/git",
@@ -55,12 +55,22 @@ pub const HOME_CREDENTIALS: &[&str] = &[
 /// Credential files anywhere on the system.
 pub const SYSTEM_CREDENTIALS: &[&str] = &["/etc/shadow", "/etc/gshadow", "/etc/sudoers"];
 
-/// Toolchains and caches in the home that builds read (and some write).
-const HOME_TOOLCHAINS: &[&str] = &[
-    // `.local` only in part: `.local/share/keyrings` holds credentials, and Linux cannot carve an
-    // exception out of a readable tree.
-    ".cargo",
+/// Toolchains and caches in the home that builds read, on every platform. A tree that holds a
+/// credential is named part by part — Landlock cannot hide a path inside a tree it reads — so
+/// only what builds use is named, and a cache missing here is unreadable rather than a hole.
+pub const HOME_TOOLCHAINS: &[&str] = &[
+    // Not `.cargo` whole: `credentials.toml` holds the crates.io tokens. Cargo reads its
+    // binaries, the registry's index and sources, git dependencies and its config; its locks and
+    // usage database (`.package-cache`, `.global-cache`) are written, which a read grant does
+    // not give anyway, and cargo goes on without them.
+    ".cargo/bin",
+    ".cargo/registry",
+    ".cargo/git",
+    ".cargo/config.toml",
+    ".cargo/config",
+    ".cargo/env",
     ".rustup",
+    // `.local` only in part: `.local/share/keyrings` holds credentials.
     ".local/bin",
     ".local/lib",
     ".local/share/pnpm",
@@ -68,7 +78,27 @@ const HOME_TOOLCHAINS: &[&str] = &[
     ".npm",
     ".nvm",
     ".pnpm-store",
-    ".cache",
+    // Not `.cache` whole: `huggingface/token` and git's credential cache live there. The named
+    // caches of Python (uv, pip, Poetry, pre-commit), Go, Node (corepack under `node`, pnpm,
+    // node-gyp, TypeScript, Yarn, Playwright's browsers), Deno, Bazel, sccache, Hugging Face's
+    // models, and the Kaginari bench's interpreters.
+    ".cache/uv",
+    ".cache/pip",
+    ".cache/pypoetry",
+    ".cache/pre-commit",
+    ".cache/go-build",
+    ".cache/golangci-lint",
+    ".cache/node",
+    ".cache/pnpm",
+    ".cache/node-gyp",
+    ".cache/typescript",
+    ".cache/yarn",
+    ".cache/ms-playwright",
+    ".cache/deno",
+    ".cache/bazel",
+    ".cache/sccache",
+    ".cache/huggingface/hub",
+    ".cache/kaginari-bench",
     ".pyenv",
     // uv's interpreters and installed tools — the targets behind `.local/bin`'s links — but not
     // `.local/share/uv` whole: its `credentials/` holds the logins `uv auth` keeps.

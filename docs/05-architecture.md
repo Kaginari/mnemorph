@@ -411,8 +411,14 @@ flowchart LR
   `sandbox.allow_unguarded = true` in their local or global file (never the tracked one); the
   status line then reads `none — <reason>`.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
-    (`.cargo`, `.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
-    (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names. Writes: the world, the command's temporary directory
+    (`.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
+    (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names, nor a
+    folder above one: landlock cannot hide a path inside a tree it reads. So `.cargo` and
+    `.cache`, which hold the crates.io and Hugging Face tokens and git's credential cache, are
+    granted part by part — `.cargo/bin`, `registry`, `git` and its config; the named caches of
+    uv, pip, pre-commit, Go, Node, pnpm, TypeScript, Playwright, Hugging Face's models, the
+    bench's interpreters and a few more. A cache not named is unreadable. Seatbelt reads the
+    same list and denies the credential paths besides. Writes: the world, the command's temporary directory
     inside it, and a few devices — for solo. A commissioned creature's commands are granted
     exactly what its soil admits, and the rest of the world is read-only to them: landlock can
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a

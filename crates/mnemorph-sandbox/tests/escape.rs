@@ -168,6 +168,48 @@ fn credentials_cannot_be_read() {
     }
 }
 
+/// Credentials inside the toolchain trees stay closed while the caches beside them read: the
+/// crates.io token beside cargo's registry, Hugging Face's token beside uv's cache.
+#[test]
+fn toolchain_credentials_cannot_be_read_but_their_caches_can() {
+    let s = sandbox();
+    let status = s.status(false);
+    if status.starts_with("none") {
+        eprintln!("skipped: {status}");
+        return;
+    }
+    let g = Ground::new("toolchains");
+    for (file, text) in [
+        (".cargo/credentials.toml", "token = \"CARGO TOKEN\"\n"),
+        (".cache/huggingface/token", "hf_TOKEN\n"),
+        (".cargo/registry/index/entry", "registry\n"),
+        (".cache/uv/CACHEDIR.TAG", "uv cache\n"),
+    ] {
+        let path = g.path("home").join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    for script in [
+        "cat ~/.cargo/credentials.toml",
+        "cat ~/.cache/huggingface/token",
+        "ls ~/.cache/huggingface",
+        "ls ~/.cargo",
+    ] {
+        let (ok, out) = g.run(&g.policy(false), script);
+        assert!(
+            !ok && !out.contains("TOKEN")
+                && !out.lines().any(|l| l == "credentials.toml" || l == "token"),
+            "{script}: {out}"
+        );
+    }
+    let (ok, out) = g.run(
+        &g.policy(false),
+        "cat ~/.cargo/registry/index/entry ~/.cache/uv/CACHEDIR.TAG",
+    );
+    assert!(ok, "{out}");
+    assert_eq!(out, "registry\nuv cache\n");
+}
+
 #[test]
 fn the_network_is_closed_unless_the_policy_opens_it() {
     let g = Ground::new("network");

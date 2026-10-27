@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use mnemorph_sandbox::{HOME_CREDENTIALS, Policy};
+use mnemorph_sandbox::{HOME_CREDENTIALS, HOME_TOOLCHAINS, Policy};
 
 #[test]
 fn uv_interpreters_and_tools_are_readable_and_its_credentials_are_not() {
@@ -30,9 +30,9 @@ fn uv_interpreters_and_tools_are_readable_and_its_credentials_are_not() {
     }
 }
 
-/// No rule reads or writes a credential path, or a tree that holds one — those inside a readable
-/// toolchain aside, named here: landlock cannot hide them, and every platform that can hides
-/// them. The toolchains are never written.
+/// No rule reads or writes a credential path, or a tree that holds one — on any platform, so
+/// Landlock, which cannot hide a path inside a tree it reads, never has to. The toolchains are
+/// never written.
 #[test]
 fn no_rule_holds_a_credential_and_no_toolchain_is_written() {
     let home = Path::new("/home/someone");
@@ -45,31 +45,40 @@ fn no_rule_holds_a_credential_and_no_toolchain_is_written() {
             .chain(&p.write)
             .filter(|r| cred.starts_with(r))
             .collect();
-        let inside = [
-            ".cargo/credentials",
-            ".cargo/credentials.toml",
-            ".cache/huggingface/token",
-            ".cache/huggingface/stored_tokens",
-            ".cache/git",
-        ];
-        if inside.contains(c) {
-            assert_eq!(holders.len(), 1, "{c}: {holders:?}");
-            assert!(
-                p.write.iter().all(|w| !cred.starts_with(w)),
-                "{c} is written"
-            );
-            assert!(
-                p.hidden.contains(&cred),
-                "{c} is hidden where the platform can"
-            );
-        } else {
-            assert!(holders.is_empty(), "{c} is held by {holders:?}");
-        }
+        assert!(holders.is_empty(), "{c} is held by {holders:?}");
+        assert!(
+            p.hidden.contains(&cred),
+            "{c} is hidden where the platform can"
+        );
     }
-    for t in [".local/share/uv/python", ".local/share/uv/tools"] {
+    for t in HOME_TOOLCHAINS {
         assert!(
             !p.write.iter().any(|w| home.join(t).starts_with(w)),
             "{t} is written"
         );
+    }
+}
+
+/// `.cargo` and `.cache` hold credentials, so they are granted part by part: what builds read is
+/// named, the trees themselves are not.
+#[test]
+fn cargo_and_the_cache_are_read_part_by_part() {
+    let home = Path::new("/home/someone");
+    let p = Policy::new(Path::new("/w"), home, Path::new("/w/.mnemorph/tmp"), false);
+    for t in [
+        ".cargo/bin",
+        ".cargo/registry",
+        ".cargo/git",
+        ".cache/uv",
+        ".cache/pip",
+        ".cache/go-build",
+        ".cache/pnpm",
+        ".cache/kaginari-bench",
+        ".cache/huggingface/hub",
+    ] {
+        assert!(p.read.contains(&home.join(t)), "{t} is read");
+    }
+    for tree in [".cargo", ".cache", ".cache/huggingface"] {
+        assert!(!p.read.contains(&home.join(tree)), "{tree} is named whole");
     }
 }

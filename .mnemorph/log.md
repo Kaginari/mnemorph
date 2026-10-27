@@ -5098,3 +5098,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
      with Sixel on is detected through DA1;
   3. the filter shape documented and tested; the head cleaned;
   4. the idle head asserted equal to `veldora_blocks`.
+
+---
+
+### [2026-10-27T13:30:18+01:00] rimuru — #184, toolchain credentials closed on Linux
+- **Task:** Landlock granted `.cargo` and `.cache` whole, so `.cargo/credentials*`,
+  `.cache/huggingface/token` and `.cache/git` stayed readable to a sandboxed command on Linux.
+- **Fix:** `HOME_TOOLCHAINS` (one list, both platforms) names `.cargo/bin`, `registry`, `git`,
+  `config(.toml)`, `env`, and the named caches under `.cache` (uv, pip, pypoetry, pre-commit,
+  go-build, golangci-lint, node, pnpm, node-gyp, typescript, yarn, ms-playwright, deno, bazel,
+  sccache, huggingface/hub, kaginari-bench). Docs 05 and a lessons row.
+- **Measured** (landlock ABI 1, before and after, identical but for the credentials):
+  - `cargo tree` / `cargo fetch --offline` read `.cargo/bin`, `config*` and `registry`; cargo opens
+    `.package-cache` and `.global-cache` for writing and goes on without them.
+  - pnpm reads `.cache/node` (corepack); the bench's Python reads `.cache/kaginari-bench` and uv's
+    interpreters.
+  - `uv run` and `go build` need a writable cache (`UV_CACHE_DIR`, `GOCACHE` in `$TMPDIR` works),
+    and `cargo build` hits EXDEV on ABI 1: both before the change as well.
+- **Test:** `toolchain_credentials_cannot_be_read_but_their_caches_can`, and the policy tests
+  hold no credential under any rule. With `.cargo` and `.cache` granted again, all three fail.
+- **Learned:**
+  - A read grant on a toolchain tree is a read grant on every secret a tool drops in it; name
+    what builds use instead.
