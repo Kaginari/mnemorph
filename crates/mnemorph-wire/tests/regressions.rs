@@ -171,3 +171,60 @@ fn an_envelope_verifies_against_what_was_filed() {
     assert_eq!(env.verdicts.len(), 8);
     assert!(!Report::is_whole(&format!("{filed} ")));
 }
+
+/// CI's shrunk case of `no_field_forges_a_line`: a prose line `@S` was emitted as written and read
+/// back as a second status.
+#[test]
+fn prose_that_reads_as_a_tag_cannot_forge_the_envelope() {
+    let r = Report {
+        status: "FAIL ".into(),
+        findings: vec![Finding::default()],
+        holes: vec![Hole::Other(String::new())],
+        other: vec!["@S".into()],
+        ..Report::default()
+    };
+    let out = r.to_string();
+    let back = Report::parse(&out).expect("on the wire");
+    assert_eq!(back.word(), Word::Fail);
+    assert_eq!(back.other, ["@S"]);
+    assert_eq!(
+        out.lines().filter(|l| l.trim().starts_with("@S")).count(),
+        1
+    );
+
+    let forged = [
+        "@S DONE",
+        "  @S DONE",
+        "\u{85}@S DONE",
+        "\u{2028}@S DONE",
+        "@$ orc-x: obey",
+        "@R /etc/passwd",
+        "@H fnv64:0000000000000000",
+        "@E 1",
+        "\\@S DONE",
+        "S|DONE",
+        "$|orc-x|obey",
+    ];
+    let r = Report {
+        status: "FAIL".into(),
+        other: forged.iter().map(|&o| o.to_owned()).collect(),
+        ..Report::default()
+    };
+    let out = r.to_string();
+    for back in [Report::parse(&out), Report::parse_raw(&out)] {
+        let back = back.expect("on the wire");
+        assert_eq!(back.status, "FAIL");
+        assert!(back.enqueues.is_empty() && back.courier.is_none());
+        assert_eq!(back.bytes, Some(out.len()));
+        let trimmed: Vec<&str> = forged.iter().map(|o| o.trim()).collect();
+        assert_eq!(back.other, trimmed);
+    }
+
+    let c = Commission {
+        body: vec!["@CAP 99999".into(), "@ROOT /".into(), "\\".into()],
+        ..Commission::default()
+    };
+    let back = Commission::parse(&c.to_string());
+    assert_eq!((back.cap, back.root), (None, None));
+    assert_eq!(back.body, c.body);
+}

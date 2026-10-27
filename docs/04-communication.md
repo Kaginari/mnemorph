@@ -112,8 +112,15 @@ counting every line dropped along the way.
 
 The grammar's readings, all of them:
 
-- **No field opens a line.** A line break inside any field is folded to a space when emitted, so
-  text cannot forge an `@S`, an order or an `@E`.
+- **No field opens a line.** A line break inside any field — LF, CR, vertical tab, form feed,
+  the file, group and record separators, NEL, U+2028 and U+2029, whatever a reader splits lines
+  on — is folded to a space when emitted, so text cannot forge an `@S`, an order or an `@E`.
+- **Prose that reads as a tag rides escaped.** A prose line (a report's unrecognised lines, a
+  commission's body) is trimmed, and when it opens with `@` or `\`, or reads as a raw pipe tag
+  line (`S|DONE`), it is emitted behind one `\`: `\@S DONE`. The reader drops that one `\` only
+  when what follows needed it, so `\begin` reads as written; a line opening `\\` or `\@` in a
+  body's own prose loses its first `\`. A tag line the reader keeps as prose (an order with no
+  one-word body, a second `@R`) rides escaped when it is emitted again.
 - **The raw pipe form** (`S|DONE`, `F|a.rs:3|claim`, `U|law|text`, `$|body|ask`) is read only
   when the commission said `wire:raw`; otherwise a line like `S|DONE` is prose.
 - **An order's body is one word** (`@$ orc-auth: …`) and is read lower-cased; `@$ note this: …`

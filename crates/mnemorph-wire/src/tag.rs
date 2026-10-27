@@ -1,4 +1,34 @@
-//! Splitting one line into its tag and the rest.
+//! Splitting one line into its tag and the rest, and keeping prose from reading as a tag.
+
+use std::borrow::Cow;
+
+/// The prose escape: a prose line that a reader would take for more than prose rides behind it.
+const ESCAPE: char = '\\';
+
+/// Whether a trimmed prose line must ride escaped: it opens with `@` or with the escape itself,
+/// or it reads as a tag line in the raw pipe form.
+fn needs_escape(line: &str) -> bool {
+    line.starts_with(['@', ESCAPE]) || split(line, true).is_some()
+}
+
+/// A trimmed prose line as it is emitted: behind one escape when it must be, so no prose a
+/// report or commission carries can be read back as a tag line, in either form.
+pub(crate) fn escape(line: &str) -> Cow<'_, str> {
+    if needs_escape(line) {
+        Cow::Owned(format!("{ESCAPE}{line}"))
+    } else {
+        Cow::Borrowed(line)
+    }
+}
+
+/// A trimmed prose line as it is read: one escape dropped when what follows needed it, else the
+/// line as written.
+pub(crate) fn unescape(line: &str) -> &str {
+    match line.strip_prefix(ESCAPE) {
+        Some(rest) if needs_escape(rest) => rest,
+        _ => line,
+    }
+}
 
 /// Reads `@TAG rest`, or — when `raw_ok`, which only a `wire:raw` commission grants — the pipe
 /// form `T|a|b`. Tags are upper-case words, or the single characters `?` and `$`. Returns `None`
@@ -41,7 +71,7 @@ pub(crate) fn split(line: &str, raw_ok: bool) -> Option<(&str, String)> {
 
 #[cfg(test)]
 mod tests {
-    use super::split;
+    use super::{escape, split, unescape};
 
     #[test]
     fn tags_and_prose() {
@@ -52,6 +82,25 @@ mod tests {
         assert_eq!(split("@ lone", false), None);
         assert_eq!(split("plain prose", true), None);
         assert_eq!(split("X|not a tag", true), None);
+    }
+
+    #[test]
+    fn prose_that_reads_as_a_tag_rides_escaped() {
+        for line in ["@S", "@$ orc: go", "@x", "S|DONE", "\\", "\\@S", "\\\\"] {
+            let out = escape(line);
+            assert!(out.starts_with('\\'), "{line}");
+            assert_eq!(split(&out, true), None, "{line}");
+            assert_eq!(unescape(&out), line);
+        }
+        for line in ["plain", "a@b", "a|b", "", "\\begin"] {
+            assert_eq!(unescape(&escape(line)), line);
+        }
+        assert_eq!(escape("plain"), "plain");
+        assert_eq!(
+            unescape("\\begin"),
+            "\\begin",
+            "a lone escape before prose is prose"
+        );
     }
 
     #[test]

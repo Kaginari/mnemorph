@@ -165,7 +165,9 @@ impl Finding {
 
     fn render(&self) -> String {
         let id = self.id.as_deref().filter(|i| !i.is_empty());
-        let claim: Vec<&str> = self.claim.split_whitespace().collect();
+        // Folded first, so a break that becomes a space cannot slip a word past the fence.
+        let folded = one_line(&self.claim);
+        let claim: Vec<&str> = folded.split_whitespace().collect();
         let first = claim.first().copied();
         let last = claim.last().copied();
         // A claim word that the parser would take for something else is fenced with GUARD.
@@ -318,7 +320,7 @@ impl Report {
         let (mut path, mut hash) = (None, None);
         for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
             let Some((t, rest)) = tag::split(line, raw) else {
-                r.other.push(line.to_owned());
+                r.other.push(tag::unescape(line).to_owned());
                 continue;
             };
             let kept = match t {
@@ -386,8 +388,8 @@ impl Report {
         Word::read(self.status.split_whitespace().next().unwrap_or(""))
     }
 
-    /// The envelope lines by section, without `@E`. Every field is folded to one line, so no
-    /// text can open a line of its own.
+    /// The envelope lines by section, without `@E`. Every field is folded to one line, and a
+    /// prose line that would read as a tag rides escaped, so no text can open a line of its own.
     fn sections(&self) -> [Vec<String>; SECTIONS] {
         let status = format!("@S {}", one_line(&self.status).trim());
         let unsaid = |u: &Unsaid| match u.kind {
@@ -437,7 +439,7 @@ impl Report {
                 .collect(),
             self.other
                 .iter()
-                .map(|o| one_line(o).into_owned())
+                .map(|o| tag::escape(one_line(o).trim()).into_owned())
                 .collect(),
         ]
     }
@@ -539,10 +541,17 @@ impl std::fmt::Display for Report {
     }
 }
 
-/// Folds line breaks to spaces: what a field holds can never open a line of its own.
+/// Every character some reader splits lines on: LF, CR, vertical tab, form feed, the
+/// file, group and record separators, NEL, and the Unicode line and paragraph separators.
+const BREAKS: [char; 10] = [
+    '\n', '\r', '\u{0b}', '\u{0c}', '\u{1c}', '\u{1d}', '\u{1e}', '\u{85}', '\u{2028}', '\u{2029}',
+];
+
+/// Folds line breaks to spaces: what a field holds can never open a line of its own, whatever
+/// splits the lines.
 pub(crate) fn one_line(text: &str) -> Cow<'_, str> {
-    if text.contains(['\n', '\r']) {
-        Cow::Owned(text.replace("\r\n", " ").replace(['\n', '\r'], " "))
+    if text.contains(BREAKS) {
+        Cow::Owned(text.replace("\r\n", " ").replace(BREAKS, " "))
     } else {
         Cow::Borrowed(text)
     }

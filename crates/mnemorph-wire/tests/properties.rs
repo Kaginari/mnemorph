@@ -123,15 +123,66 @@ prop_compose! {
     }
 }
 
+/// Every character some reader splits lines on; the encoder folds each to a space.
+const BREAKS: [char; 10] = [
+    '\n', '\r', '\u{0b}', '\u{0c}', '\u{1c}', '\u{1d}', '\u{1e}', '\u{85}', '\u{2028}', '\u{2029}',
+];
+
+/// A field value as the wire gives it back: breaks folded to spaces, then trimmed.
+fn norm(text: &str) -> String {
+    text.replace("\r\n", " ")
+        .replace(BREAKS, " ")
+        .trim()
+        .to_owned()
+}
+
+/// A value built to break the envelope: tags, escapes, pipes and every kind of line break, or
+/// any string at all.
+fn hostile() -> impl Strategy<Value = String> {
+    let piece = prop::sample::select(vec![
+        "@",
+        "@S",
+        "@E 1",
+        "@$",
+        "@R",
+        "@H",
+        "@?",
+        "@U",
+        "@F",
+        "@FORGE",
+        "S|",
+        "$|",
+        "|",
+        ":",
+        "\\",
+        "\\@",
+        " ",
+        "\t",
+        "\n",
+        "\r",
+        "\r\n",
+        "\u{0b}",
+        "\u{0c}",
+        "\u{1e}",
+        "\u{85}",
+        "\u{2028}",
+        "\u{2029}",
+        "x",
+        "—",
+        "#1",
+        "a.rs:3",
+        "witness:p",
+        "law",
+        "DONE",
+    ]);
+    prop_oneof![
+        3 => prop::collection::vec(piece, 0..8).prop_map(|p| p.concat()),
+        1 => any::<String>(),
+    ]
+}
+
 proptest! {
-    #[test]
-    fn round_trip(r in report()) {
-        let text = r.to_string();
-        let mut back = Report::parse(&text).expect("an emitted report is on the wire");
-        prop_assert_eq!(back.bytes, Some(text.len()), "@E is exact");
-        back.bytes = None;
-        prop_assert_eq!(back, r);
-    }
+    #![proptest_config(ProptestConfig::with_cases(2048))]
 
     #[test]
     fn no_field_forges_a_line(status in any::<String>(), claim in any::<String>(), hole in any::<String>(), other in any::<String>()) {
@@ -148,6 +199,70 @@ proptest! {
         prop_assert_eq!(back.word(), mnemorph_wire::Word::Fail);
         prop_assert_eq!(text.lines().filter(|l| l.trim_start().starts_with("@S")).count(), 1);
         prop_assert!(back.enqueues.is_empty() && back.courier.is_none());
+    }
+
+    /// Any value in any field comes back as written, up to folding and trimming, on a line of
+    /// its own: one line per field, whatever the reader splits lines on.
+    #[test]
+    fn every_field_keeps_its_own_line(
+        status in hostile(), hole in hostile(), unsaid in hostile(), path in hostile(),
+        hash in hostile(), ask in hostile(), verdict in hostile(), claim in hostile(),
+        written in hostile(), tool in hostile(), forge in hostile(), other in hostile(),
+    ) {
+        let r = Report {
+            status: format!("FAIL {status}"),
+            holes: vec![Hole::Other(hole.clone())],
+            unsaid: vec![Unsaid { kind: Some(UnsaidKind::Law), text: unsaid.clone() }],
+            courier: Some(Courier { path: path.clone(), hash: hash.clone() }),
+            enqueues: vec![Enqueue { body: "orc".into(), ask: ask.clone() }],
+            verdicts: vec![verdict.clone()],
+            findings: vec![Finding { claim: claim.clone(), ..Finding::default() }],
+            written: vec![written.clone()],
+            tools: vec![tool.clone()],
+            forges: vec![Forge { kind: ForgeKind::Tool, name: "x".into(), text: forge.clone() }],
+            other: vec![other.clone()],
+            bytes: None,
+        };
+        let text = r.to_string();
+        prop_assert_eq!(text.split(BREAKS).count(), 13, "one line per field, and @E");
+        for back in [Report::parse(&text), Report::parse_raw(&text)] {
+            let back = back.expect("on the wire");
+            prop_assert_eq!(back.bytes, Some(text.len()));
+            prop_assert_eq!(back.word(), mnemorph_wire::Word::Fail);
+            prop_assert_eq!(&back.status, &norm(&format!("FAIL {status}")));
+            prop_assert_eq!(&back.holes, &vec![Hole::parse(&norm(&hole))]);
+            prop_assert_eq!(&back.unsaid, &vec![Unsaid { kind: Some(UnsaidKind::Law), text: norm(&unsaid) }]);
+            prop_assert_eq!(&back.courier, &Some(Courier { path: norm(&path), hash: norm(&hash) }));
+            prop_assert_eq!(&back.enqueues, &vec![Enqueue { body: "orc".into(), ask: norm(&ask) }]);
+            prop_assert_eq!(&back.verdicts, &vec![norm(&verdict)]);
+            let words = norm(&claim).split_whitespace().collect::<Vec<_>>().join(" ");
+            prop_assert_eq!(&back.findings, &vec![Finding { claim: words, ..Finding::default() }]);
+            prop_assert_eq!(&back.written, &vec![norm(&written)]);
+            prop_assert_eq!(&back.tools, &vec![norm(&tool)]);
+            prop_assert_eq!(&back.forges, &vec![Forge { kind: ForgeKind::Tool, name: "x".into(), text: norm(&forge) }]);
+            let prose: Vec<String> = Some(norm(&other)).into_iter().filter(|o| !o.is_empty()).collect();
+            prop_assert_eq!(&back.other, &prose);
+        }
+    }
+
+    /// Prose in a commission's body stays prose: it comes back as written and sets no tag.
+    #[test]
+    fn a_commission_body_stays_prose(body in prop::collection::vec(hostile(), 0..4)) {
+        let c = Commission { body: body.clone(), ..Commission::default() };
+        let back = Commission::parse(&c.to_string());
+        let prose: Vec<String> = body.iter().map(|b| norm(b)).filter(|b| !b.is_empty()).collect();
+        prop_assert_eq!(back, Commission { body: prose, ..Commission::default() });
+    }
+}
+
+proptest! {
+    #[test]
+    fn round_trip(r in report()) {
+        let text = r.to_string();
+        let mut back = Report::parse(&text).expect("an emitted report is on the wire");
+        prop_assert_eq!(back.bytes, Some(text.len()), "@E is exact");
+        back.bytes = None;
+        prop_assert_eq!(back, r);
     }
 
     #[test]

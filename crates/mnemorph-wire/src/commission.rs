@@ -109,7 +109,7 @@ impl Commission {
         let mut c = Commission::default();
         for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
             let Some((t, rest)) = tag::split(line, false) else {
-                c.body.push(line.to_owned());
+                c.body.push(tag::unescape(line).to_owned());
                 continue;
             };
             let known = match t {
@@ -207,7 +207,7 @@ impl fmt::Display for Commission {
             writeln!(f, "@SIZE {size}")?;
         }
         for line in &self.body {
-            writeln!(f, "{}", one_line(line))?;
+            writeln!(f, "{}", tag::escape(one_line(line).trim()))?;
         }
         Ok(())
     }
