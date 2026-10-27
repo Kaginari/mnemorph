@@ -12,10 +12,12 @@ use mnemorph_tui::theme::Variant;
 
 const HELP: &str = "mnemorph-tui — a Mnemorph session in the terminal
 
-Usage: mnemorph-tui [--world <dir>] [--theme dark|light|auto] [--probe]
+Usage: mnemorph-tui [--world <dir>] [--resume <run|last>] [--theme dark|light|auto] [--probe]
 
 Options:
   --world <dir>     the world to work in (default: the current directory)
+  --resume <run>    pick up a run that stopped, from its journal: its id, or last for the
+                    newest (`mnemorph runs` lists them); gated like a fresh session
   --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
   -h, --help        this help
@@ -35,6 +37,7 @@ text.
 fn main() -> ExitCode {
     let mut world = None;
     let mut theme = None;
+    let mut resume: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -53,6 +56,10 @@ fn main() -> ExitCode {
             "--world" => match args.next() {
                 Some(dir) => world = Some(PathBuf::from(dir)),
                 None => return fail("--world needs a directory"),
+            },
+            "--resume" => match args.next() {
+                Some(run) if !run.starts_with('-') => resume = Some(run),
+                _ => return fail("--resume needs a run's id, or last"),
             },
             "--theme" => match args.next() {
                 Some(t) if ["dark", "light", "auto"].contains(&t.as_str()) => theme = Some(t),
@@ -74,9 +81,14 @@ fn main() -> ExitCode {
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
-    let opened = match mnemorph_loop::open(&world, gate(tx.clone()), observer(tx.clone()), |v| {
-        std::env::var(v).ok()
-    }) {
+    let env = |v: &str| std::env::var(v).ok();
+    let opened = match &resume {
+        Some(run) => {
+            mnemorph_loop::resume(&world, run, gate(tx.clone()), observer(tx.clone()), env)
+        }
+        None => mnemorph_loop::open(&world, gate(tx.clone()), observer(tx.clone()), env),
+    };
+    let opened = match opened {
         Ok(o) => o,
         Err(e) => return fail(&e),
     };
@@ -88,6 +100,12 @@ fn main() -> ExitCode {
         "{} via {} · sandbox {}",
         opened.model, opened.provider, opened.sandbox
     ));
+    if resume.is_some() {
+        model.info(format!(
+            "resumed run {} from its journal: ask to go on",
+            opened.run_id
+        ));
+    }
     for hole in &opened.holes {
         model.info(format!("config hole: {hole}"));
     }

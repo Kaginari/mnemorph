@@ -112,6 +112,29 @@ Before every model call the loop reads four meters from the core, never from the
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
 up from it. An outward act cut mid-flight is gated again, never replayed.
 
+**Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
+`mnemorph runs` lists such runs, newest first — the id, when its journal was last written, why it
+stopped, the last ask — and the session says the command when it stops at a checkpoint.
+`mnemorph resume <run>` (or `last`, the newest; `mnemorph-tui --resume <run>`;
+`mnemorphd --resume <run>` for a client) opens a session on it:
+
+- **One door.** A resumed session opens exactly as a fresh one does — the configuration, the
+  provider and its key, the sandbox, the end gate, the observer, the commissioner when the world
+  has lanes. Only the run differs: rebuilt from its journal instead of new, so its next answer
+  lands through the end gate like any other, and a failing verify line sends it back.
+- **Nothing to resume is refused,** before any key is asked for: a run whose last ask answered,
+  failed or escalated; a journal that is missing, or holds a line that does not read — the
+  conversation could not be rebuilt as it was; a commissioned body's run, which is its
+  dispatcher's.
+- **One session per run.** A live session holds its run — a lock beside its journal that the
+  operating system lets go of when the process ends, however it ends — and a resume of a held run
+  is refused.
+- **The model it rode.** The journal says which model the run rides, and a resumed run keeps it.
+  When the configuration now names another, the run switches and the body is told as a context
+  update appended after what was already sent: the prefix stays append-only.
+- **Its meters.** The steps already taken and the spend already ledgered are read back; the
+  journal's last entries, said with a fresh session's first ask, are not said again.
+
 **The journal** is one append-only JSON line per beat — the ask, each model turn with its blocks
 kept whole (thinking included, so a resume sends them back unchanged), each tool result, each
 note the loop added, the ending. Resume rebuilds the conversation from it and counts the steps

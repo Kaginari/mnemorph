@@ -8,6 +8,8 @@ export type Command =
       world?: string | undefined;
       core?: string | undefined;
       theme?: string | undefined;
+      /** The stopped run to pick up — its id, or `last` — instead of a new one. */
+      resume?: string | undefined;
     }
   | {
       kind: 'run';
@@ -32,6 +34,8 @@ export const HELP = `mnemorph — talk to a Mnemorph body in your terminal
 
 Usage:
   mnemorph [options]                 a session in this world
+  mnemorph resume <run|last>         a session on a run that stopped, picked up from its journal
+  mnemorph runs [--json]             the runs that may be resumed: id, when, why, the last ask
   mnemorph run "<ask>" [options]     ask once, print the answer, exit
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [options]          the build, the core, the key's origin, the sandbox
@@ -52,6 +56,11 @@ Options:
   --json           with run: print every event as a JSON line
   -h, --help       this help
   -V, --version    the version
+
+A run that stopped — at a checkpoint, an interrupt, or a turn the process died in — is resumed
+through the same opening as a fresh session, the end gate included, on the model it rode unless
+the configuration names another. One that answered or failed, a journal that does not read whole,
+or a run another live session holds is refused.
 
 In a session:
   Enter            send; while a turn runs, the line waits its turn
@@ -82,7 +91,10 @@ export function parse(argv: string[]): Command {
       break;
     }
   }
-  if (first !== -1 && ['q', 'housekeep', 'relief', 'memory'].includes(argv[first] as string)) {
+  if (
+    first !== -1 &&
+    ['q', 'housekeep', 'relief', 'memory', 'runs'].includes(argv[first] as string)
+  ) {
     let qWorld: string | undefined;
     let qCore: string | undefined;
     const before: string[] = [];
@@ -134,6 +146,14 @@ export function parse(argv: string[]): Command {
   if (rest.length === 0) {
     if (json) return { kind: 'error', message: '--json goes with run' };
     return { kind: 'chat', world, core, theme };
+  }
+  if (rest[0] === 'resume') {
+    if (json) return { kind: 'error', message: '--json goes with run' };
+    const run = rest[1];
+    if (run === undefined || rest.length > 2) {
+      return { kind: 'error', message: 'resume takes one run: its id, or last; see mnemorph runs' };
+    }
+    return { kind: 'chat', world, core, theme, resume: run };
   }
   if (rest[0] === 'status') {
     if (json) return { kind: 'error', message: '--json goes with run' };

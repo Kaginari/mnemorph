@@ -130,9 +130,14 @@ arrives as text deltas. No protocol sits between the screen and the core.
 
 ```sh
 cargo run -p mnemorph-tui -- --world <dir>            # a session in that world
+cargo run -p mnemorph-tui -- --resume last           # pick up the newest run that stopped
 cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
 cargo run -p mnemorph-tui -- --probe                  # what the terminal draws, then exit
 ```
+
+`--resume <run|last>` opens the session on a run that stopped instead of a new one, through the
+same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
+to resume is refused in plain text, before the terminal is taken.
 
 `--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
 background as `COLORFGBG` reports it, else dark.

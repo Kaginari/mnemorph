@@ -49,7 +49,9 @@ async function main(): Promise<number> {
         );
         return 2;
       }
-      const client = new Client(stdio({ command: findCore(cmd.core), world: cmd.world }));
+      const client = new Client(
+        stdio({ command: findCore(cmd.core), world: cmd.world, resume: cmd.resume }),
+      );
       let hello: Awaited<ReturnType<Client['initialize']>>;
       try {
         hello = await client.initialize({ name: 'mnemorph', version: RELEASE });
@@ -65,6 +67,7 @@ async function main(): Promise<number> {
         <App
           client={client}
           hello={hello}
+          resumed={cmd.resume !== undefined}
           theme={chooseTheme(cmd.theme === 'auto' ? undefined : cmd.theme)}
           onCoreClosed={(why) => {
             lost = why;
