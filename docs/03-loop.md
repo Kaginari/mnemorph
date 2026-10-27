@@ -128,7 +128,10 @@ stopped, the last ask — and the session says the command when it stops at a ch
   dispatcher's.
 - **One session per run.** A live session holds its run — a lock beside its journal that the
   operating system lets go of when the process ends, however it ends — and a resume of a held run
-  is refused.
+  is refused; a run whose lock cannot be made opens no session at all. `mnemorph runs` only probes
+  the lock, and a resume waits that instant out. When a session ends with nothing left to resume,
+  its lock file is removed while still held. What `runs` prints from a journal — the last ask, why
+  it stopped — has its control, bidi and zero-width characters escaped.
 - **The model it rode.** The journal says which model the run rides, and a resumed run keeps it.
   When the configuration now names another, the run switches and the body is told as a context
   update appended after what was already sent: the prefix stays append-only.

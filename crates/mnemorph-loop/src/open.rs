@@ -409,8 +409,8 @@ fn prepare(world: &Path) {
     }
 }
 
-/// The session's run id, its hold on it, and whether it is resumed: a fresh run's own — held if
-/// its lock can be made — or the stopped run `start` names, found, checked and held.
+/// The session's run id, its hold on it, and whether it is resumed: a fresh run's own, held, or
+/// the stopped run `start` names, found, checked and held.
 fn held_run(
     world: &Path,
     start: Start<'_>,
@@ -418,10 +418,11 @@ fn held_run(
 ) -> Result<(String, Option<crate::resume::Hold>, bool), String> {
     match start {
         Start::Fresh => {
-            let hold = crate::resume::hold(world, &fresh)
-                .inspect_err(|e| eprintln!("mnemorph: the run could not be held: {e}"))
-                .ok();
-            Ok((fresh, hold, false))
+            // A run no lock holds would be resumable while it lives: no session opens on it.
+            let hold = crate::resume::hold(world, &fresh).map_err(|e| {
+                format!("the session's run cannot be held, so no session opens: {e}")
+            })?;
+            Ok((fresh, Some(hold), false))
         }
         Start::Resume(which) => {
             let (run, hold, _) = crate::resume::take(world, which)?;

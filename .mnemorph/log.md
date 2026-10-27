@@ -5256,3 +5256,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   mnemorphd `runs.rs`; tui `resume.rs`; CLI args; the commands-exist test with the new hints.
 - **Learned:** a resume must refuse before the key check, or a missing run reads as a missing key;
   a code span wrapped across lines breaks the book's build (`<run>` read as an HTML tag).
+
+---
+
+### [2026-10-27T22:30:00+01:00] rimuru — #233, reviewed: escaped listings, no unheld session, the lock probe waited out
+- **Done:** `runs` escapes the journal's ask and stop reason with `shown`; a fresh run whose lock
+  cannot be made opens no session; a resume retries its lock for 250 ms past a listing's probe; a
+  session ending with nothing to resume unlinks its lock file while holding it. Docs 03.
+- **Tests:** loop `a_hostile_journal_is_shown_escaped`, `a_run_that_cannot_be_held_opens_no_session`,
+  `a_probe_never_refuses_and_finished_locks_go`.

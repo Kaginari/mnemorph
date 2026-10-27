@@ -59,7 +59,8 @@ fn stop_of(beats: &[Beat]) -> Result<String, String> {
     }
 }
 
-/// The last ask, on one line, cut short.
+/// The last ask, on one line, cut short, every control, bidi and zero-width character escaped: a
+/// journal from a cloned world may carry terminal escapes, and it is printed.
 fn last_ask(beats: &[Beat]) -> String {
     let ask = beats
         .iter()
@@ -69,7 +70,7 @@ fn last_ask(beats: &[Beat]) -> String {
             _ => None,
         })
         .unwrap_or_default();
-    let line = ask.split_whitespace().collect::<Vec<_>>().join(" ");
+    let line = crate::run::shown(&ask.split_whitespace().collect::<Vec<_>>().join(" "));
     match line.char_indices().nth(72) {
         Some((at, _)) => format!("{}…", &line[..at]),
         None => line,
@@ -78,10 +79,33 @@ fn last_ask(beats: &[Beat]) -> String {
 
 /// A live session's hold on its run: while it lives — and the process with it — no other session
 /// resumes the run. The operating system lets go of it when the process ends, however it ends.
+/// When the session ends with nothing left to resume, the lock file goes, unlinked while still
+/// held, so no live holder is ever raced.
 #[derive(Debug)]
 pub struct Hold {
-    _file: File,
+    file: Option<File>,
+    lock: PathBuf,
+    journal: PathBuf,
 }
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        let done = match Journal::<Beat>::new(self.journal.clone()).read() {
+            Ok(back) => {
+                back.skipped.is_empty() && (back.rows.is_empty() || stop_of(&back.rows).is_err())
+            }
+            Err(_) => !self.journal.exists(),
+        };
+        if done {
+            let _ = std::fs::remove_file(&self.lock);
+        }
+        // The lock is let go only after the file is gone.
+        drop(self.file.take());
+    }
+}
+
+/// How long a resume waits for a run's lock that a listing probes for a moment.
+const PROBE_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Hold `run`.
 ///
@@ -98,16 +122,32 @@ pub fn hold(world: &Path, run: &str) -> Result<Hold, String> {
         .write(true)
         .open(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    match file.try_lock() {
-        Ok(()) => Ok(Hold { _file: file }),
-        Err(TryLockError::WouldBlock) => Err(format!(
-            "run `{run}` is held by another live session: end it there first"
-        )),
-        Err(TryLockError::Error(e)) => Err(format!("{}: {e}", path.display())),
+    // A listing's probe holds the lock for an instant: a resume waits that out, never a session.
+    let until = std::time::Instant::now() + PROBE_WAIT;
+    loop {
+        match file.try_lock() {
+            Ok(()) => {
+                return Ok(Hold {
+                    file: Some(file),
+                    journal: dir.join(format!("{run}.jsonl")),
+                    lock: path,
+                });
+            }
+            Err(TryLockError::WouldBlock) if std::time::Instant::now() < until => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(TryLockError::WouldBlock) => {
+                return Err(format!(
+                    "run `{run}` is held by another live session: end it there first"
+                ));
+            }
+            Err(TryLockError::Error(e)) => return Err(format!("{}: {e}", path.display())),
+        }
     }
 }
 
-/// Whether a live session holds `run` now.
+/// Whether a live session holds `run` now: a non-blocking probe, its shared lock let go at once —
+/// a resume that meets it waits it out.
 fn held(world: &Path, run: &str) -> bool {
     let path = journals(world).join(format!("{run}.lock"));
     File::open(&path).is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
@@ -144,9 +184,9 @@ pub fn stopped(world: &Path) -> Vec<Stopped> {
                 .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
             Some(Stopped {
                 ask: last_ask(&back.rows),
+                why: crate::run::shown(&why),
                 run,
                 when: Timestamp(secs),
-                why,
                 at,
             })
         })

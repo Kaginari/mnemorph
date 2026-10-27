@@ -362,3 +362,92 @@ async fn a_changed_model_is_a_context_update() {
         matches!(beats.iter().rev().find(|b| matches!(b, Beat::Rides { .. })), Some(Beat::Rides { model }) if model == "model-b")
     );
 }
+
+/// A journal from a cloned world is printed by `runs`: its control, bidi and zero-width
+/// characters are shown escaped, never sent to the terminal.
+#[test]
+fn a_hostile_journal_is_shown_escaped() {
+    let w = World::new("hostile");
+    fs::create_dir_all(w.journal("r").parent().unwrap()).unwrap();
+    fs::write(
+        w.journal("r7-7"),
+        "{\"beat\":\"ask\",\"text\":\"look \\u001b]0;pwned\\u0007 \\u202eevil\\u200b\"}\n{\"beat\":\"end\",\"ending\":\"checkpoint: x\\u001b[2J\"}\n",
+    )
+    .unwrap();
+    let s = &mnemorph_loop::stopped(&w.world())[0];
+    for text in [&s.ask, &s.why] {
+        assert!(
+            !text.chars().any(mnemorph_loop::hidden),
+            "{text:?} carries a hidden character"
+        );
+    }
+    assert!(s.ask.contains("\\u{1b}]0;pwned\\u{7}"), "{}", s.ask);
+    assert!(s.ask.contains("\\u{202e}evil\\u{200b}"), "{}", s.ask);
+    assert_eq!(s.why, "x\\u{1b}[2J");
+}
+
+/// A fresh session whose run no lock can hold does not open: it would be resumable while live.
+#[test]
+fn a_run_that_cannot_be_held_opens_no_session() {
+    let w = World::new("unheld");
+    fs::create_dir_all(w.world().join(".mnemorph/instruments")).unwrap();
+    fs::write(
+        w.world().join(".mnemorph/instruments/loop"),
+        "not a directory",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([]));
+    let attic = w.root.join("attic");
+    let refused = open_with(
+        &w.world(),
+        &w.loaded(),
+        Bound {
+            model,
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .err()
+    .unwrap();
+    assert!(refused.contains("cannot be held"), "{refused}");
+}
+
+/// A listing's momentary probe never makes a resume fail; a run's lock file goes when its session
+/// ends with nothing left to resume, and stays while the run may still be resumed.
+#[tokio::test]
+async fn a_probe_never_refuses_and_finished_locks_go() {
+    let w = World::new("locks");
+    let run = w
+        .checkpointed("scripted-model", write("w0", "broken\n"))
+        .await;
+    let lock = w.journal(&run).with_extension("lock");
+    assert!(lock.exists(), "a stopped run keeps its lock file");
+    let world = w.world();
+    let probing = std::thread::spawn(move || {
+        for _ in 0..200 {
+            let _ = mnemorph_loop::stopped(&world);
+        }
+    });
+    w.config(None);
+    let none = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    for _ in 0..20 {
+        let opened = w.resume(&none, "scripted-model", &run);
+        assert!(opened.is_ok(), "{:?}", opened.err());
+    }
+    probing.join().unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("done")]));
+    {
+        let mut opened = w.resume(&model, "scripted-model", &run).unwrap();
+        opened.session.run().ask("go on", &mut |_| {}).await;
+        assert!(lock.exists(), "held while the session lives");
+    }
+    assert!(!lock.exists(), "answered: the lock file is gone");
+    let fresh = w.open(&model, "scripted-model").run_id;
+    assert!(
+        !w.journal(&fresh).with_extension("lock").exists(),
+        "a session that asked nothing leaves no lock"
+    );
+}
