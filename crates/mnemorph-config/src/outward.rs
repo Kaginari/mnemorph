@@ -55,6 +55,20 @@ pub enum Act {
         /// The comment.
         body: String,
     },
+    /// Open a pull request from `head` into `base`. Undone by closing it (never deleting it), by
+    /// the number it was given, only while it is still open and its own.
+    OpenPullRequest {
+        /// The repository, `owner/name`: where the pull request opens, and where both branches are.
+        repo: String,
+        /// The branch it merges into, a plain branch name that exists.
+        base: String,
+        /// The branch it proposes, a plain branch name on `repo`.
+        head: String,
+        /// The title: one line of at most [`TITLE_CHARS`] characters.
+        title: String,
+        /// The description, given to `gh` in a file the harness writes just before the spawn.
+        body: String,
+    },
     /// Any other command: the harness derives no undo for it, so an outward one is destructive.
     Command(String),
 }
@@ -96,6 +110,11 @@ pub enum Done {
     Commented {
         /// The comment's id.
         id: u64,
+    },
+    /// The pull request was opened, with this number.
+    Opened {
+        /// The pull request's number.
+        number: u64,
     },
 }
 
@@ -173,8 +192,19 @@ fn repo_ok(repo: &str) -> bool {
         .is_some_and(|(owner, name)| part(owner) && part(name))
 }
 
-/// The longest comment an act carries, in bytes.
+/// The longest comment or pull request description an act carries, in bytes.
 pub const BODY_BYTES: usize = 65_536;
+
+/// The longest pull request title, in characters.
+pub const TITLE_CHARS: usize = 256;
+
+/// Where the harness writes a pull request's description for `gh`, relative to the world: in the
+/// world's scratch folder, named by the description's SHA-256, so the rendered command — what the
+/// approval's fingerprint binds — names exactly the text the human read.
+#[must_use]
+pub fn body_file(body: &str) -> String {
+    format!(".mnemorph/tmp/pr-body-{}.md", crate::receipt::sha256(body))
+}
 
 /// Characters that make text read otherwise than it is: bidirectional overrides and isolates,
 /// zero-width characters and marks, and the Unicode line and paragraph separators.
@@ -217,6 +247,28 @@ fn pr_word(pr: u64) -> Result<String, Malformed> {
         Err(Malformed::Field("pr", "is a pull request number, from 1"))
     } else {
         Ok(pr.to_string())
+    }
+}
+
+fn body_ok(body: &str) -> Result<(), Malformed> {
+    if text_ok(body) && body.len() <= BODY_BYTES {
+        Ok(())
+    } else {
+        Err(Malformed::Field(
+            "body",
+            "is text of at most 65536 bytes, with no control character but line breaks and tabs, and no bidirectional or zero-width character",
+        ))
+    }
+}
+
+fn branch_word<'a>(field: &'static str, name: &'a str) -> Result<&'a str, Malformed> {
+    if branch_ok(name) {
+        Ok(name)
+    } else {
+        Err(Malformed::Field(
+            field,
+            "is a plain branch name: no `:`, `+`, `..`, space or glob, not under `refs/`",
+        ))
     }
 }
 
@@ -274,12 +326,7 @@ fn render(act: &Act) -> Result<Option<Vec<String>>, Malformed> {
         }
         Act::Comment { repo, pr, body } => {
             let repo = repo_word(repo)?;
-            if !text_ok(body) || body.len() > BODY_BYTES {
-                return Err(Malformed::Field(
-                    "body",
-                    "is text of at most 65536 bytes, with no control character but line breaks and tabs, and no bidirectional or zero-width character",
-                ));
-            }
+            body_ok(body)?;
             owned(&[
                 "gh",
                 "pr",
@@ -289,6 +336,45 @@ fn render(act: &Act) -> Result<Option<Vec<String>>, Malformed> {
                 repo,
                 "--body",
                 body,
+            ])
+        }
+        Act::OpenPullRequest {
+            repo,
+            base,
+            head,
+            title,
+            body,
+        } => {
+            let repo = repo_word(repo)?;
+            let base = branch_word("base", base)?;
+            let head = branch_word("head", head)?;
+            if head == base {
+                return Err(Malformed::Field("head", "is another branch than `base`"));
+            }
+            if !text_ok(title)
+                || title.contains(['\n', '\t'])
+                || title.chars().count() > TITLE_CHARS
+            {
+                return Err(Malformed::Field(
+                    "title",
+                    "is one line of at most 256 characters, with no control character, and no bidirectional or zero-width character",
+                ));
+            }
+            body_ok(body)?;
+            owned(&[
+                "gh",
+                "pr",
+                "create",
+                "--repo",
+                repo,
+                "--base",
+                base,
+                "--head",
+                head,
+                "--title",
+                title,
+                "--body-file",
+                &body_file(body),
             ])
         }
         Act::Command(_) => return Ok(None),
@@ -322,6 +408,16 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
         } => (class, why, outside),
         Verdict::Refuse { reason, .. } => return Err(Malformed::Refused(reason)),
     };
+    if let Act::OpenPullRequest { title, body, .. } = act {
+        // The command names the description by its file: the card shows the text itself.
+        why.push(format!("title: {title}"));
+        why.push(format!(
+            "description ({} bytes, sha256 {}, written to {} just before the spawn):\n{body}",
+            body.len(),
+            crate::receipt::sha256(body),
+            body_file(body)
+        ));
+    }
     let class = match (argv.is_some(), read) {
         (_, ToolClass::Destructive) | (false, ToolClass::Outward) => {
             if argv.is_none() {
@@ -410,6 +506,9 @@ fn undo_argv(act: &Act, done: &Done) -> Result<Vec<String>, NoUndo> {
             "DELETE",
             &format!("repos/{repo}/issues/comments/{id}"),
         ]),
+        (Act::OpenPullRequest { repo, .. }, Done::Opened { number }) if *number > 0 => {
+            owned(&["gh", "pr", "close", &number.to_string(), "--repo", repo])
+        }
         (Act::Command(_), _) => return Err(NoUndo::Command),
         _ => return Err(NoUndo::Mismatch),
     })
@@ -420,8 +519,17 @@ fn undo_argv(act: &Act, done: &Done) -> Result<Vec<String>, NoUndo> {
 pub(crate) fn face_of(act: &Act) -> Option<Vec<String>> {
     match act {
         Act::PushNewBranch { remote, name } => Some(owned(&["git", "push", remote, name])),
-        _ => render(act).ok().flatten(),
+        _ => render(act).ok().flatten().map(|argv| faced(act, argv)),
     }
+}
+
+/// A pull request's rendered argv with its description in place of the file that carries it: an
+/// envelope reads the text that leaves, bounded and screened like a comment's.
+fn faced(act: &Act, mut argv: Vec<String>) -> Vec<String> {
+    if let (Act::OpenPullRequest { body, .. }, Some(last)) = (act, argv.last_mut()) {
+        last.clone_from(body);
+    }
+    argv
 }
 
 /// Whether one of `envelope`'s patterns reads `act` — whatever its time, count or class: the
@@ -497,6 +605,9 @@ impl Planned {
                 Some(format!("remove label {label:?} from {repo}#{pr}"))
             }
             Act::Comment { repo, pr, .. } => Some(format!("delete this comment on {repo}#{pr}")),
+            Act::OpenPullRequest { repo, .. } => Some(format!(
+                "close this pull request on {repo} (never delete it), only while it is still open, by this login, with this title and description"
+            )),
             Act::Command(_) => None,
         }
     }
@@ -530,6 +641,33 @@ impl Planned {
         id.parse().ok().map(|id| Done::Commented { id })
     }
 
+    /// The number of the pull request this act opened, read from what `gh pr create` printed:
+    /// its URL on the pinned host, in this act's repository, and nothing else. The probe, not
+    /// this, says which pull request is the act's; a number printed must be the one it finds.
+    #[must_use]
+    pub fn opened(&self, printed: &str, host: &str) -> Option<Done> {
+        let Act::OpenPullRequest { repo, .. } = &self.act else {
+            return None;
+        };
+        if self.undo {
+            return None;
+        }
+        let head = format!("https://{host}/{repo}/pull/").to_ascii_lowercase();
+        let number = printed.lines().find_map(|l| {
+            let l = l.trim();
+            let lower = l.to_ascii_lowercase();
+            lower.starts_with(&head).then(|| l[head.len()..].to_owned())
+        })?;
+        if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        number
+            .parse()
+            .ok()
+            .filter(|n| *n > 0)
+            .map(|number| Done::Opened { number })
+    }
+
     /// The question the gate puts to the human: [`NO_UNDO`] leads the card of an act the
     /// harness cannot undo; a typed act's card says how it will be put back.
     #[must_use]
@@ -552,10 +690,18 @@ impl Planned {
 
     /// The words an envelope pattern is read against: the act as a human would write it — for a
     /// branch `git push <remote> <name>`, for the others the rendered argv, the repository in
-    /// it. Never the shell's reading of a string.
+    /// it, and a pull request's description in place of its file. Never the shell's reading of a
+    /// string.
     fn face(&self) -> Vec<&str> {
         match &self.act {
             Act::PushNewBranch { remote, name } => vec!["git", "push", remote, name],
+            Act::OpenPullRequest { body, .. } => {
+                let mut face: Vec<&str> = self.argv.iter().map(String::as_str).collect();
+                if let Some(last) = face.last_mut() {
+                    *last = body;
+                }
+                face
+            }
             _ => self.argv.iter().map(String::as_str).collect(),
         }
     }

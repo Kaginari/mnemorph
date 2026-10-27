@@ -290,6 +290,11 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
 
+The exit is met: `open-pull-request` with `remote` pushes the branch and opens the pull request
+under one approval, each act pinned, observed, receipted and undone on its own
+([races](02-races.md)); a cut act is probed before its post's next act is gated; an undo always
+asks the human, and its incident closes only on its four receipts.
+
 ### M10 — Dark Elf · M
 
 - Diff challenge on risk surfaces, offline CVE audit over the scout's mirror, secret scanning,

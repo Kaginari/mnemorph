@@ -44,6 +44,7 @@ use rustix::process::{Pid, Signal, kill_process_group};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::forge;
 use crate::outward::sha_ok;
 use crate::{Act, Done, Planned};
 
@@ -243,7 +244,7 @@ impl Planned {
                 }
                 Ok(Pin::Push { urls, sha })
             }
-            Act::AddLabel { .. } | Act::Comment { .. } => {
+            Act::AddLabel { .. } | Act::Comment { .. } | Act::OpenPullRequest { .. } => {
                 let host = scrubbed_env()
                     .into_iter()
                     .find(|(k, _)| k == "GH_HOST")
@@ -301,10 +302,58 @@ impl Planned {
                 }
                 Ok(())
             }
+            (Act::OpenPullRequest { .. }, Pin::Forge { host }) => {
+                pull_vacant(self.act(), host, false, probe).map(|_| ())
+            }
             (Act::Comment { .. }, Pin::Forge { .. }) | (Act::Command(_), Pin::Unpinned) => Ok(()),
             _ => Err("the pin is not of this act".into()),
         }
     }
+}
+
+/// Whether a pull request `act` may open on `host`, read through `probe`: its base is a branch of
+/// its repository; its head is one too — unless `pushing`, when the push approved with it makes
+/// the head — and no pull request is open from that head into that base. Returns the head's
+/// commit, when it was read.
+///
+/// # Errors
+///
+/// Why it may not, or why that cannot be told.
+pub(crate) fn pull_vacant(
+    act: &Act,
+    host: &str,
+    pushing: bool,
+    probe: &dyn Probe,
+) -> Result<Option<String>, String> {
+    let Some(want) = forge::Wanted::of(act) else {
+        return Err("the act opens no pull request".into());
+    };
+    let (mut probes, mut seen) = (Vec::new(), Vec::new());
+    let (repo, base, head) = (want.repo, want.base, want.head);
+    forge::branch_tip(host, repo, base, probe, &mut probes, &mut seen).map_err(|why| {
+        format!("the base `{base}` is not a branch of {repo} on {host} that can be read: {why}")
+    })?;
+    let tip = if pushing {
+        None
+    } else {
+        Some(
+            forge::branch_tip(host, repo, head, probe, &mut probes, &mut seen).map_err(|why| {
+                format!(
+                    "the head `{head}` is not a branch of {repo} on {host} that can be read — push it first (`push-new-branch`, or `remote` on this act): {why}"
+                )
+            })?,
+        )
+    };
+    let open = forge::open_pulls(host, &want, probe, PROBE_TIMEOUT, &mut probes, &mut seen)
+        .map_err(|why| format!("the open pull requests of {repo} cannot be read: {why}"))?;
+    if !open.is_empty() {
+        let numbers: Vec<String> = open.iter().map(|p| format!("#{}", p.number)).collect();
+        return Err(format!(
+            "already open: {} from {head} into {base} on {repo}: nothing to open, nothing to undo",
+            numbers.join(", ")
+        ));
+    }
+    Ok(tip)
 }
 
 /// The commits `refs/heads/<name>` names in what `git ls-remote` printed.
@@ -618,6 +667,24 @@ fn expected(act: &Act, pin: &Pin, done: Option<&Done>) -> String {
         (Act::Comment { repo, pr, body }, _, _) => {
             format!("a comment on {repo}#{pr}, body sha256 {}", sha256(body))
         }
+        (
+            Act::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            },
+            _,
+            done,
+        ) => format!(
+            "{} open from {head} into {base} on {repo}, by gh's login, titled {title:?}, description sha256 {}",
+            match done {
+                Some(Done::Opened { number }) => format!("pull request #{number}, the one"),
+                _ => "one pull request".to_owned(),
+            },
+            sha256(body)
+        ),
         (Act::Command(_), _, _) => "nothing: a command has no probe".into(),
     }
 }
@@ -933,7 +1000,7 @@ impl PostJournal {
             (planned.act(), &pin),
             (Act::PushNewBranch { .. }, Pin::Push { .. })
                 | (
-                    Act::AddLabel { .. } | Act::Comment { .. },
+                    Act::AddLabel { .. } | Act::Comment { .. } | Act::OpenPullRequest { .. },
                     Pin::Forge { .. }
                 )
                 | (Act::Command(_), Pin::Unpinned)
@@ -999,6 +1066,9 @@ impl PostJournal {
             }
             (Act::AddLabel { .. }, _) => Some(Done::Labelled),
             (Act::Comment { .. }, Pin::Forge { host }) => receipt.planned.commented(printed, host),
+            (Act::OpenPullRequest { .. }, Pin::Forge { host }) => {
+                receipt.planned.opened(printed, host)
+            }
             _ => None,
         };
         let state = match act {
@@ -1019,7 +1089,12 @@ impl PostJournal {
                     |c| format!("exited {c}")
                 )
             ),
-            (_, None) => "the act printed no comment id: nothing can be probed".into(),
+            (_, None) if matches!(act, Act::Comment { .. }) => {
+                "the act printed no comment id: nothing can be probed".into()
+            }
+            (_, None) if matches!(act, Act::OpenPullRequest { .. }) => {
+                "ran, printing no pull request URL: the probe finds it by its head and base".into()
+            }
             _ => "ran; its effect is not yet observed".into(),
         });
         self.append(&row)?;
@@ -1047,16 +1122,37 @@ impl PostJournal {
                 receipt.state
             )));
         }
-        let act = receipt.planned.act();
+        let act = receipt.planned.act().clone();
+        let act = &act;
         let mut row = Row::new(&receipt.id, State::Reconcile);
-        row.expect = Some(expected(act, &receipt.pin, receipt.done.as_ref()));
         let urls: Vec<Option<&str>> = match &receipt.pin {
             Pin::Push { urls, .. } => urls.iter().map(|u| Some(u.as_str())).collect(),
+            // A pull request is found by its head and base, not by what the act printed.
+            _ if matches!(act, Act::OpenPullRequest { .. }) => Vec::new(),
             _ => vec![None],
         };
         let mut probes = Vec::new();
         let mut seen = Vec::new();
         let mut verdict: Result<(), String> = Ok(());
+        if let (Some(want), Pin::Forge { host }) = (forge::Wanted::of(act), &receipt.pin) {
+            let known = match receipt.done {
+                Some(Done::Opened { number }) => Some(number),
+                _ => None,
+            };
+            verdict = match forge::find(host, &want, known, probe, timeout, &mut probes, &mut seen)
+            {
+                Ok(Some(number)) => {
+                    receipt.done = Some(Done::Opened { number });
+                    Ok(())
+                }
+                Ok(None) => Err(format!(
+                    "no pull request is open from {} into {} on {}",
+                    want.head, want.base, want.repo
+                )),
+                Err(why) => Err(why),
+            };
+        }
+        row.expect = Some(expected(act, &receipt.pin, receipt.done.as_ref()));
         for url in urls {
             let argv = receipt
                 .done

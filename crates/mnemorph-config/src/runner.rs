@@ -26,6 +26,11 @@
 //! them. The same key with the same request returns the stored receipt without acting; with a
 //! different request it is a conflict, refused.
 //!
+//! A push and the pull request from it may share one approval ([`Runner::push_and_open`]): one
+//! card shows both commands, bound to a fingerprint of both; each act is still pinned, journaled,
+//! observed and receipted on its own, and the pull request runs only once the push is observed,
+//! while the world is as approved but for what the push wrote.
+//!
 //! An act's undo ([`Runner::undo`]) takes the same path: the post check, the fingerprint, the
 //! target still where the act went and what the act left still its own, the human — always —,
 //! the recheck, the harness-rendered undo under its lease, and a probe that sees the effect gone.
@@ -45,9 +50,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::closure::{Entry, forge_repo, told_prefix};
+use crate::forge::{self, Login, PAGE, forge_get, login, probed};
 use crate::receipt::{
     branch_tips, carries, command_line, excerpt, labels_argv, ls_remote_argv, private_file,
-    receipt_id, redact, sha256,
+    pull_vacant, receipt_id, redact, sha256,
 };
 use crate::{Act, Done, PROBE_TIMEOUT, Pin, Planned, PostJournal, Probe, Receipt, Row, State};
 
@@ -61,8 +67,6 @@ const MAX_REASKS: usize = 3;
 const ACT_TIMEOUT: Duration = Duration::from_secs(120);
 /// How far before a recorded instant a read of the forge looks, for clocks that disagree.
 const SKEW_SECS: i64 = 300;
-/// The most a forge list returns in one page: a full page cannot tell what is past it.
-const PAGE: usize = 100;
 /// The longest name a Kijin may give a request.
 const KEY_CHARS: usize = 128;
 
@@ -173,6 +177,13 @@ pub(crate) enum Typed {
         pr: u64,
         body: String,
     },
+    OpenPullRequest {
+        repo: String,
+        base: String,
+        head: String,
+        title: String,
+        body: String,
+    },
 }
 
 impl Typed {
@@ -181,6 +192,19 @@ impl Typed {
             Act::PushNewBranch { remote, name } => Typed::PushNewBranch { remote, name },
             Act::AddLabel { repo, pr, label } => Typed::AddLabel { repo, pr, label },
             Act::Comment { repo, pr, body } => Typed::Comment { repo, pr, body },
+            Act::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            } => Typed::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            },
             Act::Command(_) => return None,
         })
     }
@@ -190,6 +214,19 @@ impl Typed {
             Typed::PushNewBranch { remote, name } => Act::PushNewBranch { remote, name },
             Typed::AddLabel { repo, pr, label } => Act::AddLabel { repo, pr, label },
             Typed::Comment { repo, pr, body } => Act::Comment { repo, pr, body },
+            Typed::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            } => Act::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            },
         }
     }
 }
@@ -232,6 +269,7 @@ pub(crate) enum Left {
     Pushed { sha: String },
     Labelled,
     Commented { id: u64 },
+    Opened { number: u64 },
 }
 
 impl Left {
@@ -240,14 +278,16 @@ impl Left {
             Done::Pushed { sha } => Left::Pushed { sha: sha.clone() },
             Done::Labelled => Left::Labelled,
             Done::Commented { id } => Left::Commented { id: *id },
+            Done::Opened { number } => Left::Opened { number: *number },
         }
     }
 
-    fn done(&self) -> Done {
+    pub(crate) fn done(&self) -> Done {
         match self {
             Left::Pushed { sha } => Done::Pushed { sha: sha.clone() },
             Left::Labelled => Done::Labelled,
             Left::Commented { id } => Done::Commented { id: *id },
+            Left::Opened { number } => Done::Opened { number: *number },
         }
     }
 }
@@ -271,7 +311,7 @@ pub(crate) struct Intent {
     pub(crate) pin: Pinned,
     /// What it left, once known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    left: Option<Left>,
+    pub(crate) left: Option<Left>,
     /// For a comment: the act whose incident it tells downstream of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tells: Option<String>,
@@ -297,6 +337,19 @@ fn request_parts(act: &Act, pin: &Pin) -> Option<(String, String)> {
         (Act::Comment { repo, pr, body }, Pin::Forge { host }) => (
             target(&["comment", host, repo, &pr.to_string()]),
             body.clone(),
+        ),
+        (
+            Act::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+            },
+            Pin::Forge { host },
+        ) => (
+            target(&["open-pull-request", host, repo, base, head]),
+            format!("{title}\u{0}{body}"),
         ),
         _ => return None,
     })
@@ -350,50 +403,6 @@ struct Comment {
     issue_url: String,
     #[serde(default)]
     user: Option<Login>,
-}
-
-/// Who a forge says someone is.
-#[derive(Deserialize)]
-struct Login {
-    login: String,
-}
-
-/// The login `gh` acts as on `host`.
-fn login(
-    host: &str,
-    probe: &dyn Probe,
-    probes: &mut Vec<String>,
-    seen: &mut Vec<String>,
-) -> Result<String, String> {
-    let me: Login = serde_json::from_slice(&probed(probe, &forge_get(host, "user"), probes, seen)?)
-        .map_err(|e| format!("the login does not read: {e}"))?;
-    Ok(me.login)
-}
-
-/// Run one probe, keeping what it was and what it printed for the journal.
-fn probed(
-    probe: &dyn Probe,
-    argv: &[String],
-    probes: &mut Vec<String>,
-    seen: &mut Vec<String>,
-) -> Result<Vec<u8>, String> {
-    probes.push(redact(&argv.join(" ")));
-    let s = probe
-        .run(argv, PROBE_TIMEOUT)
-        .map_err(|e| format!("the probe failed: {}", redact(&e)))?;
-    seen.push(excerpt(&s.out, crate::SEEN_BYTES));
-    if s.code != Some(0) {
-        return Err(format!(
-            "the probe exited {}: {}",
-            s.code
-                .map_or_else(|| "on a signal".into(), |c| c.to_string()),
-            excerpt(&s.err, 200)
-        ));
-    }
-    if s.cut {
-        return Err("the probe printed more than it reads: it cannot tell".into());
-    }
-    Ok(s.out)
 }
 
 /// Look for a cut act's effect at its pin: whether it landed, is absent, or cannot be told.
@@ -487,7 +496,35 @@ fn landed(
                 )),
             }
         }
+        (Typed::OpenPullRequest { .. }, Pinned::Forge { host }) => {
+            pull_landed(intent, host, probe, probes, seen)
+        }
         _ => unknown("the pin is not of this act".into()),
+    }
+}
+
+/// Whether a cut pull request act landed. As strict as `observe`: the one pull request open from
+/// the act's head into its base, by `gh`'s own login, with the act's title and description — and,
+/// once its number is known, that number. Someone else's is never taken for it.
+fn pull_landed(
+    intent: &Intent,
+    host: &str,
+    probe: &dyn Probe,
+    probes: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> Landing {
+    let act = intent.typed.act();
+    let Some(want) = forge::Wanted::of(&act) else {
+        return Landing::Unknown("the act opens no pull request".into());
+    };
+    let known = match &intent.left {
+        Some(Left::Opened { number }) => Some(*number),
+        _ => None,
+    };
+    match forge::find(host, &want, known, probe, PROBE_TIMEOUT, probes, seen) {
+        Ok(Some(number)) => Landing::Verified(Done::Opened { number }),
+        Ok(None) => Landing::Absent,
+        Err(why) => Landing::Unknown(why),
     }
 }
 
@@ -500,6 +537,11 @@ fn gone(
     probes: &mut Vec<String>,
     seen: &mut Vec<String>,
 ) -> Landing {
+    if let (Typed::OpenPullRequest { repo, .. }, Pinned::Forge { host }) =
+        (&intent.typed, &intent.pin)
+    {
+        return pull_gone(intent, repo, host, probe, probes, seen);
+    }
     let (Typed::Comment { repo, pr, .. }, Pinned::Forge { host }) = (&intent.typed, &intent.pin)
     else {
         return landed(intent, probe, probes, seen);
@@ -530,11 +572,28 @@ fn gone(
     }
 }
 
-/// `gh api` GET of `path` on `host`, as every forge probe runs it.
-fn forge_get(host: &str, path: &str) -> Vec<String> {
-    ["gh", "api", "--hostname", host, "--method", "GET", path]
-        .map(str::to_owned)
-        .to_vec()
+/// Whether the pull request an act opened is gone, for its undo: closed, by its number, and never
+/// merged — a merged pull request is not put back by closing it. An edited one is still there.
+fn pull_gone(
+    intent: &Intent,
+    repo: &str,
+    host: &str,
+    probe: &dyn Probe,
+    probes: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> Landing {
+    let Some(Left::Opened { number }) = &intent.left else {
+        return Landing::Unknown("the pull request's number was never known".into());
+    };
+    match forge::pull(host, repo, *number, probe, probes, seen) {
+        Ok(p) if p.merged_at.is_some() => Landing::Unknown(format!(
+            "#{number} was merged: closing it does not put it back"
+        )),
+        Ok(p) if p.state == "closed" => Landing::Absent,
+        Ok(p) if p.state == "open" => Landing::Verified(Done::Opened { number: *number }),
+        Ok(p) => Landing::Unknown(format!("#{number} is {}", excerpt(p.state.as_bytes(), 40))),
+        Err(why) => Landing::Unknown(why),
+    }
 }
 
 /// Whether a label on a pull request is still the one an act added: the only label event for
@@ -634,6 +693,56 @@ pub struct Runner<'a> {
 struct Reask {
     changed: Vec<String>,
     notes: Vec<String>,
+}
+
+/// An act ready for the gate: the plan its approval binds to, where it lands, its key, when its
+/// target was found vacant, and what the pin read for the card.
+struct Ready {
+    plan: Fingerprint,
+    pin: Pin,
+    key: String,
+    digest: String,
+    pinned: Timestamp,
+    card: Vec<String>,
+}
+
+/// What preparing an act came to.
+enum Prepared {
+    /// The request had landed already: its stored receipt.
+    Replayed(Report),
+    /// Asked, then run.
+    Ready(Ready),
+}
+
+/// What a push and the pull request from it came to: each its own receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Paired {
+    /// The push's report.
+    pub push: Report,
+    /// The pull request's report, or why it did not open.
+    pub pull: Result<Report, Refusal>,
+}
+
+/// One fingerprint of two plans, for the card of a pair: each part the two share, or a hash of
+/// both. Each act is still rechecked against its own plan at its spawn.
+fn both(a: &Fingerprint, b: &Fingerprint) -> Fingerprint {
+    let join = |x: &str, y: &str| {
+        if x == y {
+            x.to_owned()
+        } else {
+            sha256(&format!("{x}\u{0}{y}"))
+        }
+    };
+    Fingerprint {
+        act: sha256(&format!("{}\u{0}{}", a.act, b.act)),
+        head: match (&a.head, &b.head) {
+            (Some(x), Some(y)) => Some(join(x, y)),
+            (x, y) => x.clone().or_else(|| y.clone()),
+        },
+        diff: join(&a.diff, &b.diff),
+        git: join(&a.git, &b.git),
+        target: join(&a.target, &b.target),
+    }
 }
 
 impl<'a> Runner<'a> {
@@ -795,21 +904,7 @@ impl<'a> Runner<'a> {
     /// when the human does not approve; [`Refusal::Failed`] when it cannot run or be journaled.
     pub fn act(&self, request: &Request) -> Result<Report, Refusal> {
         let refuse = |why: String| Err(Refusal::Refused(why));
-        if let Act::Command(_) = request.act {
-            return refuse(
-                "an untyped command is not a typed act: run it with bash, where it is destructive and asks the human".into(),
-            );
-        }
-        if let Some(name) = &request.key
-            && !key_ok(name)
-        {
-            return refuse(format!(
-                "a request's key is at most {KEY_CHARS} letters, digits, `-`, `_`, `.`, `/` or `:`"
-            ));
-        }
-        if request.tells.is_some() && !matches!(request.act, Act::Comment { .. }) {
-            return refuse("only a comment tells downstream of an incident".into());
-        }
+        Self::well_formed(request)?;
         self.may_act()?;
         // A telling comment opens with the harness's words, naming the act; the Kijin's follow.
         let told;
@@ -831,22 +926,61 @@ impl<'a> Runner<'a> {
             }
             _ => request,
         };
-        let planned = crate::plan(&request.act, &self.place())
-            .map_err(|e| Refusal::Refused(e.to_string()))?;
-        check_class(self.cx.race(), planned.class())
-            .map_err(|e| Refusal::Refused(e.to_string()))?;
-        // 1. The post: an act the post does not hold is refused before anything is read or asked.
-        planned
-            .check_post(self.cx.body())
-            .map_err(|e| Refusal::Refused(e.to_string()))?;
+        let planned = self.planned(&request.act)?;
         let _held = self.hold()?;
         // Cut acts first: each is probed before the next act of the post is gated.
         let mut reask = Reask {
             changed: Vec::new(),
             notes: self.recover_held()?,
         };
+        self.run_held(&planned, request, &mut reask)
+    }
+
+    /// What every request must be before anything is read: a typed act, a plain key, and `tells`
+    /// only on a comment.
+    fn well_formed(request: &Request) -> Result<(), Refusal> {
+        let refuse = |why: String| Err(Refusal::Refused(why));
+        if let Act::Command(_) = request.act {
+            return refuse(
+                "an untyped command is not a typed act: run it with bash, where it is destructive and asks the human".into(),
+            );
+        }
+        if let Some(name) = &request.key
+            && !key_ok(name)
+        {
+            return refuse(format!(
+                "a request's key is at most {KEY_CHARS} letters, digits, `-`, `_`, `.`, `/` or `:`"
+            ));
+        }
+        if request.tells.is_some() && !matches!(request.act, Act::Comment { .. }) {
+            return refuse("only a comment tells downstream of an incident".into());
+        }
+        Ok(())
+    }
+
+    /// The act planned, its class the race's, and — step 1 — its kinds all the post's: an act
+    /// the post does not hold is refused before anything is read or asked.
+    fn planned(&self, act: &Act) -> Result<Planned, Refusal> {
+        let planned =
+            crate::plan(act, &self.place()).map_err(|e| Refusal::Refused(e.to_string()))?;
+        check_class(self.cx.race(), planned.class())
+            .map_err(|e| Refusal::Refused(e.to_string()))?;
+        planned
+            .check_post(self.cx.body())
+            .map_err(|e| Refusal::Refused(e.to_string()))?;
+        Ok(planned)
+    }
+
+    /// Steps 2 to 10 of one act, the post's lock held and its cut acts settled: asked again when
+    /// the world moves between the approval and the spawn, at most [`MAX_REASKS`] times.
+    fn run_held(
+        &self,
+        planned: &Planned,
+        request: &Request,
+        reask: &mut Reask,
+    ) -> Result<Report, Refusal> {
         for _ in 0..=MAX_REASKS {
-            if let Some(mut report) = self.once(&planned, request, &mut reask)? {
+            if let Some(mut report) = self.once(planned, request, reask)? {
                 if let Some(of) = &request.tells
                     && report.state == State::Observed
                 {
@@ -880,6 +1014,25 @@ impl<'a> Runner<'a> {
         request: &Request,
         reask: &mut Reask,
     ) -> Result<Option<Report>, Refusal> {
+        let ready = match self.prepare(planned, request, reask, None)? {
+            Prepared::Replayed(report) => return Ok(Some(report)),
+            Prepared::Ready(ready) => ready,
+        };
+        // 4. The gate: the human, always, until M11 honours envelopes.
+        self.ask(planned, &ready.plan, &reask.changed, &ready.card)?;
+        self.execute(planned, request, ready, reask)
+    }
+
+    /// Steps 2 and 3: the plan the approval binds to, the pin, the key, and what the act would make
+    /// absent — or the stored receipt of a request that landed already. `pushing` is the commit a
+    /// push approved with a pull request makes its head: that head need not exist yet.
+    fn prepare(
+        &self,
+        planned: &Planned,
+        request: &Request,
+        reask: &mut Reask,
+        pushing: Option<&str>,
+    ) -> Result<Prepared, Refusal> {
         let world = self.cx.world();
         // 2. The plan the approval binds to, read before the human is asked.
         let plan = Fingerprint::of(planned.command(), world).map_err(|e| {
@@ -898,18 +1051,112 @@ impl<'a> Runner<'a> {
         .ok_or_else(|| Refusal::Refused("the pin is not of this act".into()))?;
         self.clear(planned.act(), &pin, request.tells.as_deref())?;
         if let Some(report) = self.replay(&key, &digest, reask)? {
-            return Ok(Some(report));
+            return Ok(Prepared::Replayed(report));
         }
-        planned.vacant(&pin, self.probe).map_err(Refusal::Refused)?;
-        let pinned = Timestamp::now();
-        // 4. The gate: the human, always, until M11 honours envelopes.
-        self.ask(planned, &plan, &reask.changed)?;
+        let card = if let (Act::OpenPullRequest { .. }, Pin::Forge { host }) = (planned.act(), &pin)
+        {
+            self.pull_pin(planned.act(), host, pushing)?
+        } else {
+            planned.vacant(&pin, self.probe).map_err(Refusal::Refused)?;
+            Vec::new()
+        };
+        Ok(Prepared::Ready(Ready {
+            plan,
+            pin,
+            key,
+            digest,
+            pinned: Timestamp::now(),
+            card,
+        }))
+    }
+
+    /// Whether a pull request may open from its head: the pin's reads ([`pull_vacant`]), and —
+    /// when this post pushed the head — the head still at the commit it pushed. Returns what the
+    /// card says of the head.
+    fn pull_pin(
+        &self,
+        act: &Act,
+        host: &str,
+        pushing: Option<&str>,
+    ) -> Result<Vec<String>, Refusal> {
+        let Act::OpenPullRequest { repo, head, .. } = act else {
+            return Err(Refusal::Refused("the act opens no pull request".into()));
+        };
+        let tip =
+            pull_vacant(act, host, pushing.is_some(), self.probe).map_err(Refusal::Refused)?;
+        let Some(tip) = tip else {
+            return Ok(vec![format!(
+                "head {head}: the branch the push above makes, at {}",
+                pushing.unwrap_or_default()
+            )]);
+        };
+        Ok(vec![match self.pushed(head, repo, host)? {
+            Some((act, sha)) if sha == tip => {
+                format!("head {head} at {tip}, as act {act} of this post pushed it")
+            }
+            Some((act, sha)) => {
+                return Err(Refusal::Refused(format!(
+                    "the head `{head}` is at {tip} on {repo}, not at {sha}, where act {act} of this post pushed it: the branch moved since, so no pull request opens from it"
+                )));
+            }
+            None => format!("head {head} at {tip}: a branch of {repo} this post did not push"),
+        }])
+    }
+
+    /// The latest act of this post that pushed `head` to a URL naming `repo` on `host`, still
+    /// standing (`observed`, or a `reconcile` the human settled): its receipt and the commit.
+    fn pushed(
+        &self,
+        head: &str,
+        repo: &str,
+        host: &str,
+    ) -> Result<Option<(String, String)>, Refusal> {
+        let standing = self.standing()?;
+        Ok(self.kept()?.into_iter().rev().find_map(|i| {
+            let (Typed::PushNewBranch { name, .. }, Pinned::Push { urls, sha }) =
+                (&i.typed, &i.pin)
+            else {
+                return None;
+            };
+            let holds = standing
+                .iter()
+                .any(|r| r.act == i.act && matches!(r.state, State::Observed | State::Settled));
+            let there = urls
+                .iter()
+                .filter_map(|u| forge_repo(u, host))
+                .any(|r| r.eq_ignore_ascii_case(repo));
+            (name == head && holds && there).then(|| (i.act.clone(), sha.clone()))
+        }))
+    }
+
+    /// Steps 5 to 10 of an approved act: the recheck, the intent, the spawn, the result and the
+    /// probe; `None` when the world moved before the spawn and the gate must be asked again.
+    fn execute(
+        &self,
+        planned: &Planned,
+        request: &Request,
+        ready: Ready,
+        reask: &mut Reask,
+    ) -> Result<Option<Report>, Refusal> {
+        let Ready {
+            plan,
+            pin,
+            key,
+            digest,
+            pinned,
+            ..
+        } = ready;
         // 5–7. The recheck, the intent, the spawn — in that order, in the hands.
         let typed = Typed::of(planned.act())
             .ok_or_else(|| Refusal::Refused("an untyped command is not a typed act".into()))?;
         let kept_pin = Pinned::of(&pin)
             .ok_or_else(|| Refusal::Refused("the pin is not of this act".into()))?;
         let short = plan.short();
+        let world = self.cx.world();
+        let description = match planned.act() {
+            Act::OpenPullRequest { body, .. } => Some(body.as_str()),
+            _ => None,
+        };
         let mut committed: Option<Receipt> = None;
         let mut intent_written = |id: &str| {
             self.keep(&Intent {
@@ -925,6 +1172,12 @@ impl<'a> Runner<'a> {
             })
         };
         let mut before = || {
+            // A pull request's description is written where its command names it, after the
+            // recheck: the file the human's approval never saw cannot be there before.
+            if let Some(body) = description {
+                forge::write_body(world, body)
+                    .map_err(|e| format!("the description's file could not be written: {e}"))?;
+            }
             let receipt = self
                 .journal
                 .commit_then(planned, pin.clone(), Some(&short), &mut intent_written)
@@ -933,6 +1186,9 @@ impl<'a> Runner<'a> {
             Ok(())
         };
         let spawned = self.hands.spawn(planned, self.cx, plan, &mut before);
+        if let Some(body) = description {
+            forge::remove_body(world, body);
+        }
         let out = match spawned {
             Spawned::Ran(out) => out,
             Spawned::Changed { approved, now } => {
@@ -969,14 +1225,268 @@ impl<'a> Runner<'a> {
     }
 
     /// Put the act to the human, bound to `plan`; `changed` is what made an earlier approval
-    /// stale. No envelope is read: until M11 the human decides every act.
+    /// stale, `card` what the pin read of the target. No envelope is read: until M11 the human
+    /// decides every act.
     fn ask(
         &self,
         planned: &Planned,
         plan: &Fingerprint,
         changed: &[String],
+        card: &[String],
     ) -> Result<(), Refusal> {
         let mut ask = planned.ask(self.cx.body(), self.cx.race());
+        ask.fingerprint = Some(plan.clone());
+        ask.why.extend(card.iter().cloned());
+        ask.why.push(ENVELOPES_UNWIRED.to_owned());
+        if !changed.is_empty() {
+            ask.why.insert(
+                0,
+                format!(
+                    "the world changed since approval — {}; approving again binds to the world as it is now",
+                    changed.join("; ")
+                ),
+            );
+        }
+        match self.cx.gate().ask(&ask) {
+            Answer::Approve => Ok(()),
+            Answer::Deny(why) => Err(Refusal::Denied(format!("{why} ({})", plan.short()))),
+        }
+    }
+
+    /// Push a new branch and open a pull request from it, under one approval: one card shows both
+    /// rendered commands — the push URLs and the commit, the branch, the base, the title and the
+    /// description — bound to a fingerprint of both. Each act is still pinned, journaled, observed
+    /// and receipted on its own, and undone on its own. The pull request runs only once the push's
+    /// probe sees the branch at the pushed commit, its pin read again then; if the world moved
+    /// since the approval but by the push itself, or the push had landed before, the pull request
+    /// is asked for alone.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::act`], for the push or for both; what became of the pull request once the push
+    /// ran is in [`Paired::pull`].
+    pub fn push_and_open(&self, push: &Request, pull: &Request) -> Result<Paired, Refusal> {
+        let refuse = |why: &str| Err(Refusal::Refused(why.to_owned()));
+        Self::well_formed(push)?;
+        Self::well_formed(pull)?;
+        let (Act::PushNewBranch { name, .. }, Act::OpenPullRequest { head, .. }) =
+            (&push.act, &pull.act)
+        else {
+            return refuse(
+                "one approval covers a push of a new branch and a pull request from it, nothing else",
+            );
+        };
+        if name != head {
+            return refuse("the pull request's head is the branch the push makes");
+        }
+        if push.tells.is_some() || pull.tells.is_some() {
+            return refuse("only a comment tells downstream of an incident");
+        }
+        self.may_act()?;
+        let push_plan = self.planned(&push.act)?;
+        let pull_plan = self.planned(&pull.act)?;
+        let _held = self.hold()?;
+        let mut reask = Reask {
+            changed: Vec::new(),
+            notes: self.recover_held()?,
+        };
+        for _ in 0..=MAX_REASKS {
+            if let Some(paired) = self.pair_once(&push_plan, push, &pull_plan, pull, &mut reask)? {
+                return Ok(paired);
+            }
+        }
+        Err(Refusal::Failed(format!(
+            "the world changed between each approval and the spawn, {} times: nothing ran; {}",
+            MAX_REASKS + 1,
+            reask.notes.join("; ")
+        )))
+    }
+
+    /// One pass of [`Self::push_and_open`]; `None` when the world moved before the push.
+    fn pair_once(
+        &self,
+        push_plan: &Planned,
+        push: &Request,
+        pull_plan: &Planned,
+        pull: &Request,
+        reask: &mut Reask,
+    ) -> Result<Option<Paired>, Refusal> {
+        let push_ready = match self.prepare(push_plan, push, reask, None)? {
+            Prepared::Ready(ready) => ready,
+            Prepared::Replayed(report) => {
+                // The branch had landed already: the pull request is asked for alone.
+                reask.notes.push(format!(
+                    "the push had landed already (act {}): the pull request is asked for alone",
+                    report.receipt
+                ));
+                let pull = self.run_held(pull_plan, pull, reask);
+                return Ok(Some(Paired { push: report, pull }));
+            }
+        };
+        let Pin::Push { urls, sha } = &push_ready.pin else {
+            return Err(Refusal::Refused("the push's pin is not a push".into()));
+        };
+        let (Act::OpenPullRequest { repo, .. }, Pin::Forge { host }) = (
+            pull_plan.act(),
+            pull_plan.aim(self.cx.world()).map_err(Refusal::Refused)?,
+        ) else {
+            return Err(Refusal::Refused(
+                "the pull request's pin is not a forge's".into(),
+            ));
+        };
+        // The head the pull request names is the branch the push makes only when the push lands
+        // in the pull request's repository.
+        if !urls
+            .iter()
+            .filter_map(|u| forge_repo(u, &host))
+            .any(|r| r.eq_ignore_ascii_case(repo))
+        {
+            return Err(Refusal::Refused(format!(
+                "no push URL of the remote is {repo} on {host}: the pull request's head would not be the pushed branch"
+            )));
+        }
+        let pull_ready = match self.prepare(pull_plan, pull, reask, Some(sha))? {
+            Prepared::Ready(ready) => ready,
+            Prepared::Replayed(report) => {
+                return Err(Refusal::Refused(format!(
+                    "the pull request of this request landed already (act {}) while its branch is not pushed: the human settles it (`mnemorph status`)",
+                    report.receipt
+                )));
+            }
+        };
+        // What the pull request's plan reads of the world but the post journal, which the push
+        // itself writes: the yardstick the pull request is held to once the push is observed.
+        let yardstick = self.beside_journal(pull_plan)?;
+        // 4. One gate for both.
+        self.ask_pair(
+            push_plan,
+            &push_ready,
+            pull_plan,
+            &pull_ready,
+            &reask.changed,
+        )?;
+        let Some(pushed) = self.execute(push_plan, push, push_ready, reask)? else {
+            return Ok(None);
+        };
+        if pushed.state != State::Observed {
+            let state = pushed.state;
+            return Ok(Some(Paired {
+                push: pushed,
+                pull: Err(Refusal::Refused(format!(
+                    "the push is {state}, not observed: the pull request was not opened"
+                ))),
+            }));
+        }
+        let pull = self.pull_after_push(pull_plan, pull, pull_ready, &yardstick, reask);
+        Ok(Some(Paired { push: pushed, pull }))
+    }
+
+    /// The fingerprint of `planned` with the post's own journal read as absent: the push of a
+    /// pair writes its rows there, and nothing else of the world may move.
+    fn beside_journal(&self, planned: &Planned) -> Result<Fingerprint, Refusal> {
+        let journal = self.journal.path().to_path_buf();
+        Fingerprint::of_except(planned.command(), self.cx.world(), &[journal]).map_err(|e| {
+            Refusal::Refused(format!(
+                "the plan the pull request would be approved against could not be read: {e}"
+            ))
+        })
+    }
+
+    /// The pull request of an approved pair, its push observed: run under the pair's approval only
+    /// while the world is as approved but for what the push itself wrote — the refs, which the
+    /// pull request does not read, and the post journal's rows — `gh`'s host pinned again, and its
+    /// pin, read again, holds the head at the pushed commit. Otherwise it is asked for alone,
+    /// saying why.
+    fn pull_after_push(
+        &self,
+        planned: &Planned,
+        request: &Request,
+        ready: Ready,
+        yardstick: &Fingerprint,
+        reask: &mut Reask,
+    ) -> Result<Report, Refusal> {
+        let world = self.cx.world();
+        let now = self.beside_journal(planned)?;
+        // The refs the push moved are the target's; every other part must be as approved.
+        let masked = Fingerprint {
+            target: yardstick.target.clone(),
+            ..now
+        };
+        let mut moved = yardstick.changes(&masked);
+        let host_now = planned.aim(world).map_err(Refusal::Refused)?;
+        if host_now != ready.pin {
+            moved.push("gh's host changed".into());
+        }
+        if !moved.is_empty() {
+            reask.changed = moved;
+            reask.notes.push(
+                "the world changed since the pair was approved: the pull request is asked for alone"
+                    .into(),
+            );
+            return self.run_held(planned, request, reask);
+        }
+        let fresh = Fingerprint::of(planned.command(), world).map_err(|e| {
+            Refusal::Refused(format!(
+                "the plan the pull request was approved against could not be read again: {e}"
+            ))
+        })?;
+        // The pin read again, the push now this post's: the head must be at the pushed commit.
+        let card = match &ready.pin {
+            Pin::Forge { host } => self.pull_pin(planned.act(), host, None)?,
+            _ => {
+                return Err(Refusal::Refused(
+                    "the pull request's pin is not a forge's".into(),
+                ));
+            }
+        };
+        let again = Ready {
+            plan: fresh,
+            pinned: Timestamp::now(),
+            card,
+            ..ready
+        };
+        match self.execute(planned, request, again, reask)? {
+            Some(report) => Ok(report),
+            None => self.run_held(planned, request, reask),
+        }
+    }
+
+    /// The one card of a pair: both commands, every line of both, and a fingerprint of both.
+    fn ask_pair(
+        &self,
+        push: &Planned,
+        push_ready: &Ready,
+        pull: &Planned,
+        pull_ready: &Ready,
+        changed: &[String],
+    ) -> Result<(), Refusal> {
+        let (body, race) = (self.cx.body(), self.cx.race());
+        let mut ask = push.ask(body, race);
+        let second = pull.ask(body, race);
+        ask.act = format!("{}\n{}", push.command(), pull.command());
+        if second.class == ToolClass::Destructive {
+            ask.class = ToolClass::Destructive;
+        }
+        let shown = match &push_ready.pin {
+            Pin::Push { urls, sha } => format!(
+                "pushes commit {sha} to {}",
+                urls.iter()
+                    .map(|u| redact(u))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            _ => String::new(),
+        };
+        ask.why.insert(
+            0,
+            "two acts under one approval: the push, then — only once a probe sees the branch at the pushed commit — the pull request; each is journaled, observed and undone on its own".into(),
+        );
+        ask.why.insert(1, shown);
+        ask.why.extend(push_ready.card.iter().cloned());
+        ask.why.extend(second.why);
+        ask.why.extend(pull_ready.card.iter().cloned());
+        ask.outside.extend(second.outside);
+        let plan = both(&push_ready.plan, &pull_ready.plan);
         ask.fingerprint = Some(plan.clone());
         ask.why.push(ENVELOPES_UNWIRED.to_owned());
         if !changed.is_empty() {
@@ -1016,9 +1526,18 @@ impl<'a> Runner<'a> {
         }
         // 9. Observe: the probe, never the exit, says what happened.
         if receipt.state() == State::PendingObservation {
+            let before = receipt.done().cloned();
             self.journal
                 .observe(&mut receipt, self.probe, PROBE_TIMEOUT)
                 .map_err(|e| Refusal::Failed(format!("the receipt could not be journaled: {e}")))?;
+            // What only the probe could tell — a pull request's number — is kept for the undo.
+            if let Some(done) = receipt.done()
+                && before.as_ref() != Some(done)
+                && let Some(mut with) = self.kept()?.into_iter().find(|i| i.act == receipt.id())
+            {
+                with.left = Some(Left::of(done));
+                let _ = self.keep(&with);
+            }
         }
         // 10. The receipt.
         Ok(Report {
@@ -1181,7 +1700,7 @@ impl<'a> Runner<'a> {
             return Err("only a comment tells downstream".into());
         };
         match &incident.typed {
-            Some((Act::AddLabel { .. } | Act::Comment { .. }, _)) => {
+            Some((Act::AddLabel { .. } | Act::Comment { .. } | Act::OpenPullRequest { .. }, _)) => {
                 if incident.same_target(act, pin) {
                     Ok(())
                 } else {
@@ -1245,13 +1764,34 @@ impl<'a> Runner<'a> {
 
     /// Whether what the act left is still its own, read now: a label's one add since the pin is
     /// the act's, by `gh`'s login, and still there; a comment is by `gh`'s login, on the act's pull
-    /// request, with the act's body. A branch is leased on its commit instead. Anything uncertain
+    /// request, with the act's body; a pull request is open, unmerged, by `gh`'s login, from the
+    /// act's head into its base, with its title and description. A branch is leased on its commit
+    /// instead. Anything uncertain
     /// moves the act to `reconcile`, and nothing is undone.
     fn still_its_own(&self, intent: &Intent) -> Result<(), Refusal> {
         let (mut probes, mut seen) = (Vec::new(), Vec::new());
         let held = match &intent.typed {
             Typed::AddLabel { .. } => label_is_ours(intent, self.probe, &mut probes, &mut seen),
             Typed::Comment { .. } => comment_is_ours(intent, self.probe, &mut probes, &mut seen),
+            Typed::OpenPullRequest { .. } => match (&intent.pin, &intent.left) {
+                (Pinned::Forge { host }, Some(Left::Opened { number })) => {
+                    let act = intent.typed.act();
+                    forge::Wanted::of(&act).map_or_else(
+                        || Err("the act opens no pull request".into()),
+                        |want| {
+                            forge::still_open_and_ours(
+                                host,
+                                &want,
+                                *number,
+                                self.probe,
+                                &mut probes,
+                                &mut seen,
+                            )
+                        },
+                    )
+                }
+                _ => Err("the act is not a pull request with a known number".into()),
+            },
             Typed::PushNewBranch { .. } => Ok(()),
         };
         held.map_err(|why| {
@@ -1259,6 +1799,48 @@ impl<'a> Runner<'a> {
             self.settle(&intent.act, State::Reconcile, why.clone(), &probes, &seen);
             Refusal::Refused(why)
         })
+    }
+
+    /// A pushed branch is not deleted while a pull request this post opened from it is open:
+    /// deleting its head would close it, unrecorded. Undo the pull request first.
+    fn no_pull_open_on(&self, intent: &Intent) -> Result<(), Refusal> {
+        let Typed::PushNewBranch { name, .. } = &intent.typed else {
+            return Ok(());
+        };
+        let standing = self.standing()?;
+        for pr in self.kept()? {
+            let (
+                Typed::OpenPullRequest { repo, head, .. },
+                Pinned::Forge { host },
+                Some(Left::Opened { number }),
+            ) = (&pr.typed, &pr.pin, &pr.left)
+            else {
+                continue;
+            };
+            let holds = standing
+                .iter()
+                .any(|r| r.act == pr.act && matches!(r.state, State::Observed | State::Reconcile));
+            if head != name || !holds {
+                continue;
+            }
+            let (mut probes, mut seen) = (Vec::new(), Vec::new());
+            match forge::pull(host, repo, *number, self.probe, &mut probes, &mut seen) {
+                Ok(p) if p.state != "open" => {}
+                Ok(_) => {
+                    return Err(Refusal::Refused(format!(
+                        "act {} opened {repo}#{number} from branch {name}, and it is open: undo it first, or deleting its head closes it unrecorded",
+                        pr.act
+                    )));
+                }
+                Err(why) => {
+                    return Err(Refusal::Refused(format!(
+                        "whether {repo}#{number}, opened by act {} from branch {name}, is still open cannot be read: {why}",
+                        pr.act
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The undo of act `receipt`, rendered from the act's own fields — the undo of an observed
@@ -1295,6 +1877,7 @@ impl<'a> Runner<'a> {
         let _held = self.hold()?;
         let notes = self.recover_held()?;
         let (intent, done) = self.undoable(receipt)?;
+        self.no_pull_open_on(&intent)?;
         let undo = crate::outward::plan_undo(&intent.typed.act(), &done, &self.place())
             .map_err(|e| Refusal::Refused(e.to_string()))?;
         check_class(self.cx.race(), undo.class()).map_err(|e| Refusal::Refused(e.to_string()))?;
@@ -1359,7 +1942,7 @@ impl<'a> Runner<'a> {
         }
         self.still_its_own(intent)?;
         // 4. The human, always: no envelope covers an undo.
-        self.ask(undo, &plan, &reask.changed)?;
+        self.ask(undo, &plan, &reask.changed, &[])?;
         let short = plan.short();
         let mut committed: Option<String> = None;
         let mut before = || {
@@ -1682,6 +2265,17 @@ enum Args {
         #[serde(default)]
         tells: Option<String>,
     },
+    OpenPullRequest {
+        repo: String,
+        base: String,
+        head: String,
+        title: String,
+        body: String,
+        #[serde(default)]
+        remote: Option<String>,
+        #[serde(default)]
+        key: Option<String>,
+    },
     Undo {
         receipt: String,
     },
@@ -1691,6 +2285,8 @@ enum Args {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Call {
     Act(Request),
+    /// A push of the head, then the pull request, under one approval.
+    Pair(Request, Request),
     Undo(String),
 }
 
@@ -1723,6 +2319,36 @@ impl Args {
                 key,
                 tells,
             },
+            Args::OpenPullRequest {
+                repo,
+                base,
+                head,
+                title,
+                body,
+                remote,
+                key,
+            } => {
+                let pull = Request {
+                    act: Act::OpenPullRequest {
+                        repo,
+                        base,
+                        head: head.clone(),
+                        title,
+                        body,
+                    },
+                    key,
+                    tells: None,
+                };
+                let Some(remote) = remote else {
+                    return Call::Act(pull);
+                };
+                let push = Request {
+                    act: Act::PushNewBranch { remote, name: head },
+                    key: None,
+                    tells: None,
+                };
+                return Call::Pair(push, pull);
+            }
             Args::Undo { receipt } => return Call::Undo(receipt),
         })
     }
@@ -1741,20 +2367,23 @@ impl Tool for OutwardTool {
     }
 
     fn description(&self) -> &'static str {
-        "Do one typed outward act of your post: push a new branch, label a pull request, or comment on one — or undo one by its receipt. The harness renders the command and its undo, pins the target, asks the human, journals the intent, runs it, and probes that it landed (or, for an undo, that it is gone); you get the receipt. The same request again returns its receipt without acting; name a request with `key` to have a different request under the same name refused. An undo opens an incident: no new act lands on its target until it is undone, its journal corrected, downstream told (a comment with `tells` set to the undone act's receipt) and a lesson written. Any other outward command goes through `bash`, where it is destructive."
+        "Do one typed outward act of your post: push a new branch, open a pull request, label a pull request, or comment on one — or undo one by its receipt. `open-pull-request` with `remote` pushes `head` from HEAD first and opens the pull request from it, both under one approval, each with its own receipt. The harness renders the command and its undo, pins the target, asks the human, journals the intent, runs it, and probes that it landed (or, for an undo, that it is gone); you get the receipt. The same request again returns its receipt without acting; name a request with `key` to have a different request under the same name refused. An undo opens an incident: no new act lands on its target until it is undone, its journal corrected, downstream told (a comment with `tells` set to the undone act's receipt) and a lesson written. Any other outward command goes through `bash`, where it is destructive."
     }
 
     fn schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "kind": {"type": "string", "enum": ["push-new-branch", "add-label", "comment", "undo"], "description": "The act. `push-new-branch` takes `remote` and `name`; `add-label` takes `repo`, `pr` and `label`; `comment` takes `repo`, `pr`, `body` and, to tell downstream of an incident, `tells`; `undo` takes `receipt`."},
-                "remote": {"type": "string", "description": "push-new-branch: a configured remote's name (`origin`)."},
+                "kind": {"type": "string", "enum": ["push-new-branch", "open-pull-request", "add-label", "comment", "undo"], "description": "The act. `push-new-branch` takes `remote` and `name`; `open-pull-request` takes `repo`, `base`, `head`, `title`, `body` and, to push `head` first under the same approval, `remote`; `add-label` takes `repo`, `pr` and `label`; `comment` takes `repo`, `pr`, `body` and, to tell downstream of an incident, `tells`; `undo` takes `receipt`."},
+                "remote": {"type": "string", "description": "push-new-branch: a configured remote's name (`origin`). open-pull-request, optional: push `head` from HEAD to this remote first; its push URL must be `repo`."},
+                "base": {"type": "string", "description": "open-pull-request: the branch to merge into; it must exist."},
+                "head": {"type": "string", "description": "open-pull-request: the branch to propose, a plain name in `repo`; it must exist (pushed by this post, or by anyone), unless `remote` pushes it now."},
+                "title": {"type": "string", "maxLength": 256, "description": "open-pull-request: the title, one line."},
                 "name": {"type": "string", "description": "push-new-branch: the new branch, a plain name (`feat/undo`); it must not exist yet. HEAD's commit is pushed."},
-                "repo": {"type": "string", "description": "add-label, comment: the repository, `owner/name`."},
+                "repo": {"type": "string", "description": "open-pull-request, add-label, comment: the repository, `owner/name`."},
                 "pr": {"type": "integer", "minimum": 1, "description": "add-label, comment: the pull request's number."},
                 "label": {"type": "string", "maxLength": 50, "description": "add-label: the label."},
-                "body": {"type": "string", "description": "comment: the comment."},
+                "body": {"type": "string", "description": "comment: the comment. open-pull-request: the description."},
                 "key": {"type": "string", "maxLength": KEY_CHARS, "description": "Optional: the request's name. The same name with a different request is refused."},
                 "tells": {"type": "string", "description": "comment, optional: the receipt of the act whose open incident this comment tells downstream of."},
                 "receipt": {"type": "string", "description": "undo: the receipt of the act to put back."}
@@ -1790,11 +2419,33 @@ impl Tool for OutwardTool {
         let journal = PostJournal::of(cx.world(), post);
         let observer = crate::Observer::new(cx.sandbox().clone(), cx.home());
         let runner = Runner::new(cx, journal, &observer, &Sandboxed);
-        outcome(match call {
-            Call::Act(request) => runner.act(&request),
-            Call::Undo(receipt) => runner.undo(&receipt),
-        })
+        match call {
+            Call::Act(request) => outcome(runner.act(&request)),
+            Call::Pair(push, pull) => paired(runner.push_and_open(&push, &pull)),
+            Call::Undo(receipt) => outcome(runner.undo(&receipt)),
+        }
     }
+}
+
+/// What the body reads of a pair's result: the push's receipt, then the pull request's.
+fn paired(result: Result<Paired, Refusal>) -> Outcome {
+    let Paired { push, pull } = match result {
+        Ok(p) => p,
+        Err(refusal) => return outcome(Err(refusal)),
+    };
+    let first = outcome(Ok(push));
+    let second = outcome(pull);
+    let mut out = Outcome::ok(
+        format!(
+            "the push — {}\nthe pull request — {}",
+            first.content, second.content
+        ),
+        ToolClass::Outward,
+    );
+    out.is_error = first.is_error || second.is_error;
+    out.meta.exit = second.meta.exit.or(first.meta.exit);
+    out.meta.denied = first.meta.denied || second.meta.denied;
+    out
 }
 
 /// What the body reads of a runner's result.

@@ -29,6 +29,7 @@
 //! is an error that names its file.
 
 mod closure;
+mod forge;
 mod outward;
 mod receipt;
 mod runner;
@@ -46,14 +47,16 @@ use toml::{Table, Value};
 
 pub use closure::{Cause, Incident, Lesson, RECEIPTS, incidents, suspended};
 pub use outward::{
-    Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan,
+    Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, TITLE_CHARS,
+    Uncovered, body_file, plan,
 };
 pub use receipt::{
     Observer, PROBE_TIMEOUT, Pin, PostJournal, Probe, Receipt, Row, SEEN_BYTES, Seen, State, Tally,
     excerpt, post_journal, reconciling, redact,
 };
 pub use runner::{
-    ENVELOPES_UNWIRED, Hands, OUTWARD, OutwardTool, Refusal, Report, Request, Runner, Sandboxed,
+    ENVELOPES_UNWIRED, Hands, OUTWARD, OutwardTool, Paired, Refusal, Report, Request, Runner,
+    Sandboxed,
 };
 pub use write::{revoke, set};
 
