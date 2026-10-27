@@ -24,7 +24,7 @@ use brush_parser::ast::{
     SimpleCommand,
 };
 use brush_parser::{Parser, ParserOptions};
-use mnemorph_races::ToolClass;
+use mnemorph_races::{OutwardKind, ToolClass};
 
 use paths::{Act, locate};
 use words::{Lit, expand};
@@ -166,6 +166,14 @@ impl Verdict {
 /// Classify one command line run at `place`.
 #[must_use]
 pub fn classify(command: &str, place: &Place) -> Verdict {
+    classify_acts(command, place).0
+}
+
+/// Classify one command line run at `place`, with the kinds of outward act it does — what a
+/// Kijin's post is checked against. A command whose class is `outward` always names at least
+/// one kind: one the classifier cannot name is [`OutwardKind::Other`].
+#[must_use]
+pub fn classify_acts(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>) {
     let mut walker = Walker {
         place,
         cwd: Some(place.cwd.clone()),
@@ -173,7 +181,12 @@ pub fn classify(command: &str, place: &Place) -> Verdict {
     };
     let mut tally = Tally::default();
     walker.source(command, &mut tally);
-    tally.verdict()
+    let mut acts = std::mem::take(&mut tally.acts);
+    if tally.class == Some(ToolClass::Outward) && acts.is_empty() {
+        acts.push(OutwardKind::Other);
+    }
+    acts.sort_unstable();
+    (tally.verdict(), acts)
 }
 
 /// How far `sh -c` and `eval` strings nest before the classifier stops reading and refuses.
@@ -197,10 +210,33 @@ pub(crate) struct Tally {
     why: Vec<String>,
     refused: Option<(Rule, String)>,
     pub(crate) outside: Vec<PathBuf>,
+    /// The kinds of outward act found.
+    acts: Vec<OutwardKind>,
 }
 
 impl Tally {
+    /// Raise the class. An outward raise that names no kind is [`OutwardKind::Other`]: an act
+    /// the classifier cannot name is held by no post.
     pub(crate) fn raise(&mut self, class: ToolClass, why: impl Into<String>) {
+        if class == ToolClass::Outward {
+            self.act(OutwardKind::Other);
+        }
+        self.lift(class, why);
+    }
+
+    /// Raise the class for an outward act of a known kind.
+    pub(crate) fn reach(&mut self, kind: OutwardKind, class: ToolClass, why: impl Into<String>) {
+        self.act(kind);
+        self.lift(class, why);
+    }
+
+    fn act(&mut self, kind: OutwardKind) {
+        if !self.acts.contains(&kind) {
+            self.acts.push(kind);
+        }
+    }
+
+    fn lift(&mut self, class: ToolClass, why: impl Into<String>) {
         if class != ToolClass::Read {
             self.why.push(why.into());
         }
@@ -229,6 +265,9 @@ impl Tally {
             && self.class.is_none_or(|mine| rank(c) > rank(mine))
         {
             self.class = Some(c);
+        }
+        for kind in other.acts {
+            self.act(kind);
         }
         for p in other.outside {
             if !self.outside.contains(&p) {
@@ -475,9 +514,13 @@ impl Walker<'_> {
         }
         // Arguments only tighten: the class is the highest over every prefix of the arguments.
         let mut kind = Kind::default();
+        // The acts are the whole command's: a prefix's (`gh` alone) is not what runs.
         for k in 1..=argv.len() {
             let mut part = Tally::default();
             kind = commands::classify(self, &argv[..k], &mut part);
+            if k < argv.len() {
+                part.acts.clear();
+            }
             t.absorb(part);
         }
         kind

@@ -2,7 +2,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use mnemorph_races::ToolClass;
+use mnemorph_races::{OutwardKind, ToolClass};
 
 use super::{Place, Rule, Tally};
 
@@ -239,24 +239,28 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, t: &mut Tally) {
         }
         (Spot::Outside { path, .. }, Act::Modify) => {
             t.outside.push(path.clone());
-            t.raise(
+            t.reach(
+                OutwardKind::WriteOutside,
                 ToolClass::Outward,
                 format!("{what} writes outside the world: {}", path.display()),
             );
         }
         (Spot::Outside { path, .. }, Act::Delete) => {
             t.outside.push(path.clone());
-            t.raise(
+            t.reach(
+                OutwardKind::WriteOutside,
                 ToolClass::Destructive,
                 format!("{what} deletes outside the world: {}", path.display()),
             );
         }
-        (Spot::Unknown, Act::Modify) => t.raise(
+        (Spot::Unknown, Act::Modify) => t.reach(
+            OutwardKind::WriteOutside,
             ToolClass::Outward,
             format!("{what} writes a path known only at run time"),
         ),
         (Spot::Unknown, Act::Delete) => {
-            t.raise(
+            t.reach(
+                OutwardKind::WriteOutside,
                 ToolClass::Destructive,
                 format!("{what} deletes a path known only at run time"),
             );

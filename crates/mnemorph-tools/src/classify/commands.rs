@@ -1,6 +1,11 @@
 //! One simple command, by name: wrappers unwrapped, then the table.
 
+use mnemorph_races::OutwardKind::{
+    Comment, Deploy, Fetch, Install, Label, Publish, PullRequest, PushBranch, PushTag, RerunCi,
+    Rollback, WriteOutside,
+};
 use mnemorph_races::ToolClass::{Destructive, Outward, Write};
+use mnemorph_races::{OutwardKind, ToolClass};
 
 use super::paths::Act;
 use super::words::Lit;
@@ -345,60 +350,115 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
         "git" => git(w, args, t),
         "gh" => gh(words, t),
         "cargo" => match sub {
-            "publish" | "yank" | "owner" => t.raise(
+            "publish" | "yank" | "owner" => t.reach(
+                Publish,
                 Destructive,
                 format!("`cargo {sub}` publishes to a registry"),
             ),
-            "install" | "fetch" | "update" | "search" | "login" | "logout" | "add"
-            | "generate-lockfile" => {
+            "install" | "update" | "add" | "generate-lockfile" => {
+                t.reach(
+                    Install,
+                    Outward,
+                    format!("`cargo {sub}` reaches the registry"),
+                );
+            }
+            "fetch" | "search" => {
+                t.reach(
+                    Fetch,
+                    Outward,
+                    format!("`cargo {sub}` reaches the registry"),
+                );
+            }
+            "login" | "logout" => {
                 t.raise(Outward, format!("`cargo {sub}` reaches the registry"));
             }
             _ => t.raise(Write, "`cargo` builds and runs code"),
         },
         "npm" | "pnpm" | "yarn" => match sub {
             "publish" | "unpublish" | "deprecate" | "dist-tag" | "owner" => {
-                t.raise(
+                t.reach(
+                    Publish,
                     Destructive,
                     format!("`{name} {sub}` publishes to a registry"),
                 );
             }
-            "install" | "i" | "add" | "update" | "up" | "upgrade" | "ci" | "dlx" | "login"
-            | "logout" | "whoami" | "view" | "info" | "outdated" | "audit" => {
+            "install" | "i" | "add" | "update" | "up" | "upgrade" | "ci" | "dlx" => {
+                t.reach(
+                    Install,
+                    Outward,
+                    format!("`{name} {sub}` reaches the registry"),
+                );
+            }
+            "whoami" | "view" | "info" | "outdated" | "audit" => {
+                t.reach(
+                    Fetch,
+                    Outward,
+                    format!("`{name} {sub}` reaches the registry"),
+                );
+            }
+            "login" | "logout" => {
                 t.raise(Outward, format!("`{name} {sub}` reaches the registry"));
             }
             _ => t.raise(Write, format!("`{name}` runs scripts")),
         },
         "pip" | "pip3" | "uv" | "poetry" | "pipx" => match sub {
-            "upload" | "publish" => t.raise(
+            "upload" | "publish" => t.reach(
+                Publish,
                 Destructive,
                 format!("`{name} {sub}` publishes to a registry"),
             ),
-            "install" | "download" | "add" | "sync" | "lock" | "update" | "search" => {
-                t.raise(Outward, format!("`{name} {sub}` reaches the registry"));
+            "install" | "add" | "sync" | "lock" | "update" => {
+                t.reach(
+                    Install,
+                    Outward,
+                    format!("`{name} {sub}` reaches the registry"),
+                );
+            }
+            "download" | "search" => {
+                t.reach(
+                    Fetch,
+                    Outward,
+                    format!("`{name} {sub}` reaches the registry"),
+                );
             }
             _ => t.raise(Write, format!("`{name}` runs code")),
         },
-        "twine" => t.raise(Destructive, "`twine` publishes to a registry"),
+        "twine" => t.reach(Publish, Destructive, "`twine` publishes to a registry"),
         "go" => match sub {
-            "get" | "install" => t.raise(Outward, format!("`go {sub}` reaches the network")),
+            "get" | "install" => {
+                t.reach(Install, Outward, format!("`go {sub}` reaches the network"));
+            }
             "mod"
                 if words
                     .iter()
                     .flatten()
                     .any(|w| *w == "download" || *w == "tidy") =>
             {
-                t.raise(Outward, "`go mod` reaches the network");
+                t.reach(Install, Outward, "`go mod` reaches the network");
             }
             _ => t.raise(Write, "`go` builds and runs code"),
         },
         "docker" | "podman" => match sub {
-            "push" | "rm" | "rmi" | "prune" | "kill" => {
-                t.raise(Destructive, format!("`{name} {sub}` publishes or deletes"));
+            "push" => t.reach(
+                Publish,
+                Destructive,
+                format!("`{name} push` publishes an image"),
+            ),
+            "pull" | "search" => {
+                t.reach(Fetch, Outward, format!("`{name} {sub}` reads a registry"));
+            }
+            "rm" | "rmi" | "prune" | "kill" => {
+                t.reach(
+                    WriteOutside,
+                    Destructive,
+                    format!("`{name} {sub}` deletes outside the world"),
+                );
             }
             "system" | "volume" | "image" | "container" | "network" | "builder"
                 if words.iter().flatten().any(|w| matches!(*w, "prune" | "rm")) =>
             {
-                t.raise(
+                t.reach(
+                    WriteOutside,
                     Destructive,
                     format!("`{name} {sub}` deletes outside the world"),
                 );
@@ -408,13 +468,18 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
         },
         "brew" | "apt" | "apt-get" | "dnf" | "yum" | "pacman" | "port" => match sub {
             "uninstall" | "remove" | "rm" | "purge" | "autoremove" | "cleanup" | "-R" | "-Rs" => {
-                t.raise(
+                t.reach(
+                    Install,
                     Destructive,
                     format!("`{name} {sub}` deletes outside the world"),
                 );
             }
             "list" | "info" | "search" | "show" | "--version" | "-Q" => {}
-            _ => t.raise(Outward, format!("`{name}` installs outside the world")),
+            _ => t.reach(
+                Install,
+                Outward,
+                format!("`{name}` installs outside the world"),
+            ),
         },
         "rsync" => {
             if words.iter().flatten().any(|w| remote_spec(w)) {
@@ -516,12 +581,21 @@ fn table(w: &mut Walker<'_>, name: &str, args: &[Lit], words: &[Option<&str>], t
             }
         }
         "find" => find(w, args, t),
+        "kubectl" => kubectl(sub, words, t),
+        "helm" => helm(sub, t),
         "kill" | "pkill" | "killall" => t.raise(Write, format!("`{name}` signals processes")),
         "make" | "just" | "cmake" | "ninja" | "rustc" | "gcc" | "cc" | "clang" | "tsc"
         | "vitest" | "jest" | "pytest" | "biome" | "rustfmt" | "prettier" | "eslint" => {
             t.raise(Write, format!("`{name}` builds or runs code"));
         }
-        _ if NETWORK.contains(&name) => t.raise(Outward, format!("`{name}` reaches the network")),
+        _ if NETWORK.contains(&name) => {
+            let kind = if reads_only(name, words) {
+                Fetch
+            } else {
+                OutwardKind::Other
+            };
+            t.reach(kind, Outward, format!("`{name}` reaches the network"));
+        }
         _ if SECRET_STORES.contains(&name) => {
             t.refuse(Rule::SecretStore, format!("`{name}` reads secrets"));
         }
@@ -684,14 +758,19 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
         | "whatchanged" | "range-diff" | "merge-base" | "for-each-ref" | "show-ref"
         | "check-ignore" | "count-objects" => {}
         "push" => push(&words, t),
-        "fetch" | "pull" | "clone" | "ls-remote" | "send-email" | "request-pull" | "archive"
+        "fetch" | "pull" | "clone" | "ls-remote" | "archive"
             if sub != "archive" || any(&["--remote"]) =>
         {
+            t.reach(Fetch, Outward, format!("`git {sub}` reaches a remote"));
+        }
+        "send-email" | "request-pull" => {
             t.raise(Outward, format!("`git {sub}` reaches a remote"));
         }
         "remote" => match words.first().copied() {
             None | Some("-v" | "get-url") => {}
-            Some("update" | "show" | "prune") => t.raise(Outward, "`git remote` reaches a remote"),
+            Some("update" | "show" | "prune") => {
+                t.reach(Fetch, Outward, "`git remote` reaches a remote");
+            }
             Some(_) => t.raise(Write, "`git remote` changes the repository's config"),
         },
         "submodule"
@@ -699,7 +778,7 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
                 .iter()
                 .any(|w| matches!(*w, "update" | "sync" | "add")) =>
         {
-            t.raise(Outward, "`git submodule` reaches a remote");
+            t.reach(Fetch, Outward, "`git submodule` reaches a remote");
         }
         "reset" if any(&["--hard", "--merge", "--keep"]) => {
             t.raise(Destructive, "`git reset --hard` discards work");
@@ -814,18 +893,99 @@ fn gh(words: &[Option<&str>], t: &mut Tally) {
         ("api", _) => api_writes(words),
         _ => false,
     };
-    if destructive {
-        t.raise(
-            Destructive,
-            format!(
-                "`gh {} {}` deletes, publishes or changes what others see",
-                pair.0, pair.1
-            ),
-        );
+    let class = if destructive { Destructive } else { Outward };
+    let why = if destructive {
+        format!(
+            "`gh {} {}` deletes, publishes or changes what others see",
+            pair.0, pair.1
+        )
     } else {
-        t.raise(Outward, "`gh` reaches GitHub");
+        "`gh` reaches GitHub".to_owned()
+    };
+    for kind in gh_acts(pair, &ws, words) {
+        t.reach(kind, class, why.clone());
     }
 }
+
+/// The kinds of outward act a `gh` command does: an edit names a label, a pull request, or
+/// both; a subcommand not named here is [`OutwardKind::Other`].
+fn gh_acts(pair: (&str, &str), ws: &[&str], words: &[Option<&str>]) -> Vec<OutwardKind> {
+    const LABELS: &[&str] = &["--add-label", "--remove-label", "--label", "-l"];
+    const REPO: &[&str] = &["-R", "--repo"];
+    // An edit's flags: labels, the repository, and what else it changes.
+    let mut labels = false;
+    let mut other = false;
+    let mut flags = ws.iter().skip(2);
+    while let Some(w) = flags.next() {
+        let bare = w.split_once('=').map_or(*w, |(f, _)| f);
+        if !w.starts_with('-') {
+            continue;
+        }
+        if LABELS.contains(&bare) {
+            labels = true;
+        } else if !REPO.contains(&bare) {
+            other = true;
+        }
+        if bare == *w && (LABELS.contains(&bare) || REPO.contains(&bare)) {
+            flags.next();
+        }
+    }
+    // A subcommand known only at run time could be any of them.
+    if words.iter().take(2).any(Option::is_none) {
+        return vec![OutwardKind::Other];
+    }
+    let unknown = words.iter().any(Option::is_none);
+    match pair {
+        ("pr", "create" | "edit" | "ready" | "reopen" | "close") => {
+            let mut a = vec![PullRequest];
+            if labels {
+                a.push(Label);
+            }
+            a
+        }
+        ("issue", "edit") => {
+            let mut a = Vec::new();
+            if labels {
+                a.push(Label);
+            }
+            if other || unknown || !labels {
+                a.push(OutwardKind::Other);
+            }
+            a
+        }
+        ("pr" | "issue", "comment") => vec![Comment],
+        ("label", "create" | "edit" | "delete" | "clone") => vec![Label],
+        ("run", "rerun") => vec![RerunCi],
+        ("release", "create" | "upload" | "edit" | "delete") => vec![Publish],
+        ("api", _) if !unknown && !api_writes(words) => vec![Fetch],
+        ("search", _)
+        | ("pr", "checkout")
+        | ("repo", "clone")
+        | (
+            "pr" | "issue" | "run" | "workflow" | "release" | "repo" | "label" | "auth" | "cache"
+            | "ruleset" | "secret" | "variable",
+            "list" | "view" | "status" | "diff" | "checks" | "watch" | "download",
+        ) => vec![Fetch],
+        _ => vec![OutwardKind::Other],
+    }
+}
+
+/// The `git push` options that change nothing it pushes.
+const PUSH_QUIET: &[&str] = &[
+    "-u",
+    "--set-upstream",
+    "-q",
+    "--quiet",
+    "-v",
+    "--verbose",
+    "--progress",
+    "--no-progress",
+    "--porcelain",
+    "-n",
+    "--dry-run",
+    "--atomic",
+    "--no-verify",
+];
 
 /// `git push`: outward only as one plain branch push. A force of any kind but the create-only
 /// lease, a delete, a mirror, every branch or tag at once, a tag or a ref outside `refs/heads/`, a
@@ -833,21 +993,6 @@ fn gh(words: &[Option<&str>], t: &mut Tally) {
 /// the remote: destructive. An option it does not know is destructive too, so a word only ever
 /// raises the class.
 fn push(words: &[&str], t: &mut Tally) {
-    const QUIET: &[&str] = &[
-        "-u",
-        "--set-upstream",
-        "-q",
-        "--quiet",
-        "-v",
-        "--verbose",
-        "--progress",
-        "--no-progress",
-        "--porcelain",
-        "-n",
-        "--dry-run",
-        "--atomic",
-        "--no-verify",
-    ];
     let mut why: Option<String> = None;
     let mut positional = Vec::new();
     for w in words {
@@ -863,7 +1008,7 @@ fn push(words: &[&str], t: &mut Tally) {
             let short_quiet = !flags.starts_with('-')
                 && !flags.is_empty()
                 && flags.chars().all(|c| matches!(c, 'u' | 'q' | 'v' | 'n'));
-            if !QUIET.contains(w) && !short_quiet {
+            if !PUSH_QUIET.contains(w) && !short_quiet {
                 why.get_or_insert_with(|| {
                     format!("`git push {w}` forces, deletes, mirrors or reaches past a branch")
                 });
@@ -882,9 +1027,128 @@ fn push(words: &[&str], t: &mut Tally) {
         why.get_or_insert(reason);
     }
     match why {
-        Some(reason) => t.raise(Destructive, reason),
-        None => t.raise(Outward, "`git push` leaves the machine"),
+        Some(reason) if tags_only(words) => t.reach(PushTag, Destructive, reason),
+        // A forced, deleting or mirroring push is held by no post.
+        Some(reason) => t.reach(OutwardKind::Other, Destructive, reason),
+        None => t.reach(PushBranch, Outward, "`git push` leaves the machine"),
     }
+}
+
+/// Whether a `git push` pushes tags and nothing else: `--tags` alone, `tag <name>`, or one
+/// `refs/tags/<name>` — with no force, delete or mirror, and no branch beside them.
+fn tags_only(words: &[&str]) -> bool {
+    let name = |r: &str| {
+        !r.is_empty()
+            && !r.starts_with('-')
+            && !r.contains(['*', '+', ':', '^', '~', '?', '[', '\\'])
+            && !r.contains("..")
+    };
+    if words
+        .iter()
+        .any(|w| w.starts_with('-') && *w != "--tags" && !PUSH_QUIET.contains(w))
+    {
+        return false;
+    }
+    let positional: Vec<&str> = words
+        .iter()
+        .filter(|w| !w.starts_with('-'))
+        .copied()
+        .collect();
+    let refspecs = positional.get(1..).unwrap_or_default();
+    match refspecs {
+        [] => words.contains(&"--tags"),
+        ["tag", t] => name(t),
+        [r] => r.strip_prefix("refs/tags/").is_some_and(name),
+        _ => false,
+    }
+}
+
+/// Whether a network command only reads: a lookup, or a plain GET with nothing sent.
+fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
+    let Some(ws) = words.iter().copied().collect::<Option<Vec<&str>>>() else {
+        return false;
+    };
+    match name {
+        "ping" | "traceroute" | "dig" | "nslookup" | "host" | "whois" | "aria2c" => true,
+        "curl" => !ws.iter().any(|w| {
+            if w.contains("://") && !w.starts_with("http://") && !w.starts_with("https://") {
+                // Another scheme (`telnet://`, `ftp://`, `smtp://`) may send what it reads.
+                return true;
+            }
+            if let Some(long) = w.strip_prefix("--") {
+                let flag = long.split_once('=').map_or(long, |(f, _)| f);
+                flag.starts_with("data")
+                    || flag.starts_with("form")
+                    || matches!(
+                        flag,
+                        "json" | "upload-file" | "request" | "config" | "user" | "header"
+                    )
+            } else if let Some(short) = w.strip_prefix('-') {
+                short.contains(['d', 'F', 'T', 'X', 'K', 'u', 'H'])
+            } else {
+                false
+            }
+        }),
+        "wget" => !ws.iter().any(|w| {
+            [
+                "--post",
+                "--method",
+                "--body",
+                "--header",
+                "-i",
+                "--input-file",
+                "-e",
+                "--execute",
+            ]
+            .iter()
+            .any(|f| w.starts_with(f))
+        }),
+        "http" | "https" | "xh" => {
+            let operands: Vec<&&str> = ws.iter().filter(|w| !w.starts_with('-')).collect();
+            match operands.as_slice() {
+                [_url] => true,
+                [method, _url] => matches!(**method, "GET" | "HEAD"),
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+/// `kubectl`: reads are a fetch, a rollout undo a rollback, what changes the cluster a deploy;
+/// a shell into it, a copy or a tunnel is another act.
+fn kubectl(sub: &str, words: &[Option<&str>], t: &mut Tally) {
+    let rollout = |w: &str| words.iter().flatten().any(|x| *x == w);
+    let (kind, class): (OutwardKind, ToolClass) = match sub {
+        "get" | "describe" | "logs" | "top" | "version" | "explain" | "api-resources"
+        | "api-versions" | "cluster-info" | "diff" | "events" => (Fetch, Outward),
+        "rollout" if rollout("undo") => (Rollback, Outward),
+        "rollout" if rollout("status") || rollout("history") => (Fetch, Outward),
+        "apply" | "create" | "replace" | "patch" | "set" | "scale" | "autoscale" | "expose"
+        | "label" | "annotate" | "rollout" => (Deploy, Outward),
+        "delete" => (Deploy, Destructive),
+        _ => (OutwardKind::Other, Outward),
+    };
+    t.reach(kind, class, format!("`kubectl {sub}` reaches a cluster"));
+}
+
+/// `helm`: an install or upgrade deploys, a rollback rolls back, an uninstall removes a
+/// deployment, a push publishes a chart; reads are a fetch.
+fn helm(sub: &str, t: &mut Tally) {
+    let (kind, class) = match sub {
+        "install" | "upgrade" => (Deploy, Outward),
+        "rollback" => (Rollback, Outward),
+        "uninstall" | "delete" => (Deploy, Destructive),
+        "push" => (Publish, Destructive),
+        "status" | "list" | "ls" | "history" | "get" | "show" | "search" | "pull" | "version"
+        | "template" | "lint" => (Fetch, Outward),
+        _ => (OutwardKind::Other, Outward),
+    };
+    t.reach(
+        kind,
+        class,
+        format!("`helm {sub}` reaches a cluster or a registry"),
+    );
 }
 
 /// Why one push refspec is more than a plain branch push, if it is.

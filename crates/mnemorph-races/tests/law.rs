@@ -2,8 +2,8 @@
 //! under and just over its threshold.
 
 use mnemorph_races::{
-    Band, DispatchContext, FallReading, RECOVER_REPORTS, Race, Recent, Refusal, Route, Signals,
-    falls, may_dispatch, meter, recovers, rises, score,
+    Band, DispatchContext, FallReading, OutwardKind, Post, RECOVER_REPORTS, Race, Recent, Refusal,
+    Route, Signals, check_post, falls, may_dispatch, meter, recovers, rises, score,
 };
 
 const ALL_TRUE: DispatchContext = DispatchContext {
@@ -685,5 +685,80 @@ fn probation_recovers_or_not() {
             ),
             "{race} has no probation"
         );
+    }
+}
+
+/// Each post's outward acts, as the book's posts table lists them. A change here is a change of
+/// law: it changes this table and the book together.
+#[test]
+fn the_posts_acts_as_the_book_lists_them() {
+    use OutwardKind::{
+        Comment, Deploy, Fetch, Label, Publish, PullRequest, PushBranch, PushTag, RerunCi,
+        Rollback, WriteOutside,
+    };
+    let table: [(Post, &str, &[OutwardKind]); 5] = [
+        (Post::Ci, "kijin-ci", &[Fetch, RerunCi]),
+        (Post::Release, "kijin-release", &[Fetch, PushTag, Publish]),
+        (
+            Post::Deploy,
+            "kijin-deploy",
+            &[Fetch, Deploy, Rollback, WriteOutside],
+        ),
+        (
+            Post::Forge,
+            "kijin-forge",
+            &[Fetch, PushBranch, PullRequest, Comment, Label],
+        ),
+        (Post::Scout, "kijin-scout", &[Fetch]),
+    ];
+    for (post, name, acts) in table {
+        assert_eq!(post.creature(), name);
+        assert_eq!(Post::of(name), Some(post));
+        assert_eq!(post.acts(), acts, "{name}");
+    }
+    assert_eq!(
+        Post::ALL.map(|p| table.iter().find(|t| t.0 == p).is_some()),
+        [true; 5]
+    );
+    // Installs and every act the classifier cannot name belong to no post.
+    for kind in OutwardKind::ALL {
+        let held = Post::ALL.iter().any(|p| p.acts().contains(&kind));
+        assert_eq!(
+            held,
+            !matches!(kind, OutwardKind::Install | OutwardKind::Other),
+            "{kind}"
+        );
+        assert_eq!(kind.post().is_some(), held, "{kind}");
+    }
+}
+
+/// A Kijin does its post's acts; any other, or any act at all without a post, is refused with
+/// the post that holds it.
+#[test]
+fn a_post_holds_only_its_acts() {
+    assert_eq!(
+        check_post("kijin-forge", &[OutwardKind::PushBranch]),
+        Ok(())
+    );
+    assert_eq!(check_post("kijin-forge", &[]), Ok(()));
+    for post in Post::ALL {
+        assert_eq!(check_post(post.creature(), post.acts()), Ok(()), "{post:?}");
+    }
+    let e = check_post("kijin-forge", &[OutwardKind::Comment, OutwardKind::Deploy]).unwrap_err();
+    assert_eq!((e.post, e.act), (Some(Post::Forge), OutwardKind::Deploy));
+    let text = e.to_string();
+    assert!(
+        text.contains("`deploy` is not in the kijin-forge post")
+            && text.contains("route it to kijin-deploy"),
+        "{text}"
+    );
+    let e = check_post("kijin-scout", &[OutwardKind::PushBranch]).unwrap_err();
+    assert!(e.to_string().contains("route it to kijin-forge"), "{e}");
+    let e = check_post("kijin-release", &[OutwardKind::Install]).unwrap_err();
+    assert!(e.to_string().contains("no post holds it"), "{e}");
+    for body in ["", "kijin", "kijin-k", "kijin-forge-2", "Kijin-Forge"] {
+        let e = check_post(body, &[OutwardKind::Fetch]).unwrap_err();
+        assert_eq!(e.post, None, "{body:?}");
+        assert!(e.to_string().contains("holds no kijin post"), "{e}");
     }
 }

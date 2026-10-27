@@ -14,7 +14,7 @@ pub mod tool;
 mod tripwire;
 
 pub use attic::{Act, Attic, Conflict, Held, Restore, Snapshot, State};
-pub use classify::{Place, Rule, Verdict, classify};
+pub use classify::{Place, Rule, Verdict, classify, classify_acts};
 pub use fingerprint::Fingerprint;
 pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 /// The sandbox a context runs commands in, as the context takes it.

@@ -355,15 +355,38 @@ the village.*
 The Kijin is the one door between the world and everything beyond it. Nature 7 (Containment)
 stops being a checklist item and becomes a type: **only a Kijin's shelf carries `outward`**.
 
-Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
+Kijin hold one of five **posts**, named by the creature (`kijin-ci`, …). A post's **outward
+acts are compiled in** (`mnemorph_races::Post::acts`); its **territory is doc-declared** — the
+Kijin doc's `Post` field, world by world. The shell classifier reads every outward command as
+one or more act kinds (`mnemorph_races::OutwardKind`), and a Kijin's command whose kinds are not
+all its post's is refused before the gate is asked, naming the post, the act and the post that
+holds it. A Kijin whose name is no post does no outward act.
 
-| Post | Epithet | Owns (territory) | Outward acts |
+| Post | Epithet | Owns (territory, doc-declared) | Outward acts (compiled) |
 |---|---|---|---|
-| `kijin-ci` | the swordmaster who drills | `.github/workflows/`, CI config | read CI runs and logs, re-run jobs, publish CI as an instrument |
-| `kijin-release` | the smith | changelog, versioning, release config, installers | build artifacts; tag pushes and registry publishes (both `destructive`) |
-| `kijin-deploy` | the commander | deploy manifests, environments | deploy, verify health, roll back |
-| `kijin-forge` | the shrine keeper of records | PR templates, issue templates | push branches, open and update PRs, comment, label, read issues |
-| `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.mnemorph/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | sync advisory databases (OSV), watch upstream releases and dependency updates |
+| `kijin-ci` | the swordmaster who drills | `.github/workflows/`, CI config | `fetch` (CI runs and logs), `rerun-ci` |
+| `kijin-release` | the smith | changelog, versioning, release config, installers | `fetch`, `push-tag`, `publish` (registries, images, GitHub releases) — both `destructive` |
+| `kijin-deploy` | the commander | deploy manifests, environments | `fetch` (health checks), `deploy`, `rollback`, `write-outside` |
+| `kijin-forge` | the shrine keeper of records | PR templates, issue templates | `fetch` (issues, PRs), `push-branch`, `pull-request`, `comment`, `label` |
+| `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.mnemorph/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | `fetch` only (advisory databases such as OSV, upstream releases): no outward write |
+
+The kinds, as the classifier reads them:
+
+| Kind | Read from |
+|---|---|
+| `fetch` | a GET with nothing sent (`curl`, `wget`, `httpie`), `git fetch`/`clone`/`pull`, `gh` reads (`view`, `list`, `status`, `checks`, a plain `gh api` GET), `kubectl get`, `helm status`, DNS lookups |
+| `push-branch` | `git push` of one plain branch |
+| `pull-request` | `gh pr create`, `edit`, `ready`, `close`, `reopen` |
+| `comment` | `gh pr comment`, `gh issue comment` |
+| `label` | label flags on `gh pr`/`gh issue edit`, `gh label` |
+| `rerun-ci` | `gh run rerun` |
+| `push-tag` | `git push` of tags alone (`--tags`, `tag <name>`, `refs/tags/<name>`) |
+| `publish` | `cargo`/`npm`/`pip` publishes, `twine`, `docker push`, `helm push`, `gh release` writes |
+| `deploy` | `kubectl apply`/`set`/`scale`/`delete`/…, `helm install`/`upgrade`/`uninstall` |
+| `rollback` | `kubectl rollout undo`, `helm rollback` |
+| `write-outside` | a write or delete outside the world on this machine, or at a path known only at run time |
+| `install` | package installs and removals (`cargo install`, `npm install`, `apt`, `brew`, `go get`) — no post |
+| `other` | everything else outward: a forced, deleting or tag-and-branch push, `gh pr merge`, `gh workflow run`, a `gh api` write, `ssh`, a socket, a `curl` that sends — no post |
 
 - **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:

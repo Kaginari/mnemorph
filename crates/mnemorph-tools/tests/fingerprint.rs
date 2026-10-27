@@ -47,7 +47,9 @@ impl World {
     }
 
     fn cx(&self, gate: Arc<dyn Gate>) -> Context {
+        // The forge's post holds the branch pushes these tests approve.
         Context::new(Race::Kijin, self.world(), &["src"])
+            .with_body("kijin-forge")
             .with_gate(gate)
             .with_home("/h")
             .with_sandbox(Sandbox::None("these tests check the gate's binding".into()))

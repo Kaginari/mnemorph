@@ -5461,3 +5461,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** wire `the_first_status_and_close_win`, `invisible_characters_cannot_hide_a_tag`,
   `a_never_cut_field_is_bounded`; `hostile()` gains zero-width, bidi, NBSP, U+3000, FS/GS,
   `@CAP`/`@ROOT`; `round_trip` at 2048 cases.
+
+---
+
+### [2026-10-27T18:01:10+01:00] rimuru — #18 decision 1: each Kijin post's outward acts are compiled in
+- **Done:** `mnemorph_races::OutwardKind` (fetch, push-branch, pull-request, comment, label,
+  rerun-ci, push-tag, publish, deploy, rollback, write-outside, install, other) and
+  `Post::acts`: ci fetch + rerun-ci; release fetch + push-tag + publish; deploy fetch + deploy +
+  rollback + write-outside; forge fetch + push-branch + pull-request + comment + label (M2);
+  scout fetch only. `Post::of` reads the post from the creature's name; `check_post` refuses
+  an act the post lacks, and every act of a body that holds no post. The classifier tags each
+  outward raise with its kind (`classify_acts`, the same walk); an untagged outward raise is
+  `other`, and the kinds are the whole command's, never a prefix's. `kubectl` and `helm` are
+  read (were `write`). The bash tool checks the post after the shelf, before the gate.
+  Territory stays doc-declared. Docs 02 (the posts table, the kinds table).
+- **Tests:** shell `a_kijin_does_only_its_posts_acts` (forge's deploy, deploy's push, scout's
+  push refused unasked; each post's acts reach the gate; no post refused); corpus
+  `outward_acts_by_kind`, `every_outward_row_names_its_acts`; law
+  `the_posts_acts_as_the_book_lists_them`, `a_post_holds_only_its_acts`. With the check
+  disabled in `shell.rs`, the shell test fails.
+- **Learned:** a destructive raise is outward only sometimes, so it gets no default kind: each
+  outward one (forced push, publishes, outside deletes, uninstalls) is tagged by hand. A plain
+  `git push origin v1.0` of a tag still reads as a branch push (the classifier cannot tell).
