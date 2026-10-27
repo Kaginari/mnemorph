@@ -2,6 +2,7 @@
 //! the default for small asks and for headless and benchmark runs. In a world with Elves under a
 //! living throne the session also holds the `commission` tool (see `open`).
 
+use std::fmt::Write as _;
 use std::path::Path;
 
 use mnemorph_races::{Race, ToolClass};
@@ -47,7 +48,7 @@ so this work's own tests can prove it — or `@U colony <fact>` for how this rep
 pub fn solo(world: &Path, model: &str) -> (Body, Context) {
     let mut system = SOLO_PROMPT.to_owned();
     // The root by name: a body that knows where it stands does not spend calls finding out.
-    system.push_str(&format!("\n\nThe repository root: `{}`.", world.display()));
+    let _ = write!(system, "\n\nThe repository root: `{}`.", world.display());
     with_law(&mut system, world);
     let body = Body {
         name: "rimuru".into(),
