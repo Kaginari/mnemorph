@@ -5914,3 +5914,42 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   command refused; the journal's bash calls read back; 16 threads filing at once all clear.
 - **Learned:** a state table that accepts only rulings is a form, not coverage: one check per
   surface is what makes "no findings" mean something.
+
+---
+
+### [2026-10-27T23:55:12+01:00] rimuru — Dark Elf PR 6: the compiled playbooks, one per class, loaded by speciality and surface
+- **Done:** 35 playbooks, one markdown file per attack class under
+  `crates/mnemorph-races/playbooks/<speciality>/<class>.md`, compiled with `include_str!`
+  (`AttackClass::playbook`): Invariant, Look, Check, Witness, Not a finding, and a Regression
+  line where a real finding left one. `playbook(speciality, class)` gives only an owned class;
+  `for_landing(speciality, surfaces)` loads the owned classes each routed compiled surface names
+  (a declared surface loads them all; the generalist none); `brief` is the prompt block. Caps:
+  1.5 KiB a class, 8 KiB a speciality (largest today: harness, about 6.2 KB; 22 KB in all).
+  Adapted from Cloudflare's security-audit-skill at the pinned commit (still upstream's head);
+  notices list the files. Wiring `brief` into the routed Dark Elf's ask is PR 7's, at the gate.
+  Docs 02, roadmap, notices.
+- **Seeds:** credential reads through toolchain grants (credential-grant); symlink swaps under
+  harness-side writes and deletes (toctou); git `-c`, `GIT_SSH_COMMAND`, `pushurl`, mirror,
+  followTags, short refspecs (hook-laundering); markers behind invisible characters and separators
+  (wire-forgery); escapes into cards and status (terminal-escape); pre-existing state as an effect
+  (phantom-effect); self-declared ids and hashes, hollow coverage (ledger-integrity); a file
+  swapped after approval, headless typeahead (approval-binding).
+- **Tests:** every class has its playbook, fields in order, held only by its owner; the caps;
+  plain ASCII, no control or invisible character; every compiled surface maps to owned classes
+  and every class is reached; one surface never loads a whole speciality; each seed in its class's
+  Regression line; races region coverage 100%.
+- **Learned:** a markdown file per class keeps the text reviewable as text and its size the bytes
+  a body is given; a Rust table would hide both behind escapes.
+
+---
+
+### [2026-10-28T00:03:41+01:00] rimuru — #254, Fable's review: playbooks loaded by written path, plant-then-read, scoped probes, the generalist's chains
+- **Done:** `for_landing` places each written path on the compiled globs that hold it (a glob
+  itself still reads as its surface; none holding it means a declared surface: every owned
+  class). credential-grant's Check plants a fake credential in a temp HOME or fixture, never
+  reads real ones; sandbox-escape connects only to its own loopback listener and signals only its
+  own child. `CHAINS` (`playbooks/general/chains.md`, 960 B) is the generalist's brief. Docs 02.
+- **Tests:** real paths load their surfaces' classes; no compiled surface's sample path loads a
+  whole speciality; the generalist's brief non-empty and within 1.5 KiB; coverage 100%.
+- **Learned:** routing speaks in written paths; an API keyed by glob strings silently falls back
+  to loading everything.

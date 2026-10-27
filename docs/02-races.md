@@ -672,10 +672,32 @@ Each attack class has exactly one owning speciality, so two specialities never h
 class on the same paths.
 
 **Playbooks.** Each speciality's attack classes are a **playbook compiled into the law**
-(`mnemorph-races`), not a Mind: a Mind is writable inside the world it would audit. Per class it
-gives the invariant, where to look, the witness that proves a break, and what is not a finding.
-Only the routed speciality's playbook loads, each ≤ 8 KB. A world adds its own surfaces in
-its docs; it never removes a class. The playbooks adapt Cloudflare's security-audit-skill (MIT;
+(`mnemorph-races`), not a Mind: a Mind is writable inside the world it would audit. Each class
+has one, a markdown file compiled into the binary
+(`crates/mnemorph-races/playbooks/<speciality>/<class>.md`), headed by the class's name, with
+these fields:
+
+| Field | What it holds |
+|---|---|
+| `Invariant` | what must stay true; a break is a failure of it |
+| `Look` | where in Mnemorph to look: the files, calls and paths the class lives in |
+| `Check` | how to check it: the inputs to try and the questions to settle |
+| `Witness` | what proves a break: the test, command or scanner output the finding contract takes |
+| `Not a finding` | the known false positives |
+| `Regression` | where a real finding left one: the case to check again on every landing |
+
+A class's playbook is at most 1.5 KiB and a speciality's together at most 8 KiB, held by the
+crate's tests. **The loading rule:** a routed body is given only its own speciality's
+playbooks (`mnemorph_races::for_landing`), and of those only the classes its written paths make
+relevant — each compiled surface names its classes (`Cargo.lock`: known vulnerability and
+dependency confusion; `crates/mnemorph-tui/**`: approval binding and terminal escape), a path is
+placed on every compiled surface whose glob holds it, and a path none holds, on a surface the
+world declared, loads every class the speciality owns. The generalist owns no class: its brief
+is a fixed one on chains (`CHAINS`, at most 1.5 KiB) — a write-capable surface feeding an outward
+act, an input surface feeding the wire, a config surface feeding the sandbox. No compiled surface loads its speciality's whole playbook. The coverage ledger still
+asks an entry for every owned class: a class the surfaces leave unloaded is ruled out there with
+its fact, as any other. A world adds its own surfaces in its docs; it never removes a class. The
+playbooks adapt Cloudflare's security-audit-skill (MIT;
 [notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 
 - **Duty.**
