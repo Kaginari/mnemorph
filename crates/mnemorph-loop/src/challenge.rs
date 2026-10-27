@@ -194,11 +194,21 @@ pub fn ask(record: &Record, s: Speciality) -> String {
     text
 }
 
-/// The playbook a reviewer reads for this landing: the hook where `mnemorph_races::brief()`
-/// (`for_landing(speciality, surfaces)`, the speciality's playbooks for the routed surfaces) is
-/// called once the compiled playbooks land; until then the ask carries none.
-fn playbook(_record: &Record, _s: Speciality) -> Option<String> {
-    None
+/// The playbooks a reviewer reads for this landing: its speciality's, for the written paths its
+/// routed surfaces hold (`mnemorph_races::brief`); the generalist's chains brief for every written
+/// path. `None` when none loads.
+fn playbook(record: &Record, s: Speciality) -> Option<String> {
+    let surfaces = record.landing.routed(s).map(|r| &r.surfaces);
+    let written: Vec<&String> = record
+        .landing
+        .written
+        .iter()
+        .filter(|p| {
+            s == Speciality::General || surfaces.is_some_and(|x| x.iter().any(|x| x.holds(p)))
+        })
+        .collect();
+    let text = mnemorph_races::brief(s, &written);
+    (!text.is_empty()).then(|| text.trim_end().to_owned())
 }
 
 /// The findings of `answer`, a reviewer's report for `s`, that block: valid on the landing's
@@ -396,6 +406,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&w);
     }
 
+    /// A routed harness landing's ask carries the harness playbook for what it wrote, and no
+    /// other speciality's.
+    #[test]
+    fn a_harness_ask_carries_the_harness_playbook_only() {
+        use mnemorph_races::AttackClass;
+        let w = world("playbook", &[]);
+        let r = record(&w, "orc-o", &["crates/mnemorph-tools/src/files.rs"]);
+        let text = ask(&r, Speciality::Harness);
+        assert!(text.contains("## Playbooks (dark-elf-harness)"), "{text}");
+        let harness = AttackClass::PathTraversal.playbook().trim_end();
+        assert!(text.contains(harness), "{text}");
+        for other in [AttackClass::KnownVulnerability, AttackClass::WireForgery] {
+            assert!(!text.contains(other.playbook().trim_end()), "{other:?}");
+        }
+        assert!(!text.contains("## Playbooks (dark-elf-supply)"));
+        // The generalist gets the chains brief.
+        let r = record(
+            &w,
+            "orc-o",
+            &["crates/mnemorph-tools/src/files.rs", "Cargo.lock"],
+        );
+        assert!(ask(&r, Speciality::General).contains(mnemorph_races::CHAINS.trim_end()));
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
     #[test]
     fn ids_hashes_asks_and_lines() {
         assert_eq!(landing_id("slime s/1", 4), "slime-s-1:4");
@@ -410,6 +445,9 @@ mod tests {
         let text = ask(&r, Speciality::Supply);
         assert!(text.contains("landing `l:1`") && text.contains("`**/Cargo.lock`"));
         assert!(text.contains("- `Cargo.lock`") && text.contains("coverage"));
+        // Only the routed speciality's playbook loads.
+        assert!(text.contains("## Playbooks (dark-elf-supply)"), "{text}");
+        assert!(!text.contains("## Playbooks (dark-elf-harness)"), "{text}");
         r.status = Status::Pending {
             awaiting: vec![Speciality::Supply],
         };
