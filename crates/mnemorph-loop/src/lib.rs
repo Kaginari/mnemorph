@@ -33,6 +33,7 @@ pub use mnemorph_provider::OPAQUE_PREFIX;
 pub use mnemorph_races::ToolClass;
 /// The human gate's types, for a client that answers it.
 pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
+pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use open::{Bound, Opened, open, open_with, resume, resume_with};

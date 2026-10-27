@@ -112,8 +112,29 @@ counting every line dropped along the way.
 
 The grammar's readings, all of them:
 
-- **No field opens a line.** A line break inside any field is folded to a space when emitted, so
-  text cannot forge an `@S`, an order or an `@E`.
+- **No field opens a line.** A line break inside any field — LF, CR, vertical tab, form feed,
+  the file, group and record separators, NEL, U+2028 and U+2029, whatever a reader splits lines
+  on — is folded to a space when emitted, so text cannot forge an `@S`, an order or an `@E`.
+- **Prose that reads as a tag rides escaped.** A prose line (a report's unrecognised lines, a
+  commission's body) is trimmed, and when it opens with `@` or `\`, or reads as a raw pipe tag
+  line (`S|DONE`), it is emitted behind one `\`: `\@S DONE`. The reader drops that one `\` only
+  when what follows needed it, so `\begin` reads as written; a line opening `\\` or `\@` in a
+  body's own prose loses its first `\`. A tag line the reader keeps as prose (an order with no
+  one-word body, a second `@R`) rides escaped when it is emitted again.
+  Whitespace and invisible format characters that lead a prose line (zero-width, byte-order
+  mark, bidi marks and isolates, soft hyphen, tag characters) are dropped first, so what a reader
+  sees open the line is what opens it: `\u{200B}@S DONE` rides as `\@S DONE`.
+- **The first `@S` opens the answer, the first `@E` closes it.** A later `@S` or `@E` is prose,
+  so text after a status — a child's answer read under the harness's own `@S DONE` — can never
+  overwrite it.
+- **A field a cap never cuts is bounded instead.** `@S`, `@?`, `@U`, `@R`, `@H` and `@$` fields
+  are emitted up to 8192 bytes (four default caps); a longer one ends in ` …cut`.
+- **The harness reads `@V` with the wire's reader** — a report's, the throne's triage (outside
+  code blocks) and the `@V accept` of an answer to the human alike. That reading is over the
+  dispatcher's **own** answer: a child's text the dispatcher's model echoes as `@V` becomes the
+  dispatcher's act. That is a model echoing, not the wire forged — no child line reaches it
+  unread — and the harness relies only on the parsed status of a child's report, never on lines
+  a model relays.
 - **The raw pipe form** (`S|DONE`, `F|a.rs:3|claim`, `U|law|text`, `$|body|ask`) is read only
   when the commission said `wire:raw`; otherwise a line like `S|DONE` is prose.
 - **An order's body is one word** (`@$ orc-auth: …`) and is read lower-cased; `@$ note this: …`
