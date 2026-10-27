@@ -5434,3 +5434,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `refspec` takes a destination only as the source itself, `refs/heads/<source>`, or
   any `refs/heads/` branch for `HEAD`; `feat/x:refs/heads/main` and `HEAD:main` are destructive.
 - **Tests:** corpus rows for both, and the two accepted forms.
+
+---
+
+### [2026-10-27T17:18:44+01:00] rimuru — the wire: prose that reads as a tag rides escaped
+- **Done:** a report's prose lines (`other`) and a commission's body were emitted as written, so a
+  prose `@S` read back as a second status (CI's `no_field_forges_a_line`, shrunk to `other = "@S"`);
+  `@$`, `@R`/`@H`, `@E`, `@CAP` and raw `S|…` forged the same way — an off-the-wire child answer's
+  lines ride `other` up to the dispatcher. Prose is now trimmed and escaped behind one `\` when it
+  opens with `@` or `\` or reads as a raw tag line; the reader drops it only then. Line breaks fold
+  for every splitter (VT, FF, FS/GS/RS, NEL, U+2028/2029); a claim folds before its fence. Docs 04.
+- **Tests:** wire `prose_that_reads_as_a_tag_cannot_forge_the_envelope`, the CI seed in
+  `properties.proptest-regressions`; properties `every_field_keeps_its_own_line`,
+  `a_commission_body_stays_prose` (hostile pieces, 2048 cases).
+- **Learned:** no stored file is read back as wire — every parse is over a live answer — so older
+  journals and courier files need no migration.
+
+---
+
+### [2026-10-27T17:34:57+01:00] rimuru — #238, reviewed (Opus, Fable): the wire's cheap hardening
+- **Done:** leading whitespace and invisible format characters drop from a prose line before
+  its escape (dropped, not `\u{…}`-escaped: one escape grammar, and an invisible lead means
+  nothing); the first `@S` and `@E` win; never-cut fields bounded at 8192 bytes with ` …cut`;
+  `check` folds its findings; `accept` and `file_triage` read `@V` with `Report::parse`. Docs 04,
+  including the dispatcher's echoed `@V` as a model echo, not a forgery.
+- **Tests:** wire `the_first_status_and_close_win`, `invisible_characters_cannot_hide_a_tag`,
+  `a_never_cut_field_is_bounded`; `hostile()` gains zero-width, bidi, NBSP, U+3000, FS/GS,
+  `@CAP`/`@ROOT`; `round_trip` at 2048 cases.

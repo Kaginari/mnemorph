@@ -165,7 +165,9 @@ impl Finding {
 
     fn render(&self) -> String {
         let id = self.id.as_deref().filter(|i| !i.is_empty());
-        let claim: Vec<&str> = self.claim.split_whitespace().collect();
+        // Folded first, so a break that becomes a space cannot slip a word past the fence.
+        let folded = one_line(&self.claim);
+        let claim: Vec<&str> = folded.split_whitespace().collect();
         let first = claim.first().copied();
         let last = claim.last().copied();
         // A claim word that the parser would take for something else is fenced with GUARD.
@@ -314,15 +316,18 @@ impl Report {
 
     fn read(text: &str, raw: bool) -> Option<Self> {
         let mut r = Report::default();
-        let mut seen = false;
+        let (mut seen, mut closed) = (false, false);
         let (mut path, mut hash) = (None, None);
         for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
             let Some((t, rest)) = tag::split(line, raw) else {
-                r.other.push(line.to_owned());
+                r.other.push(tag::unescape(line).to_owned());
                 continue;
             };
             let kept = match t {
-                "S" => {
+                // The first `@S` opens the answer and the first `@E` closes it: a later one is
+                // prose, so text after a status — a child's answer under the harness's own
+                // `@S` — can never overwrite it.
+                "S" if !seen => {
                     r.status = rest;
                     seen = true;
                     true
@@ -355,8 +360,9 @@ impl Report {
                 "T" => push(&mut r.tools, rest),
                 "$" => Enqueue::parse(&rest).map(|q| r.enqueues.push(q)).is_some(),
                 "FORGE" => Forge::parse(&rest).map(|f| r.forges.push(f)).is_some(),
-                "E" => {
+                "E" if !closed => {
                     r.bytes = rest.split_whitespace().next().and_then(|n| n.parse().ok());
+                    closed = true;
                     true
                 }
                 _ => false,
@@ -386,25 +392,25 @@ impl Report {
         Word::read(self.status.split_whitespace().next().unwrap_or(""))
     }
 
-    /// The envelope lines by section, without `@E`. Every field is folded to one line, so no
-    /// text can open a line of its own.
+    /// The envelope lines by section, without `@E`. Every field is folded to one line, and a
+    /// prose line that would read as a tag rides escaped, so no text can open a line of its own.
     fn sections(&self) -> [Vec<String>; SECTIONS] {
-        let status = format!("@S {}", one_line(&self.status).trim());
+        let status = format!("@S {}", kept(self.status.trim()).trim());
         let unsaid = |u: &Unsaid| match u.kind {
-            Some(k) => format!("@U {} {}", k.word(), one_line(&u.text)),
-            None => format!("@U {}", one_line(&u.text)),
+            Some(k) => format!("@U {} {}", k.word(), kept(&u.text)),
+            None => format!("@U {}", kept(&u.text)),
         };
         let courier = self.courier.iter().flat_map(|c| {
             [
-                format!("@R {}", one_line(&c.path)),
-                format!("@H {}", one_line(&c.hash)),
+                format!("@R {}", kept(&c.path)),
+                format!("@H {}", kept(&c.hash)),
             ]
         });
         [
             vec![status.trim_end().to_owned()],
             self.holes
                 .iter()
-                .map(|h| format!("@? {}", one_line(&h.to_string())))
+                .map(|h| format!("@? {}", kept(&h.to_string())))
                 .collect(),
             self.unsaid
                 .iter()
@@ -413,7 +419,7 @@ impl Report {
             courier.collect(),
             self.enqueues
                 .iter()
-                .map(|q| format!("@$ {}: {}", one_line(&q.body), one_line(&q.ask)))
+                .map(|q| format!("@$ {}: {}", kept(&q.body), kept(&q.ask)))
                 .collect(),
             self.verdicts
                 .iter()
@@ -435,10 +441,7 @@ impl Report {
                 .iter()
                 .map(|f| format!("@FORGE {}", one_line(&f.to_string())))
                 .collect(),
-            self.other
-                .iter()
-                .map(|o| one_line(o).into_owned())
-                .collect(),
+            self.other.iter().map(|o| tag::prose(o)).collect(),
         ]
     }
 
@@ -539,10 +542,38 @@ impl std::fmt::Display for Report {
     }
 }
 
-/// Folds line breaks to spaces: what a field holds can never open a line of its own.
-pub(crate) fn one_line(text: &str) -> Cow<'_, str> {
-    if text.contains(['\n', '\r']) {
-        Cow::Owned(text.replace("\r\n", " ").replace(['\n', '\r'], " "))
+/// The longest a field that a cap never cuts (`@S`, `@?`, `@U`, `@R`, `@H`, `@$`) is emitted, in
+/// bytes; past it, the field ends in [`FIELD_CUT`].
+pub const FIELD_BYTES: usize = 4 * crate::DEFAULT_CAP;
+
+/// What ends a field bounded at [`FIELD_BYTES`].
+const FIELD_CUT: &str = " …cut";
+
+/// A never-cut field folded to one line and bounded at [`FIELD_BYTES`], the cut said.
+fn kept(text: &str) -> Cow<'_, str> {
+    let folded = one_line(text);
+    if folded.len() <= FIELD_BYTES {
+        return folded;
+    }
+    let mut end = FIELD_BYTES - FIELD_CUT.len();
+    while !folded.is_char_boundary(end) {
+        end -= 1;
+    }
+    Cow::Owned(format!("{}{FIELD_CUT}", &folded[..end]))
+}
+
+/// Every character some reader splits lines on: LF, CR, vertical tab, form feed, the
+/// file, group and record separators, NEL, and the Unicode line and paragraph separators.
+const BREAKS: [char; 10] = [
+    '\n', '\r', '\u{0b}', '\u{0c}', '\u{1c}', '\u{1d}', '\u{1e}', '\u{85}', '\u{2028}', '\u{2029}',
+];
+
+/// Folds line breaks to spaces: what a field holds can never open a line of its own, whatever
+/// splits the lines.
+#[must_use]
+pub fn one_line(text: &str) -> Cow<'_, str> {
+    if text.contains(BREAKS) {
+        Cow::Owned(text.replace("\r\n", " ").replace(BREAKS, " "))
     } else {
         Cow::Borrowed(text)
     }

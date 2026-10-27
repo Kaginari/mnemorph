@@ -320,8 +320,8 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
             "{}\t{}\t{}\t{}",
             f.severity.word(),
             f.code,
-            f.at,
-            f.message
+            mnemorph_server::wire::one_line(&f.at),
+            mnemorph_server::wire::one_line(&f.message)
         );
     }
     if failed {
