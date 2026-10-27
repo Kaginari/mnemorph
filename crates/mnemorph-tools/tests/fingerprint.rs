@@ -148,7 +148,8 @@ impl Gate for Late {
 }
 
 fn push(cx: &mut Context) -> Outcome {
-    let args = serde_json::json!({ "command": "git push -q origin feature" }).to_string();
+    let args =
+        serde_json::json!({ "command": "git push -q origin refs/heads/feature" }).to_string();
     call(&registry(), "bash", &args, cx)
 }
 
@@ -506,7 +507,8 @@ fn inner_re_asked(how: &str, meanwhile: fn(&Path), part: &str) {
         (Some(Box::new(move || meanwhile(&inner))), Answer::Approve),
         (None, Answer::Deny("no".into())),
     ]);
-    let args = serde_json::json!({ "command": "git -C vendor push -q origin feature" }).to_string();
+    let args = serde_json::json!({ "command": "git -C vendor push -q origin refs/heads/feature" })
+        .to_string();
     let o = call(&registry(), "bash", &args, &mut w.cx(gate.clone()));
     assert!(o.is_error, "{how}: {o:?}");
     assert!(

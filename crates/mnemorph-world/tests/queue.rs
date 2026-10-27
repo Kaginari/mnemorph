@@ -293,3 +293,39 @@ fn a_body_does_not_close_its_own_order() {
             .is_ok()
     );
 }
+
+/// A Kijin's post is read from its name, so the name and the race must agree: only a Kijin bears
+/// a `kijin-` name, and a Kijin's is `kijin-` and its directory.
+#[test]
+fn a_kijin_name_matches_its_race_and_its_directory() {
+    let w = World::new("kijin-names");
+    w.doc(
+        "kijin",
+        "forge",
+        "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+    );
+    w.doc(
+        "orc",
+        "deploy",
+        "# kijin-deploy\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
+    );
+    w.doc(
+        "kijin",
+        "ci",
+        "# kijin-release\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+    );
+    let r = Roster::load(&w.0);
+    assert!(r.creatures.contains_key("kijin-forge"), "{:?}", r.problems);
+    assert!(!r.creatures.contains_key("kijin-deploy"));
+    assert!(!r.creatures.contains_key("kijin-release"));
+    for want in [
+        "`kijin-deploy` is a kijin's name, but the doc's race is orc",
+        "a kijin's heading is `kijin-` and its directory: `kijin-ci`, not `kijin-release`",
+    ] {
+        assert!(
+            r.problems.iter().any(|p| p.contains(want)),
+            "{want}: {:?}",
+            r.problems
+        );
+    }
+}

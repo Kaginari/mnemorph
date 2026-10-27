@@ -728,7 +728,12 @@ fn the_posts_acts_as_the_book_lists_them() {
             !matches!(kind, OutwardKind::Install | OutwardKind::Other),
             "{kind}"
         );
-        assert_eq!(kind.post().is_some(), held, "{kind}");
+        assert_eq!(!kind.holders().is_empty(), held, "{kind}");
+        assert_eq!(
+            kind.sole_post().is_some(),
+            kind.holders().len() == 1,
+            "{kind}"
+        );
     }
 }
 
@@ -773,5 +778,6 @@ fn a_post_holds_only_its_acts() {
         let e = check_post(body, &[OutwardKind::Fetch]).unwrap_err();
         assert_eq!(e.post, None, "{body:?}");
         assert!(e.to_string().contains("holds no kijin post"), "{e}");
+        assert!(e.to_string().contains("every kijin post holds it"), "{e}");
     }
 }

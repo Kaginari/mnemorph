@@ -38,6 +38,9 @@ pub struct Place {
     pub home: PathBuf,
     /// The directory the command starts in.
     pub cwd: PathBuf,
+    /// The directories outside the world a deploy may write: a write anywhere else outside is
+    /// no post's act.
+    pub roots: Vec<PathBuf>,
 }
 
 impl Place {
@@ -48,7 +51,15 @@ impl Place {
             cwd: world.clone(),
             world,
             home: home.into(),
+            roots: Vec::new(),
         }
+    }
+
+    /// The directories outside the world a deploy may write.
+    #[must_use]
+    pub fn with_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+        self.roots = roots.into_iter().collect();
+        self
     }
 }
 
@@ -178,6 +189,7 @@ pub fn classify_acts(command: &str, place: &Place) -> (Verdict, Vec<OutwardKind>
         place,
         cwd: Some(place.cwd.clone()),
         depth: 0,
+        tainted: false,
     };
     let mut tally = Tally::default();
     walker.source(command, &mut tally);
@@ -311,6 +323,10 @@ pub(crate) struct Walker<'p> {
     /// The working directory; `None` once a `cd` went somewhere the classifier cannot read.
     pub(crate) cwd: Option<PathBuf>,
     depth: u8,
+    /// Something earlier in the command, or a prefix of this one, changed what a later command
+    /// runs with: a variable assigned or exported, a function defined, git's config written, a
+    /// script sourced, the directory changed. Every outward act after it is no post's.
+    pub(crate) tainted: bool,
 }
 
 impl Walker<'_> {
@@ -384,6 +400,7 @@ impl Walker<'_> {
                 Kind::default()
             }
             Command::Function(f) => {
+                self.tainted = true;
                 let mut names = Vec::new();
                 collect_names(&f.body.0, &mut names);
                 if names.iter().any(|n| *n == f.fname.value) {
@@ -409,7 +426,10 @@ impl Walker<'_> {
 
     fn compound(&mut self, c: &CompoundCommand, t: &mut Tally) {
         match c {
-            CompoundCommand::Arithmetic(_) | CompoundCommand::ArithmeticForClause(_) => {}
+            // An arithmetic assignment or a loop variable changes what later commands run with.
+            CompoundCommand::Arithmetic(_) | CompoundCommand::ArithmeticForClause(_) => {
+                self.tainted = true;
+            }
             CompoundCommand::BraceGroup(b) => self.list(&b.list, t),
             CompoundCommand::Subshell(s) => {
                 let saved = self.cwd.clone();
@@ -417,6 +437,7 @@ impl Walker<'_> {
                 self.cwd = saved;
             }
             CompoundCommand::ForClause(f) => {
+                self.tainted = true;
                 for w in f.values.iter().flatten() {
                     self.word_subs(&w.value, t);
                 }
@@ -479,7 +500,11 @@ impl Walker<'_> {
                 CommandPrefixOrSuffixItem::AssignmentWord(_, w) if after_name => {
                     words.push(&w.value);
                 }
-                CommandPrefixOrSuffixItem::AssignmentWord(_, w) => self.word_subs(&w.value, t),
+                CommandPrefixOrSuffixItem::AssignmentWord(_, w) => {
+                    // `GIT_SSH_COMMAND=… git fetch`: the variable changes what the command runs.
+                    self.tainted = true;
+                    self.word_subs(&w.value, t);
+                }
                 CommandPrefixOrSuffixItem::ProcessSubstitution(_, sub) => {
                     let saved = self.cwd.clone();
                     self.list(&sub.list, t);
@@ -509,6 +534,7 @@ impl Walker<'_> {
             return Kind::default();
         }
         if argv[0].text.as_deref() == Some("cd") {
+            self.tainted = true;
             self.cd(&argv[1..]);
             return Kind::default();
         }
@@ -520,6 +546,8 @@ impl Walker<'_> {
             kind = commands::classify(self, &argv[..k], &mut part);
             if k < argv.len() {
                 part.acts.clear();
+            } else if self.tainted && !part.acts.is_empty() {
+                part.acts = vec![OutwardKind::Other];
             }
             t.absorb(part);
         }
@@ -610,7 +638,7 @@ impl Walker<'_> {
     /// Judge one path the command reads, modifies or deletes.
     pub(crate) fn touch(&self, lit: &Lit, act: Act, what: &str, t: &mut Tally) {
         let spot = locate(lit.text.as_deref(), self.cwd.as_deref(), self.place);
-        paths::judge(&spot, act, what, t);
+        paths::judge(&spot, act, what, self.place, t);
     }
 }
 

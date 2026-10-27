@@ -102,7 +102,7 @@ outward   git clone https://github.com/x/y
 outward   /usr/bin/git push origin main
 outward   env git push origin main
 outward   git -C . push origin main
-outward   git -c user.name=x push origin main
+destructive git -c user.name=x push origin main
 outward   sh -c 'git push origin main'
 outward   bash -lc "git push origin main"
 outward   npm test && curl https://example.com

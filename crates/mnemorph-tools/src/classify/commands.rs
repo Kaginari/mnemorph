@@ -158,6 +158,28 @@ const INTERPRETERS: &[&str] = &[
 
 const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
 
+/// Builtins that change what the commands after them run with: variables, options, aliases.
+const STATE: &[&str] = &[
+    "export",
+    "declare",
+    "typeset",
+    "local",
+    "readonly",
+    "set",
+    "unset",
+    "alias",
+    "shopt",
+    "enable",
+    "hash",
+    "pushd",
+    "popd",
+    "read",
+    "mapfile",
+    "readarray",
+    "getopts",
+    "let",
+];
+
 /// Classify `argv` (the command name first), raising `t`.
 pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind {
     let Some(name) = argv[0].text.as_deref() else {
@@ -172,7 +194,11 @@ pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind 
     let words: Vec<Option<&str>> = tail.iter().map(|a| a.text.as_deref()).collect();
     match name {
         "sudo" | "doas" => {
-            t.raise(Destructive, format!("`{name}` runs as root"));
+            t.reach(
+                OutwardKind::Other,
+                Destructive,
+                format!("`{name}` runs as root"),
+            );
             let rest = skip_options(
                 tail,
                 &["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U"],
@@ -181,6 +207,12 @@ pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind 
         }
         "env" => {
             let mut rest = skip_options(tail, &["-u", "-C", "-S", "--unset", "--chdir"]);
+            // Anything `env` sets, unsets or changes reaches the command it runs.
+            w.tainted |= rest.len() < tail.len()
+                || rest
+                    .first()
+                    .and_then(|a| a.text.as_deref())
+                    .is_some_and(|s| s.contains('='));
             while rest
                 .first()
                 .and_then(|a| a.text.as_deref())
@@ -222,7 +254,14 @@ pub(super) fn classify(w: &mut Walker<'_>, argv: &[Lit], t: &mut Tally) -> Kind 
             Kind::default()
         }
         "source" | "." => {
+            w.tainted = true;
             t.raise(Write, format!("`{name}` runs a script"));
+            Kind::default()
+        }
+        _ if STATE.contains(&name) || (name == "printf" && words.contains(&Some("-v"))) => {
+            // What the shell carries to the commands after it: none of them is a post's act.
+            w.tainted = true;
+            table(w, name, tail, &words, t);
             Kind::default()
         }
         _ if SHELLS.contains(&name) => shell(w, name, tail, t),
@@ -719,10 +758,23 @@ fn remote_spec(word: &str) -> bool {
 )]
 fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
     let mut i = 0;
+    // A global option other than `-C` into the world changes how git runs or which repository it
+    // reads; `-c` and `--config-env` set its config outright.
+    let mut global = false;
+    let mut configured = false;
     while let Some(Some(a)) = args.get(i).map(|a| a.text.as_deref()) {
         if !a.starts_with('-') {
             break;
         }
+        configured |= a == "-c" || a.starts_with("--config-env");
+        let inside = a == "-C"
+            && args.get(i + 1).is_some_and(|d| {
+                matches!(
+                    super::paths::locate(d.text.as_deref(), w.cwd.as_deref(), w.place),
+                    super::paths::Spot::Inside { .. }
+                )
+            });
+        global |= !inside;
         i += if matches!(
             a,
             "-C" | "-c" | "--git-dir" | "--work-tree" | "--namespace" | "--exec-path"
@@ -742,6 +794,31 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
     };
     let rest = &args[i + 1..];
     let words: Vec<&str> = rest.iter().filter_map(|a| a.text.as_deref()).collect();
+    let texts: Vec<Option<&str>> = rest.iter().map(|a| a.text.as_deref()).collect();
+    // An outward git act is a post's only as its words alone say it: no global option (`-c`,
+    // `-C`, `--git-dir`, `--config-env`), no word known only at run time, nothing earlier in the
+    // command that changed how git runs.
+    let plain = !global && !w.tainted && texts.iter().all(Option::is_some);
+    // Written config (`git config`, `git remote set-url`, an upstream) reaches every git after it.
+    let writes_config = match sub {
+        "config" => !words.iter().any(|w| {
+            matches!(
+                *w,
+                "--get" | "--get-all" | "--get-regexp" | "-l" | "--list" | "get" | "list"
+            )
+        }),
+        "remote" => words.iter().any(|w| {
+            matches!(
+                *w,
+                "add" | "rename" | "remove" | "rm" | "set-head" | "set-branches" | "set-url"
+            )
+        }),
+        "branch" => words
+            .iter()
+            .any(|w| w.starts_with("--set-upstream") || *w == "-u" || *w == "--unset-upstream"),
+        _ => false,
+    };
+    w.tainted |= writes_config;
     let any = |xs: &[&str]| {
         words
             .iter()
@@ -757,11 +834,25 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
         | "cat-file" | "describe" | "shortlog" | "grep" | "rev-list" | "help" | "version"
         | "whatchanged" | "range-diff" | "merge-base" | "for-each-ref" | "show-ref"
         | "check-ignore" | "count-objects" => {}
-        "push" => push(&words, t),
-        "fetch" | "pull" | "clone" | "ls-remote" | "archive"
-            if sub != "archive" || any(&["--remote"]) =>
-        {
-            t.reach(Fetch, Outward, format!("`git {sub}` reaches a remote"));
+        "push" => {
+            if configured {
+                t.reach(
+                    OutwardKind::Other,
+                    Destructive,
+                    "`git -c` sets the config the push runs with (`core.sshCommand`, a URL)",
+                );
+            }
+            push(&words, plain, t);
+        }
+        "fetch" | "pull" | "clone" | "ls-remote" => {
+            t.reach(
+                fetch_kind(&texts, plain),
+                Outward,
+                format!("`git {sub}` reaches a remote"),
+            );
+        }
+        "archive" if any(&["--remote"]) => {
+            t.raise(Outward, "`git archive --remote` reaches a remote");
         }
         "send-email" | "request-pull" => {
             t.raise(Outward, format!("`git {sub}` reaches a remote"));
@@ -769,7 +860,16 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
         "remote" => match words.first().copied() {
             None | Some("-v" | "get-url") => {}
             Some("update" | "show" | "prune") => {
-                t.reach(Fetch, Outward, "`git remote` reaches a remote");
+                let kind = if plain
+                    && words[1..]
+                        .iter()
+                        .all(|w| matches!(*w, "-v" | "-p" | "--prune" | "-n") || remote_ok(w))
+                {
+                    Fetch
+                } else {
+                    OutwardKind::Other
+                };
+                t.reach(kind, Outward, "`git remote` reaches a remote");
             }
             Some(_) => t.raise(Write, "`git remote` changes the repository's config"),
         },
@@ -778,7 +878,8 @@ fn git(w: &mut Walker<'_>, args: &[Lit], t: &mut Tally) {
                 .iter()
                 .any(|w| matches!(*w, "update" | "sync" | "add")) =>
         {
-            t.reach(Fetch, Outward, "`git submodule` reaches a remote");
+            // A submodule's URL and update command come from config: no post's act.
+            t.raise(Outward, "`git submodule` reaches a remote");
         }
         "reset" if any(&["--hard", "--merge", "--keep"]) => {
             t.raise(Destructive, "`git reset --hard` discards work");
@@ -992,7 +1093,7 @@ const PUSH_QUIET: &[&str] = &[
 /// branch pushed onto another name, more than one refspec, a helper program or a push option on
 /// the remote: destructive. An option it does not know is destructive too, so a word only ever
 /// raises the class.
-fn push(words: &[&str], t: &mut Tally) {
+fn push(words: &[&str], plain: bool, t: &mut Tally) {
     let mut why: Option<String> = None;
     let mut positional = Vec::new();
     for w in words {
@@ -1026,26 +1127,60 @@ fn push(words: &[&str], t: &mut Tally) {
     {
         why.get_or_insert(reason);
     }
+    // A branch push is the forge's only when it cannot mean more than it says: one remote, one
+    // `refs/heads/` refspec, nothing in the command that changes how git runs.
+    let branch =
+        matches!(positional.as_slice(), [remote, spec] if remote_ok(remote) && branch_spec(spec));
     match why {
-        Some(reason) if tags_only(words) => t.reach(PushTag, Destructive, reason),
+        Some(reason) if plain && tags_only(words) => t.reach(PushTag, Destructive, reason),
         // A forced, deleting or mirroring push is held by no post.
         Some(reason) => t.reach(OutwardKind::Other, Destructive, reason),
-        None => t.reach(PushBranch, Outward, "`git push` leaves the machine"),
+        None if plain && branch => {
+            t.reach(PushBranch, Outward, "`git push` leaves the machine");
+        }
+        None => t.reach(
+            OutwardKind::Other,
+            Outward,
+            "`git push` whose refs or remote its words do not name alone",
+        ),
     }
 }
 
-/// Whether a `git push` pushes tags and nothing else: `--tags` alone, `tag <name>`, or one
-/// `refs/tags/<name>` — with no force, delete or mirror, and no branch beside them.
+/// A ref name with nothing a refspec reads as more: no glob, force, range or second ref.
+fn ref_name(r: &str) -> bool {
+    !r.is_empty()
+        && !r.starts_with('-')
+        && !r.starts_with("refs/")
+        && !r.contains(['*', '+', ':', '^', '~', '?', '[', '\\', ' '])
+        && !r.contains("..")
+}
+
+/// A remote named plainly: no transport helper (`ext::`, `fd::`), no option.
+fn remote_ok(remote: &str) -> bool {
+    !remote.is_empty()
+        && !remote.starts_with('-')
+        && !remote.contains("::")
+        && !remote.starts_with("ext:")
+        && !remote.starts_with("fd:")
+}
+
+/// `refs/heads/X`, `HEAD:refs/heads/X` or `X:refs/heads/X`: one branch, named in full.
+fn branch_spec(spec: &str) -> bool {
+    if let Some(b) = spec.strip_prefix("refs/heads/") {
+        return ref_name(b);
+    }
+    spec.split_once(':').is_some_and(|(src, dst)| {
+        dst.strip_prefix("refs/heads/")
+            .is_some_and(|b| ref_name(b) && (src == "HEAD" || src == b))
+    })
+}
+
+/// Whether a `git push` pushes one tag and nothing else: `tag <name>` or `refs/tags/<name>` to
+/// a plain remote, with no force, delete or mirror.
 fn tags_only(words: &[&str]) -> bool {
-    let name = |r: &str| {
-        !r.is_empty()
-            && !r.starts_with('-')
-            && !r.contains(['*', '+', ':', '^', '~', '?', '[', '\\'])
-            && !r.contains("..")
-    };
     if words
         .iter()
-        .any(|w| w.starts_with('-') && *w != "--tags" && !PUSH_QUIET.contains(w))
+        .any(|w| w.starts_with('-') && !PUSH_QUIET.contains(w))
     {
         return false;
     }
@@ -1054,71 +1189,238 @@ fn tags_only(words: &[&str]) -> bool {
         .filter(|w| !w.starts_with('-'))
         .copied()
         .collect();
-    let refspecs = positional.get(1..).unwrap_or_default();
-    match refspecs {
-        [] => words.contains(&"--tags"),
-        ["tag", t] => name(t),
-        [r] => r.strip_prefix("refs/tags/").is_some_and(name),
+    match positional.as_slice() {
+        [remote, "tag", t] => remote_ok(remote) && ref_name(t),
+        [remote, r] => remote_ok(remote) && r.strip_prefix("refs/tags/").is_some_and(ref_name),
         _ => false,
     }
 }
 
-/// Whether a network command only reads: a lookup, or a plain GET with nothing sent.
-fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
-    let Some(ws) = words.iter().copied().collect::<Option<Vec<&str>>>() else {
-        return false;
-    };
-    match name {
-        "ping" | "traceroute" | "dig" | "nslookup" | "host" | "whois" | "aria2c" => true,
-        "curl" => !ws.iter().any(|w| {
-            if w.contains("://") && !w.starts_with("http://") && !w.starts_with("https://") {
-                // Another scheme (`telnet://`, `ftp://`, `smtp://`) may send what it reads.
-                return true;
+/// A command's options, read against an allowlist: `flags` stand alone, `values` take one (as
+/// `--x=v`, `--x v`, `-xv` or `-x v`). Every option must be on it, and every operand pass
+/// `operand`.
+fn allowed(
+    words: &[Option<&str>],
+    flags: &[&str],
+    values: &[&str],
+    operand: impl Fn(&str) -> bool,
+) -> bool {
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        let Some(w) = *w else { return false };
+        if let Some(long) = w.strip_prefix("--") {
+            if long.is_empty() {
+                return false;
             }
-            if let Some(long) = w.strip_prefix("--") {
-                let flag = long.split_once('=').map_or(long, |(f, _)| f);
-                flag.starts_with("data")
-                    || flag.starts_with("form")
-                    || matches!(
-                        flag,
-                        "json" | "upload-file" | "request" | "config" | "user" | "header"
-                    )
-            } else if let Some(short) = w.strip_prefix('-') {
-                short.contains(['d', 'F', 'T', 'X', 'K', 'u', 'H'])
-            } else {
-                false
+            let (name, has_value) = match w.split_once('=') {
+                Some((n, _)) => (n, true),
+                None => (w, false),
+            };
+            if values.contains(&name) {
+                if !has_value && it.next().is_none() {
+                    return false;
+                }
+            } else if has_value || !flags.contains(&name) {
+                return false;
             }
-        }),
-        "wget" => !ws.iter().any(|w| {
-            [
-                "--post",
-                "--method",
-                "--body",
-                "--header",
-                "-i",
-                "--input-file",
-                "-e",
-                "--execute",
-            ]
-            .iter()
-            .any(|f| w.starts_with(f))
-        }),
-        "http" | "https" | "xh" => {
-            let operands: Vec<&&str> = ws.iter().filter(|w| !w.starts_with('-')).collect();
-            match operands.as_slice() {
-                [_url] => true,
-                [method, _url] => matches!(**method, "GET" | "HEAD"),
-                _ => false,
+        } else if let Some(short) = w.strip_prefix('-').filter(|s| !s.is_empty()) {
+            for (k, c) in short.char_indices() {
+                let flag = format!("-{c}");
+                if values.contains(&flag.as_str()) {
+                    if short[k + c.len_utf8()..].is_empty() && it.next().is_none() {
+                        return false;
+                    }
+                    break;
+                }
+                if !flags.contains(&flag.as_str()) {
+                    return false;
+                }
             }
+        } else if !operand(w) {
+            return false;
         }
+    }
+    true
+}
+
+/// A URL a fetch may name: http(s), or no scheme at all (read as http).
+fn web_url(w: &str) -> bool {
+    !w.contains("://") || w.starts_with("http://") || w.starts_with("https://")
+}
+
+/// Whether a network command only reads: a lookup, or a plain GET whose every option is on the
+/// command's allowlist.
+fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
+    match name {
+        "ping" | "traceroute" | "dig" | "nslookup" | "host" | "whois" => {
+            words.iter().all(Option::is_some)
+        }
+        "curl" => {
+            // `-X` is allowed only as a GET or a HEAD.
+            let mut ws = words.to_vec();
+            if let Some(i) = ws
+                .iter()
+                .position(|w| matches!(*w, Some("-X" | "--request")))
+            {
+                if !matches!(ws.get(i + 1), Some(Some("GET" | "HEAD"))) {
+                    return false;
+                }
+                ws.drain(i..=i + 1);
+            }
+            allowed(
+                &ws,
+                &[
+                    "-s",
+                    "--silent",
+                    "-S",
+                    "--show-error",
+                    "-f",
+                    "--fail",
+                    "--fail-with-body",
+                    "-L",
+                    "--location",
+                    "-I",
+                    "--head",
+                    "-i",
+                    "--include",
+                    "-v",
+                    "--verbose",
+                    "--compressed",
+                    "-4",
+                    "-6",
+                    "-N",
+                    "--no-buffer",
+                    "-O",
+                    "--remote-name",
+                    "-J",
+                    "--remote-header-name",
+                    "--create-dirs",
+                    "--http1.1",
+                    "--http2",
+                ],
+                &[
+                    "-o",
+                    "--output",
+                    "-m",
+                    "--max-time",
+                    "--connect-timeout",
+                    "--retry",
+                    "--retry-delay",
+                    "--max-redirs",
+                    "-A",
+                    "--user-agent",
+                    "-r",
+                    "--range",
+                ],
+                web_url,
+            )
+        }
+        "wget" => allowed(
+            words,
+            &[
+                "-q",
+                "--quiet",
+                "-c",
+                "--continue",
+                "-N",
+                "--timestamping",
+                "-S",
+                "--server-response",
+                "--spider",
+                "--no-verbose",
+                "--https-only",
+            ],
+            &[
+                "-O",
+                "--output-document",
+                "-P",
+                "--directory-prefix",
+                "-T",
+                "--timeout",
+                "-t",
+                "--tries",
+            ],
+            web_url,
+        ),
+        "aria2c" => allowed(
+            words,
+            &["-q", "--quiet", "-c", "--continue"],
+            &[
+                "-d",
+                "--dir",
+                "-o",
+                "--out",
+                "-x",
+                "--max-connection-per-server",
+                "-s",
+                "--split",
+            ],
+            web_url,
+        ),
+        "http" | "https" | "xh" => match words {
+            [Some(url)] => !url.starts_with('-'),
+            [Some(method), Some(url)] => matches!(*method, "GET" | "HEAD") && !url.starts_with('-'),
+            _ => false,
+        },
         _ => false,
     }
+}
+
+/// `git fetch`, `pull`, `clone`, `ls-remote`: a fetch only with allowlisted options and plain
+/// remotes — no `--upload-pack`, no config, no transport helper — and nothing that changes how
+/// git runs; anything else is no post's.
+fn fetch_kind(words: &[Option<&str>], plain: bool) -> OutwardKind {
+    let ok = plain
+        && allowed(
+            words,
+            &[
+                "-q",
+                "--quiet",
+                "-v",
+                "--verbose",
+                "--prune",
+                "-p",
+                "--prune-tags",
+                "--tags",
+                "-t",
+                "--no-tags",
+                "--all",
+                "--unshallow",
+                "--single-branch",
+                "--no-single-branch",
+                "--bare",
+                "--no-checkout",
+                "--ff-only",
+                "--no-rebase",
+                "--heads",
+                "--refs",
+                "--progress",
+                "--no-progress",
+            ],
+            &["--depth", "--shallow-since", "-b", "--branch", "--filter"],
+            remote_ok,
+        );
+    if ok { Fetch } else { OutwardKind::Other }
 }
 
 /// `kubectl`: reads are a fetch, a rollout undo a rollback, what changes the cluster a deploy;
 /// a shell into it, a copy or a tunnel is another act.
 fn kubectl(sub: &str, words: &[Option<&str>], t: &mut Tally) {
     let rollout = |w: &str| words.iter().flatten().any(|x| *x == w);
+    // A secret's resource, however named (`secret`, `secrets/db`, `pods,secrets`), is read only
+    // by refusal: a cluster's secrets are a secret store.
+    let secret = words.iter().flatten().any(|w| {
+        w.split(',').any(|r| {
+            let kind = r.split('/').next().unwrap_or(r);
+            matches!(kind.split('.').next().unwrap_or(kind), "secret" | "secrets")
+        })
+    });
+    if secret {
+        t.refuse(
+            Rule::SecretStore,
+            format!("`kubectl {sub}` names a cluster's secrets"),
+        );
+    }
     let (kind, class): (OutwardKind, ToolClass) = match sub {
         "get" | "describe" | "logs" | "top" | "version" | "explain" | "api-resources"
         | "api-versions" | "cluster-info" | "diff" | "events" => (Fetch, Outward),

@@ -5483,3 +5483,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a destructive raise is outward only sometimes, so it gets no default kind: each
   outward one (forced push, publishes, outside deletes, uninstalls) is tagged by hand. A plain
   `git push origin v1.0` of a tag still reads as a branch push (the classifier cannot tell).
+
+---
+
+### [2026-10-27T18:35:14+01:00] rimuru — #239, reviewed (Opus, Fable): a kind is read only from the command's own words
+- **Done:** push-branch only for one `refs/heads/X` (or `HEAD:`/`X:` onto it) to a plain
+  remote; a bare push, a short name, `--follow-tags`, `--tags`, two refspecs, `ext::`, any
+  git global but `-C` into the world are `other`; `git -c … push` is destructive. A walk-wide
+  taint — an assignment or `env` prefix, `export`/`read`/`set`…, a loop variable, a function,
+  `source`, `cd`, a `git config`/`remote`/upstream write — makes every later outward act
+  `other`. Fetch is allowlisted (git, curl, wget, aria2c, httpie). `sudo` is `other`;
+  `kubectl` naming secrets is refused (secret-store). `write-outside` only under
+  `Context::with_deploy_roots`, never a home dotfile; run-time paths `other`. Typed acts get
+  `Planned::check_post`. Escalation goes to the Kijin of the act's sole post, else the human.
+  The roster refuses a `kijin-` name on another race and a Kijin heading that is not
+  `kijin-<dir>`. Docs 02.
+- **Tests:** corpus `outward_acts_by_kind` (every hole as a row), shell
+  `a_kijin_does_only_its_posts_acts`, commission `an_act_of_no_single_post_stays_with_the_human`,
+  queue `a_kijin_name_matches_its_race_and_its_directory`, config
+  `a_typed_act_is_checked_against_the_post`.
+- **Learned:** what a command's words name is not what it runs: the shell line before it and the
+  repository's config steer it. A persisted `remote.*.pushurl` or `push.followTags` from an
+  earlier call is still read only by the gate's fingerprint, not by the kind.

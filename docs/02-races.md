@@ -360,7 +360,10 @@ acts are compiled in** (`mnemorph_races::Post::acts`); its **territory is doc-de
 Kijin doc's `Post` field, world by world. The shell classifier reads every outward command as
 one or more act kinds (`mnemorph_races::OutwardKind`), and a Kijin's command whose kinds are not
 all its post's is refused before the gate is asked, naming the post, the act and the post that
-holds it. A Kijin whose name is no post does no outward act.
+holds it. A Kijin whose name is no post does no outward act; the roster refuses a `kijin-` name
+on another race, and a Kijin doc whose heading is not `kijin-` and its directory. Solo's
+escalation hands a refused act to the one Kijin whose post holds it; an act several posts hold,
+or none, stays with the human.
 
 | Post | Epithet | Owns (territory, doc-declared) | Outward acts (compiled) |
 |---|---|---|---|
@@ -370,23 +373,28 @@ holds it. A Kijin whose name is no post does no outward act.
 | `kijin-forge` | the shrine keeper of records | PR templates, issue templates | `fetch` (issues, PRs), `push-branch`, `pull-request`, `comment`, `label` |
 | `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.mnemorph/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | `fetch` only (advisory databases such as OSV, upstream releases): no outward write |
 
-The kinds, as the classifier reads them:
+The kinds, as the classifier reads them. A kind is read only from what the command's own words
+say: a git global option (`-c`, `--config-env`, `-C` outside the world, `--git-dir`), a word
+known only at run time, or anything earlier in the command line that changes what later commands
+run with — a variable assigned or exported (`GIT_SSH_COMMAND=…`, `env GH_CONFIG_DIR=…`), git's
+config or a remote written, a function defined, a script sourced, a `cd` — makes every outward
+act after it `other`.
 
 | Kind | Read from |
 |---|---|
-| `fetch` | a GET with nothing sent (`curl`, `wget`, `httpie`), `git fetch`/`clone`/`pull`, `gh` reads (`view`, `list`, `status`, `checks`, a plain `gh api` GET), `kubectl get`, `helm status`, DNS lookups |
-| `push-branch` | `git push` of one plain branch |
+| `fetch` | `curl`, `wget`, `aria2c`, `httpie` with only allowlisted options (a GET, nothing sent, no hook, no config file); `git fetch`/`clone`/`pull`/`ls-remote` with allowlisted options and plain remotes (no `--upload-pack`, no `ext::` or `fd::`); `gh` reads (`view`, `list`, `status`, `checks`, a plain `gh api` GET); `kubectl get` (never a secret: that is refused), `helm status`; DNS lookups |
+| `push-branch` | `git push <remote> refs/heads/<name>`, or `HEAD:refs/heads/<name>`, or `<name>:refs/heads/<name>`: one branch named in full — a short name (`v1.0` may be a tag), no refspec, `--follow-tags` or two refspecs are `other` |
 | `pull-request` | `gh pr create`, `edit`, `ready`, `close`, `reopen` |
 | `comment` | `gh pr comment`, `gh issue comment` |
 | `label` | label flags on `gh pr`/`gh issue edit`, `gh label` |
 | `rerun-ci` | `gh run rerun` |
-| `push-tag` | `git push` of tags alone (`--tags`, `tag <name>`, `refs/tags/<name>`) |
+| `push-tag` | `git push <remote> refs/tags/<name>` or `tag <name>`: one tag (`--tags` is `other`) |
 | `publish` | `cargo`/`npm`/`pip` publishes, `twine`, `docker push`, `helm push`, `gh release` writes |
 | `deploy` | `kubectl apply`/`set`/`scale`/`delete`/…, `helm install`/`upgrade`/`uninstall` |
 | `rollback` | `kubectl rollout undo`, `helm rollback` |
-| `write-outside` | a write or delete outside the world on this machine, or at a path known only at run time |
+| `write-outside` | a write or delete under a deploy root (`Context::with_deploy_roots`) outside the world; a dotfile of the home (`~/.gitconfig`, `~/.config/git`, `~/.bashrc`), any other outside path and a path known only at run time are `other` |
 | `install` | package installs and removals (`cargo install`, `npm install`, `apt`, `brew`, `go get`) — no post |
-| `other` | everything else outward: a forced, deleting or tag-and-branch push, `gh pr merge`, `gh workflow run`, a `gh api` write, `ssh`, a socket, a `curl` that sends — no post |
+| `other` | everything else outward: a forced, deleting or ambiguous push, `git submodule`, `gh pr merge`, `gh workflow run`, a `gh api` write, `ssh`, a socket, `sudo`, a `curl` that sends — no post |
 
 - **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:

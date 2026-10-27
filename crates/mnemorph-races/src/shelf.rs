@@ -260,10 +260,22 @@ impl OutwardKind {
         OutwardKind::Other,
     ];
 
-    /// The post that holds this kind, if one does.
+    /// The posts that hold this kind.
     #[must_use]
-    pub fn post(self) -> Option<Post> {
-        Post::ALL.into_iter().find(|p| p.acts().contains(&self))
+    pub fn holders(self) -> Vec<Post> {
+        Post::ALL
+            .into_iter()
+            .filter(|p| p.acts().contains(&self))
+            .collect()
+    }
+
+    /// The one post that holds this kind; `None` when no post or several do.
+    #[must_use]
+    pub fn sole_post(self) -> Option<Post> {
+        match self.holders()[..] {
+            [post] => Some(post),
+            _ => None,
+        }
     }
 }
 
@@ -336,9 +348,10 @@ impl fmt::Display for PostRefusal {
                 self.body, self.act
             ),
         };
-        let route = match self.act.post() {
-            Some(holder) => format!("route it to {}", holder.creature()),
-            None => "no post holds it; the human does it".to_owned(),
+        let route = match self.act.holders()[..] {
+            [] => "no post holds it; the human does it".to_owned(),
+            [holder] => format!("route it to {}", holder.creature()),
+            _ => "every kijin post holds it".to_owned(),
         };
         write!(f, "{refused}: {route}")
     }

@@ -155,6 +155,8 @@ pub struct Context {
     /// The creature's scratch nest, when it was handed one.
     nest: Option<PathBuf>,
     home: PathBuf,
+    /// The directories outside the world a deploy may write (see [`Self::with_deploy_roots`]).
+    deploy_roots: Vec<PathBuf>,
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
     asked_rules: BTreeSet<Rule>,
@@ -215,6 +217,7 @@ impl Context {
             build: Vec::new(),
             nest: None,
             home,
+            deploy_roots: Vec::new(),
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
             asked_rules: BTreeSet::new(),
@@ -437,6 +440,7 @@ impl Context {
     #[must_use]
     pub fn inherit(mut self, from: &Context) -> Self {
         self.home.clone_from(&from.home);
+        self.deploy_roots.clone_from(&from.deploy_roots);
         self.gate = Arc::clone(&from.gate);
         self.sandbox.clone_from(&from.sandbox);
         self.asked_rules.clone_from(&from.asked_rules);
@@ -554,6 +558,20 @@ impl Context {
     #[must_use]
     pub fn home(&self) -> &Path {
         &self.home
+    }
+
+    /// The directories outside the world a deploy Kijin may write: a write outside the world
+    /// anywhere else, or into a dotfile of the home, is no post's act.
+    #[must_use]
+    pub fn with_deploy_roots(mut self, roots: &[impl AsRef<Path>]) -> Self {
+        self.deploy_roots = roots.iter().map(|r| real(r.as_ref())).collect();
+        self
+    }
+
+    /// The directories outside the world a deploy Kijin may write.
+    #[must_use]
+    pub fn deploy_roots(&self) -> &[PathBuf] {
+        &self.deploy_roots
     }
 
     /// The human approval gate the tools ask; the loop asks it too, for what the end gate leaves

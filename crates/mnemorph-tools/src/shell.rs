@@ -263,6 +263,7 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
         world: cx.world().to_path_buf(),
         home: cx.home().to_path_buf(),
         cwd: cx.world().to_path_buf(),
+        roots: cx.deploy_roots().to_vec(),
     };
     let (verdict, acts) = classify_acts(command, &place);
     let (class, why, outside, asked) = match verdict {

@@ -299,3 +299,17 @@ fn an_envelope_matches_plain_ascii_words_only() {
     let long = planned(&comment(&"a".repeat(COVERED_TEXT + 1)));
     assert_eq!(e.covers(&long, today(), 0), Err(Uncovered::TooLong));
 }
+
+/// A typed act is a post's act as the command it renders: the forge pushes its branch, labels
+/// and comments; the deploy does none of them.
+#[test]
+fn a_typed_act_is_checked_against_the_post() {
+    let push = planned(&branch("feat/undo"));
+    assert_eq!(push.check_post("kijin-forge"), Ok(()));
+    let e = push.check_post("kijin-deploy").unwrap_err();
+    assert_eq!(e.act, mnemorph_races::OutwardKind::PushBranch);
+    assert!(push.check_post("kijin-k").is_err());
+    let deploy = planned(&Act::Command("kubectl apply -f d.yaml".into()));
+    assert_eq!(deploy.check_post("kijin-deploy"), Ok(()));
+    assert!(deploy.check_post("kijin-forge").is_err());
+}
