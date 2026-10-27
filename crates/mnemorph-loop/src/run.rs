@@ -304,9 +304,21 @@ pub struct Run {
     /// The last verdict the end gate passed on a change, with the journal heading it wrote: what
     /// a **checked** route cites.
     passed: Option<(crate::gate::GateVerdict, Option<String>)>,
-    /// The fingerprints of the last request's messages, and the fold it was sent under: the next
-    /// request must only append to them, unless a fold moved.
-    sent: (Vec<u64>, usize),
+    /// The system prompt and the tools as sent: built once, when the run is made, and sent
+    /// byte-identical with every request of the session — the head of the cached prefix.
+    frame: (Vec<Block>, Vec<ToolSpec>),
+    /// The fingerprints of the last request — its frame, then its messages: the next request
+    /// only appends to them, unless a documented reshaping moved them.
+    sent: Vec<u64>,
+    /// Why the next request may rewrite what the last one sent: a fold or a compaction, said in
+    /// the prefix beat when the prefix moves.
+    reshaped: Option<&'static str>,
+    /// Changes said since the last request — the model, the date, a reloaded configuration —
+    /// appended before the next one as context updates.
+    updates: Vec<String>,
+    /// How many thinking blocks the recovery stripped when the prefix first moved with nothing
+    /// to explain it: `None` until then, and it runs once a session.
+    stripped: Option<usize>,
     noticed: bool,
     decisions: Option<Decisions>,
     observer: Option<Observer>,
@@ -356,6 +368,7 @@ impl Run {
     #[must_use]
     pub fn new(body: Body, limits: Limits, setup: Setup) -> Self {
         let interrupt = Arc::new(Interrupt::default());
+        let frame = frame(&body.system, &setup.tools);
         Self {
             body,
             limits,
@@ -393,7 +406,11 @@ impl Run {
             ask_said: String::new(),
             manifest_said: None,
             passed: None,
-            sent: (Vec::new(), 0),
+            frame,
+            sent: Vec::new(),
+            reshaped: None,
+            updates: Vec::new(),
+            stripped: None,
             noticed: false,
             decisions: None,
             observer: None,
@@ -782,61 +799,93 @@ impl Run {
         ending
     }
 
-    /// Every request only appends to the one before, between folds: the system prompt and the
-    /// tools are built once, and a change rides as a new message. A request that rewrote what was
-    /// sent, with no fold to explain it, is said loudly — the provider rebuilds its cache from
-    /// there, and the bill shows it.
-    fn next_request(&mut self) -> Request {
-        let request = self.request(self.limits.max_tokens);
-        self.watch_prefix(&request);
+    /// A change mid-session — the date rolled over, the working directory or the mode moved, the
+    /// configuration reloaded, a Mind or a tool came into the world — said to the body as a
+    /// context update appended before its next request. The system prompt and the tools never
+    /// change after the run is made: they are the session's cached prefix.
+    pub fn update(&mut self, change: &str) {
+        self.updates.push(change.to_owned());
+    }
+
+    /// The run rides `model` from its next request — a fallback, or the human's switch — and
+    /// the body is told why as a context update. The prefix's bytes stay as they were; only the
+    /// provider's cache is per model.
+    pub fn switch_model(&mut self, model: &str, why: &str) {
+        if self.body.model == model {
+            return;
+        }
+        let from = std::mem::replace(&mut self.body.model, model.to_owned());
+        self.update(&format!("the model is now `{model}` (was `{from}`): {why}"));
+    }
+
+    /// The request for the next turn, every change since the last one appended first. Every
+    /// request only appends to the one before: the system prompt and the tools are built once,
+    /// and a change rides as a new message. A fold or a compaction may rewrite what was sent,
+    /// and the prefix beat says which; a rewrite with nothing to explain it is said loudly, fails
+    /// a debug build, and strips the earlier asks' thinking once — the cache is rebuilt from
+    /// there anyway, so it is rebuilt smaller.
+    fn next_request(&mut self, max_tokens: u32) -> Request {
+        for change in std::mem::take(&mut self.updates) {
+            self.nudge(&format!("{UPDATE} {change}"));
+        }
+        let mut request = self.request(max_tokens);
+        let mut now = prefix_of(&request);
+        let mut unexplained = None;
+        if let Some(at) = moved(&self.sent, &now) {
+            if let Some(why) = self.reshaped {
+                self.record(&Beat::Prefix {
+                    at,
+                    why: why.to_owned(),
+                    stripped: 0,
+                });
+            } else {
+                let stripped = if self.stripped.is_some() {
+                    0
+                } else {
+                    // The asks before this one only: the turn in flight keeps the thinking its
+                    // tool calls are bound to.
+                    let upto = self.ask_from.min(self.messages.len());
+                    let n = strip_thinking(&mut self.messages[..upto]);
+                    self.stripped = Some(n);
+                    n
+                };
+                if stripped > 0 {
+                    request = self.request(max_tokens);
+                    now = prefix_of(&request);
+                }
+                self.record(&Beat::Warning {
+                    text: format!(
+                        "the cached prefix moved at block {at} with no fold: the provider rebuilds its cache from there"
+                    ),
+                });
+                self.record(&Beat::Prefix {
+                    at,
+                    why: MOVED.to_owned(),
+                    stripped,
+                });
+                unexplained = Some(at);
+            }
+        }
+        self.reshaped = None;
+        self.sent = now;
+        // The guard every test runs under — but the recovery's own, which makes the move.
+        if cfg!(all(debug_assertions, not(test)))
+            && let Some(at) = unexplained
+        {
+            panic!(
+                "the cached prefix moved at block {at} with no fold or compaction to explain it"
+            );
+        }
         request
     }
 
-    fn watch_prefix(&mut self, request: &Request) {
-        // The system prompt and the tools first — the heart of the prefix — then the conversation.
-        let head = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            format!("{:?}{:?}", request.system, request.tools).hash(&mut h);
-            h.finish()
-        };
-        let now: Vec<u64> = std::iter::once(head)
-            .chain(fingerprints(&request.messages))
-            .collect();
-        let (before, folded) = &self.sent;
-        if *folded == self.folded_upto
-            && let Some(at) = moved(before, &now)
-        {
-            self.record(&Beat::Warning {
-                text: format!(
-                    "the cached prefix moved at block {at} with no fold: the provider rebuilds its cache from there"
-                ),
-            });
-        }
-        self.sent = (now, self.folded_upto);
-    }
-
-    /// The request for the next turn: the system prompt and the tools as the cached prefix.
+    /// The request for the next turn: the session's frame — the system prompt and the tools —
+    /// as the cached prefix, then the conversation as sent.
     fn request(&self, max_tokens: u32) -> Request {
-        let count = self.tools.len();
-        let tools = self
-            .tools
-            .iter()
-            .enumerate()
-            .map(|(i, t)| ToolSpec {
-                name: t.name().to_owned(),
-                description: t.description().to_owned(),
-                input_schema: t.schema(),
-                cache: i + 1 == count,
-            })
-            .collect();
         let mut request = Request {
             model: self.body.model.clone(),
-            system: vec![Block::Text {
-                text: self.body.system.clone(),
-                cache: true,
-            }],
-            tools,
+            system: self.frame.0.clone(),
+            tools: self.frame.1.clone(),
             messages: fold(&self.messages, self.folded_upto),
             max_tokens,
             effort: None,
@@ -891,7 +940,7 @@ impl Run {
                 )));
             }
             self.ease_context();
-            let request = self.next_request();
+            let request = self.next_request(self.limits.max_tokens);
             let left = self.limits.deadline.saturating_sub(self.started.elapsed());
             let interrupt = Arc::clone(&self.interrupt);
             let call = tokio::time::timeout(left, self.model.complete(&request, on));
@@ -1413,6 +1462,7 @@ impl Run {
                 && foldable(&self.messages, self.folded_upto, point) >= worth
             {
                 self.folded_upto = point;
+                self.reshaped = Some(FOLD);
                 // The folded results are gone from what is sent: a re-read shows them again.
                 self.cx.forget_reads();
                 self.record(&Beat::Warning {
@@ -1440,6 +1490,7 @@ impl Run {
             return false;
         }
         self.folded_upto = point;
+        self.reshaped = Some(FOLD);
         // The folded results are gone from what is sent: a re-read shows them again.
         self.cx.forget_reads();
         self.last_occupancy = estimate;
@@ -2248,8 +2299,8 @@ impl Run {
         None
     }
 
-    /// A clock death: one more short turn, without tools, to write down what the body learned —
-    /// then the checkpoint, carrying it.
+    /// A clock death: one more short turn, told to call no tool, to write down what the body
+    /// learned — then the checkpoint, carrying it.
     async fn salvage(&mut self, why: &str) -> Ending {
         let note =
             "Time is up. In a few lines: what you did, what you learned, what is left. No tools.";
@@ -2399,7 +2450,7 @@ impl Run {
         let (notes, facts) = self.keep_unsaid(&summary);
         self.folded_upto = 0;
         self.ask_from = 0;
-        self.sent.0.clear();
+        self.reshaped = Some(COMPACTION);
         // The conversation's reads are summarised away: a re-read shows them again.
         self.cx.forget_reads();
         self.compactions += 1;
@@ -2412,8 +2463,9 @@ impl Run {
         true
     }
 
-    /// The context line: one turn without tools to write down what is not durable, its `@U` lines
-    /// kept as the body's proposed notes, then the checkpoint — a full context drains, never dies.
+    /// The context line: one turn, told to call no tool, to write down what is not durable, its
+    /// `@U` lines kept as the body's proposed notes, then the checkpoint — a full context drains,
+    /// never dies.
     async fn drain(&mut self, why: String) -> Ending {
         let note = "The context is full and this session must break. Before it does, write down \
                     what is not durable, one line each: `@U <law|colony|territory> <fact>` for \
@@ -2476,8 +2528,8 @@ impl Run {
         (kept, filed)
     }
 
-    /// One last turn without tools, capped at [`SALVAGE_TOKENS`], within `grace`: its text, or
-    /// `None` when the model gave none in time.
+    /// One last turn, told to call no tool and sent with the tools as any turn, capped at
+    /// [`SALVAGE_TOKENS`], within `grace`: its text, or `None` when the model gave none in time.
     async fn last_turn(&mut self, note: &str, stop: &str, grace: Duration) -> Option<String> {
         self.record(&Beat::Note {
             text: note.to_owned(),
@@ -2489,8 +2541,9 @@ impl Run {
                 cache: false,
             }],
         );
-        let mut request = self.request(SALVAGE_TOKENS);
-        request.tools.clear();
+        // Sent with the tools, as any turn: the note says to call none, and the cached prefix is
+        // read, not rebuilt, on the turn that carries the fullest context of the run.
+        let request = self.next_request(SALVAGE_TOKENS);
         let mut quiet = |_: Event| {};
         match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
             Ok(Ok(r)) => {
@@ -2503,15 +2556,94 @@ impl Run {
                     Timestamp::now(),
                 );
                 self.spend(&row);
+                // A tool the model called anyway never runs: only its words are kept.
+                let words = clean(
+                    r.content
+                        .into_iter()
+                        .filter(|b| !matches!(b, Block::ToolUse { .. }))
+                        .collect(),
+                );
                 self.record(&Beat::Model {
-                    content: r.content.iter().map(block_json).collect(),
+                    content: words.iter().map(block_json).collect(),
                     stop: stop.into(),
                 });
-                Some(text_of(&r.content))
+                Some(text_of(&words))
             }
             _ => None,
         }
     }
+}
+
+/// Why the prefix moved: a fold of old tool outputs.
+pub const FOLD: &str = "fold";
+/// Why the prefix moved: a structured compaction.
+pub const COMPACTION: &str = "compaction";
+/// Why the prefix moved: nothing documented — a rewrite to fix.
+pub const MOVED: &str = "unexplained";
+/// What opens a context update: a change mid-session, appended, never edited into the prefix.
+pub const UPDATE: &str = "[context update]";
+
+/// The session's frame: the system prompt and the tools as every request sends them, the last
+/// tool carrying the tools' breakpoint.
+fn frame(system: &str, tools: &[Box<dyn Tool>]) -> (Vec<Block>, Vec<ToolSpec>) {
+    let count = tools.len();
+    let specs = tools
+        .iter()
+        .enumerate()
+        .map(|(i, t)| ToolSpec {
+            name: t.name().to_owned(),
+            description: t.description().to_owned(),
+            input_schema: t.schema(),
+            cache: i + 1 == count,
+        })
+        .collect();
+    (
+        vec![Block::Text {
+            text: system.to_owned(),
+            cache: true,
+        }],
+        specs,
+    )
+}
+
+/// A request as its prefix is compared: the frame — the system prompt and the tools — first,
+/// the heart of the prefix, then the conversation block by block.
+fn prefix_of(request: &Request) -> Vec<u64> {
+    let head = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}{:?}", request.system, request.tools).hash(&mut h);
+        h.finish()
+    };
+    std::iter::once(head)
+        .chain(fingerprints(&request.messages))
+        .collect()
+}
+
+/// Strip the thinking from `messages` — the provider's thinking blocks and the reasoning an
+/// OpenAI-compatible server returned — leaving every turn its words and its tool calls, and a
+/// turn that would be left empty whole. How many blocks went.
+pub fn strip_thinking(messages: &mut [Message]) -> usize {
+    let thinking = |b: &Block| {
+        let Block::Opaque(v) = b else {
+            return false;
+        };
+        let kind = v["type"].as_str().unwrap_or_default();
+        matches!(kind, "thinking" | "redacted_thinking")
+            || kind
+                .strip_prefix(mnemorph_provider::OPAQUE_PREFIX)
+                .is_some_and(|k| matches!(k, "reasoning_content" | "reasoning_details"))
+    };
+    let mut stripped = 0;
+    for m in messages.iter_mut().filter(|m| m.role == Role::Assistant) {
+        let kept = m.content.iter().filter(|b| !thinking(b)).count();
+        if kept == 0 || kept == m.content.len() {
+            continue;
+        }
+        stripped += m.content.len() - kept;
+        m.content.retain(|b| !thinking(b));
+    }
+    stripped
 }
 
 fn text_of(content: &[Block]) -> String {
@@ -2580,3 +2712,130 @@ pub fn shown(text: &str) -> String {
 
 /// See [`card_list`].
 const CARD_ITEMS: usize = 5;
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use mnemorph_ledger::{Journal, Usage};
+    use mnemorph_provider::{Block, Caller, Response, StopReason};
+    use mnemorph_races::Race;
+    use mnemorph_tools::{Context, Sandbox, registry};
+    use serde_json::json;
+
+    use super::{Beat, Body, Limits, MOVED, Run, Setup};
+    use crate::model::ScriptedModel;
+
+    fn thought(then: Block, stop: StopReason) -> Response {
+        Response {
+            id: "m".into(),
+            model: "m".into(),
+            content: vec![
+                Block::Opaque(json!({"type": "thinking", "thinking": "hmm", "signature": "s"})),
+                then,
+            ],
+            stop,
+            stop_details: None,
+            usage: Usage {
+                input: 100,
+                output: 20,
+                cache_read: 0,
+                cache_write: 0,
+            },
+            warnings: vec![],
+        }
+    }
+
+    fn said(text: &str) -> Block {
+        Block::Text {
+            text: text.into(),
+            cache: false,
+        }
+    }
+
+    fn thinks(m: &mnemorph_provider::Message) -> bool {
+        m.content.iter().any(|b| matches!(b, Block::Opaque(_)))
+    }
+
+    /// A prefix that moved with nothing to explain it is said, and the earlier asks' thinking is
+    /// stripped from what is sent — once a session; the turn in flight keeps its own.
+    #[tokio::test]
+    async fn an_unexplained_move_strips_the_earlier_thinking_once() {
+        let root = std::env::temp_dir().join(format!("mnemorph-strip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("world")).unwrap();
+        std::fs::write(root.join("world/a.txt"), "a\n").unwrap();
+        let model = Arc::new(ScriptedModel::new([
+            Ok(thought(said("one"), StopReason::EndTurn)),
+            Ok(thought(
+                Block::ToolUse {
+                    id: "t1".into(),
+                    name: "read".into(),
+                    input: json!({"path": "a.txt"}),
+                },
+                StopReason::ToolUse,
+            )),
+            Ok(thought(said("two"), StopReason::EndTurn)),
+            Ok(thought(said("three"), StopReason::EndTurn)),
+        ]));
+        let cx = Context::new(Race::Slime, root.join("world"), &["."])
+            .with_sandbox(Sandbox::None("unit test".into()))
+            .with_unguarded(true);
+        let setup = Setup {
+            model: model.clone(),
+            tools: registry(),
+            cx,
+            journal: Journal::new(root.join("run.jsonl")),
+            ledger: None,
+            prices: mnemorph_ledger::Prices::default(),
+            caller: Caller {
+                session: "s".into(),
+                run: "r".into(),
+                body: "slime-test".into(),
+                race: "slime".into(),
+                commission: None,
+                prefix: 0,
+            },
+        };
+        let body = Body {
+            name: "slime-test".into(),
+            race: Race::Slime,
+            model: "m".into(),
+            system: "You are a test body.".into(),
+        };
+        let mut run = Run::new(body, Limits::for_race(Race::Slime), setup);
+        let mut quiet = |_| {};
+        run.ask("first", &mut quiet).await;
+        // An accidental rewrite of what was sent: the first ask's text.
+        run.messages[0].content[0] = said("first, rewritten");
+        run.ask("second", &mut quiet).await;
+        run.messages[0].content[0] = said("first, rewritten again");
+        run.ask("third", &mut quiet).await;
+
+        let requests = model.requests();
+        assert!(
+            !thinks(&requests[1].messages[1]),
+            "the first ask's thinking is stripped from the request that moved"
+        );
+        assert!(
+            thinks(&requests[2].messages[3]),
+            "the turn in flight keeps the thinking its tool call is bound to"
+        );
+        assert!(
+            thinks(&requests[3].messages[3]),
+            "stripped once: the second move keeps the later thinking"
+        );
+        let moves: Vec<(String, usize)> = Journal::<Beat>::new(root.join("run.jsonl"))
+            .read()
+            .unwrap()
+            .rows
+            .into_iter()
+            .filter_map(|b| match b {
+                Beat::Prefix { why, stripped, .. } => Some((why, stripped)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(moves, [(MOVED.to_owned(), 1), (MOVED.to_owned(), 0)]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

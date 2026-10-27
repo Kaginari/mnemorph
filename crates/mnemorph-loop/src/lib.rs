@@ -40,7 +40,8 @@ pub use route::{
     Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, capped, pick, route, route_ask, tier_of,
 };
 pub use run::{
-    Body, Ending, Interrupt, Limits, Observer, Run, SENT, Seen, Setup, Steer, hidden, shown,
+    Body, COMPACTION, Ending, FOLD, Interrupt, Limits, MOVED, Observer, Run, SENT, Seen, Setup,
+    Steer, UPDATE, hidden, shown, strip_thinking,
 };
 pub use sequence::validate;
 pub use session::{Queue, Session};

@@ -109,6 +109,18 @@ pub enum Beat {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bench_outcome: Option<String>,
     },
+    /// A request that rewrote what the one before it sent: where the cached prefix moved, why — a
+    /// fold, a compaction, or nothing documented — and how many thinking blocks the recovery
+    /// stripped. Journaled for the record, never fed back to the model.
+    Prefix {
+        /// The first block that changed, counted over the frame and then the conversation.
+        at: usize,
+        /// `fold`, `compaction`, or `unexplained`.
+        why: String,
+        /// Thinking blocks stripped from the earlier asks when the move was unexplained.
+        #[serde(default)]
+        stripped: usize,
+    },
     /// How the run ended.
     End {
         /// The ending, in words.
@@ -243,7 +255,11 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 let head = if head.is_empty() { &asked } else { head };
                 messages = crate::compact::compacted(head, summary, &messages[from..]);
             }
-            Beat::Gate { .. } | Beat::Warning { .. } | Beat::Guts { .. } | Beat::Recall { .. } => {}
+            Beat::Gate { .. }
+            | Beat::Warning { .. }
+            | Beat::Guts { .. }
+            | Beat::Recall { .. }
+            | Beat::Prefix { .. } => {}
         }
     }
     close(&mut messages, &mut pending);

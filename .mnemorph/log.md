@@ -5098,3 +5098,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
      with Sixel on is detected through DA1;
   3. the filter shape documented and tested; the head cleaned;
   4. the idle head asserted equal to `veldora_blocks`.
+
+---
+
+### [2026-10-27T13:48:18+01:00] rimuru — #38, append-only requests
+- **Why:** the bench read a 94% cache hit rate against OpenCode's 97%. Every move of the cached
+  prefix resends the whole history uncached.
+- **Audit** of the loop and the providers' request building, for what rewrites an earlier part
+  of the request mid-session:
+  - append-only already: the manifest and the opening (taken once, in the ask's message), recall
+    and `@ONTO` (the ask's message), a Mind worn (a tool result), steering, gate failures, stress
+    and top-up notes (appended), `forget_reads` (the read tracker, not the conversation), the
+    wake's lines (the next ask's message). The model, the date and the configuration never
+    changed mid-session: there was no lane for them;
+  - documented rewrites: the fold, the structured compaction;
+  - accidental: the drain and salvage turns cleared the tool list, so the turn with the fullest
+    context of the run was resent uncached.
+- **Fix:**
+  - the frame (system prompt and tools) is built once in `Run::new`;
+  - drain and salvage send the tools and keep only the words of a reply;
+  - `Run::update` and `Run::switch_model` append a `[context update]` note;
+  - `Beat::Prefix` records each move: fold, compaction or unexplained;
+  - an unexplained move warns, panics in a debug build, and strips the earlier asks' thinking
+    once.
+- **Tests:**
+  - an eight-turn session with steering, a Mind, a fallback, a config reload and a fold;
+  - the recovery's unit test.
+- **Proof the session test is not vacuous:**
+  - updates edited into the system prompt fail it ("request 5 rewrote the system prompt", or the
+    debug guard's panic);
+  - steering edited into the ask's message fails it ("one move, the fold: [(2, 2), (6, 6)]").
