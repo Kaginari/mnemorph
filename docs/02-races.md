@@ -230,7 +230,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | `read` | look inside the world | everyone |
 | `write` | change files inside the world — including deleting or renaming inside the writer's own soil; whatever it takes away is kept in the attic first | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
-| `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
+| `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world — and any outward act its plan gives no undo, or a standing effect no expiry | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
 | `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |
 | `seal` | propose freezing landings on a territory | Dark Elf, Arch Dark Elf — a seal always takes the human's confirm |
 
@@ -370,6 +370,23 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
   replayed; it is gated again.
+- **The plan declares the undo** (`mnemorph_config::Act`, classed by `plan`). Each outward act
+  names how it is put back — a rollback command, a revert, or `none` — and a standing effect (a
+  deploy, a feature flag, a scheduled job) names the day it ends. The line between `outward` and
+  `destructive` is computed from the plan:
+  - an outward act whose undo is `none` is **destructive**, and its approval card reads
+    `no undo — destructive` before anything else;
+  - a standing effect with no expiry, or one more than a year out, is **destructive**; an expiry
+    on or before the day it is planned refuses the plan;
+  - the classifier's destructive patterns stay the first reading: a declared undo never lowers a
+    force push or a publish.
+
+  An undo is checked as an act itself, one level deep: it is a command, not the act again, not
+  refused by the guard, **outward** (a read or a write inside the machine puts nothing outside
+  back) and **not destructive** — its own undo is never asked for, so a destructive undo would be
+  an irreversible act with nothing behind it. An undo that fails a check refuses the plan; to act
+  anyway, the plan says `none`, and the act goes to the human as destructive. A branch whose only
+  undo is deleting it therefore always asks.
 - **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
@@ -485,7 +502,14 @@ Rules that hold for every ascension:
   listed in `mnemorph status`, its time and count checked at the moment of use, not only when the
   act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
 - **What an envelope can never cover** (compiled, whatever the envelope says):
-  - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites;
+  - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites, and
+    every outward act its plan gives no undo or a standing effect no expiry. The envelope is read
+    against the planned act (`Envelope::covers`): its class first, so a destructive act is refused
+    before the envelope's time, count or patterns are looked at;
+  - a command that chains, redirects, expands or globs (`;`, `&&`, `|`, `$(…)`, `*`, `~`): a
+    pattern matches words, not what the shell makes of them, so such a command always asks. A
+    `*` word ending a pattern stands for the rest of the command, a word ending in `*` (`feat/*`)
+    for one word;
   - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests
     — a pushed workflow runs with the repository's secrets, so that push is always asked;
   - deploys to any environment marked `protected` (production by default);

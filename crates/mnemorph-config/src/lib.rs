@@ -14,10 +14,15 @@
 //! says, never more than a year), may cap its uses, and stays in the file once revoked, so the
 //! record of what was allowed is never lost.
 //!
+//! The Kijin's plan step lives beside the envelopes it is read against: each outward act declares
+//! its undo and, standing, its expiry, and an act with neither is destructive, which no envelope
+//! covers ([`plan`], [`Envelope::covers`]).
+//!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
 //! is an error that names its file.
 
+mod outward;
 mod write;
 
 use std::collections::BTreeMap;
@@ -30,6 +35,9 @@ use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
+pub use outward::{
+    Act, Effect, FAR_EXPIRY, Malformed, NO_EXPIRY, NO_UNDO, Planned, Uncovered, Undo, plan,
+};
 pub use write::{revoke, set};
 
 /// The compiled defaults: the lowest layer, and the reference `config explain` shows.
