@@ -130,11 +130,10 @@ def run_one(task, mode, model, secret, timeout, keep=False):
     ask = (task / "ask.md").read_text().strip()
     if mode == "hierarchy":
         ask = HANDOFF + ask
-    cli = [shutil.which("node") or "node", str(REPO / "packages/cli/dist/cli.js"), "run", ask,
-           "--world", str(world), "--json", "--core", str(REPO / "target/debug/mnemorphd")]
+    cli = [str(REPO / "target/debug/mnemorph"), "run", ask, "--world", str(world), "--json"]
     env = dict(os.environ, OPENROUTER_API_KEY=secret)
     start = time.time()
-    # Its own process group: a timeout ends the CLI and the core it started, key and all.
+    # Its own process group: a timeout ends the run and anything it started, key and all.
     proc = subprocess.Popen(cli, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, start_new_session=True)
     try:

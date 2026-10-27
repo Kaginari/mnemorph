@@ -115,10 +115,10 @@ gated, its probe says whether it landed (settled, not asked again), never did (g
 new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md).
 
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
-`mnemorph runs` lists such runs, newest first — the id, when its journal was last written, why it
+`mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
 stopped, the last ask — and the session says the command when it stops at a checkpoint.
-`mnemorph resume <run>` (or `last`, the newest; `mnemorph-tui --resume <run>`;
-`mnemorphd --resume <run>` for a client) opens a session on it:
+`mnemorph resume <run>` (or `last`, the newest; `mnemorph --resume <run>` is the same;
+`mnemorphd --resume <run>` for an SDK client) opens a session on it:
 
 - **One door.** A resumed session opens exactly as a fresh one does — the configuration, the
   provider and its key, the sandbox, the end gate, the observer, the commissioner when the world
@@ -130,7 +130,7 @@ stopped, the last ask — and the session says the command when it stops at a ch
   dispatcher's.
 - **One session per run.** A live session holds its run — a lock beside its journal that the
   operating system lets go of when the process ends, however it ends — and a resume of a held run
-  is refused; a run whose lock cannot be made opens no session at all. `mnemorph runs` only probes
+  is refused; a run whose lock cannot be made opens no session at all. `mnemorphd runs` only probes
   the lock, and a resume waits that instant out. When a session ends with nothing left to resume,
   its lock file is removed while still held. What `runs` prints from a journal — the last ask, why
   it stopped — has its control, bidi and zero-width characters escaped.
@@ -212,7 +212,7 @@ dropped when the next ask starts.
 
 A client watches a run through its **observer**: every beat at the moment it is journaled, and
 every call's spend — a model turn or a decision — with the run's running total and its context
-against the stress line. It is how the CLI and the board show a run live
+against the stress line. It is how the terminal app and the board show a run live
 ([the client protocol](04-communication.md#the-client-protocol)) without reading the journal
 back. `open(world, gate, observer, env)` builds the session a client talks to — solo, and with the
 `commission` tool and an envelope from the human's caps when the world has Elves under a living
@@ -319,7 +319,7 @@ The world repairs itself in small, mechanical steps, each one written to the led
   `Retired: yes` line, and on a split a `Heirs` line naming its young, and nothing else changes;
   its open queue orders are named, to re-route.
   Every check runs before any write, and a failed write is undone. The
-  human can act it with `mnemorph relief <name> [--apply]` — without `--apply` it says what it
+  human can act it with `mnemorphd relief <name> [--apply]` — without `--apply` it says what it
   would do; never from a body's command.
 - **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
   its lane goes into the instruments as a `death` row (`.mnemorph/instruments/deaths.jsonl`, with
@@ -332,7 +332,7 @@ The world repairs itself in small, mechanical steps, each one written to the led
   fingerprint moves — another session's relief, a hand edit — the roster is rebuilt before the
   next dispatch, so no court is created for a retired seat. A heal never moves trust: a body's
   verify lines change only through its own gate.
-- **`mnemorph housekeep --heal`** fixes what is mechanical — a creature without a doc, a broken
+- **`mnemorphd housekeep --heal`** fixes what is mechanical — a creature without a doc, a broken
   *Reports to* link — and reports everything else. A seat with no doc gets a retired stub, so its
   memory stays visible and it claims nothing; a *Reports to* that names no living creature is
   relinked to the nearest living ancestor of the race that may command it (an Orc for a Slime, an
@@ -349,7 +349,7 @@ Runs on the body's own writes (minus what its Courts already landed on their own
 commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
 card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens, and in solo the whole
 repository is its soil, so right author holds by construction. A card with no verify line runs no
-check, and then no claim of a solo session is ever grounded: `mnemorph memory status` and
+check, and then no claim of a solo session is ever grounded: `mnemorphd memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
 model's words, since the human may paste it — for the human to add. A Cargo project is suggested

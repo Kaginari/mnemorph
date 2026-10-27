@@ -1,6 +1,7 @@
-//! Every command a prompt or a hint names exists in the build: a `mnemorph …` or `mnemorphd …`
-//! command written in backticks anywhere in the shipped sources is one the help of the CLI or the
-//! core lists — so no hint ever tells a model to run what the binary does not ship.
+//! Every command a prompt or a hint names exists in the build: a `mnemorph …` command written in
+//! backticks anywhere in the shipped sources is one `mnemorph --help` lists, and a `mnemorphd …`
+//! one is one the core's help lists — so no hint ever tells a model or the human to run what the
+//! binary does not ship.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -77,29 +78,30 @@ fn listed(help: &str, prog: &str) -> BTreeMap<String, BTreeSet<String>> {
 #[test]
 fn every_command_a_prompt_names_exists_in_the_build() {
     let root = repo();
-    let cli = std::fs::read_to_string(root.join("packages/cli/src/args.ts")).unwrap();
-    let core = std::fs::read_to_string(root.join("crates/mnemorphd/src/main.rs")).unwrap();
-    let cli_help = cli
-        .split("export const HELP = `")
-        .nth(1)
-        .unwrap()
-        .split('`')
-        .next()
-        .unwrap();
-    let core_help = core
-        .split("const HELP: &str = \"")
-        .nth(1)
-        .unwrap()
-        .split("\";")
-        .next()
-        .unwrap();
-    let mut known = listed(cli_help, "mnemorph");
-    for (cmd, subs) in listed(core_help, "mnemorphd") {
-        known.entry(cmd).or_default().extend(subs);
-    }
+    let help_of = |file: &str, opening: &str| {
+        let text = std::fs::read_to_string(root.join(file)).unwrap();
+        text.split(opening)
+            .nth(1)
+            .unwrap()
+            .split("\";")
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    let cli_help = help_of(
+        "crates/mnemorph-tui/src/cli.rs",
+        "pub const HELP: &str = \"",
+    );
+    let core_help = help_of("crates/mnemorphd/src/main.rs", "const HELP: &str = \"");
+    let cli = listed(&cli_help, "mnemorph");
+    let core = listed(&core_help, "mnemorphd");
     assert!(
-        known.contains_key("memory") && known.contains_key("q"),
-        "{known:?}"
+        cli.contains_key("run") && cli.contains_key("resume"),
+        "{cli:?}"
+    );
+    assert!(
+        core.contains_key("memory") && core.contains_key("q"),
+        "{core:?}"
     );
     let mut files = Vec::new();
     sources(&root.join("crates"), &mut files);
@@ -108,7 +110,7 @@ fn every_command_a_prompt_names_exists_in_the_build() {
     for f in &files {
         let text = std::fs::read_to_string(f).unwrap_or_default();
         for (n, line) in text.lines().enumerate() {
-            for prog in ["`mnemorph ", "`mnemorphd "] {
+            for (prog, known) in [("`mnemorph ", &cli), ("`mnemorphd ", &core)] {
                 // A command is a short backticked span; a template string of prose that opens on
                 // the program's name (`mnemorphd could not start: ${e}`) is none.
                 let spans: Vec<&str> = line

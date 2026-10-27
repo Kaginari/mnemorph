@@ -8,7 +8,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid';
 export default withMermaid(
   defineConfig({
     title: 'Mnemorph',
-    description: 'An agent harness grown from isekai: Rust core, TypeScript CLI and board.',
+    description: 'An agent harness grown from isekai: a Rust core and terminal app, a TypeScript SDK and board.',
     srcDir: '../docs',
     rewrites: { 'README.md': 'index.md' },
     // Local-only notes (ignored by git) never reach the site.

@@ -2,8 +2,8 @@
 
 - **Race:** slime
 - **Reports to:** orc-clients
-- **Territory:** packages/cli/
-- **Verify:** `pnpm --filter @mnemorph/cli test`
+- **Territory:** crates/mnemorph-tui/
+- **Verify:** `cargo nextest run -p mnemorph-tui`
 
 ## Traits
 

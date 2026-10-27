@@ -4,7 +4,7 @@
 //! wins — no lock file, no database.
 //!
 //! The file is `.mnemorph/shared/queue.jsonl`, harness soil, ignored by git: the queue belongs to
-//! one machine. Every line the harness or the human's `mnemorph q` writes is written again to a
+//! one machine. Every line the harness or the human's `mnemorphd q` writes is written again to a
 //! witness under the human's state directory, out of every command's reach; when a body's command
 //! has touched the queue, the tripwire puts it back keeping only the lines the witness holds.
 

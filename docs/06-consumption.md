@@ -148,7 +148,7 @@ Currency caps convert through the same table; a model with no known price is sti
   never exceed what the parent holds.
 - **Who gives.** Every slice comes out of the giver's own envelope: what a parent gives a child it
   can no longer spend itself, and what the child spends counts as the parent's. Work no body owns
-  — an order the wake runs, one the human added with `mnemorph q` — draws from the session's
+  — an order the wake runs, one the human added with `mnemorphd q` — draws from the session's
   shared pool, the envelope itself, under the same clamps.
 - **The grant is the giver's judgment, inside the harness's bounds.** The parent proposes its
   child's slice (`budget_wt`, default half of what it has left, within the ceiling); the harness

@@ -14,7 +14,7 @@ task passes when its `verify.py` — kept outside the world, so no body can edit
 ## Running it
 
 ```sh
-just check                      # builds target/debug/mnemorphd and the CLI
+cargo build -p mnemorph-tui      # builds target/debug/mnemorph, which runs each ask
 python3 bench/run.py --check    # every task fails untouched: no model, no key
 python3 bench/run.py            # all 60 runs on the default free model
 python3 bench/run.py --tasks 01,02 --modes solo --limit 2
@@ -51,7 +51,7 @@ extra or recorded twice is an error, never dropped; `--partial` reports a run st
 and names what is missing, but an extra or doubled run is an error even then. A task succeeds
 only when its verify passed *and* the run ended answered, and a hierarchy run ran below the
 throne. Every other run is told by why it ended — its `ending`, recorded by `run.py`, or for an
-older row the `mnemorph: <ending>` line the CLI writes to stderr:
+older row the `mnemorph: <ending>` line `mnemorph run` writes to stderr:
 
 | Cause | Ending | Counts |
 |---|---|---|

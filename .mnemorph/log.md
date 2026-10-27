@@ -5749,3 +5749,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   id from its record's root cause; a mismatch reads back `forged id:` as `@?`; only it makes a
   `Proven`. The file rule is ASCII: no absolute, `.`, `..` or empty segment.
 - **Learned:** a fingerprint that the body states is only a shape; the harness must derive it.
+
+---
+
+### [2026-10-27T22:04:07+01:00] rimuru — one `mnemorph`: the Rust binary, the TypeScript CLI retired
+- **Done:** crate `mnemorph-tui` builds the binary `mnemorph`: no subcommand (or `chat`) opens the
+  terminal app; `resume <run|last>`; `status`; `run "<ask>"` asks once through the same session
+  and end gate (`headless`: stderr progress escaped, the answer on stdout, `--json` event lines
+  then a `result` line, exits 0/1/2/3, gated acts denied unless `--gate-tty`, `--core` ignored).
+  `mnemorphd` keeps the server and the admin commands; hints now name `mnemorphd` for them, and
+  the commands test checks each program against its own help. `packages/cli` deleted, `tsup`
+  dropped; slime-cli's territory is the binary's crate; the in-repo bench runs `mnemorph run`.
+- **Learned:** worktrees sharing one `CARGO_TARGET_DIR` can reuse another checkout's artifact of
+  a path crate (same name, newer mtime): touching the sources forces the rebuild.

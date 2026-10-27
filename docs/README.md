@@ -1,7 +1,8 @@
 # Mnemorph — the book
 
 Mnemorph is the agent harness that grows out of isekai: the same nine natures, the same wire,
-rebuilt with a Rust core and a TypeScript CLI and board. The races are **code**, not
+rebuilt as a Rust core with a Rust terminal app, `mnemorph`, plus a TypeScript SDK for the web
+board. The races are **code**, not
 configuration: what each one may do, whom it answers to, how it is scored and how it ascends is
 compiled into the binary.
 

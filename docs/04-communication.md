@@ -287,7 +287,7 @@ flowchart LR
     SQ -->|"the wake claims each<br/>for the body it names"| T["the parent's next turn:<br/>dispatch, re-checked"]
     Q --> T
     W --> T
-    TQ["mnemorph q · the queue tool"] <--> SQ
+    TQ["mnemorphd q · the queue tool"] <--> SQ
     classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
     class H human
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
@@ -303,7 +303,7 @@ flowchart LR
 **In plain words.** A session never loses what arrives while it works. What you type during a
 turn waits its turn; what you `/send` reaches a running body at its next tool step; a background
 body's report wakes the body that sent it. Work ordered down the ranks (`@$` lines) is written to a
-shared queue on disk that every session, the terminal, the board and `mnemorph q` can see — so a
+shared queue on disk that every session, the terminal, the board and `mnemorphd q` can see — so a
 restart, a second session or a lost report never drops an order, and nobody has to wonder what is
 waiting.
 
@@ -320,7 +320,7 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 **The shared work queue** is the durable form of the order book.
 
 - One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf: harness soil, ignored by git, so
-  the queue belongs to one machine. It moves only through the harness and the human's `mnemorph q`;
+  the queue belongs to one machine. It moves only through the harness and the human's `mnemorphd q`;
   each line they write is written again to a witness under the human's state directory
   (`$XDG_STATE_HOME/mnemorph/queue/`), out of every command's reach. A body's command that touches
   the queue has it rebuilt from what it held and what the witness gained since, in the witness's
@@ -350,7 +350,7 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
   said as it runs and opens the session's next turn. The throne's own work waits for the human's
   turn; a turn the human interrupted wakes nothing, an Esc during the wake stops it, and a spent
   budget leaves every order waiting.
-- **Doors.** `mnemorph q list [--all] | show | add [--for] [--rank] | claim [--as] | touch | requeue
+- **Doors.** `mnemorphd q list [--all] | show | add [--for] [--rank] | claim [--as] | touch | requeue
   | close [--drop]` for the human (`--json`; a refusal exits 2); a `queue` tool on every shelf for
   bodies — reading is free, moving takes only what the body holds or stands over — and a body never
   closes or drops its own order: its report settles what it ran, and only a body above it discharges
@@ -361,9 +361,12 @@ Queue and send are two lanes, never one inbox: a queued line must not ride the r
 
 ### The client protocol
 
-`mnemorphd` exposes one JSON-RPC 2.0 API. The CLI reaches it over stdio, the board over a loopback
-WebSocket. Types are defined in Rust and generated into TypeScript (`@mnemorph/protocol`), so the
-clients cannot drift.
+`mnemorphd` exposes one JSON-RPC 2.0 API. The TypeScript SDK reaches it over stdio, the board over
+a loopback WebSocket. Types are defined in Rust and generated into TypeScript
+(`@mnemorph/protocol`), so the clients cannot drift. The terminal app, `mnemorph`, needs no wire:
+it hosts the session in its own process and draws the same events, made by the same function
+(`mnemorph_server::events`); its gate cards answer the same questions `gate/ask` carries, and
+`mnemorph run --json` prints those events as JSON lines.
 
 ```mermaid
 ---
@@ -374,26 +377,26 @@ config:
     wrappingWidth: 360
 ---
 sequenceDiagram
-    participant CLI as mnemorph CLI
+    participant C as SDK client
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
-    CLI->>D: initialize {clientInfo}
-    D-->>CLI: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox, body}
-    CLI->>D: session/prompt {text}
+    C->>D: initialize {clientInfo}
+    D-->>C: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox, body}
+    C->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
-    D--)CLI: event/turnStarted
-    D--)CLI: event/textDelta …
-    D--)CLI: event/dispatch {from: rimuru, to: elf-engine}
-    D--)CLI: event/usage {tokens, cacheRead, usd, spentWt}
+    D--)C: event/turnStarted
+    D--)C: event/textDelta …
+    D--)C: event/toolCall {id, name, input} — body: elf-engine, for a body below
+    D--)C: event/usage {tokens, cacheRead, usd, spentWt}
     end
     rect rgba(212,175,55,0.22)
-    D->>CLI: gate/ask {body, race, class, act, why, outside, plan}
-    CLI-->>D: {allow: true}
+    D->>C: gate/ask {body, race, class, act, why, outside, plan}
+    C-->>D: {allow: true}
     end
     rect rgba(22,163,74,0.13)
-    D--)CLI: event/gateVerdict {passed, verdict, changed, failures, unverified}
-    D--)CLI: event/turnEnded {ending: answered}
+    D--)C: event/gateVerdict {passed, verdict, changed, failures, unverified}
+    D--)C: event/turnEnded {ending: answered}
     end
 ```
 
@@ -433,40 +436,32 @@ order and once each (`resync()` replays from the last `seq` it saw, dropping wha
 had), answers `gate/ask` with the handler the interface gives it — denying when there is none —
 and fails whatever waits when the core's end closes, with the reason the core gave.
 
-**The terminal client.** `mnemorph` starts the core and opens a session in this world; `mnemorph
-run "<ask>"` asks once, prints the answer on stdout and the calls and the ending on stderr, and
-exits 0 only when the body answered. `run` reads its ask from stdin only when none is on the
-command line (`run` or `run -`), so an inherited open pipe never holds it, and it asks no one:
-an act that needs the human is denied, and the denial says so. `--help` and `--version` answer
-before any world is looked for; a core that will not start says why on the terminal before
-anything is drawn, and one that goes away mid-session is said on the terminal, with exit code 1.
-In a session the transcript goes to the terminal's own scrollback, printed once per item and
-again whole when the width changes — the screen is cleared, the scrollback above kept. A
-paragraph leaves the live region as soon as it is finished, and what still streams shows only
-the lines the terminal has room for, so the live region never outgrows it. Below the transcript
-live the text as it streams, the
-calls that run, the lines waiting their turn, an approval when one is asked, the input, and the
-status line — model, spend (`unpriced` when the price tables do not know the model), context
-against the stress line, the cache's share, and what the human's caps leave
-([consumption](06-consumption.md)); before the first call it says nothing of spend. A tool call
-shows as soon as it starts, before its input has streamed. **`mnemorph status`** — and `/status`
-in a session — prints the build's version and commit, the core's, where the provider's key comes
-from (its variable and the file that names it, never the value), the sandbox actually in force
-(or `none — <reason>`) and what the caps leave; the hello carries the core's part (`key`,
-`sandbox`). **`mnemorph onto owner <path>...`** asks the core who owns each path, by which rule
-and claim ([ontology](09-ontology.md#ownership-one-function)), with no session and no key.
-**Enter** sends, and while a turn runs the line
-waits its turn; **Alt+Enter** (Shift+Enter where the terminal reports it) starts a new line;
-**`/send <text>`** steers the turn that runs — `session/send`, refused when nothing runs, the
-text reaching the body after its next tool step as the human's, and said to the human when the
-turn ends first; **Esc** stops the turn; **Ctrl+C** stops the turn and denies an open approval, or quits when
-nothing runs — within a second, whether the core answers or not; **↑ ↓** walk the
-history. An approval is chosen with **y** or **n** and confirmed with **Enter**, so a key typed as
-the box appears approves nothing; **Esc** denies it; while it is open, keys typed and pastes are dropped; and one
-whose turn ended unanswered is denied and cleared. The cursor moves by whole characters, an
-emoji as one. Every
-printable character is text while the input has focus, and keys that arrive together are taken
-in order, a carriage return among them as Enter.
+**The terminal client.** `mnemorph` opens a session in this world, hosted in its own process,
+and draws it in the terminal ([the terminal UI](05-architecture.md#the-terminal-ui)); `mnemorph
+run "<ask>"` asks once without the app, prints the answer on stdout and the calls and the ending
+on stderr, and exits 0 only when the body answered and the end gate passed
+([`mnemorph run`](05-architecture.md#mnemorph-run)). `run` reads its ask from stdin only when none
+is on the command line (`run` or `run -`) and stdin is no terminal, and it asks no one: an act that
+needs the human is denied, and the denial says so, unless `--gate-tty` puts it to them on the
+terminal. `--help` and `--version` answer before any world is looked for; a session that will not
+open says why in plain text before the terminal is taken. The app shows the transcript — the text
+as it streams, the calls that run with their cards and diffs, the lines waiting their turn, an
+approval when one is asked — beside a sidebar of vitals, memory, files and bodies, over the input
+and the status line: model, spend (`unpriced` when the price tables do not know the model),
+context against the stress line, the cache's share, and what the human's caps leave
+([consumption](06-consumption.md)). A tool call shows as soon as it starts, before its input has
+streamed. **`mnemorph status`** prints the build's version, the world, the model and its
+provider, where the provider's key comes from (its variable and the file that names it, never the
+value), the sandbox actually in force (or `none — <reason>`), what the caps leave and the
+configuration's holes. **`mnemorphd onto owner <path>...`** asks the core who owns each path, by
+which rule and claim ([ontology](09-ontology.md#ownership-one-function)), with no session and no
+key. **Enter** sends, and while a turn runs the line waits its turn; **Alt+Enter** starts a new
+line; **`/send <text>`** steers the turn that runs, the text reaching the body after its next tool
+step as the human's; **Esc** stops the turn; **Ctrl+C** stops the turn, or quits when nothing
+runs; **↑ ↓** walk the history. An approval is chosen with **1** (**y**), **2** (**n**) or **3**
+(no, with a reason) and confirmed with **Enter**, so a key typed as the card appears approves
+nothing; one whose turn ended unanswered is denied and cleared. The cursor moves by whole
+characters, an emoji as one.
 
 Rules:
 
@@ -490,5 +485,5 @@ Rules:
   word: no strain, no failure) and resumes at that act when the human answers — an overnight run
   waits instead of dying.
 - The board's WebSocket accepts only `Host: 127.0.0.1|localhost`, checks `Origin`, and requires
-  the per-launch token the CLI prints — reads included, not only acts.
+  the per-launch token `mnemorphd` prints — reads included, not only acts.
 - Protocol changes are versioned; the generated TypeScript is checked in and CI fails on a diff.

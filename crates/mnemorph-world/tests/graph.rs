@@ -101,7 +101,7 @@ fn every_soil_admits_exactly_what_own_gives_it_to_write() {
         }
     }
     assert_eq!(
-        own(&roster, "packages/cli/src/app.tsx"),
+        own(&roster, "crates/mnemorph-tui/src/cli.rs"),
         Owner::Creature("slime-cli".into())
     );
 }
