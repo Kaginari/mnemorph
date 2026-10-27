@@ -91,6 +91,10 @@ fn every_outward_row_names_its_acts() {
 
 /// The kinds the classifier reads, command by command: what the posts are checked against.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row per command: the table reads best whole"
+)]
 fn outward_acts_by_kind() {
     use OutwardKind::{
         Comment, Deploy, Fetch, Install, Label, Other, Publish, PullRequest, PushBranch, PushTag,

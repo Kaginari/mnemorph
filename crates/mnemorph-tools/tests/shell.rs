@@ -214,6 +214,8 @@ fn bash_runs_inside_the_guard() {
         "cat \"$1\"/.ssh/id_ed25519\n",
     )
     .unwrap();
+    // A write the classifier cannot see: a script's own redirect, to the path it is handed.
+    fs::write(w.world().join("src/sneak.sh"), "echo sneaky > \"$1\"\n").unwrap();
     let cx = |race, gate| {
         Context::new(race, w.world(), &["src"])
             .with_body("kijin-deploy")
@@ -252,7 +254,7 @@ fn bash_runs_inside_the_guard() {
     let o = bash(
         &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
         &format!(
-            "echo new > {}; f={}; echo sneaky > \"$f\"",
+            "echo new > {}; bash src/sneak.sh {}",
             fresh.display(),
             sibling.display()
         ),
@@ -275,7 +277,7 @@ fn bash_runs_inside_the_guard() {
     let o = bash(
         &mut cx(Race::Kijin, Arc::new(Scripted::new([Answer::Approve]))),
         &format!(
-            "echo hi > {}; f={}; echo sneaky > \"$f\"",
+            "echo hi > {}; bash src/sneak.sh {}",
             marker.display(),
             w.root.join("elsewhere").display()
         ),
@@ -773,6 +775,10 @@ fn build_links_scratch_many_grants_and_truncate() {
 /// Each post does its own outward acts and no other: what it does not hold is refused before
 /// the gate is asked, naming the post, the act and the post that holds it.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table per verdict: refused, asked, refused for its words"
+)]
 fn a_kijin_does_only_its_posts_acts() {
     let w = World::new("posts");
     let as_post = |body: &str, gate: Arc<Scripted>| w.cx(Race::Kijin, gate).with_body(body);
