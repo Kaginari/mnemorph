@@ -146,6 +146,22 @@ mnemorph run "<ask>"              # one ask without the app
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
 `housekeep` and `relief` (`mnemorphd --help`).
 
+**Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
+a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
+screen and the loop. `mnemorphd` is for programs that are not Rust — the SDK, the board, an editor
+plugin — which start it as a child and speak JSON-RPC to it; every such client sees the same
+sessions, gate and events. The upkeep commands sit with it because they work on the world's
+records directly, without a session. Both link the same crates (`mnemorph-loop`, `-world`,
+`-races`, `-tools`, `-sandbox`), so a law, a gate or a sandbox rule holds the same in either.
+
+| You want to | Run |
+|---|---|
+| talk to Rimuru | `mnemorph` |
+| ask once from a script or CI | `mnemorph run "<ask>"` |
+| pick up a run that stopped | `mnemorph resume last` |
+| list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
+| connect the SDK or the board | they start `mnemorphd` themselves |
+
 `resume <run|last>` opens the session on a run that stopped instead of a new one, through the
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
 to resume is refused in plain text, before the terminal is taken. `mnemorphd runs` lists them.

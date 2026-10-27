@@ -51,9 +51,19 @@ just docs-dev  # read the book as a website while writing it
 
 ### Install `mnemorph`
 
-`mnemorph` is one Rust binary: the terminal app, and `mnemorph run` for scripts. It hosts the
-session in its own process. `mnemorphd` is the core as a server — the client protocol for the
-SDK and the board — and holds the world's admin commands.
+Mnemorph ships two Rust binaries over the same core. Install both.
+
+| Binary | For | Use it to |
+|---|---|---|
+| `mnemorph` | you, at a terminal, and your scripts | talk to Rimuru in the terminal app (`mnemorph`), ask once without it (`mnemorph run "<ask>"`), pick up a run that stopped (`mnemorph resume`), check the setup (`mnemorph status`) |
+| `mnemorphd` | other programs, and the world's upkeep | serve the client protocol (JSON-RPC over stdio) to the TypeScript SDK and the web board; run the admin commands: `runs`, `memory`, `onto`, `q`, `incident`, `housekeep`, `relief` |
+
+They are two binaries because they answer two kinds of caller. `mnemorph` holds the session in
+its own process, so nothing sits between the screen and the core. `mnemorphd` is the core
+**served**: a program that is not Rust (the SDK, the board, an editor plugin) starts it as a child
+and speaks the protocol to it, so every client sees the same sessions, gate and events. The world's
+upkeep commands live with the server because they read and change the world's records directly,
+without a session. Both share the same crates, so a rule enforced in one is enforced in the other.
 
 ```sh
 cargo install --path crates/mnemorph-tui      # mnemorph, into ~/.cargo/bin
