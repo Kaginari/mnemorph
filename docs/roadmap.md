@@ -18,7 +18,8 @@ flowchart LR
     M3 --> M4["M4<br/>tools + sandbox + gate"]
     M4 --> M4a["M4a<br/>config"]
     M4a --> M5["M5<br/>one body loops"]
-    M5 --> M6["M6<br/>protocol + CLI<br/>🐕 solo dogfood"]
+    M5 --> M5b["M5b<br/>long runs"]
+    M5b --> M6["M6<br/>protocol + CLI<br/>🐕 solo dogfood"]
     M6 --> M7["M7<br/>the world"]
     M7 --> M8["M8<br/>memory + toolbox"]
     M8 --> M9["M9<br/>👹 Kijin"]
@@ -29,14 +30,19 @@ flowchart LR
     M12 --> M13["M13<br/>integrations"]
     M13 --> M14["M14<br/>1.0"]
     classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
-    class D,M0,M1,M2,M3 good
+    class M0,M1,M2,M3,M4,M4a,M5,M5b,M6,M8 good
+    classDef doing fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
+    class D,M7 doing
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
-    class M4,M4a,M5,M6,M7,M8,M11,M12,M13,M14 step
-    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:2px,color:#3d0710
+    class M11,M12,M13,M14 step
+    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:3px,stroke-dasharray:6 3,color:#3d0710
     class M9 kijin
-    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:2px,color:#22114a
+    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:3px,stroke-dasharray:6 3,color:#22114a
     class M10 dark
 ```
+
+Green rungs are built; amber and dashed ones are under way; blue ones are ahead. The
+[milestones](https://github.com/Kaginari/mnemorph/milestones) hold each rung's open issues.
 
 ## In plain words
 
@@ -80,6 +86,10 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 - one diagram checked in a GitHub preview: if GitHub ignores the hand-drawn look, the look is set
   in the docs site's config instead and the pages keep plain Mermaid;
 - canvases reviewed like code: a `.tldraw` file can carry document scripts that run when opened.
+
+Open: the canvases ([#22](https://github.com/Kaginari/mnemorph/issues/22)), the Oni and Arch Dark
+Elf card art ([#23](https://github.com/Kaginari/mnemorph/issues/23)) and the published names
+([#19](https://github.com/Kaginari/mnemorph/issues/19)).
 
 **Exit:** you say the book is right. No code before this.
 
@@ -227,6 +237,10 @@ build Mnemorph in solo mode.
      naming an id: keyed facts compared by code, anchors that drift, the parent's triage on
      collision.
 
+Open: decisions with Jev first and the LLM in its place
+([#244](https://github.com/Kaginari/mnemorph/issues/244)), and the paired measurement of solo
+against the hierarchy ([#96](https://github.com/Kaginari/mnemorph/issues/96)).
+
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,
 the queue or scratch; an ontology fixture with an overlap, a loop in the chain, a contested fact
@@ -244,7 +258,7 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
 1. **Notes as events.** The trace schema (polarity, salience, confidence, status, source), the
    append-only event log with its fold, a tolerant reader, `merge=union`. Short, personal and
    shared tiers on top; personal notes follow their creature through split and retirement.
-2. **Recall.** tantivy BM25 ranked by relation, the priors, the dissent seat and the declared
+2. **Recall.** BM25 ranked by relation, the priors, the dissent seat and the declared
    omissions; silent on queries with no content words; never rebuilt inline, healed once at boot.
 3. **The write rule.** `Note<Proposed>` and `Note<Grounded>` as types; `@U` landing personal and
    proposed; promotion to shared by the four routes (checked, accepted, corroborated, confirmed),
@@ -286,6 +300,11 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
 - A rolled-back or corrected act is an incident until four receipts close it — undone, journal
   corrected, downstream told, a lesson — its envelope suspended and its target refused meanwhile.
 
+Built: typed outward acts (`PushNewBranch`, `AddLabel`, `Comment`) and the `outward` tool, the
+plan fingerprint an approval binds to, receipts with a read-only probe, the act runner with
+request keys and the probe of a cut act, per-post journals, and closure on four receipts. In
+progress: the typed pull-request act, so a branch and its pull request take one approval.
+
 **Exit:** a branch pushed and a PR opened through `kijin-forge` with one gate prompt; a cut run
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
@@ -320,6 +339,9 @@ In order:
 10. ledger: findings, upheld and precision folds per creature
 11. the law audit's checks ([#104](https://github.com/Kaginari/mnemorph/issues/104)) and the
     gold-set hooks ([#106](https://github.com/Kaginari/mnemorph/issues/106))
+
+Built: rungs 1 to 3 — the specialities, each one's attack classes compiled with its surfaces,
+`route`, and the wire's finding fields.
 
 **Exit:** on a seeded vulnerable fixture repo, the routed specialities find the planted flaws
 with witnesses, each verified by a fresh verifier, seal, and the seal lifts only when the fix

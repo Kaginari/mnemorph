@@ -280,8 +280,8 @@ a learned value model ([M11](roadmap.md)) will train on:
 - how many files it wrote, and the **lines** it added and removed, counted as a multiset against
   what the files held before, so a line moved within a file is neither (a file that was not text
   had none to remove);
-- an **edit miss**: an edit whose `old_string` was not in the file, the body editing text it had
-  not read (or, in a multiedit, text an earlier edit of the call had changed);
+- an **edit miss**: an edit whose `old_string` matched nowhere in the file — not exactly, and not
+  in one place on a forgiving rung ([lessons](lessons.md)) — the body editing text it had not read (or, in a multiedit, text an earlier edit of the call had changed);
 - the **bench** it ran, if any, and how that run counted: green, red, muted, read green or read red.
 
 The beat is for the record only: the conversation rebuilt from the journal ignores it, and no
