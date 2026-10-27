@@ -421,8 +421,23 @@ flowchart LR
   `sandbox.allow_unguarded = true` in their local or global file (never the tracked one); the
   status line then reads `none — <reason>`.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
-    (`.cargo`, `.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
-    (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names. Writes: the world, the command's temporary directory
+    (`.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
+    (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names, nor a
+    folder above one: landlock cannot hide a path inside a tree it reads. So a toolchain tree
+    that holds a credential is granted part by part: of `.cargo`, `bin`, `registry`, `git` and
+    its config (not `credentials.toml`); of `.cache`, the named caches of uv, pip, pre-commit,
+    Go, Node, pnpm, TypeScript, Playwright, Hugging Face's models, the bench's interpreters and a
+    few more (not the Hugging Face token or git's credential cache); of `.config/git`, its
+    `config`, `ignore` and `attributes` (not `credentials`); `.m2/repository`, `.gradle/caches`
+    and `.gradle/wrapper` (not `settings.xml` or `gradle.properties`); and each Node nvm
+    installed, its `bin`, `lib` and `include` (not `etc/npmrc`). A cache not named is
+    unreadable. A toolchain path that is a link resolving onto, inside or above a credential
+    path grants nothing; Landlock resolves links again when a file is opened, so a link inside a
+    granted cache leads nowhere either. Of `~/go`, only `bin` and `pkg` (not `src`, the human's
+    projects). Some configs stay readable because their tools cannot run without them, and each
+    can hold a secret: `.cargo/config.toml` (a `[registry] token`), the remote URL in each cargo
+    git dependency's `.cargo/git/db/*/config`, and `.gitconfig` (an `http.extraHeader` bearer
+    token) — keep such tokens in the credential files instead. Seatbelt reads the same list and denies the credential paths besides. Writes: the world, the command's temporary directory
     inside it, and a few devices — for solo. A commissioned creature's commands are granted
     exactly what its soil admits, and the rest of the world is read-only to them: landlock can
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a
