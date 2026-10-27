@@ -344,7 +344,7 @@ async fn an_unchanged_re_read_is_pointed_at_once_then_shown() {
     );
 }
 
-/// A clock death gets one short turn, without tools, to say what it learned.
+/// A clock death gets one short turn, told to call no tool, to say what it learned.
 #[tokio::test]
 async fn a_clock_death_salvages() {
     let w = World::new("clock");
@@ -367,7 +367,10 @@ async fn a_clock_death_salvages() {
         }
     );
     let r = &model.requests()[0];
-    assert_eq!(r.tools, [] as [mnemorph_provider::Tool; 0]);
+    assert!(
+        !r.tools.is_empty(),
+        "the salvage turn sends the tools as any turn does: the cached prefix holds"
+    );
     assert_eq!(r.max_tokens, 4096);
 }
 
@@ -1614,7 +1617,7 @@ async fn a_newer_revision_is_forced_into_a_locked_in_recall() {
     // only a revision that still misses (pathology.rs's own tests hold that case).
 }
 
-/// A full context drains instead of dying: one turn without tools, its `@U` lines kept as the
+/// A full context drains instead of dying: one turn told to call no tool, its `@U` lines kept as the
 /// body's proposed notes, then the checkpoint.
 #[tokio::test]
 async fn a_full_context_drains_its_unsaid_into_memory() {
@@ -1643,7 +1646,11 @@ async fn a_full_context_drains_its_unsaid_into_memory() {
         "{salvage}"
     );
     let drain = &model.requests()[1];
-    assert_eq!(drain.tools, [] as [mnemorph_provider::Tool; 0]);
+    assert_eq!(
+        drain.tools,
+        model.requests()[0].tools,
+        "the drain turn sends the tools as any turn does: the cached prefix holds"
+    );
     assert_eq!(drain.max_tokens, 4096);
     let notes = mnemorph_memory::fold(
         &mnemorph_memory::read(
@@ -1936,5 +1943,169 @@ async fn recall_reads_its_configured_weights() {
     assert!(
         !first(Some(9.0)).await.contains("@M "),
         "an unreachable floor recalls nothing"
+    );
+}
+
+/// A scripted model that sends the human's line down the run's send lane while its `at`-th call
+/// is in flight, as a human typing during a turn would.
+struct Steered {
+    script: ScriptedModel,
+    steer: std::sync::OnceLock<mnemorph_loop::Steer>,
+    at: usize,
+    line: &'static str,
+}
+
+impl mnemorph_loop::Model for Steered {
+    fn provider(&self) -> &'static str {
+        "scripted"
+    }
+
+    fn complete<'a>(
+        &'a self,
+        request: &'a mnemorph_provider::Request,
+        on: &'a mut (dyn FnMut(mnemorph_provider::Event) + Send),
+    ) -> mnemorph_loop::model::Completion<'a> {
+        if self.script.requests().len() == self.at
+            && let Some(steer) = self.steer.get()
+        {
+            steer.lock().unwrap().push_back(self.line.to_owned());
+        }
+        self.script.complete(request, on)
+    }
+}
+
+/// Where each request rewrote the one before it — `(request, block)` — after checking every one
+/// sends the system prompt and the tools byte-identical.
+fn moves_between(requests: &[mnemorph_provider::Request]) -> Vec<(usize, usize)> {
+    let fps = |r: &mnemorph_provider::Request| mnemorph_loop::compact::fingerprints(&r.messages);
+    let mut moves = Vec::new();
+    for (i, pair) in requests.windows(2).enumerate() {
+        let (a, b) = (encode(&pair[0]).unwrap(), encode(&pair[1]).unwrap());
+        assert_eq!(
+            b["system"],
+            a["system"],
+            "request {} rewrote the system prompt",
+            i + 1
+        );
+        assert_eq!(
+            b["tools"],
+            a["tools"],
+            "request {} rewrote the tools",
+            i + 1
+        );
+        if let Some(at) = mnemorph_loop::compact::moved(&fps(&pair[0]), &fps(&pair[1])) {
+            moves.push((i + 1, at));
+        }
+    }
+    moves
+}
+
+/// #38: over a session of many turns — a steering line, a Mind worn, a model fallback and a
+/// reloaded configuration between asks, then a fold — every request sends the system prompt and
+/// the tools byte-identical and only appends to the one before, except at the fold, which the
+/// prefix beat explains. Each change rides as an appended message.
+#[tokio::test]
+async fn a_session_of_changes_only_appends_except_at_its_fold() {
+    let w = World::new("append-many");
+    let big = "a line of the file that the body reads, long enough to fold\n".repeat(40);
+    for f in ["f1.txt", "f2.txt", "f3.txt", "f4.txt"] {
+        fs::write(w.world().join(f), &big).unwrap();
+    }
+    fs::create_dir_all(w.world().join(".mnemorph/minds")).unwrap();
+    fs::write(
+        w.world().join(".mnemorph/minds/light.md"),
+        "# Light\n\n- **Shared:** yes\n\nThe light Mind's know-how.\n",
+    )
+    .unwrap();
+    let model = Arc::new(Steered {
+        script: ScriptedModel::new([
+            tool("t1", "read", json!({"path": "f1.txt"})),
+            tool("t2", "read", json!({"path": "f2.txt"})),
+            tool("t3", "wear", json!({"mind": "light"})),
+            tool("t4", "read", json!({"path": "f3.txt"})),
+            answer("first"),
+            tool_with("t5", "read", json!({"path": "f4.txt"}), usage(2_000)),
+            tool("t6", "glob", json!({"pattern": "*.txt"})),
+            answer("second"),
+        ]),
+        steer: std::sync::OnceLock::new(),
+        at: 1,
+        line: "keep it short",
+    });
+    let mut setup = w.setup(Arc::new(ScriptedModel::default()));
+    setup.model = model.clone();
+    setup
+        .tools
+        .push(Box::new(mnemorph_loop::wear_tool::WearTool));
+    let mut run = Run::new(
+        body(),
+        Limits {
+            stress_tokens: 3_000,
+            ..limits()
+        },
+        setup,
+    );
+    model.steer.set(run.steer()).unwrap();
+    assert_eq!(
+        ask(&mut run, "read the files").await,
+        Ending::Answered("first".into())
+    );
+    run.switch_model("claude-haiku-5-5", "the provider is overloaded");
+    run.update("the configuration reloaded: `limits.steps` is 50");
+    assert_eq!(
+        ask(&mut run, "go on").await,
+        Ending::Answered("second".into())
+    );
+
+    let requests = model.script.requests();
+    assert_eq!(requests.len(), 8, "eight turns");
+    let moves = moves_between(&requests);
+    let said =
+        |r: &mnemorph_provider::Request, what: &str| format!("{:?}", r.messages).contains(what);
+    assert!(
+        said(&requests[2], "keep it short"),
+        "the steering line rides"
+    );
+    assert!(
+        said(&requests[3], "light Mind's know-how"),
+        "the Mind rides"
+    );
+    assert!(said(&requests[5], "claude-haiku-5-5") && said(&requests[5], "50"));
+    assert_eq!(requests[4].model, "claude-sonnet-5-5");
+    assert_eq!(
+        requests[5].model, "claude-haiku-5-5",
+        "the fallback rides the model field"
+    );
+    assert_eq!(moves.len(), 1, "one move, the fold: {moves:?}");
+    assert_eq!(moves[0].0, 6, "the fold is the only move: {moves:?}");
+    assert!(
+        said(&requests[6], "[folded:"),
+        "request 6 is the folded one"
+    );
+    let beats = w.journal().read().unwrap().rows;
+    let prefix: Vec<(usize, String, usize)> = beats
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Prefix { at, why, stripped } => Some((*at, why.clone(), *stripped)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(prefix.len(), 1, "{prefix:?}");
+    assert_eq!(
+        prefix[0].1,
+        mnemorph_loop::FOLD,
+        "the move says it was a fold"
+    );
+    assert!(
+        !beats
+            .iter()
+            .any(|b| matches!(b, Beat::Warning { text } if text.contains("cached prefix moved"))),
+        "nothing moved the prefix unexplained"
+    );
+    // The changes are journaled where they were said: a resume rebuilds the same conversation.
+    let rebuilt = conversation(&beats);
+    assert_eq!(
+        mnemorph_loop::compact::fingerprints(&rebuilt),
+        mnemorph_loop::compact::fingerprints(run.messages())
     );
 }
