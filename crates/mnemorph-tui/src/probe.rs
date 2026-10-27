@@ -22,7 +22,8 @@ use crate::kit::pixels::{self, Caps, Choice, Replies};
 pub const TIMEOUT: Duration = Duration::from_millis(200);
 
 /// The queries, DA1 last.
-pub const QUERIES: &str = "\x1b[>0q\x1b[16t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
+pub const QUERIES: &str =
+    "\x1b[>0q\x1b[16t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[?1;1;0S\x1b[c";
 
 /// A terminal to ask: send bytes, then wait up to a while for some back.
 pub trait Tty {
