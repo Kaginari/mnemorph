@@ -292,13 +292,38 @@ only once the human approves it, and its incident closes only on four receipts.
 
 ### M10 — Dark Elf · M
 
-- Diff challenge on risk surfaces, offline CVE audit over the scout's mirror, secret scanning,
-  rule-pack static analysis, threat models, the law audit.
-- The witness rule (finding ids, coverage of the cited line), seals as gated acts, frozen
-  witnesses, the contest path, expiry, and the automatic challenge on risk surfaces.
+- Six specialities born like Kijin posts — `dark-elf-harness`, `dark-elf-agent`,
+  `dark-elf-supply`, `dark-elf-secrets`, `dark-elf-web`, `dark-elf-law` — each with its surfaces
+  and a playbook of attack classes compiled into the law, and the plain `dark-elf` generalist for
+  threat models and cross-surface attack chains ([races](02-races.md#-dark-elf--the-adversary)).
+- Diff challenge routed by the written paths to the specialities they touch, offline CVE audit
+  over the scout's mirror, secret scanning, rule-pack static analysis, threat models, the law
+  audit.
+- The finding contract — a line-free root-cause fingerprint, `@? nv` for what needs validation,
+  severity capped at demonstrated impact — a coverage ledger per audit, and a fresh verifier
+  before a finding counts or a seal is proposed.
+- The witness rule (coverage of the cited line), seals as gated acts, frozen witnesses, the
+  contest path, expiry, and the automatic challenge on risk surfaces.
+- Scores and ascension per speciality.
 
-**Exit:** on a seeded vulnerable fixture repo, the Dark Elf finds the planted flaws with
-witnesses, seals, and the seal lifts only when the fix includes the witness.
+In order:
+
+1. docs: specialities, routing, the finding and coverage contract
+2. races: `Speciality`, `of`, surfaces, `route`
+3. wire: the line-free fingerprint, `rec:`, `@? nv`
+4. proving: the finding record and its validator
+5. proving: the coverage ledger and its validator
+6. races: the six compiled playbooks
+7. loop: challenge routing from the reserve
+8. loop: independent verification
+9. test: the seeded fixture repository
+10. ledger: findings, upheld and precision folds per creature
+11. the law audit's checks ([#104](https://github.com/Kaginari/mnemorph/issues/104)) and the
+    gold-set hooks ([#106](https://github.com/Kaginari/mnemorph/issues/106))
+
+**Exit:** on a seeded vulnerable fixture repo, the routed specialities find the planted flaws
+with witnesses, each verified by a fresh verifier, seal, and the seal lifts only when the fix
+includes the witness.
 
 ### M11 — Value, evolution, ascension · M
 

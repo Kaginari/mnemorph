@@ -231,7 +231,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | `write` | change files inside the world — including deleting or renaming inside the writer's own soil; whatever it takes away is kept in the attic first | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
 | `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world — and any outward act whose undo the harness cannot derive | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
-| `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |
+| `dispatch` | commission another body | Rimuru, Elf, Orc, and their ascended forms (High Elf, High Orc; see Ascension) |
 | `seal` | propose freezing landings on a territory | Dark Elf, Arch Dark Elf — a seal always takes the human's confirm |
 
 A tool call whose class is not on the body's shelf is refused **before it runs**, and the
@@ -279,8 +279,10 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
   rule meant to reach other bodies' prompts — changes only as a diff the human applies.
 - **Challenge duty.** When a landing's written paths match a risk surface (auth, crypto,
   deserialisation, process execution, path handling, network input, dependency manifests), the
-  gate's verdict reads `PASS (challenge pending)` and the harness opens a Dark Elf commission
-  itself, from a reserved share of the session envelope. Rimuru cannot skip it.
+  gate's verdict reads `PASS (challenge pending)` and the harness opens the challenge itself,
+  from a reserved share of the session envelope: one commission for each Dark Elf speciality
+  whose surfaces the written paths touch, and only those ([routing](#-dark-elf--the-adversary)).
+  Rimuru cannot skip it, nor choose who answers.
 - **Holds** the session's budget envelope and carves each commission's slice from it.
 - **Turn.** Read the ask → if ambiguous, ask the human → plan deck → dispatch (in parallel when
   the lanes' territories are disjoint) → fold reports → answer in full human language.
@@ -303,7 +305,8 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
 - **Parallelism.** Two Orcs run at once only if their territories are disjoint — computed, not
   trusted. An Elf runs its Orcs in the foreground; running them in the background needs
   Rimuru's leave, asked once per commission.
-- **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80.
+- **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80,
+  warn ≥ 50.
 
 ### 🪓 Orc — the domain and its gate
 
@@ -327,7 +330,7 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
 - **Answering a Dark Elf.** A finding on its domain reaches the Orc through Rimuru. The Orc
   either orders the fix, or contests it with `@? contest #<finding-id>: <reason>`, which Rimuru
   puts to the human.
-- **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90.
+- **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90, warn ≥ 70.
 
 ### 💧 Slime — the ground truth of a zone
 
@@ -343,7 +346,7 @@ The full order, and the findings it raises, are in [the ontology](09-ontology.md
 - **Hard rules.** A write outside the zone is refused at the step, naming the owner. Editing or
   deleting a verify line is a hole, never a pass. Deleting or skipping a test fails *tests
   intact*.
-- **Score** `0.6·landRate + 0.3·gateRate − 0.1·holeRate`. Meter: *Landed*, ok ≥ 80.
+- **Score** `0.6·landRate + 0.3·gateRate − 0.1·holeRate`. Meter: *Landed*, ok ≥ 80, warn ≥ 50.
 
 ### 👹 Kijin — the hands that reach outside
 
@@ -577,7 +580,7 @@ act after it `other`.
   checks the real CI state instead of trusting a doc (Nature 9).
 - **Score** `0.5·outwardCleanRate + 0.3·verifyGreenRate + 0.2·landRate`, where
   `outwardCleanRate` = outward acts that completed without rollback or human correction. Meter:
-  *Outward clean*, ok ≥ 90.
+  *Outward clean*, ok ≥ 90, warn ≥ 70.
 
 ### 🌑 Dark Elf — the adversary
 
@@ -587,38 +590,111 @@ act after it `other`.
 prove.*
 
 The Dark Elf challenges the code itself. It is independent of the chain it attacks: it is never
-dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru.
+dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru. It is built in M10
+([roadmap](roadmap.md#m10--dark-elf--m)); until then this section is its specification.
+
+**Specialities.** Dark Elves are born like Kijin posts: six **specialities**, named by the
+creature, each with its surfaces and its attack classes compiled into the law
+(`mnemorph_races::Speciality`). A speciality is read from the name by exact match
+(`Speciality::of`): `dark-elf-agent-2` holds none, and is routed nothing; the roster refuses a
+`dark-elf-` name on another race. The race stays `DarkElf`: the shelf, the soil and the score are
+the race's; the speciality says what it hunts.
+
+| Speciality | Surfaces it is routed (compiled; a world adds its own in its docs) | Witness | Runs (offline) |
+|---|---|---|---|
+| `dark-elf-harness` | the sandbox, the shell and file tools, the classifier, the gate, the act runner, terminal rendering; in a user's world: process execution, path handling, FFI and `unsafe` | a proof-of-concept test | `cargo test` and sanitizers, in the sandbox |
+| `dark-elf-agent` | the wire, commissions and prompts, memory and Minds, providers, MCP | a proof-of-concept test, a recorded cassette | tests |
+| `dark-elf-supply` | lockfiles and manifests, `.github/workflows/`, release config, Dockerfiles | scanner output | `cargo audit` and `osv-scanner` over the scout's mirror; workflow lint |
+| `dark-elf-secrets` | configuration, credentials, redaction, journals, history | scanner output, a proof-of-concept test | a secret scan of the tree and its history |
+| `dark-elf-web` | servers, `packages/protocol`, HTTP and auth in a user's world | a proof-of-concept on loopback | loopback tests |
+| `dark-elf-law` | `log.md`, gate verdicts, envelopes, caps, retries, background work | a proof-of-concept test, a journal check | read-only |
+
+The plain **`dark-elf`** is the generalist. It is routed no landing: it writes the threat model at
+each Orc's birth, and reviews the attack chains that cross surfaces — a weakness on one speciality's
+ground that only becomes an attack through another's.
+
+**Routing.** The harness routes each landing at the gate — `route(written paths) → specialities` —
+and commissions only the specialities whose surfaces those paths touch: a landing on two surfaces
+opens two bodies, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
+Each attack class has exactly one owning speciality, so two specialities never hunt the same
+class on the same paths.
+
+**Playbooks.** Each speciality's attack classes are a **playbook compiled into the law**
+(`mnemorph-races`), not a Mind: a Mind is writable inside the world it would audit. Per class it
+gives the invariant, where to look, the witness that proves a break, and what is not a finding.
+Only the routed speciality's playbook loads, at most 8 KB of it. A world adds its own surfaces in
+its docs; it never removes a class. The playbooks adapt Cloudflare's security-audit-skill (MIT;
+[notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 
 - **Duty.**
   1. **Diff challenge.** Adversarial review of every landing that touches a risk surface: auth,
-     crypto, deserialisation, process execution, path handling, network input, dependencies.
-  2. **Dependency and CVE audit.** Against the offline advisory mirror kept fresh by
-     `kijin-scout` (`cargo audit`, `osv-scanner`, `npm audit`-equivalent): no network of its own.
-  3. **Secret scanning** of the tree and the history.
-  4. **Static analysis** with rule packs (semgrep-style) for the languages present.
-  5. **Threat model** written at each Orc's birth: the domain's assets, entry points and trust
-     boundaries.
-  6. **Law audit** — what isekai's Dark Elf did: gate verdicts and `log.md` integrity.
+     crypto, deserialisation, process execution, path handling, network input, dependencies —
+     each routed to the specialities that own it.
+  2. **Dependency and CVE audit** (`dark-elf-supply`). Against the offline advisory mirror kept
+     fresh by `kijin-scout` (`cargo audit`, `osv-scanner`, `npm audit`-equivalent): no network of
+     its own.
+  3. **Secret scanning** (`dark-elf-secrets`) of the tree and the history.
+  4. **Static analysis** with rule packs (semgrep-style) for the languages present, each
+     speciality over its own surfaces.
+  5. **Threat model** (`dark-elf`) written at each Orc's birth: the domain's assets, entry points
+     and trust boundaries — the seed of every speciality's coverage ledger there.
+  6. **Attack chains** (`dark-elf`) across surfaces.
+  7. **Law audit** (`dark-elf-law`) — what isekai's Dark Elf did: gate verdicts and `log.md`
+     integrity, and the budgets, retries and detached work an interrupt must stop.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
   `.mnemorph/dark-elf/` (self-gated), `seal` proposals.
 - **The witness rule.** A finding is `@F` only with an id and a **witness**: a proof-of-concept
   test in the proving ground that fails *for the stated reason* (it must exercise the code under
   the cited `file:line`, which the harness checks by coverage), or a scanner output file. Without
   a witness it is `@?` — a suspicion, never a finding. This is what keeps an adversarial model
-  from crying wolf.
-- **Seal.** A critical or high finding with a witness can propose a seal on its territory.
+  from crying wolf. A guardrail in a prompt is not a boundary: a finding needs a failure in code.
+- **The finding contract.** Each finding has a record,
+  `.mnemorph/dark-elf/<speciality>/findings/<fingerprint>.json`, and the harness reads back as
+  `@?` any record that breaks it:
+  - **Its id is a root-cause fingerprint**: the speciality, the class, the file and the symbol —
+    never a line, a body or a severity. It is stable across runs, so a moved line keeps its id and
+    a later fix is still linked to it.
+  - **Its record** holds the class (a playbook reference), the trace from entry to sink with a
+    `file:line` at each step, the witness, the preconditions and reachability, the fix and the
+    invariant it restores.
+  - **Severity is capped at the demonstrated impact**: likelihood and impact, each with its reason,
+    and the overall never above the impact the witness shows.
+  - **Needs validation** is its own verdict: `@? nv #<fingerprint> blocker:<fact> plan:<check>`,
+    the exact blocker and the plan that would settle it — no severity, never a finding, never a
+    seal.
+  - **Not findings**: a checklist deviation with no reachable failure, a missing second line of
+    defence, harm a user can only do to themselves.
+- **The coverage ledger.** Each audit writes
+  `.mnemorph/dark-elf/<speciality>/coverage/<audit>.json`: one unit per routed surface × attack
+  class, each **checked** (with the paths read and the checks run), **n/a** (with the fact that
+  rules it out) or **skipped** (with the reason). "No findings" means something only beside it: a
+  `@S PASS` without a valid ledger reads `NOT_VERIFIED`.
+- **Independent verification.** Before a finding counts or a seal is proposed, the harness
+  commissions a **fresh verifier** of the same speciality, whose mandate is to refute it. It gets
+  the record and the witness only, never the hunter's transcript, and its run is not the hunter's.
+  It answers *verified* — the witness is then frozen by content hash — *replace*, a stronger
+  record that goes to another fresh verifier, or *rejected*, kept so the claim is not raised
+  again. Only a verified `@F` counts in the score or may seal.
+- **Seal.** A verified critical or high finding — severity as capped above — can propose a seal on
+  its territory.
   1. The proposal is a gated act: Rimuru puts it to the human with the witness, who confirms.
-  2. At confirmation the witness is **frozen by content hash**; the Dark Elf can no longer change
-     what it is judged by.
+  2. The witness was **frozen by content hash** at verification, and the seal holds that hash: the
+     Dark Elf can no longer change what it is judged by.
   3. While sealed, the gate refuses landings on that territory except the fix.
   4. The fix copies the frozen witness into the owning zone's tests — from then on it is the
      Slime's regression test, and its Orc's verify line runs it. The seal lifts when that test
      passes with the frozen hash intact.
   5. A seal can be contested (`@? contest`, through Rimuru to the human) and expires after
      7 days unless the human renews it.
-- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = findings, linked by id, that a
-  later landing fixed, and *precision* = 1 − dismissed ÷ findings (a dismissal is a contest the
-  human upheld). Meter: *Upheld*, ok ≥ 80.
+- **A seal is not the end gate's only refusal.** By its own rule, independent of any Dark Elf, the
+  end gate refuses a landing that a critical or high **ontology** finding touches, read on the tree
+  as the landing leaves it — no human confirms it, and a landing that ends the finding is not
+  blocked by it ([the end gate](03-loop.md#the-end-gate), [ontology](09-ontology.md#findings)).
+- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = verified findings, linked by
+  fingerprint, that a later landing fixed, and *precision* = 1 − dismissed ÷ findings (a dismissal
+  is a contest the human upheld; a verifier's rejection is not one). Meter: *Upheld*, ok ≥ 80,
+  warn ≥ 50. Each speciality is its own creature, so its score and its ascension are its own:
+  `dark-elf-supply` may rise to Arch Dark Elf while `dark-elf-agent` has not.
 
 ---
 
@@ -639,7 +715,7 @@ stateDiagram-v2
     Candidate --> Base: Veldora declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
     Ascended --> Base: an event — immediate, no probation
-    Probation --> Ascended: recovers within 5 reports
+    Probation --> Ascended: back at the fall bar within 5 reports
     Probation --> Base: does not recover — falls, record kept
     classDef risen fill:#fff7d6,stroke:#b8860b,stroke-width:2px,stroke-dasharray:5 3,color:#3a2e05
     class Ascended risen
@@ -655,16 +731,17 @@ friction a creature meets, so it is yours to grant. An ascended creature that sl
 probation; if it does not recover, it falls back to its base race. Nothing is erased: the record
 and the doc carry over both ways.
 
-**Technical detail.** Bars are evaluated after every report fold over the value ledger's 28-day
-window. The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
+**Technical detail.** From M11, bars are evaluated after every report fold over the value
+ledger's 28-day window; the bars themselves are compiled already (`rises`, `falls`, `recovers`).
+The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
 | <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it, and like any Elf's order it needs a plan item naming its target; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
 | <img src="../assets/portraits/high-orc@64.png" width="28" alt="High Orc"> **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
 | <img src="../assets/portraits/named-slime@64.png" width="28" alt="Named Slime"> **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
-| <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
-| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+| <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks and zero corrections in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
+| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% — per speciality, each its own record | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
 
 How a fall is read (`mnemorph-races`, `falls`):
 
@@ -673,16 +750,33 @@ How a fall is read (`mnemorph-races`, `falls`):
 - **A rate below its fall bar starts probation**, and only on a full recent record — ten reports,
   or ten findings for an Arch Dark Elf. The fall bars sit well under the rise bars, so a body
   that just rose never reads as falling.
-- Fewer than five reports: a meter is shown, never ranked.
+- **Probation ends at the fall bar.** Over at least five reports since it began (findings for an
+  Arch Dark Elf), a rate back at or above its fall bar, with no event, recovers the form; five
+  reports without that, and the creature falls. Recovering to the bar it fell at ends probation;
+  rising again after a fall still needs the rise bar.
+- **A meter is ranked on the race's own unit**: reports, findings for a Dark Elf, outward acts for
+  a Kijin. Fewer than five of them: the meter is shown, never ranked.
+- **Every meter has an ok bar and a warn bar**: warn ≥ 70 for the Orc and the Kijin, whose acts
+  reach the gate or the outside, and warn ≥ 50 for every other race; below warn it reads low.
 
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
-  advance by the human, scoped, expiring (30 days by default and at most, a limit the human may
-  set from 1 to 365 days), capped in uses if the human says so, revocable, and — once the gate honours envelopes (M11) —
+  advance by the human, scoped, expiring (at most `oni.envelope_days` after its signing — 30
+  unless the human's own file says, from 1 to 365), capped in uses if the human says so,
+  revocable, and — once the gate honours envelopes (M11) —
   listed in `mnemorph status`, its time and count checked at the moment of use, not only when the
   act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
-- **What an envelope can never cover** (compiled, whatever the envelope says):
+- **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
+  that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):
+  it covers nothing until the incident closes on its four receipts; an incident record that
+  cannot be read suspends every envelope.
+- **An envelope that is a bare `*`** — a pattern whose only word is `*`, or one whose words a `*`
+  could fill with a destructive argument — is refused when the configuration loads, with the
+  file named ([config](05-architecture.md#configuration)).
+- **What an envelope can never cover** (compiled, whatever the envelope says) — and the same
+  exclusions bind every other standing approval, `gate.approve` among them, once the gate reads
+  it:
   - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites, and
     every outward act the harness cannot undo: whatever is not a typed kind. The envelope is read
     against the planned act (`Envelope::covers`): its class first, so a destructive act is refused
@@ -703,7 +797,7 @@ Rules that hold for every ascension:
   bodies' prompts.
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
 - Ascension, probation and fall are each logged in `log.md` with the readings that caused them.
-- A creature can be named down by the human at any time (`mnemorph fall <creature>`).
+- From M11, a creature can be named down by the human at any time (`mnemorph fall <creature>`).
 
 ### Evolution — the other way to change
 
@@ -743,7 +837,7 @@ reject` instead — a proposal is refused if the world moved since it was drawn.
 |---|---|---|
 | a rank table in config (`ranks.*`) | an enum and its compiled methods | we know what works; a configurable tree produced unknowns and 8k lines of config |
 | Kijin = one standing release lane | Kijin = the only outward race, five posts | Containment as a type, not a rule to remember |
-| Dark Elf = auditor of `log.md` | Dark Elf = adversary of the code, witness rule, seals | the most valuable review is the hostile one, and it must be provable |
+| Dark Elf = auditor of `log.md` | Dark Elf = adversary of the code: six specialities and a generalist, the witness rule, verified findings, seals | the most valuable review is the hostile one, and it must be provable; a score per speciality stays honest |
 | ascension = a rename | ascension = concrete privileges, human-confirmed, with falls | trust that grants nothing is decoration; trust that cannot be lost is a risk |
 | "Keeper" bodies that never existed in code | standing through post journals | say what the code does |
 | Slime and Kijin never ascend | Named Slime, Oni | every race can earn less friction |
