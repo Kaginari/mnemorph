@@ -5717,6 +5717,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T21:20:52+01:00] rimuru — Dark Elf PR 3: the wire's finding fields
+- **Done:** `Finding.rec`, emitted and read in the fixed tail order `witness:` then `rec:`;
+  a claim ending in either, or in the fence, is fenced, and a claim-less finding fences a tail
+  that would read as a location. `fingerprint(speciality, class, file, symbol)`: the first ten
+  hex of FNV-1a over the normalised fields, no line; `address()` stays for id-less findings.
+  `Hole::Nv` for `@? nv #<fp> blocker:<fact> plan:<check>`, exact grammar, no severity.
+  `Report::dark_elf` reads a finding without fingerprint, witness or record back as a hole.
+  Tests: round trips, a pinned fingerprint, a line shift, the root cause, nv never a finding,
+  2048-case properties over the hostile alphabet (now with `rec:`, `plan:`, `nv #`).
+- **Ledger:** nothing in mnemorph-ledger or mnemorph-loop reads `@F` ids yet (the score fold is
+  PR 10), so there was no line-based link to migrate; journaled ids are read as written.
+- **Learned:** a claim-less finding's `witness:a.rs:3` read as its location — the property test
+  over the tail found it on its first run.
+
+---
+
 ### [2026-10-27T21:30:18+01:00] rimuru — #246, Fable's review: no dead field, no unrouted law ground
 - **Done:** the generalist is routed a world's declared `Surfaces` (its catch-all); law owns
   `crates/mnemorph-world/**`, `crates/mnemorph-ledger/**` and the loop's route, session and solo;
@@ -5724,3 +5740,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   `own::normal`; 02's surface table drops brace globs the matcher never read.
 - **Learned:** a surface table is a list of what a landing can rewrite unseen — the roster and
   ownership are the law's ground as much as the race crate is.
+
+---
+
+### [2026-10-27T21:32:32+01:00] rimuru — #247, Fable's review: a Dark Elf's id recomputed, never trusted
+- **Done:** fingerprint is SHA-256 (ten hex) over length-framed fields; `address()` framed the
+  same way (FNV kept), journaled ids read as written. `Report::dark_elf(record)` recomputes each
+  id from its record's root cause; a mismatch reads back `forged id:` as `@?`; only it makes a
+  `Proven`. The file rule is ASCII: no absolute, `.`, `..` or empty segment.
+- **Learned:** a fingerprint that the body states is only a shape; the harness must derive it.

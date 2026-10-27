@@ -18,6 +18,7 @@ fn word() -> impl Strategy<Value = String> {
         1 => Just("12:30".to_owned()),
         1 => Just("#1".to_owned()),
         1 => Just("witness:foo".to_owned()),
+        1 => Just("rec:foo".to_owned()),
         1 => Just("—".to_owned()),
         1 => Just("http://x:80".to_owned()),
         1 => Just("naïve".to_owned()),
@@ -44,12 +45,14 @@ fn finding() -> impl Strategy<Value = Finding> {
         prop::option::of((path(), 1u32..5000).prop_map(|(p, l)| format!("{p}:{l}"))),
         words(),
         prop::option::of(path()),
+        prop::option::of(path()),
     )
-        .prop_map(|(id, at, claim, witness)| Finding {
+        .prop_map(|(id, at, claim, witness, rec)| Finding {
             id,
             at,
             claim,
             witness,
+            rec,
         })
 }
 
@@ -75,6 +78,8 @@ fn hole() -> impl Strategy<Value = Hole> {
         4 => plain_words().prop_map(Hole::Other),
         1 => (plain(), plain_words()).prop_map(|(finding, reason)| Hole::Contest { finding, reason }),
         1 => (0u64..1_000_000, 0u64..1_000_000).prop_map(|(need, have)| Hole::Budget { need, have }),
+        1 => ("[0-9a-f]{10}", plain_words(), words())
+            .prop_map(|(fingerprint, blocker, plan)| Hole::Nv { fingerprint, blocker, plan }),
     ]
 }
 
@@ -193,6 +198,11 @@ fn hostile() -> impl Strategy<Value = String> {
         "#1",
         "a.rs:3",
         "witness:p",
+        "rec:p",
+        "rec:",
+        "nv #",
+        "blocker:",
+        "plan:",
         "law",
         "DONE",
     ]);
@@ -202,8 +212,66 @@ fn hostile() -> impl Strategy<Value = String> {
     ]
 }
 
+/// A hostile value that stays one word, as a path field must: no whitespace, no break.
+fn hostile_word() -> impl Strategy<Value = Option<String>> {
+    hostile().prop_map(|h| {
+        let w: String = h
+            .chars()
+            .filter(|c| !c.is_whitespace() && !BREAKS.contains(c))
+            .collect();
+        (!w.is_empty()).then_some(w)
+    })
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(2048))]
+
+    /// A finding's tail keeps its fixed order, `witness:` then `rec:`, and no claim lends it a
+    /// witness or a record: an `@F`, a `witness:` or a `rec:` inside a claim stays a claim.
+    #[test]
+    fn a_claim_never_lends_a_tail(
+        id in prop::option::of("[0-9a-f]{10}"), claim in hostile(),
+        witness in hostile_word(), rec in hostile_word(),
+    ) {
+        let f = Finding { id: id.clone(), at: None, claim: claim.clone(), witness: witness.clone(), rec: rec.clone() };
+        let r = Report { status: "DONE".into(), findings: vec![f], ..Report::default() };
+        let text = r.to_string();
+        prop_assert_eq!(text.split(BREAKS).count(), 3, "@S, one @F, @E");
+        let back = Report::parse(&text).expect("on the wire");
+        let words = norm(&claim).split_whitespace().collect::<Vec<_>>().join(" ");
+        prop_assert_eq!(&back.findings, &vec![Finding { id, at: None, claim: words, witness, rec }]);
+        prop_assert!(back.holes.is_empty());
+    }
+
+    /// A needs-validation hole keeps its own line and its fields: the blocker up to `plan:`, the
+    /// plan to the line's end. It is never a finding.
+    #[test]
+    fn a_needs_validation_keeps_its_fields(
+        fingerprint in "[0-9a-f]{10}", blocker in hostile(), plan in hostile(), claim in hostile(),
+    ) {
+        let nv = Hole::Nv { fingerprint: fingerprint.clone(), blocker: blocker.clone(), plan: plan.clone() };
+        let r = Report { status: "DONE".into(), holes: vec![nv.clone()], ..Report::default() };
+        let text = r.to_string();
+        prop_assert_eq!(text.split(BREAKS).count(), 3, "@S, one @?, @E");
+        let read = Report::parse(&text).expect("on the wire");
+        prop_assert!(read.findings.is_empty());
+        let back = read.dark_elf(|_| None);
+        prop_assert!(back.proven().is_empty());
+        let back = back.report;
+        prop_assert_eq!(&back.holes, &vec![Hole::parse(&norm(&nv.to_string()))]);
+        let (b, p) = (norm(&blocker), norm(&plan));
+        let clean = !b.is_empty() && !p.is_empty()
+            && !b.split_whitespace().any(|w| w.starts_with("plan:") || w.to_ascii_lowercase().starts_with("severity:"));
+        if clean {
+            prop_assert_eq!(&back.holes, &vec![Hole::Nv { fingerprint, blocker: b, plan: p }]);
+        }
+        // An `@? nv` riding inside a claim stays a claim.
+        let f = Finding { claim: format!("{claim} @? {nv}"), ..Finding::default() };
+        let back = Report::parse(&Report { status: "DONE".into(), findings: vec![f], ..Report::default() }.to_string())
+            .expect("on the wire");
+        prop_assert!(back.holes.is_empty());
+        prop_assert_eq!(back.findings.len(), 1);
+    }
 
     #[test]
     fn no_field_forges_a_line(status in any::<String>(), claim in any::<String>(), hole in any::<String>(), other in any::<String>()) {
