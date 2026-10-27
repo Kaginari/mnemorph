@@ -272,6 +272,11 @@ the welcome card draws its portrait in half blocks, so it scrolls with nothing t
 (A Kitty-only animation would upload each frame once under its own id and switch placements by
 id; `pictures::Art` is where it would be named.)
 
+A terminal that gives no cell size gives its text area in pixels (`CSI 14 t`) more often than
+not; the cell is that area over the window's cells, in whichever order makes a cell about twice
+as tall as wide (VTE answers width first). VTE says nothing of Sixel in its device attributes, so
+`VTE_VERSION` decides: from 0.76 on it draws Sixel; before, half blocks are what it can show.
+
 To see the pictures in VS Code's terminal, turn on `terminal.integrated.enableImages` in the
 settings and reload the window: xterm.js then lists Sixel in DA1, and Mnemorph draws iTerm2's
 inline images. `mnemorph-tui --probe` says `drawing iterm` when it took.

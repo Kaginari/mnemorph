@@ -5062,3 +5062,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   and one Veldora build and one working-body build.
 - **Open:** whether the sidebar's picture shows in the human's VS Code (the empty box) is
   unconfirmed; their check on this build tells.
+
+---
+
+### [2026-10-27T12:00:59+01:00] rimuru — VTE: the cell from its text area, Sixel by its version
+- **The human's Ubuntu terminal** (GNOME Terminal, VTE 0.60.3):
+  - no XTVERSION, no `CSI 16 t`, TIOCGWINSZ pixels 0×0, and DA1 `?65;1;9c`;
+  - it answers `CSI 14 t` as `4;1575;882`, width first, for 175×49 cells: a 9×18 cell;
+  - forcing Sixel showed only the half-block fallback, because the cell was unknown;
+  - VTE 0.60 draws no Sixel anyway (VTE enables it from 0.76).
+- **Fix:**
+  - probe.rs QUERIES adds `CSI 14 t`;
+  - kit/pixels.rs `Replies.area` and `cell_from_area`, which take the order that gives a plausible
+    cell;
+  - `VTE_VERSION ≥ 7600` means Sixel;
+  - docs 05.
+- **Test:** `vte_gives_its_cell_by_the_text_area_and_sixel_by_its_version` uses the human's exact
+  replies.

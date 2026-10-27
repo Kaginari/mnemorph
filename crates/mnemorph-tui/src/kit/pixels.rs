@@ -102,6 +102,9 @@ pub struct Replies {
     /// The primary device attributes (DA1), when they came: every terminal answers them, so they
     /// mark the end of the replies.
     pub attributes: Option<Vec<u16>>,
+    /// The text area's size in pixels (`CSI 14 t`), as the two numbers came: a terminal that gives
+    /// no cell size often gives this (VTE does), and the cell follows from the window's cells.
+    pub area: Option<(u16, u16)>,
     /// A graphics query (XTSMGRAPHICS, the colour registers) answered with success: a terminal
     /// whose image layer is on, though its DA1 may not say so — VS Code's xterm.js is one.
     pub graphics: bool,
@@ -125,6 +128,11 @@ impl Replies {
             let (h, w) = (h.parse::<u16>().ok()?, w.parse::<u16>().ok()?);
             (h > 0 && w > 0).then_some((w, h))
         });
+        let area = between(reply, "\x1b[4;", "t").and_then(|s| {
+            let (a, b) = s.split_once(';')?;
+            let (a, b) = (a.parse::<u16>().ok()?, b.parse::<u16>().ok()?);
+            (a > 0 && b > 0).then_some((a, b))
+        });
         let kitty = reply.contains(&format!("\x1b_Gi={QUERY_ID};OK"));
         let attributes = attributes(reply);
         let graphics = graphics(reply);
@@ -133,6 +141,7 @@ impl Replies {
             cell,
             kitty,
             attributes,
+            area,
             graphics,
         }
     }
@@ -205,6 +214,24 @@ pub struct Window {
     pub xpx: u16,
     /// Pixels down, `0` when the terminal does not say.
     pub ypx: u16,
+}
+
+/// A cell's size from the text area's pixels `area` (`CSI 14 t`, height then width by the spec)
+/// over the window's cells: the order that gives a cell about twice as tall as wide, since some
+/// terminals (VTE) answer width first.
+#[must_use]
+pub fn cell_from_area(area: (u16, u16), window: Window) -> Option<(u16, u16)> {
+    if window.cols == 0 || window.rows == 0 {
+        return None;
+    }
+    let plausible = |w: u16, h: u16| w > 0 && h > 0 && (h * 10 >= w * 12) && (h * 10 <= w * 30);
+    let (a, b) = area;
+    [
+        (b / window.cols, a / window.rows),
+        (a / window.cols, b / window.rows),
+    ]
+    .into_iter()
+    .find(|&(w, h)| plausible(w, h))
 }
 
 impl Window {
@@ -346,14 +373,26 @@ pub fn decide(
     choice: Choice,
     env: &impl Fn(&str) -> Option<String>,
 ) -> Caps {
-    let cell = replies.cell.or_else(|| window.and_then(Window::cell));
+    let cell = replies
+        .cell
+        .or_else(|| window.and_then(Window::cell))
+        .or_else(|| {
+            replies
+                .area
+                .zip(window)
+                .and_then(|(a, w)| cell_from_area(a, w))
+        });
+    // VTE (GNOME Terminal and its kin) draws Sixel from 0.76 on, though its DA1 does not say so.
+    let vte_sixel = env("VTE_VERSION")
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .is_some_and(|v| v >= 7600);
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
     let mut notes = Vec::new();
     let (protocol, why) = match choice {
         Choice::Off => (Protocol::Blocks, "images off".to_owned()),
         Choice::Force(p) => (p, "as MNEMORPH_TUI_IMAGES asks".to_owned()),
         Choice::Auto => {
-            let on = replies.sixel() || replies.kitty || replies.graphics || native;
+            let on = replies.sixel() || replies.kitty || replies.graphics || native || vte_sixel;
             if replies.kitty {
                 (
                     Protocol::Kitty,
@@ -369,6 +408,8 @@ pub fn decide(
                     Protocol::Sixel,
                     "the terminal answers Sixel's queries".into(),
                 )
+            } else if vte_sixel {
+                (Protocol::Sixel, "VTE 0.76 or later draws Sixel".into())
             } else if iterm_family {
                 (
                     Protocol::Blocks,
@@ -925,6 +966,39 @@ mod tests {
         assert_eq!(
             chosen("\x1b[6;20;10t\x1b[?1;0;256S\x1b[?62c", Choice::Auto, &[]),
             Protocol::Sixel
+        );
+    }
+
+    /// VTE answers no cell size and no Sixel attribute, but gives its text area (width first):
+    /// the cell follows from it, and VTE 0.76 or later draws Sixel. Older VTE draws half blocks.
+    #[test]
+    fn vte_gives_its_cell_by_the_text_area_and_sixel_by_its_version() {
+        let reply = "\x1b[4;1575;882t\x1b[?65;1;9c";
+        let window = Window {
+            cols: 175,
+            rows: 49,
+            xpx: 0,
+            ypx: 0,
+        };
+        let r = Replies::parse(reply);
+        assert_eq!(r.area, Some((1575, 882)));
+        assert_eq!(cell_from_area((1575, 882), window), Some((9, 18)));
+        // The spec's order works too.
+        assert_eq!(cell_from_area((882, 1575), window), Some((9, 18)));
+        let caps = |vte: &str| {
+            decide(
+                Replies::parse(reply),
+                Some(window),
+                Choice::Auto,
+                &env(&[("VTE_VERSION", vte)]),
+            )
+        };
+        let new = caps("7600");
+        assert_eq!((new.protocol, new.cell), (Protocol::Sixel, Some((9, 18))));
+        assert_eq!(
+            caps("6003").protocol,
+            Protocol::Blocks,
+            "VTE 0.60 draws no Sixel"
         );
     }
 }
