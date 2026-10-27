@@ -131,8 +131,8 @@ impl Late {
             }
             KeyCode::Char('[') if alt => true,
             KeyCode::Char(_) if plain && self.inside => true,
-            // The shapes of `CSI ? … c`, `CSI 6 ; h ; w t` and `CSI ? 1 ; 0 ; n S` read as
-            // characters.
+            // The shapes of `CSI ? … c`, `CSI 6 ; h ; w t`, `CSI 4 ; a ; b t` and
+            // `CSI ? 1 ; 0 ; n S` read as characters.
             KeyCode::Char(c) if plain => {
                 c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't' | 'S')
             }
@@ -396,6 +396,7 @@ mod tests {
             "\x1b[6;17;8t",
             "\x1b[?1;2;4c",
             "\x1b[?1;0;256S",
+            "\x1b[4;1575;882t",
             "?1;2c",
             "6;17;8t",
         ] {

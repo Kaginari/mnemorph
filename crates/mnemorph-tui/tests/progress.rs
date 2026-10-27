@@ -465,6 +465,13 @@ fn head(m: &Model) -> Vec<String> {
 }
 
 /// `race`'s portrait at `clock`, as the head draws it.
+fn veldora(m: &Model) -> Vec<String> {
+    mnemorph_tui::sidebar::veldora_blocks(&m.theme)
+        .iter()
+        .map(|l| format!("{:?}", &l.spans[..]))
+        .collect()
+}
+
 fn portrait(race: Race, clock: Duration) -> Vec<String> {
     let p = mnanim::portrait(race).unwrap();
     mnanim::lines(p.at(clock), None)
@@ -546,7 +553,7 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
         "idle: nothing ticks, the portrait still"
     );
     // Idle: Veldora, the human, still; a body's race and loop only while it works.
-    assert_ne!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
+    assert_eq!(head(&m), veldora(&m));
     send(&mut m, "go");
     assert_eq!(
         m.next_tick(),
@@ -575,7 +582,7 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
     update(&mut m, Msg::Resize(120, 40));
     update(&mut m, Msg::Done { held: 0 });
     assert_eq!(m.next_tick(), None);
-    assert_ne!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
+    assert_eq!(head(&m), veldora(&m));
 }
 
 #[test]

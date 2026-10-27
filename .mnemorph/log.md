@@ -5079,3 +5079,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - docs 05.
 - **Test:** `vte_gives_its_cell_by_the_text_area_and_sixel_by_its_version` uses the human's exact
   replies.
+
+---
+
+### [2026-10-27T12:04:54+01:00] rimuru — #229, Fable's review
+- **Fable found:**
+  1. `cell_from_area` took the spec's order when both are plausible. VTE 120×50 with a 9×18
+     cell answers `4;1080;900`, and the spec order gives 7×21, so the Sixel box spills a row.
+  2. `h * 10` on u16 overflows.
+  3. `VTE_VERSION ≥ 7600` as a decision fires only when VTE's own DA1 omits Sixel, likely when
+     its Sixel is off, which gives a blank box.
+  4. Small items: the late `CSI 4;…t` shape undocumented, a dead branch and a stale comment in
+     the sidebar head, and an `assert_ne` that proved only "not Rimuru".
+- **Fixed:**
+  1. u32 maths; the order the window divides exactly wins, then the one nearest 2:1, then the
+     spec's;
+  2. `VTE_VERSION` is a note in `--probe` (a VTE that lists no Sixel draws half blocks), and VTE
+     with Sixel on is detected through DA1;
+  3. the filter shape documented and tested; the head cleaned;
+  4. the idle head asserted equal to `veldora_blocks`.

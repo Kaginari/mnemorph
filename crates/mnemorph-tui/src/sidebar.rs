@@ -566,10 +566,9 @@ pub fn band(t: &Theme, pct: u64) -> Style {
     }
 }
 
-/// The head: the portrait of the body working now — Rimuru for the session, a commissioned
-/// body's race while it acts — centred, playing its idle loop while it works and still on its
-/// first frame otherwise; under it the state, centred too (the world and the model are on the
-/// frame's edges).
+/// The head: Veldora, the human, while no body works; during a turn the portrait of the body
+/// working — Rimuru for the session, a commissioned body's race while it acts — playing its idle
+/// loop; centred, with the state under it (the world and the model are on the frame's edges).
 fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
@@ -587,17 +586,16 @@ fn head(m: &Model, w: usize) -> Lines {
             Line::from(spans)
         }));
     } else if let Some(p) = mnanim::ready(race) {
-        let clock = if m.busy() {
-            m.portrait_clock
-        } else {
-            std::time::Duration::ZERO
-        };
         let pad = Span::raw(" ".repeat(w.saturating_sub(mnanim::SIZE) / 2));
-        out.extend(mnanim::lines(p.at(clock), None).into_iter().map(|l| {
-            let mut spans = vec![pad.clone()];
-            spans.extend(l.spans);
-            Line::from(spans)
-        }));
+        out.extend(
+            mnanim::lines(p.at(m.portrait_clock), None)
+                .into_iter()
+                .map(|l| {
+                    let mut spans = vec![pad.clone()];
+                    spans.extend(l.spans);
+                    Line::from(spans)
+                }),
+        );
     }
     let centred = |spans: Vec<Span<'static>>| {
         let line = truncate(Line::from(spans), w);
@@ -939,7 +937,8 @@ const PORTRAIT: u16 = 32;
 const _: () = assert!(PORTRAIT as usize == mnanim::SIZE);
 
 /// Veldora in half blocks, built once per theme background.
-fn veldora_blocks(t: &crate::theme::Theme) -> Lines {
+#[must_use]
+pub fn veldora_blocks(t: &crate::theme::Theme) -> Lines {
     use std::sync::Mutex;
     static CACHE: Mutex<Option<(crate::theme::Rgb, Lines)>> = Mutex::new(None);
     let mut c = CACHE

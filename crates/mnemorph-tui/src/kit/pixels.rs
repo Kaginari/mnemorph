@@ -217,21 +217,31 @@ pub struct Window {
 }
 
 /// A cell's size from the text area's pixels `area` (`CSI 14 t`, height then width by the spec)
-/// over the window's cells: the order that gives a cell about twice as tall as wide, since some
-/// terminals (VTE) answer width first.
+/// over the window's cells. Some terminals (VTE) answer width first, so both orders are read; of
+/// those giving a plausible cell (1.2 to 3 times as tall as wide), the one the window divides
+/// exactly wins — a text area is a whole number of cells — then the one nearest twice as tall,
+/// then the spec's.
 #[must_use]
 pub fn cell_from_area(area: (u16, u16), window: Window) -> Option<(u16, u16)> {
-    if window.cols == 0 || window.rows == 0 {
+    let (cols, rows) = (u32::from(window.cols), u32::from(window.rows));
+    if cols == 0 || rows == 0 {
         return None;
     }
-    let plausible = |w: u16, h: u16| w > 0 && h > 0 && (h * 10 >= w * 12) && (h * 10 <= w * 30);
-    let (a, b) = area;
-    [
-        (b / window.cols, a / window.rows),
-        (a / window.cols, b / window.rows),
-    ]
-    .into_iter()
-    .find(|&(w, h)| plausible(w, h))
+    let (a, b) = (u32::from(area.0), u32::from(area.1));
+    // (width, height, remainder) for each order: the spec's (height, width) first.
+    let orders = [
+        (b / cols, a / rows, b % cols + a % rows),
+        (a / cols, b / rows, a % cols + b % rows),
+    ];
+    let plausible = |w: u32, h: u32| w > 0 && h > 0 && h * 10 >= w * 12 && h * 10 <= w * 30;
+    let off_two = |w: u32, h: u32| (h * 10).abs_diff(w * 20);
+    let best = orders
+        .iter()
+        .enumerate()
+        .filter(|(_, (w, h, _))| plausible(*w, *h))
+        .min_by_key(|(i, (w, h, rest))| (*rest, off_two(*w, *h), *i))?;
+    let (w, h, _) = *best.1;
+    Some((u16::try_from(w).ok()?, u16::try_from(h).ok()?))
 }
 
 impl Window {
@@ -382,17 +392,16 @@ pub fn decide(
                 .zip(window)
                 .and_then(|(a, w)| cell_from_area(a, w))
         });
-    // VTE (GNOME Terminal and its kin) draws Sixel from 0.76 on, though its DA1 does not say so.
-    let vte_sixel = env("VTE_VERSION")
-        .and_then(|v| v.trim().parse::<u32>().ok())
-        .is_some_and(|v| v >= 7600);
+    // VTE says nothing of its version but in the environment; its DA1 lists Sixel when its Sixel
+    // is on. A VTE without it is named in the notes, never guessed into a blank box.
+    let vte = env("VTE_VERSION").and_then(|v| v.trim().parse::<u32>().ok());
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
     let mut notes = Vec::new();
     let (protocol, why) = match choice {
         Choice::Off => (Protocol::Blocks, "images off".to_owned()),
         Choice::Force(p) => (p, "as MNEMORPH_TUI_IMAGES asks".to_owned()),
         Choice::Auto => {
-            let on = replies.sixel() || replies.kitty || replies.graphics || native || vte_sixel;
+            let on = replies.sixel() || replies.kitty || replies.graphics || native;
             if replies.kitty {
                 (
                     Protocol::Kitty,
@@ -408,8 +417,6 @@ pub fn decide(
                     Protocol::Sixel,
                     "the terminal answers Sixel's queries".into(),
                 )
-            } else if vte_sixel {
-                (Protocol::Sixel, "VTE 0.76 or later draws Sixel".into())
             } else if iterm_family {
                 (
                     Protocol::Blocks,
@@ -432,6 +439,15 @@ pub fn decide(
     } else {
         (protocol, why)
     };
+    if let Some(v) = vte.filter(|_| protocol == Protocol::Blocks && !replies.sixel()) {
+        notes.push(format!(
+            "VTE {}.{}.{} lists no Sixel: images need VTE 0.76 or later with Sixel on, or a \
+             terminal that draws them (Kitty, WezTerm)",
+            v / 10000,
+            v / 100 % 100,
+            v % 100
+        ));
+    }
     Caps {
         replies,
         window,
@@ -972,33 +988,41 @@ mod tests {
     /// VTE answers no cell size and no Sixel attribute, but gives its text area (width first):
     /// the cell follows from it, and VTE 0.76 or later draws Sixel. Older VTE draws half blocks.
     #[test]
-    fn vte_gives_its_cell_by_the_text_area_and_sixel_by_its_version() {
-        let reply = "\x1b[4;1575;882t\x1b[?65;1;9c";
-        let window = Window {
-            cols: 175,
-            rows: 49,
+    fn vte_gives_its_cell_by_the_text_area_and_sixel_by_its_attributes() {
+        let window = |cols, rows| Window {
+            cols,
+            rows,
             xpx: 0,
             ypx: 0,
         };
-        let r = Replies::parse(reply);
-        assert_eq!(r.area, Some((1575, 882)));
-        assert_eq!(cell_from_area((1575, 882), window), Some((9, 18)));
-        // The spec's order works too.
-        assert_eq!(cell_from_area((882, 1575), window), Some((9, 18)));
-        let caps = |vte: &str| {
+        let reply = "\x1b[4;1575;882t\x1b[?65;1;9c";
+        assert_eq!(Replies::parse(reply).area, Some((1575, 882)));
+        assert_eq!(cell_from_area((1575, 882), window(175, 49)), Some((9, 18)));
+        assert_eq!(cell_from_area((882, 1575), window(175, 49)), Some((9, 18)));
+        // Both orders plausible: the one the window divides exactly wins (9×18, not 7×21).
+        assert_eq!(cell_from_area((1080, 900), window(120, 50)), Some((9, 18)));
+        // A huge area never overflows.
+        assert_eq!(cell_from_area((u16::MAX, u16::MAX), window(1, 1)), None);
+        let caps = |reply: &str| {
             decide(
                 Replies::parse(reply),
-                Some(window),
+                Some(window(175, 49)),
                 Choice::Auto,
-                &env(&[("VTE_VERSION", vte)]),
+                &env(&[("VTE_VERSION", "6003")]),
             )
         };
-        let new = caps("7600");
-        assert_eq!((new.protocol, new.cell), (Protocol::Sixel, Some((9, 18))));
-        assert_eq!(
-            caps("6003").protocol,
-            Protocol::Blocks,
-            "VTE 0.60 draws no Sixel"
+        // VTE without Sixel in its attributes: half blocks, and a note saying why.
+        let off = caps(reply);
+        assert_eq!((off.protocol, off.cell), (Protocol::Blocks, Some((9, 18))));
+        assert!(
+            off.notes
+                .iter()
+                .any(|n| n.contains("VTE 0.60.3 lists no Sixel")),
+            "{:?}",
+            off.notes
         );
+        // With Sixel on it says so, and it gets Sixel.
+        let on = caps("\x1b[4;1575;882t\x1b[?65;1;4;9c");
+        assert_eq!(on.protocol, Protocol::Sixel);
     }
 }
