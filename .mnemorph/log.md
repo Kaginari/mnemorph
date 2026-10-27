@@ -5843,3 +5843,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   end of input or an error denies, `GATE_WAIT` as deadline; Ctrl+C fires the interrupt and denies
   a waiting card (exit 1); the answer is escaped only on a terminal stdout.
 - **Learned:** a gate that was never live hides its gaps — the first caller inherits them.
+
+---
+
+### [2026-10-27T23:11:08+01:00] rimuru — two binaries explained
+- The human chose to keep `mnemorph` and `mnemorphd`. README and docs/05 now say why there are two (a person or script vs a program that is not Rust; upkeep with the server) and which to run for what.
