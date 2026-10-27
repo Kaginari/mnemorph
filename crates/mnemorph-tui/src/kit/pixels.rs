@@ -416,6 +416,39 @@ pub fn square(cols: u16, cell: (u16, u16)) -> (u16, u32, u32) {
     (rows, wide, u32::from(rows) * ch)
 }
 
+/// Veldora's portrait, a 256 px RGBA PNG: the human, whom the sidebar shows while no body works.
+pub const VELDORA: &[u8] = include_bytes!("../../assets/portraits/veldora.png");
+
+/// `source` (a PNG) as half blocks `cols` cells wide: each cell's upper pixel its foreground, its
+/// lower its background, on `bg`. For a terminal that draws no images.
+#[must_use]
+pub fn half_blocks(source: &[u8], cols: u16, bg: Rgb) -> Vec<ratatui::text::Line<'static>> {
+    use ratatui::style::{Color, Style};
+    use ratatui::text::{Line, Span};
+    let w = u32::from(cols.max(1));
+    let Some(img) = picture(source, w, w, bg) else {
+        return Vec::new();
+    };
+    (0..w / 2)
+        .map(|r| {
+            Line::from(
+                (0..w)
+                    .map(|x| {
+                        let top = img.get_pixel(x, r * 2);
+                        let low = img.get_pixel(x, r * 2 + 1);
+                        Span::styled(
+                            "▀",
+                            Style::new()
+                                .fg(Color::Rgb(top[0], top[1], top[2]))
+                                .bg(Color::Rgb(low[0], low[1], low[2])),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect()
+}
+
 /// The embedded portrait of `race`: a 256 px RGBA PNG.
 #[must_use]
 pub fn png(race: Race) -> &'static [u8] {

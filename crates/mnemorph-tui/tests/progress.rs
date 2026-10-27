@@ -545,7 +545,8 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
         None,
         "idle: nothing ticks, the portrait still"
     );
-    assert_eq!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
+    // Idle: Veldora, the human, still; a body's race and loop only while it works.
+    assert_ne!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
     send(&mut m, "go");
     assert_eq!(
         m.next_tick(),
@@ -570,11 +571,11 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
     ctrl(&mut m, 'o');
     update(&mut m, Msg::Resize(120, 30));
     assert!(!m.portrait_shown());
-    // Idle again: it rests on its first frame.
+    // Idle again: no ticks, and Veldora rests in Rimuru's place.
     update(&mut m, Msg::Resize(120, 40));
     update(&mut m, Msg::Done { held: 0 });
     assert_eq!(m.next_tick(), None);
-    assert_eq!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
+    assert_ne!(head(&m), portrait(Race::Rimuru, Duration::ZERO));
 }
 
 #[test]

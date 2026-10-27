@@ -5042,3 +5042,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   root's absolute path.
 - **Check:** one regression task on the bench (below), comparing tool use and calls with the
   campaign's run of the same task.
+
+---
+
+### [2026-10-27T11:40:43+01:00] rimuru — pictures in the sidebar alone; Veldora at rest
+- **The human, testing in VS Code:**
+  - the TUI showed nothing where real pixels should be, while blocks worked;
+  - "keep image only on side bar", and on the start screen put Veldora, then Rimuru when it works,
+    and so on.
+- **Done:**
+  - view.rs `welcome_art` always draws half blocks, so the welcome scrolls with nothing to
+    withdraw;
+  - pictures `Art::Veldora` and kit/pixels `VELDORA` (Mnemorph's own `assets/portraits/veldora.png`,
+    256 px) for the sidebar's picture while no body works;
+  - sidebar `veldora_blocks`, Veldora in half blocks when the terminal draws no images;
+  - a working body's race and loop during a turn, as before;
+  - docs 05.
+- **Tests:** the pictures and progress tests now expect Veldora at rest, the sidebar alone wanted,
+  and one Veldora build and one working-body build.
+- **Open:** whether the sidebar's picture shows in the human's VS Code (the empty box) is
+  unconfirmed; their check on this build tells.
