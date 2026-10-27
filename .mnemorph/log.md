@@ -5862,3 +5862,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   hostile bytes, fields and report lines.
 - **Learned:** a rule's fixture proves the rule only when it breaks nothing else: switch the rule
   off and the fixture must pass.
+
+---
+
+### [2026-10-27T23:12:22+01:00] rimuru — #251, Fable's review: witness strength, located traces, one count per root cause
+- **Done:** `witness-strength` (from high up, a witness the harness re-reads — a test, a scanner's
+  output, or a command's captured `output` with its hash; a bare command caps at medium);
+  `trace-located` (each step's file in the tree, its line within it); `accept` demotes a second
+  `@F` of a counted fingerprint to `@? duplicate of #<id>`. Doc 02: the impact is a claim until
+  the verifier confirms it; `symbol-present` takes a comment until then.
+- **Tests:** a fixture per new rule (sixteen, each passing with its rule off); command, output and
+  scanner witnesses; lines past a file's end, a missing entry file; a duplicate, and a forged first
+  line that leaves the true one counted.
+- **Learned:** a hash of the claim's own text is a tautology: a witness counts only as a file the
+  harness re-reads.

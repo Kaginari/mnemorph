@@ -62,6 +62,8 @@ fn good() -> FindingRecord {
             kind: WitnessKind::Test,
             reference: POC.into(),
             sha256: digest(POC_BODY.as_bytes()),
+            output: None,
+            output_sha256: None,
         }),
         preconditions: vec!["the body reads an untrusted repository".into()],
         reachability: "a repository file names the path the tool reads".into(),
@@ -77,6 +79,7 @@ fn good() -> FindingRecord {
 }
 
 /// One record per rule, breaking that rule and no other.
+#[allow(clippy::too_many_lines)] // a table, one row per rule
 fn fixtures() -> Vec<(Rule, FindingRecord)> {
     let g = good;
     vec![
@@ -148,6 +151,11 @@ fn fixtures() -> Vec<(Rule, FindingRecord)> {
             r.trace.reverse();
             r
         }),
+        (Rule::TraceLocated, {
+            let mut r = g();
+            r.trace[0].at = format!("{ENTRY}:2");
+            r
+        }),
         (
             Rule::Witness,
             FindingRecord {
@@ -162,6 +170,7 @@ fn fixtures() -> Vec<(Rule, FindingRecord)> {
             }
             r
         }),
+        (Rule::WitnessStrength, command_witnessed(Severity::High)),
         (
             Rule::SeverityCap,
             FindingRecord {
@@ -392,16 +401,7 @@ fn a_trace_runs_entry_to_sink_on_safe_paths() {
 
 #[test]
 fn a_witness_lies_in_its_own_proving_ground_or_is_a_hashed_command() {
-    let command = "cargo test -p demo escapes";
-    let poc = FindingRecord {
-        witness: Some(Witness {
-            kind: WitnessKind::PocCommand,
-            reference: command.into(),
-            sha256: digest(command.as_bytes()),
-        }),
-        ..good()
-    };
-    assert!(validate(&poc, &world()).is_ok());
+    assert!(validate(&command_witnessed(Severity::Medium), &world()).is_ok());
     let mut elsewhere = world();
     let other = ".mnemorph/dark-elf/dark-elf-agent/poc/read_path.rs";
     elsewhere.insert(other.into(), POC_BODY.into());
@@ -420,6 +420,8 @@ fn a_witness_lies_in_its_own_proving_ground_or_is_a_hashed_command() {
                 kind,
                 reference: reference.into(),
                 sha256,
+                output: None,
+                output_sha256: None,
             }),
             ..good()
         };
@@ -453,6 +455,144 @@ fn a_record_reads_back_from_its_json() {
     let nv = br#"{"verdict":"nv","claim":"maybe"}"#;
     let nv = FindingRecord::parse("x.json", nv).expect("a record");
     assert!(validate(&nv, &world()).is_err_and(|e| e[0] == Rule::Nv));
+}
+
+const COMMAND: &str = "cargo test -p demo escapes";
+const OUTPUT: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/escapes.out";
+const OUTPUT_BODY: &str = "test escapes ... FAILED: read /etc/hostname\n";
+
+/// The good record, witnessed by a bare command.
+fn command_witnessed(severity: Severity) -> FindingRecord {
+    FindingRecord {
+        witness: Some(Witness {
+            kind: WitnessKind::PocCommand,
+            reference: COMMAND.into(),
+            sha256: digest(COMMAND.as_bytes()),
+            output: None,
+            output_sha256: None,
+        }),
+        severity: Some(severity),
+        ..good()
+    }
+}
+
+/// The good record, witnessed by a command and the output it printed.
+fn output_witnessed(severity: Severity) -> FindingRecord {
+    let mut r = command_witnessed(severity);
+    if let Some(w) = r.witness.as_mut() {
+        w.output = Some(OUTPUT.into());
+        w.output_sha256 = Some(digest(OUTPUT_BODY.as_bytes()));
+    }
+    r
+}
+
+fn with_output() -> BTreeMap<String, Vec<u8>> {
+    let mut w = world();
+    w.insert(OUTPUT.into(), OUTPUT_BODY.into());
+    w
+}
+
+#[test]
+fn a_bare_command_caps_the_severity_at_medium() {
+    for severity in [Severity::Low, Severity::Medium] {
+        assert!(validate(&command_witnessed(severity), &world()).is_ok());
+    }
+    for severity in [Severity::High, Severity::Critical] {
+        let r = FindingRecord {
+            impact: Some(Impact::Execution),
+            ..command_witnessed(severity)
+        };
+        assert_eq!(validate(&r, &world()), Err(vec![Rule::WitnessStrength]));
+        // Its captured output, hashed from the tree, lifts the cap.
+        let r = FindingRecord {
+            impact: Some(Impact::Execution),
+            ..output_witnessed(severity)
+        };
+        assert!(validate(&r, &with_output()).is_ok());
+    }
+    // A scanner's output is a file the harness re-reads.
+    let mut w = world();
+    let scan = ".mnemorph/dark-elf/dark-elf-harness/scan/out.txt";
+    w.insert(scan.into(), b"finding".to_vec());
+    let r = FindingRecord {
+        witness: Some(Witness {
+            kind: WitnessKind::ScannerOutput,
+            reference: scan.into(),
+            sha256: digest(b"finding"),
+            output: None,
+            output_sha256: None,
+        }),
+        ..good()
+    };
+    assert!(validate(&r, &w).is_ok());
+}
+
+#[test]
+fn a_captured_output_is_in_the_ground_and_hashed() {
+    let set = |output: Option<&str>, sha: Option<String>, kind| {
+        let mut r = output_witnessed(Severity::High);
+        if let Some(w) = r.witness.as_mut() {
+            w.output = output.map(Into::into);
+            w.output_sha256 = sha;
+            w.kind = kind;
+            if kind == WitnessKind::Test {
+                POC.clone_into(&mut w.reference);
+                w.sha256 = digest(POC_BODY.as_bytes());
+            }
+        }
+        r
+    };
+    let body = Some(digest(OUTPUT_BODY.as_bytes()));
+    for r in [
+        set(Some(OUTPUT), None, WitnessKind::PocCommand),
+        set(None, body.clone(), WitnessKind::PocCommand),
+        set(
+            Some("crates/demo/out.txt"),
+            body.clone(),
+            WitnessKind::PocCommand,
+        ),
+        set(Some(OUTPUT), body.clone(), WitnessKind::Test),
+        set(Some(OUTPUT), Some("XYZ".into()), WitnessKind::PocCommand),
+    ] {
+        assert!(
+            validate(&r, &with_output()).is_err_and(|e| e.contains(&Rule::Witness)),
+            "{:?}",
+            r.witness
+        );
+    }
+    // An output whose bytes changed, or that is not in the tree, breaks its hash.
+    let mut changed = with_output();
+    changed.insert(OUTPUT.into(), b"ok".to_vec());
+    for w in [changed, world()] {
+        assert_eq!(
+            validate(&output_witnessed(Severity::High), &w),
+            Err(vec![Rule::WitnessHash])
+        );
+    }
+}
+
+#[test]
+fn every_trace_step_is_in_the_tree_within_its_file() {
+    let at = |entry: &str| {
+        let mut r = good();
+        entry.clone_into(&mut r.trace[0].at);
+        r
+    };
+    assert!(validate(&at(&format!("{ENTRY}:1")), &world()).is_ok());
+    for entry in [
+        format!("{ENTRY}:2"),
+        format!("{ENTRY}:99999"),
+        "crates/demo/src/none.rs:1".to_owned(),
+    ] {
+        assert_eq!(
+            validate(&at(&entry), &world()),
+            Err(vec![Rule::TraceLocated]),
+            "{entry}"
+        );
+    }
+    let mut sink = good();
+    sink.trace[1].at = format!("{SOURCE}:2");
+    assert_eq!(validate(&sink, &world()), Err(vec![Rule::TraceLocated]));
 }
 
 // --- the tree on disk ---
@@ -582,6 +722,59 @@ fn a_missing_record_and_a_forged_id_are_demoted_too() {
         .collect();
     assert!(holes[0].starts_with("no record: "), "{holes:?}");
     assert!(holes[1].starts_with("forged id: "), "{holes:?}");
+}
+
+#[test]
+fn a_root_cause_counts_once() {
+    let ok = good();
+    let w = with_records(&[&ok]);
+    let report = Report {
+        status: "DONE".into(),
+        findings: vec![
+            finding_of(&ok),
+            Finding {
+                at: Some(format!("{SOURCE}:1")),
+                claim: "the same again".into(),
+                ..finding_of(&ok)
+            },
+        ],
+        ..Report::default()
+    };
+    let accepted = accept(report, &w);
+    assert_eq!(accepted.valid().len(), 1);
+    assert_eq!(accepted.report.proven().len(), 1);
+    let holes: Vec<String> = accepted
+        .report
+        .report
+        .holes
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(holes.len(), 1);
+    assert!(
+        holes[0].starts_with(&format!(
+            "duplicate of #{}: #{}",
+            ok.fingerprint, ok.fingerprint
+        )),
+        "{holes:?}"
+    );
+    // A forged first line does not make the true one a duplicate.
+    let forged = Finding {
+        id: Some("0123456789".into()),
+        ..finding_of(&ok)
+    };
+    let report = Report {
+        status: "DONE".into(),
+        findings: vec![forged, finding_of(&ok)],
+        ..Report::default()
+    };
+    let accepted = accept(report, &w);
+    assert_eq!(accepted.valid().len(), 1);
+    assert!(
+        accepted.report.report.holes[0]
+            .to_string()
+            .starts_with("forged id: ")
+    );
 }
 
 // --- hostile input ---

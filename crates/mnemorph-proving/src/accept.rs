@@ -26,11 +26,28 @@ impl Accepted {
 /// Reads `report` as a Dark Elf's against `world`, the landing's tree. Each `@F`'s record is read
 /// at its `rec:` path and held to [`validate`]: an unreadable record demotes the finding to
 /// `no record:`, a broken one to `invalid record (<rules>):`, and an id that is not the record's
-/// fingerprint to `forged id:` — each an `@?`, never dropped.
+/// fingerprint to `forged id:`, and a second finding of a root cause already counted to
+/// `duplicate of #<id>:` — each an `@?`, never dropped.
 #[must_use]
 pub fn accept(report: Report, world: &(impl World + ?Sized)) -> Accepted {
+    // The ids of the findings `dark_elf` reads a record for, in the order it reads them.
+    let ids: Vec<(String, String)> = report
+        .findings
+        .iter()
+        .filter(|f| f.has_dark_elf_parts())
+        .filter_map(|f| Some((f.rec.clone()?, f.id.clone()?)))
+        .collect();
+    let mut next = ids.iter();
+    let mut counted: Vec<String> = Vec::new();
     let mut seen: Vec<(String, Valid)> = Vec::new();
     let read = report.dark_elf(|rec| {
+        // A second `@F` of one root cause is the first one again: it never counts twice.
+        let id = next.next().filter(|(r, _)| r == rec).map(|(_, id)| id);
+        if let Some(id) = id
+            && counted.contains(id)
+        {
+            return Err(format!("duplicate of #{id}"));
+        }
         let record = world
             .read(rec)
             .and_then(|bytes| FindingRecord::parse(rec, &bytes))
@@ -40,6 +57,11 @@ pub fn accept(report: Report, world: &(impl World + ?Sized)) -> Accepted {
             format!("invalid record ({})", names.join(", "))
         })?;
         let root = valid.root().clone();
+        if let Some(id) = id
+            && id == valid.fingerprint()
+        {
+            counted.push(id.clone());
+        }
         seen.push((rec.to_owned(), valid));
         Ok(root)
     });

@@ -130,6 +130,25 @@ pub struct Witness {
     pub reference: String,
     /// The SHA-256 of the file's bytes, or of the command line, in lowercase hex.
     pub sha256: String,
+    /// For a `poc-command`: the file in the proving ground holding the output it printed when
+    /// run — what the harness hashes, since a command's own text proves nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// The SHA-256 of that output file's bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_sha256: Option<String>,
+}
+
+impl Witness {
+    /// Whether the harness can re-read a file that shows the failure: a test, a scanner's
+    /// output, or a command's captured output. A bare command line is only a claim.
+    #[must_use]
+    pub fn on_file(&self) -> bool {
+        match self.kind {
+            WitnessKind::Test | WitnessKind::ScannerOutput => true,
+            WitnessKind::PocCommand => self.output.is_some(),
+        }
+    }
 }
 
 /// Where a trace step stands between the entry and the sink.
@@ -314,11 +333,16 @@ pub enum Rule {
     /// The trace runs entry, propagation, sink, each at a safe `file:line`, the sink in the root
     /// cause's file.
     Trace,
+    /// Every trace step's file is in the landing's tree, and its line within the file.
+    TraceLocated,
     /// A witness: a test or scanner output in the speciality's proving ground, or a command, with
     /// a SHA-256.
     Witness,
-    /// The witness's hash is its content's.
+    /// The witness's hash is its content's, and a captured output's hash its file's.
     WitnessHash,
+    /// From high up, the witness is a file the harness re-reads: a test, a scanner's output, or
+    /// a command's captured output — a bare command caps the severity at medium.
+    WitnessStrength,
     /// The severity is at most the cap of the demonstrated impact, and at most low when no
     /// reachability is shown.
     SeverityCap,
@@ -328,7 +352,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order they are checked and reported.
-    pub const ALL: [Rule; 14] = [
+    pub const ALL: [Rule; 16] = [
         Rule::Nv,
         Rule::Required,
         Rule::Size,
@@ -339,8 +363,10 @@ impl Rule {
         Rule::FileExists,
         Rule::SymbolPresent,
         Rule::Trace,
+        Rule::TraceLocated,
         Rule::Witness,
         Rule::WitnessHash,
+        Rule::WitnessStrength,
         Rule::SeverityCap,
         Rule::Preconditions,
     ];
@@ -359,8 +385,10 @@ impl Rule {
             Rule::FileExists => "file-exists",
             Rule::SymbolPresent => "symbol-present",
             Rule::Trace => "trace",
+            Rule::TraceLocated => "trace-located",
             Rule::Witness => "witness",
             Rule::WitnessHash => "witness-hash",
+            Rule::WitnessStrength => "witness-strength",
             Rule::SeverityCap => "severity-cap",
             Rule::Preconditions => "preconditions",
         }
@@ -446,8 +474,13 @@ pub(crate) fn check(
                 .as_deref()
                 .is_some_and(|s| !names(&String::from_utf8_lossy(s), &r.symbol)),
             Rule::Trace => !traced(r),
+            Rule::TraceLocated => !trace_located(r, world, source.is_some()),
             Rule::Witness => !witnessed(r),
             Rule::WitnessHash => r.witness.as_ref().is_some_and(|w| !hashed(w, world)),
+            Rule::WitnessStrength => {
+                r.severity.is_some_and(|s| s >= Severity::High)
+                    && r.witness.as_ref().is_some_and(|w| !w.on_file())
+            }
             Rule::SeverityCap => r
                 .severity
                 .zip(r.impact)
@@ -552,13 +585,31 @@ fn names(text: &str, symbol: &str) -> bool {
 }
 
 /// The file of a `file:line`, when it is a safe repository path and a line from 1.
-fn located(at: &str) -> Option<String> {
+fn located(at: &str) -> Option<(String, usize)> {
     let (file, line) = at.rsplit_once(':')?;
-    let line: u32 = line.parse().ok()?;
+    let line: usize = line.parse().ok()?;
     if line == 0 {
         return None;
     }
-    repo_path(file)
+    Some((repo_path(file)?, line))
+}
+
+/// Every step's file in the tree and its line within it. A step in the root cause's file is
+/// left to `file-exists` when that file is missing, so one gap breaks one rule.
+fn trace_located(r: &FindingRecord, world: &(impl World + ?Sized), source: bool) -> bool {
+    let root = repo_path(&r.file);
+    r.trace.iter().all(|s| {
+        let Some((file, line)) = located(&s.at) else {
+            // A malformed step breaks `trace`.
+            return true;
+        };
+        if !source && Some(&file) == root.as_ref() {
+            return true;
+        }
+        world
+            .read(&file)
+            .is_some_and(|b| line <= String::from_utf8_lossy(&b).lines().count())
+    })
 }
 
 fn traced(r: &FindingRecord) -> bool {
@@ -575,7 +626,7 @@ fn traced(r: &FindingRecord) -> bool {
         _ => false,
     });
     let safe = r.trace.iter().all(|s| located(&s.at).is_some());
-    let sink = located(&last.at).is_some_and(|f| Some(f) == repo_path(&r.file));
+    let sink = located(&last.at).is_some_and(|(f, _)| Some(f) == repo_path(&r.file));
     ordered && safe && sink
 }
 
@@ -583,18 +634,24 @@ fn witnessed(r: &FindingRecord) -> bool {
     let Some(w) = &r.witness else {
         return false;
     };
-    let hex = w.sha256.len() == 64
-        && w.sha256
-            .bytes()
-            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
     let ground = format!(".mnemorph/dark-elf/{}/", r.speciality);
+    let grounded = |path: &str| repo_path(path).is_some_and(|p| p.starts_with(&ground));
     let placed = match w.kind {
         WitnessKind::PocCommand => !blank(&w.reference),
-        WitnessKind::Test | WitnessKind::ScannerOutput => {
-            repo_path(&w.reference).is_some_and(|p| p.starts_with(&ground))
-        }
+        WitnessKind::Test | WitnessKind::ScannerOutput => grounded(&w.reference),
     };
-    hex && placed
+    let output = match (&w.output, &w.output_sha256) {
+        (None, None) => true,
+        (Some(path), Some(sha)) => {
+            w.kind == WitnessKind::PocCommand && grounded(path) && is_sha256(sha)
+        }
+        _ => false,
+    };
+    is_sha256(&w.sha256) && placed && output
+}
+
+fn is_sha256(hex: &str) -> bool {
+    hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
@@ -611,5 +668,10 @@ fn hashed(w: &Witness, world: &(impl World + ?Sized)) -> bool {
         WitnessKind::PocCommand => Some(w.reference.as_bytes().to_vec()),
         WitnessKind::Test | WitnessKind::ScannerOutput => world.read(&w.reference),
     };
-    content.is_some_and(|c| sha256_hex(&c) == w.sha256)
+    let output = match (&w.output, &w.output_sha256) {
+        (Some(path), Some(sha)) => world.read(path).is_some_and(|c| &sha256_hex(&c) == sha),
+        (None, None) => true,
+        _ => false,
+    };
+    content.is_some_and(|c| sha256_hex(&c) == w.sha256) && output
 }

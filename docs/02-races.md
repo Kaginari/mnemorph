@@ -710,7 +710,8 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
     name) holds the verdict (`finding` or `nv`), the fingerprint, the speciality, the class (a
     playbook reference), the file and the symbol; the claim; the trace from entry to sink with a
     `file:line` at each step; the witness — its kind (`test`, `poc-command`, `scanner-output`),
-    its reference and its SHA-256; the preconditions and the reachability (how an attacker reaches
+    its reference and its SHA-256, and for a command the file holding the output it printed, with
+    that file's SHA-256; the preconditions and the reachability (how an attacker reaches
     it); the likelihood and the demonstrated impact, each with its reason; the severity; the fix
     and the invariant it restores.
   - **Severity is capped at the demonstrated impact**: likelihood and impact, each with its reason,
@@ -724,6 +725,8 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
     | `disclosure` — data read across a boundary · `tamper` — state changed across one | high |
     | `bypass` — the sandbox, the gate or an approval bypassed · `execution` — the attacker's code run | critical |
 
+    The impact stays a claim until the independent verifier below confirms it: the validator
+    checks the cap, not that the witness shows that impact.
   - **Needs validation** is its own verdict: `@? nv #<fingerprint> blocker:<fact> plan:<check>`,
     the exact blocker and the plan that would settle it — no severity, never a finding, never a
     seal.
@@ -743,16 +746,19 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
   | `fingerprint` | its fingerprint is the one derived from its root cause |
   | `rec-path` | it was read from its own path, `.mnemorph/dark-elf/<speciality>/findings/<fingerprint>.json` |
   | `file-exists` | its file is in the landing's tree, read by the wire's ASCII path rule, never through a symbolic link |
-  | `symbol-present` | that file names its symbol (the last segment after `::` or `.`) as a whole word |
+  | `symbol-present` | that file names its symbol (the last segment after `::` or `.`) as a whole word — a comment naming it is enough here; the independent verifier checks it is the code's |
   | `trace` | the trace runs entry, propagation, sink (one step: entry or sink), each at a safe `file:line` from line 1, the sink in its file |
-  | `witness` | it has a witness: a test or a scanner output in its own speciality's proving ground, or a command, with a SHA-256 in lowercase hex |
-  | `witness-hash` | that hash is the witness file's bytes', or the command line's |
+  | `trace-located` | every step's file is in the landing's tree and its line within that file |
+  | `witness` | it has a witness: a test or a scanner output in its own speciality's proving ground, or a command — its captured output, if any, in that ground — each with a SHA-256 in lowercase hex |
+  | `witness-hash` | that hash is the witness file's bytes', or the command line's, and the captured output's is its file's |
+  | `witness-strength` | from high up, its witness is a file the harness re-reads — a test, a scanner's output, or a command's captured output: a bare command caps the severity at medium |
   | `severity-cap` | its severity is within the cap above |
   | `preconditions` | from medium up, its preconditions and reachability are stated |
 
   The harness reads a Dark Elf's report through `mnemorph_proving::accept`: each `@F`'s record is
   read at its `rec:` path and validated, and a finding whose record breaks a rule is demoted to
-  `@? invalid record (<rule>, …): <finding>` — named, never dropped. The rules adapt Cloudflare's
+  `@? invalid record (<rule>, …): <finding>` — named, never dropped. A root cause counts once: a
+  second `@F` with a fingerprint already counted is demoted to `@? duplicate of #<fingerprint>`. The rules adapt Cloudflare's
   `validate-findings.cjs` ([notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 - **The coverage ledger.** Each audit writes
   `.mnemorph/dark-elf/<speciality>/coverage/<audit>.json`: one unit per routed surface × attack
