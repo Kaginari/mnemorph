@@ -597,7 +597,8 @@ pub fn band(t: &Theme, pct: u64) -> Style {
 
 /// The head: Veldora, the human, while no body works; during a turn the portrait of the body
 /// working — Rimuru for the session, a commissioned body's race while it acts — playing its idle
-/// loop; centred, with the state under it (the world and the model are on the frame's edges).
+/// loop (or its ascension, once seen); centred, with the state under it (the world and the model
+/// are on the frame's edges). Real pixels go over blank rows; else the clip's glyph cells.
 fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
@@ -614,17 +615,13 @@ fn head(m: &Model, w: usize) -> Lines {
             spans.extend(l.spans);
             Line::from(spans)
         }));
-    } else if let Some(p) = mnanim::ready(race) {
+    } else if let Some((p, at)) = clip_cells(m) {
         let pad = Span::raw(" ".repeat(w.saturating_sub(mnanim::SIZE) / 2));
-        out.extend(
-            mnanim::lines(p.at(m.portrait_clock), None)
-                .into_iter()
-                .map(|l| {
-                    let mut spans = vec![pad.clone()];
-                    spans.extend(l.spans);
-                    Line::from(spans)
-                }),
-        );
+        out.extend(mnanim::lines(p.at(at), None).into_iter().map(|l| {
+            let mut spans = vec![pad.clone()];
+            spans.extend(l.spans);
+            Line::from(spans)
+        }));
     }
     let centred = |spans: Vec<Span<'static>>| {
         let line = truncate(Line::from(spans), w);
@@ -958,6 +955,21 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
         )));
     }
     out
+}
+
+/// The clip playing as glyph cells, and how far into it, once decoded: an ascension not decoded
+/// yet is asked for off the UI's thread, the risen form's loop standing in meanwhile.
+fn clip_cells(m: &Model) -> Option<(std::sync::Arc<mnanim::Loop>, std::time::Duration)> {
+    let (clip, at) = m.playing();
+    if let Some(p) = mnanim::clip_ready(clip) {
+        return Some((p, at));
+    }
+    if clip == clip.then() {
+        // An idle loop: the start-up warm-up decodes it.
+        return None;
+    }
+    mnanim::fetch(clip);
+    mnanim::clip_ready(clip.then()).map(|p| (p, at))
 }
 
 /// The portrait's width, in cells.

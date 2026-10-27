@@ -6,8 +6,9 @@
 //! encoded ([`kitty`], [`iterm`], [`sixel`]). Asking the terminal is [`crate::probe`]'s work;
 //! placing, moving and erasing a picture over the cells is [`crate::pictures`]'.
 //!
-//! The source art is embedded ([`png`]): each race's 256 px portrait. No byte of an escape
-//! sequence built here comes from the model or the world — only from those files and from numbers.
+//! The source art is embedded: Veldora's 256 px portrait ([`VELDORA`]) and the races' animations
+//! ([`crate::kit::mnanim`]). No byte of an escape sequence built here comes from the model or the
+//! world — only from those files and from numbers.
 
 use std::fmt::Write as _;
 use std::io::Cursor;
@@ -16,8 +17,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use image::imageops::{self, FilterType};
 use image::{ImageFormat, RgbImage};
-use mnemorph_races::Race;
 
+use crate::kit::glyphs::Glyphs;
 use crate::theme::Rgb;
 
 /// How the portraits are drawn.
@@ -277,6 +278,8 @@ pub struct Caps {
     pub timed_out: bool,
     /// Notes: an unknown override, a terminal multiplexer.
     pub notes: Vec<String>,
+    /// The glyphs a portrait is drawn with when it is not real pixels ([`glyphs`]).
+    pub glyphs: Glyphs,
 }
 
 impl Caps {
@@ -294,6 +297,7 @@ impl Caps {
             raw: String::new(),
             timed_out: false,
             notes: Vec::new(),
+            glyphs: Glyphs::Half,
         }
     }
 
@@ -330,6 +334,11 @@ impl Caps {
         };
         let _ = writeln!(s, "asked        {choice} (MNEMORPH_TUI_IMAGES)");
         let _ = writeln!(s, "drawing      {} — {}", self.protocol.name(), self.why);
+        let _ = writeln!(
+            s,
+            "glyphs       {} (MNEMORPH_TUI_GLYPHS), without pixels",
+            self.glyphs.name()
+        );
         if self.timed_out {
             let _ = writeln!(s, "timed out    the terminal did not finish answering");
         }
@@ -396,6 +405,7 @@ pub fn decide(
     // is on. A VTE without it is named in the notes, never guessed into a blank box.
     let vte = env("VTE_VERSION").and_then(|v| v.trim().parse::<u32>().ok());
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
+    let replies_name = replies.name.clone();
     let mut notes = Vec::new();
     let (protocol, why) = match choice {
         Choice::Off => (Protocol::Blocks, "images off".to_owned()),
@@ -459,6 +469,39 @@ pub fn decide(
         raw: String::new(),
         timed_out: false,
         notes,
+        glyphs: glyphs(replies_name.as_deref(), env),
+    }
+}
+
+/// The glyphs a terminal named `name` (XTVERSION) draws a portrait with when it shows no pixels:
+/// `MNEMORPH_TUI_GLYPHS` when set (`half`, `quadrants`, `sextants`, `octants`); half blocks on the
+/// Linux console; octants where the terminal draws them itself whatever the font (Kitty,
+/// Ghostty), sextants where it draws those (`WezTerm`, foot); else quadrants — block elements,
+/// which every font with `▀` has.
+#[must_use]
+pub fn glyphs(name: Option<&str>, env: &impl Fn(&str) -> Option<String>) -> Glyphs {
+    if let Some(g) = env("MNEMORPH_TUI_GLYPHS")
+        .as_deref()
+        .and_then(Glyphs::parse)
+    {
+        return g;
+    }
+    let term = env("TERM").unwrap_or_default().to_ascii_lowercase();
+    if term == "linux" {
+        return Glyphs::Half;
+    }
+    let said = format!(
+        "{} {} {term}",
+        name.unwrap_or_default(),
+        env("TERM_PROGRAM").unwrap_or_default()
+    )
+    .to_ascii_lowercase();
+    if ["kitty", "ghostty"].iter().any(|t| said.contains(t)) {
+        Glyphs::Octants
+    } else if ["wezterm", "foot"].iter().any(|t| said.contains(t)) {
+        Glyphs::Sextants
+    } else {
+        Glyphs::Quadrants
     }
 }
 
@@ -504,29 +547,6 @@ pub fn half_blocks(source: &[u8], cols: u16, bg: Rgb) -> Vec<ratatui::text::Line
             )
         })
         .collect()
-}
-
-/// The embedded portrait of `race`: a 256 px RGBA PNG.
-#[must_use]
-pub fn png(race: Race) -> &'static [u8] {
-    macro_rules! art {
-        ($name:literal) => {
-            include_bytes!(concat!("../../assets/portraits/", $name, ".png"))
-        };
-    }
-    match race {
-        Race::Rimuru => art!("rimuru"),
-        Race::Elf => art!("elf"),
-        Race::Orc => art!("orc"),
-        Race::Slime => art!("slime"),
-        Race::Kijin => art!("kijin"),
-        Race::DarkElf => art!("dark-elf"),
-        Race::HighElf => art!("high-elf"),
-        Race::HighOrc => art!("high-orc"),
-        Race::NamedSlime => art!("named-slime"),
-        Race::Oni => art!("oni"),
-        Race::ArchDarkElf => art!("arch-dark-elf"),
-    }
 }
 
 /// `source` (a PNG) as a `w` × `h` picture: laid on `bg` at its own size first, so its clear
@@ -577,6 +597,41 @@ pub const KITTY_CHUNK: usize = 4096;
 /// always shows, even in a terminal that ignored the picture's deletion.
 #[must_use]
 pub fn kitty(png: &[u8], cols: u16, rows: u16, id: u32) -> String {
+    kitty_chunks(
+        &format!("a=T,f=100,i={id},c={cols},r={rows},z=-1,C=1,q=2"),
+        png,
+    )
+}
+
+/// Kitty: store `png` as image `id` without showing it — an animation's frame, sent once and
+/// placed by id after.
+#[must_use]
+pub fn kitty_transmit(png: &[u8], id: u32) -> String {
+    kitty_chunks(&format!("a=t,f=100,i={id},q=2"), png)
+}
+
+/// Kitty: show the stored image `id` at the cursor over `cols` × `rows` cells, below the text,
+/// the cursor kept: a few bytes, however large the picture.
+#[must_use]
+pub fn kitty_place(id: u32, cols: u16, rows: u16) -> String {
+    format!("\x1b_Ga=p,i={id},p=1,c={cols},r={rows},z=-1,C=1,q=2\x1b\\")
+}
+
+/// Kitty: take image `id` off the screen, its data kept for the next placement.
+#[must_use]
+pub fn kitty_unplace(id: u32) -> String {
+    format!("\x1b_Ga=d,d=i,i={id},q=2\x1b\\")
+}
+
+/// Kitty: delete and free every image with an id from `first` to `last`.
+#[must_use]
+pub fn kitty_free_range(first: u32, last: u32) -> String {
+    format!("\x1b_Ga=d,d=R,x={first},y={last},q=2\x1b\\")
+}
+
+/// Kitty: `png` in chunks of at most [`KITTY_CHUNK`] base64 bytes, the control `keys` on the
+/// first, `m=1` on every chunk but the last.
+fn kitty_chunks(keys: &str, png: &[u8]) -> String {
     let data = STANDARD.encode(png);
     let chunks: Vec<&str> = data
         .as_bytes()
@@ -589,10 +644,7 @@ pub fn kitty(png: &[u8], cols: u16, rows: u16, id: u32) -> String {
     for (i, c) in chunks.iter().enumerate() {
         let more = u8::from(i < last);
         if i == 0 {
-            let _ = write!(
-                out,
-                "\x1b_Ga=T,f=100,i={id},c={cols},r={rows},z=-1,C=1,q=2,m={more};{c}\x1b\\"
-            );
+            let _ = write!(out, "\x1b_G{keys},m={more};{c}\x1b\\");
         } else {
             let _ = write!(out, "\x1b_Gq=2,m={more};{c}\x1b\\");
         }
@@ -882,13 +934,11 @@ mod tests {
     #[test]
     fn a_picture_is_exactly_its_box_on_the_background() {
         let bg = Rgb(6, 11, 18);
-        let img = picture(png(Race::Rimuru), 256, 255, bg).unwrap();
+        let img = picture(VELDORA, 256, 255, bg).unwrap();
         assert_eq!(img.dimensions(), (256, 255));
         // The square is 255 px, centred: the column left over is the background.
         assert_eq!(img.get_pixel(0, 0).0, [6, 11, 18]);
-        for race in Race::ALL {
-            assert!(picture(png(race), 16, 16, bg).is_some(), "{race:?}");
-        }
+        assert!(picture(VELDORA, 16, 16, bg).is_some());
         assert!(picture(b"not a png", 8, 8, bg).is_none());
     }
 
@@ -931,7 +981,7 @@ mod tests {
 
     #[test]
     fn sixel_payloads_are_well_formed() {
-        let img = picture(png(Race::Slime), 24, 17, Rgb(6, 11, 18)).unwrap();
+        let img = picture(VELDORA, 24, 17, Rgb(6, 11, 18)).unwrap();
         let s = sixel(&img);
         assert!(s.starts_with("\x1bP0;1;0q\"1;1;24;17#0;2;"));
         assert!(s.ends_with("-\x1b\\"));
@@ -955,7 +1005,7 @@ mod tests {
         assert_eq!(pal.len(), 2);
         assert_eq!(pal[usize::from(px[0])], [255, 0, 0]);
         assert_eq!(pal[usize::from(px[3])], [0, 0, 255]);
-        let many = picture(png(Race::Elf), 64, 64, Rgb(0, 0, 0)).unwrap();
+        let many = picture(VELDORA, 64, 64, Rgb(0, 0, 0)).unwrap();
         let (pal, px) = quantize(&many, 255);
         assert!(pal.len() <= 255);
         assert_eq!(px.len(), 64 * 64);

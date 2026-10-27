@@ -561,3 +561,34 @@ fn a_commissioned_body_reaches_the_wire_under_its_own_name() {
         "a child's run is its own"
     );
 }
+
+/// An outward act a probe left in `reconcile` is shown to the human in the hello, which
+/// `mnemorph status` prints, until a later row settles it.
+#[test]
+fn an_act_in_reconcile_is_shown_to_the_human() {
+    let mut c = Client::start("reconcile", UNGUARDED, vec![ScriptedModel::text("never")]);
+    let post = c.root.join("world/.mnemorph/kijin/kijin-forge");
+    std::fs::create_dir_all(&post).unwrap();
+    std::fs::write(
+        post.join("post.jsonl"),
+        concat!(
+            r#"{"act":"a1","state":"committed","at":"2026-10-27T10:00:00Z"}"#,
+            "\n",
+            r#"{"act":"a1","state":"reconcile","at":"2026-10-27T10:00:05Z","why":"refs/heads/feat/x is not on the remote"}"#,
+            "\n",
+            r#"{"act":"a2","state":"observed","at":"2026-10-27T10:01:00Z"}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+    let id = c.request("initialize", &json!({}));
+    let hello = c.response(id);
+    let holes = hello["result"]["holes"].to_string();
+    assert!(
+        holes.contains(
+            "kijin-forge act a1 is in reconcile since 2026-10-27T10:00:05Z: refs/heads/feat/x is not on the remote"
+        ),
+        "{hello}"
+    );
+    assert!(!holes.contains("act a2"), "{hello}");
+}

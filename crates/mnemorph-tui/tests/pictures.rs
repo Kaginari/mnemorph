@@ -7,7 +7,7 @@ use mnemorph_server::protocol::Event;
 use mnemorph_tools::Pending;
 use mnemorph_tui::app::{Header, Model, Msg, update, view};
 use mnemorph_tui::gate::Card;
-use mnemorph_tui::kit::mnanim;
+use mnemorph_tui::kit::mnanim::{self, Clip};
 use mnemorph_tui::kit::pixels::{self, Protocol};
 use mnemorph_tui::pictures::{Art, Pictures, Placer, Slot, Want};
 use mnemorph_tui::theme::Variant;
@@ -56,6 +56,22 @@ fn card() -> Card {
     )
 }
 
+/// Sync until the placer has sent `sends` pictures, the frames written: a clip's frame is
+/// encoded on a thread of its own, and waited for.
+fn sync_until(placer: &mut Placer, m: &Model, buf: &Buffer, sends: usize) -> String {
+    let start = std::time::Instant::now();
+    let mut all = Vec::new();
+    let size = (buf.area.width, buf.area.height);
+    while placer.sends < sends && start.elapsed() < std::time::Duration::from_secs(120) {
+        placer
+            .sync(&m.pictures.wanted(), size, buf, &mut all)
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(placer.sends, sends, "sent in time");
+    String::from_utf8(all).unwrap()
+}
+
 fn slot(wants: &[Want], s: Slot) -> Option<Want> {
     wants.iter().find(|w| w.slot == s).copied()
 }
@@ -67,8 +83,9 @@ fn the_sidebar_alone_wants_a_picture_over_plain_cells() {
     let buf = draw(&mut m, &mut t);
     let wants = m.pictures.wanted();
     let side = slot(&wants, Slot::Sidebar).expect("the sidebar's head");
-    // 32 columns of 8 px: 256 × 255 px in 15 rows.
-    assert_eq!((side.area.width, side.area.height), (32, 15));
+    // 32 columns of 8 px: 256 px across, and 16 rows of 17 px, so a 256 px frame shows at its
+    // own size.
+    assert_eq!((side.area.width, side.area.height), (32, 16));
     // Idle: Veldora, the human; a working body's race only during a turn.
     assert_eq!(side.art, Art::Veldora);
     assert_eq!(side.bg, m.theme.p.bg);
@@ -84,9 +101,10 @@ fn the_sidebar_alone_wants_a_picture_over_plain_cells() {
             }
         }
     }
-    // Still, never played: a busy body asks no portrait ticks.
+    // A busy body's clip plays: the portrait asks ticks, at 8 frames a second under iTerm2.
     m.outstanding = 1;
-    assert!(!m.portrait_plays());
+    assert!(m.portrait_plays());
+    assert_eq!(m.next_tick(), Some(std::time::Duration::from_millis(125)));
 }
 
 #[test]
@@ -126,13 +144,10 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     assert!(m.gate.is_none());
     let buf = draw(&mut m, &mut t);
     assert!(slot(&m.pictures.wanted(), Slot::Sidebar).is_some());
-    // The sidebar alone comes back: the welcome wants no picture.
-    let now = std::time::Instant::now();
-    placer
-        .sync_at(&m.pictures.wanted(), (120, 50), &buf, &mut Vec::new(), now)
-        .unwrap();
-    assert_eq!(placer.sends, 2, "the sidebar, back at once");
-    let later = now + mnemorph_tui::pictures::SETTLE;
+    // The sidebar alone comes back, its clip's frame as soon as it is encoded: the welcome wants
+    // no picture.
+    sync_until(&mut placer, &m, &buf, 2);
+    let later = std::time::Instant::now() + mnemorph_tui::pictures::SETTLE;
     placer
         .sync_at(
             &m.pictures.wanted(),
@@ -143,9 +158,10 @@ fn no_picture_is_placed_while_an_approval_is_open() {
         )
         .unwrap();
     assert_eq!(placer.sends, 2, "nothing more once settled");
-    assert_eq!(
-        placer.builds, 2,
-        "Veldora and the working body, each built once"
+    assert_eq!(placer.builds, 1, "Veldora's still, built once");
+    assert!(
+        placer.encoded() >= 1,
+        "the working body's frames, encoded off the thread"
     );
 }
 
@@ -182,12 +198,12 @@ fn an_unchanged_frame_sends_nothing_and_a_new_body_swaps_the_picture() {
     );
     let buf = draw(&mut m, &mut t);
     let side = slot(&m.pictures.wanted(), Slot::Sidebar).unwrap();
-    assert_ne!(side.art, Art::Still(Race::Rimuru));
-    let mut out = Vec::new();
-    placer
-        .sync(&m.pictures.wanted(), (120, 50), &buf, &mut out)
-        .unwrap();
-    let out = String::from_utf8(out).unwrap();
+    assert!(
+        matches!(side.art, Art::Frame(Clip::Idle(Race::Orc), _)),
+        "{:?}",
+        side.art
+    );
+    let out = sync_until(&mut placer, &m, &buf, sent + 1);
     let at = format!(
         "\x1b7\x1b[{};{}H\x1b]1337;File=",
         side.area.y + 1,
@@ -306,4 +322,94 @@ fn ctrl_c_and_esc_always_pass_a_late_window() {
         update(&mut m, Msg::KeyAt(KeyEvent::from(KeyCode::Char(c)), soon));
     }
     assert_eq!(m.input.text(), "");
+}
+
+#[test]
+fn a_body_seen_ascending_plays_its_ascension_once_then_its_risen_loop() {
+    let mut m = model(Protocol::Kitty);
+    let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
+    m.outstanding = 1;
+    update(
+        &mut m,
+        Msg::Below {
+            event: Event::TurnStarted {
+                text: "judge".into(),
+            },
+            chain: vec!["orc-sql".into()],
+        },
+    );
+    draw(&mut m, &mut t);
+    let side = slot(&m.pictures.wanted(), Slot::Sidebar).unwrap();
+    assert_eq!(side.art, Art::Frame(Clip::Idle(Race::Orc), 0));
+    update(&mut m, Msg::Tick(std::time::Duration::from_millis(500)));
+    // The world now says the same body is a High Orc: no event names an ascension yet, but the
+    // survey re-reads each creature's race, and a body risen to its ascended form is one.
+    let mnemorph_tui::app::Cmd::Survey(seq) = m.survey() else {
+        unreachable!("a survey asks for a survey")
+    };
+    let mut survey = mnemorph_tui::sidebar::Survey::default();
+    survey.races.insert("orc-sql".into(), Race::HighOrc);
+    update(&mut m, Msg::Surveyed { seq, survey });
+    assert_eq!(m.ascending, Some(Race::Orc));
+    draw(&mut m, &mut t);
+    let side = slot(&m.pictures.wanted(), Slot::Sidebar).unwrap();
+    assert_eq!(
+        side.art,
+        Art::Frame(Clip::Ascend(Race::Orc), 0),
+        "from its start"
+    );
+    // Five seconds on, the ascension is over: the risen form's loop.
+    for _ in 0..52 {
+        update(&mut m, Msg::Tick(std::time::Duration::from_millis(100)));
+    }
+    draw(&mut m, &mut t);
+    let side = slot(&m.pictures.wanted(), Slot::Sidebar).unwrap();
+    assert!(
+        matches!(side.art, Art::Frame(Clip::Idle(Race::HighOrc), _)),
+        "{:?}",
+        side.art
+    );
+    // Without pixels, the same clips play as glyph cells.
+    m.pictures = Pictures::new(Protocol::Blocks, None);
+    assert_eq!(m.playing().0, Clip::Idle(Race::HighOrc));
+}
+
+#[test]
+fn idle_wants_veldora_alone() {
+    for p in [Protocol::Kitty, Protocol::Iterm, Protocol::Sixel] {
+        let mut m = model(p);
+        let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
+        for _ in 0..3 {
+            update(&mut m, Msg::Tick(std::time::Duration::from_millis(100)));
+            draw(&mut m, &mut t);
+            let wants = m.pictures.wanted();
+            assert_eq!(wants.len(), 1, "{p:?}");
+            assert_eq!(wants[0].art, Art::Veldora, "{p:?}");
+        }
+        assert!(!m.portrait_plays(), "{p:?}: an idle UI wakes for nothing");
+    }
+}
+
+#[test]
+fn an_unfocused_window_pauses_the_portrait() {
+    let mut m = model(Protocol::Iterm);
+    let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
+    draw(&mut m, &mut t);
+    m.outstanding = 1;
+    assert!(m.portrait_plays());
+    update(&mut m, Msg::Focus(false));
+    assert!(
+        !m.portrait_plays(),
+        "no frames for a window no one looks at"
+    );
+    let clock = m.portrait_clock;
+    update(&mut m, Msg::Tick(std::time::Duration::from_millis(500)));
+    assert_eq!(m.portrait_clock, clock, "paused");
+    assert_ne!(
+        m.next_tick(),
+        Some(std::time::Duration::from_millis(125)),
+        "no portrait ticks"
+    );
+    update(&mut m, Msg::Focus(true));
+    assert!(m.portrait_plays(), "resumed");
 }

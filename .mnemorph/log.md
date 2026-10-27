@@ -5464,6 +5464,78 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T18:01:54+01:00] rimuru — #93: an outward act's receipt is observed, never an exit code
+- **Done:** `mnemorph_config::PostJournal` (`.mnemorph/kijin/<post>/post.jsonl`): rows
+  `committed` → `pending observation` → `observed` | `reconcile`; a `Command` is `unobserved`.
+  `Planned::pin` reads the push URLs (insteadOf applied), HEAD and the `gh` host with the plan;
+  `Observer` runs fixed probes on the pin (`git ls-remote`, `gh api --method GET` labels /
+  comment by id with the body's SHA-256), outside every repository, 30 s, inside the guard with
+  only its scratch writable. `reconciling` feeds the hello's holes (`mnemorph status`);
+  `Tally` is the hook M11 folds into `outward_clean_rate`, the envelope's suspension and the
+  Oni fall. Docs 02, 05.
+- **Tests:** config `receipt` (local bare repos, a fake `Probe` for `gh`): match → observed;
+  moved or missing branch, missing label, edited or misplaced comment, exit ≠ 0, timeout →
+  reconcile; `remote set-url` after the act still probes the pinned URL; a `-`-leading pushurl
+  is not pinned; credentials never reach the journal; the guard keeps a probe from writing.
+  server `an_act_in_reconcile_is_shown_to_the_human`. With the judgement disabled, 6 of 12 fail.
+- **Learned:** nothing executes a typed act yet: the receipt is the API that executor calls
+  (pin with the plan, commit, run, `ran`, `observe`).
+
+---
+
+### [2026-10-27T18:25:39+01:00] rimuru — #240, reviewed (Opus, Fable): receipts that cannot read a false `observed`
+- **Done:** `pin` (now with a `Probe`) refuses what the act would make if it is already there: a
+  branch on any push URL (`git push` with the empty lease exits 0, "Everything up-to-date", when
+  the branch sits at HEAD's commit) and a label on the PR. A typed act exiting other than 0 is
+  `reconcile` with no `Done`, so no undo. Rows witnessed under
+  `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`; the tripwire rebuilds each
+  post journal as it does the queue; `tally` reads the witness alone. `status` escapes a row's
+  id and why; a ref's sha is shown only when it reads. `commented` takes the pinned host (GHE).
+  Docs 02, 05: GH_TOKEN-only machines reconcile; observe before gating the next act on a target.
+- **Tests:** config `receipt` 18 (7 fail with the judgement off); tripwire
+  `a_post_journal_keeps_the_harness_rows_and_loses_the_forged_ones`; outward GHE `commented`.
+- **Learned:** the reviewers' failed-push case was wider: a lease is never checked when there is
+  nothing to send, so exit 0 proved nothing there either — the pin-time read closes it.
+
+---
+
+### [2026-10-27T18:27:41+01:00] rimuru — the TUI: the races' 256 px animations, and the welcome at the top
+- **Done:** the sidebar plays the working body's clip from mnemorph-animations `ff8af6d`
+  (`assets/anims/256px/`, v2 sprite sheets; the eleven idles and five ascensions, 7.8 MB in,
+  the 32 px loops and the race stills, 2.25 MB, out). Real pixels as the player's `--native`
+  shows them: Kitty stores each frame once by id and places it (16 fps), iTerm2 and Sixel send the
+  frame again (8 fps); frames encode off the UI's thread into reels, a new frame covers the old
+  with nothing erased. Without pixels, glyph cells from octants to half blocks
+  (`MNEMORPH_TUI_GLYPHS`). The sheet decoder and glyph renderer are vendored (`kit::mnanim`,
+  `kit::glyphs`): the repository is private, CI has no token for it. An ascension plays when the
+  body shown is seen as the risen form of its race (`Model::ascend`; no event names one yet). A
+  short transcript is top-anchored, so the welcome opens the conversation like a header and
+  scrolls away. Docs 05.
+- **Tests:** pictures `a_kitty_clip_is_stored_once_by_id_then_placed`,
+  `the_frame_cache_never_encodes_an_unchanged_frame_again`, `a_clip_plays_at_the_protocols_pace`;
+  `a_body_seen_ascending_plays_its_ascension_once_then_its_risen_loop`, `idle_wants_veldora_alone`;
+  welcome `on_first_run_the_welcome_opens_the_conversation_at_the_top`,
+  `the_welcome_scrolls_away_and_comes_back_at_the_top_of_the_history`; mnanim and glyphs units.
+  Under a pty, `MNEMORPH_TUI_IMAGES=kitty|sixel|iterm` wrote `a=t`/`a=p` by id and freed every
+  stored id on exit; Sixel and iTerm2 frames of 256 × 272 px, about 86 and 67 KB.
+- **Learned:** image's Lanczos in a debug build took ~50 s to shrink the eleven clips for glyphs;
+  an area mean over the palette indices does it in a fraction, with no colour bleeding from clear
+  pixels.
+
+---
+
+### [2026-10-27T18:43:43+01:00] rimuru — #241, reviewed (Fable): Kitty's frames let go, a pause out of focus, the licence
+- **Done:** a reel let go (over the few kept, or on a font zoom) frees its Kitty frames by id once
+  none is on screen, so a long session never fills the terminal's image quota; a stored frame is
+  sent again every 32 placements, since `q=2` hides an eviction. Focus reports on: the portrait
+  pauses while the window is unfocused (no ticks, nothing sent), off again on exit and panic. The
+  vendored files name their MIT licence. Docs 05.
+- **Tests:** pictures `a_reel_let_go_frees_its_kitty_frames_and_a_stored_frame_is_refreshed`,
+  `an_unfocused_window_pauses_the_portrait`; run `releasing_turns_every_mode_off…` checks
+  `?1004l`.
+
+---
+
 ### [2026-10-27T18:01:10+01:00] rimuru — #18 decision 1: each Kijin post's outward acts are compiled in
 - **Done:** `mnemorph_races::OutwardKind` (fetch, push-branch, pull-request, comment, label,
   rerun-ci, push-tag, publish, deploy, rollback, write-outside, install, other) and
@@ -5505,3 +5577,6 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** what a command's words name is not what it runs: the shell line before it and the
   repository's config steer it. A persisted `remote.*.pushurl` or `push.followTags` from an
   earlier call is still read only by the gate's fingerprint, not by the kind.
+- **Merged with #240:** `PostJournal` knows its post and `commit` refuses an act the post does not
+  hold (`a_journal_commits_only_its_posts_acts`); the untyped-command receipt test uses a forge
+  command.

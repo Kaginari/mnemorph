@@ -628,7 +628,8 @@ fn drain(pipe: Option<impl std::io::Read + Send + 'static>) -> mpsc::Receiver<Ca
 
 /// The process's environment without its secrets: names carrying a secret word, and values that
 /// are URLs with credentials in them.
-pub(crate) fn scrubbed_env() -> Vec<(String, String)> {
+#[must_use]
+pub fn scrubbed_env() -> Vec<(String, String)> {
     std::env::vars().filter(|(k, v)| !is_secret(k, v)).collect()
 }
 

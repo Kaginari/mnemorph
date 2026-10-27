@@ -24,8 +24,9 @@ Options:
   -V, --version     the version
 
 Portraits are real pixels where the terminal draws images — Kitty, iTerm2's inline images
-(iTerm2, WezTerm, VS Code with terminal.integrated.enableImages), Sixel — else half blocks.
-MNEMORPH_TUI_IMAGES=auto|kitty|iterm|sixel|blocks|off overrides the choice.
+(iTerm2, WezTerm, VS Code with terminal.integrated.enableImages), Sixel — else glyphs.
+MNEMORPH_TUI_IMAGES=auto|kitty|iterm|sixel|blocks|off overrides the choice, and
+MNEMORPH_TUI_GLYPHS=half|quadrants|sextants|octants the glyphs.
 
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
 pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
@@ -115,6 +116,8 @@ fn main() -> ExitCode {
         model.info(format!("portraits: {note}"));
     }
     model.pictures = Pictures::new(caps.protocol, caps.cell);
+    // Without pixels, the portraits are glyphs as fine as the terminal's font draws.
+    mnemorph_tui::kit::mnanim::set_glyphs(caps.glyphs);
     if caps.timed_out {
         model.late = Late::after(std::time::Instant::now());
     }
