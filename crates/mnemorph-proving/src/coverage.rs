@@ -3,10 +3,10 @@
 //!
 //! For every surface the landing touched that the speciality is routed, and every attack class
 //! the speciality owns, the ledger holds exactly one entry: **checked** (how, and the files and
-//! commands that show it, each with its SHA-256), **not applicable** (the fact that rules it out),
-//! or **skipped** (why, and for a high-risk class the risk left open). [`validate`] holds the
-//! ledger to its state table; each [`Rule`] is named, so a refused ledger comes back with the
-//! rules it broke for the body to fix.
+//! commands that show it), **not applicable** (the fact that rules it out — shown by files for a
+//! high-risk class), or **skipped** (why, and for a high-risk class the risk left open).
+//! [`validate`] holds the ledger to its state table; each [`Rule`] is named, so a refused ledger
+//! comes back with the rules it broke for the body to fix.
 //!
 //! Adapted from Cloudflare's security-audit-skill (`validate-coverage-ledger.cjs`, MIT; see
 //! `THIRD-PARTY-NOTICES.md`): its strict state table and bounds, cut to Mnemorph's surfaces and
@@ -18,6 +18,9 @@ use std::fmt;
 use mnemorph_races::{AttackClass, Speciality};
 use serde::{Deserialize, Serialize};
 
+use crate::World;
+use crate::finding::sha256_hex;
+
 /// The shortest a reason, a risk or a method may be, in characters, once its whitespace is folded.
 pub const MIN_PROSE: usize = 20;
 /// The most entries one ledger may hold.
@@ -28,6 +31,10 @@ pub const MAX_TEXT: usize = 1024;
 pub const MAX_LIST: usize = 64;
 /// The most breaches a refusal lists; it counts the rest.
 pub const MAX_BREACHES: usize = 32;
+/// The most pairs one normalised reason may stand for.
+pub const MAX_SAME_REASON: usize = 2;
+/// The most pairs one file, at one hash, may be the sole evidence of.
+pub const MAX_SOLE_EVIDENCE: usize = 2;
 
 /// Reasons that say nothing, as [`normalised`] reads them: refused whatever their length.
 const BOILERPLATE: &[&str] = &[
@@ -71,7 +78,8 @@ const BOILERPLATE: &[&str] = &[
 ];
 
 /// The classes whose break hands over code execution, a credential, the gate or the law: a skip
-/// of one must state the risk it leaves open.
+/// of one states the risk it leaves open, a ruling it out shows the files that do, and every
+/// touched surface has one of its speciality's checked.
 pub const HIGH_RISK: [AttackClass; 14] = [
     AttackClass::SandboxEscape,
     AttackClass::PathTraversal,
@@ -100,14 +108,17 @@ pub struct Surface {
 }
 
 impl Surface {
-    /// Whether `path` (normalised, world-relative) lies on this surface: a compiled glob as the
-    /// routing reads it, a declared claim as ownership does.
+    /// Whether `path` (a plain repository path) lies on this surface: a compiled glob as the
+    /// routing reads it; a declared claim as ownership does — a directory claim covers what lies
+    /// under it, a file claim the file alone.
     #[must_use]
     pub fn holds(&self, path: &str) -> bool {
-        if self.declared {
-            crate::doc::covers(&self.at, path)
-        } else {
+        if !self.declared {
             mnemorph_races::glob(&self.at, path)
+        } else if self.at.ends_with('/') {
+            path.starts_with(&self.at)
+        } else {
+            path == self.at
         }
     }
 }
@@ -157,30 +168,31 @@ impl Landing {
     }
 }
 
-/// A file read for a check: its path, the symbols looked at, and its SHA-256 as it was read.
+/// A file read: its path, the symbols looked at, and its SHA-256 as it was read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileRead {
-    /// World-relative.
+    /// A plain repository path.
     pub path: String,
-    /// The functions, types or keys looked at; may be empty for a file with none (a lockfile).
+    /// The functions, types, keys or packages looked at; at least one.
     #[serde(default)]
     pub symbols: Vec<String>,
     /// 64 hex digits: `sha256sum` of the file.
     pub sha256: String,
 }
 
-/// A command run for a check, and the SHA-256 of its output.
+/// A command run, and the SHA-256 of its output as the body's run journal recorded it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommandRun {
-    /// The command, as run.
+    /// The command, exactly as it was run through `bash`.
     pub run: String,
-    /// 64 hex digits: `sha256sum` of what it printed.
-    pub sha256: String,
+    /// 64 hex digits; left out, the harness stamps it from the recorded output ([`stamp`]).
+    #[serde(default)]
+    pub sha256: Option<String>,
 }
 
-/// What a check rests on.
+/// What a check, or a ruling out, rests on.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Evidence {
@@ -190,6 +202,12 @@ pub struct Evidence {
     /// The commands run.
     #[serde(default)]
     pub commands: Vec<CommandRun>,
+}
+
+impl Evidence {
+    fn is_empty(&self) -> bool {
+        self.files.is_empty() && self.commands.is_empty()
+    }
 }
 
 /// One pair's state.
@@ -207,6 +225,9 @@ pub enum State {
     NotApplicable {
         /// The fact that rules it out.
         reason: String,
+        /// The files that show it; required for a high-risk class.
+        #[serde(default)]
+        evidence: Evidence,
     },
     /// Not looked at.
     Skipped {
@@ -216,6 +237,33 @@ pub enum State {
         #[serde(default)]
         risk: Option<String>,
     },
+}
+
+impl State {
+    fn evidence(&self) -> Option<&Evidence> {
+        match self {
+            State::Checked { evidence, .. } | State::NotApplicable { evidence, .. } => {
+                Some(evidence)
+            }
+            State::Skipped { .. } => None,
+        }
+    }
+
+    fn evidence_mut(&mut self) -> Option<&mut Evidence> {
+        match self {
+            State::Checked { evidence, .. } | State::NotApplicable { evidence, .. } => {
+                Some(evidence)
+            }
+            State::Skipped { .. } => None,
+        }
+    }
+
+    fn reason(&self) -> Option<&str> {
+        match self {
+            State::NotApplicable { reason, .. } | State::Skipped { reason, .. } => Some(reason),
+            State::Checked { .. } => None,
+        }
+    }
 }
 
 /// One (surface, class) pair and its state.
@@ -243,6 +291,48 @@ pub struct CoverageLedger {
     pub entries: Vec<Entry>,
 }
 
+/// The commands a body ran, as its run journal recorded them: each command, trimmed, to the
+/// SHA-256 of every output it gave.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Ran {
+    outputs: BTreeMap<String, Vec<String>>,
+}
+
+impl Ran {
+    /// Records that `command` was run and printed `output`.
+    pub fn record(&mut self, command: &str, output: &str) {
+        self.outputs
+            .entry(command.trim().to_owned())
+            .or_default()
+            .push(sha256_hex(output.as_bytes()));
+    }
+
+    /// Whether `command` was run, and — with `sha256` — gave that output.
+    fn shows(&self, command: &str, sha256: Option<&str>) -> bool {
+        self.outputs.get(command.trim()).is_some_and(|hashes| {
+            sha256.is_none_or(|h| hashes.iter().any(|o| o.eq_ignore_ascii_case(h)))
+        })
+    }
+
+    fn last(&self, command: &str) -> Option<&String> {
+        self.outputs.get(command.trim()).and_then(|h| h.last())
+    }
+}
+
+/// Stamps every command of `ledger` that names no hash with the hash of its last output in `ran`.
+/// A command `ran` does not hold stays unstamped, and [`Rule::UnrunCommand`] refuses it.
+pub fn stamp(ledger: &mut CoverageLedger, ran: &Ran) {
+    for e in &mut ledger.entries {
+        if let Some(evidence) = e.state.evidence_mut() {
+            for c in &mut evidence.commands {
+                if c.sha256.is_none() {
+                    c.sha256 = ran.last(&c.run).cloned();
+                }
+            }
+        }
+    }
+}
+
 /// A rule of the state table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rule {
@@ -260,21 +350,33 @@ pub enum Rule {
     ExtraPair,
     /// A not-applicable or skipped reason is empty, boilerplate or under [`MIN_PROSE`].
     BoilerplateReason,
+    /// One reason stands for more than [`MAX_SAME_REASON`] pairs.
+    UniformReason,
     /// A high-risk class is skipped without a stated risk.
     UnstatedRisk,
+    /// A high-risk class is ruled not applicable with no file to show it.
+    UnprovenRuling,
+    /// A touched surface has none of the speciality's high-risk classes checked.
+    UncheckedSurface,
     /// A check names no method, or rests on no file and no command.
     HollowCheck,
-    /// A check cites a file outside the landing's surfaces for this speciality.
+    /// A cited file names no symbol.
+    UnnamedSymbols,
+    /// A cited file is outside the landing's surfaces for this speciality.
     OutsideEvidence,
     /// A file or command hash is not 64 hex digits.
     UnhashedEvidence,
-    /// A file's hash is not the file as it stands in the world.
+    /// A file's hash is not the file as it stands in the landing's tree.
     StaleEvidence,
+    /// One file at one hash is the sole evidence of more than [`MAX_SOLE_EVIDENCE`] pairs.
+    ReusedEvidence,
+    /// A command the body's run journal does not show run with that output.
+    UnrunCommand,
 }
 
 impl Rule {
     /// Every rule, in the order they are checked.
-    pub const ALL: [Rule; 12] = [
+    pub const ALL: [Rule; 18] = [
         Rule::Oversize,
         Rule::UnreadableText,
         Rule::Unrouted,
@@ -282,11 +384,17 @@ impl Rule {
         Rule::DuplicatePair,
         Rule::ExtraPair,
         Rule::BoilerplateReason,
+        Rule::UniformReason,
         Rule::UnstatedRisk,
+        Rule::UnprovenRuling,
+        Rule::UncheckedSurface,
         Rule::HollowCheck,
+        Rule::UnnamedSymbols,
         Rule::OutsideEvidence,
         Rule::UnhashedEvidence,
         Rule::StaleEvidence,
+        Rule::ReusedEvidence,
+        Rule::UnrunCommand,
     ];
 
     /// The rule's name, as a refusal cites it.
@@ -300,11 +408,17 @@ impl Rule {
             Rule::DuplicatePair => "duplicate-pair",
             Rule::ExtraPair => "extra-pair",
             Rule::BoilerplateReason => "boilerplate-reason",
+            Rule::UniformReason => "uniform-reason",
             Rule::UnstatedRisk => "unstated-risk",
+            Rule::UnprovenRuling => "unproven-ruling",
+            Rule::UncheckedSurface => "unchecked-surface",
             Rule::HollowCheck => "hollow-check",
+            Rule::UnnamedSymbols => "unnamed-symbols",
             Rule::OutsideEvidence => "outside-evidence",
             Rule::UnhashedEvidence => "unhashed-evidence",
             Rule::StaleEvidence => "stale-evidence",
+            Rule::ReusedEvidence => "reused-evidence",
+            Rule::UnrunCommand => "unrun-command",
         }
     }
 }
@@ -315,12 +429,12 @@ impl fmt::Display for Rule {
     }
 }
 
-/// One broken rule: which, where (a pair, or `ledger`), and what.
+/// One broken rule: which, where (a pair, a surface, or `ledger`), and what.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Breach {
     /// The rule broken.
     pub rule: Rule,
-    /// The pair it was broken at (`<surface> × <class>`), or `ledger`.
+    /// Where it was broken: `<surface> × <class>`, a surface, or `ledger`.
     pub at: String,
     /// What broke it.
     pub detail: String,
@@ -364,31 +478,50 @@ impl fmt::Display for Refused {
     }
 }
 
-/// Holds `ledger` to every rule but [`Rule::StaleEvidence`], which needs the world's files: see
-/// [`check`].
+/// What a ledger's evidence is held to beyond itself: the landing's tree, for
+/// [`Rule::StaleEvidence`], and the body's recorded commands, for [`Rule::UnrunCommand`]. Either
+/// absent, its rule holds nothing to it — and a command must then carry its stamped hash.
+#[derive(Clone, Copy, Default)]
+pub struct Sources<'a> {
+    /// The landing's tree.
+    pub tree: Option<&'a dyn World>,
+    /// The commands the filing body ran.
+    pub ran: Option<&'a Ran>,
+}
+
+/// Holds `ledger` to every rule, with nothing beyond it: a stored ledger's check on read.
 ///
 /// # Errors
 ///
 /// The breaches, when any rule is broken.
 pub fn validate(ledger: &CoverageLedger, landing: &Landing) -> Result<(), Refused> {
-    refused(check(ledger, landing, &Rule::ALL, None))
+    refused(check(ledger, landing, &Rule::ALL, Sources::default()))
 }
 
-/// A world-relative path to the SHA-256 of the file there, or `None` when it cannot be read.
-pub type Tree<'a> = &'a dyn Fn(&str) -> Option<String>;
+/// Holds `ledger` to every rule, its evidence held to `sources`: the check at filing.
+///
+/// # Errors
+///
+/// The breaches, when any rule is broken.
+pub fn validate_in(
+    ledger: &CoverageLedger,
+    landing: &Landing,
+    sources: Sources<'_>,
+) -> Result<(), Refused> {
+    refused(check(ledger, landing, &Rule::ALL, sources))
+}
 
-/// Holds `ledger` to `rules` only. With `tree`, [`Rule::StaleEvidence`] holds each file's hash
-/// to the file as it stands.
+/// Holds `ledger` to `rules` only, its evidence held to `sources`.
 #[must_use]
 pub fn check(
     ledger: &CoverageLedger,
     landing: &Landing,
     rules: &[Rule],
-    tree: Option<Tree<'_>>,
+    sources: Sources<'_>,
 ) -> Vec<Breach> {
     let mut c = Checker {
         rules,
-        tree,
+        sources,
         out: Vec::new(),
     };
     // Bounded first: nothing past the cap is read.
@@ -406,21 +539,22 @@ pub fn check(
         }
     }
     let entries = &ledger.entries[..ledger.entries.len().min(MAX_ENTRIES)];
+    let spec = ledger.speciality;
     c.routing(ledger, landing);
-    c.pairs(entries, &landing.required(ledger.speciality));
-    let surfaces: &[Surface] = landing
-        .routed(ledger.speciality)
-        .map_or(&[], |r| &r.surfaces);
+    c.pairs(entries, &landing.required(spec));
+    let surfaces: &[Surface] = landing.routed(spec).map_or(&[], |r| &r.surfaces);
+    c.surfaces(entries, spec, surfaces);
+    c.sameness(entries);
     for e in entries {
-        c.entry(e, ledger.speciality, surfaces);
+        c.entry(e, spec, surfaces);
     }
     c.out
 }
 
-/// The rules switched on, the world's files, and the breaches found so far.
+/// The rules switched on, what evidence is held to, and the breaches found so far.
 struct Checker<'a> {
     rules: &'a [Rule],
-    tree: Option<Tree<'a>>,
+    sources: Sources<'a>,
     out: Vec<Breach>,
 }
 
@@ -499,6 +633,84 @@ impl Checker<'_> {
         }
     }
 
+    /// [`Rule::UncheckedSurface`]: on every touched surface, one of the speciality's high-risk
+    /// classes is checked.
+    fn surfaces(&mut self, entries: &[Entry], spec: Speciality, surfaces: &[Surface]) {
+        let high: Vec<&str> = spec
+            .classes()
+            .iter()
+            .filter(|c| HIGH_RISK.contains(c))
+            .map(|c| c.name())
+            .collect();
+        if high.is_empty() {
+            return;
+        }
+        for s in surfaces {
+            let checked = entries.iter().any(|e| {
+                e.surface == s.at
+                    && high.contains(&e.class.as_str())
+                    && matches!(e.state, State::Checked { .. })
+            });
+            if !checked {
+                self.breach(
+                    Rule::UncheckedSurface,
+                    &s.at,
+                    format!(
+                        "check at least one of {} here: rulings alone do not cover a surface",
+                        high.join(", ")
+                    ),
+                );
+            }
+        }
+    }
+
+    /// [`Rule::UniformReason`] and [`Rule::ReusedEvidence`]: one reason, or one file at one hash,
+    /// does not stand for many pairs.
+    fn sameness(&mut self, entries: &[Entry]) {
+        let mut reasons: BTreeMap<String, usize> = BTreeMap::new();
+        let mut sole: BTreeMap<(&str, String), usize> = BTreeMap::new();
+        for e in entries {
+            if let Some(reason) = e.state.reason() {
+                let plain = normalised(reason);
+                if !plain.is_empty() {
+                    *reasons.entry(plain).or_default() += 1;
+                }
+            }
+            if let Some(ev) = e.state.evidence()
+                && let [file] = ev.files.as_slice()
+                && ev.commands.is_empty()
+            {
+                *sole
+                    .entry((file.path.as_str(), file.sha256.to_ascii_lowercase()))
+                    .or_default() += 1;
+            }
+        }
+        for (reason, n) in reasons {
+            if n > MAX_SAME_REASON {
+                self.breach(
+                    Rule::UniformReason,
+                    "ledger",
+                    format!(
+                        "`{}` stands for {n} pairs; each ruling states its own fact",
+                        shown(&reason)
+                    ),
+                );
+            }
+        }
+        for ((path, _), n) in sole {
+            if n > MAX_SOLE_EVIDENCE {
+                self.breach(
+                    Rule::ReusedEvidence,
+                    "ledger",
+                    format!(
+                        "{} is the sole evidence of {n} pairs, over {MAX_SOLE_EVIDENCE}",
+                        shown(path)
+                    ),
+                );
+            }
+        }
+    }
+
     /// One entry's texts and state.
     fn entry(&mut self, e: &Entry, spec: Speciality, surfaces: &[Surface]) {
         let at = pair(&e.surface, &e.class);
@@ -518,17 +730,27 @@ impl Checker<'_> {
                 );
             }
         }
+        let high = class_named(&e.class).is_some_and(|c| HIGH_RISK.contains(&c));
         match &e.state {
-            State::NotApplicable { reason } => {
+            State::NotApplicable { reason, evidence } => {
                 if !substantive(reason) {
                     self.breach(Rule::BoilerplateReason, &at, said(reason));
+                }
+                if high && evidence.files.is_empty() {
+                    self.breach(
+                        Rule::UnprovenRuling,
+                        &at,
+                        format!(
+                            "{} is high-risk: ruling it out shows the files and symbols that do",
+                            shown(&e.class)
+                        ),
+                    );
                 }
             }
             State::Skipped { reason, risk } => {
                 if !substantive(reason) {
                     self.breach(Rule::BoilerplateReason, &at, said(reason));
                 }
-                let high = class_named(&e.class).is_some_and(|c| HIGH_RISK.contains(&c));
                 if high && !risk.as_deref().is_some_and(substantive) {
                     self.breach(
                         Rule::UnstatedRisk,
@@ -541,21 +763,30 @@ impl Checker<'_> {
                 }
             }
             State::Checked { method, evidence } => {
-                self.checked(&at, method, evidence, spec, surfaces);
+                if !substantive(method) {
+                    self.breach(
+                        Rule::HollowCheck,
+                        &at,
+                        format!("the method {}", said(method)),
+                    );
+                }
+                if evidence.is_empty() {
+                    self.breach(
+                        Rule::HollowCheck,
+                        &at,
+                        "a check rests on at least one file read or command run".to_owned(),
+                    );
+                }
             }
+        }
+        if let Some(evidence) = e.state.evidence() {
+            self.evidence(&at, evidence, spec, surfaces);
         }
     }
 
-    /// A check: its lists capped, its method and evidence real, its files on the landing's
-    /// surfaces and hashed as they stand.
-    fn checked(
-        &mut self,
-        at: &str,
-        method: &str,
-        evidence: &Evidence,
-        spec: Speciality,
-        surfaces: &[Surface],
-    ) {
+    /// The evidence of a check or a ruling: its lists capped, its files named, on the landing's
+    /// surfaces and hashed as they stand, its commands in the body's journal.
+    fn evidence(&mut self, at: &str, evidence: &Evidence, spec: Speciality, surfaces: &[Surface]) {
         let lists = [
             ("files", evidence.files.len()),
             ("commands", evidence.commands.len()),
@@ -576,60 +807,73 @@ impl Checker<'_> {
                 );
             }
         }
-        if !substantive(method) {
-            self.breach(
-                Rule::HollowCheck,
-                at,
-                format!("the method {}", said(method)),
-            );
-        }
-        if evidence.files.is_empty() && evidence.commands.is_empty() {
-            self.breach(
-                Rule::HollowCheck,
-                at,
-                "a check rests on at least one file read or command run".to_owned(),
-            );
-        }
         for f in evidence.files.iter().take(MAX_LIST) {
-            let path = crate::own::normal(&f.path).filter(|p| !p.ends_with('/'));
-            let inside = path
-                .as_deref()
-                .is_some_and(|p| surfaces.iter().any(|s| s.holds(p)));
-            if !inside {
-                self.breach(
-                    Rule::OutsideEvidence,
-                    at,
-                    format!(
-                        "{} is not a file on the landing's surfaces for {spec}",
-                        shown(&f.path)
-                    ),
-                );
-            }
-            if !is_sha256(&f.sha256) {
-                self.breach(
-                    Rule::UnhashedEvidence,
-                    at,
-                    format!("{}: sha256 is not 64 hex digits", shown(&f.path)),
-                );
-            } else if let (Some(tree), Some(p)) = (self.tree, path.as_deref())
-                && inside
-                && tree(p).as_deref() != Some(f.sha256.to_ascii_lowercase().as_str())
-            {
-                self.breach(
-                    Rule::StaleEvidence,
-                    at,
-                    format!("{}: not the file as it stands", shown(&f.path)),
-                );
-            }
+            self.file(at, f, spec, surfaces);
         }
         for c in evidence.commands.iter().take(MAX_LIST) {
-            if !is_sha256(&c.sha256) {
+            let malformed = c.sha256.as_deref().is_some_and(|h| !is_sha256(h));
+            let unstamped = c.sha256.is_none() && self.sources.ran.is_none();
+            if malformed || unstamped {
                 self.breach(
                     Rule::UnhashedEvidence,
                     at,
                     format!("{}: sha256 is not 64 hex digits", shown(&c.run)),
                 );
+            } else if let Some(ran) = self.sources.ran
+                && !ran.shows(&c.run, c.sha256.as_deref())
+            {
+                self.breach(
+                    Rule::UnrunCommand,
+                    at,
+                    format!(
+                        "{}: your run journal shows no such command with that output; cite \
+                         commands you ran through `bash`, exactly as run",
+                        shown(&c.run)
+                    ),
+                );
             }
+        }
+    }
+
+    fn file(&mut self, at: &str, f: &FileRead, spec: Speciality, surfaces: &[Surface]) {
+        if f.symbols.iter().all(|s| s.trim().is_empty()) {
+            self.breach(
+                Rule::UnnamedSymbols,
+                at,
+                format!("{}: name the symbols looked at", shown(&f.path)),
+            );
+        }
+        let path = mnemorph_wire::repo_path(&f.path);
+        let inside = path
+            .as_deref()
+            .is_some_and(|p| surfaces.iter().any(|s| s.holds(p)));
+        if !inside {
+            self.breach(
+                Rule::OutsideEvidence,
+                at,
+                format!(
+                    "{} is not a file on the landing's surfaces for {spec}",
+                    shown(&f.path)
+                ),
+            );
+        }
+        if !is_sha256(&f.sha256) {
+            self.breach(
+                Rule::UnhashedEvidence,
+                at,
+                format!("{}: sha256 is not 64 hex digits", shown(&f.path)),
+            );
+        } else if let (Some(tree), Some(p)) = (self.sources.tree, path.as_deref())
+            && inside
+            && !tree
+                .read(p)
+                .is_some_and(|bytes| sha256_hex(&bytes).eq_ignore_ascii_case(&f.sha256))
+        {
+            self.breach(
+                Rule::StaleEvidence,
+                at,
+                format!("{}: not the file as it stands", shown(&f.path)),
+            );
         }
     }
 }
@@ -642,19 +886,6 @@ fn refused(mut breaches: Vec<Breach>) -> Result<(), Refused> {
     let more = breaches.len().saturating_sub(MAX_BREACHES);
     breaches.truncate(MAX_BREACHES);
     Err(Refused { breaches, more })
-}
-
-/// Holds `ledger` to every rule, the world's files included through `tree`.
-///
-/// # Errors
-///
-/// The breaches, when any rule is broken.
-pub fn validate_in(
-    ledger: &CoverageLedger,
-    landing: &Landing,
-    tree: Tree<'_>,
-) -> Result<(), Refused> {
-    refused(check(ledger, landing, &Rule::ALL, Some(tree)))
 }
 
 /// The class a playbook name names.
@@ -697,28 +928,30 @@ fn unreadable(c: char) -> bool {
 fn texts(e: &Entry) -> Vec<(&'static str, &str)> {
     let mut out = vec![("surface", e.surface.as_str()), ("class", e.class.as_str())];
     match &e.state {
-        State::Checked { method, evidence } => {
-            out.push(("method", method));
-            for f in evidence.files.iter().take(MAX_LIST) {
-                out.push(("a file's path", &f.path));
-                out.push(("a file's sha256", &f.sha256));
-                out.extend(
-                    f.symbols
-                        .iter()
-                        .take(MAX_LIST)
-                        .map(|s| ("a symbol", s.as_str())),
-                );
-            }
-            for c in evidence.commands.iter().take(MAX_LIST) {
-                out.push(("a command", &c.run));
-                out.push(("a command's sha256", &c.sha256));
-            }
-        }
-        State::NotApplicable { reason } => out.push(("reason", reason)),
+        State::Checked { method, .. } => out.push(("method", method)),
+        State::NotApplicable { reason, .. } => out.push(("reason", reason)),
         State::Skipped { reason, risk } => {
             out.push(("reason", reason));
             if let Some(risk) = risk {
                 out.push(("risk", risk));
+            }
+        }
+    }
+    if let Some(evidence) = e.state.evidence() {
+        for f in evidence.files.iter().take(MAX_LIST) {
+            out.push(("a file's path", &f.path));
+            out.push(("a file's sha256", &f.sha256));
+            out.extend(
+                f.symbols
+                    .iter()
+                    .take(MAX_LIST)
+                    .map(|s| ("a symbol", s.as_str())),
+            );
+        }
+        for c in evidence.commands.iter().take(MAX_LIST) {
+            out.push(("a command", &c.run));
+            if let Some(h) = &c.sha256 {
+                out.push(("a command's sha256", h));
             }
         }
     }

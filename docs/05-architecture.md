@@ -52,6 +52,7 @@ flowchart TB
       WORLD --> LEDGER
       WORLD --> MEM
       MEM --> LEDGER
+      WORLD --> PROVING
       PROVING --> WIRE
       PROVING --> RACES
     end
@@ -87,7 +88,7 @@ mnemorph/
 │  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
 │  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
-│  ├─ mnemorph-proving    Dark Elf finding records, the validator     (reads the tree)
+│  ├─ mnemorph-proving    Dark Elf finding records, coverage ledgers  (reads the tree)
 │  ├─ mnemorph-provider   streaming clients, retry ladder, caching,   (network)
 │  │                      System One decisions with an LLM fallback
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)

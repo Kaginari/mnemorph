@@ -4,7 +4,6 @@
 pub use mnemorph_memory as memory;
 
 pub mod challenge;
-pub mod coverage;
 pub mod dispatch;
 pub mod doc;
 pub mod facts;

@@ -1460,6 +1460,7 @@ dependencies = [
  "mnemorph-ledger",
  "mnemorph-memory",
  "mnemorph-provider",
+ "mnemorph-proving",
  "mnemorph-races",
  "mnemorph-tools",
  "mnemorph-wire",
@@ -1587,12 +1588,11 @@ dependencies = [
  "libc",
  "mnemorph-ledger",
  "mnemorph-memory",
+ "mnemorph-proving",
  "mnemorph-races",
  "mnemorph-wire",
- "proptest",
  "serde",
  "serde_json",
- "sha2",
 ]
 
 [[package]]

@@ -6,10 +6,13 @@
 //! seal takes. [`accept`] is where the harness reads a Dark Elf's report: a finding whose record
 //! breaks a rule rides back as an `@?` naming the rules it broke, never dropped silently.
 //!
-//! The rules adapt Cloudflare's `validate-findings.cjs` (MIT; `THIRD-PARTY-NOTICES.md`). The
-//! contract is in the book, `docs/02-races.md`.
+//! [`coverage`] holds a speciality's coverage ledger of a landing to its strict state table.
+//!
+//! The rules adapt Cloudflare's `validate-findings.cjs` and `validate-coverage-ledger.cjs` (MIT;
+//! `THIRD-PARTY-NOTICES.md`). The contract is in the book, `docs/02-races.md`.
 
 mod accept;
+pub mod coverage;
 mod finding;
 mod world;
 

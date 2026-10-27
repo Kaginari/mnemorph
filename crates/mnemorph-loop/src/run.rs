@@ -2193,8 +2193,11 @@ impl Run {
                 .any(|t| t.name() == crate::coverage_tool::COVERAGE)
         {
             let world = self.cx.world();
+            // The commands a ledger cites are held to this body's own journal.
+            let beats = self.journal.read().map(|r| r.rows).unwrap_or_default();
+            let ran = crate::coverage_tool::ran_of(&beats);
             return match mnemorph_world::challenge::Challenges::of(world) {
-                Some(c) => crate::coverage_tool::run(&c, world, &self.body.name, input),
+                Some(c) => crate::coverage_tool::run(&c, world, &ran, &self.body.name, input),
                 None => mnemorph_tools::Outcome::error(
                     "coverage: no state directory to keep the challenge records in",
                 ),

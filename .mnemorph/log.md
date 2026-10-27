@@ -5897,3 +5897,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** one fixture per rule that breaks it alone, and each rule switched off lets its
   fixture through; the generalist's empty ledger; two hunters routed, one filed, still pending;
   a forged filing line ignored on read; hostile ledgers and tool arguments (proptest).
+
+---
+
+### [2026-10-27T23:39:10+01:00] rimuru — #252, Fable's review: no hollow pass, commands held to the journal, locked records, the ledger in `mnemorph-proving`
+- **Done:** `mnemorph_proving::coverage` (moved beside `finding.rs`; world now depends on proving,
+  layers and docs 05 updated): six new rules — `uniform-reason` (one reason on more than 2
+  pairs), `unproven-ruling` (a high-risk class ruled out with no file), `unchecked-surface` (no
+  high-risk class checked on a touched surface), `unnamed-symbols`, `reused-evidence` (one
+  file at one hash the sole evidence of more than 2 pairs), `unrun-command` (a command the
+  body's run journal does not show with that output; the harness stamps the hash from it).
+  `challenge.rs` reads and writes under the records' lock, one row per write, capped at 1 MiB,
+  a torn line closed first; folder `0700`, file `0600`. Docs 02, notices.
+- **Tests:** a fixture per rule (18), each alone and each passing with its rule off; the
+  all-not-applicable copied-reason ledger refused and the challenge still pending; an unrun
+  command refused; the journal's bash calls read back; 16 threads filing at once all clear.
+- **Learned:** a state table that accepts only rulings is a form, not coverage: one check per
+  surface is what makes "no findings" mean something.
