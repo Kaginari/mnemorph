@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc abef14b4200f051774da2872def7e79b268cc5be6cec51757267c495ff581c39 # shrinks to status = "", claim = "", hole = "", other = "@S"
+cc 0a5f50264382fe95bcfd3c504f2d3e653f858a5d239480566a63180e2ace7aa7 # shrinks to id = None, claim = "", witness = Some("a.rs:3"), rec = None

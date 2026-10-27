@@ -1564,6 +1564,7 @@ name = "mnemorph-wire"
 version = "0.0.0"
 dependencies = [
  "proptest",
+ "sha2",
 ]
 
 [[package]]
