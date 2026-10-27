@@ -40,7 +40,9 @@ use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
-pub use outward::{Act, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan};
+pub use outward::{
+    Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan,
+};
 pub use receipt::{
     Observer, PROBE_TIMEOUT, Pin, PostJournal, Probe, Receipt, Row, SEEN_BYTES, Seen, State, Tally,
     excerpt, post_journal, reconciling, redact,

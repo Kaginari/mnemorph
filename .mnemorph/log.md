@@ -5615,3 +5615,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a test witness is not the tripwire's (that one is found under the human's state
   directory), so a test reads the witness, not the world's rebuilt journal. Still open: the undo
   is rendered, not yet run through the gate; a push or comment undo is no forge post's kind.
+
+---
+
+### [2026-10-27T20:04:24+01:00] rimuru — #242, Fable's review: the runner's six holes closed
+- **Done:** cut-comment recovery and replay require `gh`'s login (and the id once known), so
+  someone's identical comment is never the act's; a label refuses `,` and `"`; a comment is at
+  most 64 KiB, with no bidi, zero-width or U+2028/9, and the card indents continuation lines; the
+  post lock is `try_lock`, a second act refused while one is in flight; an observed request
+  asked again is re-probed, `reconcile` if its effect is gone. Docs 02.
+- **Tests:** config `runner`: foreign identical comment, label/body refusals and the card's
+  indent, two runners, a replay after the branch was deleted, a spawn that fails after its
+  intent (probed `absent`, lock let go). Author, comma and re-probe guards disabled fail theirs.

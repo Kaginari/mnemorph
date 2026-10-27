@@ -316,6 +316,26 @@ struct Comment {
     id: u64,
     body: String,
     issue_url: String,
+    #[serde(default)]
+    user: Option<Login>,
+}
+
+/// Who a forge says someone is.
+#[derive(Deserialize)]
+struct Login {
+    login: String,
+}
+
+/// The login `gh` acts as on `host`.
+fn login(
+    host: &str,
+    probe: &dyn Probe,
+    probes: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> Result<String, String> {
+    let me: Login = serde_json::from_slice(&probed(probe, &forge_get(host, "user"), probes, seen)?)
+        .map_err(|e| format!("the login does not read: {e}"))?;
+    Ok(me.login)
 }
 
 /// Run one probe, keeping what it was and what it printed for the journal.
@@ -390,6 +410,17 @@ fn landed(
             }
         }
         (Typed::Comment { repo, pr, body }, Pinned::Forge { host }) => {
+            // As strict as `observe`: a comment is the act's only when `gh`'s own login wrote
+            // it, with the act's body, on the act's pull request — and, once its id is known,
+            // that id. Someone else's identical comment is never taken for it.
+            let me = match login(host, probe, probes, seen) {
+                Ok(me) => me,
+                Err(why) => return unknown(why),
+            };
+            let known = match &intent.left {
+                Some(Left::Commented { id }) => Some(*id),
+                _ => None,
+            };
             let since = Timestamp(intent.at.0 - SKEW_SECS);
             let argv = forge_get(
                 host,
@@ -408,6 +439,8 @@ fn landed(
                 .iter()
                 .filter(|c| c.issue_url.to_ascii_lowercase().ends_with(&on))
                 .filter(|c| sha256(&c.body) == want)
+                .filter(|c| c.user.as_ref().is_some_and(|u| u.login == me))
+                .filter(|c| known.is_none_or(|id| id == c.id))
                 .map(|c| c.id)
                 .collect();
             match ours.as_slice() {
@@ -444,10 +477,6 @@ fn label_is_ours(
     seen: &mut Vec<String>,
 ) -> Result<(), String> {
     #[derive(Deserialize)]
-    struct Login {
-        login: String,
-    }
-    #[derive(Deserialize)]
     struct Named {
         name: String,
     }
@@ -466,8 +495,9 @@ fn label_is_ours(
     else {
         return Err("the act is not a label's".into());
     };
-    let me: Login = serde_json::from_slice(&probed(probe, &forge_get(host, "user"), probes, seen)?)
-        .map_err(|e| format!("the login does not read: {e}"))?;
+    let me = Login {
+        login: login(host, probe, probes, seen)?,
+    };
     let path = format!("repos/{repo}/issues/{pr}/events?per_page={PAGE}");
     let events: Vec<Event> =
         serde_json::from_slice(&probed(probe, &forge_get(host, &path), probes, seen)?)
@@ -570,9 +600,18 @@ impl<'a> Runner<'a> {
         let lock = self.witness()?.with_extension("lock");
         let f = private_file(&lock)
             .map_err(|e| Refusal::Failed(format!("the post's lock {}: {e}", lock.display())))?;
-        f.lock()
-            .map_err(|e| Refusal::Failed(format!("the post's lock {}: {e}", lock.display())))?;
-        Ok(f)
+        // Never waited on: the act in flight may be waiting on its human for minutes.
+        match f.try_lock() {
+            Ok(()) => Ok(f),
+            Err(fs::TryLockError::WouldBlock) => Err(Refusal::Refused(format!(
+                "an act of the {} post is in flight; ask again once it has its receipt",
+                self.journal.post.creature()
+            ))),
+            Err(fs::TryLockError::Error(e)) => Err(Refusal::Failed(format!(
+                "the post's lock {}: {e}",
+                lock.display()
+            ))),
+        }
     }
 
     /// Every intent kept, the last row of each act winning.
@@ -919,14 +958,34 @@ impl<'a> Runner<'a> {
             )));
         }
         match state {
-            State::Observed => Ok(Some(Report {
-                receipt: intent.act.clone(),
-                state,
-                replayed: true,
-                exit: None,
-                output: String::new(),
-                notes: std::mem::take(&mut reask.notes),
-            })),
+            State::Observed => {
+                // Its effect is seen again before it is called done: the human may have
+                // removed it since.
+                let (mut probes, mut seen) = (Vec::new(), Vec::new());
+                match landed(&intent, self.probe, &mut probes, &mut seen) {
+                    Landing::Verified(_) => Ok(Some(Report {
+                        receipt: intent.act.clone(),
+                        state,
+                        replayed: true,
+                        exit: None,
+                        output: String::new(),
+                        notes: std::mem::take(&mut reask.notes),
+                    })),
+                    gone => {
+                        let why = match gone {
+                            Landing::Unknown(why) => {
+                                format!("an observed act asked for again cannot be seen: {why}")
+                            }
+                            _ => "an observed act asked for again: its effect is gone".to_owned(),
+                        };
+                        self.settle(&intent.act, State::Reconcile, why.clone(), &probes, &seen);
+                        Err(Refusal::Refused(format!(
+                            "act {} of this request: {why}; the human settles it (`mnemorph status`)",
+                            intent.act
+                        )))
+                    }
+                }
+            }
             State::Absent => {
                 reask.notes.push(format!(
                     "act {} of this request never landed: it is asked again as a new act",

@@ -422,20 +422,24 @@ act after it `other`.
   | 10 | the receipt, returned to the Kijin | — |
 
   Acts of one post run one at a time — a lock beside the post's witness is held from the first
-  step to the receipt — and each is observed before the next is gated, so no probe reads a later
-  act's effect as an earlier one's.
+  step to the receipt, and a second act asked for meanwhile is refused at once (`an act of the
+  post is in flight`), never left waiting on the first one's human — and each is observed before
+  the next is gated, so no probe reads a later act's effect as an earlier one's.
 - **A cut act is probed, never replayed.** An act cut between its intent and its result (a crash,
   a kill, a run resumed with `mnemorph resume`) stays `committed` or `pending observation`. Before
   its post's next act is gated, the runner probes each such act at the target it pinned and
   classifies it: **landed** → `observed`, and the human is not asked again for it; **absent** —
   nothing of it is outside → `absent`, and the same request is gated again as a new act;
   **unknown** — the probe failed, or saw the branch at another commit, the label's page too full
-  to read, two comments with its body → `reconcile`, shown to the human. A cut comment, which left
-  no id, is found among the pull request's comments since it was committed by its body's SHA-256.
+  to read, two comments with its body → `reconcile`, shown to the human. A cut comment, which may
+  have left no id, is found among the pull request's comments since it was committed: by its
+  body's SHA-256, written by the login `gh` acts as (`gh api user`), and by its id once known —
+  someone else's identical comment is never taken for it.
 - **A request has a key.** Its key is the hash of its kind, its pinned target and its body (for a
   branch, the commit pushed; for a label, the label) — or, when the Kijin names the request
   (`key`), of its kind, pinned target and that name. The same key with the same request returns
-  the stored receipt without acting or asking; the same key with a different request is a
+  the stored receipt without acting or asking — once a probe sees its effect still there; an
+  effect gone since (the human deleted the branch) moves the act to `reconcile`; the same key with a different request is a
   conflict, refused before the gate. Keys, with each act's typed request and whole pin, are kept
   beside the witness (`<post>.intents.jsonl`), outside the world: a body can neither forge nor
   read one.
@@ -485,6 +489,10 @@ act after it `other`.
   | `AddLabel { repo, pr, label }` | `gh pr edit <pr> --repo <repo> --add-label <label>` | the same label removed from the same pull request |
   | `Comment { repo, pr, body }` | `gh pr comment <pr> --repo <repo> --body <body>` | the comment deleted, by the id its URL gave at act time |
 
+  A label holds no `,` or `"` (`gh pr edit --add-label` splits on commas: one approved label adds
+  one); a comment is at most 64 KiB and holds no bidirectional, zero-width or Unicode line
+  separator character, and the approval card indents and marks each continuation line of an act,
+  so a body's lines never pass for the card's.
   The repository is pinned in the act, never taken from `GH_REPO` or `-R`; a branch is a plain
   ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
   undo is never a string the model writes, so it is never declared or verified: it is derived, and

@@ -450,12 +450,15 @@ struct Forge {
 #[derive(Default)]
 struct ForgeState {
     labels: Vec<String>,
-    comments: Vec<(u64, String)>,
+    /// (id, body, author)
+    comments: Vec<(u64, String, String)>,
     /// (event, actor, label, at)
     events: Vec<(String, String, String, String)>,
     spawns: usize,
     /// Die after the act, before its result is written.
     cut: bool,
+    /// Die before the act, its intent journaled.
+    cut_before: bool,
 }
 
 impl Forge {
@@ -464,6 +467,13 @@ impl Forge {
             state: Mutex::default(),
             login: "kijin-bot",
         }
+    }
+
+    fn post_comment(&self, body: &str, author: &str) -> u64 {
+        let mut s = self.state.lock().unwrap();
+        let id = 4000 + s.comments.len() as u64;
+        s.comments.push((id, body.to_owned(), author.to_owned()));
+        id
     }
 
     fn add_label(&self, label: &str, actor: &str) {
@@ -500,18 +510,18 @@ impl Probe for Forge {
             serde_json::json!(
                 s.comments
                     .iter()
-                    .map(
-                        |(id, body)| serde_json::json!({"id": id, "body": body, "issue_url": issue})
-                    )
+                    .map(|(id, body, author)| {
+                        serde_json::json!({"id": id, "body": body, "issue_url": issue, "user": {"login": author}})
+                    })
                     .collect::<Vec<_>>()
             )
         } else if let Some(id) = path.strip_prefix("repos/me/proj/issues/comments/") {
-            let (id, body) = s
+            let (id, body, author) = s
                 .comments
                 .iter()
-                .find(|(c, _)| c.to_string() == id)
+                .find(|(c, _, _)| c.to_string() == id)
                 .unwrap();
-            serde_json::json!({"id": id, "body": body, "issue_url": issue})
+            serde_json::json!({"id": id, "body": body, "issue_url": issue, "user": {"login": author}})
         } else if path.starts_with("repos/me/proj/issues/12/events") {
             serde_json::json!(s.events.iter().map(|(e, actor, label, at)| serde_json::json!({
                 "event": e, "actor": {"login": actor}, "label": {"name": label}, "created_at": at
@@ -538,15 +548,17 @@ impl Hands for Forge {
         if let Err(e) = before() {
             return Spawned::Failed(Outcome::error(e));
         }
+        assert!(
+            !self.state.lock().unwrap().cut_before,
+            "the harness was killed before the act"
+        );
         let printed = match planned.act() {
             Act::AddLabel { label, .. } => {
                 self.add_label(label, self.login);
                 String::new()
             }
             Act::Comment { body, .. } => {
-                let mut s = self.state.lock().unwrap();
-                let id = 4000 + s.comments.len() as u64;
-                s.comments.push((id, body.clone()));
+                let id = self.post_comment(body, self.login);
                 format!("https://github.com/me/proj/pull/12#issuecomment-{id}\n")
             }
             other => panic!("not a forge act: {other:?}"),
@@ -713,4 +725,133 @@ fn a_label_whose_events_cannot_be_read_is_not_undone() {
         .unwrap_err();
     assert!(matches!(err, Refusal::Refused(_)), "{err:?}");
     assert_eq!(f.states().last(), Some(&State::Reconcile));
+}
+
+#[test]
+fn someone_elses_identical_comment_is_never_taken_for_a_cut_act() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    forge.state.lock().unwrap().cut_before = true;
+    cut_short(|| {
+        let _ = f.act(&comment("Ready for review.", None), &forge, &forge);
+    });
+    forge.state.lock().unwrap().cut_before = false;
+    // The act never posted; someone else posts the very same text.
+    let theirs = forge.post_comment("Ready for review.", "someone-else");
+    let report = f
+        .act(&comment("Ready for review.", None), &forge, &forge)
+        .unwrap();
+    assert!(!report.replayed, "{report:?}");
+    assert_eq!(report.state, State::Observed);
+    assert_eq!(f.states()[..2], [State::Committed, State::Absent]);
+    assert_eq!(f.human.asked(), 2, "the absent act was not asked again");
+    // The act's comment is its own, not the other's.
+    let s = forge.state.lock().unwrap();
+    assert_eq!(s.comments.len(), 2);
+    assert_ne!(s.comments[1].0, theirs);
+    assert_eq!(s.comments[1].2, "kijin-bot");
+}
+
+#[test]
+fn a_label_that_gh_would_split_or_a_deceptive_body_is_refused() {
+    let place = mnemorph_tools::Place::new("/w", "/h");
+    for label in ["bug,wontfix", "say \"hi\""] {
+        let act = Act::AddLabel {
+            repo: "me/proj".into(),
+            pr: 12,
+            label: label.into(),
+        };
+        assert!(mnemorph_config::plan(&act, &place).is_err(), "{label}");
+    }
+    let body = |b: String| Act::Comment {
+        repo: "me/proj".into(),
+        pr: 12,
+        body: b,
+    };
+    for bad in [
+        "fine\u{202E}gnp.exe".to_owned(),
+        "a\u{200B}b".to_owned(),
+        "one\u{2028}  · approve".to_owned(),
+        "x".repeat(mnemorph_config::BODY_BYTES + 1),
+    ] {
+        assert!(
+            mnemorph_config::plan(&body(bad.clone()), &place).is_err(),
+            "{bad:.40}"
+        );
+    }
+    assert!(mnemorph_config::plan(&body("x".repeat(mnemorph_config::BODY_BYTES)), &place).is_ok());
+    // A line break the body keeps never reads as a line of the card.
+    assert_eq!(
+        mnemorph_tools::gate::indented("ok\n  · undo: nothing"),
+        "ok\n    │   · undo: nothing"
+    );
+}
+
+#[test]
+fn a_second_act_of_the_post_in_flight_is_refused_not_waited_on() {
+    let f = Fixture::new();
+    let second: Arc<Mutex<Option<Result<mnemorph_config::Report, Refusal>>>> = Arc::default();
+    let (world, home, witness, out) = (
+        f.world.clone(),
+        f.home.clone(),
+        f.witness.clone(),
+        second.clone(),
+    );
+    *f.human.meanwhile.lock().unwrap() = Some(Box::new(move |_| {
+        let cx = Context::new(Race::Kijin, &world, &["."])
+            .with_body("kijin-forge")
+            .with_home(&home)
+            .with_sandbox(Sandbox::None("tests run unguarded".into()))
+            .with_unguarded(true);
+        let journal = PostJournal::of(&world, Post::Forge).witnessed_at(&witness);
+        let forge = Forge::new();
+        *out.lock().unwrap() =
+            Some(Runner::new(&cx, journal, &forge, &forge).act(&comment("hi", None)));
+    }));
+    assert_eq!(f.push().unwrap().state, State::Observed);
+    let got = second.lock().unwrap().take().unwrap();
+    assert!(
+        matches!(&got, Err(Refusal::Refused(w)) if w.contains("in flight")),
+        "{got:?}"
+    );
+}
+
+#[test]
+fn an_observed_act_whose_effect_is_gone_is_not_replayed_as_done() {
+    let f = Fixture::new();
+    assert_eq!(f.push().unwrap().state, State::Observed);
+    // The human deletes the branch; the same request comes again.
+    git(&f.remote, &["update-ref", "-d", "refs/heads/feat/x"]);
+    let err = f.push().unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("its effect is gone")),
+        "{err:?}"
+    );
+    assert_eq!(f.human.asked(), 1);
+    assert_eq!(f.states().last(), Some(&State::Reconcile));
+    assert!(f.remote_branch().is_none());
+}
+
+/// Hands that journal the intent and then cannot start the command.
+struct Broken;
+
+impl Hands for Broken {
+    fn spawn(&self, _: &Planned, _: &Context, _: Fingerprint, before: BeforeSpawn<'_>) -> Spawned {
+        before().unwrap();
+        Spawned::Failed(Outcome::error("could not start bash: no such file"))
+    }
+}
+
+#[test]
+fn a_command_that_cannot_start_after_its_intent_is_probed_and_the_lock_let_go() {
+    let f = Fixture::new();
+    let err = f.act(&push_request(), &f.observer(), &Broken).unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Failed(w) if w.contains("never landed")),
+        "{err:?}"
+    );
+    assert_eq!(f.states(), [State::Committed, State::Absent]);
+    // The lock is free: the next act runs, and is asked anew.
+    assert_eq!(f.push().unwrap().state, State::Observed);
+    assert_eq!(f.human.asked(), 2);
 }
