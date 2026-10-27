@@ -545,6 +545,7 @@ pub(crate) async fn order(
         &put_back,
         checked_proof(&a.to, child.passed_gate()).as_ref(),
         &child.evidence(),
+        child.challenged(),
     );
     order_of((report, offered), spent, landed, put_back, before, &ending)
 }
@@ -1049,10 +1050,13 @@ fn report_for(
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
     evidence: &[String],
+    pending: &[String],
 ) -> (String, Vec<(String, String)>) {
     let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
+    // A landing waiting on its challenge is written, not landed: said as a hole, never cut.
+    triage.extend(pending.iter().cloned());
     let (kept, offered) = remember(&c.world, to, ending, checked, evidence);
     notes.extend(kept);
     // Each claim left proposed is offered as a hole too: never cut, however much the body said.

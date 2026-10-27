@@ -91,6 +91,23 @@ pub struct Opening {
     pub tree: String,
     /// The body whose landing it is: never one of its reviewers, never the one that sends them.
     pub by: String,
+    /// The bodies above the author, nearest first: none of them files a ledger for it either.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain: Vec<String>,
+    /// How many paths the landing wrote, when the routed landing keeps only a sample of them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paths: Option<u64>,
+    /// The SHA-256 of every written path, sorted, one per line, when only a sample is kept.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub paths_sha256: String,
+}
+
+impl Opening {
+    /// Whether `body` is the landing's author or above it: such a body never clears it.
+    #[must_use]
+    pub fn holds_author(&self, body: &str) -> bool {
+        self.by == body || self.chain.iter().any(|c| c == body)
+    }
 }
 
 /// How one routed speciality stands for its review.
@@ -114,7 +131,17 @@ pub enum Staff {
         by: String,
         /// The weighted tokens its review spent, booked against the challenge.
         wt: u64,
+        /// How many sweeps since found it commissioned with no ledger filed: past
+        /// a few, it is sent again.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        waited: u32,
     },
+}
+
+// Serde's `skip_serializing_if` passes the field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// A valid critical or high finding on the landing: it blocks the landing until it is fixed or
@@ -247,6 +274,8 @@ pub enum Refusal {
     Unreasoned,
     /// The challenge was waived already.
     AlreadyWaived(String),
+    /// The landing's author, or a body above it, filed for it.
+    Author(String),
     /// The row would be over [`MAX_ROW`] bytes.
     TooLarge(usize),
     /// The records could not be read or written.
@@ -274,6 +303,10 @@ impl fmt::Display for Refusal {
                 "a waiver says why: at least 20 characters of reason, not a stock phrase",
             ),
             Refusal::AlreadyWaived(id) => write!(f, "the challenge of `{id}` is waived already"),
+            Refusal::Author(body) => write!(
+                f,
+                "{body} wrote this landing, or commands who did: it never clears its own challenge"
+            ),
             Refusal::TooLarge(n) => write!(f, "the filing is {n} bytes, over {MAX_ROW}"),
             Refusal::Unwritten(why) => write!(f, "the challenge records cannot be kept: {why}"),
         }
@@ -582,6 +615,9 @@ impl Challenges {
         if open.filed.contains_key(&ledger.speciality) {
             return Err(Refusal::AlreadyFiled(ledger.speciality));
         }
+        if open.opening.holds_author(ledger.speciality.creature()) {
+            return Err(Refusal::Author(ledger.speciality.creature().to_owned()));
+        }
         let sources = Sources {
             tree: Some(tree),
             ran: Some(ran),
@@ -732,6 +768,7 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
             Row::Filed { ledger } => {
                 if let Some(open) = all.get_mut(&ledger.landing)
                     && !open.filed.contains_key(&ledger.speciality)
+                    && !open.opening.holds_author(ledger.speciality.creature())
                     && validate(&ledger, &open.landing).is_ok()
                 {
                     open.filed.insert(ledger.speciality, ledger);
@@ -1108,6 +1145,7 @@ mod tests {
         Opening {
             tree: HASH.to_owned(),
             by: "orc-o".to_owned(),
+            ..Default::default()
         }
     }
 
@@ -1136,6 +1174,7 @@ mod tests {
                 body: "dark-elf-supply".into(),
                 by: "rimuru".into(),
                 wt: 7,
+                waited: 0,
             },
         )
         .unwrap();
@@ -1158,7 +1197,8 @@ mod tests {
                     Staff::Commissioned {
                         body: "dark-elf-supply".into(),
                         by: "rimuru".into(),
-                        wt: 7
+                        wt: 7,
+                        waited: 0,
                     }
                 ),
             ]
@@ -1271,6 +1311,58 @@ mod tests {
         ] {
             assert_ne!(r.to_string(), "");
         }
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// The landing's author, or a body above it, never clears its own challenge: its filing is
+    /// refused, and one written into the records counts for nothing.
+    #[test]
+    fn the_author_never_files_for_its_own_landing() {
+        let w = temp("author");
+        let file = w.join("challenges.jsonl");
+        let c = Challenges::at(&file);
+        let l = landing(&["Cargo.lock"]);
+        c.open_at(
+            &l,
+            &Opening {
+                tree: HASH.to_owned(),
+                by: "dark-elf-supply".to_owned(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            c.file(full(&l, Speciality::Supply), &tree(&l), &ran()),
+            Err(Refusal::Author("dark-elf-supply".to_owned()))
+        );
+        let mut above = l.clone();
+        above.id = "run-7:9".to_owned();
+        c.open_at(
+            &above,
+            &Opening {
+                tree: HASH.to_owned(),
+                by: "slime-s".to_owned(),
+                chain: vec!["orc-o".to_owned(), "dark-elf-supply".to_owned()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            c.file(full(&above, Speciality::Supply), &tree(&above), &ran()),
+            Err(Refusal::Author(_))
+        ));
+        // Written by hand, the author's filing is dropped on read.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file)
+            .unwrap();
+        let mut stamped = full(&l, Speciality::Supply);
+        stamp(&mut stamped, &ran());
+        let row = Row::Filed { ledger: stamped };
+        writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+        drop(f);
+        assert!(matches!(c.status(&l.id), Some(Status::Pending { .. })));
+        assert_ne!(Refusal::Author("x".into()).to_string(), "");
         let _ = std::fs::remove_dir_all(&w);
     }
 

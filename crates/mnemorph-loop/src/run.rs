@@ -348,6 +348,19 @@ pub struct Run {
     challenger: Option<Arc<crate::commission::Commissioner>>,
     /// The session's envelope, held for its challenge reserve: each review is a slice of it.
     reserve: Option<mnemorph_ledger::Envelope>,
+    /// What this ask's passes left waiting on a challenge, one line each.
+    challenged: Vec<String>,
+}
+
+/// How a pass stands on its challenge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Held {
+    /// Routed to no speciality: it lands.
+    Not,
+    /// Its challenge is open: it waits.
+    Pending,
+    /// Routed, but its challenge could not be recorded: it waits all the same — fail closed.
+    Unrecorded,
 }
 
 /// What a run needs that is not the body itself.
@@ -434,6 +447,7 @@ impl Run {
             challenges: None,
             challenger: None,
             reserve: None,
+            challenged: Vec::new(),
         }
     }
 
@@ -1111,8 +1125,12 @@ impl Run {
         });
         let solo = gate.author.is_none();
         // A pass on a Dark Elf surface opens the landing's challenge: it waits on it.
-        let pending = verdict.passed() && self.open_challenge(&verdict.changed);
-        let heading = self.log_verdict(&verdict, *retried, pending);
+        let held = if verdict.passed() {
+            self.open_challenge(&verdict.changed)
+        } else {
+            Held::Not
+        };
+        let heading = self.log_verdict(&verdict, *retried, held);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
@@ -1219,46 +1237,61 @@ impl Run {
     }
 
     /// Opens the challenge of the landing the gate just passed, when its changed paths touch a
-    /// Dark Elf surface: whether it now waits on one.
-    fn open_challenge(&mut self, changed: &[PathBuf]) -> bool {
+    /// Dark Elf surface. It fails closed: a routed landing whose challenge cannot be recorded —
+    /// no state directory, a refusal, a disk or lock error — is held as unrecorded, never passed
+    /// as landed.
+    fn open_challenge(&mut self, changed: &[PathBuf]) -> Held {
         if changed.is_empty() {
-            return false;
+            return Held::Not;
         }
         let world = self.cx.world().to_path_buf();
-        let Some(records) = self.challenge_records() else {
-            self.record(&Beat::Warning {
-                text: "the landing's challenge cannot be opened: no state directory to keep it in"
-                    .to_owned(),
-            });
-            return false;
-        };
         let id = crate::challenge::landing_id(&self.caller.run, self.steps);
-        match crate::challenge::open(&records, &world, &id, &self.body.name, changed) {
-            Ok(Some(status)) if status.open() => {
-                let routed = records
-                    .record(&id)
-                    .map(|r| {
-                        r.landing
-                            .routed
-                            .iter()
-                            .map(|x| x.speciality.creature())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default();
-                self.record(&Beat::Note {
-                    text: format!("challenge opened on landing {id}: routed to {routed}"),
-                });
-                true
+        let written: Vec<String> = changed.iter().map(|p| p.display().to_string()).collect();
+        let routed = mnemorph_world::Roster::load(&world).route(&written);
+        if routed.is_empty() {
+            return Held::Not;
+        }
+        let names: Vec<&str> = routed.iter().map(|s| s.creature()).collect();
+        let opened = match self.challenge_records() {
+            None => Err("no state directory to keep it in".to_owned()),
+            Some(records) => {
+                crate::challenge::open(&records, &world, &id, &self.body.name, changed)
             }
-            Ok(_) => false,
-            Err(e) => {
-                self.record(&Beat::Warning {
-                    text: format!("the landing's challenge could not be opened: {e}"),
+        };
+        match opened {
+            Ok(Some(status)) if status.open() => {
+                self.record(&Beat::Note {
+                    text: format!(
+                        "challenge opened on landing {id}: routed to {}",
+                        names.join(", ")
+                    ),
                 });
-                false
+                self.challenged.push(format!(
+                    "the landing {id} waits on its Dark Elf challenge ({}): written, not landed",
+                    names.join(", ")
+                ));
+                Held::Pending
+            }
+            Ok(_) => Held::Not,
+            Err(e) => {
+                let why = format!(
+                    "the landing {id} is routed to {} but its challenge could not be recorded: {} \
+                     — written, not landed",
+                    names.join(", "),
+                    crate::challenge::safe(&e)
+                );
+                self.record(&Beat::Warning { text: why.clone() });
+                self.challenged.push(why);
+                Held::Unrecorded
             }
         }
+    }
+
+    /// What this ask's passes left waiting on a challenge, one line each: what a commission's
+    /// report says instead of "landed".
+    #[must_use]
+    pub fn challenged(&self) -> &[String] {
+        &self.challenged
     }
 
     /// The throne's answer, with the challenges its sweep moved said beside it.
@@ -1302,14 +1335,15 @@ impl Run {
             if !record.status.open() {
                 continue;
             }
+            crate::challenge::wait_on(&records, &record);
+            let record = records.record(&id).unwrap_or(record);
             let plan = crate::challenge::plan(&roster, &record, cap);
             let had = |s: Speciality, want: &Staff| {
                 record.staff.iter().any(|(t, st)| *t == s && st == want)
             };
-            let mut moved = false;
             for s in plan.unstaffed {
                 if !had(s, &Staff::Unstaffed) {
-                    moved |= records.staff(&id, s, Staff::Unstaffed).is_ok();
+                    let _ = records.staff(&id, s, Staff::Unstaffed);
                 }
             }
             let past_cap = Staff::Queued {
@@ -1317,17 +1351,18 @@ impl Run {
             };
             for s in plan.queued {
                 if !had(s, &past_cap) {
-                    moved |= records.staff(&id, s, past_cap.clone()).is_ok();
+                    let _ = records.staff(&id, s, past_cap.clone());
                 }
             }
             for (s, body) in plan.commission {
                 if self.interrupt.flag().load(Ordering::SeqCst) {
                     break;
                 }
-                moved = true;
                 self.review(&c, &records, &record, s, &body).await;
             }
-            if moved && let Some(now) = records.record(&id) {
+            // Every challenge still holding its landing is said at every sweep, so none falls
+            // silent; one this sweep settled is said once.
+            if let Some(now) = records.record(&id) {
                 open |= now.status.open();
                 lines.push(crate::challenge::said(&now));
             }
@@ -1399,6 +1434,7 @@ impl Run {
                 body: body.to_owned(),
                 by: self.body.name.clone(),
                 wt: order.spent,
+                waited: 0,
             },
         );
         if let Some(answer) = &order.answer {
@@ -1413,15 +1449,18 @@ impl Run {
         &mut self,
         verdict: &crate::gate::GateVerdict,
         retried: bool,
-        pending: bool,
+        held: Held,
     ) -> Option<String> {
+        let pending = held != Held::Not;
         // An answer that changed nothing passed untouched: there is nothing to journal.
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
             return None;
         }
         let word = verdict.verdict().word();
-        let word = if pending {
+        let word = if held == Held::Pending {
             format!("{word} (challenge pending)")
+        } else if held == Held::Unrecorded {
+            format!("{word} (challenge unrecorded)")
         } else if verdict.unrun() {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
@@ -1465,7 +1504,8 @@ impl Run {
                     self.landed_in_ask = Some(h.to_owned());
                     self.credit(h);
                 }
-                if verdict.passed() {
+                // A pass still waiting on its challenge proves nothing checked yet.
+                if verdict.passed() && !pending {
                     self.passed = Some((verdict.clone(), heading.clone()));
                 }
                 heading
@@ -1891,6 +1931,7 @@ impl Run {
 
     /// Open an ask: its preface, its journal row, then the recall row that follows it.
     fn open_ask(&mut self, text: &str) -> String {
+        self.challenged.clear();
         self.ask_from = self.messages.len();
         self.failed_in_ask = None;
         self.acceptable.clear();

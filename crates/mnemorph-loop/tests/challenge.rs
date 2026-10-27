@@ -260,6 +260,8 @@ async fn a_harness_landing_waits_on_its_ledger_then_clears() {
     assert!(r.status.open());
     let log = fs::read_to_string(w.world().join(".mnemorph/log.md")).unwrap();
     assert!(log.contains("gate: PASS (challenge pending)"), "{log}");
+    // A pass still waiting on its challenge proves nothing checked.
+    assert!(run.passed_gate().is_none());
     // The ledger, filed now, clears it.
     let mut filed = harness_ledger();
     filed["landing"] = json!(r.landing.id);
@@ -516,6 +518,23 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let r = w.only();
     assert_eq!(r.opening.by, "slime-s");
+    assert_eq!(r.opening.chain, ["orc-o", "elf-e", "rimuru"]);
+    // The Orc read its Slime's landing as waiting on the challenge, not as landed.
+    let orc = fs::read_dir(w.world().join(".mnemorph/instruments/loop"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("orc-o")
+        })
+        .unwrap();
+    let read = fs::read_to_string(orc).unwrap();
+    assert!(
+        read.contains("waits on its Dark Elf challenge (dark-elf-harness): written, not landed"),
+        "{read}"
+    );
     // Every staffing row the records hold names the throne as the sender: none the Orc's, none
     // the Elf's, none queued by a refused send from below.
     let rows = w.rows();
@@ -537,4 +556,62 @@ fn the_tree_hash_is_the_landing_s_bytes() {
     fs::write(w.world().join(FILE), "other").unwrap();
     assert_ne!(a, mnemorph_loop::challenge::tree_hash(&w.world(), &p(FILE)));
     assert!(Path::new(&w.world()).exists());
+}
+
+/// A routed landing whose challenge cannot be recorded fails closed: journaled
+/// `PASS (challenge unrecorded)`, crediting nothing, said as written and not landed.
+#[tokio::test]
+async fn an_unrecorded_challenge_credits_nothing() {
+    let w = World::new("unrecorded", &["dark-elf-harness"]);
+    // The records' folder is a file: nothing can be kept there.
+    fs::write(w.root.join("state"), "not a folder").unwrap();
+    let model = Arc::new(Reviewing(ScriptedModel::new([
+        write("w1", FILE, BODY),
+        ScriptedModel::text("Wrote the reader."),
+    ])));
+    let mut run = w.throne(model, 3);
+    let ending = run.ask("add a reader", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let log = fs::read_to_string(w.world().join(".mnemorph/log.md")).unwrap();
+    assert!(log.contains("gate: PASS (challenge unrecorded)"), "{log}");
+    assert!(run.passed_gate().is_none());
+    assert!(
+        run.challenged()[0].contains("could not be recorded"),
+        "{:?}",
+        run.challenged()
+    );
+}
+
+/// A reviewer that never files is not forgotten: its challenge is said at every answer, and
+/// after [`RESEND_AFTER`] sweeps it is sent again.
+#[tokio::test]
+async fn an_unfiled_review_is_said_and_sent_again() {
+    let w = World::new("resend", &["dark-elf-harness"]);
+    let model = Arc::new(Reviewing(ScriptedModel::new([
+        write("w1", FILE, BODY),
+        ScriptedModel::text("Wrote the reader."),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("One."),
+        ScriptedModel::text("Two."),
+        ScriptedModel::text("Three."),
+        // Sent again.
+        ScriptedModel::text("@S DONE\n@E"),
+    ])));
+    let mut run = w.throne(model, 3);
+    for ask in ["add a reader", "one", "two", "three"] {
+        let Ending::Answered(text) = run.ask(ask, &mut |_| {}).await else {
+            panic!("answered");
+        };
+        assert!(
+            text.contains("challenge pending — awaiting dark-elf-harness"),
+            "{ask}: {text}"
+        );
+    }
+    let sends = w
+        .rows()
+        .iter()
+        .filter(|r| r["row"] == "staffed" && r["staff"]["staff"] == "commissioned")
+        .filter(|r| r["staff"].get("waited").is_none())
+        .count();
+    assert_eq!(sends, 2, "sent, then sent again");
 }

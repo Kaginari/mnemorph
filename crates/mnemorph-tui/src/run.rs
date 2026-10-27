@@ -299,9 +299,10 @@ fn waive(world: &std::path::Path, landing: &str, reason: &str) -> String {
     let Some(records) = Challenges::of(&world) else {
         return "waive: no state directory to keep the challenges in".to_owned();
     };
+    let safe = mnemorph_server::challenge::safe;
     match Waiver::human(reason).and_then(|w| records.waive(landing, &w)) {
-        Ok(_) => format!("waived {landing}: {reason}"),
-        Err(e) => format!("waive refused: {e}"),
+        Ok(_) => format!("waived {}: {}", safe(landing), safe(reason)),
+        Err(e) => format!("waive refused: {}", safe(&e.to_string())),
     }
 }
 

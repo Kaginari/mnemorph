@@ -46,6 +46,7 @@ impl Fixture {
         let opening = Opening {
             tree: "ab".repeat(32),
             by: "orc-o".to_owned(),
+            ..Default::default()
         };
         Challenges::at(&records(&state, &world))
             .open_at(&landing, &opening)
@@ -60,7 +61,15 @@ impl Fixture {
     /// Run with `input` on stdin, and `body` as the asker when one is given.
     fn run(&self, args: &[&str], input: &str, body: Option<&str>) -> Output {
         use std::io::Write as _;
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        // In a session of its own, on Linux: no controlling terminal, as a body's command or a
+        // script has none — and never the terminal of whoever runs the tests.
+        let mut cmd = if cfg!(target_os = "linux") {
+            let mut c = Command::new("setsid");
+            c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
+            c
+        } else {
+            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        };
         cmd.arg("challenge")
             .args(args)
             .args(["--world", self.world.to_str().unwrap()])
@@ -74,6 +83,39 @@ impl Fixture {
         }
         let mut child = cmd.spawn().unwrap();
         let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
+        child.wait_with_output().unwrap()
+    }
+}
+
+impl Fixture {
+    /// Run at a terminal of its own (a pseudo-terminal `script` makes), `input` typed at it.
+    #[cfg(target_os = "linux")]
+    fn at_tty(&self, args: &[&str], input: &str) -> Output {
+        use std::io::Write as _;
+        let quoted: Vec<String> = args
+            .iter()
+            .map(|a| format!("'{}'", a.replace('\'', "'\\''")))
+            .collect();
+        let line = format!(
+            "{} challenge {} --world '{}'",
+            env!("CARGO_BIN_EXE_mnemorphd"),
+            quoted.join(" "),
+            self.world.display()
+        );
+        let mut child = Command::new("script")
+            .args(["-qec", &line, "/dev/null"])
+            .env("XDG_STATE_HOME", &self.state)
+            .env_remove("MNEMORPH_BODY")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        // Typed once the question is up: the terminal reads it, not the pipe.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let _ = stdin.write_all(input.as_bytes());
+        drop(stdin);
         child.wait_with_output().unwrap()
     }
 }
@@ -94,6 +136,7 @@ fn text(out: &Output) -> String {
 
 const WHY: &str = "the reader is a test fixture the human wrote by hand";
 
+#[cfg(target_os = "linux")]
 #[test]
 fn the_human_lists_shows_and_waives_with_a_reason() {
     let f = Fixture::new("waive");
@@ -107,13 +150,28 @@ fn the_human_lists_shows_and_waives_with_a_reason() {
     let out = f.run(&["show", "run-1:2"], "", None);
     assert!(text(&out).contains(&format!("tree {}", "ab".repeat(32))));
     assert!(text(&out).contains("wrote crates/mnemorph-tools/src/files.rs"));
-    // Not confirmed: nothing is waived.
-    let out = f.run(&["waive", "run-1:2", "--why", WHY], "n\n", None);
-    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
-    assert!(matches!(f.status(), Some(Status::Pending { .. })));
+    // Piped, the answer is no human's: refused, nothing waived.
     let out = f.run(&["waive", "run-1:2", "--why", WHY], "y\n", None);
-    assert!(out.status.success(), "{}", text(&out));
-    assert!(text(&out).contains(&format!("waived run-1:2: {WHY}")));
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+    assert!(
+        text(&out).contains("answered at a terminal"),
+        "{}",
+        text(&out)
+    );
+    assert!(matches!(f.status(), Some(Status::Pending { .. })));
+    // At the terminal: `n` waives nothing, `y` waives it with its reason.
+    let out = f.at_tty(&["waive", "run-1:2", "--why", WHY], "n\n");
+    assert!(
+        matches!(f.status(), Some(Status::Pending { .. })),
+        "{}",
+        text(&out)
+    );
+    let out = f.at_tty(&["waive", "run-1:2", "--why", WHY], "y\n");
+    assert!(
+        text(&out).contains(&format!("waived run-1:2: {WHY}")),
+        "{}",
+        text(&out)
+    );
     assert_eq!(
         f.status(),
         Some(Status::Waived {
@@ -124,8 +182,12 @@ fn the_human_lists_shows_and_waives_with_a_reason() {
     assert_eq!(text(&out), "no challenge holds a landing\n");
     let out = f.run(&["list", "--all"], "", None);
     assert!(text(&out).contains("waived by the human"), "{}", text(&out));
-    let out = f.run(&["waive", "run-1:2", "--why", WHY], "y\n", None);
-    assert_eq!(out.status.code(), Some(2), "waived once: {}", text(&out));
+    let out = f.at_tty(&["waive", "run-1:2", "--why", WHY], "y\n");
+    assert!(
+        text(&out).contains("waived already"),
+        "waived once: {}",
+        text(&out)
+    );
 }
 
 /// A waiver from a body, one with no reason, or one for no landing, is refused and waives
@@ -159,4 +221,40 @@ fn a_forged_or_unreasoned_waiver_is_refused() {
         assert!(text(&out).contains(says), "{args:?}: {}", text(&out));
     }
     assert!(matches!(f.status(), Some(Status::Pending { .. })));
+}
+
+/// A written path a model chose — a newline, an escape sequence, a backtick — is shown escaped,
+/// never as the terminal would act on it.
+#[test]
+fn a_hostile_path_is_shown_escaped() {
+    let f = Fixture::new("hostile");
+    let hostile = "crates/mnemorph-tools/a`\n\u{1b}[31mred.rs";
+    let landing = route(&Roster::default(), "run-1:3", &[hostile.to_owned()]);
+    assert_ne!(landing.routed, []);
+    Challenges::at(&records(&f.state, &f.world))
+        .open_at(
+            &landing,
+            &Opening {
+                tree: "cd".repeat(32),
+                by: "orc-o\u{1b}]0;x\u{7}".to_owned(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    for args in [&["show", "run-1:3"][..], &["list"]] {
+        let out = f.run(args, "", None);
+        let shown = text(&out);
+        assert!(out.status.success(), "{shown}");
+        assert!(
+            !shown.contains('\u{1b}') && !shown.contains('\u{7}'),
+            "{shown:?}"
+        );
+        assert!(!shown.contains("a`"), "{shown:?}");
+    }
+    let out = f.run(&["show", "run-1:3"], "", None);
+    assert!(
+        text(&out).contains("a\\u{60}\\u{a}\\u{1b}[31mred.rs"),
+        "{}",
+        text(&out)
+    );
 }
