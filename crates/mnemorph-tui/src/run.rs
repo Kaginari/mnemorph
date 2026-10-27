@@ -336,10 +336,16 @@ impl Screen {
         )
     }
 
-    /// The terminal's modes: pasted text whole, the mouse's wheel and clicks, keys told apart.
+    /// The terminal's modes: pasted text whole, the mouse's wheel and clicks, the window's focus
+    /// told, keys told apart.
     fn modes() -> std::io::Result<()> {
         let mut out = std::io::stdout();
-        execute!(out, term::EnableBracketedPaste, term::EnableMouseCapture)?;
+        execute!(
+            out,
+            term::EnableBracketedPaste,
+            term::EnableMouseCapture,
+            term::EnableFocusChange
+        )?;
         if terminal::supports_keyboard_enhancement().unwrap_or(false) {
             execute!(
                 out,
@@ -357,8 +363,8 @@ impl Screen {
 /// terminal back first — the panic hook or the screen's drop.
 static PUSHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Unset the modes the UI set, into `out`: the keyboard flags popped if still pushed, the mouse
-/// and bracketed paste turned off. Safe to run twice: only the pop is once-only, and turning a
+/// Unset the modes the UI set, into `out`: the keyboard flags popped if still pushed, the mouse,
+/// focus reporting and bracketed paste turned off. Safe to run twice: only the pop is once-only, and turning a
 /// mode off again does nothing.
 ///
 /// # Errors
@@ -368,7 +374,12 @@ pub fn release(out: &mut impl std::io::Write) -> std::io::Result<()> {
     if PUSHED.swap(false, std::sync::atomic::Ordering::SeqCst) {
         ratatui::crossterm::queue!(out, term::PopKeyboardEnhancementFlags)?;
     }
-    ratatui::crossterm::queue!(out, term::DisableMouseCapture, term::DisableBracketedPaste)?;
+    ratatui::crossterm::queue!(
+        out,
+        term::DisableMouseCapture,
+        term::DisableFocusChange,
+        term::DisableBracketedPaste
+    )?;
     out.flush()
 }
 
@@ -416,7 +427,10 @@ fn read_input(tx: Sender<Msg>) {
                 TermEvent::Paste(s) => Msg::Paste(s),
                 TermEvent::Mouse(m) => Msg::Mouse(m),
                 TermEvent::Resize(w, h) => Msg::Resize(w, h),
-                _ => continue,
+                TermEvent::FocusGained => Msg::Focus(true),
+                TermEvent::FocusLost => Msg::Focus(false),
+                // A key's release: the press already counted.
+                TermEvent::Key(_) => continue,
             };
             if tx.send(msg).is_err() {
                 break;
@@ -656,6 +670,10 @@ mod tests {
             "the keyboard flags popped: {first:?}"
         );
         assert!(first.contains("\x1b[?1000l"), "the mouse off: {first:?}");
+        assert!(
+            first.contains("\x1b[?1004l"),
+            "focus reports off: {first:?}"
+        );
         assert!(
             first.contains("\x1b[?2004l"),
             "bracketed paste off: {first:?}"

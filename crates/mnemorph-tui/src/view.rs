@@ -208,9 +208,10 @@ fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
     if let Some((pad, cols, rows)) = crate::sidebar::picture_box(m, w, h) {
         m.pictures.want(Want {
             slot: Slot::Sidebar,
-            // Veldora while no body works; the body working now during a turn.
+            // Veldora while no body works; the body working now during a turn, its clip playing.
             art: if m.busy() {
-                Art::Still(crate::activity::actor(m).1)
+                let (clip, at) = m.playing();
+                Art::Frame(clip, m.pictures.frame(clip, at))
             } else {
                 Art::Veldora
             },
@@ -256,13 +257,20 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         top,
     } = m.transcript.window(&ctx, rows, m.viewport.offset(), &head);
     m.measured.set(top.unwrap_or(usize::MAX));
-    // The transcript sits on the input: a short one is pushed down, as a chat reads.
-    let top_row = area.y + to_u16(rows.saturating_sub(window.len()));
-    let stack = window.iter().chain(&queued).chain(&strip).chain(&input);
+    // A short transcript starts at the top — the welcome first, like a page's head — and the
+    // room it leaves stays below it, above the input; once it fills the rows it scrolls.
+    let room = Line::from("");
+    let gap = std::iter::repeat_n(&room, rows.saturating_sub(window.len()));
+    let stack = window
+        .iter()
+        .chain(gap)
+        .chain(&queued)
+        .chain(&strip)
+        .chain(&input);
     // A stack taller than the area keeps its bottom: the status and the input stay.
     let stack: Vec<&Line<'static>> = stack.collect();
     let skip = stack.len().saturating_sub(usize::from(area.height));
-    let first = top_row.max(area.y);
+    let first = area.y;
     for (row, line) in (first..area.bottom()).zip(stack.into_iter().skip(skip)) {
         buf.set_line(area.x, row, line, area.width);
     }

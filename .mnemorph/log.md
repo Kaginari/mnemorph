@@ -5496,3 +5496,40 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   `a_post_journal_keeps_the_harness_rows_and_loses_the_forged_ones`; outward GHE `commented`.
 - **Learned:** the reviewers' failed-push case was wider: a lease is never checked when there is
   nothing to send, so exit 0 proved nothing there either — the pin-time read closes it.
+
+---
+
+### [2026-10-27T18:27:41+01:00] rimuru — the TUI: the races' 256 px animations, and the welcome at the top
+- **Done:** the sidebar plays the working body's clip from mnemorph-animations `ff8af6d`
+  (`assets/anims/256px/`, v2 sprite sheets; the eleven idles and five ascensions, 7.8 MB in,
+  the 32 px loops and the race stills, 2.25 MB, out). Real pixels as the player's `--native`
+  shows them: Kitty stores each frame once by id and places it (16 fps), iTerm2 and Sixel send the
+  frame again (8 fps); frames encode off the UI's thread into reels, a new frame covers the old
+  with nothing erased. Without pixels, glyph cells from octants to half blocks
+  (`MNEMORPH_TUI_GLYPHS`). The sheet decoder and glyph renderer are vendored (`kit::mnanim`,
+  `kit::glyphs`): the repository is private, CI has no token for it. An ascension plays when the
+  body shown is seen as the risen form of its race (`Model::ascend`; no event names one yet). A
+  short transcript is top-anchored, so the welcome opens the conversation like a header and
+  scrolls away. Docs 05.
+- **Tests:** pictures `a_kitty_clip_is_stored_once_by_id_then_placed`,
+  `the_frame_cache_never_encodes_an_unchanged_frame_again`, `a_clip_plays_at_the_protocols_pace`;
+  `a_body_seen_ascending_plays_its_ascension_once_then_its_risen_loop`, `idle_wants_veldora_alone`;
+  welcome `on_first_run_the_welcome_opens_the_conversation_at_the_top`,
+  `the_welcome_scrolls_away_and_comes_back_at_the_top_of_the_history`; mnanim and glyphs units.
+  Under a pty, `MNEMORPH_TUI_IMAGES=kitty|sixel|iterm` wrote `a=t`/`a=p` by id and freed every
+  stored id on exit; Sixel and iTerm2 frames of 256 × 272 px, about 86 and 67 KB.
+- **Learned:** image's Lanczos in a debug build took ~50 s to shrink the eleven clips for glyphs;
+  an area mean over the palette indices does it in a fraction, with no colour bleeding from clear
+  pixels.
+
+---
+
+### [2026-10-27T18:43:43+01:00] rimuru — #241, reviewed (Fable): Kitty's frames let go, a pause out of focus, the licence
+- **Done:** a reel let go (over the few kept, or on a font zoom) frees its Kitty frames by id once
+  none is on screen, so a long session never fills the terminal's image quota; a stored frame is
+  sent again every 32 placements, since `q=2` hides an eviction. Focus reports on: the portrait
+  pauses while the window is unfocused (no ticks, nothing sent), off again on exit and panic. The
+  vendored files name their MIT licence. Docs 05.
+- **Tests:** pictures `a_reel_let_go_frees_its_kitty_frames_and_a_stored_frame_is_refreshed`,
+  `an_unfocused_window_pauses_the_portrait`; run `releasing_turns_every_mode_off…` checks
+  `?1004l`.

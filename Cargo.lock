@@ -1546,6 +1546,7 @@ dependencies = [
  "mnemorph-races",
  "mnemorph-server",
  "mnemorph-tools",
+ "png",
  "pulldown-cmark",
  "ratatui",
  "rustix",
