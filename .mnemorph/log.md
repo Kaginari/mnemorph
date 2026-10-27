@@ -5846,6 +5846,41 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T23:03:02+01:00] rimuru — Dark Elf rung 4: the finding record and its validator (`mnemorph-proving`)
+- **Done:** crate `mnemorph-proving` (wire + races; races holds no wire and the ledger stays the
+  usage accounting, so a new crate): `FindingRecord` (JSON, ≤ 64 KiB, unknown fields refused),
+  `validate(record, world) -> Result<Valid, Vec<Rule>>` with fourteen named rules — nv, required,
+  size, escaped, class-owned, fingerprint, rec-path, file-exists, symbol-present, trace, witness,
+  witness-hash, severity-cap, preconditions — the impact cap table (none → informational, crash
+  and exhaustion → medium, disclosure and tamper → high, bypass and execution → critical; no
+  reachability → low), `World` (a map, or `Tree`: the ASCII path rule, no symlink),
+  `accept(report, world)`: `Report::dark_elf` now takes a reason, and a broken record demotes its
+  `@F` to `@? invalid record (<rules>): …`. Only `Valid` counts. Docs 02, 04, 05, roadmap, notices.
+- **Tests:** one fixture per rule, each breaking that rule alone, and with the rule switched off
+  each passes; the cap table whole; trace, witness and symbol cases; a tree that never leaves its
+  root; demotion through the wire end to end (over-cap, nv record, missing record, forged id);
+  hostile bytes, fields and report lines.
+- **Learned:** a rule's fixture proves the rule only when it breaks nothing else: switch the rule
+  off and the fixture must pass.
+
+---
+
+### [2026-10-27T23:11:08+01:00] rimuru — two binaries explained
+- The human chose to keep `mnemorph` and `mnemorphd`. README and docs/05 now say why there are two (a person or script vs a program that is not Rust; upkeep with the server) and which to run for what.
+
+---
+
+### [2026-10-27T23:12:22+01:00] rimuru — #251, Fable's review: witness strength, located traces, one count per root cause
+- **Done:** `witness-strength` (from high up, a witness the harness re-reads — a test, a scanner's
+  output, or a command's captured `output` with its hash; a bare command caps at medium);
+  `trace-located` (each step's file in the tree, its line within it); `accept` demotes a second
+  `@F` of a counted fingerprint to `@? duplicate of #<id>`. Doc 02: the impact is a claim until
+  the verifier confirms it; `symbol-present` takes a comment until then.
+- **Tests:** a fixture per new rule (sixteen, each passing with its rule off); command, output and
+  scanner witnesses; lines past a file's end, a missing entry file; a duplicate, and a forged first
+  line that leaves the true one counted.
+- **Learned:** a hash of the claim's own text is a tautology: a witness counts only as a file the
+  harness re-reads.
 ### [2026-10-27T23:06:28+01:00] rimuru — Dark Elf PR 5: the coverage ledger, its strict state table, the clearing rule
 - **Done:** `mnemorph_world::coverage`: a `CoverageLedger` per speciality per landing, one entry
   per (touched surface × owned class): `Checked { method, evidence }` (files with symbols and

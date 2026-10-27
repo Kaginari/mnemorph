@@ -32,6 +32,7 @@ flowchart TB
       LEDGER["ledger<br/>usage · value · budgets"]
       MEM["memory<br/>tiers · recall · write rule"]
       CONFIG["config<br/>layers · origins · loosening"]
+      PROVING["proving<br/>Dark Elf records · validator"]
       SERVER --> LOOP
       D --> SERVER
       TUI --> SERVER
@@ -51,13 +52,15 @@ flowchart TB
       WORLD --> LEDGER
       WORLD --> MEM
       MEM --> LEDGER
+      PROVING --> WIRE
+      PROVING --> RACES
     end
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
     class BOARD,SDK,PROTO ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class TUI,D,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
+    class TUI,D,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG,PROVING rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SANDBOX gate
     style ts fill:#fdf2f8,stroke:#db2777
@@ -84,6 +87,7 @@ mnemorph/
 │  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
 │  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
+│  ├─ mnemorph-proving    Dark Elf finding records, the validator     (reads the tree)
 │  ├─ mnemorph-provider   streaming clients, retry ladder, caching,   (network)
 │  │                      System One decisions with an LLM fallback
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
@@ -145,6 +149,23 @@ mnemorph run "<ask>"              # one ask without the app
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
 `housekeep` and `relief` (`mnemorphd --help`).
+
+**Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
+a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
+screen and the loop. `mnemorphd` is for programs that are not Rust: the SDK and an editor plugin start it as a
+child and speak JSON-RPC to it, and the board (M12) is served by it; every such client sees the
+same sessions, gate and events. The upkeep commands sit with it because they work on the world's
+records directly, without a session. Both link the same crates (`mnemorph-loop`, `-world`,
+`-races`, `-tools`, `-sandbox`), so a law, a gate or a sandbox rule holds the same in either.
+
+| You want to | Run |
+|---|---|
+| talk to Rimuru | `mnemorph` |
+| ask once from a script or CI | `mnemorph run "<ask>"` |
+| pick up a run that stopped | `mnemorph resume last` |
+| list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
+| connect the SDK | the SDK starts `mnemorphd` itself |
+| open the board (M12) | the board is served by `mnemorphd` |
 
 `resume <run|last>` opens the session on a run that stopped instead of a new one, through the
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing

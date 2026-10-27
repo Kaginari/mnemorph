@@ -706,51 +706,109 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
   - **Its id is a root-cause fingerprint**: the speciality, the class, the file and the symbol —
     never a line, a body or a severity. It is stable across runs, so a moved line keeps its id and
     a later fix is still linked to it.
-  - **Its record** holds the class (a playbook reference), the trace from entry to sink with a
-    `file:line` at each step, the witness, the preconditions and reachability, the fix and the
-    invariant it restores.
+  - **Its record** (`mnemorph_proving::FindingRecord`, JSON, at most 64 KiB, no field it does not
+    name) holds the verdict (`finding` or `nv`), the fingerprint, the speciality, the class (a
+    playbook reference), the file and the symbol; the claim; the trace from entry to sink with a
+    `file:line` at each step; the witness — its kind (`test`, `poc-command`, `scanner-output`),
+    its reference and its SHA-256, and for a command the file holding the output it printed, with
+    that file's SHA-256; the preconditions and the reachability (how an attacker reaches
+    it); the likelihood and the demonstrated impact, each with its reason; the severity; the fix
+    and the invariant it restores.
   - **Severity is capped at the demonstrated impact**: likelihood and impact, each with its reason,
-    and the overall never above the impact the witness shows.
+    and the overall never above the cap of the impact the witness shows — and never above low
+    when no reachability is shown:
+
+    | Demonstrated impact | Highest severity |
+    |---|---|
+    | `none` — no failure beyond a deviation | informational |
+    | `crash` — a panic, an abort or a hang · `exhaustion` — a budget, cap or resource run out | medium |
+    | `disclosure` — data read across a boundary · `tamper` — state changed across one | high |
+    | `bypass` — the sandbox, the gate or an approval bypassed · `execution` — the attacker's code run | critical |
+
+    The impact stays a claim until the independent verifier below confirms it: the validator
+    checks the cap, not that the witness shows that impact.
   - **Needs validation** is its own verdict: `@? nv #<fingerprint> blocker:<fact> plan:<check>`,
     the exact blocker and the plan that would settle it — no severity, never a finding, never a
     seal.
   - **Not findings**: a checklist deviation with no reachable failure, a missing second line of
     defence, harm a user can only do to themselves.
+- **The validator.** `mnemorph_proving::validate(record, world)` holds a record to the contract
+  against the landing's tree and gives a `Valid` — the only finding a count, a score or a seal
+  takes — or every rule it breaks, by name, in this order:
+
+  | Rule | The record keeps it when |
+  |---|---|
+  | `nv` | its verdict is `finding`: a needs-validation record never passes |
+  | `required` | the speciality, class, file, symbol, claim, trace, likelihood and impact (each with its reason), severity, fix and invariant are all there |
+  | `size` | the claim is at most 512 bytes, each one-line field 512, each prose field 2,048, the preconditions 16, the trace 32 steps |
+  | `escaped` | no field holds a control character or an invisible format character (a bidi override, a zero-width space) |
+  | `class-owned` | the class is one its speciality owns in the compiled table; the generalist owns none |
+  | `fingerprint` | its fingerprint is the one derived from its root cause |
+  | `rec-path` | it was read from its own path, `.mnemorph/dark-elf/<speciality>/findings/<fingerprint>.json` |
+  | `file-exists` | its file is in the landing's tree, read by the wire's ASCII path rule, never through a symbolic link |
+  | `symbol-present` | that file names its symbol (the last segment after `::` or `.`) as a whole word — a comment naming it is enough here; the independent verifier checks it is the code's |
+  | `trace` | the trace runs entry, propagation, sink (one step: entry or sink), each at a safe `file:line` from line 1, the sink in its file |
+  | `trace-located` | every step's file is in the landing's tree and its line within that file |
+  | `witness` | it has a witness: a test or a scanner output in its own speciality's proving ground, or a command — its captured output, if any, in that ground — each with a SHA-256 in lowercase hex |
+  | `witness-hash` | that hash is the witness file's bytes', or the command line's, and the captured output's is its file's |
+  | `witness-strength` | from high up, its witness is a file the harness re-reads — a test, a scanner's output, or a command's captured output: a bare command caps the severity at medium |
+  | `severity-cap` | its severity is within the cap above |
+  | `preconditions` | from medium up, its preconditions and reachability are stated |
+
+  The harness reads a Dark Elf's report through `mnemorph_proving::accept`: each `@F`'s record is
+  read at its `rec:` path and validated, and a finding whose record breaks a rule is demoted to
+  `@? invalid record (<rule>, …): <finding>` — named, never dropped. A root cause counts once: a
+  second `@F` with a fingerprint already counted is demoted to `@? duplicate of #<fingerprint>`. The rules adapt Cloudflare's
+  `validate-findings.cjs` ([notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 - **The coverage ledger.** "No findings" means something only beside it. Each routed speciality
   files one per landing through the `coverage` tool, and the harness keeps it with the landing's
   challenge in its own records, outside the world and out of every command's reach
-  (`$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl`, append-only), where the board and
-  the ledger folds read it. For every surface the landing touched that the speciality is routed —
-  compiled or declared — and every attack class it owns, the ledger holds one entry:
+  (`$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl`), where the board and the ledger
+  folds read it. For every surface the landing touched that the speciality is routed — compiled or
+  declared — and every attack class it owns, the ledger (`mnemorph_proving::coverage`) holds one
+  entry:
   - **checked** — the method, and the evidence: the files read, each with the symbols looked at
-    and its `sha256sum`, and the commands run, each with the `sha256sum` of its output;
-  - **not applicable** — the fact of the code that rules the class out;
+    and its `sha256sum`, and the commands run. A command counts only when this body's own run
+    journal shows it run: the harness hashes the output it recorded and stamps that hash, so a
+    command the transcript does not hold, or a hash that is not its output's, is refused;
+  - **not applicable** — the fact of the code that rules the class out; for a high-risk class,
+    with the files and symbols that show it, as a check's;
   - **skipped** — the reason, and for a high-risk class the risk left open.
 
-  The generalist owns no class: its ledger is empty, and filing it says its chain review ran. The
+  The high-risk classes are sandbox escape, path traversal, command injection, approval binding,
+  memory safety, hook laundering, wire forgery, known vulnerability, workflow injection, secret
+  exposure, credential grant, auth bypass, unsafe deserialisation and ledger integrity. The
+  generalist owns no class: its ledger is empty, and filing it says its chain review ran. The
   state table is strict, and a ledger that breaks it is refused with every rule it broke, named,
   for the body to fix and file again:
 
   | Rule | Refuses |
   |---|---|
-  | `oversize` | more than 512 entries, a text over 1 KiB, a list over 64 items |
+  | `oversize` | more than 512 entries, a text over 1 KiB, a list over 64 items, a filing over 256 KiB |
   | `unreadable-text` | a control or invisible character in any text |
   | `unrouted` | a speciality the landing was not routed, or a ledger naming another landing |
   | `missing-pair` | a required (surface, class) pair with no entry |
   | `duplicate-pair` | a pair with more than one entry |
   | `extra-pair` | a pair the landing does not require of this speciality |
   | `boilerplate-reason` | a reason under 20 characters, or a stock phrase (`n/a`, `none`, `not relevant`, `out of scope`, …) |
-  | `unstated-risk` | a skipped high-risk class with no risk stated — sandbox escape, path traversal, command injection, approval binding, memory safety, hook laundering, wire forgery, known vulnerability, workflow injection, secret exposure, credential grant, auth bypass, unsafe deserialisation, ledger integrity |
+  | `uniform-reason` | one reason, as normalised, on more than 2 pairs |
+  | `unstated-risk` | a skipped high-risk class with no risk stated |
+  | `unproven-ruling` | a high-risk class ruled not applicable with no file to show it |
+  | `unchecked-surface` | a touched surface where none of the speciality's high-risk classes is checked |
   | `hollow-check` | a check with no method worth the name, or resting on no file and no command |
-  | `outside-evidence` | a check citing a file off the landing's surfaces for this speciality, read as ownership reads paths |
+  | `unnamed-symbols` | a cited file with no symbol named |
+  | `outside-evidence` | a cited file off the landing's surfaces for this speciality, or not a plain repository path |
   | `unhashed-evidence` | a file or command hash that is not 64 hex digits |
-  | `stale-evidence` | a file hash that is not the file as it stands in the world |
+  | `stale-evidence` | a file hash that is not the file as it stands in the landing's tree |
+  | `reused-evidence` | one file at one hash as the sole evidence of more than 2 pairs |
+  | `unrun-command` | a command its body's run journal does not show run with that output |
 
   A ledger is kept only once it holds, a speciality files once per landing, and every filing is
-  validated again when the records are read. A tool call rather than a line in the report: the
-  ledger is structured, a refusal reaches the body while it can still fix it, and no report cap
-  can cut it nor prose forge it. A Dark Elf's `@S PASS` without a valid ledger reads
-  `NOT_VERIFIED`.
+  validated again when the records are read. Filings are written whole, one line each, under the
+  records' lock; the folder is `0700` and the file `0600`. A tool call rather than a line in the
+  report: the ledger is structured, a refusal reaches the body while it can still fix it, and no
+  report cap can cut it nor prose forge it. A Dark Elf's `@S PASS` without a valid ledger reads
+  `NOT_VERIFIED`. The rules adapt Cloudflare's `validate-coverage-ledger.cjs`.
 - **Independent verification.** Before a finding counts or a seal is proposed, the harness
   commissions a **fresh verifier** of the same speciality, whose mandate is to refute it. It gets
   the record and the witness only, never the hunter's transcript, and its run is not the hunter's.
