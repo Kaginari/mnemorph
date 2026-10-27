@@ -5144,3 +5144,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
      and keeps tool calls and words. A thinking-only turn becomes "(reasoning omitted)".
   3. Docs 06 states the rule.
 - **Test:** `the_strip_takes_all_thinking_and_leaves_no_gap`.
+
+---
+
+### [2026-10-27T16:00:00+01:00] rimuru — the welcome opens on a MNEMORPH wordmark and a card that says what Mnemorph does
+- **The human, launching the TUI:** Rimuru's half-block portrait on the start screen looked
+  blurry (the sidebar's Veldora picture is good); "a fixed Mnemorph logo on the main load page"
+  and "a better card describing Mnemorph".
+- **Done:**
+  - welcome.rs: MNEMORPH in five rows of block letters from a small static font (`█ ▀ ▄` and
+    spaces, one foreground a cell), coloured across its columns Rimuru → elf → orc → slime;
+    `◈ MNEMORPH` on one line where the card is narrower than the wordmark; the tagline, four lines
+    on what Mnemorph does, the chips, and MEMORY and VERIFY under WORLD / MODEL / SESSION;
+  - sidebar `Survey` carries the session card's verify line, or the manifest's suggested test
+    command when it has none (`world::verify::suggest`), read off the UI thread with the memory;
+  - the welcome's portrait gone: view `welcome_art`, `welcome::still`, `pictures::Slot::Welcome`
+    and the transcript window's `head` offset;
+  - perf: the cold first frame keeps a cold-start margin (250 ms, after a 104 ms flake on CI
+    macOS); every warm frame still holds 33 ms;
+  - docs 05.
+- **Tests:** welcome unit tests (crisp glyphs only, the gradient across the width, the narrow
+  fallback, the four lines at 80 / 120 / 200, VERIFY's suggestion, no picture wanted, nothing
+  overflows); sidebar `the_survey_reads_the_verify_line_or_a_suggestion`.
+- **Learned:** a portrait in half blocks cannot be made sharp; text glyphs in one colour a cell
+  can. The header's mark already reads `◈ MNEMORPH`: a test of the card's fallback reads the card,
+  not the screen.

@@ -39,19 +39,43 @@ pub const HEAD_FROM: usize = 36;
 /// The narrowest frame that keeps the sidebar: below it, the transcript takes the whole width.
 pub const FOLD_BELOW: u16 = 100;
 
-/// What the world says, read off the UI thread: the memory's standing and each creature's race.
+/// What the world says, read off the UI thread: the memory's standing, each creature's race,
+/// and the session card's verify line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Survey {
     /// The memory's standing.
     pub memory: Standing,
     /// Each creature's race, by name.
     pub races: BTreeMap<String, Race>,
+    /// The session card's verify line.
+    pub verify: Verify,
 }
 
-/// Read `world`'s memory standing and its roster's races: file reads, for a runtime thread.
+/// The session card's verify line, and the line to add when it has none.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Verify {
+    /// Its commands; empty when the card has none, and the end gate grounds nothing.
+    pub line: Vec<String>,
+    /// The test command the project's manifest names, suggested only when `line` is empty.
+    pub suggested: Option<String>,
+}
+
+/// Read `world`'s memory standing, its roster's races and the session card's verify line: file
+/// reads, for a runtime thread.
 #[must_use]
 pub fn survey(world: &Path) -> Survey {
-    let races = Roster::load(world)
+    let roster = Roster::load(world);
+    let line = roster
+        .creatures
+        .get("rimuru")
+        .map(|c| c.verify.clone())
+        .unwrap_or_default();
+    let suggested = if line.is_empty() {
+        mnemorph_loop::world::verify::suggest(world)
+    } else {
+        None
+    };
+    let races = roster
         .creatures
         .into_iter()
         .map(|(name, c)| (name, c.race))
@@ -59,6 +83,7 @@ pub fn survey(world: &Path) -> Survey {
     Survey {
         memory: standing(world),
         races,
+        verify: Verify { line, suggested },
     }
 }
 
@@ -400,6 +425,8 @@ pub struct Sidebar {
     pub root: Option<PathBuf>,
     /// The memory's standing, once read.
     pub memory: Option<Standing>,
+    /// The session card's verify line, once read: the welcome card shows it.
+    pub verify: Option<Verify>,
     /// Notes recall gave this ask; `None` before the first ask.
     pub recalled: Option<usize>,
     /// Each creature's race, by name.
@@ -439,6 +466,7 @@ impl Default for Sidebar {
             open: true,
             root: None,
             memory: None,
+            verify: None,
             recalled: None,
             races: BTreeMap::new(),
             files: Files::default(),
@@ -491,6 +519,7 @@ impl Sidebar {
     pub fn surveyed(&mut self, s: Survey) {
         self.memory = Some(s.memory);
         self.races = s.races;
+        self.verify = Some(s.verify);
     }
 
     /// The sidebar's width in a frame whose inside is `inner` cells wide (the frame's own width

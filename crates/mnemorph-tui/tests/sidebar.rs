@@ -147,6 +147,7 @@ fn world(m: &mut Model) {
                     ("orc-sql".to_owned(), Race::Orc),
                     ("slime-parser".to_owned(), Race::Slime),
                 ]),
+                ..Survey::default()
             },
         },
     );
@@ -495,7 +496,7 @@ fn a_survey_that_comes_back_late_never_overwrites_a_newer_one() {
             shared,
             ..Standing::default()
         },
-        races: BTreeMap::new(),
+        ..Survey::default()
     };
     let (Cmd::Survey(old), Cmd::Survey(new)) = (m.survey(), m.survey()) else {
         panic!("not surveys")
@@ -725,4 +726,34 @@ fn a_write_path_is_looked_at_off_the_session_and_its_answer_may_come_late() {
     );
     prior(&mut m, "w5", false);
     assert_eq!(mark_of(&m, "never.py"), None);
+}
+
+/// The survey reads the session card's verify line; with none, the test command the project's
+/// manifest names, for the welcome card to suggest.
+#[test]
+fn the_survey_reads_the_verify_line_or_a_suggestion() {
+    let w = std::env::temp_dir().join(format!("mnemorph-tui-verify-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    let card = w.join(".mnemorph/rimuru/rimuru");
+    std::fs::create_dir_all(&card).unwrap();
+    std::fs::write(w.join("Cargo.toml"), "[workspace]\n").unwrap();
+    std::fs::write(card.join("README.md"), "# rimuru\n\n- **Race:** rimuru\n").unwrap();
+    let s = mnemorph_tui::sidebar::survey(&w);
+    assert_eq!(s.verify.line, Vec::<String>::new());
+    assert_eq!(
+        s.verify.suggested.as_deref(),
+        Some("cargo test --workspace")
+    );
+    std::fs::write(
+        card.join("README.md"),
+        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
+    )
+    .unwrap();
+    let s = mnemorph_tui::sidebar::survey(&w);
+    assert_eq!(s.verify.line, vec!["cargo nextest run".to_owned()]);
+    assert_eq!(
+        s.verify.suggested, None,
+        "a card with its line is never told"
+    );
+    let _ = std::fs::remove_dir_all(&w);
 }
