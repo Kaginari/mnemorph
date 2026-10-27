@@ -1,6 +1,7 @@
 //! The sextant and octant glyphs by sub-pixel mask: vendored unchanged from
 //! Kaginari/mnemorph-animations `player/src/glyph_tables.rs` at commit `ff8af6d` (generated there
-//! by `tools/glyph_tables.py` from Unicode 16's `UnicodeData.txt`).
+//! by `tools/glyph_tables.py` from Unicode 16's `UnicodeData.txt`). MIT License, Copyright (c)
+//! 2026 Kaginari (that repository's `LICENSE`).
 
 /// The sextant character for each mask (bit i = sub-pixel i + 1).
 pub const SEXTANTS: [char; 64] = [

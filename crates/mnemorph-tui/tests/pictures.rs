@@ -389,3 +389,27 @@ fn idle_wants_veldora_alone() {
         assert!(!m.portrait_plays(), "{p:?}: an idle UI wakes for nothing");
     }
 }
+
+#[test]
+fn an_unfocused_window_pauses_the_portrait() {
+    let mut m = model(Protocol::Iterm);
+    let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
+    draw(&mut m, &mut t);
+    m.outstanding = 1;
+    assert!(m.portrait_plays());
+    update(&mut m, Msg::Focus(false));
+    assert!(
+        !m.portrait_plays(),
+        "no frames for a window no one looks at"
+    );
+    let clock = m.portrait_clock;
+    update(&mut m, Msg::Tick(std::time::Duration::from_millis(500)));
+    assert_eq!(m.portrait_clock, clock, "paused");
+    assert_ne!(
+        m.next_tick(),
+        Some(std::time::Duration::from_millis(125)),
+        "no portrait ticks"
+    );
+    update(&mut m, Msg::Focus(true));
+    assert!(m.portrait_plays(), "resumed");
+}

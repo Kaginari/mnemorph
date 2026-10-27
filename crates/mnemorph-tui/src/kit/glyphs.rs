@@ -1,6 +1,7 @@
 //! Text-only terminals: a picture as glyph cells, from half blocks (two pixels a cell) down to
 //! octants (eight). Vendored from Kaginari/mnemorph-animations `player/src/glyphs.rs` at commit
-//! `ff8af6d`, on this crate's `image` buffers and cells, its rule unchanged.
+//! `ff8af6d`, on this crate's `image` buffers and cells, its rule unchanged. MIT License,
+//! Copyright (c) 2026 Kaginari (that repository's `LICENSE`).
 //!
 //! A cell has one foreground and one background colour, so a glyph finer than a half block shows
 //! its sub-pixels in two colours: [`cells`] tries every split of a cell's sub-pixels into two

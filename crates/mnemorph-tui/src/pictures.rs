@@ -311,6 +311,9 @@ fn encode(key: ReelKey, first: usize, reel: &Reel, encoded: &AtomicUsize) {
     }
 }
 
+/// Kitty: placements of a stored frame before it is sent again, in case the terminal evicted it.
+const REFRESH: u32 = 32;
+
 /// How soon a frame still encoding is looked for again.
 const ENCODING: Duration = Duration::from_millis(16);
 
@@ -358,8 +361,11 @@ pub struct Placer {
     cache: HashMap<Key, Arc<str>>,
     /// The clips' frames, encoded off the UI's thread.
     reels: HashMap<ReelKey, Arc<Reel>>,
-    /// Kitty: the frames stored in the terminal, by image id, and the reel each came from.
-    stored: HashMap<u32, ReelKey>,
+    /// Kitty: the frames stored in the terminal, by image id: the reel each came from, and its
+    /// placements since it was sent.
+    stored: HashMap<u32, (ReelKey, u32)>,
+    /// Kitty: frames of reels let go, to free from the terminal once none of them is on screen.
+    freeing: Vec<u32>,
     /// Frames encoded, by every reel: the frame cache's own instrument.
     encoded: Arc<AtomicUsize>,
     /// Pictures sent to the terminal.
@@ -382,6 +388,7 @@ impl Placer {
             cache: HashMap::new(),
             reels: HashMap::new(),
             stored: HashMap::new(),
+            freeing: Vec::new(),
             encoded: Arc::new(AtomicUsize::new(0)),
             sends: 0,
             builds: 0,
@@ -393,8 +400,37 @@ impl Placer {
         if cell != self.cell {
             self.cell = cell;
             self.cache.clear();
-            self.reels.clear();
+            self.let_reels_go();
         }
+    }
+
+    /// Drop every reel: under Kitty, the frames they stored are no longer trusted — sent again
+    /// when next wanted — and freed from the terminal at the next sync, unless one is on screen
+    /// then or was sent again since. Over a long session the terminal never holds more than the
+    /// last few reels' frames.
+    fn let_reels_go(&mut self) {
+        self.reels.clear();
+        self.freeing.extend(self.stored.drain().map(|(id, _)| id));
+    }
+
+    /// Free the frames let go that nothing shows and nothing stored again.
+    fn free_let_go(&mut self, out: &mut impl Write) -> std::io::Result<bool> {
+        let shown: Vec<u32> = self
+            .shown
+            .iter()
+            .map(|s| kitty_id(s.want.slot, s.want.art))
+            .collect();
+        let stored = &self.stored;
+        self.freeing.retain(|id| !stored.contains_key(id));
+        self.freeing.sort_unstable();
+        self.freeing.dedup();
+        let (wait, free): (Vec<u32>, Vec<u32>) =
+            self.freeing.drain(..).partition(|id| shown.contains(id));
+        self.freeing = wait;
+        for id in &free {
+            out.write_all(pixels::kitty_delete(*id).as_bytes())?;
+        }
+        Ok(!free.is_empty())
     }
 
     /// Draw with `protocol` from now on; `None` falls back to half blocks, and the next sync
@@ -453,7 +489,9 @@ impl Placer {
             }
             // The frames stored are freed by id, so nothing of them outlives the session.
             let mut ids: Vec<u32> = self.stored.drain().map(|(id, _)| id).collect();
+            ids.append(&mut self.freeing);
             ids.sort_unstable();
+            ids.dedup();
             for id in ids {
                 out.write_all(pixels::kitty_delete(id).as_bytes())?;
             }
@@ -571,6 +609,9 @@ impl Placer {
             wrote = true;
             self.shown.push(Shown { want: w, size });
         }
+        if self.erase_with == Some(Protocol::Kitty) && !self.freeing.is_empty() {
+            wrote |= self.free_let_go(out)?;
+        }
         if wrote {
             out.flush()?;
         }
@@ -615,7 +656,7 @@ impl Placer {
             Arc::clone(r)
         } else {
             if self.reels.len() >= REELS {
-                self.reels.clear();
+                self.let_reels_go();
             }
             let reel = Arc::new(Reel::default());
             let (r, encoded) = (Arc::clone(&reel), Arc::clone(&self.encoded));
@@ -630,10 +671,16 @@ impl Placer {
         }
         let id = kitty_id(w.slot, w.art);
         let mut parts = Vec::with_capacity(2);
-        if self.stored.get(&id) != Some(&key) {
-            parts.push(bytes);
-            self.stored.insert(id, key);
-            KITTY_SHOWN.fetch_or(FRAMES_STORED, Ordering::SeqCst);
+        // Sent when not stored from this reel, and again every REFRESH placements: Kitty may
+        // evict a frame under its quota, and with `q=2` nothing says so — a frame lost blanks for
+        // a few turns of the loop at most.
+        match self.stored.get_mut(&id) {
+            Some((k, placed)) if *k == key && *placed < REFRESH => *placed += 1,
+            _ => {
+                parts.push(bytes);
+                self.stored.insert(id, (key, 1));
+                KITTY_SHOWN.fetch_or(FRAMES_STORED, Ordering::SeqCst);
+            }
         }
         parts.push(Arc::from(pixels::kitty_place(
             id,
@@ -861,6 +908,49 @@ mod tests {
         }
         assert!(!pl.showing());
         assert_eq!(pl.encoded(), 48, "each frame encoded once");
+    }
+
+    #[test]
+    fn a_reel_let_go_frees_its_kitty_frames_and_a_stored_frame_is_refreshed() {
+        let mut pl = placer(Protocol::Kitty);
+        let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        let id0 = kitty_id(Slot::Sidebar, Art::Frame(Clip::Idle(Race::Slime), 0));
+        // Two frames by turns: frame 0 placed from the store, sent again every REFRESH placements.
+        let mut sent0 = 0;
+        for turn in 0..2 * REFRESH + 2 {
+            let out = show(
+                &mut pl,
+                frame(u16::try_from(turn % 2).unwrap()),
+                (40, 20),
+                &buf,
+            );
+            if out.contains(&format!("a=t,f=100,i={id0},")) {
+                sent0 += 1;
+            }
+        }
+        assert_eq!(
+            sent0, 2,
+            "stored once, refreshed once after {REFRESH} placements"
+        );
+        // A font zoom lets the reels go: their frames are freed by id, but the one on screen
+        // waits until it is off.
+        pl.set_cell((9, 18));
+        let mut out = Vec::new();
+        pl.sync(&[], (40, 20), &buf, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        let unplace = out
+            .find(&pixels::kitty_unplace(id0 + 1))
+            .expect("taken off");
+        for id in [id0, id0 + 1] {
+            let free = out.find(&pixels::kitty_delete(id)).expect("freed");
+            assert!(free > unplace, "freed once off the screen");
+        }
+        // Nothing is freed twice, and shown again it is stored anew.
+        let mut again = Vec::new();
+        pl.sync(&[], (40, 20), &buf, &mut again).unwrap();
+        assert_eq!(again, b"");
+        let back = show(&mut pl, frame(0), (40, 20), &buf);
+        assert!(back.contains(&format!("a=t,f=100,i={id0},")), "sent again");
     }
 
     #[test]

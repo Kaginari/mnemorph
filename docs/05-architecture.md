@@ -229,7 +229,9 @@ overrides it. The idle loops decode on a blocking thread at start, an ascension 
 own the first time it plays — a frame only reads the cache and never decodes, so a clip not yet
 ready is simply not drawn; a malformed file is an error, never a panic. A clip plays at its own
 pace, advanced by elapsed time under the 30-frame cap, only while a body works and the portrait
-is on screen; idle, the UI schedules no tick for it.
+is on screen; idle, or while the terminal's window has lost the focus (focus reports are on while the UI
+runs, off when it gives the terminal back), the UI schedules no tick for it, and in pixels sends
+nothing.
 
 **Ascensions.** No event names an ascension yet: the sidebar's survey re-reads each creature's
 race, and the body shown seen again as the risen form of the race it had is one. Its ascension
@@ -284,7 +286,7 @@ compares that with what the terminal shows. An unchanged picture is never sent a
 one with nothing erased in between, so nothing flickers. Under **Kitty** each frame is
 transmitted once under its own image id (`a=t`) and placed by id after (`a=p`): the next frame is
 placed, then the old one's placement taken down (`a=d,d=i`, its data kept for the loop's next
-turn), a few bytes a frame, so the clip plays at its own 16 frames a second. Under **iTerm2** and
+turn), a few bytes a frame, so the clip plays at its own 16 frames a second. The terminal holds only the last few reels' frames: a reel let go (a few are kept; a font zoom lets all go) has its frames freed by id once none is on screen. Kitty may evict a stored frame under its quota, and `q=2` hides the error, so a stored frame is sent again every 32 placements. Under **iTerm2** and
 **Sixel** a frame is its pixels sent again — about 67 KB as an iTerm2 image, 86 KB as Sixel — so the clip plays at 8 frames a second
 (every other frame, the loop still three seconds), a frame sent only when it changes. VS Code's
 terminal, with images on, draws iTerm2's inline images. A picture gone

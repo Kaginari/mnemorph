@@ -39,6 +39,8 @@ pub enum Msg {
     Mouse(MouseEvent),
     /// The terminal's new size.
     Resize(u16, u16),
+    /// The terminal's window gained (`true`) or lost the focus.
+    Focus(bool),
     /// Time passed: spinners turn, springs move.
     Tick(Duration),
     /// Something the session did; `below` names the commissioned body it came from.
@@ -202,6 +204,9 @@ pub struct Model {
     /// The base race of the body seen ascending: its ascension plays at the portrait's clock's
     /// start, then the risen form's idle loop.
     pub ascending: Option<mnemorph_races::Race>,
+    /// The terminal's window lost the focus: the portrait pauses, so nothing is drawn — nor, in
+    /// pixels, sent — for a window no one looks at.
+    pub unfocused: bool,
     /// The window after a probe that timed out, in which its replies may still arrive as keys.
     pub late: crate::probe::Late,
 }
@@ -265,6 +270,7 @@ impl Model {
             portrait_clock: Duration::ZERO,
             pictures: crate::pictures::Pictures::default(),
             ascending: None,
+            unfocused: false,
             late: crate::probe::Late::default(),
         }
     }
@@ -277,10 +283,11 @@ impl Model {
             && usize::from(self.size.1.saturating_sub(3)) >= crate::sidebar::HEAD_FROM
     }
 
-    /// Whether the portrait plays: a body works, and the portrait is on screen.
+    /// Whether the portrait plays: a body works, the portrait is on screen, and the window has
+    /// the focus.
     #[must_use]
     pub fn portrait_plays(&self) -> bool {
-        self.busy() && self.portrait_shown()
+        self.busy() && self.portrait_shown() && !self.unfocused
     }
 
     /// The clip the portrait plays now, and how far into it: the working body's idle loop, or
@@ -422,6 +429,10 @@ fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
         Msg::Resize(w, h) => {
             m.size = (w, h);
             refit(m);
+            Vec::new()
+        }
+        Msg::Focus(on) => {
+            m.unfocused = !on;
             Vec::new()
         }
         Msg::Tick(dt) => tick(m, dt),

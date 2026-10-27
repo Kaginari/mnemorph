@@ -5486,3 +5486,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** image's Lanczos in a debug build took ~50 s to shrink the eleven clips for glyphs;
   an area mean over the palette indices does it in a fraction, with no colour bleeding from clear
   pixels.
+
+---
+
+### [2026-10-27T18:43:43+01:00] rimuru — #241, reviewed (Fable): Kitty's frames let go, a pause out of focus, the licence
+- **Done:** a reel let go (over the few kept, or on a font zoom) frees its Kitty frames by id once
+  none is on screen, so a long session never fills the terminal's image quota; a stored frame is
+  sent again every 32 placements, since `q=2` hides an eviction. Focus reports on: the portrait
+  pauses while the window is unfocused (no ticks, nothing sent), off again on exit and panic. The
+  vendored files name their MIT licence. Docs 05.
+- **Tests:** pictures `a_reel_let_go_frees_its_kitty_frames_and_a_stored_frame_is_refreshed`,
+  `an_unfocused_window_pauses_the_portrait`; run `releasing_turns_every_mode_off…` checks
+  `?1004l`.

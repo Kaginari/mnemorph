@@ -3,6 +3,7 @@
 //! sheet beside it. The sheet's decoding and the glyph renderer ([`super::glyphs`]) are vendored
 //! from that repository's `player` crate (`mnanim`) at commit `ff8af6d`, rebuilt on this crate's
 //! `image` buffers: the repository is private, so a git dependency could not be fetched by CI.
+//! MIT License, Copyright (c) 2026 Kaginari (that repository's `LICENSE`).
 //!
 //! The clips ship inside the binary (`assets/anims/256px/`, [`source`]): each race's idle loop
 //! (48 frames at 16 fps, seamless) and the five ascensions (80 frames, played once), all drawn
