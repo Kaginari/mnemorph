@@ -1250,6 +1250,10 @@ fn web_url(w: &str) -> bool {
 
 /// Whether a network command only reads: a lookup, or a plain GET whose every option is on the
 /// command's allowlist.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one allowlist per command: the lists read best whole"
+)]
 fn reads_only(name: &str, words: &[Option<&str>]) -> bool {
     match name {
         "ping" | "traceroute" | "dig" | "nslookup" | "host" | "whois" => {
