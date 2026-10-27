@@ -9,6 +9,8 @@
 
 pub mod protocol;
 
+/// The wire, for the commands that speak it without a session (`check`).
+pub use mnemorph_loop::wire;
 /// The world, for the commands that read it without a session (`onto owner`).
 pub use mnemorph_loop::world;
 /// The runs that stopped and may be resumed.

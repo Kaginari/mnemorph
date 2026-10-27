@@ -207,7 +207,7 @@ impl fmt::Display for Commission {
             writeln!(f, "@SIZE {size}")?;
         }
         for line in &self.body {
-            writeln!(f, "{}", tag::escape(one_line(line).trim()))?;
+            writeln!(f, "{}", tag::prose(line))?;
         }
         Ok(())
     }

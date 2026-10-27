@@ -1407,8 +1407,12 @@ impl Run {
     /// acceptance. A claim it does not accept stays personal; an id naming nothing it may accept is
     /// said, not grounded.
     fn accept(&self, answer: &str) {
-        for line in answer.lines().map(str::trim) {
-            let Some(rest) = line.strip_prefix("@V accept") else {
+        // The wire's own reader, so an `@V` reads here as it does in a report.
+        let Some(report) = mnemorph_wire::Report::parse(&format!("@S DONE\n{answer}")) else {
+            return;
+        };
+        for verdict in &report.verdicts {
+            let Some(rest) = verdict.strip_prefix("accept") else {
                 continue;
             };
             let ids: Vec<&str> = rest
@@ -2105,7 +2109,7 @@ impl Run {
         };
         // A line in a code block is quoted, never said: it labels nothing.
         let mut fenced = false;
-        let verdicts: Vec<String> = text
+        let said: Vec<&str> = text
             .lines()
             .filter(|l| {
                 if l.trim().starts_with("```") {
@@ -2114,9 +2118,15 @@ impl Run {
                 }
                 !fenced
             })
-            .filter_map(|l| l.trim().strip_prefix("@V "))
-            .map(str::to_owned)
             .collect();
+        // The wire's own reader, so an `@V` reads here as it does in a report.
+        let verdicts: Vec<String> =
+            mnemorph_wire::Report::parse(&format!("@S DONE\n{}", said.join("\n")))
+                .map(|r| r.verdicts)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|v| !v.is_empty())
+                .collect();
         if !verdicts.is_empty() {
             let roster = mnemorph_world::Roster::load(&c.world);
             crate::commission::file_verdicts(&c.world, &roster, &verdicts, &self.body.name);

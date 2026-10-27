@@ -21,6 +21,43 @@ pub(crate) fn escape(line: &str) -> Cow<'_, str> {
     }
 }
 
+/// Whether `c` is a format character no reader can see: a soft hyphen, a zero-width or joiner,
+/// a bidi mark, embedding, override or isolate, a word joiner or invisible operator, a byte-order
+/// mark, an interlinear annotation, a tag character, or one of the Arabic and Syriac marks.
+#[must_use]
+pub fn invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{AD}'
+            | '\u{600}'..='\u{605}'
+            | '\u{61C}'
+            | '\u{6DD}'
+            | '\u{70F}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
+}
+
+/// A prose line as it is emitted: folded to one line, its leading whitespace and invisible
+/// characters dropped — what opens a prose line is what a reader sees open it — trimmed, and
+/// escaped when it must be.
+pub(crate) fn prose(line: &str) -> String {
+    let folded = crate::report::one_line(line);
+    escape(
+        folded
+            .trim_start_matches(|c: char| c.is_whitespace() || invisible(c))
+            .trim_end(),
+    )
+    .into_owned()
+}
+
 /// A trimmed prose line as it is read: one escape dropped when what follows needed it, else the
 /// line as written.
 pub(crate) fn unescape(line: &str) -> &str {

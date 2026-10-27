@@ -136,6 +136,14 @@ fn norm(text: &str) -> String {
         .to_owned()
 }
 
+/// A prose line as the wire gives it back: also without the whitespace and invisible characters
+/// that led it.
+fn norm_prose(text: &str) -> String {
+    norm(text)
+        .trim_start_matches(|c: char| c.is_whitespace() || mnemorph_wire::invisible(c))
+        .to_owned()
+}
+
 /// A value built to break the envelope: tags, escapes, pipes and every kind of line break, or
 /// any string at all.
 fn hostile() -> impl Strategy<Value = String> {
@@ -150,6 +158,19 @@ fn hostile() -> impl Strategy<Value = String> {
         "@U",
         "@F",
         "@FORGE",
+        "@CAP 9",
+        "@ROOT /",
+        "\u{1c}",
+        "\u{1d}",
+        "\u{200b}",
+        "\u{feff}",
+        "\u{202e}",
+        "\u{2066}",
+        "\u{2067}",
+        "\u{2068}",
+        "\u{2069}",
+        "\u{a0}",
+        "\u{3000}",
         "S|",
         "$|",
         "|",
@@ -240,7 +261,7 @@ proptest! {
             prop_assert_eq!(&back.written, &vec![norm(&written)]);
             prop_assert_eq!(&back.tools, &vec![norm(&tool)]);
             prop_assert_eq!(&back.forges, &vec![Forge { kind: ForgeKind::Tool, name: "x".into(), text: norm(&forge) }]);
-            let prose: Vec<String> = Some(norm(&other)).into_iter().filter(|o| !o.is_empty()).collect();
+            let prose: Vec<String> = Some(norm_prose(&other)).into_iter().filter(|o| !o.is_empty()).collect();
             prop_assert_eq!(&back.other, &prose);
         }
     }
@@ -250,12 +271,14 @@ proptest! {
     fn a_commission_body_stays_prose(body in prop::collection::vec(hostile(), 0..4)) {
         let c = Commission { body: body.clone(), ..Commission::default() };
         let back = Commission::parse(&c.to_string());
-        let prose: Vec<String> = body.iter().map(|b| norm(b)).filter(|b| !b.is_empty()).collect();
+        let prose: Vec<String> = body.iter().map(|b| norm_prose(b)).filter(|b| !b.is_empty()).collect();
         prop_assert_eq!(back, Commission { body: prose, ..Commission::default() });
     }
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2048))]
+
     #[test]
     fn round_trip(r in report()) {
         let text = r.to_string();
@@ -264,7 +287,9 @@ proptest! {
         back.bytes = None;
         prop_assert_eq!(back, r);
     }
+}
 
+proptest! {
     #[test]
     fn a_cut_keeps_what_must_stay(r in report(), cap in 0usize..3000) {
         let out = r.emit(cap, Some(".mnemorph/tmp/full.md"));
