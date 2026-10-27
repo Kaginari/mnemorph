@@ -96,15 +96,17 @@ pub struct Unsaid {
 }
 
 /// The word a finding's renderer puts before or after a claim that would otherwise read as an
-/// id, a location or a witness. The parser drops one at each end.
+/// id, a location, a witness or a record. The parser drops one at each end.
 const GUARD: &str = "—";
 
-/// One `@F #<id> <file:line> <claim> witness:<path>` finding. Every part but the claim is
-/// optional; the id lets a later fix, contest or seal point at it, the witness is what makes a
-/// Dark Elf's finding count.
+/// One `@F #<id> <file:line> <claim> witness:<path> rec:<path>` finding. Every part but the claim
+/// is optional; the id lets a later fix, contest or seal point at it, the witness is what makes a
+/// Dark Elf's finding count, and the record holds its trace, severity and fix. The tail's order
+/// is fixed: `witness:` then `rec:`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Finding {
-    /// `#id`, without the `#`. An empty id is no id.
+    /// `#id`, without the `#`. An empty id is no id. A Dark Elf's id is its root-cause
+    /// [`fingerprint`].
     pub id: Option<String>,
     /// `file:line` or `file:line-line`.
     pub at: Option<String>,
@@ -112,6 +114,8 @@ pub struct Finding {
     pub claim: String,
     /// `witness:<path>`: a failing proof or a scanner output.
     pub witness: Option<String>,
+    /// `rec:<path>`: the finding's record.
+    pub rec: Option<String>,
 }
 
 impl Finding {
@@ -136,14 +140,17 @@ impl Finding {
         if words.first() == Some(&GUARD) {
             words.remove(0);
         }
+        // The tail, from the end: a fence ends it; otherwise `rec:` first, then `witness:`, and
+        // a fence between a lone record and the claim.
         if words.last() == Some(&GUARD) {
             words.pop();
-        } else if let Some(last) = words.last()
-            && let Some(path) = last.strip_prefix("witness:")
-            && !path.is_empty()
-        {
-            f.witness = Some(path.to_owned());
-            words.pop();
+        } else {
+            f.rec = take_tail(&mut words, "rec:");
+            if f.rec.is_some() && words.last() == Some(&GUARD) {
+                words.pop();
+            } else {
+                f.witness = take_tail(&mut words, "witness:");
+            }
         }
         f.claim = words.join(" ");
         f
@@ -151,7 +158,8 @@ impl Finding {
 
     /// The finding's content address: ten hex digits of FNV-1a over its location, claim and
     /// witness, so a relayed finding keeps the same address at every hop. Use it as the id of a
-    /// finding that has none.
+    /// finding that has none. It holds the line, so it is never a Dark Elf's id: that is its
+    /// [`fingerprint`].
     #[must_use]
     pub fn address(&self) -> String {
         let claim = self.claim.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -160,7 +168,16 @@ impl Finding {
             self.at.as_deref().unwrap_or(""),
             self.witness.as_deref().unwrap_or("")
         );
-        format!("{:016x}", fnv::fnv64a(key.as_bytes()))[..10].to_owned()
+        ten_hex(&key)
+    }
+
+    /// Whether this finding keeps the Dark Elf's contract on the wire: a fingerprint for its id,
+    /// a witness and a record. One that does not is read back as a hole ([`Report::dark_elf`]).
+    #[must_use]
+    pub fn is_dark_elf(&self) -> bool {
+        self.id.as_deref().is_some_and(is_fingerprint)
+            && self.witness.as_deref().is_some_and(|w| !w.is_empty())
+            && self.rec.as_deref().is_some_and(|r| !r.is_empty())
     }
 
     fn render(&self) -> String {
@@ -168,7 +185,14 @@ impl Finding {
         // Folded first, so a break that becomes a space cannot slip a word past the fence.
         let folded = one_line(&self.claim);
         let claim: Vec<&str> = folded.split_whitespace().collect();
-        let first = claim.first().copied();
+        let witness = self.witness.as_ref().map(|w| format!("witness:{w}"));
+        let rec = self.rec.as_ref().map(|r| format!("rec:{r}"));
+        // With no claim, the first word of the tail stands where a location is read.
+        let first = claim
+            .first()
+            .copied()
+            .or(witness.as_deref())
+            .or(rec.as_deref());
         let last = claim.last().copied();
         // A claim word that the parser would take for something else is fenced with GUARD.
         let lead = first.is_some_and(|w| {
@@ -176,9 +200,11 @@ impl Finding {
                 || (self.at.is_none()
                     && (is_location(w) || (id.is_none() && w.len() > 1 && w.starts_with('#'))))
         });
+        // With a witness, the parser stops at it: the claim's last word is safe. Without one,
+        // a last word the parser would take as a witness, a record or a fence is fenced.
         let trail = self.witness.is_none()
             && last.is_some_and(|w| {
-                w == GUARD || w.strip_prefix("witness:").is_some_and(|p| !p.is_empty())
+                w == GUARD || opens(w, "witness:") || (self.rec.is_none() && opens(w, "rec:"))
             });
         let mut out = String::new();
         if let Some(id) = id {
@@ -194,11 +220,58 @@ impl Finding {
         if trail {
             let _ = write!(out, " {GUARD}");
         }
-        if let Some(w) = &self.witness {
-            let _ = write!(out, " witness:{w}");
+        for tail in [witness, rec].into_iter().flatten() {
+            let _ = write!(out, " {tail}");
         }
         out.trim().to_owned()
     }
+}
+
+/// Whether `word` opens `field` with a non-empty value.
+fn opens(word: &str, field: &str) -> bool {
+    word.strip_prefix(field).is_some_and(|v| !v.is_empty())
+}
+
+/// Pops the last word when it opens `field` with a value, and gives the value.
+fn take_tail(words: &mut Vec<&str>, field: &str) -> Option<String> {
+    let value = words
+        .last()?
+        .strip_prefix(field)
+        .filter(|v| !v.is_empty())?;
+    let value = value.to_owned();
+    words.pop();
+    Some(value)
+}
+
+/// The first ten hex digits of the 64-bit FNV-1a of `key`.
+fn ten_hex(key: &str) -> String {
+    format!("{:016x}", fnv::fnv64a(key.as_bytes()))[..10].to_owned()
+}
+
+/// Ten lowercase hex digits: the shape of a fingerprint.
+fn is_fingerprint(id: &str) -> bool {
+    id.len() == 10 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// A Dark Elf finding's root-cause fingerprint: ten hex digits, the first ten of the 64-bit
+/// FNV-1a of `<speciality>|<class>|<file>|<symbol>`. Each field is trimmed and its whitespace
+/// folded to single spaces; the file is read as a repository-relative path with `/` separators
+/// and no leading `./`. No line, body or severity enters it, so the same weakness keeps its id
+/// across runs and after its line moves.
+#[must_use]
+pub fn fingerprint(speciality: &str, class: &str, file: &str, symbol: &str) -> String {
+    let fold = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let file = fold(file).replace('\\', "/");
+    let mut file = file.as_str();
+    while let Some(rest) = file.strip_prefix("./") {
+        file = rest;
+    }
+    ten_hex(&format!(
+        "{}|{}|{file}|{}",
+        fold(speciality),
+        fold(class),
+        fold(symbol)
+    ))
 }
 
 /// `file:line` or `file:line-line`, with a non-empty file part.
@@ -378,6 +451,22 @@ impl Report {
             (None, None) => {}
         }
         seen.then_some(r)
+    }
+
+    /// Reads this report as a Dark Elf's: every finding that breaks the contract — no
+    /// fingerprint for its id, no witness or no record — becomes a hole, a suspicion that is never
+    /// a finding.
+    #[must_use]
+    pub fn dark_elf(mut self) -> Self {
+        let (kept, unproven): (Vec<_>, Vec<_>) =
+            self.findings.into_iter().partition(Finding::is_dark_elf);
+        self.findings = kept;
+        self.holes.extend(
+            unproven
+                .iter()
+                .map(|f| Hole::Other(format!("unproven: {}", f.render()))),
+        );
+        self
     }
 
     /// Whether `text` is a whole report: on the wire, and its `@E` equal to its byte length.

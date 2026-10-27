@@ -26,6 +26,6 @@ pub use forge::{Forge, ForgeKind, forges_of};
 pub use hole::Hole;
 pub use report::{
     COURIER_BYTES, Courier, Enqueue, FIELD_BYTES, Finding, Report, Unsaid, UnsaidKind, Word,
-    enqueues_of, one_line,
+    enqueues_of, fingerprint, one_line,
 };
 pub use tag::invisible;

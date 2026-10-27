@@ -67,7 +67,7 @@ fn claims_that_look_like_parts_read_back_as_claims() {
                     id: id.clone(),
                     at: at.clone(),
                     claim: claim.into(),
-                    witness: None,
+                    ..Finding::default()
                 };
                 let back = Report::parse(
                     &Report {

@@ -5701,3 +5701,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   fingerprint as ten-hex FNV-1a over normalised fields, `plan:` as `nv`'s last field.
 - **Learned:** the book is built from `docs/` alone: a relative link above it is a dead link to
   VitePress, so a repository-root file is linked by its GitHub URL.
+
+---
+
+### [2026-10-27T21:20:52+01:00] rimuru — Dark Elf PR 3: the wire's finding fields
+- **Done:** `Finding.rec`, emitted and read in the fixed tail order `witness:` then `rec:`;
+  a claim ending in either, or in the fence, is fenced, and a claim-less finding fences a tail
+  that would read as a location. `fingerprint(speciality, class, file, symbol)`: the first ten
+  hex of FNV-1a over the normalised fields, no line; `address()` stays for id-less findings.
+  `Hole::Nv` for `@? nv #<fp> blocker:<fact> plan:<check>`, exact grammar, no severity.
+  `Report::dark_elf` reads a finding without fingerprint, witness or record back as a hole.
+  Tests: round trips, a pinned fingerprint, a line shift, the root cause, nv never a finding,
+  2048-case properties over the hostile alphabet (now with `rec:`, `plan:`, `nv #`).
+- **Ledger:** nothing in mnemorph-ledger or mnemorph-loop reads `@F` ids yet (the score fold is
+  PR 10), so there was no line-based link to migrate; journaled ids are read as written.
+- **Learned:** a claim-less finding's `witness:a.rs:3` read as its location — the property test
+  over the tail found it on its first run.

@@ -147,15 +147,19 @@ The grammar's readings, all of them:
 - **A finding's tail has a fixed order: `witness:` then `rec:`** (M10). The reader strips the last
   word first when it opens `rec:`, then the last word left when it opens `witness:`; whatever
   stays is the claim. A claim that would end in a word opening `witness:` or `rec:` is fenced like
-  any other, so a claim never lends a finding a witness or a record.
+  any other, so a claim never lends a finding a witness or a record; a finding with no claim and no
+  location fences its tail when the tail's first word would read as a location.
 - **A Dark Elf's finding is never addressed by its line** (M10). Its id is the root-cause
   fingerprint: ten hex digits, the first ten of the 64-bit FNV-1a, as `address` takes them, of
   `<speciality>|<class>|<file>|<symbol>` — the speciality's full name, the playbook's class id, the
   file as a repository-relative path with `/` separators and no `./`, and the symbol as the code
   names it, each trimmed and its whitespace folded to single spaces. So the same weakness keeps its
-  id across runs and after its line moves, and the later fix that upholds it is linked by that id. A
-  `@F` from a Dark Elf with no fingerprint, no witness or no record is read back as `@?`, and an
-  `@? nv` that carries a severity is read as a hole of its own.
+  id across runs and after its line moves, and the later fix that upholds it is linked by that id;
+  an id already journaled is read as written, never re-derived. A `@F` from a Dark Elf with no
+  fingerprint, no witness or no record is read back as `@?` (`Report::dark_elf`), and an `@? nv`
+  that carries a severity is read as a hole of its own: the grammar is exact, `nv`, the
+  fingerprint, `blocker:`, `plan:`, nothing between, and the blocker ends at its first word
+  opening `plan:` — so a word opening `severity:` before `plan:` breaks it.
 - **`@CAP 0`** is refused like any bad value: it never means "no ceiling".
 - Fields are trimmed; `@ASK +unsaid` alone is an empty ask with the flag set.
 
