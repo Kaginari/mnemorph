@@ -43,10 +43,16 @@ const NAMED_CARGO: &[&str] = &[".cargo/config", ".cargo/config.toml"];
 const GIT_PIECES: &[&str] = &["config", "config.worktree", "hooks", "info"];
 /// How many entries git's hooks and info may hold before the plan refuses to read them.
 const GIT_ENTRIES: usize = 10_000;
-/// How deep submodules are followed.
+/// How deep submodules and nested repositories are followed.
 const SUBMODULE_DEPTH: usize = 8;
+/// How many words of a command are looked at for a folder it names.
+const NAMED_WORDS: usize = 256;
 
 /// What an approval was given against. Two fingerprints are equal exactly when every part is.
+///
+/// Every repository inside the world's — a submodule, an untracked repository, and the one any
+/// folder the command names lies in, ignored or not — is bound as the world's own: its HEAD and
+/// tree in the diff, its configuration and executables in git, its target in target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fingerprint {
     /// SHA-256 of the act, as it will run.
@@ -88,20 +94,34 @@ impl Fingerprint {
     /// # Errors
     ///
     /// As [`Self::of`].
-    pub fn of_except(act: &str, world: &Path, made: &[PathBuf]) -> Result<Self, String> {
-        let act = hex(&Sha256::digest(act.as_bytes()));
+    pub fn of_except(command: &str, world: &Path, made: &[PathBuf]) -> Result<Self, String> {
+        let act = hex(&Sha256::digest(command.as_bytes()));
         let made: Vec<PathBuf> = made
             .iter()
             .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
             .collect();
         Ok(match toplevel(world)? {
-            Some(top) => Self {
-                act,
-                head: head(&top)?,
-                diff: repo_diff(&top, &made, 0)?,
-                git: git_pieces(&top)?,
-                target: target(&top)?,
-            },
+            Some(top) => {
+                let mut nested = Nested::default();
+                let diff = repo_diff(&top, &made, 0, &mut nested)?;
+                // A repository the command names (`git -C vendor push`, `cd vendor && …`) is
+                // bound whole, wherever it sits: ignored by the world's repository or not.
+                let mut named = Vec::new();
+                for rel in named_repositories(command, world, &top)? {
+                    named.push(format!(
+                        "{} {}",
+                        rel.display(),
+                        nested_repository(&top, &rel, 1, &mut nested)?
+                    ));
+                }
+                Self {
+                    act,
+                    head: head(&top)?,
+                    diff: combine(diff, &named),
+                    git: combine(git_pieces(&top)?, &nested.git),
+                    target: combine(target(&top)?, &nested.target),
+                }
+            }
             None => Self {
                 act,
                 head: None,
@@ -279,7 +299,12 @@ fn paths(out: &[u8]) -> impl Iterator<Item = &[u8]> {
 /// The index as listed (modes, blobs, stages, paths), then each tracked path's bytes in the
 /// working tree (a submodule's own HEAD and tree), then each untracked path's, then the publish
 /// files beside them.
-fn repo_diff(top: &Path, made: &[PathBuf], depth: usize) -> Result<String, String> {
+fn repo_diff(
+    top: &Path,
+    made: &[PathBuf],
+    depth: usize,
+    nested: &mut Nested,
+) -> Result<String, String> {
     let mut h = Sha256::new();
     let index = git(top, &["ls-files", "-s", "-z"])?;
     h.update(b"index\0");
@@ -301,7 +326,7 @@ fn repo_diff(top: &Path, made: &[PathBuf], depth: usize) -> Result<String, Strin
         if line.starts_with(b"160000 ") {
             h.update(path);
             h.update(b"\0submodule\0");
-            h.update(submodule(top, Path::new(OsStr::from_bytes(path)), depth)?.as_bytes());
+            h.update(submodule(top, Path::new(OsStr::from_bytes(path)), depth, nested)?.as_bytes());
             h.update([0]);
         } else {
             entry_into(&mut h, top, path, made);
@@ -310,10 +335,22 @@ fn repo_diff(top: &Path, made: &[PathBuf], depth: usize) -> Result<String, Strin
     h.update(b"untracked\0");
     let others = git(top, &["ls-files", "-o", "--exclude-standard", "-z"])?;
     for p in paths(&others) {
-        if !made.contains(&top.join(OsStr::from_bytes(p))) {
-            entry_into(&mut h, top, p, made);
-            seen.push(p);
+        if made.contains(&top.join(OsStr::from_bytes(p))) {
+            continue;
         }
+        seen.push(p);
+        // An untracked repository is listed as its folder: it is bound whole, as a submodule is.
+        if let Some(dir) = p.strip_suffix(b"/") {
+            let rel = Path::new(OsStr::from_bytes(dir));
+            if entry(top, &rel.join(".git")).is_ok() {
+                h.update(dir);
+                h.update(b"\0nested repository\0");
+                h.update(nested_repository(top, rel, depth, nested)?.as_bytes());
+                h.update([0]);
+                continue;
+            }
+        }
+        entry_into(&mut h, top, p, made);
     }
     named_into(
         &mut h,
@@ -323,31 +360,106 @@ fn repo_diff(top: &Path, made: &[PathBuf], depth: usize) -> Result<String, Strin
     Ok(hex(&h.finalize()))
 }
 
-/// A submodule's own HEAD and working tree, or that it is not checked out.
-fn submodule(top: &Path, rel: &Path, depth: usize) -> Result<String, String> {
-    match entry(top, &rel.join(".git")) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok("not checked out".into()),
-        Err(e) => return Err(format!("submodule {}: {e}", rel.display())),
-        Ok(_) => {}
+/// What the repositories inside a repository add to its git and target parts: each one's own
+/// configuration, executables and target, by its path.
+#[derive(Default)]
+struct Nested {
+    git: Vec<String>,
+    target: Vec<String>,
+}
+
+/// A part's own digest, with what nested repositories add to it.
+fn combine(own: String, nested: &[String]) -> String {
+    if nested.is_empty() {
+        return own;
     }
+    let mut h = Sha256::new();
+    h.update(own.as_bytes());
+    for n in nested {
+        h.update([0]);
+        h.update(n.as_bytes());
+    }
+    hex(&h.finalize())
+}
+
+/// A submodule bound whole, or that it is not checked out.
+fn submodule(top: &Path, rel: &Path, depth: usize, nested: &mut Nested) -> Result<String, String> {
+    match entry(top, &rel.join(".git")) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok("not checked out".into()),
+        Err(e) => Err(format!("submodule {}: {e}", rel.display())),
+        Ok(_) => nested_repository(top, rel, depth, nested),
+    }
+}
+
+/// A repository inside `top` at `rel`, bound as the world's own is: its HEAD and working tree
+/// (returned, for the diff), its configuration and executables, and its target (kept in
+/// `nested`, for the git and target parts).
+fn nested_repository(
+    top: &Path,
+    rel: &Path,
+    depth: usize,
+    nested: &mut Nested,
+) -> Result<String, String> {
     if depth >= SUBMODULE_DEPTH {
         return Err(format!(
-            "submodule {} is nested deeper than {SUBMODULE_DEPTH}",
+            "repository {} is nested deeper than {SUBMODULE_DEPTH}",
             rel.display()
         ));
     }
     let sub = top.join(rel);
     if toplevel(&sub)?.as_deref() != Some(sub.as_path()) {
         return Err(format!(
-            "submodule {} is not its own repository",
+            "{} has a .git but is not its own repository",
             rel.display()
         ));
     }
+    nested
+        .git
+        .push(format!("{} {}", rel.display(), git_pieces(&sub)?));
+    nested
+        .target
+        .push(format!("{} {}", rel.display(), target(&sub)?));
     Ok(format!(
         "head {} diff {}",
         head(&sub)?.unwrap_or_else(|| "none".into()),
-        repo_diff(&sub, &[], depth + 1)?
+        repo_diff(&sub, &[], depth + 1, nested)?
     ))
+}
+
+/// The repositories inside `top`, other than `top` itself, that a folder the command names lies
+/// in: a word of the command that is a folder under the world, resolved to its repository.
+fn named_repositories(command: &str, world: &Path, top: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut found: BTreeSet<PathBuf> = BTreeSet::new();
+    let words = command
+        .split(|c: char| c.is_whitespace() || ";&|()'\"=`<>".contains(c))
+        .filter(|w| !w.is_empty() && !w.starts_with('-'))
+        .take(NAMED_WORDS);
+    for word in words {
+        let path = Path::new(word);
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            world.join(path)
+        };
+        let Ok(path) = path.canonicalize() else {
+            continue;
+        };
+        // A git directory (`--git-dir=vendor/.git`) names the repository it belongs to.
+        let path = match path.components().position(|c| c.as_os_str() == ".git") {
+            Some(at) => path.components().take(at).collect(),
+            None => path,
+        };
+        if !path.is_dir() || !path.starts_with(top) || path == top {
+            continue;
+        }
+        if let Some(repo) = toplevel(&path)?
+            && repo != top
+            && let Ok(rel) = repo.strip_prefix(top)
+        {
+            found.insert(rel.to_path_buf());
+        }
+    }
+    Ok(found.into_iter().collect())
 }
 
 /// A world with no repository: every file its ignore files leave in, in path order, then the

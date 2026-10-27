@@ -515,7 +515,10 @@ flowchart LR
     names, every ref and its commit, the `remote.*`, `branch.*`, `push.*` and `url.*`
     configuration, each remote's push URLs as git resolves them (`insteadOf` and
     `pushInsteadOf` applied), and `GH_REPO` and `GH_HOST`, where `gh` acts when the command
-    names no `-R`. A write inside the world needs no approval, so `git remote set-url`, a
+    names no `-R`. Every repository inside the world's is bound the same way, its tree in the
+    diff, its configuration and executables in git, its target in target: a submodule, an
+    untracked repository, and the repository any folder the command names lies in (`git -C
+    vendor`, `cd vendor`, `--git-dir=vendor/.git`), ignored or not — eight deep at most. A write inside the world needs no approval, so `git remote set-url`, a
     `pushurl` or an `insteadOf` can reroute an approved push without touching HEAD, the diff or
     the command: the target is what catches it. The short form, `plan 3f9a1c2e4b5d · head
     1a2b3c4d · diff 5d6e7f8a · git 0c1d2e3f · target 9a8b7c6d`, is on the approval card and in

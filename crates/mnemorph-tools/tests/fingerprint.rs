@@ -469,6 +469,135 @@ fn a_dirty_submodule_after_approval_is_asked_again() {
     );
 }
 
+/// A repository inside the world, at `vendor`, with a bare `vendor-origin.git` beside the world.
+fn with_inner(w: &World, how: &str) -> PathBuf {
+    let inner = w.world().join("vendor");
+    fs::create_dir_all(&inner).unwrap();
+    git(&inner, &["init", "-q"]);
+    git(&inner, &["symbolic-ref", "HEAD", "refs/heads/feature"]);
+    fs::write(inner.join("lib.txt"), "one\n").unwrap();
+    git(&inner, &["add", "-A"]);
+    git(&inner, &["commit", "-q", "-m", "lib"]);
+    git(&w.root, &["init", "-q", "--bare", "vendor-origin.git"]);
+    let origin = w.root.join("vendor-origin.git");
+    git(
+        &inner,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    match how {
+        "submodule" => {
+            git(&w.world(), &["add", "vendor"]);
+            git(&w.world(), &["commit", "-q", "-m", "vendor"]);
+        }
+        "ignored" => fs::write(w.world().join(".gitignore"), "vendor/\n").unwrap(),
+        _ => {}
+    }
+    inner
+}
+
+/// Approve `git -C vendor push`, let `meanwhile` change the inner repository, and expect a
+/// re-ask naming `part`, with nothing pushed.
+fn inner_re_asked(how: &str, meanwhile: fn(&Path), part: &str) {
+    let w = World::new(&format!("inner-{how}-{}", part.len()));
+    let inner = with_inner(&w, how);
+    let gate = Late::new(vec![
+        (Some(Box::new(move || meanwhile(&inner))), Answer::Approve),
+        (None, Answer::Deny("no".into())),
+    ]);
+    let args = serde_json::json!({ "command": "git -C vendor push -q origin feature" }).to_string();
+    let o = call(&registry(), "bash", &args, &mut w.cx(gate.clone()));
+    assert!(o.is_error, "{how}: {o:?}");
+    assert!(
+        !w.pushed_to("vendor-origin.git") && !w.pushed_to("elsewhere.git"),
+        "{how}"
+    );
+    let asked = gate.asked();
+    assert_eq!(asked.len(), 2, "{how}: {o:?}");
+    assert!(asked[1].why[0].contains(part), "{how}: {:?}", asked[1].why);
+}
+
+fn reroute(inner: &Path) {
+    let elsewhere = inner
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("elsewhere.git");
+    git(
+        inner,
+        &["remote", "set-url", "origin", elsewhere.to_str().unwrap()],
+    );
+}
+
+fn plant_hook(inner: &Path) {
+    let hook = inner.join(".git/hooks/pre-push");
+    fs::write(&hook, "#!/bin/sh\necho planted\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// A repository inside the world is bound whole: its remotes and its hooks, not only its tree.
+#[test]
+fn a_repository_inside_the_world_is_bound_whole() {
+    inner_re_asked("submodule", reroute, "the target changed");
+    inner_re_asked(
+        "submodule",
+        plant_hook,
+        "git's configuration, hooks or info changed",
+    );
+    inner_re_asked("untracked", reroute, "the target changed");
+    inner_re_asked(
+        "untracked",
+        plant_hook,
+        "git's configuration, hooks or info changed",
+    );
+    // Ignored by the world's repository: bound because the command names it.
+    inner_re_asked("ignored", reroute, "the target changed");
+    inner_re_asked(
+        "ignored",
+        plant_hook,
+        "git's configuration, hooks or info changed",
+    );
+    // Named by its git directory.
+    let w = World::new("gitdir");
+    let inner = with_inner(&w, "ignored");
+    let act = "git --git-dir=vendor/.git push origin feature";
+    let before = fp(act, &w.world());
+    reroute(&inner);
+    assert_ne!(before.target, fp(act, &w.world()).target);
+}
+
+/// The other publish files by name: `.yarnrc` and `.cargo/config.toml`, ignored.
+#[test]
+fn ignored_yarnrc_and_cargo_config_are_part_of_the_plan() {
+    let w = World::new("publish-files");
+    let world = w.world();
+    fs::write(world.join(".gitignore"), ".yarnrc\n.cargo/\n").unwrap();
+    fs::create_dir_all(world.join(".cargo")).unwrap();
+    fs::write(
+        world.join(".yarnrc"),
+        "registry \"https://registry.yarnpkg.com\"\n",
+    )
+    .unwrap();
+    fs::write(world.join(".cargo/config.toml"), "[registry]\n").unwrap();
+    let before = fp("cargo publish", &world);
+    fs::write(world.join(".yarnrc"), "registry \"https://evil.example\"\n").unwrap();
+    let yarnrc = fp("cargo publish", &world);
+    assert_ne!(
+        before.diff, yarnrc.diff,
+        "an ignored .yarnrc is part of the plan"
+    );
+    fs::write(
+        world.join(".cargo/config.toml"),
+        "[registries.evil]\nindex = \"https://evil.example\"\n",
+    )
+    .unwrap();
+    assert_ne!(
+        yarnrc.diff,
+        fp("cargo publish", &world).diff,
+        "an ignored .cargo/config.toml too"
+    );
+}
+
 #[test]
 fn an_unchanged_world_runs_once() {
     let w = World::new("same");

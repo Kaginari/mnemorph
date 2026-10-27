@@ -5305,3 +5305,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (the corrupt index refuses before any recheck; the other three need no recheck).
 - **Learned:** the tripwire's `Snapshot` reads with `fs::read` (following, blocking) and covers
   `.mnemorph/`, which churns with every court: the plan walks the same git pieces with its own non-blocking reader.
+
+---
+
+### [2026-10-27T17:19:57+01:00] rimuru — #92, reviewed again: repositories inside the world are bound whole
+- **Done:** a submodule, an untracked repository (`ls-files -o` lists it as its folder) and the
+  repository any folder the command names lies in (`git -C vendor`, `cd vendor`,
+  `--git-dir=vendor/.git`, ignored or not) are bound as the world's own: HEAD and tree in the
+  diff, `git_pieces` in git, `target` in target; eight deep. Doc 05.
+- **Tests:** tools `a_repository_inside_the_world_is_bound_whole` — `remote set-url` and a planted
+  `pre-push` in a submodule, an untracked and an ignored repository each re-ask, nothing pushed;
+  `ignored_yarnrc_and_cargo_config_are_part_of_the_plan`. Recheck disabled: 10 of 15 fail.
+- **Learned:** a word naming a path inside `.git` has no work tree: git refuses `--show-toplevel`
+  there, so it is resolved to the repository it belongs to.
