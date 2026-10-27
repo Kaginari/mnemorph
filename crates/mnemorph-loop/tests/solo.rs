@@ -665,3 +665,20 @@ async fn a_call_with_broken_arguments_is_answered_and_the_run_goes_on() {
         "{told}"
     );
 }
+
+/// The solo body knows where it stands: its system prompt names the repository root, escaped, so it
+/// spends no call finding out.
+#[test]
+fn the_solo_prompt_names_the_repository_root() {
+    let w = World::new("root-named");
+    let (body, _) = solo(&w.world(), "claude-sonnet-5-5");
+    assert!(
+        body.system.contains(&format!(
+            "The repository root: {:?}.",
+            w.world().display().to_string()
+        )),
+        "{}",
+        body.system
+    );
+    assert!(body.system.contains("bash, for running things"));
+}

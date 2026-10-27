@@ -48,7 +48,12 @@ so this work's own tests can prove it — or `@U colony <fact>` for how this rep
 pub fn solo(world: &Path, model: &str) -> (Body, Context) {
     let mut system = SOLO_PROMPT.to_owned();
     // The root by name: a body that knows where it stands does not spend calls finding out.
-    let _ = write!(system, "\n\nThe repository root: `{}`.", world.display());
+    // Escaped: a path is the human's, but a backtick or a newline in it must not break the line.
+    let _ = write!(
+        system,
+        "\n\nThe repository root: {:?}.",
+        world.display().to_string()
+    );
     with_law(&mut system, world);
     let body = Body {
         name: "rimuru".into(),
