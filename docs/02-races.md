@@ -706,16 +706,54 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
   - **Its id is a root-cause fingerprint**: the speciality, the class, the file and the symbol —
     never a line, a body or a severity. It is stable across runs, so a moved line keeps its id and
     a later fix is still linked to it.
-  - **Its record** holds the class (a playbook reference), the trace from entry to sink with a
-    `file:line` at each step, the witness, the preconditions and reachability, the fix and the
-    invariant it restores.
+  - **Its record** (`mnemorph_proving::FindingRecord`, JSON, at most 64 KiB, no field it does not
+    name) holds the verdict (`finding` or `nv`), the fingerprint, the speciality, the class (a
+    playbook reference), the file and the symbol; the claim; the trace from entry to sink with a
+    `file:line` at each step; the witness — its kind (`test`, `poc-command`, `scanner-output`),
+    its reference and its SHA-256; the preconditions and the reachability (how an attacker reaches
+    it); the likelihood and the demonstrated impact, each with its reason; the severity; the fix
+    and the invariant it restores.
   - **Severity is capped at the demonstrated impact**: likelihood and impact, each with its reason,
-    and the overall never above the impact the witness shows.
+    and the overall never above the cap of the impact the witness shows — and never above low
+    when no reachability is shown:
+
+    | Demonstrated impact | Highest severity |
+    |---|---|
+    | `none` — no failure beyond a deviation | informational |
+    | `crash` — a panic, an abort or a hang · `exhaustion` — a budget, cap or resource run out | medium |
+    | `disclosure` — data read across a boundary · `tamper` — state changed across one | high |
+    | `bypass` — the sandbox, the gate or an approval bypassed · `execution` — the attacker's code run | critical |
+
   - **Needs validation** is its own verdict: `@? nv #<fingerprint> blocker:<fact> plan:<check>`,
     the exact blocker and the plan that would settle it — no severity, never a finding, never a
     seal.
   - **Not findings**: a checklist deviation with no reachable failure, a missing second line of
     defence, harm a user can only do to themselves.
+- **The validator.** `mnemorph_proving::validate(record, world)` holds a record to the contract
+  against the landing's tree and gives a `Valid` — the only finding a count, a score or a seal
+  takes — or every rule it breaks, by name, in this order:
+
+  | Rule | The record keeps it when |
+  |---|---|
+  | `nv` | its verdict is `finding`: a needs-validation record never passes |
+  | `required` | the speciality, class, file, symbol, claim, trace, likelihood and impact (each with its reason), severity, fix and invariant are all there |
+  | `size` | the claim is at most 512 bytes, each one-line field 512, each prose field 2,048, the preconditions 16, the trace 32 steps |
+  | `escaped` | no field holds a control character or an invisible format character (a bidi override, a zero-width space) |
+  | `class-owned` | the class is one its speciality owns in the compiled table; the generalist owns none |
+  | `fingerprint` | its fingerprint is the one derived from its root cause |
+  | `rec-path` | it was read from its own path, `.mnemorph/dark-elf/<speciality>/findings/<fingerprint>.json` |
+  | `file-exists` | its file is in the landing's tree, read by the wire's ASCII path rule, never through a symbolic link |
+  | `symbol-present` | that file names its symbol (the last segment after `::` or `.`) as a whole word |
+  | `trace` | the trace runs entry, propagation, sink (one step: entry or sink), each at a safe `file:line` from line 1, the sink in its file |
+  | `witness` | it has a witness: a test or a scanner output in its own speciality's proving ground, or a command, with a SHA-256 in lowercase hex |
+  | `witness-hash` | that hash is the witness file's bytes', or the command line's |
+  | `severity-cap` | its severity is within the cap above |
+  | `preconditions` | from medium up, its preconditions and reachability are stated |
+
+  The harness reads a Dark Elf's report through `mnemorph_proving::accept`: each `@F`'s record is
+  read at its `rec:` path and validated, and a finding whose record breaks a rule is demoted to
+  `@? invalid record (<rule>, …): <finding>` — named, never dropped. The rules adapt Cloudflare's
+  `validate-findings.cjs` ([notices](https://github.com/Kaginari/mnemorph/blob/main/THIRD-PARTY-NOTICES.md)).
 - **The coverage ledger.** Each audit writes
   `.mnemorph/dark-elf/<speciality>/coverage/<audit>.json`: one unit per routed surface × attack
   class, each **checked** (with the paths read and the checks run), **n/a** (with the fact that

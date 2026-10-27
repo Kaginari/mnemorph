@@ -5843,3 +5843,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   end of input or an error denies, `GATE_WAIT` as deadline; Ctrl+C fires the interrupt and denies
   a waiting card (exit 1); the answer is escaped only on a terminal stdout.
 - **Learned:** a gate that was never live hides its gaps — the first caller inherits them.
+
+---
+
+### [2026-10-27T23:03:02+01:00] rimuru — Dark Elf rung 4: the finding record and its validator (`mnemorph-proving`)
+- **Done:** crate `mnemorph-proving` (wire + races; races holds no wire and the ledger stays the
+  usage accounting, so a new crate): `FindingRecord` (JSON, ≤ 64 KiB, unknown fields refused),
+  `validate(record, world) -> Result<Valid, Vec<Rule>>` with fourteen named rules — nv, required,
+  size, escaped, class-owned, fingerprint, rec-path, file-exists, symbol-present, trace, witness,
+  witness-hash, severity-cap, preconditions — the impact cap table (none → informational, crash
+  and exhaustion → medium, disclosure and tamper → high, bypass and execution → critical; no
+  reachability → low), `World` (a map, or `Tree`: the ASCII path rule, no symlink),
+  `accept(report, world)`: `Report::dark_elf` now takes a reason, and a broken record demotes its
+  `@F` to `@? invalid record (<rules>): …`. Only `Valid` counts. Docs 02, 04, 05, roadmap, notices.
+- **Tests:** one fixture per rule, each breaking that rule alone, and with the rule switched off
+  each passes; the cap table whole; trace, witness and symbol cases; a tree that never leaves its
+  root; demotion through the wire end to end (over-cap, nv record, missing record, forged id);
+  hostile bytes, fields and report lines.
+- **Learned:** a rule's fixture proves the rule only when it breaks nothing else: switch the rule
+  off and the fixture must pass.

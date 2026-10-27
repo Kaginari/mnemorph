@@ -538,25 +538,28 @@ impl Report {
         seen.then_some(r)
     }
 
-    /// Reads this report as a Dark Elf's. Each finding's record is looked up by its `rec:` path
-    /// (`record` reads it; `None` when it is missing or broken) and its id recomputed from the
-    /// root cause there. A finding is proven only when it has a witness and a record and its
-    /// stated id is that fingerprint; any other becomes a hole — a suspicion, never a finding.
+    /// Reads this report as a Dark Elf's. Each finding's record is looked up by its `rec:` path:
+    /// `record` reads it and gives its root cause, or why it gives none (`no record`, a broken
+    /// rule), and the id is recomputed from that root cause. A finding is proven only when it
+    /// has a witness and a record and its stated id is that fingerprint; any other becomes a
+    /// hole that says why — a suspicion, never a finding.
     #[must_use]
-    pub fn dark_elf(mut self, mut record: impl FnMut(&str) -> Option<RootCause>) -> DarkElfReport {
+    pub fn dark_elf(
+        mut self,
+        mut record: impl FnMut(&str) -> Result<RootCause, String>,
+    ) -> DarkElfReport {
         let mut proven = Vec::new();
         for f in std::mem::take(&mut self.findings) {
-            let why = if f.has_dark_elf_parts() {
-                match f.rec.as_deref().and_then(&mut record) {
-                    None => "no record",
-                    Some(root) if root.fingerprint() == f.id => {
+            let why = match f.rec.as_deref().filter(|_| f.has_dark_elf_parts()) {
+                None => "unproven".to_owned(),
+                Some(rec) => match record(rec) {
+                    Ok(root) if root.fingerprint() == f.id => {
                         proven.push(Proven { finding: f, root });
                         continue;
                     }
-                    Some(_) => "forged id",
-                }
-            } else {
-                "unproven"
+                    Ok(_) => "forged id".to_owned(),
+                    Err(why) => one_line(&why).into_owned(),
+                },
             };
             self.holes
                 .push(Hole::Other(format!("{why}: {}", f.render())));

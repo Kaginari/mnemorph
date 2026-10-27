@@ -271,7 +271,7 @@ fn needs_validation_is_never_a_finding() {
     let line = done(vec![f.clone()], vec![]).to_string();
     let f_line = line.lines().nth(1).expect("the @F line");
     let nv = "@? nv #1234567890 blocker:x plan:y";
-    let records = |_: &str| Some(r.clone());
+    let records = |_: &str| Ok(r.clone());
     let with = Report::parse(&format!("@S DONE\n{f_line}\n{nv}\n@E 1"))
         .expect("on the wire")
         .dark_elf(records);
@@ -318,7 +318,7 @@ fn a_dark_elf_finding_without_its_contract_is_a_hole() {
     ];
     let mut all = vec![whole.clone()];
     all.extend(broken.iter().cloned());
-    let back = relay(&done(all, vec![])).dark_elf(|_| Some(r.clone()));
+    let back = relay(&done(all, vec![])).dark_elf(|_| Ok(r.clone()));
     assert_eq!(back.proven().len(), 1);
     assert_eq!(back.proven()[0].finding(), &whole);
     assert_eq!(back.proven()[0].root(), &r);
@@ -344,11 +344,11 @@ fn a_self_declared_id_is_a_hole() {
         id: Some(fp(&other)),
         ..proven(&r, 4)
     };
-    let back = relay(&done(vec![forged.clone()], vec![])).dark_elf(|_| Some(r.clone()));
+    let back = relay(&done(vec![forged.clone()], vec![])).dark_elf(|_| Ok(r.clone()));
     assert!(back.proven().is_empty(), "nothing proven or found");
     assert!(matches!(&back.report.holes[..], [Hole::Other(t)] if t.starts_with("forged id: ")));
     // A record that cannot be read proves nothing either.
-    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| None);
+    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| Err("no record".into()));
     assert!(back.proven().is_empty(), "nothing proven or found");
     assert!(matches!(&back.report.holes[..], [Hole::Other(t)] if t.starts_with("no record: ")));
     // A record whose file is refused has no fingerprint to match.
@@ -356,6 +356,24 @@ fn a_self_declared_id_is_a_hole() {
         file: "../escape.rs".into(),
         ..r.clone()
     };
-    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| Some(bad.clone()));
+    let back = relay(&done(vec![proven(&r, 4)], vec![])).dark_elf(|_| Ok(bad.clone()));
     assert!(back.proven().is_empty(), "nothing proven or found");
+}
+
+#[test]
+fn a_refused_record_names_why_on_one_line() {
+    let r = base();
+    let back = relay(&done(vec![proven(&r, 4)], vec![]))
+        .dark_elf(|_| Err("invalid record (severity-cap,\nwitness)".into()));
+    assert!(back.proven().is_empty(), "nothing proven or found");
+    assert!(matches!(
+        &back.report.holes[..],
+        [Hole::Other(t)] if t.starts_with("invalid record (severity-cap, witness): #")
+    ));
+    // The hole rides one line: the reason opens no line of its own.
+    let text = back.report.to_string();
+    assert_eq!(
+        Report::parse(&text).expect("on the wire").holes,
+        back.report.holes
+    );
 }

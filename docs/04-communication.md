@@ -161,13 +161,16 @@ The grammar's readings, all of them:
   ASCII rule, so no two spellings of one name, such as NFC and NFD, can both pass). So the same
   weakness keeps its id across runs and after its line moves, and the later fix that upholds it is
   linked by that id.
-- **A Dark Elf's id is recomputed, never trusted** (M10). The harness reads a Dark Elf's report
-  through `Report::dark_elf`, the only maker of a `Proven` finding — the one type a score or a seal
-  takes: each `@F`'s record, at its `rec:` path, gives the root cause, and the finding is proven
-  only when it has a witness and a record and its stated id is the fingerprint derived from that
-  record. Any other `@F` is read back as `@?` — `unproven:` (no fingerprint-shaped id, witness or
-  record), `no record:` (the record cannot be read) or `forged id:` (the ids differ) — a claim,
-  never a finding. A `@? nv` is a hole on every reading, never a finding, and one that carries a
+- **A Dark Elf's id is recomputed, never trusted** (M10). `Report::dark_elf` is the only maker
+  of a `Proven` finding: each `@F`'s record, at its `rec:` path, gives the root cause or the reason
+  it gives none, and the finding is proven only when it has a witness and a record and its stated
+  id is the fingerprint derived from that record. The harness reads a Dark Elf's report through
+  `mnemorph_proving::accept`, which reads each record from the landing's tree and validates it,
+  so a proven finding's record is also `Valid` — the one type a score or a seal takes. Any other
+  `@F` is read back as `@?` — `unproven:` (no fingerprint-shaped id, witness or record),
+  `no record:` (the record cannot be read), `invalid record (<rule>, …):` (the record breaks the
+  named rules of [the validator](02-races.md#-dark-elf--the-adversary)) or `forged id:` (the ids
+  differ) — a claim, never a finding; the reason rides on the hole's one line. A `@? nv` is a hole on every reading, never a finding, and one that carries a
   severity is read as a hole of its own: the grammar is exact, `nv`, the fingerprint, `blocker:`,
   `plan:`, nothing between, and the blocker ends at its first word opening `plan:` — so a word
   opening `severity:` before `plan:` breaks it.
