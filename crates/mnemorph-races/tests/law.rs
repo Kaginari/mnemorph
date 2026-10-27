@@ -756,6 +756,19 @@ fn a_post_holds_only_its_acts() {
     assert!(e.to_string().contains("route it to kijin-forge"), "{e}");
     let e = check_post("kijin-release", &[OutwardKind::Install]).unwrap_err();
     assert!(e.to_string().contains("no post holds it"), "{e}");
+    // Every kind has a name of its own, and every refusal names its act.
+    let names: std::collections::HashSet<String> =
+        OutwardKind::ALL.iter().map(ToString::to_string).collect();
+    assert_eq!(names.len(), OutwardKind::ALL.len());
+    for kind in OutwardKind::ALL {
+        let e = check_post("kijin-scout", &[kind]);
+        if kind == OutwardKind::Fetch {
+            assert_eq!(e, Ok(()));
+        } else {
+            let text = e.unwrap_err().to_string();
+            assert!(text.contains(&format!("`{kind}`")), "{text}");
+        }
+    }
     for body in ["", "kijin", "kijin-k", "kijin-forge-2", "Kijin-Forge"] {
         let e = check_post(body, &[OutwardKind::Fetch]).unwrap_err();
         assert_eq!(e.post, None, "{body:?}");

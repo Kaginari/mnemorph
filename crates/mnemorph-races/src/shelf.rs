@@ -321,27 +321,26 @@ pub struct PostRefusal {
 
 impl fmt::Display for PostRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.post {
+        let refused = match self.post {
             Some(post) => {
                 let acts: Vec<String> = post.acts().iter().map(ToString::to_string).collect();
-                write!(
-                    f,
+                format!(
                     "the outward act `{}` is not in the {} post (its acts: {})",
                     self.act,
                     post.creature(),
                     acts.join(", ")
-                )?;
+                )
             }
-            None => write!(
-                f,
+            None => format!(
                 "`{}` holds no kijin post, so it does no outward act (`{}` refused)",
                 self.body, self.act
-            )?,
-        }
-        match self.act.post() {
-            Some(holder) => write!(f, ": route it to {}", holder.creature()),
-            None => f.write_str(": no post holds it; the human does it"),
-        }
+            ),
+        };
+        let route = match self.act.post() {
+            Some(holder) => format!("route it to {}", holder.creature()),
+            None => "no post holds it; the human does it".to_owned(),
+        };
+        write!(f, "{refused}: {route}")
     }
 }
 
