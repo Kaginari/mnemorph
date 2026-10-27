@@ -802,6 +802,7 @@ async fn a_world_without_creatures_stays_solo() {
     let journals: Vec<_> = fs::read_dir(bare.join(".mnemorph/instruments/loop"))
         .unwrap()
         .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
         .collect();
     assert_eq!(journals.len(), 1, "no child ran");
     let _ = fs::remove_dir_all(&bare);

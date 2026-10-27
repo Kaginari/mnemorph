@@ -121,6 +121,13 @@ pub enum Beat {
         #[serde(default)]
         stripped: usize,
     },
+    /// The model the run rides from here: said when it first asks and whenever the model it
+    /// rides changed since — what a resume keeps it on. Journaled for the record, never fed back to
+    /// the model.
+    Rides {
+        /// The model, as the run sends it.
+        model: String,
+    },
     /// How the run ended.
     End {
         /// The ending, in words.
@@ -259,7 +266,8 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
             | Beat::Warning { .. }
             | Beat::Guts { .. }
             | Beat::Recall { .. }
-            | Beat::Prefix { .. } => {}
+            | Beat::Prefix { .. }
+            | Beat::Rides { .. } => {}
         }
     }
     close(&mut messages, &mut pending);

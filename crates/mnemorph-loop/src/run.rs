@@ -343,6 +343,8 @@ pub struct Run {
     /// An outward act this ask was refused because its race does not hold it: the tool, and its
     /// input as the model sent it.
     unheld: Option<(String, String)>,
+    /// The model the journal last said the run rides: a change is said again at the next ask.
+    rode: Option<String>,
 }
 
 /// What a run needs that is not the body itself.
@@ -425,6 +427,7 @@ impl Run {
             topup_wt: None,
             asked: String::new(),
             unheld: None,
+            rode: None,
         }
     }
 
@@ -584,7 +587,8 @@ impl Run {
     }
 
     /// A run continued from its journal: the conversation rebuilt beat by beat, the steps it
-    /// already took counted. An act the journal shows no answer for is answered with an error.
+    /// already took counted, the model it last rode kept. An act the journal shows no answer for
+    /// is answered with an error.
     ///
     /// # Errors
     ///
@@ -592,6 +596,14 @@ impl Run {
     pub fn resume(body: Body, limits: Limits, setup: Setup) -> std::io::Result<Self> {
         let beats = setup.journal.read()?.rows;
         let mut run = Self::new(body, limits, setup);
+        // The run keeps the model it rode: a different one is a switch, said as a context update.
+        run.rode = beats.iter().rev().find_map(|b| match b {
+            Beat::Rides { model } => Some(model.clone()),
+            _ => None,
+        });
+        if let Some(model) = &run.rode {
+            model.clone_into(&mut run.body.model);
+        }
         run.steps = u32::try_from(
             beats
                 .iter()
@@ -793,6 +805,15 @@ impl Run {
                 });
             }
         }
+        // A session's checkpoint names the way back: the run, resumed from its journal.
+        if matches!(ending, Ending::Checkpoint { .. }) && self.caller.commission.is_none() {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "stopped at a checkpoint: ask again to go on, or later `mnemorph resume {}`",
+                    self.caller.run
+                ),
+            });
+        }
         self.record(&Beat::End {
             ending: ending.words(),
         });
@@ -816,6 +837,16 @@ impl Run {
         }
         let from = std::mem::replace(&mut self.body.model, model.to_owned());
         self.update(&format!("the model is now `{model}` (was `{from}`): {why}"));
+    }
+
+    /// The model the run rides, journaled when it is new to the journal: what a resume keeps.
+    fn ride(&mut self) {
+        if self.rode.as_deref() != Some(self.body.model.as_str()) {
+            self.rode = Some(self.body.model.clone());
+            self.record(&Beat::Rides {
+                model: self.body.model.clone(),
+            });
+        }
     }
 
     /// The request for the next turn, every change since the last one appended first. Every
@@ -887,6 +918,7 @@ impl Run {
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
+        self.ride();
         let text = &self.open_ask(text);
         push_user(
             &mut self.messages,

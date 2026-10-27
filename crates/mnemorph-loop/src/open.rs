@@ -17,12 +17,13 @@ use mnemorph_tools::registry;
 
 use crate::decisions::decisions;
 use crate::model::{AnthropicModel, Model, OpenAiModel};
-use crate::run::{Limits, Observer, Run, Setup};
+use crate::run::{Body, Limits, Observer, Run, Setup};
 use crate::session::Session;
 use crate::solo::{configure, solo};
 
-/// The session's run, given what it opens with and answers to: the journal's last entries, the
-/// commissioner over its lanes, the human's caps and the decider.
+/// The session's run, given what it opens with and answers to: the journal's last entries — a
+/// fresh run's alone; a resumed one was told them when it began — the commissioner over its
+/// lanes, the human's caps and the decider.
 fn equip(
     mut run: Run,
     world: &Path,
@@ -30,11 +31,13 @@ fn equip(
     caps: Option<mnemorph_ledger::Caps>,
     decided: Option<crate::Decisions>,
 ) -> Run {
-    run = run.with_opening(mnemorph_world::start::recent(
-        world,
-        OPENING_ENTRIES,
-        OPENING_CAP,
-    ));
+    if run.steps() == 0 && run.messages().is_empty() {
+        run = run.with_opening(mnemorph_world::start::recent(
+            world,
+            OPENING_ENTRIES,
+            OPENING_CAP,
+        ));
+    }
     let roster = mnemorph_world::Roster::load(world);
     run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
     if let Some(c) = commissioner {
@@ -81,6 +84,16 @@ pub struct Opened {
     pub sandbox: String,
 }
 
+/// Which run a session opens on.
+enum Start<'a> {
+    /// A new run.
+    Fresh,
+    /// A stopped run, by id or `last`, picked up from its journal.
+    Resume(&'a str),
+    /// A stopped run already found, checked and held.
+    Held(String, crate::resume::Hold),
+}
+
 /// Open a solo session in `world`: its configuration loaded, its model reached through the
 /// backend the human chose, its key read from the environment variable the provider names
 /// (`env`), the human's gate answering every act that asks.
@@ -95,6 +108,43 @@ pub fn open(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
+    open_from(world, Start::Fresh, gate, observer, env)
+}
+
+/// [`open`] on a stopped run — its id, or `last` for the newest that stopped — picked up from its
+/// journal: the same configuration, provider, sandbox, end gate, observer and commissioner as a
+/// fresh session's, only the run rebuilt rather than new. It keeps its model unless the
+/// configuration now names another; then the switch is said to the body as a context update.
+///
+/// # Errors
+///
+/// What [`open`] refuses on, and: no such run, its journal does not read whole, it answered or
+/// failed, or another live session holds it.
+pub fn resume(
+    world: &Path,
+    run: &str,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    open_from(world, Start::Resume(run), gate, observer, env)
+}
+
+fn open_from(
+    world: &Path,
+    start: Start<'_>,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    // A run with nothing to resume is refused before any key is asked for.
+    let start = match start {
+        Start::Resume(which) => {
+            let (run, hold, _) = crate::resume::take(world, which)?;
+            Start::Held(run, hold)
+        }
+        other => other,
+    };
     let config = Config::load(&Paths::resolve(world))?;
     let named = config.model_for("rimuru", Race::Rimuru, None);
     let backend = config.backend(&named)?;
@@ -137,7 +187,7 @@ pub fn open(
             ));
         }
     };
-    let mut opened = open_with(
+    let mut opened = build(
         world,
         &config,
         Bound {
@@ -145,6 +195,7 @@ pub fn open(
             model_id: &backend.model,
             attic: None,
         },
+        start,
         gate,
         observer,
         env,
@@ -200,19 +251,54 @@ pub fn open_with(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
+    build(world, config, bound, Start::Fresh, gate, observer, env)
+}
+
+/// [`resume`] with the model given, as [`open_with`] is [`open`].
+///
+/// # Errors
+///
+/// What [`open_with`] and [`resume`] refuse on.
+pub fn resume_with(
+    world: &Path,
+    config: &Config,
+    bound: Bound<'_>,
+    run: &str,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    build(
+        world,
+        config,
+        bound,
+        Start::Resume(run),
+        gate,
+        observer,
+        env,
+    )
+}
+
+/// The one opening every session goes through, fresh or resumed.
+fn build(
+    world: &Path,
+    config: &Config,
+    bound: Bound<'_>,
+    start: Start<'_>,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
     let Bound {
         model,
         model_id,
         attic,
     } = bound;
-    // The report folder a check writes into, ignored locally: a check never writes the tree.
-    if let Err(e) = mnemorph_world::report::prepare(world) {
-        eprintln!("mnemorph: the report folder could not be prepared: {e}");
-    }
-    // Two machines that both appended notes never conflict: git merges note files by union.
-    if let Err(e) = mnemorph_memory::union_merge(world) {
-        eprintln!("mnemorph: the notes' union merge could not be set: {e}");
-    }
+    let (session_id, fresh_run) = ids();
+    // A resumed run is found, checked and held before anything is prepared: a refusal leaves the
+    // world as it was.
+    let (run_id, hold, resuming) = held_run(world, start, fresh_run)?;
+    prepare(world);
     let (mut body, cx) = solo(world, model_id);
     // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
     let lanes = lanes(world);
@@ -230,7 +316,6 @@ pub fn open_with(
             .ok_or_else(|| format!("{}: the attic needs git", dir.display()))?;
         cx = cx.with_attic(kept.with_limits(keep_days, max_mb));
     }
-    let (session_id, run_id) = ids();
     let instruments = world.join(".mnemorph/instruments");
     // The caps against what this world already spent. A cap that cannot be read opens no
     // session: spend it cannot see would be spend it cannot stop.
@@ -284,12 +369,16 @@ pub fn open_with(
         },
     };
     let gate = session_gate(world, &body.name, config);
-    let run = Run::new(body, limits, setup)
-        .with_observer(observer)
-        .with_gate(gate);
+    let run = if resuming {
+        resumed(body, limits, setup, model_id)?
+    } else {
+        Run::new(body, limits, setup)
+    }
+    .with_observer(observer)
+    .with_gate(gate);
     let run = equip(run, world, commissioner, capped.then_some(caps), decided);
     Ok(Opened {
-        session: Session::new(run),
+        session: hold.into_iter().fold(Session::new(run), Session::holding),
         world: world.to_path_buf(),
         model: model_id.to_owned(),
         provider: model.provider().to_owned(),
@@ -306,6 +395,51 @@ pub fn open_with(
         // The network is opened only for an approved outward act, so the standing state is off.
         sandbox: mnemorph_tools::Sandbox::detect().status(false),
     })
+}
+
+/// The world made ready for a session: the report folder a check writes into, ignored locally —
+/// a check never writes the tree — and git merging note files by union, so two machines that
+/// both appended notes never conflict.
+fn prepare(world: &Path) {
+    if let Err(e) = mnemorph_world::report::prepare(world) {
+        eprintln!("mnemorph: the report folder could not be prepared: {e}");
+    }
+    if let Err(e) = mnemorph_memory::union_merge(world) {
+        eprintln!("mnemorph: the notes' union merge could not be set: {e}");
+    }
+}
+
+/// The session's run id, its hold on it, and whether it is resumed: a fresh run's own, held, or
+/// the stopped run `start` names, found, checked and held.
+fn held_run(
+    world: &Path,
+    start: Start<'_>,
+    fresh: String,
+) -> Result<(String, Option<crate::resume::Hold>, bool), String> {
+    match start {
+        Start::Fresh => {
+            // A run no lock holds would be resumable while it lives: no session opens on it.
+            let hold = crate::resume::hold(world, &fresh).map_err(|e| {
+                format!("the session's run cannot be held, so no session opens: {e}")
+            })?;
+            Ok((fresh, Some(hold), false))
+        }
+        Start::Resume(which) => {
+            let (run, hold, _) = crate::resume::take(world, which)?;
+            Ok((run, Some(hold), true))
+        }
+        Start::Held(run, hold) => Ok((run, Some(hold), true)),
+    }
+}
+
+/// A stopped run rebuilt from its journal, on the model it rode — or on `model_id`, when the
+/// configuration names another now, said to the body as a context update.
+fn resumed(body: Body, limits: Limits, setup: Setup, model_id: &str) -> Result<Run, String> {
+    let run_id = setup.caller.run.clone();
+    let mut run = Run::resume(body, limits, setup)
+        .map_err(|e| format!("run `{run_id}`: its journal cannot be read: {e}"))?;
+    run.switch_model(model_id, "the configuration names it now");
+    Ok(run)
 }
 
 /// What the human is told of ledger lines that cannot be read: their spend is counted high, as

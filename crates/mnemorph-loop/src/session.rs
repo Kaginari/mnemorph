@@ -14,6 +14,8 @@ pub type Queue = Arc<Mutex<VecDeque<String>>>;
 pub struct Session {
     run: Run,
     queue: Queue,
+    /// The session's hold on its run, while it lives.
+    hold: Option<crate::resume::Hold>,
 }
 
 impl Session {
@@ -23,7 +25,21 @@ impl Session {
         Self {
             run,
             queue: Arc::new(Mutex::new(VecDeque::new())),
+            hold: None,
         }
+    }
+
+    /// The session holds its run: no other session resumes it while this one lives.
+    #[must_use]
+    pub fn holding(mut self, hold: crate::resume::Hold) -> Self {
+        self.hold = Some(hold);
+        self
+    }
+
+    /// Whether the session holds its run.
+    #[must_use]
+    pub fn holds(&self) -> bool {
+        self.hold.is_some()
     }
 
     /// The queue the interface pushes a line into when Enter is pressed during a turn.

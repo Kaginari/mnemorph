@@ -83,3 +83,26 @@ test('memory status hands its words to the core whole', () => {
     raw: true,
   });
 });
+
+test('resume opens a session on a stopped run; runs lists them through the core', () => {
+  expect(parse(['resume', 'last', '--world', 'w'])).toEqual({
+    kind: 'chat',
+    world: 'w',
+    core: undefined,
+    theme: undefined,
+    resume: 'last',
+  });
+  expect(parse(['resume', 'r1-2'])).toMatchObject({ kind: 'chat', resume: 'r1-2' });
+  expect(parse(['resume'])).toMatchObject({
+    kind: 'error',
+    message: expect.stringContaining('mnemorph runs'),
+  });
+  expect(parse(['resume', 'a', 'b'])).toMatchObject({ kind: 'error' });
+  expect(parse(['runs', '--json'])).toEqual({
+    kind: 'onto',
+    words: ['runs', '--json'],
+    world: undefined,
+    core: undefined,
+    raw: true,
+  });
+});

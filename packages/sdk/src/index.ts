@@ -33,10 +33,15 @@ export function stdio(
   options: {
     command?: string | undefined;
     world?: string | undefined;
+    /** Open the session on this stopped run — its id, or `last` — instead of a new one. */
+    resume?: string | undefined;
     env?: NodeJS.ProcessEnv | undefined;
   } = {},
 ): Transport {
-  const args = options.world ? ['--world', options.world] : [];
+  const args = [
+    ...(options.world ? ['--world', options.world] : []),
+    ...(options.resume ? ['--resume', options.resume] : []),
+  ];
   const child = spawn(options.command ?? 'mnemorphd', args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: options.env ?? process.env,

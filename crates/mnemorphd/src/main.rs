@@ -7,7 +7,8 @@ use std::process::ExitCode;
 
 const HELP: &str = "mnemorphd — the Mnemorph core
 
-Usage: mnemorphd [--world <dir>]
+Usage: mnemorphd [--world <dir>] [--resume <run|last>]
+       mnemorphd runs [--world <dir>] [--json]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
@@ -29,6 +30,14 @@ current directory, or absolute. `onto check` prints `@S PASS|FAIL <n> findings`,
 finding's severity, code, place and message; it fails on a critical or high finding, or a doc
 that does not read.
 
+`--resume` opens the session on a run that stopped — at a checkpoint, an interrupt, or a turn
+the process died in — rebuilt from its journal under `.mnemorph/instruments/loop/`; `last` is
+the newest. It goes through the same opening as a fresh session, the end gate included, and keeps
+its model unless the configuration names another. A run that answered or failed, a journal that
+does not read whole, or a run another live session holds is refused. `runs` lists the runs that
+may be resumed, newest first: the id, when its journal was last written, why it stopped, the
+last ask.
+
 `memory status` names, per creature, every note event whose author or proof does not resolve —
 a hand edit, a bad merge, an import that skipped its checks. Recall ignores such an event and
 the creature's memory writes stay frozen until the event is removed or re-proved; it exits 1
@@ -39,6 +48,7 @@ and says why.
 
 Options:
   --world <dir>   the world to work in (default: the current directory)
+  --resume <run>  open on that stopped run, or `last`
   -h, --help      this help
   -V, --version   the version
 ";
@@ -77,6 +87,10 @@ fn main() -> ExitCode {
     if all.first().map(String::as_str) == Some("memory") {
         return memory(&all[1..]);
     }
+    if all.first().map(String::as_str) == Some("runs") {
+        return runs(&all[1..]);
+    }
+    let mut resume = None;
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
     while let Some(arg) = args.next() {
@@ -93,6 +107,10 @@ fn main() -> ExitCode {
                 Some(dir) => world = Some(PathBuf::from(dir)),
                 None => return fail("--world needs a directory"),
             },
+            "--resume" => match args.next() {
+                Some(run) if !run.starts_with('-') => resume = Some(run),
+                _ => return fail("--resume needs a run's id, or `last`"),
+            },
             other => return fail(&format!("unknown argument `{other}`; see --help")),
         }
     }
@@ -106,15 +124,61 @@ fn main() -> ExitCode {
         Err(e) => return fail(&format!("{}: {e}", world.display())),
     };
     let input = BufReader::new(std::io::stdin());
-    match mnemorph_server::serve(
-        input,
-        std::io::stdout(),
-        VERSION,
-        mnemorph_server::opener(world),
-    ) {
+    let opener = match resume {
+        Some(run) => mnemorph_server::resumer(world, run),
+        None => mnemorph_server::opener(world),
+    };
+    match mnemorph_server::serve(input, std::io::stdout(), VERSION, opener) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&e),
     }
+}
+
+/// `runs [--world <dir>] [--json]`: the runs that stopped and may be resumed, newest first.
+fn runs(args: &[String]) -> ExitCode {
+    let mut world = None;
+    let mut json = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--json" => json = true,
+            "--world" => match it.next() {
+                Some(dir) => world = Some(PathBuf::from(dir)),
+                None => return refused(&"--world needs a value"),
+            },
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let stopped = mnemorph_server::stopped(&world);
+    if json {
+        for s in &stopped {
+            println!(
+                "{}",
+                serde_json::json!({"run": s.run, "when": s.when.to_string(), "why": s.why, "ask": s.ask})
+            );
+        }
+        return ExitCode::SUCCESS;
+    }
+    if stopped.is_empty() {
+        println!("no run stopped to be resumed");
+        return ExitCode::SUCCESS;
+    }
+    let wide = stopped.iter().map(|s| s.run.len()).max().unwrap_or(0);
+    for s in &stopped {
+        println!("{:<wide$}  {}  {}", s.run, s.when, s.why);
+        if !s.ask.is_empty() {
+            println!("{:<wide$}  asked: {}", "", s.ask);
+        }
+    }
+    println!(
+        "\nresume one with `mnemorph resume <run>`, or the newest with `mnemorph resume last`"
+    );
+    ExitCode::SUCCESS
 }
 
 /// `onto owner <path>... [--world <dir>]`.

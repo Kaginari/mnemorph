@@ -11,6 +11,8 @@ pub mod protocol;
 
 /// The world, for the commands that read it without a session (`onto owner`).
 pub use mnemorph_loop::world;
+/// The runs that stopped and may be resumed.
+pub use mnemorph_loop::{Stopped, stopped};
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
@@ -296,7 +298,11 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             unverified: unverified.clone(),
         }],
         // The guts' readings are for the record and the value model, not for the surfaces.
-        Beat::Guts { .. } | Beat::Recall { .. } | Beat::Compacted { .. } | Beat::Prefix { .. } => {
+        Beat::Guts { .. }
+        | Beat::Recall { .. }
+        | Beat::Compacted { .. }
+        | Beat::Prefix { .. }
+        | Beat::Rides { .. } => {
             vec![]
         }
         Beat::End { ending } => vec![Event::TurnEnded {
@@ -601,5 +607,13 @@ async fn drive(
 pub fn opener(world: std::path::PathBuf) -> Opener {
     Box::new(move |gate, observer| {
         mnemorph_loop::open(&world, gate, observer, |var| std::env::var(var).ok())
+    })
+}
+
+/// The opener that resumes a stopped run of a world — its id, or `last` — through the same
+/// opening as [`opener`]'s: a refusal is the `initialize` call's error.
+pub fn resumer(world: std::path::PathBuf, run: String) -> Opener {
+    Box::new(move |gate, observer| {
+        mnemorph_loop::resume(&world, &run, gate, observer, |var| std::env::var(var).ok())
     })
 }

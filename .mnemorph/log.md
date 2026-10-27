@@ -5235,3 +5235,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   resize keeps the 250 ms cold-start margin, warm, streaming and paging frames still under 33 ms.
 - **Tests:** `the_wordmark_shows_from_72_columns_folded_and_108_open` (71/72, 107/108); the
   fallback test pins 67/68 on the card.
+
+---
+
+### [2026-10-27T21:00:00+01:00] rimuru — #204: `mnemorph resume <run>` ships, through the session's one door and its end gate
+- **Done:** mnemorph-loop `resume`/`resume_with` open a session on a stopped run through the same
+  `build` as `open`/`open_with` — config, provider, sandbox, `session_gate`, observer,
+  commissioner — only the run differs (`Run::resume`, the journal's opening not said again);
+  module `resume`: `stopped` (newest first), `take` (an id or `last`; refuses an answered, failed
+  or escalated run, a missing or corrupt journal, a commissioned body's run, a held run — before
+  any key is asked for), `hold` (an OS file lock beside the journal, kept by `Session` while it
+  lives); `Beat::Rides` journals the model a run rides, a resume keeps it and a configuration
+  change becomes `switch_model`'s context update; a session's checkpoint warns "ask again to go on,
+  or later `mnemorph resume <run>`". Commands: `mnemorphd --resume <run|last>`, `mnemorphd runs
+  [--json]`, `mnemorph resume <run|last>`, `mnemorph runs`, `mnemorph-tui --resume <run|last>`;
+  the SDK's `stdio({ resume })`. Docs 03 (Resume), 05 (the TUI), both helps.
+- **Tests:** loop `resume.rs` — a resumed run's answer is sent back by a failing verify line (with
+  `.with_gate` removed from `build` the test fails: answered "Done." after two requests), the
+  refusals, `last`, the model switch (no unexplained prefix move, the sent prefix appended to);
+  mnemorphd `runs.rs`; tui `resume.rs`; CLI args; the commands-exist test with the new hints.
+- **Learned:** a resume must refuse before the key check, or a missing run reads as a missing key;
+  a code span wrapped across lines breaks the book's build (`<run>` read as an HTML tag).
+
+---
+
+### [2026-10-27T22:30:00+01:00] rimuru — #233, reviewed: escaped listings, no unheld session, the lock probe waited out
+- **Done:** `runs` escapes the journal's ask and stop reason with `shown`; a fresh run whose lock
+  cannot be made opens no session; a resume retries its lock for 250 ms past a listing's probe; a
+  session ending with nothing to resume unlinks its lock file while holding it. Docs 03.
+- **Tests:** loop `a_hostile_journal_is_shown_escaped`, `a_run_that_cannot_be_held_opens_no_session`,
+  `a_probe_never_refuses_and_finished_locks_go`.

@@ -11,6 +11,7 @@ pub mod gate;
 pub mod model;
 pub mod open;
 pub mod queue_tool;
+pub mod resume;
 pub mod route;
 pub mod run;
 pub mod sequence;
@@ -34,8 +35,9 @@ pub use mnemorph_races::ToolClass;
 pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
-pub use open::{Bound, Opened, open, open_with};
+pub use open::{Bound, Opened, open, open_with, resume, resume_with};
 pub use queue_tool::{QUEUE, QueueTool};
+pub use resume::{Stopped, stopped};
 pub use route::{
     Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, capped, pick, route, route_ask, tier_of,
 };

@@ -204,9 +204,17 @@ export interface AppProps {
   onCoreClosed?: (why: string) => void;
   /** The palette to start with. */
   theme?: ThemeName;
+  /** The session picked up a stopped run rather than starting one. */
+  resumed?: boolean;
 }
 
-export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }: AppProps) {
+export function App({
+  client,
+  hello,
+  onCoreClosed,
+  theme: startTheme = 'dark',
+  resumed = false,
+}: AppProps) {
   const [theme, setTheme] = useState<ThemeName>(startTheme);
   const p = palette(theme);
   const { exit } = useApp();
@@ -216,6 +224,7 @@ export function App({ client, hello, onCoreClosed, theme: startTheme = 'dark' }:
     let s = initial(hello.body, hello.held);
     s = info(s, `mnemorph · ${hello.model} via ${hello.provider} · ${hello.world}`);
     for (const h of hello.holes) s = info(s, `  config hole: ${h}`);
+    if (resumed) s = info(s, `  resumed run ${hello.run} from its journal: ask to go on`);
     if (hello.budget && hello.budget.leftWt === 0) {
       s = info(s, `  the ${hello.budget.cap} cap is spent: a turn stops at once until it resets`);
     }
