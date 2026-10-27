@@ -5144,3 +5144,60 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
      and keeps tool calls and words. A thinking-only turn becomes "(reasoning omitted)".
   3. Docs 06 states the rule.
 - **Test:** `the_strip_takes_all_thinking_and_leaves_no_gap`.
+
+---
+
+### [2026-10-27T13:30:18+01:00] rimuru — #184, toolchain credentials closed on Linux
+- **Task:** Landlock granted `.cargo` and `.cache` whole, so `.cargo/credentials*`,
+  `.cache/huggingface/token` and `.cache/git` stayed readable to a sandboxed command on Linux.
+- **Fix:** `HOME_TOOLCHAINS` (one list, both platforms) names `.cargo/bin`, `registry`, `git`,
+  `config(.toml)`, `env`, and the named caches under `.cache` (uv, pip, pypoetry, pre-commit,
+  go-build, golangci-lint, node, pnpm, node-gyp, typescript, yarn, ms-playwright, deno, bazel,
+  sccache, huggingface/hub, kaginari-bench). Docs 05 and a lessons row.
+- **Measured** (landlock ABI 1, before and after, identical but for the credentials):
+  - `cargo tree` / `cargo fetch --offline` read `.cargo/bin`, `config*` and `registry`; cargo opens
+    `.package-cache` and `.global-cache` for writing and goes on without them.
+  - pnpm reads `.cache/node` (corepack); the bench's Python reads `.cache/kaginari-bench` and uv's
+    interpreters.
+  - `uv run` and `go build` need a writable cache (`UV_CACHE_DIR`, `GOCACHE` in `$TMPDIR` works),
+    and `cargo build` hits EXDEV on ABI 1: both before the change as well.
+- **Test:** `toolchain_credentials_cannot_be_read_but_their_caches_can`, and the policy tests
+  hold no credential under any rule. With `.cargo` and `.cache` granted again, all three fail.
+- **Learned:**
+  - A read grant on a toolchain tree is a read grant on every secret a tool drops in it; name
+    what builds use instead.
+
+---
+
+### [2026-10-27T14:10:00+01:00] rimuru — #184, Opus's review: the rest of the class
+- **Opus found:** `.config/git` (git's credential store), `.m2` and `.gradle` (`settings.xml`,
+  `settings-security.xml`, `gradle.properties`) and `.nvm` (`versions/node/*/etc/npmrc`) were
+  granted whole; `.cargo/config.toml` and `.gitconfig` can hold tokens; `Policy::existing`
+  granted wherever a toolchain link led.
+- **Fixed:**
+  1. `.config/git/{config,ignore,attributes}`, and `.config/git/credentials` in `HOME_CREDENTIALS`;
+  2. `.m2/repository`, `.gradle/caches`, `.gradle/wrapper`;
+  3. each nvm Node's `bin`, `lib`, `include`, listed when the policy is made;
+  4. `.cargo/config.toml` and `.gitconfig` stay readable, documented as an accepted risk;
+  5. a home toolchain rule resolving onto, inside or above a credential is dropped and kept in
+     `Policy::refused`.
+- **Test:** the escape test reads none of the new credentials and reads the caches beside them;
+  `each_nvm_node_is_read_without_its_npmrc`; `a_toolchain_linked_to_a_credential_is_refused`.
+  Disable-and-run: each whole tree back fails 2–3 tests; the link check off fails its test;
+  `.config/git` whole is caught by the link check alone, and with it off fails 4.
+- **Measured:** node, npm (`npm ls`, `config get`), pnpm and git run with the narrowed grants;
+  npm goes on when its global npmrc is unreadable.
+- **Learned:**
+  - The "above" half of the link check also guards the list itself: a tree named whole that
+    holds a credential is refused even when no test names it.
+
+---
+
+### [2026-10-27T14:40:00+01:00] rimuru — #184, Fable's review of the review
+- **Fable found:** `~/go` (GOPATH) was granted whole, so `go/src` (the human's projects, their
+  `.env`) was readable; `.cargo/git/db/*/config` holds remote URLs that may embed a token; no test
+  proved a link inside a granted cache leads nowhere.
+- **Fixed:** `go/bin` and `go/pkg` only; the cargo git-db configs documented as an accepted risk
+  beside `config.toml`; the escape test plants `.cache/uv/x → .ssh` and reads the key through it.
+- **Test:** the policy test names `go` and `go/src` as never granted whole; the escape test's
+  read through the link is refused (Landlock resolves at open time).

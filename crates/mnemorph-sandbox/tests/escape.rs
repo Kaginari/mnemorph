@@ -168,6 +168,66 @@ fn credentials_cannot_be_read() {
     }
 }
 
+/// Credentials inside the toolchain trees stay closed while the caches beside them read: the
+/// crates.io token beside cargo's registry, Hugging Face's token beside uv's cache, git's
+/// credential store beside its config, Maven's and Gradle's passwords beside their caches, an
+/// npmrc beside nvm's Node.
+#[test]
+fn toolchain_credentials_cannot_be_read_but_their_caches_can() {
+    let s = sandbox();
+    let status = s.status(false);
+    if status.starts_with("none") {
+        eprintln!("skipped: {status}");
+        return;
+    }
+    let g = Ground::new("toolchains");
+    for (file, text) in [
+        (".cargo/credentials.toml", "token = \"CARGO TOKEN\"\n"),
+        (".cache/huggingface/token", "hf_TOKEN\n"),
+        (".config/git/credentials", "https://u:TOKEN@host\n"),
+        (".m2/settings.xml", "<password>TOKEN</password>\n"),
+        (".gradle/gradle.properties", "repoPassword=TOKEN\n"),
+        (".nvm/versions/node/v1/etc/npmrc", "//r/:_authToken=TOKEN\n"),
+        (".cargo/registry/index/entry", "registry\n"),
+        (".cache/uv/CACHEDIR.TAG", "uv cache\n"),
+        (".config/git/config", "git config\n"),
+        (".m2/repository/entry", "maven\n"),
+        (".nvm/versions/node/v1/bin/node", "node\n"),
+    ] {
+        let path = g.path("home").join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    // A link inside a granted cache leads to the keys: Landlock resolves it when the file opens.
+    std::os::unix::fs::symlink(g.path("home/.ssh"), g.path("home/.cache/uv/x")).unwrap();
+    for script in [
+        "cat ~/.cache/uv/x/id_ed25519",
+        "cat ~/.cargo/credentials.toml",
+        "cat ~/.cache/huggingface/token",
+        "cat ~/.config/git/credentials",
+        "cat ~/.m2/settings.xml",
+        "cat ~/.gradle/gradle.properties",
+        "cat ~/.nvm/versions/node/v1/etc/npmrc",
+        "ls ~/.cache/huggingface",
+        "ls ~/.cargo",
+    ] {
+        let (ok, out) = g.run(&g.policy(false), script);
+        assert!(
+            !ok && !out.contains("TOKEN")
+                && !out.contains("PRIVATE KEY")
+                && !out.lines().any(|l| l == "credentials.toml" || l == "token"),
+            "{script}: {out}"
+        );
+    }
+    let (ok, out) = g.run(
+        &g.policy(false),
+        "cat ~/.cargo/registry/index/entry ~/.cache/uv/CACHEDIR.TAG ~/.config/git/config \
+         ~/.m2/repository/entry ~/.nvm/versions/node/v1/bin/node",
+    );
+    assert!(ok, "{out}");
+    assert_eq!(out, "registry\nuv cache\ngit config\nmaven\nnode\n");
+}
+
 #[test]
 fn the_network_is_closed_unless_the_policy_opens_it() {
     let g = Ground::new("network");

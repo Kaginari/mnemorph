@@ -22,10 +22,9 @@ pub mod linux;
 mod macos;
 
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
-/// them, Seatbelt hides them even inside a readable tree, and the shell classifier refuses
-/// commands that name them. Landlock cannot hide a path inside a tree it reads: those inside a
-/// toolchain — `.cargo/credentials*`, and those under `.cache` — stay readable on Linux until
-/// those trees are narrowed to what builds need.
+/// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
+/// commands that name them. Landlock cannot hide a path inside a tree it reads, so the toolchain
+/// trees that hold one — `.cargo`, `.cache` — are granted part by part ([`HOME_TOOLCHAINS`]).
 pub const HOME_CREDENTIALS: &[&str] = &[
     ".ssh",
     ".aws",
@@ -43,10 +42,13 @@ pub const HOME_CREDENTIALS: &[&str] = &[
     ".azure",
     ".cargo/credentials",
     ".cargo/credentials.toml",
+    // git's `credential.helper store` file, when it lives beside git's XDG config.
+    ".config/git/credentials",
     "Library/Keychains",
     // uv's `uv auth` logins, beside the interpreters and tools the toolchains name.
     ".local/share/uv/credentials",
-    // Hugging Face's login tokens — its model cache stays readable — and git's credential cache.
+    // Hugging Face's login tokens — its model cache, `hub`, stays readable — and git's
+    // credential-cache socket.
     ".cache/huggingface/token",
     ".cache/huggingface/stored_tokens",
     ".cache/git",
@@ -55,20 +57,53 @@ pub const HOME_CREDENTIALS: &[&str] = &[
 /// Credential files anywhere on the system.
 pub const SYSTEM_CREDENTIALS: &[&str] = &["/etc/shadow", "/etc/gshadow", "/etc/sudoers"];
 
-/// Toolchains and caches in the home that builds read (and some write).
-const HOME_TOOLCHAINS: &[&str] = &[
-    // `.local` only in part: `.local/share/keyrings` holds credentials, and Linux cannot carve an
-    // exception out of a readable tree.
-    ".cargo",
+/// Toolchains and caches in the home that builds read, on every platform. A tree that holds a
+/// credential is named part by part — Landlock cannot hide a path inside a tree it reads — so
+/// only what builds use is named, and a cache missing here is unreadable rather than a hole.
+pub const HOME_TOOLCHAINS: &[&str] = &[
+    // Not `.cargo` whole: `credentials.toml` holds the crates.io tokens. Cargo reads its
+    // binaries, the registry's index and sources, git dependencies and its config; its locks and
+    // usage database (`.package-cache`, `.global-cache`) are written, which a read grant does
+    // not give anyway, and cargo goes on without them. Its config can hold a `[registry] token`,
+    // and each git dependency's `git/db/*/config` its remote URL, which may embed a token: cargo
+    // cannot build without them, so that risk is accepted and they stay readable.
+    ".cargo/bin",
+    ".cargo/registry",
+    ".cargo/git",
+    ".cargo/config.toml",
+    ".cargo/config",
+    ".cargo/env",
     ".rustup",
+    // `.local` only in part: `.local/share/keyrings` holds credentials.
     ".local/bin",
     ".local/lib",
     ".local/share/pnpm",
     ".local/go-current",
     ".npm",
-    ".nvm",
+    // `.nvm` only in part: each installed Node's `bin`, `lib` and `include` are added when the
+    // policy is made ([`Policy::new`]), never its `etc/npmrc`, which can hold registry tokens.
     ".pnpm-store",
-    ".cache",
+    // Not `.cache` whole: `huggingface/token` and git's credential cache live there. The named
+    // caches of Python (uv, pip, Poetry, pre-commit), Go, Node (corepack under `node`, pnpm,
+    // node-gyp, TypeScript, Yarn, Playwright's browsers), Deno, Bazel, sccache, Hugging Face's
+    // models, and the Kaginari bench's interpreters.
+    ".cache/uv",
+    ".cache/pip",
+    ".cache/pypoetry",
+    ".cache/pre-commit",
+    ".cache/go-build",
+    ".cache/golangci-lint",
+    ".cache/node",
+    ".cache/pnpm",
+    ".cache/node-gyp",
+    ".cache/typescript",
+    ".cache/yarn",
+    ".cache/ms-playwright",
+    ".cache/deno",
+    ".cache/bazel",
+    ".cache/sccache",
+    ".cache/huggingface/hub",
+    ".cache/kaginari-bench",
     ".pyenv",
     // uv's interpreters and installed tools — the targets behind `.local/bin`'s links — but not
     // `.local/share/uv` whole: its `credentials/` holds the logins `uv auth` keeps.
@@ -76,12 +111,26 @@ const HOME_TOOLCHAINS: &[&str] = &[
     ".local/share/uv/tools",
     ".bun",
     ".deno",
+    // git cannot run without its config, and `.gitconfig` can hold an `http.extraHeader`
+    // bearer token: that risk is accepted. Of `.config/git`, only the config, ignore and
+    // attributes files: its `credentials` is git's credential store.
     ".gitconfig",
-    ".config/git",
-    "go",
-    ".gradle",
-    ".m2",
+    ".config/git/config",
+    ".config/git/ignore",
+    ".config/git/attributes",
+    // Of `~/go` (GOPATH), the installed binaries and the module cache: `go/src` holds the
+    // human's own projects and their `.env` files.
+    "go/bin",
+    "go/pkg",
+    // Not `.gradle` and `.m2` whole: `gradle.properties`, `settings.xml` and
+    // `settings-security.xml` hold repository passwords.
+    ".gradle/caches",
+    ".gradle/wrapper",
+    ".m2/repository",
 ];
+
+/// What of each Node version nvm installed a command may read: never its `etc`.
+const NVM_PARTS: &[&str] = &["bin", "lib", "include"];
 
 /// The system directories a command may read (and execute from).
 const SYSTEM_READ: &[&str] = &[
@@ -130,23 +179,44 @@ pub struct Policy {
     pub hidden: Vec<PathBuf>,
     /// Sockets allowed.
     pub network: bool,
+    /// Home toolchain rules left out because they resolve — through a link — onto, inside or
+    /// above a credential path.
+    pub refused: Vec<PathBuf>,
 }
 
 impl Policy {
     /// The policy for a command in `world` with `home`, writing temporary files under `tmp`.
     #[must_use]
     pub fn new(world: &Path, home: &Path, tmp: &Path, network: bool) -> Self {
+        let credentials: Vec<PathBuf> = HOME_CREDENTIALS.iter().map(|c| home.join(c)).collect();
+        // A toolchain path the human made a link resolves elsewhere, and the guard grants where
+        // it resolves: a rule landing on, inside or above a credential is dropped.
+        let resolved: Vec<PathBuf> = credentials
+            .iter()
+            .flat_map(|c| [c.clone(), resolve(c)])
+            .collect();
+        let (toolchains, refused): (Vec<PathBuf>, Vec<PathBuf>) = HOME_TOOLCHAINS
+            .iter()
+            .map(|t| home.join(t))
+            .chain(nvm_versions(home))
+            .partition(|t| {
+                let at = resolve(t);
+                !resolved
+                    .iter()
+                    .any(|c| at.starts_with(c) || c.starts_with(&at))
+            });
         let mut read: Vec<PathBuf> = SYSTEM_READ.iter().map(PathBuf::from).collect();
-        read.extend(HOME_TOOLCHAINS.iter().map(|t| home.join(t)));
+        read.extend(toolchains);
         let mut write = vec![world.to_path_buf(), tmp.to_path_buf()];
         write.extend(DEVICES.iter().map(PathBuf::from));
-        let mut hidden: Vec<PathBuf> = HOME_CREDENTIALS.iter().map(|c| home.join(c)).collect();
+        let mut hidden = credentials;
         hidden.extend(SYSTEM_CREDENTIALS.iter().map(PathBuf::from));
         Self {
             write,
             read,
             hidden,
             network,
+            refused,
         }
     }
 
@@ -155,6 +225,37 @@ impl Policy {
     pub fn existing(list: &[PathBuf]) -> Vec<PathBuf> {
         list.iter().filter_map(|p| p.canonicalize().ok()).collect()
     }
+}
+
+/// `path` resolved as far as it exists: its links followed, the missing rest kept as written.
+fn resolve(path: &Path) -> PathBuf {
+    let mut missing = Vec::new();
+    let mut at = path;
+    loop {
+        if let Ok(real) = at.canonicalize() {
+            return missing.iter().rev().fold(real, |p, part| p.join(part));
+        }
+        match (at.parent(), at.file_name()) {
+            (Some(parent), Some(name)) => {
+                missing.push(name.to_owned());
+                at = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// Each Node version nvm installed: its `bin`, `lib` and `include`.
+fn nvm_versions(home: &Path) -> Vec<PathBuf> {
+    let Ok(versions) = std::fs::read_dir(home.join(".nvm/versions/node")) else {
+        return Vec::new();
+    };
+    let mut parts: Vec<PathBuf> = versions
+        .flatten()
+        .flat_map(|v| NVM_PARTS.iter().map(move |p| v.path().join(p)))
+        .collect();
+    parts.sort();
+    parts
 }
 
 /// How commands are contained on this machine.
