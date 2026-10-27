@@ -169,7 +169,7 @@ background as `COLORFGBG` reports it, else dark.
 | welcome | the card the conversation opens on: Rimuru's portrait (still), the name and tagline, the races as chips, the world, the model and the session in small capitals, the first keys |
 | transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
-| sidebar | at its head, on a column 36 rows tall or more, the portrait of the body working now (Rimuru for the session, a commissioned body's race while it acts) over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
+| sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
 | approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
 | toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring; never drawn over an open approval |
@@ -265,12 +265,18 @@ sits under one; under Kitty they are placed below the text (`z=-1`), so text dra
 always shows, and they are deleted before the frame that opens the card besides. A panic deletes
 Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
 the screen, so each picture is sent again; the sidebar's toggle, its fold below 100 columns and
-the welcome scrolling move or remove theirs. A box that moved is erased and its picture held
-back until the box has stayed put for 150 ms, so a scroll never sends a picture once a frame. In pixels a portrait is still — the working body's
-race, swapped when it changes — and asks no ticks. The welcome card's portrait is a picture too
-while its rows are all on screen; partly scrolled away, those rows show its half blocks.
+a scroll moves or removes theirs. A box that moved is erased and its picture held
+back until the box has stayed put for 150 ms, so a scroll never sends a picture once a frame. In pixels a portrait is still — Veldora at rest, the working body's
+race during a turn, swapped when it changes — and asks no ticks. Pictures are the sidebar's alone:
+the welcome card draws its portrait in half blocks, so it scrolls with nothing to withdraw.
 (A Kitty-only animation would upload each frame once under its own id and switch placements by
 id; `pictures::Art` is where it would be named.)
+
+A terminal that gives no cell size gives its text area in pixels (`CSI 14 t`) more often than
+not; the cell is that area over the window's cells, in either order (VTE answers width first):
+the one the window divides exactly, a text area being whole cells, then the one nearest twice as
+tall as wide. VTE lists Sixel in its device attributes when its Sixel is on; a VTE that does not
+draws half blocks, and `--probe` names its version (`VTE_VERSION`) and what would give images.
 
 To see the pictures in VS Code's terminal, turn on `terminal.integrated.enableImages` in the
 settings and reload the window: xterm.js then lists Sixel in DA1, and Mnemorph draws iTerm2's

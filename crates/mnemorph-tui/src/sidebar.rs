@@ -566,10 +566,9 @@ pub fn band(t: &Theme, pct: u64) -> Style {
     }
 }
 
-/// The head: the portrait of the body working now — Rimuru for the session, a commissioned
-/// body's race while it acts — centred, playing its idle loop while it works and still on its
-/// first frame otherwise; under it the state, centred too (the world and the model are on the
-/// frame's edges).
+/// The head: Veldora, the human, while no body works; during a turn the portrait of the body
+/// working — Rimuru for the session, a commissioned body's race while it acts — playing its idle
+/// loop; centred, with the state under it (the world and the model are on the frame's edges).
 fn head(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
     let (who, race) = crate::activity::actor(m);
@@ -578,18 +577,25 @@ fn head(m: &Model, w: usize) -> Lines {
         // The picture goes over these rows (the view places it): plain cells of the page.
         let blank = Line::from(Span::styled(" ".repeat(w), Style::new().bg(t.p.bg.color())));
         out.extend(std::iter::repeat_n(blank, usize::from(rows)));
-    } else if let Some(p) = mnanim::ready(race) {
-        let clock = if m.busy() {
-            m.portrait_clock
-        } else {
-            std::time::Duration::ZERO
-        };
-        let pad = Span::raw(" ".repeat(w.saturating_sub(mnanim::SIZE) / 2));
-        out.extend(mnanim::lines(p.at(clock), None).into_iter().map(|l| {
+    } else if !m.busy() {
+        // Idle: Veldora, the human, in half blocks (no idle loop is drawn for Veldora).
+        let pad = Span::raw(" ".repeat(w.saturating_sub(usize::from(PORTRAIT)) / 2));
+        out.extend(veldora_blocks(t).into_iter().map(|l| {
             let mut spans = vec![pad.clone()];
             spans.extend(l.spans);
             Line::from(spans)
         }));
+    } else if let Some(p) = mnanim::ready(race) {
+        let pad = Span::raw(" ".repeat(w.saturating_sub(mnanim::SIZE) / 2));
+        out.extend(
+            mnanim::lines(p.at(m.portrait_clock), None)
+                .into_iter()
+                .map(|l| {
+                    let mut spans = vec![pad.clone()];
+                    spans.extend(l.spans);
+                    Line::from(spans)
+                }),
+        );
     }
     let centred = |spans: Vec<Span<'static>>| {
         let line = truncate(Line::from(spans), w);
@@ -929,6 +935,24 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
 const PORTRAIT: u16 = 32;
 #[allow(clippy::cast_lossless)]
 const _: () = assert!(PORTRAIT as usize == mnanim::SIZE);
+
+/// Veldora in half blocks, built once per theme background.
+#[must_use]
+pub fn veldora_blocks(t: &crate::theme::Theme) -> Lines {
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<(crate::theme::Rgb, Lines)>> = Mutex::new(None);
+    let mut c = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((bg, lines)) = c.as_ref()
+        && *bg == t.p.bg
+    {
+        return lines.clone();
+    }
+    let lines = crate::kit::pixels::half_blocks(crate::kit::pixels::VELDORA, PORTRAIT, t.p.bg);
+    *c = Some((t.p.bg, lines.clone()));
+    lines
+}
 
 /// Where the head's picture goes in a sidebar `w` cells wide and `h` rows tall, when it is a
 /// picture: its first column from the sidebar's left, its width and its rows, from the sidebar's

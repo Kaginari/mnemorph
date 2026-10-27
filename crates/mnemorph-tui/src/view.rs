@@ -208,7 +208,12 @@ fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
     if let Some((pad, cols, rows)) = crate::sidebar::picture_box(m, w, h) {
         m.pictures.want(Want {
             slot: Slot::Sidebar,
-            art: Art::Still(crate::activity::actor(m).1),
+            // Veldora while no body works; the body working now during a turn.
+            art: if m.busy() {
+                Art::Still(crate::activity::actor(m).1)
+            } else {
+                Art::Veldora
+            },
             area: Rect::new(area.x + 3 + pad, top, cols, rows),
             bg: m.theme.p.bg,
         });
@@ -263,7 +268,7 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         buf.set_line(area.x, row, line, area.width);
     }
     if let Some(n) = head_skip {
-        welcome_art(m, area, buf, (n, skip, first, window.len()));
+        welcome_art(area, buf, (n, skip, first, window.len()));
     }
     // Each row's entry, for a click: the transcript's rows only, as drawn.
     let mut hits = m.hits.borrow_mut();
@@ -292,40 +297,24 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     }
 }
 
-/// The welcome's portrait as a picture: wanted where the card's art rows are all on screen;
-/// where only some are, those rows get its half blocks, cut to the picture's height. `at` is the
+/// The welcome's portrait, always in half blocks: real pixels belong to the sidebar alone, so the
+/// card can scroll freely without a picture withdrawn and placed again under it. `at` is the
 /// window's layout: how many head lines lie above it, the stack's skipped lines, the first row
 /// drawn and the window's visible lines.
-fn welcome_art(m: &Model, area: Rect, buf: &mut Buffer, at: (usize, usize, u16, usize)) {
+fn welcome_art(area: Rect, buf: &mut Buffer, at: (usize, usize, u16, usize)) {
     let (above, skip, first, shown) = at;
     let cols = crate::welcome::COLS;
-    let Some(rows) = m.pictures.rows(cols) else {
-        return;
-    };
     let (line, col) = crate::welcome::ART_AT;
     if usize::from(area.width) < usize::from(col + cols) + crate::kit::slab::FRAME {
         return;
     }
-    // The screen row of the card's line `k`, when it is drawn.
-    let row_of = |k: usize| -> Option<u16> {
-        let idx = k.checked_sub(above)?;
-        (idx >= skip && idx < shown).then(|| first + to_u16(idx - skip))
-    };
     let x = area.x + col;
-    let rows_on: Vec<Option<u16>> = (0..usize::from(rows)).map(|r| row_of(line + r)).collect();
-    if let (Some(Some(y)), true) = (rows_on.first(), rows_on.iter().all(Option::is_some)) {
-        m.pictures.want(Want {
-            slot: Slot::Welcome,
-            art: Art::Still(mnemorph_races::Race::Rimuru),
-            area: Rect::new(x, *y, cols, rows),
-            bg: crate::welcome::face(&m.theme),
-        });
-        return;
-    }
-    let still = crate::welcome::still();
-    for (y, l) in rows_on.iter().zip(&still) {
-        if let Some(y) = y {
-            buf.set_line(x, *y, l, cols);
+    for (r, l) in crate::welcome::still().iter().enumerate() {
+        let Some(idx) = (line + r).checked_sub(above) else {
+            continue;
+        };
+        if idx >= skip && idx < shown {
+            buf.set_line(x, first + to_u16(idx - skip), l, cols);
         }
     }
 }

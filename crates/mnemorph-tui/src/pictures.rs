@@ -63,6 +63,8 @@ impl Slot {
 pub enum Art {
     /// A race's portrait, still.
     Still(Race),
+    /// Veldora's portrait: the human, shown while no body works.
+    Veldora,
 }
 
 /// A picture a frame wants: its slot, its art, its box in cells, and the background it sits on.
@@ -408,8 +410,11 @@ impl Placer {
         }
         let (cw, ch) = (u32::from(self.cell.0), u32::from(self.cell.1));
         let (px_w, px_h) = (u32::from(w.area.width) * cw, u32::from(w.area.height) * ch);
-        let Art::Still(race) = w.art;
-        let img = pixels::picture(pixels::png(race), px_w, px_h, w.bg)?;
+        let source = match w.art {
+            Art::Still(race) => pixels::png(race),
+            Art::Veldora => pixels::VELDORA,
+        };
+        let img = pixels::picture(source, px_w, px_h, w.bg)?;
         let encoded: String = match protocol {
             Protocol::Kitty => pixels::kitty(
                 &pixels::png_bytes(&img),

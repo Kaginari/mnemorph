@@ -102,6 +102,9 @@ pub struct Replies {
     /// The primary device attributes (DA1), when they came: every terminal answers them, so they
     /// mark the end of the replies.
     pub attributes: Option<Vec<u16>>,
+    /// The text area's size in pixels (`CSI 14 t`), as the two numbers came: a terminal that gives
+    /// no cell size often gives this (VTE does), and the cell follows from the window's cells.
+    pub area: Option<(u16, u16)>,
     /// A graphics query (XTSMGRAPHICS, the colour registers) answered with success: a terminal
     /// whose image layer is on, though its DA1 may not say so — VS Code's xterm.js is one.
     pub graphics: bool,
@@ -125,6 +128,11 @@ impl Replies {
             let (h, w) = (h.parse::<u16>().ok()?, w.parse::<u16>().ok()?);
             (h > 0 && w > 0).then_some((w, h))
         });
+        let area = between(reply, "\x1b[4;", "t").and_then(|s| {
+            let (a, b) = s.split_once(';')?;
+            let (a, b) = (a.parse::<u16>().ok()?, b.parse::<u16>().ok()?);
+            (a > 0 && b > 0).then_some((a, b))
+        });
         let kitty = reply.contains(&format!("\x1b_Gi={QUERY_ID};OK"));
         let attributes = attributes(reply);
         let graphics = graphics(reply);
@@ -133,6 +141,7 @@ impl Replies {
             cell,
             kitty,
             attributes,
+            area,
             graphics,
         }
     }
@@ -205,6 +214,34 @@ pub struct Window {
     pub xpx: u16,
     /// Pixels down, `0` when the terminal does not say.
     pub ypx: u16,
+}
+
+/// A cell's size from the text area's pixels `area` (`CSI 14 t`, height then width by the spec)
+/// over the window's cells. Some terminals (VTE) answer width first, so both orders are read; of
+/// those giving a plausible cell (1.2 to 3 times as tall as wide), the one the window divides
+/// exactly wins — a text area is a whole number of cells — then the one nearest twice as tall,
+/// then the spec's.
+#[must_use]
+pub fn cell_from_area(area: (u16, u16), window: Window) -> Option<(u16, u16)> {
+    let (cols, rows) = (u32::from(window.cols), u32::from(window.rows));
+    if cols == 0 || rows == 0 {
+        return None;
+    }
+    let (a, b) = (u32::from(area.0), u32::from(area.1));
+    // (width, height, remainder) for each order: the spec's (height, width) first.
+    let orders = [
+        (b / cols, a / rows, b % cols + a % rows),
+        (a / cols, b / rows, a % cols + b % rows),
+    ];
+    let plausible = |w: u32, h: u32| w > 0 && h > 0 && h * 10 >= w * 12 && h * 10 <= w * 30;
+    let off_two = |w: u32, h: u32| (h * 10).abs_diff(w * 20);
+    let best = orders
+        .iter()
+        .enumerate()
+        .filter(|(_, (w, h, _))| plausible(*w, *h))
+        .min_by_key(|(i, (w, h, rest))| (*rest, off_two(*w, *h), *i))?;
+    let (w, h, _) = *best.1;
+    Some((u16::try_from(w).ok()?, u16::try_from(h).ok()?))
 }
 
 impl Window {
@@ -346,7 +383,18 @@ pub fn decide(
     choice: Choice,
     env: &impl Fn(&str) -> Option<String>,
 ) -> Caps {
-    let cell = replies.cell.or_else(|| window.and_then(Window::cell));
+    let cell = replies
+        .cell
+        .or_else(|| window.and_then(Window::cell))
+        .or_else(|| {
+            replies
+                .area
+                .zip(window)
+                .and_then(|(a, w)| cell_from_area(a, w))
+        });
+    // VTE says nothing of its version but in the environment; its DA1 lists Sixel when its Sixel
+    // is on. A VTE without it is named in the notes, never guessed into a blank box.
+    let vte = env("VTE_VERSION").and_then(|v| v.trim().parse::<u32>().ok());
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
     let mut notes = Vec::new();
     let (protocol, why) = match choice {
@@ -391,6 +439,15 @@ pub fn decide(
     } else {
         (protocol, why)
     };
+    if let Some(v) = vte.filter(|_| protocol == Protocol::Blocks && !replies.sixel()) {
+        notes.push(format!(
+            "VTE {}.{}.{} lists no Sixel: images need VTE 0.76 or later with Sixel on, or a \
+             terminal that draws them (Kitty, WezTerm)",
+            v / 10000,
+            v / 100 % 100,
+            v % 100
+        ));
+    }
     Caps {
         replies,
         window,
@@ -414,6 +471,39 @@ pub fn square(cols: u16, cell: (u16, u16)) -> (u16, u32, u32) {
     let rows = ((wide * 2 + ch) / (ch * 2)).max(1);
     let rows = u16::try_from(rows).unwrap_or(u16::MAX);
     (rows, wide, u32::from(rows) * ch)
+}
+
+/// Veldora's portrait, a 256 px RGBA PNG: the human, whom the sidebar shows while no body works.
+pub const VELDORA: &[u8] = include_bytes!("../../assets/portraits/veldora.png");
+
+/// `source` (a PNG) as half blocks `cols` cells wide: each cell's upper pixel its foreground, its
+/// lower its background, on `bg`. For a terminal that draws no images.
+#[must_use]
+pub fn half_blocks(source: &[u8], cols: u16, bg: Rgb) -> Vec<ratatui::text::Line<'static>> {
+    use ratatui::style::{Color, Style};
+    use ratatui::text::{Line, Span};
+    let w = u32::from(cols.max(1));
+    let Some(img) = picture(source, w, w, bg) else {
+        return Vec::new();
+    };
+    (0..w / 2)
+        .map(|r| {
+            Line::from(
+                (0..w)
+                    .map(|x| {
+                        let top = img.get_pixel(x, r * 2);
+                        let low = img.get_pixel(x, r * 2 + 1);
+                        Span::styled(
+                            "▀",
+                            Style::new()
+                                .fg(Color::Rgb(top[0], top[1], top[2]))
+                                .bg(Color::Rgb(low[0], low[1], low[2])),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect()
 }
 
 /// The embedded portrait of `race`: a 256 px RGBA PNG.
@@ -893,5 +983,46 @@ mod tests {
             chosen("\x1b[6;20;10t\x1b[?1;0;256S\x1b[?62c", Choice::Auto, &[]),
             Protocol::Sixel
         );
+    }
+
+    /// VTE answers no cell size and no Sixel attribute, but gives its text area (width first):
+    /// the cell follows from it, and VTE 0.76 or later draws Sixel. Older VTE draws half blocks.
+    #[test]
+    fn vte_gives_its_cell_by_the_text_area_and_sixel_by_its_attributes() {
+        let window = |cols, rows| Window {
+            cols,
+            rows,
+            xpx: 0,
+            ypx: 0,
+        };
+        let reply = "\x1b[4;1575;882t\x1b[?65;1;9c";
+        assert_eq!(Replies::parse(reply).area, Some((1575, 882)));
+        assert_eq!(cell_from_area((1575, 882), window(175, 49)), Some((9, 18)));
+        assert_eq!(cell_from_area((882, 1575), window(175, 49)), Some((9, 18)));
+        // Both orders plausible: the one the window divides exactly wins (9×18, not 7×21).
+        assert_eq!(cell_from_area((1080, 900), window(120, 50)), Some((9, 18)));
+        // A huge area never overflows.
+        assert_eq!(cell_from_area((u16::MAX, u16::MAX), window(1, 1)), None);
+        let caps = |reply: &str| {
+            decide(
+                Replies::parse(reply),
+                Some(window(175, 49)),
+                Choice::Auto,
+                &env(&[("VTE_VERSION", "6003")]),
+            )
+        };
+        // VTE without Sixel in its attributes: half blocks, and a note saying why.
+        let off = caps(reply);
+        assert_eq!((off.protocol, off.cell), (Protocol::Blocks, Some((9, 18))));
+        assert!(
+            off.notes
+                .iter()
+                .any(|n| n.contains("VTE 0.60.3 lists no Sixel")),
+            "{:?}",
+            off.notes
+        );
+        // With Sixel on it says so, and it gets Sixel.
+        let on = caps("\x1b[4;1575;882t\x1b[?65;1;4;9c");
+        assert_eq!(on.protocol, Protocol::Sixel);
     }
 }

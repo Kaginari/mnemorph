@@ -23,7 +23,7 @@ pub const TIMEOUT: Duration = Duration::from_millis(200);
 
 /// The queries, DA1 last.
 pub const QUERIES: &str =
-    "\x1b[>0q\x1b[16t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[?1;1;0S\x1b[c";
+    "\x1b[>0q\x1b[16t\x1b[14t\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[?1;1;0S\x1b[c";
 
 /// A terminal to ask: send bytes, then wait up to a while for some back.
 pub trait Tty {
@@ -131,8 +131,8 @@ impl Late {
             }
             KeyCode::Char('[') if alt => true,
             KeyCode::Char(_) if plain && self.inside => true,
-            // The shapes of `CSI ? … c`, `CSI 6 ; h ; w t` and `CSI ? 1 ; 0 ; n S` read as
-            // characters.
+            // The shapes of `CSI ? … c`, `CSI 6 ; h ; w t`, `CSI 4 ; a ; b t` and
+            // `CSI ? 1 ; 0 ; n S` read as characters.
             KeyCode::Char(c) if plain => {
                 c.is_ascii_digit() || matches!(c, ';' | '?' | '[' | 'c' | 't' | 'S')
             }
@@ -396,6 +396,7 @@ mod tests {
             "\x1b[6;17;8t",
             "\x1b[?1;2;4c",
             "\x1b[?1;0;256S",
+            "\x1b[4;1575;882t",
             "?1;2c",
             "6;17;8t",
         ] {

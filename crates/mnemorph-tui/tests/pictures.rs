@@ -60,7 +60,7 @@ fn slot(wants: &[Want], s: Slot) -> Option<Want> {
 }
 
 #[test]
-fn the_sidebar_and_the_welcome_want_their_pictures_over_plain_cells() {
+fn the_sidebar_alone_wants_a_picture_over_plain_cells() {
     let mut m = model(Protocol::Iterm);
     let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
     let buf = draw(&mut m, &mut t);
@@ -68,13 +68,13 @@ fn the_sidebar_and_the_welcome_want_their_pictures_over_plain_cells() {
     let side = slot(&wants, Slot::Sidebar).expect("the sidebar's head");
     // 32 columns of 8 px: 256 × 255 px in 15 rows.
     assert_eq!((side.area.width, side.area.height), (32, 15));
-    assert_eq!(side.art, Art::Still(Race::Rimuru));
+    // Idle: Veldora, the human; a working body's race only during a turn.
+    assert_eq!(side.art, Art::Veldora);
     assert_eq!(side.bg, m.theme.p.bg);
-    let welcome = slot(&wants, Slot::Welcome).expect("the welcome's portrait");
-    assert_eq!((welcome.area.width, welcome.area.height), (32, 15));
-    assert_eq!(welcome.bg, mnemorph_tui::welcome::face(&m.theme));
-    // Under each, plain cells on the picture's own background: no half block for it to hide.
-    for w in [side, welcome] {
+    // The welcome draws its portrait in half blocks: real pixels are the sidebar's alone.
+    assert!(slot(&wants, Slot::Welcome).is_none());
+    // Under the picture, plain cells on its own background: no half block for it to hide.
+    for w in [side] {
         for y in w.area.top()..w.area.bottom() {
             for x in w.area.left()..w.area.right() {
                 let c = &buf[(x, y)];
@@ -98,7 +98,7 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     placer
         .sync(&m.pictures.wanted(), (120, 50), &buf, &mut out)
         .unwrap();
-    assert_eq!(placer.sends, 2, "the sidebar and the welcome");
+    assert_eq!(placer.sends, 1, "the sidebar alone");
 
     m.outstanding = 1;
     update(&mut m, Msg::Gate(card()));
@@ -108,7 +108,6 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     placer.before(m.gate.is_some(), &mut before).unwrap();
     let before = String::from_utf8(before).unwrap();
     assert!(before.contains(&pixels::kitty_delete(Slot::Sidebar.id())));
-    assert!(before.contains(&pixels::kitty_delete(Slot::Welcome.id())));
     let buf = draw(&mut m, &mut t);
     assert_eq!(
         m.pictures.wanted(),
@@ -126,15 +125,12 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     assert!(m.gate.is_none());
     let buf = draw(&mut m, &mut t);
     assert!(slot(&m.pictures.wanted(), Slot::Sidebar).is_some());
-    // The welcome moved while the turn ran (the activity strip): it is placed once settled.
+    // The sidebar alone comes back: the welcome draws half blocks.
     let now = std::time::Instant::now();
     placer
         .sync_at(&m.pictures.wanted(), (120, 50), &buf, &mut Vec::new(), now)
         .unwrap();
-    assert_eq!(
-        placer.sends, 3,
-        "the sidebar at once, the moved welcome held back"
-    );
+    assert_eq!(placer.sends, 2, "the sidebar, back at once");
     let later = now + mnemorph_tui::pictures::SETTLE;
     placer
         .sync_at(
@@ -145,10 +141,10 @@ fn no_picture_is_placed_while_an_approval_is_open() {
             later,
         )
         .unwrap();
-    assert_eq!(placer.sends, 4);
+    assert_eq!(placer.sends, 2, "nothing more once settled");
     assert_eq!(
         placer.builds, 2,
-        "each built once, sent again from the cache"
+        "Veldora and the working body, each built once"
     );
 }
 
