@@ -401,7 +401,7 @@ fails when the two differ.
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
-| derived indexes | `.mnemorph/index/` | no — rebuildable |
+| derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
 
 Every index is derived and can be deleted, and is rebuilt from what it derives from; a stale index

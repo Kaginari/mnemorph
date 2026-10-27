@@ -5767,3 +5767,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   tree and terminal UI, 04's terminal client and sequence diagram): the TypeScript CLI's
   retirement rewrites them.
 - **Learned:** a choices table ages fastest — it names libraries before the code picks them.
+
+---
+
+### [2026-10-27T22:03:02+01:00] rimuru — #249 Fable review fixes
+- 02: the M11 envelope clause no longer names a `mnemorph status` command.
+- 05: no `.mnemorph/index/` exists; recall keeps its BM25 index in memory.

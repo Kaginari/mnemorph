@@ -789,7 +789,7 @@ Rules that hold for every ascension:
   advance by the human, scoped, expiring (at most `oni.envelope_days` after its signing — 30
   unless the human's own file says, from 1 to 365), capped in uses if the human says so,
   revocable, and — once the gate honours envelopes (M11) —
-  listed in `mnemorph status`, its time and count checked at the moment of use, not only when the
+  listed to the human, its time and count checked at the moment of use, not only when the
   act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
 - **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
   that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):
