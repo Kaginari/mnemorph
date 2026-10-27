@@ -150,6 +150,10 @@ fn push(cx: &mut Context) -> Outcome {
     call(&registry(), "bash", &args, cx)
 }
 
+fn fp(act: &str, world: &Path) -> Fingerprint {
+    Fingerprint::of(act, world).expect("the plan reads")
+}
+
 fn plan(ask: &Ask) -> &Fingerprint {
     ask.fingerprint
         .as_ref()
@@ -318,6 +322,153 @@ fn a_rerouted_push_is_asked_again() {
     }
 }
 
+/// A change that steers what the push runs or where it goes, made while the card waits.
+fn re_asked(name: &str, meanwhile: impl FnOnce(&Path) + Send + 'static, part: &str) {
+    let w = World::new(name);
+    let world = w.world();
+    let gate = Late::new(vec![
+        (Some(Box::new(move || meanwhile(&world))), Answer::Approve),
+        (None, Answer::Deny("no".into())),
+    ]);
+    let o = push(&mut w.cx(gate.clone()));
+    assert!(o.is_error, "{name}: {o:?}");
+    assert!(
+        !w.pushed_to("origin.git") && !w.pushed_to("elsewhere.git"),
+        "{name}"
+    );
+    let asked = gate.asked();
+    assert_eq!(asked.len(), 2, "{name}");
+    assert!(asked[1].why[0].contains(part), "{name}: {:?}", asked[1].why);
+}
+
+/// Git's executables are part of the plan: a hook, an ssh command or an alias planted after the
+/// approval would run with it.
+#[test]
+fn git_planted_with_code_after_approval_is_asked_again() {
+    re_asked(
+        "hook",
+        |world| {
+            let hook = world.join(".git/hooks/pre-push");
+            fs::write(&hook, "#!/bin/sh\necho planted\n").unwrap();
+            fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        },
+        "git's configuration, hooks or info changed",
+    );
+    re_asked(
+        "ssh",
+        |world| {
+            git(
+                world,
+                &["config", "core.sshCommand", "sh -c 'echo planted'"],
+            );
+        },
+        "git's configuration, hooks or info changed",
+    );
+    re_asked(
+        "alias",
+        |world| {
+            git(world, &["config", "alias.push", "!echo planted"]);
+        },
+        "git's configuration, hooks or info changed",
+    );
+    re_asked(
+        "exclude",
+        |world| fs::write(world.join(".git/info/exclude"), "src/\n").unwrap(),
+        "git's configuration, hooks or info changed",
+    );
+}
+
+/// The publish files are bound by name, ignored or not.
+#[test]
+fn an_ignored_npmrc_changed_after_approval_is_asked_again() {
+    let w = World::new("npmrc");
+    let world = w.world();
+    fs::write(world.join(".gitignore"), ".npmrc\n.env*\n").unwrap();
+    fs::write(
+        world.join(".npmrc"),
+        "registry=https://registry.npmjs.org/\n",
+    )
+    .unwrap();
+    fs::write(world.join("src/.env.local"), "A=1\n").unwrap();
+    let before = fp("npm publish", &world);
+    fs::write(world.join(".npmrc"), "registry=https://evil.example/\n").unwrap();
+    let npmrc = fp("npm publish", &world);
+    assert_ne!(
+        before.diff, npmrc.diff,
+        "an ignored .npmrc is part of the plan"
+    );
+    fs::write(world.join("src/.env.local"), "A=2\n").unwrap();
+    assert_ne!(
+        npmrc.diff,
+        fp("npm publish", &world).diff,
+        "an ignored .env.* too"
+    );
+    // And through the gate.
+    let gate = Late::new(vec![
+        (
+            Some(Box::new(move || {
+                fs::write(world.join(".npmrc"), "registry=https://other.example/\n").unwrap();
+            })),
+            Answer::Approve,
+        ),
+        (None, Answer::Deny("no".into())),
+    ]);
+    let o = push(&mut w.cx(gate.clone()));
+    assert!(o.is_error && !w.pushed_to("origin.git"), "{o:?}");
+    assert_eq!(gate.asked().len(), 2);
+}
+
+/// A plan that cannot be read is no plan: the gate is not asked and nothing runs.
+#[test]
+fn a_corrupt_index_refuses() {
+    let w = World::new("corrupt");
+    fs::write(w.world().join(".git/index"), "garbage").unwrap();
+    let gate = Late::new(vec![(None, Answer::Approve)]);
+    let o = push(&mut w.cx(gate.clone()));
+    assert!(
+        o.is_error && o.content.contains("could not be read") && o.content.contains("ls-files"),
+        "{o:?}"
+    );
+    assert!(gate.asked().is_empty(), "the gate was not asked");
+    assert!(!w.pushed_to("origin.git"));
+}
+
+/// A submodule's gitlink is in the index, its working tree is not: the plan follows it.
+#[test]
+fn a_dirty_submodule_after_approval_is_asked_again() {
+    let w = World::new("submodule");
+    let world = w.world();
+    let sub = world.join("vendor");
+    fs::create_dir_all(&sub).unwrap();
+    git(&sub, &["init", "-q"]);
+    fs::write(sub.join("lib.txt"), "one\n").unwrap();
+    git(&sub, &["add", "-A"]);
+    git(&sub, &["commit", "-q", "-m", "lib"]);
+    git(&world, &["add", "vendor"]);
+    git(&world, &["commit", "-q", "-m", "vendor"]);
+    let before = fp("git push origin feature", &world);
+    fs::write(sub.join("lib.txt"), "dirty\n").unwrap();
+    assert_ne!(before.diff, fp("git push origin feature", &world).diff);
+    fs::write(sub.join("lib.txt"), "one\n").unwrap();
+    let file = sub.join("lib.txt");
+    let gate = Late::new(vec![
+        (
+            Some(Box::new(move || fs::write(file, "dirty\n").unwrap())),
+            Answer::Approve,
+        ),
+        (None, Answer::Deny("no".into())),
+    ]);
+    let o = push(&mut w.cx(gate.clone()));
+    assert!(o.is_error && !w.pushed_to("origin.git"), "{o:?}");
+    let asked = gate.asked();
+    assert_eq!(asked.len(), 2);
+    assert!(
+        asked[1].why[0].contains("the working tree changed"),
+        "{:?}",
+        asked[1].why
+    );
+}
+
 #[test]
 fn an_unchanged_world_runs_once() {
     let w = World::new("same");
@@ -359,31 +510,31 @@ fn the_fingerprint_sees_staged_unstaged_and_untracked_changes() {
     let w = World::new("parts");
     let world = w.world();
     let act = "git push origin feature";
-    let base = Fingerprint::of(act, &world);
-    assert_eq!(base, Fingerprint::of(act, &world), "deterministic");
+    let base = fp(act, &world);
+    assert_eq!(base, fp(act, &world), "deterministic");
     assert!(base.head.is_some());
 
     // Untracked, not ignored.
     fs::write(world.join("new.txt"), "x").unwrap();
-    let untracked = Fingerprint::of(act, &world);
+    let untracked = fp(act, &world);
     assert_ne!(base.diff, untracked.diff);
     // Ignored files are build output, not the plan.
     fs::write(world.join(".gitignore"), "out/\n").unwrap();
-    let ignoring = Fingerprint::of(act, &world);
+    let ignoring = fp(act, &world);
     fs::create_dir_all(world.join("out")).unwrap();
     fs::write(world.join("out/build.bin"), "x").unwrap();
-    assert_eq!(ignoring, Fingerprint::of(act, &world));
+    assert_eq!(ignoring, fp(act, &world));
     // Staging the same bytes changes the index, so the plan.
     git(&world, &["add", "src/a.txt"]);
-    let staged = Fingerprint::of(act, &world);
+    let staged = fp(act, &world);
     assert_ne!(ignoring.diff, staged.diff);
     // The executable bit is part of a file.
     fs::set_permissions(world.join("new.txt"), fs::Permissions::from_mode(0o755)).unwrap();
-    assert_ne!(staged.diff, Fingerprint::of(act, &world).diff);
+    assert_ne!(staged.diff, fp(act, &world).diff);
     // A different act is a different plan.
     assert_ne!(
-        Fingerprint::of(act, &world).id(),
-        Fingerprint::of("git push origin main", &world).id()
+        fp(act, &world).id(),
+        fp("git push origin main", &world).id()
     );
 }
 
@@ -393,10 +544,10 @@ fn a_world_with_no_repository_is_bound_to_its_files() {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("a.txt"), "A").unwrap();
-    let before = Fingerprint::of("deploy", &root);
+    let before = fp("deploy", &root);
     assert_eq!(before.head, None);
     fs::write(root.join("a.txt"), "B").unwrap();
-    let after = Fingerprint::of("deploy", &root);
+    let after = fp("deploy", &root);
     assert_eq!(after.changes(&after), Vec::<String>::new());
     assert_ne!(before.diff, after.diff);
     let _ = fs::remove_dir_all(&root);

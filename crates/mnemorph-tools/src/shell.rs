@@ -198,16 +198,19 @@ fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -
     let bound = plan.as_ref().map(|plan| (plan, made.as_slice()));
     let ran = match run(command, cx, timeout, network, &opened, bound) {
         Ok(r) => r,
-        Err(Spawn::Changed(now)) => {
+        Err(stale @ (Spawn::Changed(_) | Spawn::Unreadable(_))) => {
             // Nothing ran: the files made for it go, and nothing is restored over the world.
             for path in &made {
                 if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
                     let _ = fs::remove_file(path);
                 }
             }
-            return match plan {
-                Some(approved) => Attempt::Changed { approved, now },
-                None => Attempt::Failed(Outcome::error("the command did not run")),
+            return match (stale, plan) {
+                (Spawn::Changed(now), Some(approved)) => Attempt::Changed { approved, now },
+                (Spawn::Unreadable(e), _) => Attempt::Failed(Outcome::error(format!(
+                    "the world could not be read again before the spawn, so the approved command did not run: {e}"
+                ))),
+                _ => Attempt::Failed(Outcome::error("the command did not run")),
             };
         }
         Err(Spawn::Io(e)) => {
@@ -309,7 +312,12 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
         );
     }
     // The plan is taken before the human is asked: what they approve is the world they were shown.
-    let plan = Fingerprint::of(command, cx.world());
+    // A plan that cannot be read is no plan: nothing is put to the human, and nothing runs.
+    let plan = Fingerprint::of(command, cx.world()).map_err(|e| {
+        Outcome::error(format!(
+            "the plan this {class} command would be approved against could not be read, so the gate was not asked and the command did not run: {e}"
+        ))
+    })?;
     let ask = Ask {
         body: cx.body().to_owned(),
         race: cx.race(),
@@ -483,6 +491,8 @@ impl Ran {
 enum Spawn {
     /// The world no longer matched the approved plan: this is what it is now.
     Changed(Fingerprint),
+    /// The world could not be read again: no plan to compare, so nothing runs.
+    Unreadable(String),
     /// The process could not be started.
     Io(std::io::Error),
 }
@@ -540,7 +550,7 @@ fn run(
     // The recheck is the last thing before the spawn: everything else is already prepared, so
     // the window in which the world can change unseen is the recheck's own reading of it.
     if let Some((approved, made)) = approved {
-        let now = Fingerprint::of_except(command, cx.world(), made);
+        let now = Fingerprint::of_except(command, cx.world(), made).map_err(Spawn::Unreadable)?;
         if now != *approved {
             return Err(Spawn::Changed(now));
         }

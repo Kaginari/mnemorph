@@ -398,6 +398,7 @@ fn hostile_card() -> (Card, Arc<Pending>) {
             act: "a".repeat(64),
             head: Some("\u{202e}1a2b3c4d5e6f".into()),
             diff: "d".repeat(64),
+            git: "g".repeat(64),
             target: "t".repeat(64),
         }),
     };

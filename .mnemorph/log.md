@@ -5285,3 +5285,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   check the fingerprint alone or the unchanged world). TUI: the plan on the hostile card, escaped.
 - **Learned:** a world inside a larger repository sees the empty files the harness makes for an
   approved outside path; the recheck reads them as the absence the human was shown.
+  - Measured: the recheck reads this repository (550 tracked files, 21 MB) in about 0.1 s.
+
+---
+
+### [2026-10-27T17:09:09+01:00] rimuru — #92, reviewed: the plan binds git's executables and the publish files, and fails closed
+- **Done:** a fifth part, **git**: the whole `config --list` (includes expanded) and the bytes of
+  the git dir's `config`, `config.worktree`, `hooks/`, `info/` (common dir too) and a `.git`
+  file. Any git command failing is no plan: the gate is not asked, or the approved command does
+  not run (a quiet "no commit"/"detached" excepted). The diff binds `.npmrc`, `.yarnrc(.yml)`,
+  `.env`, `.env.*`, `.cargo/config(.toml)` by name, ignored or not, and follows submodules (their
+  HEAD and tree, depth 8). A file is read no further than its size at the open. Doc 05 names
+  what stays unbound (ignored code an act runs, other shipped ignored output, the tripwire's
+  concurrency hole) and the follow-ups: bind the shipped list, stat-bind files over a size cap,
+  a cross-court lock from recheck to spawn (world, then attic).
+- **Tests:** tools `fingerprint.rs` — a `pre-push` hook, `core.sshCommand`, `alias.push` and
+  `info/exclude` planted after approval re-ask; an ignored `.npmrc`/`.env.local` change re-asks; a
+  corrupt index refuses before the gate; a dirty submodule re-asks. Recheck disabled: 9 of 13 fail
+  (the corrupt index refuses before any recheck; the other three need no recheck).
+- **Learned:** the tripwire's `Snapshot` reads with `fs::read` (following, blocking) and covers
+  `.mnemorph/`, which churns with every court: the plan walks the same git pieces with its own non-blocking reader.
