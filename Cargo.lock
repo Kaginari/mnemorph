@@ -1576,8 +1576,10 @@ dependencies = [
  "mnemorph-memory",
  "mnemorph-races",
  "mnemorph-wire",
+ "proptest",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

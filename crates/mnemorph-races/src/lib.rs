@@ -16,7 +16,7 @@ pub use race::{ModelTier, Race};
 pub use shelf::{
     Gate, OutwardKind, Post, PostRefusal, ShelfRefusal, Soil, ToolClass, check_class, check_post,
 };
-pub use speciality::{AttackClass, Speciality, route, route_with};
+pub use speciality::{AttackClass, Speciality, glob, route, route_with};
 pub use value::{
     Band, DECLINE_COOLDOWN_RUNS, FallReading, Meter, RECOVER_REPORTS, Recent, Signals, falls,
     meter, recovers, rises, score,

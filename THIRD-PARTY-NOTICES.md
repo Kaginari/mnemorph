@@ -10,7 +10,8 @@ covers, as its licence asks.
 - **Licence:** MIT, © 2025–2026 Cloudflare, Inc.
 - **What Mnemorph adapts:** the Dark Elf's audit discipline — its playbooks of attack classes,
   the finding contract (a line-free root-cause fingerprint, the "needs validation" verdict,
-  severity capped at demonstrated impact), the coverage ledger and independent verification
+  severity capped at demonstrated impact), the coverage ledger and its strict state table
+  (after `validate-coverage-ledger.cjs`), and independent verification
   ([races](docs/02-races.md#-dark-elf--the-adversary)). The playbooks are rewritten in
   Mnemorph's own words and format, not copied; a playbook taken from a later upstream commit
   moves the pin above.

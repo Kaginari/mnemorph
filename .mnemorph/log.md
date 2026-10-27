@@ -5843,3 +5843,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   end of input or an error denies, `GATE_WAIT` as deadline; Ctrl+C fires the interrupt and denies
   a waiting card (exit 1); the answer is escaped only on a terminal stdout.
 - **Learned:** a gate that was never live hides its gaps — the first caller inherits them.
+
+---
+
+### [2026-10-27T23:06:28+01:00] rimuru — Dark Elf PR 5: the coverage ledger, its strict state table, the clearing rule
+- **Done:** `mnemorph_world::coverage`: a `CoverageLedger` per speciality per landing, one entry
+  per (touched surface × owned class): `Checked { method, evidence }` (files with symbols and
+  sha256, commands with the sha256 of their output), `NotApplicable { reason }`, `Skipped { reason,
+  risk }`. Twelve named rules (`oversize`, `unreadable-text`, `unrouted`, `missing-pair`,
+  `duplicate-pair`, `extra-pair`, `boilerplate-reason`, `unstated-risk`, `hollow-check`,
+  `outside-evidence`, `unhashed-evidence`, `stale-evidence`), adapted from Cloudflare's
+  `validate-coverage-ledger.cjs`. `mnemorph_world::challenge`: a landing routed with its touched
+  surfaces, the records under `$XDG_STATE_HOME/mnemorph/challenges/`, pending until every routed
+  speciality (the generalist's empty ledger included) has filed a valid one; the fold validates
+  each filing again. Filed by the `coverage` tool on a Dark Elf's shelf, not a wire block: a
+  refusal reaches the body while it can fix it, and no cap or prose touches it.
+  `mnemorph_races::glob` is public. Opening a challenge at the gate is PR 7's. Docs 02, 05.
+- **Tests:** one fixture per rule that breaks it alone, and each rule switched off lets its
+  fixture through; the generalist's empty ledger; two hunters routed, one filed, still pending;
+  a forged filing line ignored on read; hostile ledgers and tool arguments (proptest).

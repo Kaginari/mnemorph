@@ -665,9 +665,9 @@ are the playbooks' headings, each owned once:
 and commissions only the specialities whose surfaces those paths touch, in the table's order, and
 the generalist after them when there are two or more or a path lies on its declared surfaces: a landing on two surfaces opens two bodies
 and the generalist, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
-The landing's `PASS (challenge pending)` clears only when every routed speciality has filed a
-valid coverage ledger for it; a speciality that files none, or one that does not validate, leaves
-the challenge pending, and a verified finding from any of them goes the way of every finding.
+The landing's `PASS (challenge pending)` clears only when every routed speciality, the generalist
+included, has filed a valid coverage ledger for it (below); a speciality that
+files none, or one that does not validate, leaves the challenge pending, and a verified finding from any of them goes the way of every finding.
 Each attack class has exactly one owning speciality, so two specialities never hunt the same
 class on the same paths.
 
@@ -694,7 +694,7 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
   7. **Law audit** (`dark-elf-law`) — what isekai's Dark Elf did: gate verdicts and `log.md`
      integrity, and the budgets, retries and detached work an interrupt must stop.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
-  `.mnemorph/dark-elf/` (self-gated), `seal` proposals.
+  `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, `seal` proposals.
 - **The witness rule.** A finding is `@F` only with an id and a **witness**: a proof-of-concept
   test in the proving ground that fails *for the stated reason* (it must exercise the code under
   the cited `file:line`, which the harness checks by coverage), or a scanner output file. Without
@@ -716,11 +716,41 @@ its docs; it never removes a class. The playbooks adapt Cloudflare's security-au
     seal.
   - **Not findings**: a checklist deviation with no reachable failure, a missing second line of
     defence, harm a user can only do to themselves.
-- **The coverage ledger.** Each audit writes
-  `.mnemorph/dark-elf/<speciality>/coverage/<audit>.json`: one unit per routed surface × attack
-  class, each **checked** (with the paths read and the checks run), **n/a** (with the fact that
-  rules it out) or **skipped** (with the reason). "No findings" means something only beside it: a
-  `@S PASS` without a valid ledger reads `NOT_VERIFIED`.
+- **The coverage ledger.** "No findings" means something only beside it. Each routed speciality
+  files one per landing through the `coverage` tool, and the harness keeps it with the landing's
+  challenge in its own records, outside the world and out of every command's reach
+  (`$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl`, append-only), where the board and
+  the ledger folds read it. For every surface the landing touched that the speciality is routed —
+  compiled or declared — and every attack class it owns, the ledger holds one entry:
+  - **checked** — the method, and the evidence: the files read, each with the symbols looked at
+    and its `sha256sum`, and the commands run, each with the `sha256sum` of its output;
+  - **not applicable** — the fact of the code that rules the class out;
+  - **skipped** — the reason, and for a high-risk class the risk left open.
+
+  The generalist owns no class: its ledger is empty, and filing it says its chain review ran. The
+  state table is strict, and a ledger that breaks it is refused with every rule it broke, named,
+  for the body to fix and file again:
+
+  | Rule | Refuses |
+  |---|---|
+  | `oversize` | more than 512 entries, a text over 1 KiB, a list over 64 items |
+  | `unreadable-text` | a control or invisible character in any text |
+  | `unrouted` | a speciality the landing was not routed, or a ledger naming another landing |
+  | `missing-pair` | a required (surface, class) pair with no entry |
+  | `duplicate-pair` | a pair with more than one entry |
+  | `extra-pair` | a pair the landing does not require of this speciality |
+  | `boilerplate-reason` | a reason under 20 characters, or a stock phrase (`n/a`, `none`, `not relevant`, `out of scope`, …) |
+  | `unstated-risk` | a skipped high-risk class with no risk stated — sandbox escape, path traversal, command injection, approval binding, memory safety, hook laundering, wire forgery, known vulnerability, workflow injection, secret exposure, credential grant, auth bypass, unsafe deserialisation, ledger integrity |
+  | `hollow-check` | a check with no method worth the name, or resting on no file and no command |
+  | `outside-evidence` | a check citing a file off the landing's surfaces for this speciality, read as ownership reads paths |
+  | `unhashed-evidence` | a file or command hash that is not 64 hex digits |
+  | `stale-evidence` | a file hash that is not the file as it stands in the world |
+
+  A ledger is kept only once it holds, a speciality files once per landing, and every filing is
+  validated again when the records are read. A tool call rather than a line in the report: the
+  ledger is structured, a refusal reaches the body while it can still fix it, and no report cap
+  can cut it nor prose forge it. A Dark Elf's `@S PASS` without a valid ledger reads
+  `NOT_VERIFIED`.
 - **Independent verification.** Before a finding counts or a seal is proposed, the harness
   commissions a **fresh verifier** of the same speciality, whose mandate is to refute it. It gets
   the record and the witness only, never the hunter's transcript, and its run is not the hunter's.

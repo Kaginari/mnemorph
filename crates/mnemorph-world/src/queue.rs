@@ -25,6 +25,13 @@ pub const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
 /// place (`mnemorph_tools::queue_witness`).
 #[must_use]
 pub fn witness_of(world: &Path) -> Option<PathBuf> {
+    state_file(world, "queue")
+}
+
+/// A record the harness keeps for `world` outside it, under the human's state directory:
+/// `$XDG_STATE_HOME/mnemorph/<kind>/<world>-<fnv64a>.jsonl`, else under `~/.local/state`; `None`
+/// when there is no home.
+pub(crate) fn state_file(world: &Path, kind: &str) -> Option<PathBuf> {
     let state = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
@@ -36,7 +43,8 @@ pub fn witness_of(world: &Path) -> Option<PathBuf> {
         .unwrap_or_default();
     Some(
         state
-            .join("mnemorph/queue")
+            .join("mnemorph")
+            .join(kind)
             .join(format!("{name}-{h:016x}.jsonl")),
     )
 }

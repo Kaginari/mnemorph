@@ -2184,6 +2184,22 @@ impl Run {
         {
             return crate::verify_tool::run(self.cx.world(), &self.body.name, input);
         }
+        // A challenge's records are the harness's, outside the world: the loop files the ledger
+        // in this body's name.
+        if name == crate::coverage_tool::COVERAGE
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::coverage_tool::COVERAGE)
+        {
+            let world = self.cx.world();
+            return match mnemorph_world::challenge::Challenges::of(world) {
+                Some(c) => crate::coverage_tool::run(&c, world, &self.body.name, input),
+                None => mnemorph_tools::Outcome::error(
+                    "coverage: no state directory to keep the challenge records in",
+                ),
+            };
+        }
         // The shared queue is the harness's: the loop moves it in this body's name.
         if name == crate::queue_tool::QUEUE
             && self

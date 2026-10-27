@@ -433,9 +433,11 @@ pub fn route_with<P: AsRef<str>>(
     routed
 }
 
-/// Whether the glob `pattern` matches the whole of `path`, segment by segment: `**` matches any
-/// number of segments, `*` any run of characters inside one.
-fn glob(pattern: &str, path: &str) -> bool {
+/// Whether the surface glob `pattern` matches the whole of `path`, segment by segment: `**`
+/// matches any number of segments, `*` any run of characters inside one. It is how a written path
+/// is placed on a compiled surface, and how a coverage ledger's evidence is held to one.
+#[must_use]
+pub fn glob(pattern: &str, path: &str) -> bool {
     let pattern: Vec<&str> = pattern.split('/').collect();
     let path: Vec<&str> = path.split('/').collect();
     segments(&pattern, &path)
