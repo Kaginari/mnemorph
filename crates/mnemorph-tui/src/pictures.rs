@@ -41,10 +41,9 @@ use crate::theme::Rgb;
 /// Where a picture goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Slot {
-    /// The sidebar's head: the working body.
+    /// The sidebar's head: the working body. The only slot: the welcome card draws its
+    /// wordmark in text, and scrolls with nothing to withdraw.
     Sidebar,
-    /// The welcome card: Rimuru.
-    Welcome,
 }
 
 impl Slot {
@@ -53,7 +52,6 @@ impl Slot {
     pub fn id(self) -> u32 {
         match self {
             Self::Sidebar => 0x4d_4e01,
-            Self::Welcome => 0x4d_4e02,
         }
     }
 }
@@ -146,7 +144,6 @@ impl Slot {
     fn bit(self) -> u8 {
         match self {
             Self::Sidebar => 1,
-            Self::Welcome => 2,
         }
     }
 }
@@ -160,10 +157,9 @@ impl Slot {
 /// `out` cannot be written.
 pub fn release(out: &mut impl Write) -> std::io::Result<()> {
     let shown = KITTY_SHOWN.swap(0, Ordering::SeqCst);
-    for slot in [Slot::Sidebar, Slot::Welcome] {
-        if shown & slot.bit() != 0 {
-            out.write_all(pixels::kitty_delete(slot.id()).as_bytes())?;
-        }
+    let slot = Slot::Sidebar;
+    if shown & slot.bit() != 0 {
+        out.write_all(pixels::kitty_delete(slot.id()).as_bytes())?;
     }
     out.flush()
 }
@@ -322,9 +318,9 @@ impl Placer {
     }
 
     /// After a frame drawn as `buf` at terminal `size`, at `now`: erase what is no longer wanted,
-    /// send what is newly wanted; nothing when nothing changed. A picture whose box moved — the
-    /// welcome scrolling — is not sent until its box has stayed put for [`SETTLE`]: a moving box
-    /// shows its plain cells, and is never sent once a frame.
+    /// send what is newly wanted; nothing when nothing changed. A picture whose box moved is not
+    /// sent until its box has stayed put for [`SETTLE`]: a moving box shows its plain cells, and
+    /// is never sent once a frame.
     ///
     /// # Errors
     ///
@@ -544,7 +540,7 @@ mod tests {
         let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
         let mut out = Vec::new();
         pl.sync(
-            &[want(Slot::Welcome, Race::Elf, 3, 5)],
+            &[want(Slot::Sidebar, Race::Elf, 3, 5)],
             (40, 20),
             &buf,
             &mut out,
@@ -590,17 +586,17 @@ mod tests {
         let mut frame = Buffer::empty(Rect::new(0, 0, 40, 20));
         frame.set_string(30, 1, "abcd", ratatui::style::Style::new());
         sx.sync(
-            &[want(Slot::Welcome, Race::Slime, 30, 1)],
+            &[want(Slot::Sidebar, Race::Slime, 30, 1)],
             (40, 20),
             &frame,
             &mut Vec::new(),
         )
         .unwrap();
-        // It moves (the welcome scrolling): the old box erased, nothing sent while it moves.
+        // It moves: the old box erased, nothing sent while it moves.
         let t0 = Instant::now();
         let mut out = Vec::new();
         sx.sync_at(
-            &[want(Slot::Welcome, Race::Slime, 30, 3)],
+            &[want(Slot::Sidebar, Race::Slime, 30, 3)],
             (40, 20),
             &frame,
             &mut out,
@@ -620,7 +616,7 @@ mod tests {
             let at = t0 + Duration::from_millis(33 * (i as u64 + 1));
             let mut out = Vec::new();
             sx.sync_at(
-                &[want(Slot::Welcome, Race::Slime, 30, y)],
+                &[want(Slot::Sidebar, Race::Slime, 30, y)],
                 (40, 20),
                 &frame,
                 &mut out,
@@ -631,7 +627,7 @@ mod tests {
         }
         assert_eq!(sx.sends, 1);
         // Settled for 150 ms: placed once.
-        let still = want(Slot::Welcome, Race::Slime, 30, 6);
+        let still = want(Slot::Sidebar, Race::Slime, 30, 6);
         let early = t0 + Duration::from_millis(99 + 140);
         let mut out = Vec::new();
         sx.sync_at(&[still], (40, 20), &frame, &mut out, early)
@@ -720,23 +716,18 @@ mod tests {
     fn a_panic_deletes_the_kitty_pictures_once() {
         let mut pl = placer(Protocol::Kitty);
         let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
-        let wants = [
-            want(Slot::Sidebar, Race::Rimuru, 30, 1),
-            want(Slot::Welcome, Race::Rimuru, 2, 4),
-        ];
+        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
         pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
         // The panic hook, then the screen's drop: deleted once, then nothing.
         let mut first = Vec::new();
         release(&mut first).unwrap();
         let first = String::from_utf8(first).unwrap();
         assert!(first.contains(&pixels::kitty_delete(Slot::Sidebar.id())));
-        assert!(first.contains(&pixels::kitty_delete(Slot::Welcome.id())));
         let mut second = Vec::new();
         release(&mut second).unwrap();
         assert_eq!(second, b"");
         // The normal way out leaves nothing for the hook either.
-        pl.sync(&wants[..1], (60, 31), &buf, &mut Vec::new())
-            .unwrap();
+        pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
         pl.clear(&mut Vec::new()).unwrap();
         let mut after = Vec::new();
         release(&mut after).unwrap();
@@ -770,7 +761,7 @@ mod tests {
         let buf = Buffer::empty(Rect::new(0, 0, 20, 10));
         let mut out = Vec::new();
         pl.sync(
-            &[want(Slot::Welcome, Race::Rimuru, 18, 9)],
+            &[want(Slot::Sidebar, Race::Rimuru, 18, 9)],
             (20, 10),
             &buf,
             &mut out,

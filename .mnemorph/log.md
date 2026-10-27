@@ -5201,3 +5201,37 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   beside `config.toml`; the escape test plants `.cache/uv/x → .ssh` and reads the key through it.
 - **Test:** the policy test names `go` and `go/src` as never granted whole; the escape test's
   read through the link is refused (Landlock resolves at open time).
+
+---
+
+### [2026-10-27T16:00:00+01:00] rimuru — the welcome opens on a MNEMORPH wordmark and a card that says what Mnemorph does
+- **The human, launching the TUI:** Rimuru's half-block portrait on the start screen looked
+  blurry (the sidebar's Veldora picture is good); "a fixed Mnemorph logo on the main load page"
+  and "a better card describing Mnemorph".
+- **Done:**
+  - welcome.rs: MNEMORPH in five rows of block letters from a small static font (`█ ▀ ▄` and
+    spaces, one foreground a cell), coloured across its columns Rimuru → elf → orc → slime;
+    `◈ MNEMORPH` on one line where the card is narrower than the wordmark; the tagline, four lines
+    on what Mnemorph does, the chips, and MEMORY and VERIFY under WORLD / MODEL / SESSION;
+  - sidebar `Survey` carries the session card's verify line, or the manifest's suggested test
+    command when it has none (`world::verify::suggest`), read off the UI thread with the memory;
+  - the welcome's portrait gone: view `welcome_art`, `welcome::still`, `pictures::Slot::Welcome`
+    and the transcript window's `head` offset;
+  - perf: the cold first frame keeps a cold-start margin (250 ms, after a 104 ms flake on CI
+    macOS); every warm frame still holds 33 ms;
+  - docs 05.
+- **Tests:** welcome unit tests (crisp glyphs only, the gradient across the width, the narrow
+  fallback, the four lines at 80 / 120 / 200, VERIFY's suggestion, no picture wanted, nothing
+  overflows); sidebar `the_survey_reads_the_verify_line_or_a_suggestion`.
+- **Learned:** a portrait in half blocks cannot be made sharp; text glyphs in one colour a cell
+  can. The header's mark already reads `◈ MNEMORPH`: a test of the card's fallback reads the card,
+  not the screen.
+
+---
+
+### [2026-10-27T17:30:00+01:00] rimuru — #232, reviewed: the wordmark's real threshold; the resize frame's cold-start margin
+- **Done:** the docs and welcome.rs state the rule — the 62-cell wordmark shows on a card 68 wide
+  or more: a terminal of 72 columns folded, 108 with the sidebar open; perf's first frame after a
+  resize keeps the 250 ms cold-start margin, warm, streaming and paging frames still under 33 ms.
+- **Tests:** `the_wordmark_shows_from_72_columns_folded_and_108_open` (71/72, 107/108); the
+  fallback test pins 67/68 on the card.

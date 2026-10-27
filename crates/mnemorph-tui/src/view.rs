@@ -254,7 +254,6 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
         lines: window,
         owners,
         top,
-        head: head_skip,
     } = m.transcript.window(&ctx, rows, m.viewport.offset(), &head);
     m.measured.set(top.unwrap_or(usize::MAX));
     // The transcript sits on the input: a short one is pushed down, as a chat reads.
@@ -266,9 +265,6 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     let first = top_row.max(area.y);
     for (row, line) in (first..area.bottom()).zip(stack.into_iter().skip(skip)) {
         buf.set_line(area.x, row, line, area.width);
-    }
-    if let Some(n) = head_skip {
-        welcome_art(area, buf, (n, skip, first, window.len()));
     }
     // Each row's entry, for a click: the transcript's rows only, as drawn.
     let mut hits = m.hits.borrow_mut();
@@ -294,28 +290,6 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
             .wants
             .borrow_mut()
             .retain(|w| w.area.intersection(over).is_empty());
-    }
-}
-
-/// The welcome's portrait, always in half blocks: real pixels belong to the sidebar alone, so the
-/// card can scroll freely without a picture withdrawn and placed again under it. `at` is the
-/// window's layout: how many head lines lie above it, the stack's skipped lines, the first row
-/// drawn and the window's visible lines.
-fn welcome_art(area: Rect, buf: &mut Buffer, at: (usize, usize, u16, usize)) {
-    let (above, skip, first, shown) = at;
-    let cols = crate::welcome::COLS;
-    let (line, col) = crate::welcome::ART_AT;
-    if usize::from(area.width) < usize::from(col + cols) + crate::kit::slab::FRAME {
-        return;
-    }
-    let x = area.x + col;
-    for (r, l) in crate::welcome::still().iter().enumerate() {
-        let Some(idx) = (line + r).checked_sub(above) else {
-            continue;
-        };
-        if idx >= skip && idx < shown {
-            buf.set_line(x, first + to_u16(idx - skip), l, cols);
-        }
     }
 }
 

@@ -166,7 +166,7 @@ background as `COLORFGBG` reports it, else dark.
 |---|---|
 | header | Mnemorph's mark (the name drawn across the water races' blues), the session's body and its model on the left; the session's id and its state on the right — `○ idle`, `● running bash 3s`, `◆ waiting for you` |
 | panes | labelled in small capitals on their edges: ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ, ꜱᴇꜱꜱɪᴏɴ (the sidebar), ᴀꜱᴋ (the input) |
-| welcome | the card the conversation opens on: Rimuru's portrait (still), the name and tagline, the races as chips, the world, the model and the session in small capitals, the first keys |
+| welcome | the card the conversation opens on, scrolling with the transcript: the MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
 | transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
 | sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
@@ -264,11 +264,19 @@ the cursor saved and restored. While an approval is open no picture is wanted, s
 sits under one; under Kitty they are placed below the text (`z=-1`), so text drawn over one
 always shows, and they are deleted before the frame that opens the card besides. A panic deletes
 Kitty's pictures too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
-the screen, so each picture is sent again; the sidebar's toggle, its fold below 100 columns and
-a scroll moves or removes theirs. A box that moved is erased and its picture held
-back until the box has stayed put for 150 ms, so a scroll never sends a picture once a frame. In pixels a portrait is still — Veldora at rest, the working body's
-race during a turn, swapped when it changes — and asks no ticks. Pictures are the sidebar's alone:
-the welcome card draws its portrait in half blocks, so it scrolls with nothing to withdraw.
+the screen, so each picture is sent again; the sidebar's toggle and its fold below 100 columns
+move or remove theirs. A box that moved is erased and its picture held
+back until the box has stayed put for 150 ms, so a moving box never sends a picture once a frame. In pixels a portrait is still — Veldora at rest, the working body's
+race during a turn, swapped when it changes — and asks no ticks. Pictures are the sidebar's alone.
+
+**The wordmark.** The welcome card opens on MNEMORPH in block letters, five rows tall, from a
+small font in `welcome.rs`: full and half blocks (`█ ▀ ▄`) and spaces only, each cell one
+foreground colour on the card's face, so it is as crisp as the terminal's font everywhere and
+scrolls with the transcript with nothing to withdraw. Its columns run the races' gradient —
+Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal — made readable on the light
+page as every race hue is. The wordmark is 62 cells and the card's frame takes 6, so it shows on a
+card 68 cells wide or more — a terminal of 72 columns or more with the sidebar folded, 108 or more
+with it open; on a narrower card one line, `◈ MNEMORPH`, in the same gradient, stands in.
 (A Kitty-only animation would upload each frame once under its own id and switch placements by
 id; `pictures::Art` is where it would be named.)
 
@@ -324,7 +332,9 @@ finished paragraph leaves for an entry of its own, joined to the same panel. Str
 together become one frame, and frames come at most 30 a second. An idle UI wakes for nothing.
 The wheel moves the scroll on the same spring as the keys, and the loop ticks only while it moves.
 A test draws a 2,000-message session with the sidebar open — every file it changed, forty
-bodies, the activity strip drawn and the portrait playing — and holds every frame under the 33 ms budget in a debug build.
+bodies, the activity strip drawn and the portrait playing — and holds every warm frame under the
+33 ms budget in a debug build; the cold first frame and the first after a resize, which fill the
+layout caches once, keep a cold-start margin (under 250 ms).
 
 The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
 ecosystem:

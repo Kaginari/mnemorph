@@ -1,5 +1,5 @@
 //! The portraits as real pixels, end to end through the model and the view: where a frame wants
-//! them, never under an approval, the welcome's too, nothing re-sent for an unchanged frame,
+//! them, never under an approval, nothing re-sent for an unchanged frame,
 //! and half blocks where the terminal draws no images.
 
 use mnemorph_races::Race;
@@ -71,8 +71,8 @@ fn the_sidebar_alone_wants_a_picture_over_plain_cells() {
     // Idle: Veldora, the human; a working body's race only during a turn.
     assert_eq!(side.art, Art::Veldora);
     assert_eq!(side.bg, m.theme.p.bg);
-    // The welcome draws its portrait in half blocks: real pixels are the sidebar's alone.
-    assert!(slot(&wants, Slot::Welcome).is_none());
+    // The sidebar's alone: the welcome draws its wordmark in text.
+    assert_eq!(wants.len(), 1);
     // Under the picture, plain cells on its own background: no half block for it to hide.
     for w in [side] {
         for y in w.area.top()..w.area.bottom() {
@@ -125,7 +125,7 @@ fn no_picture_is_placed_while_an_approval_is_open() {
     assert!(m.gate.is_none());
     let buf = draw(&mut m, &mut t);
     assert!(slot(&m.pictures.wanted(), Slot::Sidebar).is_some());
-    // The sidebar alone comes back: the welcome draws half blocks.
+    // The sidebar alone comes back: the welcome wants no picture.
     let now = std::time::Instant::now();
     placer
         .sync_at(&m.pictures.wanted(), (120, 50), &buf, &mut Vec::new(), now)
