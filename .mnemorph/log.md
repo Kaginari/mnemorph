@@ -5754,7 +5754,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ### [2026-10-27T21:48:18+01:00] rimuru — the book audited against the code: status, milestones, stale tools and commands
 - **Done:** README's status line read from the milestones (M0–M6 and M8 built, M7 with #244 and
-  #96 open, M9's typed pull-request act in progress, M10's specialities compiled) and a "Read |
+  #96 open, M9's typed pull-request act in progress, M10's specialities and wire fields in) and a "Read |
   For" row per page; the roadmap's diagram coloured built / under way / ahead, M5b drawn, D's, M7's,
   M9's and M10's open and built pieces named. Stale claims fixed: tantivy (recall is BM25 in
   `mnemorph-memory`), axum, CancellationToken, thiserror/anyhow, tracing and insta in the choices;

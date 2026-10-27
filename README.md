@@ -14,8 +14,8 @@ sandbox and human gate, configuration, the loop with its long runs and resume, t
 the terminal clients, memory and the toolbox. M7, the world, runs with two items open (the Jev
 decisions and the paired solo-versus-hierarchy measurement). M9, the Kijin, has its typed outward
 acts, fingerprints, receipts, the act runner and closure; the typed pull-request act its exit
-needs is in progress. M10's Dark Elf specialities and their routing are compiled; the board is
-M12. Start with [the book](docs/README.md); the plan is the
+needs is in progress. M10's Dark Elf specialities, their routing and the wire's finding fields
+are compiled; the board is M12. Start with [the book](docs/README.md); the plan is the
 [roadmap](docs/roadmap.md) and its [milestones](https://github.com/Kaginari/mnemorph/milestones).
 
 | Read | For |
