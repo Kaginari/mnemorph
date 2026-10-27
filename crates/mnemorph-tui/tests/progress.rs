@@ -191,6 +191,7 @@ fn card(act: &str) -> Card {
             act: act.into(),
             why: vec!["reaches beyond the world".into()],
             outside: vec![],
+            fingerprint: None,
         },
         Pending::new(),
     )

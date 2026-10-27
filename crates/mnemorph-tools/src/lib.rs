@@ -4,6 +4,7 @@ pub mod attic;
 mod beneath;
 pub mod classify;
 pub mod files;
+pub mod fingerprint;
 pub mod gate;
 pub mod patch;
 pub mod shell;
@@ -12,6 +13,7 @@ mod tripwire;
 
 pub use attic::{Attic, Snapshot};
 pub use classify::{Place, Rule, Verdict, classify};
+pub use fingerprint::Fingerprint;
 pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 /// The sandbox a context runs commands in, as the context takes it.
 pub use mnemorph_sandbox::Sandbox;

@@ -369,7 +369,9 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
-  replayed; it is gated again.
+  replayed; it is gated again. The approval is bound to the plan the human saw — the commit, the
+  working tree and the target ([the sandbox](05-architecture.md#sandbox)) — and rechecked
+  just before the act: a world that changed meanwhile runs nothing and is asked again.
 - **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**

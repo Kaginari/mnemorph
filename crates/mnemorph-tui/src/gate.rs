@@ -27,6 +27,9 @@ pub struct Card {
     pub why: Vec<String>,
     /// Paths outside the world it opens.
     pub outside: Vec<String>,
+    /// The plan an approval binds to, in short: the command runs only if the world still
+    /// matches it when it is spawned.
+    pub plan: Option<String>,
     /// Where the answer goes.
     pub pending: Arc<Pending>,
     /// When silence denies: the gate's own wait, from the moment it asked.
@@ -52,6 +55,7 @@ impl Card {
                 .iter()
                 .map(|p| shown(&p.display().to_string()))
                 .collect(),
+            plan: ask.fingerprint.as_ref().map(|f| shown(&f.short())),
             pending,
             deadline: Instant::now() + GATE_WAIT,
         }

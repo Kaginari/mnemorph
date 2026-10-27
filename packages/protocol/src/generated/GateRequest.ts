@@ -27,4 +27,10 @@ why: Array<string>,
 /**
  * Paths outside the world it opens.
  */
-outside: Array<string>, };
+outside: Array<string>, 
+/**
+ * The plan the approval binds to, in short (`plan 3f9a1c2e4b5d · head 1a2b3c4d · diff
+ * 5d6e7f8a · target 9a8b7c6d`): the command runs only if the world still matches it at the
+ * spawn. Absent for an ask that spawns nothing.
+ */
+plan?: string | null, };

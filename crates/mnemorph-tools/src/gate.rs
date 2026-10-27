@@ -30,6 +30,10 @@ pub struct Ask {
     pub why: Vec<String>,
     /// Paths outside the world the act writes or deletes: approving opens exactly these.
     pub outside: Vec<std::path::PathBuf>,
+    /// The plan an approval binds to: the world as it was when asked. A command whose world no
+    /// longer matches it when it is about to run does not run, and is asked again. `None` for an
+    /// ask that spawns nothing (a landing with its tests changed).
+    pub fingerprint: Option<crate::Fingerprint>,
 }
 
 /// The human's answer.
@@ -153,6 +157,9 @@ impl Gate for Terminal {
         }
         for path in &ask.outside {
             let _ = writeln!(card, "  ⚠ approving lets it write {}", path.display());
+        }
+        if let Some(plan) = &ask.fingerprint {
+            let _ = writeln!(card, "  bound to {}", plan.short());
         }
         let _ = write!(
             card,

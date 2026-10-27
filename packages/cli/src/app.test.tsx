@@ -82,10 +82,12 @@ test('an approval is chosen, then confirmed: a stray y or Enter approves nothing
       race: 'slime',
       why: ['deletes files'],
       outside: [],
+      plan: 'plan 3f9a1c2e4b5d · head 1a2b3c4d · diff 5d6e7f8a · target 9a8b7c6d',
     },
   });
   await tick();
   expect(ui.lastFrame()).toContain('rimuru asks: approve this destructive act?');
+  expect(ui.lastFrame()).toContain('bound to plan 3f9a1c2e4b5d');
   ui.stdin.write('\r');
   await tick();
   expect(core.sent.find((m) => m.id === 'gate-1')).toBeUndefined();

@@ -31,6 +31,8 @@ pub use mnemorph_config::{Config, Paths};
 pub use mnemorph_provider::Event as StreamEvent;
 pub use mnemorph_provider::OPAQUE_PREFIX;
 pub use mnemorph_races::ToolClass;
+/// The plan a gate approval binds to.
+pub use mnemorph_tools::Fingerprint as GateFingerprint;
 /// The human gate's types, for a client that answers it.
 pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
 pub use mnemorph_world as world;
