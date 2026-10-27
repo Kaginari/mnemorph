@@ -128,6 +128,13 @@ impl Gate for NoHuman {
     }
 }
 
+/// Text on the card, each continuation line indented under its first and marked, so a line of
+/// an act's text can never pass for a line of the card.
+#[must_use]
+pub fn indented(text: &str) -> String {
+    text.lines().collect::<Vec<_>>().join("\n    │ ")
+}
+
 /// Asks on the controlling terminal and waits until the deadline; silence denies.
 #[derive(Debug, Clone, Copy)]
 pub struct Terminal {
@@ -150,10 +157,12 @@ impl Gate for Terminal {
         };
         let mut card = format!(
             "\n── {} wants to run a {} act ──\n  {}\n",
-            ask.race, ask.class, ask.act
+            ask.race,
+            ask.class,
+            indented(&ask.act)
         );
         for why in &ask.why {
-            let _ = writeln!(card, "  · {why}");
+            let _ = writeln!(card, "  · {}", indented(why));
         }
         for path in &ask.outside {
             let _ = writeln!(card, "  ⚠ approving lets it write {}", path.display());

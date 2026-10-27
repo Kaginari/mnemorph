@@ -399,10 +399,50 @@ act after it `other`.
 - **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
-  *journal intent* → *act* → *journal result*. A run cut between intent and result is never
-  replayed; it is gated again. The approval is bound to the plan the human saw — the commit, the
-  working tree and the target ([the sandbox](05-architecture.md#sandbox)) — and rechecked
-  just before the act: a world that changed meanwhile runs nothing and is asked again.
+  *journal intent* → *act* → *journal result*. The approval is bound to the plan the human saw —
+  the commit, the working tree and the target ([the sandbox](05-architecture.md#sandbox)) — and
+  rechecked just before the act: a world that changed meanwhile runs nothing and is asked again.
+- **The act runner** (`mnemorph_config::Runner`) is the one path a typed act takes. A Kijin asks
+  for one through its `outward` tool, with a typed act — `{kind: "push-new-branch", remote,
+  name}`, `{kind: "add-label", repo, pr, label}` or `{kind: "comment", repo, pr, body}`, and an
+  optional `key` — never a command string; an untyped outward command still goes through `bash`,
+  where it is a destructive `Command`. The steps run in this order, and none can be skipped:
+
+  | # | Step | What stops the act |
+  |---|---|---|
+  | 1 | the post check (`Planned::check_post`) | a kind the post does not hold: refused before anything is read or asked |
+  | 2 | the plan's fingerprint | a world that cannot be read |
+  | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet | a key given to another request; an earlier act of the same request in `reconcile`; the branch or label already there |
+  | 4 | the gate: **always the human** — Oni envelopes are not honoured before M11, and the card says so | a denial |
+  | 5 | the fingerprint, rechecked just before the spawn | a world that moved: nothing is journaled, and the gate is asked again (three times at most) |
+  | 6 | `commit`: the intent journaled under the request's key | a row that cannot be written: nothing runs |
+  | 7 | the rendered command, in the sandbox, as `bash` runs an approved command | — |
+  | 8 | `ran`: its exit and what it left | — |
+  | 9 | `observe`, with the read-only probe | — |
+  | 10 | the receipt, returned to the Kijin | — |
+
+  Acts of one post run one at a time — a lock beside the post's witness is held from the first
+  step to the receipt, and a second act asked for meanwhile is refused at once (`an act of the
+  post is in flight`), never left waiting on the first one's human — and each is observed before
+  the next is gated, so no probe reads a later act's effect as an earlier one's.
+- **A cut act is probed, never replayed.** An act cut between its intent and its result (a crash,
+  a kill, a run resumed with `mnemorph resume`) stays `committed` or `pending observation`. Before
+  its post's next act is gated, the runner probes each such act at the target it pinned and
+  classifies it: **landed** → `observed`, and the human is not asked again for it; **absent** —
+  nothing of it is outside → `absent`, and the same request is gated again as a new act;
+  **unknown** — the probe failed, or saw the branch at another commit, the label's page too full
+  to read, two comments with its body → `reconcile`, shown to the human. A cut comment, which may
+  have left no id, is found among the pull request's comments since it was committed: by its
+  body's SHA-256, written by the login `gh` acts as (`gh api user`), and by its id once known —
+  someone else's identical comment is never taken for it.
+- **A request has a key.** Its key is the hash of its kind, its pinned target and its body (for a
+  branch, the commit pushed; for a label, the label) — or, when the Kijin names the request
+  (`key`), of its kind, pinned target and that name. The same key with the same request returns
+  the stored receipt without acting or asking — once a probe sees its effect still there; an
+  effect gone since (the human deleted the branch) moves the act to `reconcile`; the same key with a different request is a
+  conflict, refused before the gate. Keys, with each act's typed request and whole pin, are kept
+  beside the witness (`<post>.intents.jsonl`), outside the world: a body can neither forge nor
+  read one.
 - **An act is done when its effect is seen, never because its command exited 0.** Its post
   journal row moves `committed` (approved, its target pinned) → `pending observation` (it ran:
   its exit and what it left) → `observed` or `reconcile`. The harness — never the model — then
@@ -430,11 +470,10 @@ act after it `other`.
   `http`, `ssh`, `git` and `file` transports, and inside the kernel guard when one is in force:
   the network open, nothing writable but its own scratch directory. The row keeps the probe,
   its output (1 KiB at most, escaped, credentials in URLs blanked) and when. A `Command` has no
-  probe: its receipt is `unobserved`, and says so. The act runner observes an act before it
-  gates the next one on the same target, so no probe reads a later act's effect as an earlier
-  one's. Every row is written first to a witness under the human's state directory
+  probe: its receipt is `unobserved`, and says so; a cut act found never landed is `absent`. Every
+  row is written first to a witness under the human's state directory
   (`$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, found again by the world's
-  path); after each command the tripwire rebuilds the journal from what it held and what the
+  path; the folder `0700`, its files `0600`); after each command the tripwire rebuilds the journal from what it held and what the
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
   never counts. A `reconcile` is shown to the human
   (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
@@ -450,10 +489,19 @@ act after it `other`.
   | `AddLabel { repo, pr, label }` | `gh pr edit <pr> --repo <repo> --add-label <label>` | the same label removed from the same pull request |
   | `Comment { repo, pr, body }` | `gh pr comment <pr> --repo <repo> --body <body>` | the comment deleted, by the id its URL gave at act time |
 
+  A label holds no `,` or `"` (`gh pr edit --add-label` splits on commas: one approved label adds
+  one); a comment is at most 64 KiB and holds no bidirectional, zero-width or Unicode line
+  separator character, and the approval card indents and marks each continuation line of an act,
+  so a body's lines never pass for the card's.
   The repository is pinned in the act, never taken from `GH_REPO` or `-R`; a branch is a plain
   ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
   undo is never a string the model writes, so it is never declared or verified: it is derived, and
-  it runs as an act of its own, through the gate. Every other outward act is a `Command`: the
+  it runs as an act of its own, through the gate. An undo is rendered only for an `observed`
+  act, and only while what it left is still its own (`Runner::undo`): a label is removed only when
+  the one label event since the act was pinned is its add, by the login `gh` acts as, and the
+  pull request still carries it — a label someone added between the pin and the act, whose add
+  then did nothing, is never removed. Anything uncertain moves the act to `reconcile` instead.
+  Every other outward act is a `Command`: the
   harness derives no undo for it, so it is **destructive**, and its approval card reads
   `no undo — destructive` before anything else. The classifier still reads every rendered command
   first: a typed act it calls destructive stays so.

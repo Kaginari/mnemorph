@@ -392,7 +392,7 @@ fails when the two differ.
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
-| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads | yes |
+| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
@@ -592,7 +592,11 @@ flowchart LR
     network and read the credentials a read needs (`.ssh`, `.netrc`, `.git-credentials`, git's
     credential store, `.config/gh`), and write nothing but its scratch directory. Only a probe
     that shows the planned effect makes the act `observed`; anything else is `reconcile`
-    ([races](02-races.md)).
+    ([races](02-races.md)). The Kijin's act runner (`mnemorph_config::Runner`, its `outward`
+    tool) spawns through the bash tool's own path (`mnemorph_tools::shell::spawn_approved`):
+    the sandbox, the tripwire's and the attic's snapshots, and the plan rechecked at the spawn —
+    with the act's intent journaled between that recheck and the spawn, so an act whose world
+    moved journals nothing and is asked again.
   - **Limits** — no core dumps, files up to 4 GiB, at most 8192 processes for the user; and no
     new namespaces: `unshare` and a `clone` carrying a namespace flag fail, `clone3` reports
     itself missing so the C library falls back to `clone`.

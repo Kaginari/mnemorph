@@ -170,12 +170,22 @@ fn repo_ok(repo: &str) -> bool {
         .is_some_and(|(owner, name)| part(owner) && part(name))
 }
 
-/// Text a model writes into an act: not blank, no control character but line breaks and tabs.
+/// The longest comment an act carries, in bytes.
+pub const BODY_BYTES: usize = 65_536;
+
+/// Characters that make text read otherwise than it is: bidirectional overrides and isolates,
+/// zero-width characters and marks, and the Unicode line and paragraph separators.
+fn deceptive(c: char) -> bool {
+    matches!(c, '\u{200B}'..='\u{200F}' | '\u{2028}' | '\u{2029}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// Text a model writes into an act: not blank, no control character but line breaks and tabs,
+/// nothing that reads otherwise than it is.
 fn text_ok(text: &str) -> bool {
     !text.trim().is_empty()
         && !text
             .chars()
-            .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
+            .any(|c| (c.is_control() && !matches!(c, '\n' | '\t')) || deceptive(c))
 }
 
 /// A word as the shell reads it back unchanged: bare when it is plain, else single-quoted.
@@ -241,10 +251,11 @@ fn render(act: &Act) -> Result<Option<Vec<String>>, Malformed> {
         }
         Act::AddLabel { repo, pr, label } => {
             let repo = repo_word(repo)?;
-            if !text_ok(label) || label.contains('\n') || label.chars().count() > 50 {
+            // `gh pr edit --add-label` splits on commas: one approved label must add one.
+            if !text_ok(label) || label.contains(['\n', ',', '"']) || label.chars().count() > 50 {
                 return Err(Malformed::Field(
                     "label",
-                    "is one line of at most 50 characters",
+                    "is one line of at most 50 characters, without `,` or `\"`",
                 ));
             }
             owned(&[
@@ -260,10 +271,10 @@ fn render(act: &Act) -> Result<Option<Vec<String>>, Malformed> {
         }
         Act::Comment { repo, pr, body } => {
             let repo = repo_word(repo)?;
-            if !text_ok(body) {
+            if !text_ok(body) || body.len() > BODY_BYTES {
                 return Err(Malformed::Field(
                     "body",
-                    "is text, with no control character but line breaks and tabs",
+                    "is text of at most 65536 bytes, with no control character but line breaks and tabs, and no bidirectional or zero-width character",
                 ));
             }
             owned(&[

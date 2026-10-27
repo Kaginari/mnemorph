@@ -201,7 +201,8 @@ answer with yours."
         }
         Race::Slime => "As a Slime you change the code of your one zone, check it, and answer.",
         Race::Kijin => {
-            "As a Kijin you do the outward acts of your post — what leaves the machine — and answer."
+            "As a Kijin you do the outward acts of your post — what leaves the machine — and answer. \
+A new branch, a label or a comment goes through the outward tool, which returns its receipt."
         }
         Race::DarkElf => {
             "As a Dark Elf you challenge what landed: find what is wrong, with evidence."
@@ -1247,6 +1248,10 @@ fn child_run(
     }
     if c.queue.is_some() {
         tools.push(Box::new(crate::queue_tool::QueueTool));
+    }
+    // A Kijin's typed outward acts take the act runner's one path; untyped ones stay with bash.
+    if creature.race.base() == mnemorph_races::Race::Kijin {
+        tools.push(Box::new(mnemorph_config::OutwardTool));
     }
     let setup = Setup {
         model: Arc::clone(&c.model),
