@@ -14,6 +14,11 @@
 //! deadline, and inside the kernel guard when one is in force: network open, nothing writable
 //! but its own empty scratch directory.
 //!
+//! An act cut between `committed` and its probe (a crash, a kill, a resumed run) is never
+//! replayed: the act runner ([`crate::Runner`]) probes it before its post's next act and moves it
+//! to `observed` (it landed), `absent` (it never did: the same request is asked again as a new
+//! act) or `reconcile` (the probe cannot tell).
+//!
 //! A `reconcile` is shown to the human (`mnemorph status`) until a later row settles the act.
 //! It is the event M11 folds into `outward_clean_rate`, and where it suspends the envelope that
 //! covered the act and may make an Oni fall ([`Tally`]).
@@ -51,7 +56,7 @@ const READ_BYTES: usize = 256 * 1024;
 /// The longest command the journal keeps, in characters.
 const COMMAND_CHARS: usize = 512;
 /// The `gh` host when the environment names none.
-const DEFAULT_HOST: &str = "github.com";
+pub(crate) const DEFAULT_HOST: &str = "github.com";
 /// Transports a push probe may use: every other, a remote helper (`ext::`) above all, is refused.
 const PROTOCOLS: &[&str] = &["https", "http", "ssh", "git", "file"];
 /// Credentials a probe needs to read the outside as the act wrote it: read, never written.
@@ -81,6 +86,10 @@ pub enum State {
     /// A command, which has no probe: its effect is not observed.
     #[serde(rename = "unobserved")]
     Unobserved,
+    /// A cut act the probe found never landed: nothing of it is outside, and the same request is
+    /// asked again as a new act.
+    #[serde(rename = "absent")]
+    Absent,
 }
 
 impl fmt::Display for State {
@@ -91,6 +100,7 @@ impl fmt::Display for State {
             State::Observed => "observed",
             State::Reconcile => "reconcile",
             State::Unobserved => "unobserved",
+            State::Absent => "absent",
         })
     }
 }
@@ -151,7 +161,7 @@ fn host_ok(host: &str) -> bool {
 }
 
 /// Git in the world, read-only and deaf to what it could run, in the environment the act gets.
-fn world_git(world: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) fn world_git(world: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
         .args([
             "--no-optional-locks",
@@ -191,8 +201,16 @@ impl Planned {
     /// URL, a label on the pull request. The command would exit 0 doing nothing, the probe would
     /// see what someone else made, and the undo would remove it.
     pub fn pin(&self, world: &Path, probe: &dyn Probe) -> Result<Pin, String> {
+        let pin = self.aim(world)?;
+        self.vacant(&pin, probe)?;
+        Ok(pin)
+    }
+
+    /// Where this act lands, read in `world` now without reaching outside: the remote's push URLs
+    /// and the commit HEAD names, or the `gh` host.
+    pub(crate) fn aim(&self, world: &Path) -> Result<Pin, String> {
         match self.act() {
-            Act::PushNewBranch { remote, name } => {
+            Act::PushNewBranch { remote, .. } => {
                 let urls: Vec<String> =
                     world_git(world, &["remote", "get-url", "--push", "--all", remote])?
                         .lines()
@@ -214,30 +232,6 @@ impl Planned {
                 if !sha_ok(&sha) {
                     return Err("HEAD names no commit to push".into());
                 }
-                // A branch already there is refused: the push would exit 0 ("Everything
-                // up-to-date") when it is at HEAD's commit, the probe would see it, and the undo
-                // would delete a branch the act never made.
-                for url in &urls {
-                    let shown = redact(url);
-                    let seen = probe
-                        .run(&ls_remote_argv(url, name), PROBE_TIMEOUT)
-                        .map_err(|e| format!("{shown} cannot be read: {}", redact(&e)))?;
-                    if seen.code != Some(0) || seen.cut {
-                        return Err(format!(
-                            "{shown} cannot be read: {}",
-                            excerpt(&seen.err, 200)
-                        ));
-                    }
-                    let want = format!("refs/heads/{name}");
-                    if String::from_utf8_lossy(&seen.out)
-                        .lines()
-                        .any(|l| l.split_once('\t').is_some_and(|(_, r)| r == want))
-                    {
-                        return Err(format!(
-                            "branch {name} is already on {shown}: nothing to push, nothing to undo"
-                        ));
-                    }
-                }
                 Ok(Pin::Push { urls, sha })
             }
             Act::AddLabel { .. } | Act::Comment { .. } => {
@@ -248,28 +242,71 @@ impl Planned {
                 if !host_ok(&host) {
                     return Err(format!("GH_HOST `{host}` is not a plain host name"));
                 }
-                if let Act::AddLabel { repo, pr, label } = self.act() {
-                    let argv = labels_argv(repo, *pr, &host);
-                    let seen = probe
-                        .run(&argv, PROBE_TIMEOUT)
-                        .map_err(|e| format!("the labels of {repo}#{pr} cannot be read: {e}"))?;
-                    if seen.code != Some(0) || seen.cut {
-                        return Err(format!(
-                            "the labels of {repo}#{pr} cannot be read: {}",
-                            excerpt(&seen.err, 200)
-                        ));
-                    }
-                    if carries(&seen.out, label)? {
-                        return Err(format!(
-                            "label {label:?} is already on {repo}#{pr}: nothing to add, nothing to undo"
-                        ));
-                    }
-                }
                 Ok(Pin::Forge { host })
             }
             Act::Command(_) => Ok(Pin::Unpinned),
         }
     }
+
+    /// Whether what the act would make is still absent at `pin`, read through `probe`.
+    pub(crate) fn vacant(&self, pin: &Pin, probe: &dyn Probe) -> Result<(), String> {
+        match (self.act(), pin) {
+            (Act::PushNewBranch { name, .. }, Pin::Push { urls, .. }) => {
+                // A branch already there is refused: the push would exit 0 ("Everything
+                // up-to-date") when it is at HEAD's commit, the probe would see it, and the undo
+                // would delete a branch the act never made.
+                for url in urls {
+                    let shown = redact(url);
+                    let seen = probe
+                        .run(&ls_remote_argv(url, name), PROBE_TIMEOUT)
+                        .map_err(|e| format!("{shown} cannot be read: {}", redact(&e)))?;
+                    if seen.code != Some(0) || seen.cut {
+                        return Err(format!(
+                            "{shown} cannot be read: {}",
+                            excerpt(&seen.err, 200)
+                        ));
+                    }
+                    if !branch_tips(&seen.out, name).is_empty() {
+                        return Err(format!(
+                            "branch {name} is already on {shown}: nothing to push, nothing to undo"
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            (Act::AddLabel { repo, pr, label }, Pin::Forge { host }) => {
+                let argv = labels_argv(repo, *pr, host);
+                let seen = probe
+                    .run(&argv, PROBE_TIMEOUT)
+                    .map_err(|e| format!("the labels of {repo}#{pr} cannot be read: {e}"))?;
+                if seen.code != Some(0) || seen.cut {
+                    return Err(format!(
+                        "the labels of {repo}#{pr} cannot be read: {}",
+                        excerpt(&seen.err, 200)
+                    ));
+                }
+                if carries(&seen.out, label)? {
+                    return Err(format!(
+                        "label {label:?} is already on {repo}#{pr}: nothing to add, nothing to undo"
+                    ));
+                }
+                Ok(())
+            }
+            (Act::Comment { .. }, Pin::Forge { .. }) | (Act::Command(_), Pin::Unpinned) => Ok(()),
+            _ => Err("the pin is not of this act".into()),
+        }
+    }
+}
+
+/// The commits `refs/heads/<name>` names in what `git ls-remote` printed.
+pub(crate) fn branch_tips(out: &[u8], name: &str) -> Vec<String> {
+    let want = format!("refs/heads/{name}");
+    String::from_utf8_lossy(out)
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .filter(|(_, r)| *r == want)
+        .map(|(s, _)| s.to_owned())
+        .collect()
 }
 
 /// What a probe printed.
@@ -509,7 +546,7 @@ fn probe_argv(act: &Act, pin: &Pin, done: &Done, url: Option<&str>) -> Option<Ve
 }
 
 /// The read of a branch on a remote, at a URL: no transport but `PROTOCOLS`.
-fn ls_remote_argv(url: &str, name: &str) -> Vec<String> {
+pub(crate) fn ls_remote_argv(url: &str, name: &str) -> Vec<String> {
     let mut argv: Vec<String> = ["git", "-c", "protocol.allow=never"]
         .map(str::to_owned)
         .to_vec();
@@ -523,7 +560,7 @@ fn ls_remote_argv(url: &str, name: &str) -> Vec<String> {
 }
 
 /// The read of a pull request's labels: at most 100, all a pull request may carry.
-fn labels_argv(repo: &str, pr: u64, host: &str) -> Vec<String> {
+pub(crate) fn labels_argv(repo: &str, pr: u64, host: &str) -> Vec<String> {
     [
         "gh",
         "api",
@@ -538,7 +575,7 @@ fn labels_argv(repo: &str, pr: u64, host: &str) -> Vec<String> {
 }
 
 /// Whether the labels `gh api` printed include `label`, as GitHub compares them: ignoring case.
-fn carries(out: &[u8], label: &str) -> Result<bool, String> {
+pub(crate) fn carries(out: &[u8], label: &str) -> Result<bool, String> {
     #[derive(Deserialize)]
     struct Label {
         name: String,
@@ -549,7 +586,7 @@ fn carries(out: &[u8], label: &str) -> Result<bool, String> {
     Ok(labels.iter().any(|l| l.name.to_lowercase() == want))
 }
 
-fn sha256(text: &str) -> String {
+pub(crate) fn sha256(text: &str) -> String {
     Sha256::digest(text.as_bytes())
         .iter()
         .fold(String::with_capacity(64), |mut s, b| {
@@ -681,7 +718,7 @@ pub struct Row {
 }
 
 impl Row {
-    fn new(act: &str, state: State) -> Self {
+    pub(crate) fn new(act: &str, state: State) -> Self {
         Self {
             act: act.to_owned(),
             state,
@@ -701,11 +738,11 @@ impl Row {
 /// An act on its way through the post journal, as the harness holds it between rows.
 #[derive(Debug, Clone)]
 pub struct Receipt {
-    id: String,
-    planned: Planned,
-    pin: Pin,
-    done: Option<Done>,
-    state: State,
+    pub(crate) id: String,
+    pub(crate) planned: Planned,
+    pub(crate) pin: Pin,
+    pub(crate) done: Option<Done>,
+    pub(crate) state: State,
 }
 
 impl Receipt {
@@ -736,22 +773,36 @@ impl Receipt {
 #[derive(Debug, Clone)]
 pub struct PostJournal {
     /// The post whose acts it journals: it commits no other.
-    post: Post,
+    pub(crate) post: Post,
     journal: Journal<Row>,
-    witness: Option<Journal<Row>>,
+    pub(crate) witness: Option<Journal<Row>>,
 }
 
-/// Hold a witness's lock: the file opened (made if need be) and locked whole until dropped. The
-/// tripwire rebuilds the journal under the same lock, so no row lands between its read and its
-/// write.
-fn lock(witness: &Path) -> io::Result<fs::File> {
-    if let Some(dir) = witness.parent() {
-        fs::create_dir_all(dir)?;
+/// A file beside the witness, private to the human: its folder `0700` (made so if need be), the
+/// file `0600`, opened for appending (made if need be). Nothing in it is anyone else's to read.
+pub(crate) fn private_file(path: &Path) -> io::Result<fs::File> {
+    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+    if let Some(dir) = path.parent() {
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)?;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
     }
     let f = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(witness)?;
+        .mode(0o600)
+        .open(path)?;
+    f.set_permissions(fs::Permissions::from_mode(0o600))?;
+    Ok(f)
+}
+
+/// Hold a witness's lock: the file opened (made if need be, private to the human) and locked
+/// whole until dropped. The tripwire rebuilds the journal under the same lock, so no row lands
+/// between its read and its write.
+fn lock(witness: &Path) -> io::Result<fs::File> {
+    let f = private_file(witness)?;
     f.lock()?;
     Ok(f)
 }
@@ -815,7 +866,7 @@ impl PostJournal {
 
     /// One row: the witness first, under its lock — a row the journal holds and its witness does
     /// not would be dropped by the next command's tripwire — then the journal.
-    fn append(&self, row: &Row) -> io::Result<()> {
+    pub(crate) fn append(&self, row: &Row) -> io::Result<()> {
         let held = match &self.witness {
             Some(w) => {
                 let held = lock(w.path())?;
@@ -843,6 +894,18 @@ impl PostJournal {
     /// The act is not this post's, the pin is not of this act, or the row cannot be written:
     /// the act must not run.
     pub fn commit(&self, planned: &Planned, pin: Pin, plan: Option<&str>) -> io::Result<Receipt> {
+        self.commit_then(planned, pin, plan, &mut |_| Ok(()))
+    }
+
+    /// [`Self::commit`], with `first` run on the receipt's id before its row is written: the act
+    /// runner keeps the request's key and intent there. Its failure writes no row.
+    pub(crate) fn commit_then(
+        &self,
+        planned: &Planned,
+        pin: Pin,
+        plan: Option<&str>,
+        first: &mut dyn FnMut(&str) -> io::Result<()>,
+    ) -> io::Result<Receipt> {
         planned
             .check_post(self.post.creature())
             .map_err(|e| io::Error::other(e.to_string()))?;
@@ -879,6 +942,7 @@ impl PostJournal {
         row.target = pin.shown();
         row.plan = plan.map(str::to_owned);
         row.expect = Some(expected(planned.act(), &pin, None));
+        first(&id)?;
         self.append(&row)?;
         Ok(Receipt {
             id,
@@ -1048,6 +1112,7 @@ impl PostJournal {
                 State::Observed => t.observed += 1,
                 State::Reconcile => t.reconcile += 1,
                 State::Unobserved => t.unobserved += 1,
+                State::Absent => t.absent += 1,
             }
         }
         Ok(t)
@@ -1085,6 +1150,8 @@ pub struct Tally {
     pub unobserved: u32,
     /// Committed or ran, not yet probed — a run cut short; never replayed.
     pub open: u32,
+    /// Cut acts the probe found never landed.
+    pub absent: u32,
 }
 
 /// One line per act any post of `world` holds in `reconcile`, for the human (`mnemorph status`),

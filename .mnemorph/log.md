@@ -5592,3 +5592,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** fingerprint `the_card_shows_where_a_push_goes`,
   `a_push_url_set_before_approval_is_no_posts_push`; corpus rows for URL remotes and outputs;
   each guard disabled fails its test.
+
+---
+
+### [2026-10-27T19:48:24+01:00] rimuru — #94: the Kijin act runner; a cut act is probed, never replayed; request keys
+- **Done:** `mnemorph_config::Runner`, behind the Kijin's `outward` tool (a typed act:
+  `push-new-branch {remote, name}`, `add-label {repo, pr, label}`, `comment {repo, pr, body}`,
+  optional `key`; never a command string): post check → fingerprint → pin (key looked up, target
+  vacant) → the human (no envelope before M11, said on the card) → recheck at the spawn → commit
+  (intent and key) → the sandboxed command (`mnemorph_tools::shell::spawn_approved`, the bash
+  tool's own path) → `ran` → `observe` → receipt. One act per post at a time (a lock beside the
+  witness). A cut `committed`/`pending observation` act is probed before the post's next act:
+  landed → `observed`, absent → new state `absent` and re-gated when asked again, unknown →
+  `reconcile`. Keys and whole pins live in `<post>.intents.jsonl` beside the witness; same key
+  and request → the stored receipt, another request → refused. Witness folder `0700`, files
+  `0600`. `Runner::undo` removes a label only while the one label event since the pin is the
+  act's own add by `gh`'s login; else `reconcile`. Docs 02, 03, 05, roadmap.
+- **Tests:** config `runner` (full pipeline, re-ask on a moved world, post refused before the
+  gate, denied, cut landed/absent/unknown, comment replay and key conflict, resume after a landed
+  comment, label undo re-probe); each guard (post check, recheck, probe-before-re-ask,
+  idempotency, undo re-probe) disabled fails its test.
+- **Learned:** a test witness is not the tripwire's (that one is found under the human's state
+  directory), so a test reads the witness, not the world's rebuilt journal. Still open: the undo
+  is rendered, not yet run through the gate; a push or comment undo is no forge post's kind.

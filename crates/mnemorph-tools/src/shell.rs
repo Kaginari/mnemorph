@@ -113,14 +113,14 @@ impl Tool for Bash {
                     return refused;
                 }
             };
-            match attempt(&a.command, cx, timeout, admitted) {
-                Attempt::Ran(mut out) => {
+            match attempt(&a.command, cx, timeout, admitted, None) {
+                Spawned::Ran(mut out) => {
                     for note in &notes {
                         let _ = write!(out.content, "\n[{note}]");
                     }
                     return out;
                 }
-                Attempt::Changed { approved, now } => {
+                Spawned::Changed { approved, now } => {
                     changed = approved.changes(&now);
                     notes.push(format!(
                         "the world changed since approval of plan {}, so the command did not run and the gate asked again: {}",
@@ -128,7 +128,7 @@ impl Tool for Bash {
                         changed.join("; ")
                     ));
                 }
-                Attempt::Failed(out) => return out,
+                Spawned::Failed(out) => return out,
             }
         }
         let mut out = Outcome::error(format!(
@@ -154,20 +154,60 @@ struct Admitted {
     plan: Option<Fingerprint>,
 }
 
-/// One try at running an admitted command.
-enum Attempt {
+/// One try at running an approved command.
+#[derive(Debug)]
+pub enum Spawned {
     /// It ran: the result to give the body.
     Ran(Outcome),
     /// The world no longer matched the approved plan at the spawn: nothing ran.
     Changed {
+        /// The plan the human approved.
         approved: Fingerprint,
+        /// The world as it is now.
         now: Fingerprint,
     },
-    /// It could not be prepared or started.
+    /// It could not be prepared or started, or the step before the spawn refused: nothing ran.
     Failed(Outcome),
 }
 
-fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -> Attempt {
+/// The last step before an approved command is spawned, taken after the plan is rechecked:
+/// an `Err` stops the spawn, with its reason.
+pub type BeforeSpawn<'a> = &'a mut dyn FnMut() -> Result<(), String>;
+
+/// Run `command`, already approved by the human against `plan`, as the bash tool runs what its
+/// gate admitted: in the context's sandbox with the network open, between the tripwire's
+/// snapshots and after the attic's, and only if the world still matches `plan` at the spawn.
+/// `before` runs between that recheck and the spawn — the Kijin's act runner journals its intent
+/// there — and its refusal stops the spawn. The kernel guard is the caller's to require.
+pub fn spawn_approved(
+    command: &str,
+    cx: &Context,
+    timeout: Duration,
+    class: ToolClass,
+    plan: Fingerprint,
+    before: BeforeSpawn<'_>,
+) -> Spawned {
+    let admitted = Admitted {
+        class,
+        outside: Vec::new(),
+        plan: Some(plan),
+    };
+    attempt(
+        command,
+        cx,
+        timeout.min(MAX_TIMEOUT),
+        admitted,
+        Some(before),
+    )
+}
+
+fn attempt(
+    command: &str,
+    cx: &Context,
+    timeout: Duration,
+    admitted: Admitted,
+    before_spawn: Option<BeforeSpawn<'_>>,
+) -> Spawned {
     let Admitted {
         class,
         outside,
@@ -180,13 +220,13 @@ fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -
     // command runs is not taken for a directory the command made.
     let _ = std::fs::create_dir_all(cx.world().join(".mnemorph/shared"));
     if let Err(e) = std::fs::create_dir_all(cx.world().join(".mnemorph/tmp")) {
-        return Attempt::Failed(Outcome::error(format!(
+        return Spawned::Failed(Outcome::error(format!(
             "could not prepare the command's temporary directory: {e}"
         )));
     }
     let made = match make_approved(&opened) {
         Ok(m) => m,
-        Err(e) => return Attempt::Failed(Outcome::error(e)),
+        Err(e) => return Spawned::Failed(Outcome::error(e)),
     };
     let mut before = Snapshot::take(cx.world());
     // What the command may take away is kept first; a failed snapshot is said, not fatal: the
@@ -196,9 +236,9 @@ fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -
         .attic()
         .map(|attic| attic.snapshot(&format!("before bash: {line}")));
     let bound = plan.as_ref().map(|plan| (plan, made.as_slice()));
-    let ran = match run(command, cx, timeout, network, &opened, bound) {
+    let ran = match run(command, cx, timeout, network, &opened, bound, before_spawn) {
         Ok(r) => r,
-        Err(stale @ (Spawn::Changed(_) | Spawn::Unreadable(_))) => {
+        Err(stale @ (Spawn::Changed(_) | Spawn::Unreadable(_) | Spawn::Held(_))) => {
             // Nothing ran: the files made for it go, and nothing is restored over the world.
             for path in &made {
                 if fs::metadata(path).is_ok_and(|m| m.len() == 0) {
@@ -206,15 +246,18 @@ fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -
                 }
             }
             return match (stale, plan) {
-                (Spawn::Changed(now), Some(approved)) => Attempt::Changed { approved, now },
-                (Spawn::Unreadable(e), _) => Attempt::Failed(Outcome::error(format!(
+                (Spawn::Changed(now), Some(approved)) => Spawned::Changed { approved, now },
+                (Spawn::Unreadable(e), _) => Spawned::Failed(Outcome::error(format!(
                     "the world could not be read again before the spawn, so the approved command did not run: {e}"
                 ))),
-                _ => Attempt::Failed(Outcome::error("the command did not run")),
+                (Spawn::Held(e), _) => Spawned::Failed(Outcome::error(format!(
+                    "the step before the spawn refused, so the approved command did not run: {e}"
+                ))),
+                _ => Spawned::Failed(Outcome::error("the command did not run")),
             };
         }
         Err(Spawn::Io(e)) => {
-            return Attempt::Failed(Outcome::error(format!("could not start bash: {e}")));
+            return Spawned::Failed(Outcome::error(format!("could not start bash: {e}")));
         }
     };
     // A command that failed leaves no empty file behind it.
@@ -252,7 +295,7 @@ fn attempt(command: &str, cx: &Context, timeout: Duration, admitted: Admitted) -
         out.content.push_str(&tripped.join("; "));
         out.content.push(']');
     }
-    Attempt::Ran(out)
+    Spawned::Ran(out)
 }
 
 /// Whether the command may run, and at what class: classified, shelved, asked when it must be.
@@ -514,6 +557,8 @@ enum Spawn {
     Changed(Fingerprint),
     /// The world could not be read again: no plan to compare, so nothing runs.
     Unreadable(String),
+    /// The step before the spawn refused: nothing runs.
+    Held(String),
     /// The process could not be started.
     Io(std::io::Error),
 }
@@ -535,6 +580,7 @@ fn run(
     network: bool,
     opened: &[PathBuf],
     approved: Option<(&Fingerprint, &[PathBuf])>,
+    before_spawn: Option<BeforeSpawn<'_>>,
 ) -> Result<Ran, Spawn> {
     let tmp = cx.scratch();
     std::fs::create_dir_all(&tmp)?;
@@ -575,6 +621,9 @@ fn run(
         if now != *approved {
             return Err(Spawn::Changed(now));
         }
+    }
+    if let Some(before) = before_spawn {
+        before().map_err(Spawn::Held)?;
     }
     let mut child = cmd.spawn()?;
     let stdout = drain(child.stdout.take());

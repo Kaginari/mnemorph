@@ -18,6 +18,8 @@
 //! and only a kind whose undo the harness derives can be covered; every other outward act is
 //! destructive, which no envelope covers ([`plan`], [`Envelope::covers`]). Its receipt follows the
 //! act: a typed act is `observed` only when a read-only probe sees its effect ([`PostJournal`]).
+//! The act runner ([`Runner`], the Kijin's `outward` tool) is the one path a typed act takes:
+//! post, plan, pin, gate, recheck, intent, act, result, probe, receipt.
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
@@ -25,6 +27,7 @@
 
 mod outward;
 mod receipt;
+mod runner;
 mod write;
 
 use std::collections::BTreeMap;
@@ -41,6 +44,9 @@ pub use outward::{Act, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, 
 pub use receipt::{
     Observer, PROBE_TIMEOUT, Pin, PostJournal, Probe, Receipt, Row, SEEN_BYTES, Seen, State, Tally,
     excerpt, post_journal, reconciling, redact,
+};
+pub use runner::{
+    ENVELOPES_UNWIRED, Hands, OUTWARD, OutwardTool, Refusal, Report, Request, Runner, Sandboxed,
 };
 pub use write::{revoke, set};
 

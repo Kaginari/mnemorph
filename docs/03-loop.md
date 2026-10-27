@@ -110,7 +110,9 @@ Before every model call the loop reads four meters from the core, never from the
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
-up from it. An outward act cut mid-flight is gated again, never replayed.
+up from it. An outward act cut mid-flight is never replayed: before its post's next act is
+gated, its probe says whether it landed (settled, not asked again), never did (gated again as a
+new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md).
 
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorph runs` lists such runs, newest first — the id, when its journal was last written, why it

@@ -284,7 +284,7 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
   mirror), `release`, `deploy`.
 
 **Exit:** a branch pushed and a PR opened through `kijin-forge` with one gate prompt; a cut run
-mid-act is gated again, not replayed.
+mid-act is probed first — settled if it landed, gated again if not — never replayed.
 
 ### M10 — Dark Elf · M
 
