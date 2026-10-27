@@ -91,6 +91,8 @@ outward   git push --dry-run origin main
 outward   git push -u origin feat/x
 outward   git push -uq origin feat/x
 outward   git push origin HEAD:refs/heads/feat/x
+outward   git push origin feat/x:refs/heads/feat/x
+outward   git push origin feat/x:feat/x
 outward   git push origin HEAD:refs/heads/feat/x --force-with-lease=refs/heads/feat/x:
 outward   gh api repos/x/y/pulls
 outward   gh api -X GET repos/x/y/pulls
@@ -199,6 +201,8 @@ destructive gh api graphql -f query='query { viewer { login } }'
 destructive gh api graphql -f query='mutation { deleteRepository }'
 destructive gh api -X $M /repos/x/y
 destructive git push origin feat/x:main
+destructive git push origin feat/x:refs/heads/main
+destructive git push origin HEAD:main
 destructive git push origin feat/x:refs/tags/v9
 destructive git push origin refs/heads/a:refs/notes/x
 destructive git push origin HEAD:refs/meta/config

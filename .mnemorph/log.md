@@ -5305,3 +5305,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   check — each fails its test.
 - **Learned:** the classifier takes the highest class over every argument prefix, so a guard must
   read a flag with nothing after it yet as nothing, or every `-X GET` reads as a write.
+
+---
+
+### [2026-10-27T17:11:56+01:00] rimuru — #101, Fable's last read: a push destination is the source's own branch
+- **Done:** `refspec` takes a destination only as the source itself, `refs/heads/<source>`, or
+  any `refs/heads/` branch for `HEAD`; `feat/x:refs/heads/main` and `HEAD:main` are destructive.
+- **Tests:** corpus rows for both, and the two accepted forms.

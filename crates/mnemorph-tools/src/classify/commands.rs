@@ -898,8 +898,13 @@ fn refspec(spec: &str) -> Option<String> {
     };
     let src_ok =
         plain(src) && (!src.starts_with("refs/") || src.starts_with("refs/heads/")) && src != "tag";
+    // A destination is the source's own branch, or any branch for `HEAD`: never another name.
     let dst_ok = dst.is_none_or(|d| {
-        plain(d) && ((d.starts_with("refs/heads/") && d.len() > "refs/heads/".len()) || d == src)
+        let heads = d.strip_prefix("refs/heads/");
+        plain(d)
+            && (d == src
+                || heads == Some(src)
+                || (src == "HEAD" && heads.is_some_and(|b| !b.is_empty())))
     });
     (!src_ok || !dst_ok).then(|| {
         format!("`{spec}` forces, deletes, renames or reaches a tag or a ref outside the branches")
