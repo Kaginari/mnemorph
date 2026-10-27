@@ -11,13 +11,17 @@
 //! their hash — are hard-linked into the attic and its refs copied: an `rm -rf .git` unlinks the
 //! world's names and leaves the attic's, and the repository is put back.
 
+use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::Write as _;
+use std::io::{BufRead as _, Read as _, Write as _};
+use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
+
+use crate::pinned;
 
 /// A world's attic.
 #[derive(Debug, Clone)]
@@ -60,10 +64,13 @@ pub enum State {
     Absent,
     /// A regular file: its content's blob id, and whether it is executable.
     File {
-        /// The content's git blob id.
+        /// The content's git blob id; empty when the size alone already differs, so the
+        /// content was never read.
         blob: String,
         /// The owner's execute bit.
         executable: bool,
+        /// Its size in bytes.
+        size: u64,
     },
     /// A symlink, and where it points.
     Link {
@@ -85,12 +92,18 @@ impl std::fmt::Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             State::Absent => f.write_str("nothing"),
-            State::File { blob, executable } => write!(
-                f,
-                "{} file {}",
-                if *executable { "an executable" } else { "a" },
-                &blob[..blob.len().min(12)]
-            ),
+            State::File {
+                blob,
+                executable,
+                size,
+            } => {
+                let a = if *executable { "an executable" } else { "a" };
+                if blob.is_empty() {
+                    write!(f, "{a} file of {size} bytes")
+                } else {
+                    write!(f, "{a} file {} ({size} bytes)", &blob[..blob.len().min(12)])
+                }
+            }
             State::Link { target } => write!(f, "a symlink to {}", target.display()),
             State::Dir => f.write_str("a directory"),
             State::Other => f.write_str("a special file"),
@@ -130,6 +143,14 @@ pub enum Restore {
     Conflict(Vec<Conflict>),
 }
 
+/// The attic's lock, held: restores made under it run in turn with every snapshot and restore
+/// of the world, and the caller's own removals can share it. Released when dropped.
+#[derive(Debug)]
+pub struct Held {
+    _file: fs::File,
+    dir: PathBuf,
+}
+
 /// One path an act changed: its tree entry before and after (`None`: absent).
 struct Change {
     path: String,
@@ -140,29 +161,6 @@ struct Change {
 struct Entry {
     mode: String,
     oid: String,
-}
-
-/// Whether every non-directory under `dir` (at `rel` in the world) is a path this undo removes.
-fn only_undone(dir: &Path, rel: &str, undone: &std::collections::HashSet<&str>) -> bool {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return false;
-    };
-    entries.into_iter().all(|e| {
-        let Ok(e) = e else { return false };
-        let Ok(kind) = e.file_type() else {
-            return false;
-        };
-        let name = e.file_name();
-        let Some(name) = name.to_str() else {
-            return false;
-        };
-        let child = format!("{rel}/{name}");
-        if kind.is_dir() {
-            only_undone(&e.path(), &child, undone)
-        } else {
-            undone.contains(child.as_str())
-        }
-    })
 }
 
 /// A relative path with no empty, `.` or `..` component, and not inside `.git`.
@@ -268,28 +266,33 @@ impl Attic {
     /// Git, pointed at the attic's store and the world's tree, deaf to every configuration but
     /// its own: no hooks, no filters, no fsmonitor from the world or the human's files.
     fn git(&self, args: &[&str]) -> std::io::Result<Output> {
-        Command::new("git")
-            .args([
-                "-c",
-                "core.hooksPath=/dev/null",
-                "-c",
-                "core.fsmonitor=false",
-                "-c",
-                "core.autocrlf=false",
-                "-c",
-                "core.quotePath=false",
-            ])
-            .args(args)
-            .env_clear()
-            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-            .env("GIT_DIR", self.dir.join("store.git"))
-            .env("GIT_WORK_TREE", &self.world)
-            .env("GIT_INDEX_FILE", self.dir.join("index"))
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("HOME", &self.dir)
-            .current_dir(&self.world)
-            .output()
+        self.command(args).output()
+    }
+
+    /// The attic's git command, not yet run.
+    fn command(&self, args: &[&str]) -> Command {
+        let mut cmd = Command::new("git");
+        cmd.args([
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.quotePath=false",
+        ])
+        .args(args)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("GIT_DIR", self.dir.join("store.git"))
+        .env("GIT_WORK_TREE", &self.world)
+        .env("GIT_INDEX_FILE", self.dir.join("index"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("HOME", &self.dir)
+        .current_dir(&self.world);
+        cmd
     }
 
     fn ok(&self, args: &[&str]) -> Result<String, String> {
@@ -518,19 +521,46 @@ impl Attic {
         Ok(Act { before, after })
     }
 
+    /// Take the attic's lock and keep it until the returned guard drops.
+    ///
+    /// # Errors
+    ///
+    /// The lock file cannot be made or locked.
+    pub fn hold(&self) -> Result<Held, String> {
+        Ok(Held {
+            _file: self.lock()?,
+            dir: self.dir.clone(),
+        })
+    }
+
     /// Undo `act` on `paths` (everything it changed when `paths` is empty), but only if each
     /// path it changed there is still as the act left it — content, mode, a link's target, or
     /// its absence. One path changed since, by anyone, and nothing is undone: the later writer
     /// is kept and every such path is named. A path the act created is removed; one it changed
-    /// or deleted is written back. Nothing outside the world, and nothing reached through a
-    /// symlink, is touched: a path under a symlink or a file the act did not leave is a
-    /// conflict. The outcome is written to the attic's log.
+    /// or deleted is written back. Every look and every write goes through directory handles
+    /// opened beneath the world, following no symlink: a path under a symlink or a file the act
+    /// did not leave is a conflict, and a component swapped for a symlink after the check makes
+    /// the write fail. The outcome is written to the attic's log. Takes the attic's lock.
     ///
     /// # Errors
     ///
     /// A path is not a plain relative path inside the world, a changed path was too large for
-    /// either snapshot to keep, a snapshot is gone, or git or the filesystem fails.
+    /// either snapshot to keep, a snapshot is gone, or git or the filesystem fails — a write
+    /// that fails part-way is journaled with what was restored and what was not.
     pub fn restore(&self, act: &Act, paths: &[&str]) -> Result<Restore, String> {
+        let held = self.hold()?;
+        self.restore_held(&held, act, paths)
+    }
+
+    /// [`Attic::restore`] under a lock the caller already holds.
+    ///
+    /// # Errors
+    ///
+    /// As [`Attic::restore`]; and the lock is another attic's.
+    pub fn restore_held(&self, held: &Held, act: &Act, paths: &[&str]) -> Result<Restore, String> {
+        if held.dir != self.dir {
+            return Err("the lock held is another attic's".into());
+        }
         for p in paths {
             if *p != "." && !plain(p) {
                 return Err(format!(
@@ -538,7 +568,6 @@ impl Attic {
                 ));
             }
         }
-        let _held = self.lock()?;
         let changes: Vec<Change> = self
             .changes(act)?
             .into_iter()
@@ -560,12 +589,19 @@ impl Attic {
                 ));
             }
         }
-        let undone: std::collections::HashSet<&str> =
-            changes.iter().map(|c| c.path.as_str()).collect();
-        let now = self.states(&changes, &undone)?;
+        let root = pinned::root(&self.world).map_err(|e| format!("the world: {e}"))?;
+        let mut batch = Batch::new(self, false)?;
+        let mut check = Batch::new(self, true)?;
+        let removed: HashSet<&str> = changes
+            .iter()
+            .filter(|c| c.before.is_none())
+            .map(|c| c.path.as_str())
+            .collect();
+        let undone: HashSet<&str> = changes.iter().map(|c| c.path.as_str()).collect();
         let mut conflicts = Vec::new();
-        for (c, now) in changes.iter().zip(now) {
-            let left = self.state_in_tree(c.after.as_ref())?;
+        for c in &changes {
+            let left = batch.state(&mut check, c.after.as_ref())?;
+            let now = self.state_now(&root, &c.path, &left, &undone, &removed)?;
             if left != now {
                 conflicts.push(Conflict {
                     path: c.path.clone(),
@@ -579,32 +615,73 @@ impl Attic {
             self.journal(act, &format!("refused: {}", named.join("; ")));
             return Ok(Restore::Conflict(conflicts));
         }
+        #[cfg(test)]
+        tests::between();
         // Every path is as the act left it: what it created goes, then what it changed or
-        // deleted comes back — by git, which never writes through a symlink.
-        for c in changes.iter().filter(|c| c.before.is_none()) {
-            let at = self.world.join(&c.path);
-            if fs::symlink_metadata(&at).is_ok() {
-                fs::remove_file(&at).map_err(|e| format!("{}: {e}", c.path))?;
-            }
-        }
-        let back: Vec<&str> = changes
+        // deleted comes back. Removals first, so a file the act put where a directory was is
+        // gone before the directory is made again.
+        let mut done: Vec<&str> = Vec::new();
+        let order = changes
             .iter()
-            .filter(|c| c.before.is_some())
-            .map(|c| c.path.as_str())
-            .collect();
-        for chunk in back.chunks(200) {
-            let mut args = vec![
-                "--literal-pathspecs",
-                "checkout",
-                act.before.tree.as_str(),
-                "--",
-            ];
-            args.extend_from_slice(chunk);
-            self.ok(&args)?;
+            .filter(|c| c.before.is_none())
+            .chain(changes.iter().filter(|c| c.before.is_some()));
+        for c in order {
+            if let Err(e) = Self::undo_one(&root, &mut batch, c) {
+                let rest: Vec<&str> = changes
+                    .iter()
+                    .map(|c| c.path.as_str())
+                    .filter(|p| !done.contains(p))
+                    .collect();
+                let why = format!(
+                    "failed at `{}`: {e}; restored: {}; not restored: {}",
+                    c.path,
+                    done.join(", "),
+                    rest.join(", ")
+                );
+                self.journal(act, &why);
+                return Err(why);
+            }
+            done.push(&c.path);
         }
         let restored: Vec<String> = changes.into_iter().map(|c| c.path).collect();
         self.journal(act, &format!("restored: {}", restored.join(", ")));
         Ok(Restore::Restored(restored))
+    }
+
+    /// Undo one change, through a handle on its parent opened beneath the world.
+    fn undo_one(root: &OwnedFd, batch: &mut Batch, c: &Change) -> Result<(), String> {
+        let parts: Vec<&str> = c.path.split('/').collect();
+        let name = parts.last().copied().unwrap_or_default();
+        let io = |e: std::io::Error| e.to_string();
+        let Some(entry) = &c.before else {
+            return match pinned::parent(root, &parts, false) {
+                Ok(dir) => pinned::unlink(&dir, name).map_err(io),
+                // The act's parent went with the act's other removals: nothing left to remove.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(io(e)),
+            };
+        };
+        let dir = pinned::parent(root, &parts, true).map_err(io)?;
+        let replace = c.after.is_some();
+        let (size, content) = batch.open(&entry.oid)?;
+        let mut content = content.take(size);
+        let placed = if entry.mode == "120000" {
+            let mut target = Vec::new();
+            std::io::Read::read_to_end(&mut content, &mut target).map_err(io)?;
+            let target = PathBuf::from(std::ffi::OsString::from_vec(target));
+            pinned::put(&dir, name, replace, |d, tmp| {
+                pinned::link_new(d, tmp, &target)
+            })
+        } else {
+            let executable = entry.mode == "100755";
+            pinned::put(&dir, name, replace, |d, tmp| {
+                pinned::write_new(d, tmp, &mut content, executable)
+            })
+        };
+        // The rest of the blob, and git's newline after it, are read whatever happened.
+        let _ = std::io::copy(&mut content, &mut std::io::sink());
+        batch.end_object()?;
+        placed.map_err(io)
     }
 
     /// What `act` changed, path by path; a nested repository's gitlink is never held, so never
@@ -646,103 +723,80 @@ impl Attic {
         Ok(out)
     }
 
-    /// The state a tree entry records.
-    fn state_in_tree(&self, entry: Option<&Entry>) -> Result<State, String> {
-        Ok(match entry {
-            None => State::Absent,
-            Some(e) if e.mode == "120000" => {
-                let out = self
-                    .git(&["cat-file", "blob", &e.oid])
-                    .map_err(|e| format!("git: {e}"))?;
-                if !out.status.success() {
-                    return Err(format!("the attic lost the link `{}`", e.oid));
-                }
-                State::Link {
-                    target: PathBuf::from(std::ffi::OsString::from_vec(out.stdout)),
-                }
-            }
-            Some(e) => State::File {
-                blob: e.oid.clone(),
-                executable: e.mode == "100755",
-            },
-        })
-    }
-
-    /// The state of each changed path in the world now. A leading component that is not a
-    /// directory hides the path, unless the act itself left it there and this undo removes it.
-    fn states(
-        &self,
-        changes: &[Change],
-        undone: &std::collections::HashSet<&str>,
-    ) -> Result<Vec<State>, String> {
-        let mut states = Vec::with_capacity(changes.len());
-        let mut files = Vec::new();
-        for (i, c) in changes.iter().enumerate() {
-            let state = self.state_now(&c.path, undone)?;
-            if matches!(state, State::File { .. }) {
-                files.push((i, c.path.as_str()));
-            }
-            states.push(state);
-        }
-        let blobs = self.hash_files(&files.iter().map(|(_, p)| *p).collect::<Vec<_>>())?;
-        for ((i, _), hashed) in files.into_iter().zip(blobs) {
-            if let State::File { blob, .. } = &mut states[i] {
-                *blob = hashed;
-            }
-        }
-        Ok(states)
-    }
-
-    /// One path's state now, its blob left empty for a file (hashed in one batch after).
+    /// One path's state now, read through handles beneath the world. A leading component that
+    /// is not a directory hides the path, unless this undo removes it; a directory holding only
+    /// what this undo removes is as good as absent. A file is hashed only when it is what `left`
+    /// says it should be — a regular file of the same size — so a fifo or a grown file is never
+    /// read.
     fn state_now(
         &self,
+        root: &OwnedFd,
         rel: &str,
-        undone: &std::collections::HashSet<&str>,
+        left: &State,
+        undone: &HashSet<&str>,
+        removed: &HashSet<&str>,
     ) -> Result<State, String> {
-        use std::os::unix::fs::PermissionsExt as _;
+        use rustix::fs::FileType;
+        let io = |e: std::io::Error| format!("{rel}: {e}");
         let parts: Vec<&str> = rel.split('/').collect();
-        for depth in 1..parts.len() {
-            let lead = parts[..depth].join("/");
-            match fs::symlink_metadata(self.world.join(&lead)) {
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::Absent),
-                Err(e) => return Err(format!("{lead}: {e}")),
-                Ok(m) if m.is_dir() => {}
-                Ok(_) if undone.contains(lead.as_str()) => return Ok(State::Absent),
-                Ok(_) => return Ok(State::Beyond { lead }),
+        let name = parts.last().copied().unwrap_or_default();
+        let dir = match pinned::walk(root, &parts).map_err(io)? {
+            pinned::Walk::Parent(dir) => dir,
+            pinned::Walk::Absent => return Ok(State::Absent),
+            pinned::Walk::Blocked(lead) if undone.contains(lead.as_str()) => {
+                return Ok(State::Absent);
             }
-        }
-        let at = self.world.join(rel);
-        Ok(match fs::symlink_metadata(&at) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => State::Absent,
-            Err(e) => return Err(format!("{rel}: {e}")),
-            Ok(m) if m.file_type().is_symlink() => State::Link {
-                target: fs::read_link(&at).map_err(|e| format!("{rel}: {e}"))?,
+            pinned::Walk::Blocked(lead) => return Ok(State::Beyond { lead }),
+        };
+        let Some(st) = pinned::stat(&dir, name).map_err(io)? else {
+            return Ok(State::Absent);
+        };
+        Ok(match pinned::kind(&st) {
+            FileType::Symlink => State::Link {
+                target: pinned::read_link(&dir, name).map_err(io)?,
             },
-            Ok(m) if m.is_file() => State::File {
-                blob: String::new(),
-                executable: m.permissions().mode() & 0o100 != 0,
-            },
-            // A directory holding only what this undo removes is gone once it runs; anything
-            // else in it is a later writer's, which git's checkout would sweep away.
-            Ok(m) if m.is_dir() && only_undone(&at, rel, undone) => State::Absent,
-            Ok(m) if m.is_dir() => State::Dir,
-            Ok(_) => State::Other,
+            FileType::RegularFile => {
+                let executable = st.st_mode & 0o100 != 0;
+                let size = u64::try_from(st.st_size).unwrap_or(0);
+                let blob = match left {
+                    State::File { size: want, .. } if *want == size => {
+                        match pinned::open_regular(&dir, name, size).map_err(io)? {
+                            Some(file) => self.hash(file)?,
+                            None => return Ok(State::Other),
+                        }
+                    }
+                    _ => String::new(),
+                };
+                State::File {
+                    blob,
+                    executable,
+                    size,
+                }
+            }
+            FileType::Directory
+                if pinned::holds_only(&dir, name, rel, &|p| removed.contains(p)) =>
+            {
+                State::Absent
+            }
+            FileType::Directory => State::Dir,
+            _ => State::Other,
         })
     }
 
-    /// The blob ids of `paths` (regular files, relative to the world), byte for byte.
-    fn hash_files(&self, paths: &[&str]) -> Result<Vec<String>, String> {
-        let mut out = Vec::with_capacity(paths.len());
-        for chunk in paths.chunks(200) {
-            let mut args = vec!["hash-object", "--no-filters", "--"];
-            args.extend_from_slice(chunk);
-            let ids = self.ok(&args)?;
-            out.extend(ids.lines().map(str::to_owned));
-        }
-        if out.len() == paths.len() {
-            Ok(out)
+    /// The blob id of what `file` holds, read from its handle, in the store's own hash.
+    fn hash(&self, file: fs::File) -> Result<String, String> {
+        let out = self
+            .command(&["hash-object", "-t", "blob", "--no-filters", "--stdin"])
+            .stdin(file)
+            .output()
+            .map_err(|e| format!("git: {e}"))?;
+        if out.status.success() {
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
         } else {
-            Err("git hash-object: an id short".into())
+            Err(format!(
+                "git hash-object: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
         }
     }
 
@@ -836,6 +890,93 @@ impl Attic {
             Ok(()) => "the repository (.git) was deleted or broken; it was put back from the attic — run `git status` to see the working tree".into(),
             Err(e) => format!("the repository (.git) was deleted or broken, and the attic could not put it back: {e}"),
         })
+    }
+}
+
+/// One `git cat-file --batch` for a whole restore: each object's size and content, asked one at
+/// a time and streamed, never held whole in memory.
+struct Batch {
+    child: Child,
+    input: ChildStdin,
+    output: std::io::BufReader<ChildStdout>,
+}
+
+impl Batch {
+    /// `check`: sizes only (`--batch-check`), no content.
+    fn new(attic: &Attic, check: bool) -> Result<Self, String> {
+        let mut child = attic
+            .command(&["cat-file", if check { "--batch-check" } else { "--batch" }])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("git cat-file: {e}"))?;
+        let input = child.stdin.take().ok_or("git cat-file: no stdin")?;
+        let output = std::io::BufReader::new(child.stdout.take().ok_or("git cat-file: no stdout")?);
+        Ok(Self {
+            child,
+            input,
+            output,
+        })
+    }
+
+    /// Ask for `oid`: its size, and a reader on its content (read exactly that many bytes,
+    /// then call [`Batch::end_object`]).
+    fn open(&mut self, oid: &str) -> Result<(u64, &mut std::io::BufReader<ChildStdout>), String> {
+        let lost = |e: std::io::Error| format!("git cat-file: {e}");
+        writeln!(self.input, "{oid}").map_err(lost)?;
+        self.input.flush().map_err(lost)?;
+        let mut header = String::new();
+        self.output.read_line(&mut header).map_err(lost)?;
+        let size = header
+            .trim_end()
+            .rsplit(' ')
+            .next()
+            .and_then(|n| n.parse::<u64>().ok())
+            .filter(|_| header.split(' ').nth(1) == Some("blob"))
+            .ok_or_else(|| format!("the attic lost `{oid}`: {}", header.trim_end()))?;
+        Ok((size, &mut self.output))
+    }
+
+    /// Read the newline git writes after an object's content.
+    fn end_object(&mut self) -> Result<(), String> {
+        let mut nl = [0u8; 1];
+        self.output
+            .read_exact(&mut nl)
+            .map_err(|e| format!("git cat-file: {e}"))
+    }
+
+    /// The state a tree entry records: a link's target from this (content) batch, a file's
+    /// size from `check`.
+    fn state(&mut self, check: &mut Batch, entry: Option<&Entry>) -> Result<State, String> {
+        let Some(e) = entry else {
+            return Ok(State::Absent);
+        };
+        if e.mode != "120000" {
+            let (size, _) = check.open(&e.oid)?;
+            return Ok(State::File {
+                blob: e.oid.clone(),
+                executable: e.mode == "100755",
+                size,
+            });
+        }
+        let (size, content) = self.open(&e.oid)?;
+        let mut target = Vec::new();
+        content
+            .take(size)
+            .read_to_end(&mut target)
+            .map_err(|err| format!("git cat-file: {err}"))?;
+        self.end_object()?;
+        Ok(State::Link {
+            target: PathBuf::from(std::ffi::OsString::from_vec(target)),
+        })
+    }
+}
+
+impl Drop for Batch {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -953,4 +1094,105 @@ fn large_files(world: &Path) -> Vec<String> {
                 .map(|p| p.to_string_lossy().into_owned())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::{Attic, Restore};
+
+    thread_local! {
+        static BETWEEN: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
+    }
+
+    /// Run the test's racer, if any: after the check, before the writes.
+    pub(super) fn between() {
+        if let Some(racer) = BETWEEN.with(|b| b.borrow_mut().take()) {
+            racer();
+        }
+    }
+
+    struct Ground(PathBuf);
+
+    impl Drop for Ground {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A world whose `src` the act changes; then a racer swaps `src` for a symlink to a
+    /// directory outside, holding the same files, after the check and before the writes.
+    fn raced(name: &str, act: impl FnOnce(&Path)) -> (Ground, Result<Restore, String>) {
+        let root =
+            std::env::temp_dir().join(format!("mnemorph-race-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("world/src")).unwrap();
+        fs::write(root.join("world/src/a.rs"), "before\n").unwrap();
+        let world = root.join("world");
+        let attic = Attic::at(&root.join("attic"), &world).expect("git");
+        let before = attic.snapshot("before").unwrap();
+        act(&world);
+        let act = attic.seal(before, "after").unwrap();
+        let (w, outside) = (world.clone(), root.join("outside"));
+        BETWEEN.with(|b| {
+            *b.borrow_mut() = Some(Box::new(move || {
+                fs::rename(w.join("src"), &outside).unwrap();
+                std::os::unix::fs::symlink(&outside, w.join("src")).unwrap();
+            }));
+        });
+        let r = attic.restore(&act, &[]);
+        (Ground(root), r)
+    }
+
+    fn listing(dir: &Path) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| {
+                let e = e.unwrap();
+                let name = e.file_name().to_string_lossy().into_owned();
+                (name, fs::read_to_string(e.path()).unwrap_or_default())
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// A write raced by a swap goes nowhere: the file outside keeps what it held, and no
+    /// temporary is left there.
+    #[test]
+    fn a_parent_swapped_after_the_check_is_never_written_through() {
+        let (g, r) = raced("write", |w| {
+            fs::write(w.join("src/a.rs"), "the act\n").unwrap();
+        });
+        assert!(r.is_err(), "{r:?}");
+        assert_eq!(
+            listing(&g.0.join("outside")),
+            [("a.rs".to_owned(), "the act\n".to_owned())]
+        );
+        let log = fs::read_to_string(g.0.join("attic/snapshots.log")).unwrap();
+        assert!(
+            log.lines().last().unwrap().contains("failed at `src/a.rs`")
+                && log.contains("not restored: src/a.rs"),
+            "{log}"
+        );
+    }
+
+    /// A removal raced by a swap removes nothing outside.
+    #[test]
+    fn a_parent_swapped_after_the_check_is_never_removed_through() {
+        let (g, r) = raced("unlink", |w| {
+            fs::write(w.join("src/new.rs"), "the act\n").unwrap();
+        });
+        assert!(r.is_err(), "{r:?}");
+        assert_eq!(
+            listing(&g.0.join("outside")),
+            [
+                ("a.rs".to_owned(), "before\n".to_owned()),
+                ("new.rs".to_owned(), "the act\n".to_owned())
+            ]
+        );
+    }
 }

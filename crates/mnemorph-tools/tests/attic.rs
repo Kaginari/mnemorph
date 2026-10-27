@@ -663,3 +663,35 @@ fn a_path_outside_the_world_is_refused() {
     }
     assert_eq!(read(&g, "src/a.rs"), "x\n");
 }
+
+/// A fifo where the act left a file is a conflict, and never blocks the restore.
+#[test]
+fn a_fifo_is_a_conflict_and_never_hangs() {
+    let g = Ground::new("guard-fifo");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    fs::remove_file(g.world().join("src/a.rs")).unwrap();
+    let made = Command::new("mkfifo")
+        .arg(g.world().join("src/a.rs"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert!(
+        matches!(&c[..], [(p, State::File { .. }, State::Other)] if p == "src/a.rs"),
+        "{c:?}"
+    );
+}
+
+/// A file grown past what the act left is a conflict by its size alone: it is never read.
+#[test]
+fn an_oversized_file_is_a_conflict_unread() {
+    let g = Ground::new("guard-big");
+    let (attic, act) = sealed(&g, |w| fs::write(w.join("src/a.rs"), "the act\n").unwrap());
+    fs::write(g.world().join("src/a.rs"), vec![b'x'; 9 * 1024 * 1024]).unwrap();
+    let c = conflicts(attic.restore(&act, &[]).unwrap());
+    assert!(
+        matches!(&c[..], [(_, State::File { size: 8, .. }, State::File { blob, size, .. })]
+            if blob.is_empty() && *size == 9 * 1024 * 1024),
+        "{c:?}"
+    );
+}

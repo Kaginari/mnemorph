@@ -5286,3 +5286,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** `git checkout <tree> -- p` never follows a symlinked directory — it unlinks it and
   makes a directory, and with a directory in the way it removes the subtree: safe for the world's
   border, destructive for a later writer, so both are checked before git runs.
+
+---
+
+### [2026-10-27T17:05:26+01:00] rimuru — #90, reviewed (Opus, then Fable): the attic's undo owns its writes
+- **Done:** `restore` no longer runs `git checkout` (its cached leading-path check then
+  unlink/create through the parent could be led out by a swap). New private `pinned`: parents by
+  `openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)`, else an `O_NOFOLLOW|O_DIRECTORY` walk; content
+  from one `cat-file --batch` into an exclusive temp, `fchmod`, `renameat` (`NOREPLACE` where the
+  act left nothing); `symlinkat`; `unlinkat` never on a directory; only empty dirs removed. Files
+  hashed only when a regular file of the left size, opened `O_NONBLOCK|O_NOFOLLOW`, hashed from the
+  fd. `Attic::hold`/`restore_held`; `remove_created` for commission's new-file removal; the act
+  sealed when `child.ask` returns; a part-way failure journaled. The rollback module dropped: the
+  deploy rule stays in 02 as M9 work. Docs 05, 02.
+- **Tests:** racer hook swaps `src` for a symlink between check and write: nothing outside written
+  or removed; fifo and oversized file are conflicts, unread; pinned removal test. Guards disabled
+  (comparison off, `NOFOLLOW`/resolve flags off): 11 tests fail.
+- **Learned:** re-checking metadata before a path-based write is still check-then-act; only a
+  pinned handle closes it. Open (@?): repair's n restores read n diffs — batch later.

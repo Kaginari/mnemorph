@@ -521,7 +521,7 @@ pub(crate) async fn order(
         &roster,
         &a.to,
         &before,
-        held.as_ref(),
+        sealed(cx, held).as_ref(),
         &courts,
         answered,
     );
@@ -1366,6 +1366,13 @@ fn held_before(cx: &Context) -> Option<mnemorph_tools::Snapshot> {
         .and_then(|attic| attic.snapshot("before a commission").ok())
 }
 
+/// The child's act, sealed: the attic's snapshot before it and one of what it left, taken the
+/// moment it ends, so what another court writes after is never taken for it, nor undone with it.
+fn sealed(cx: &Context, held: Option<mnemorph_tools::Snapshot>) -> Option<mnemorph_tools::Act> {
+    let attic = cx.attic()?;
+    attic.seal(held?, "after a commission").ok()
+}
+
 /// The note for what another writer changed while the child ran: named, and left as it is.
 fn others_note(others: &[PathBuf]) -> Option<String> {
     (!others.is_empty()).then(|| {
@@ -1387,7 +1394,7 @@ fn repair(
     roster: &Roster,
     name: &str,
     before: &crate::gate::Tree,
-    held: Option<&mnemorph_tools::Snapshot>,
+    act: Option<&mnemorph_tools::Act>,
     courts: &[PathBuf],
     answered: bool,
 ) -> (Vec<PathBuf>, Vec<(PathBuf, bool)>, Vec<PathBuf>) {
@@ -1395,9 +1402,11 @@ fn repair(
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
     let mut others = Vec::new();
-    // The act is sealed once, when the first path needs putting back: the attic undoes a path
-    // only while it is still as the child left it.
-    let mut sealed: Option<Option<mnemorph_tools::Act>> = None;
+    // The attic's lock, over every restore and removal here: they run in turn with every other
+    // snapshot and restore of the world. Each path is undone only while it is still as the child
+    // left it. (Each restore reads the act's whole diff: n strays cost n diffs.)
+    let attic = cx.attic();
+    let held = attic.and_then(|a| a.hold().ok());
     for rel in changed(before, &c.world) {
         if courts.contains(&rel) {
             continue;
@@ -1415,22 +1424,17 @@ fn repair(
             continue;
         }
         let restored = if before.has(&rel) {
-            match (cx.attic(), held) {
-                (Some(attic), Some(snap)) if attic.holds(snap, &shown) => sealed
-                    .get_or_insert_with(|| attic.seal(snap.clone(), "after a commission").ok())
-                    .as_ref()
-                    .is_some_and(|act| {
-                        matches!(
-                            attic.restore(act, &[shown.as_str()]),
-                            Ok(mnemorph_tools::Restore::Restored(_))
-                        )
-                    }),
+            match (attic, act, held.as_ref()) {
+                (Some(attic), Some(act), Some(held)) if attic.holds(&act.before, &shown) => {
+                    matches!(
+                        attic.restore_held(held, act, &[shown.as_str()]),
+                        Ok(mnemorph_tools::Restore::Restored(_))
+                    )
+                }
                 _ => false,
             }
         } else {
-            let path = c.world.join(&rel);
-            path.symlink_metadata().is_ok_and(|m| !m.is_dir())
-                && std::fs::remove_file(&path).is_ok()
+            matches!(mnemorph_tools::remove_created(&c.world, &rel), Ok(true))
         };
         put_back.push((rel, restored));
     }
