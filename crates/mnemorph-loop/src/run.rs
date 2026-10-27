@@ -65,14 +65,8 @@ impl Limits {
     /// A race's steps, a session's clock, a 200k window.
     #[must_use]
     pub fn for_race(race: Race) -> Self {
-        let steps = match race {
-            Race::Kijin | Race::Oni => 20,
-            Race::Elf | Race::HighElf | Race::Orc | Race::HighOrc => 30,
-            Race::NamedSlime => 60,
-            Race::Rimuru | Race::Slime | Race::DarkElf | Race::ArchDarkElf => 40,
-        };
         Self {
-            steps,
+            steps: race.steps(),
             deadline: Duration::from_hours(1),
             window: 200_000,
             stress_tokens: STRESS_TOKENS,
@@ -2791,6 +2785,15 @@ mod tests {
 
     use super::{Beat, Body, Limits, MOVED, OMITTED, Run, Setup, strip_thinking};
     use crate::model::ScriptedModel;
+
+    #[test]
+    fn steps_come_from_the_race_law() {
+        for race in Race::ALL {
+            assert_eq!(Limits::for_race(race).steps, race.steps(), "{race:?}");
+        }
+        assert_eq!(Limits::for_race(Race::NamedSlime).steps, 60);
+        assert_eq!(Limits::for_race(Race::Slime).steps, 40);
+    }
 
     fn thought(then: Block, stop: StopReason) -> Response {
         Response {

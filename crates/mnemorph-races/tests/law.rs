@@ -223,6 +223,8 @@ fn meters_band_their_reading() {
     let at = |race: Race, value: f64| {
         let s = Signals {
             reports: 5,
+            findings: 5,
+            outward_acts: 5,
             ask_done_rate: value,
             plan_land_rate: value,
             land_rate: value,
@@ -253,6 +255,29 @@ fn meters_band_their_reading() {
         ..Signals::default()
     };
     assert_eq!(meter(Race::Slime, &few).band, Band::Unranked);
+    // Each race is ranked on its own unit: findings for a Dark Elf, outward acts for a Kijin.
+    let many_reports = Signals {
+        reports: 50,
+        findings: 4,
+        outward_acts: 4,
+        upheld_rate: 100.0,
+        outward_clean_rate: 100.0,
+        ..Signals::default()
+    };
+    for race in [Race::DarkElf, Race::ArchDarkElf, Race::Kijin, Race::Oni] {
+        assert_eq!(meter(race, &many_reports).band, Band::Unranked, "{race}");
+    }
+    let own_unit = Signals {
+        findings: 5,
+        outward_acts: 5,
+        upheld_rate: 100.0,
+        outward_clean_rate: 100.0,
+        ..Signals::default()
+    };
+    for race in [Race::DarkElf, Race::Kijin] {
+        assert_eq!(meter(race, &own_unit).band, Band::Ok, "{race}");
+    }
+    assert_eq!(meter(Race::Slime, &own_unit).band, Band::Unranked);
 }
 
 /// For each ascended form: a record exactly at its bars, and one bar at a time nudged just past.
@@ -361,6 +386,10 @@ fn rise_cases() -> Vec<(Race, Signals, Vec<Signals>)> {
                 },
                 Signals {
                     rollbacks: 1,
+                    ..oni
+                },
+                Signals {
+                    envelope_corrections: 1,
                     ..oni
                 },
             ],
