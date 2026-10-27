@@ -791,6 +791,8 @@ impl Receipt {
 pub struct PostJournal {
     /// The post whose acts it journals: it commits no other.
     pub(crate) post: Post,
+    /// The world it is in: where an incident's lesson is read.
+    pub(crate) world: PathBuf,
     journal: Journal<Row>,
     pub(crate) witness: Option<Journal<Row>>,
 }
@@ -863,6 +865,7 @@ impl PostJournal {
     pub fn of(world: &Path, post: Post) -> Self {
         Self {
             post,
+            world: world.to_path_buf(),
             journal: Journal::new(post_journal(world, post)),
             witness: kijin_witness(world, post.creature()).map(Journal::new),
         }

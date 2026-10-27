@@ -44,7 +44,7 @@ use mnemorph_tools::{Answer, Context, Fingerprint, Outcome, Place, Tool};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::closure::{Entry, tells_downstream};
+use crate::closure::{Entry, forge_repo, told_prefix};
 use crate::receipt::{
     branch_tips, carries, command_line, excerpt, labels_argv, ls_remote_argv, private_file,
     receipt_id, redact, sha256,
@@ -811,6 +811,26 @@ impl<'a> Runner<'a> {
             return refuse("only a comment tells downstream of an incident".into());
         }
         self.may_act()?;
+        // A telling comment opens with the harness's words, naming the act; the Kijin's follow.
+        let told;
+        let request = match (&request.tells, &request.act) {
+            (Some(of), Act::Comment { repo, pr, body }) => {
+                if body.trim().is_empty() {
+                    return refuse("a comment that tells downstream says what happened".into());
+                }
+                told = Request {
+                    act: Act::Comment {
+                        repo: repo.clone(),
+                        pr: *pr,
+                        body: format!("{}{body}", told_prefix(of)),
+                    },
+                    key: request.key.clone(),
+                    tells: request.tells.clone(),
+                };
+                &told
+            }
+            _ => request,
+        };
         let planned = crate::plan(&request.act, &self.place())
             .map_err(|e| Refusal::Refused(e.to_string()))?;
         check_class(self.cx.race(), planned.class())
@@ -1113,36 +1133,75 @@ impl<'a> Runner<'a> {
         }
     }
 
-    /// Whether a new act may land at `pin`: no open incident of the post is on that target, but
-    /// for the comment that tells downstream of one, which must be on its incident's pull request.
+    /// Whether a new act may land at `pin`: no open incident of the post is on that target — but
+    /// for the comment that tells downstream of the one incident open there, on the pull request
+    /// its act concerns.
     fn clear(&self, act: &Act, pin: &Pin, tells: Option<&str>) -> Result<(), Refusal> {
-        if let Some(of) = tells {
-            let incident = self
-                .journal
-                .incident(of)
-                .map_err(|e| Refusal::Refused(format!("the post's incidents cannot be read: {e}")))?
-                .filter(crate::Incident::is_open)
-                .ok_or_else(|| {
-                    Refusal::Refused(format!(
-                        "act {} has no open incident of the {} post to tell of",
-                        excerpt(of.as_bytes(), 64),
-                        self.journal.post.creature()
-                    ))
-                })?;
-            if !tells_downstream(&incident, act, pin) {
-                return Err(Refusal::Refused(format!(
-                    "a comment telling of the incident on act {of} goes on the pull request its act was on"
-                )));
-            }
-            return Ok(());
+        let open = self.journal.blocking(act, pin).map_err(Refusal::Refused)?;
+        let Some(of) = tells else {
+            return match open.first() {
+                Some(incident) => Err(Refusal::Refused(format!(
+                    "the incident on act {} is open on this target, missing {}: no new act lands here until it closes; only a comment that `tells` of it is admitted (`mnemorph status` lists it)",
+                    incident.act,
+                    incident.missing().join(", ")
+                ))),
+                None => Ok(()),
+            };
+        };
+        let incident = self
+            .journal
+            .incident(of)
+            .map_err(|e| Refusal::Refused(format!("the post's incidents cannot be read: {e}")))?
+            .filter(crate::Incident::is_open)
+            .ok_or_else(|| {
+                Refusal::Refused(format!(
+                    "act {} has no open incident of the {} post to tell of",
+                    excerpt(of.as_bytes(), 64),
+                    self.journal.post.creature()
+                ))
+            })?;
+        if let Some(other) = open.iter().find(|i| i.act != of) {
+            return Err(Refusal::Refused(format!(
+                "the incident on act {} is open on this target: a comment telling of another incident does not land here",
+                other.act
+            )));
         }
-        match self.journal.blocking(act, pin).map_err(Refusal::Refused)? {
-            Some(incident) => Err(Refusal::Refused(format!(
-                "the incident on act {} is open on this target, missing {}: no new act lands here until it closes; only a comment that `tells` of it is admitted (`mnemorph status` lists it)",
-                incident.act,
-                incident.missing().join(", ")
-            ))),
-            None => Ok(()),
+        self.speaks_to(&incident, act, pin).map_err(|why| {
+            Refusal::Refused(format!(
+                "a comment telling of the incident on act {of} goes on the pull request its act concerns: {why}"
+            ))
+        })
+    }
+
+    /// Whether a comment at `pin` is on the pull request the incident's act concerns: the act's
+    /// own, for a label or a comment; for a branch, one whose head is that branch, in the
+    /// repository a pinned push URL names on the comment's host — read through the probe.
+    fn speaks_to(&self, incident: &crate::Incident, act: &Act, pin: &Pin) -> Result<(), String> {
+        let (Act::Comment { repo, pr, .. }, Pin::Forge { host }) = (act, pin) else {
+            return Err("only a comment tells downstream".into());
+        };
+        match &incident.typed {
+            Some((Act::AddLabel { .. } | Act::Comment { .. }, _)) => {
+                if incident.same_target(act, pin) {
+                    Ok(())
+                } else {
+                    Err("it is not the act's pull request".into())
+                }
+            }
+            Some((Act::PushNewBranch { name, .. }, Pin::Push { urls, .. })) => {
+                let (mut probes, mut seen) = (Vec::new(), Vec::new());
+                branch_pr(
+                    name,
+                    urls,
+                    repo,
+                    *pr,
+                    host,
+                    self.probe,
+                    &mut probes,
+                    &mut seen,
+                )
+            }
+            _ => Err("the incident's act is not known".into()),
         }
     }
 
@@ -1304,6 +1363,9 @@ impl<'a> Runner<'a> {
         let short = plan.short();
         let mut committed: Option<String> = None;
         let mut before = || {
+            // What the act left is read again after the recheck: edited while the human read the
+            // card, it is not undone.
+            self.still_its_own(intent).map_err(|e| e.to_string())?;
             self.journal
                 .open_rollback(of)
                 .map_err(|e| format!("the incident could not be opened: {e}"))?;
@@ -1505,6 +1567,59 @@ fn pin_shown(pin: &Pin) -> Vec<String> {
         Pin::Push { urls, .. } => urls.iter().map(|u| redact(u)).collect(),
         Pin::Forge { host } => vec![format!("host {host}")],
         Pin::Unpinned => Vec::new(),
+    }
+}
+
+/// Whether pull request `repo#pr` on `host` has the branch `name` as its head, in a repository one
+/// of the act's push `urls` names on that host.
+#[allow(clippy::too_many_arguments)]
+fn branch_pr(
+    name: &str,
+    urls: &[String],
+    repo: &str,
+    pr: u64,
+    host: &str,
+    probe: &dyn Probe,
+    probes: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> Result<(), String> {
+    #[derive(Deserialize)]
+    struct Head {
+        #[serde(rename = "ref")]
+        branch: String,
+        repo: Option<Full>,
+    }
+    #[derive(Deserialize)]
+    struct Full {
+        full_name: String,
+    }
+    #[derive(Deserialize)]
+    struct Pull {
+        head: Head,
+    }
+    let pushed: Vec<String> = urls.iter().filter_map(|u| forge_repo(u, host)).collect();
+    if pushed.is_empty() {
+        return Err(format!(
+            "no push URL of the branch is a repository on {host}: nothing ties a pull request to it"
+        ));
+    }
+    let pull: Pull = serde_json::from_slice(&probed(
+        probe,
+        &forge_get(host, &format!("repos/{repo}/pulls/{pr}")),
+        probes,
+        seen,
+    )?)
+    .map_err(|e| format!("the pull request does not read: {e}"))?;
+    let head = pull.head.repo.map(|r| r.full_name).unwrap_or_default();
+    if pull.head.branch == name && pushed.iter().any(|r| r.eq_ignore_ascii_case(&head)) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{repo}#{pr}'s head is {}:{}, not {name} on {}",
+            excerpt(head.as_bytes(), 100),
+            excerpt(pull.head.branch.as_bytes(), 100),
+            pushed.join(", ")
+        ))
     }
 }
 
@@ -1743,6 +1858,45 @@ mod tests {
         // A comment that tells of an incident is never the replay of one that does not.
         let (t, rt) = keyed(&comment("one"), &pin, None, Some("abc")).unwrap();
         assert_ne!((t, rt), (a, ra));
+    }
+
+    #[test]
+    fn a_branch_is_told_of_only_on_a_pull_request_whose_head_it_is() {
+        use crate::{Probe, Seen};
+        struct Pulls(&'static str);
+        impl Probe for Pulls {
+            fn run(&self, _: &[String], _: std::time::Duration) -> Result<Seen, String> {
+                Ok(Seen {
+                    code: Some(0),
+                    out: self.0.as_bytes().to_vec(),
+                    ..Seen::default()
+                })
+            }
+        }
+        let urls = ["git@github.com:me/proj.git".to_owned()];
+        let check = |body: &'static str, urls: &[String]| {
+            let (mut p, mut s) = (Vec::new(), Vec::new());
+            super::branch_pr(
+                "feat/x",
+                urls,
+                "up/proj",
+                4,
+                "github.com",
+                &Pulls(body),
+                &mut p,
+                &mut s,
+            )
+        };
+        let ours = r#"{"head": {"ref": "feat/x", "repo": {"full_name": "Me/Proj"}}}"#;
+        assert_eq!(check(ours, &urls), Ok(()));
+        for other in [
+            r#"{"head": {"ref": "feat/y", "repo": {"full_name": "me/proj"}}}"#,
+            r#"{"head": {"ref": "feat/x", "repo": {"full_name": "you/proj"}}}"#,
+            r#"{"head": {"ref": "feat/x", "repo": null}}"#,
+        ] {
+            assert!(check(other, &urls).is_err(), "{other}");
+        }
+        assert!(check(ours, &["/srv/me/proj.git".to_owned()]).is_err());
     }
 
     #[test]

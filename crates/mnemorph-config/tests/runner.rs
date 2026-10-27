@@ -555,6 +555,8 @@ impl Probe for Forge {
                 .find(|(c, _, _)| c.to_string() == id)
                 .unwrap();
             serde_json::json!({"id": id, "body": body, "issue_url": issue, "user": {"login": author}})
+        } else if path == "repos/me/proj/pulls/12" {
+            serde_json::json!({"head": {"ref": "feat/x", "repo": {"full_name": "me/proj"}}})
         } else if path.starts_with("repos/me/proj/issues/12/events") {
             serde_json::json!(s.events.iter().map(|(e, actor, label, at)| serde_json::json!({
                 "event": e, "actor": {"login": actor}, "label": {"name": label}, "created_at": at
@@ -1329,9 +1331,9 @@ fn a_lesson_must_be_written_in_the_world() {
     ));
     std::os::unix::fs::symlink("/etc/hostname", f.world.join("link.rs")).unwrap();
     assert!(Lesson::test(&f.world, "link.rs").is_err());
-    assert!(Lesson::thought("a b", "text").is_err());
-    assert!(Lesson::thought("19a-ff", " ").is_err());
-    assert!(Lesson::thought("19a-ff", "Ask before labelling.").is_ok());
+    assert!(Lesson::thought("a b", "text", 0).is_err());
+    assert!(Lesson::thought("19a-ff", " ", 0).is_err());
+    assert!(Lesson::thought("19a-ff", "Ask before labelling.", 0).is_ok());
     // No incident, no lesson.
     let lesson = Lesson::verify(&f.world, "card.md", 2).unwrap();
     assert!(
@@ -1376,4 +1378,178 @@ fn an_undo_whose_remote_now_points_elsewhere_is_refused_before_the_gate() {
     assert_eq!(f.human.asked(), 1);
     assert_eq!(f.remote_branch().as_deref(), Some(f.head.as_str()));
     assert_eq!(f.incidents(), []);
+}
+
+#[test]
+fn a_telling_comment_lands_only_on_its_own_incidents_pull_request() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    // Two incidents: a label on me/proj#12, and a branch pushed to a local remote.
+    let label_act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    f.undo(&label_act, &forge, &forge).unwrap();
+    let branch = f.push().unwrap().receipt;
+    f.undo(&branch, &f.observer(), &Sandboxed).unwrap();
+    let asked = f.human.asked();
+    // Telling of the branch on the pull request another incident suspends: refused.
+    let err = f
+        .act(&tells("Deleted feat/x.", &branch), &forge, &forge)
+        .unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("telling of another incident")),
+        "{err:?}"
+    );
+    // Telling of the label on another pull request: refused.
+    let elsewhere = Request {
+        act: Act::Comment {
+            repo: "me/other".into(),
+            pr: 3,
+            body: "Removed the label.".into(),
+        },
+        key: None,
+        tells: Some(label_act.clone()),
+    };
+    let err = f.act(&elsewhere, &forge, &forge).unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("not the act's pull request")),
+        "{err:?}"
+    );
+    // The label's incident told and closed, the branch's telling on #12 is still refused: no push
+    // URL of a local remote names a repository the pull request could be from.
+    f.act(&tells("Removed the label.", &label_act), &forge, &forge)
+        .unwrap();
+    f.lesson(&label_act);
+    let err = f
+        .act(&tells("Deleted feat/x.", &branch), &forge, &forge)
+        .unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Refused(w) if w.contains("no push URL")),
+        "{err:?}"
+    );
+    assert_eq!(
+        f.human.asked(),
+        asked + 1,
+        "a refused telling reached the gate"
+    );
+}
+
+#[test]
+fn a_telling_comment_opens_with_the_harnesss_words_or_it_tells_nothing() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    f.undo(&act, &forge, &forge).unwrap();
+    let err = f.act(&tells("  ", &act), &forge, &forge).unwrap_err();
+    assert!(matches!(err, Refusal::Refused(_)), "{err:?}");
+    let told = f.act(&tells("Removed it.", &act), &forge, &forge).unwrap();
+    let body = forge
+        .state
+        .lock()
+        .unwrap()
+        .comments
+        .last()
+        .unwrap()
+        .1
+        .clone();
+    assert_eq!(body, format!("Rolled back act {act}: Removed it."));
+    assert_eq!(
+        f.incident(&act).told.as_deref(),
+        Some(told.receipt.as_str())
+    );
+    // An intent whose body lost the harness's words tells nothing.
+    let intents = f.witness.with_extension("intents.jsonl");
+    let text = fs::read_to_string(&intents).unwrap();
+    fs::write(&intents, text.replace("Rolled back act ", "Rolled act ")).unwrap();
+    assert_eq!(f.incident(&act).told, None);
+}
+
+#[test]
+fn a_lesson_is_written_after_the_incident_and_dropped_when_it_changes() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    f.undo(&act, &forge, &forge).unwrap();
+    let journal = f.journal(Post::Forge);
+    // A file the world held unchanged when the incident opened is no lesson.
+    let old = Lesson::test(&f.world, "a.txt").unwrap();
+    let err = journal.lesson(&act, old).unwrap_err();
+    assert!(err.contains("unchanged since the incident opened"), "{err}");
+    // Nor a Thought born before it.
+    let early = Lesson::thought("19a-ff", "Ask before labelling.", 1000).unwrap();
+    assert!(
+        journal
+            .lesson(&act, early)
+            .unwrap_err()
+            .contains("born before")
+    );
+    // A file changed since is one, and the human sees the change.
+    fs::write(f.world.join("a.txt"), "one\nlabels wait for review\n").unwrap();
+    let edited = Lesson::test(&f.world, "a.txt").unwrap();
+    let diff = journal.lesson_change(&act, &edited).unwrap();
+    assert!(diff.contains("+labels wait for review"), "{diff}");
+    let inc = journal.lesson(&act, edited).unwrap();
+    assert!(inc.lesson.is_some());
+    // Edited after it was recorded, it counts no more.
+    fs::write(f.world.join("a.txt"), "one\n").unwrap();
+    assert_eq!(f.incident(&act).lesson, None);
+}
+
+#[test]
+fn a_comment_edited_while_the_human_reads_the_card_is_not_undone() {
+    let f = Fixture::new();
+    let forge = Arc::new(Forge::new());
+    let act = f
+        .act(&comment("Ready.", None), &*forge, &*forge)
+        .unwrap()
+        .receipt;
+    let meanwhile = forge.clone();
+    *f.human.meanwhile.lock().unwrap() = Some(Box::new(move |n| {
+        if n == 2 {
+            meanwhile.state.lock().unwrap().comments[0].1 = "Edited meanwhile.".into();
+        }
+    }));
+    let err = f.undo(&act, &*forge, &*forge).unwrap_err();
+    assert!(
+        matches!(&err, Refusal::Failed(w) if w.contains("edited")),
+        "{err:?}"
+    );
+    let s = forge.state.lock().unwrap();
+    assert_eq!(
+        (s.comments.len(), s.undos),
+        (1, 0),
+        "the edited comment was deleted"
+    );
+}
+
+#[test]
+fn a_correction_counts_only_while_it_is_the_acts_latest_row() {
+    let f = Fixture::new();
+    let forge = Forge::new();
+    let act = f.act(&label("ready"), &forge, &forge).unwrap().receipt;
+    f.undo(&act, &forge, &forge).unwrap();
+    assert!(f.incident(&act).corrected.is_some());
+    let mut later = Row {
+        act: act.clone(),
+        state: State::Reconcile,
+        at: Timestamp::now(),
+        command: None,
+        target: Vec::new(),
+        plan: None,
+        exit: None,
+        expect: None,
+        probe: None,
+        seen: None,
+        why: Some("seen again".into()),
+        undoes: None,
+        by: None,
+    };
+    Journal::<Row>::new(&f.witness).append(&later).unwrap();
+    assert_eq!(f.incident(&act).corrected, None);
+    later.state = State::Corrected;
+    later.by = Some("f0f0f0f0f0f0".into());
+    Journal::<Row>::new(&f.witness).append(&later).unwrap();
+    assert_eq!(
+        f.incident(&act).corrected,
+        None,
+        "a correction naming another undo counted"
+    );
 }

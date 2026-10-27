@@ -36,6 +36,32 @@ impl Fixture {
         fs::create_dir_all(&world).unwrap();
         fs::create_dir_all(&state).unwrap();
         let world = world.canonicalize().unwrap();
+        // A world with a commit: a lesson is what changed since the incident opened.
+        fs::create_dir_all(world.join("tests")).unwrap();
+        fs::write(world.join("tests/old.rs"), "#[test]\nfn old() {}\n").unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["add", "tests/old.rs"],
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-qm",
+                "one",
+            ],
+        ] {
+            assert!(
+                Command::new("git")
+                    .args(args)
+                    .current_dir(&world)
+                    .env("GIT_CONFIG_NOSYSTEM", "1")
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
         // Two forge acts the probe could not place: `abc123` and `def456`, each with its intent.
         let w = witness(&state, &world, "kijin-forge");
         fs::create_dir_all(w.parent().unwrap()).unwrap();
@@ -65,14 +91,25 @@ impl Fixture {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        self.answer(args, "")
+    }
+
+    /// Run with `input` on stdin: the human's answer to a confirmation.
+    fn answer(&self, args: &[&str], input: &str) -> Output {
+        use std::io::Write as _;
+        let mut child = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
             .arg("incident")
             .args(args)
             .args(["--world", self.world.to_str().unwrap()])
             .env("XDG_STATE_HOME", &self.state)
             .env_remove("MNEMORPH_BODY")
-            .output()
-            .unwrap()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
+        child.wait_with_output().unwrap()
     }
 }
 
@@ -115,13 +152,24 @@ fn the_human_marks_lists_and_settles_incidents_and_records_a_lesson() {
     // The lesson must exist in the world.
     let out = f.run(&["lesson", "forge", "abc123", "test", "tests/missing.rs"]);
     assert_eq!(out.status.code(), Some(2), "{}", text(&out));
-    fs::create_dir_all(f.world.join("tests")).unwrap();
+    // A test the world held unchanged when the incident opened is no lesson.
+    let out = f.answer(
+        &["lesson", "forge", "abc123", "test", "tests/old.rs"],
+        "y\n",
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+    assert!(text(&out).contains("unchanged"), "{}", text(&out));
     fs::write(
         f.world.join("tests/label.rs"),
         "#[test]\nfn asks_first() {}\n",
     )
     .unwrap();
-    let out = f.run(&["lesson", "kijin-forge", "abc123", "test", "tests/label.rs"]);
+    // The human sees the lesson and declines: nothing is recorded.
+    let lesson = ["lesson", "kijin-forge", "abc123", "test", "tests/label.rs"];
+    let out = f.answer(&lesson, "n\n");
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+    assert!(text(&out).contains("fn asks_first"), "{}", text(&out));
+    let out = f.answer(&lesson, "y\n");
     assert!(out.status.success(), "{}", text(&out));
     let said = text(&out);
     assert!(

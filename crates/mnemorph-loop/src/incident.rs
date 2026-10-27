@@ -56,8 +56,9 @@ pub fn settle(world: &Path, post: Post, act: &str, why: Option<&str>) -> Result<
     ))
 }
 
-/// The text of the Thought `id`: a note of the world's shared memory or of a creature's.
-fn thought(world: &Path, id: &str) -> Result<String, String> {
+/// The text and birth of the Thought `id`: a note of the world's shared memory or of a
+/// creature's.
+fn thought(world: &Path, id: &str) -> Result<(String, u64), String> {
     let mut tiers = vec![Tier::Shared];
     if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
         for e in rd.filter_map(Result::ok) {
@@ -72,35 +73,55 @@ fn thought(world: &Path, id: &str) -> Result<String, String> {
     for tier in tiers {
         let back = read(world, &tier).map_err(|e| format!("memory cannot be read: {e}"))?;
         if let Some(note) = fold(&back.rows).remove(id) {
-            return Ok(note.text);
+            return Ok((note.text, note.born));
         }
     }
     Err(format!("no Thought `{id}` in this world's memory"))
 }
 
-/// Record the lesson of the incident on act `act` of `post`: `test <path>`, `verify
-/// <path>:<line>` or `thought <id>`, each checked to exist.
+/// The lesson the words name for the incident on act `act` of `post` — `test <path>`, `verify
+/// <path>:<line>` or `thought <id>`, each checked to exist and to be written after the incident
+/// opened — and what it changed since, for the human to read before it is recorded.
 ///
 /// # Errors
 ///
-/// The words name no lesson, it does not exist, or the incident takes none.
-pub fn lesson(world: &Path, post: Post, act: &str, words: &[String]) -> Result<String, String> {
-    let lesson = match words {
-        [kind, path] if kind == "test" => Lesson::test(world, path)?,
+/// The words name no lesson, it does not exist, it was not written after the incident, or the
+/// incident takes none.
+pub fn lesson(
+    world: &Path,
+    post: Post,
+    act: &str,
+    words: &[String],
+) -> Result<(Lesson, String), String> {
+    let (lesson, text) = match words {
+        [kind, path] if kind == "test" => (Lesson::test(world, path)?, None),
         [kind, at] if kind == "verify" => {
             let (path, line) = at
                 .rsplit_once(':')
                 .and_then(|(p, l)| Some((p, l.parse::<usize>().ok()?)))
                 .ok_or("a verify line is named `<path>:<line>`")?;
-            Lesson::verify(world, path, line)?
+            (Lesson::verify(world, path, line)?, None)
         }
-        [kind, id] if kind == "thought" => Lesson::thought(id, &thought(world, id)?)?,
+        [kind, id] if kind == "thought" => {
+            let (text, born) = thought(world, id)?;
+            (Lesson::thought(id, &text, born)?, Some(text))
+        }
         _ => {
             return Err(
                 "a lesson is `test <path>`, `verify <path>:<line>` or `thought <id>`".into(),
             );
         }
     };
+    let change = PostJournal::of(world, post).lesson_change(act, &lesson)?;
+    Ok((lesson, text.unwrap_or(change)))
+}
+
+/// Record `lesson`, which the human read, as the incident's fourth receipt.
+///
+/// # Errors
+///
+/// Why it is not taken ([`PostJournal::lesson`]).
+pub fn record(world: &Path, post: Post, act: &str, lesson: Lesson) -> Result<String, String> {
     let shown = lesson.to_string();
     let inc = PostJournal::of(world, post).lesson(act, lesson)?;
     Ok(if inc.is_open() {

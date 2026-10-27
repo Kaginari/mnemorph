@@ -51,7 +51,8 @@ corrected stays an open incident until four receipts are recorded: undone (its u
 journal corrected, downstream told (a comment that `tells` of it) and a lesson. `list` shows each
 open incident and what it is missing; `open` marks an act in reconcile, or an observed act that was
 wrong, as an incident; `settle` closes a reconcile that is no incident; `lesson` records the
-fourth receipt — a test or a verify line in the world, or a Thought, checked to exist. The post is
+fourth receipt — a test or a verify line changed in the world since the incident opened, or a
+Thought born since — after showing the change and asking for `y`. The post is
 `forge` or `kijin-forge`, and so on. A body never runs it.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
@@ -864,7 +865,22 @@ fn incident(args: &[String]) -> ExitCode {
             match (verb.as_str(), rest) {
                 ("open", []) => done(incident::open(&world, post, act, why.as_deref())),
                 ("settle", []) => done(incident::settle(&world, post, act, why.as_deref())),
-                ("lesson", rest) => done(incident::lesson(&world, post, act, rest)),
+                ("lesson", rest) => match incident::lesson(&world, post, act, rest) {
+                    Ok((lesson, change)) => {
+                        // The human reads what the lesson changed before it is recorded.
+                        println!("{change}");
+                        print!("record {lesson} as the lesson of act {act}? [y/N] ");
+                        let _ = std::io::stdout().flush();
+                        let mut answer = String::new();
+                        let _ = std::io::stdin().read_line(&mut answer);
+                        if answer.trim().eq_ignore_ascii_case("y") {
+                            done(incident::record(&world, post, act, lesson))
+                        } else {
+                            refused(&"the lesson was not recorded")
+                        }
+                    }
+                    Err(e) => refused(&e),
+                },
                 _ => refused(&"see --help: incident list | open | settle | lesson"),
             }
         }

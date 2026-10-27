@@ -34,7 +34,8 @@ use mnemorph_races::Post;
 use serde::{Deserialize, Serialize};
 
 use crate::outward::envelope_reads;
-use crate::receipt::{excerpt, fold, lock, private_file, sha256};
+use crate::outward::sha_ok;
+use crate::receipt::{excerpt, fold, lock, private_file, sha256, world_git};
 use crate::runner::{Intent, Typed, intents_path};
 use crate::{Act, Envelope, Pin, PostJournal, Row, State};
 
@@ -87,6 +88,9 @@ pub enum Lesson {
     Thought {
         /// The note's id.
         id: String,
+        /// When the note was born, in milliseconds since the epoch.
+        #[serde(default)]
+        born: u64,
         /// Its text's SHA-256.
         sha256: String,
     },
@@ -99,7 +103,9 @@ impl fmt::Display for Lesson {
             Lesson::Verify { path, line, sha256 } => {
                 write!(f, "verify line {path}:{line} (sha256 {sha256:.12})")
             }
-            Lesson::Thought { id, sha256 } => write!(f, "Thought {id} (sha256 {sha256:.12})"),
+            Lesson::Thought { id, sha256, .. } => {
+                write!(f, "Thought {id} (sha256 {sha256:.12})")
+            }
         }
     }
 }
@@ -152,7 +158,76 @@ fn bytes_sha256(bytes: &[u8]) -> String {
         })
 }
 
+/// The commit HEAD names in `world` now, if it names one.
+fn head(world: &Path) -> Option<String> {
+    world_git(world, &["rev-parse", "-q", "--verify", "HEAD^{commit}"])
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| sha_ok(s))
+}
+
+/// What changed at `path` in `world` since `commit`: its diff, or its text when the commit did not
+/// hold it. Unchanged since is refused: a lesson is written after the incident opens.
+fn changed_since(world: &Path, commit: &str, path: &str) -> Result<String, String> {
+    if !sha_ok(commit) {
+        return Err("the incident's commit does not read".into());
+    }
+    let held = world_git(
+        world,
+        &[
+            "--literal-pathspecs",
+            "cat-file",
+            "-e",
+            &format!("{commit}:./{path}"),
+        ],
+    )
+    .is_ok();
+    if !held {
+        let (_, bytes) = world_file(world, path)?;
+        return Ok(format!(
+            "{path} is new since the incident opened:\n{}",
+            String::from_utf8_lossy(&bytes[..bytes.len().min(8192)])
+        ));
+    }
+    let diff = world_git(
+        world,
+        &[
+            "--literal-pathspecs",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-color",
+            commit,
+            "--",
+            path,
+        ],
+    )?;
+    if diff.trim().is_empty() {
+        return Err(format!(
+            "{path} is unchanged since the incident opened (at {commit:.12}): a lesson is written after the incident, not found before it"
+        ));
+    }
+    Ok(diff)
+}
+
 impl Lesson {
+    /// Whether the lesson still reads as it was recorded: the file, or its line, hashes the same.
+    /// A Thought's text is fixed when it is born.
+    fn holds(&self, world: &Path) -> bool {
+        match self {
+            Lesson::Test { path, sha256 } => {
+                world_file(world, path).is_ok_and(|(_, b)| bytes_sha256(&b) == *sha256)
+            }
+            Lesson::Verify { path, line, sha256 } => {
+                Lesson::verify(world, path, *line).is_ok_and(|l| match l {
+                    Lesson::Verify { sha256: now, .. } => now == *sha256,
+                    _ => false,
+                })
+            }
+            Lesson::Thought { .. } => true,
+        }
+    }
+
     /// A test at `path` in `world`, checked to exist, kept with its SHA-256.
     ///
     /// # Errors
@@ -192,12 +267,13 @@ impl Lesson {
         })
     }
 
-    /// The Thought `id`, whose text the caller read from the world's memory.
+    /// The Thought `id`, whose text and birth (in milliseconds since the epoch) the caller read
+    /// from the world's memory. A note's text is fixed when it is born.
     ///
     /// # Errors
     ///
     /// The id is not plain, or the text is blank.
-    pub fn thought(id: &str, text: &str) -> Result<Self, String> {
+    pub fn thought(id: &str, text: &str, born: u64) -> Result<Self, String> {
         if id.is_empty()
             || id.len() > 128
             || !id
@@ -211,6 +287,7 @@ impl Lesson {
         }
         Ok(Lesson::Thought {
             id: id.to_owned(),
+            born,
             sha256: sha256(text),
         })
     }
@@ -230,6 +307,9 @@ pub(crate) enum Entry {
         /// The envelope that covered the act, once the gate honours envelopes (M11).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         envelope: Option<String>,
+        /// The commit HEAD named when it opened: a lesson is written after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commit: Option<String>,
     },
     /// Receipt (1): the act's undo.
     Undone {
@@ -281,6 +361,8 @@ pub struct Incident {
     pub why: Option<String>,
     /// The envelope that covered the act, when one did.
     pub envelope: Option<String>,
+    /// The commit HEAD named when it opened.
+    pub commit: Option<String>,
     /// (1) the undo's receipt, `observed` in the witness.
     pub undone: Option<String>,
     /// (2) when the `corrected` row naming that undo was journaled.
@@ -388,16 +470,50 @@ fn same_target(a: &Act, pa: &Pin, b: &Act, pb: &Pin) -> bool {
     }
 }
 
-/// Whether a comment on `comment` at `pin` speaks to the pull request of the incident's act: for a
-/// label or a comment, the same pull request; a branch has none the harness knows, so any.
-pub(crate) fn tells_downstream(incident: &Incident, comment: &Act, pin: &Pin) -> bool {
-    match &incident.typed {
-        Some((mine @ (Act::AddLabel { .. } | Act::Comment { .. }), at)) => {
-            matches!(comment, Act::Comment { .. }) && same_target(mine, at, comment, pin)
+/// What the harness puts first in a comment that tells downstream of the incident on `act`: the
+/// Kijin's own words follow it.
+#[must_use]
+pub fn told_prefix(act: &str) -> String {
+    format!("Rolled back act {act}: ")
+}
+
+/// The repository `owner/name` a push URL names on `host` (ports aside): `https://host/o/r.git`,
+/// `ssh://git@host/o/r`, `git@host:o/r.git`. `None` for anything else — a local path above all.
+pub(crate) fn forge_repo(url: &str, host: &str) -> Option<String> {
+    let bare = |h: &str| {
+        h.rsplit_once('@')
+            .map_or(h, |(_, h)| h)
+            .split(':')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    };
+    let (at, path) = if let Some((scheme, rest)) = url.split_once("://") {
+        if !matches!(scheme, "https" | "http" | "ssh" | "git") {
+            return None;
         }
-        Some((Act::PushNewBranch { .. }, _)) => matches!(comment, Act::Comment { .. }),
-        _ => false,
+        rest.split_once('/')?
+    } else {
+        // scp-like: `[user@]host:path`, never a path with a slash before the colon.
+        let (h, p) = url.split_once(':')?;
+        if h.contains('/') || h.is_empty() {
+            return None;
+        }
+        (h, p)
+    };
+    if bare(at) != bare(host) {
+        return None;
     }
+    let path = path.trim_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    let (owner, name) = path.split_once('/')?;
+    let part = |p: &str| {
+        !p.is_empty()
+            && !p.starts_with(['.', '-'])
+            && p.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    };
+    (part(owner) && part(name)).then(|| format!("{owner}/{name}"))
 }
 
 impl PostJournal {
@@ -436,11 +552,6 @@ impl PostJournal {
         }
         let entries = Journal::<Entry>::new(&path).read()?.rows;
         let witnessed = Journal::<Row>::new(&witness);
-        let rows = if witness.exists() {
-            witnessed.read()?.rows
-        } else {
-            Vec::new()
-        };
         let (latest, _) = if witness.exists() {
             fold(&witnessed)?
         } else {
@@ -463,6 +574,7 @@ impl PostJournal {
                 at,
                 why,
                 envelope,
+                commit,
             } = entry
                 && !out.iter().any(|i| &i.act == act)
             {
@@ -473,6 +585,7 @@ impl PostJournal {
                     opened: *at,
                     why: why.clone(),
                     envelope: envelope.clone(),
+                    commit: commit.clone(),
                     undone: None,
                     corrected: None,
                     told: None,
@@ -498,8 +611,10 @@ impl PostJournal {
                 Entry::Told { receipt, .. } if inc.told.is_none() => {
                     // (3) an observed comment whose intent names this incident.
                     let observed = state(receipt).is_some_and(|r| r.state == State::Observed);
+                    let prefix = told_prefix(&inc.act);
                     let named = intent(receipt).is_some_and(|i| {
-                        matches!(i.typed, Typed::Comment { .. })
+                        matches!(&i.typed, Typed::Comment { body, .. }
+                            if body.strip_prefix(&prefix).is_some_and(|said| !said.trim().is_empty()))
                             && i.tells.as_deref() == Some(&inc.act)
                             && i.at.0 >= inc.opened.0
                     });
@@ -507,7 +622,9 @@ impl PostJournal {
                         inc.told = Some(receipt.clone());
                     }
                 }
-                Entry::Lesson { lesson, .. } if inc.lesson.is_none() => {
+                Entry::Lesson { lesson, .. }
+                    if inc.lesson.is_none() && lesson.holds(&self.world) =>
+                {
                     inc.lesson = Some(lesson.clone());
                 }
                 _ => {}
@@ -516,13 +633,9 @@ impl PostJournal {
         // (2) the act's `corrected` row, naming the undo counted as (1).
         for inc in &mut out {
             if let Some(undo) = &inc.undone {
-                inc.corrected = rows
-                    .iter()
-                    .find(|r| {
-                        r.act == inc.act
-                            && r.state == State::Corrected
-                            && r.by.as_deref() == Some(undo)
-                    })
+                // The act's latest row: a later one supersedes the correction.
+                inc.corrected = state(&inc.act)
+                    .filter(|r| r.state == State::Corrected && r.by.as_deref() == Some(undo))
                     .map(|r| r.at);
             }
         }
@@ -538,15 +651,16 @@ impl PostJournal {
         Ok(self.incidents()?.into_iter().find(|i| i.act == act))
     }
 
-    /// The open incident whose act landed where `act` at `pin` would: what refuses a new act.
+    /// The open incidents whose acts landed where `act` at `pin` would: what refuses a new act.
     /// Incidents that cannot be read refuse every act.
-    pub(crate) fn blocking(&self, act: &Act, pin: &Pin) -> Result<Option<Incident>, String> {
+    pub(crate) fn blocking(&self, act: &Act, pin: &Pin) -> Result<Vec<Incident>, String> {
         let all = self
             .incidents()
             .map_err(|e| format!("the post's incidents cannot be read, so no act runs: {e}"))?;
         Ok(all
             .into_iter()
-            .find(|i| i.is_open() && i.same_target(act, pin)))
+            .filter(|i| i.is_open() && i.same_target(act, pin))
+            .collect())
     }
 
     /// Open a rollback incident on `act`, unless one is already open or closed on it.
@@ -560,6 +674,7 @@ impl PostJournal {
             at: Timestamp::now(),
             why: None,
             envelope: None,
+            commit: head(&self.world),
         })
     }
 
@@ -612,6 +727,7 @@ impl PostJournal {
             at: Timestamp::now(),
             why: why.map(str::to_owned),
             envelope: None,
+            commit: head(&self.world),
         })
         .map_err(|e| format!("the incident could not be recorded: {e}"))?;
         self.incident(act)
@@ -659,16 +775,11 @@ impl PostJournal {
     /// There is no open incident on the act, it has its lesson already, or the record cannot be
     /// written.
     pub fn lesson(&self, act: &str, lesson: Lesson) -> Result<Incident, String> {
+        self.lesson_change(act, &lesson)?;
         let read = |j: &Self| {
             j.incident(act)
                 .map_err(|e| format!("the post's incidents cannot be read: {e}"))
         };
-        let Some(inc) = read(self)? else {
-            return Err(format!("act {act} has no incident"));
-        };
-        if inc.lesson.is_some() {
-            return Err(format!("the incident on act {act} has its lesson already"));
-        }
         self.record(&Entry::Lesson {
             act: act.to_owned(),
             lesson,
@@ -676,6 +787,49 @@ impl PostJournal {
         })
         .map_err(|e| format!("the lesson could not be recorded: {e}"))?;
         read(self)?.ok_or_else(|| "the incident is gone".into())
+    }
+
+    /// What the lesson changed since the incident on `act` opened, for the human to read before
+    /// it is recorded: a file's diff since the commit HEAD named then, or its text when it is new.
+    /// A Thought must be born after the incident opened.
+    ///
+    /// # Errors
+    ///
+    /// There is no incident on the act, it has its lesson already, or the lesson was not written
+    /// after it opened: a file unchanged since that commit, a world with no commit then, a
+    /// Thought born before.
+    pub fn lesson_change(&self, act: &str, lesson: &Lesson) -> Result<String, String> {
+        let Some(inc) = self
+            .incident(act)
+            .map_err(|e| format!("the post's incidents cannot be read: {e}"))?
+        else {
+            return Err(format!("act {act} has no incident"));
+        };
+        if inc.lesson.is_some() {
+            return Err(format!("the incident on act {act} has its lesson already"));
+        }
+        if !lesson.holds(&self.world) {
+            return Err("the lesson no longer reads as it was taken".into());
+        }
+        match lesson {
+            Lesson::Test { path, .. } | Lesson::Verify { path, .. } => {
+                let commit = inc.commit.as_deref().ok_or(
+                    "the world named no commit when the incident opened: its lesson is a Thought",
+                )?;
+                changed_since(&self.world, commit, path)
+            }
+            Lesson::Thought { id, born, .. } => {
+                let opened = u64::try_from(inc.opened.0)
+                    .unwrap_or(0)
+                    .saturating_mul(1000);
+                if *born < opened {
+                    return Err(format!(
+                        "Thought {id} was born before the incident opened: a lesson is written after it"
+                    ));
+                }
+                Ok(String::new())
+            }
+        }
     }
 
     /// Whether `envelope` is suspended by an open incident of this post. Incidents that cannot be
@@ -726,4 +880,35 @@ pub fn incidents(world: &Path) -> Vec<String> {
         }
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::forge_repo;
+
+    #[test]
+    fn a_push_url_names_a_repository_only_on_the_host() {
+        for url in [
+            "https://github.com/me/proj.git",
+            "https://user:tok@github.com/me/proj",
+            "ssh://git@github.com:22/me/proj.git",
+            "git@github.com:me/proj.git",
+        ] {
+            assert_eq!(
+                forge_repo(url, "github.com").as_deref(),
+                Some("me/proj"),
+                "{url}"
+            );
+        }
+        for url in [
+            "/srv/git/me/proj.git",
+            "file:///srv/me/proj.git",
+            "https://gitlab.com/me/proj.git",
+            "https://github.com/me/proj/extra",
+            "./me:proj",
+            "ext::sh -c x",
+        ] {
+            assert_eq!(forge_repo(url, "github.com"), None, "{url}");
+        }
+    }
 }

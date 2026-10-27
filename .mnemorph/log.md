@@ -5655,3 +5655,18 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   edited comment no longer matches by body, so "not ours" would have read as "gone". A guard
   behind another guard needs a test that isolates it (exit 0 leaving the effect; exit 1 removing
   it).
+
+---
+
+### [2026-10-27T20:45:25+01:00] rimuru — #243, Fable's review: closure's five holes closed
+- **Done:** a telling comment always passes the target check — admitted only where its own
+  incident is the one open there, on the act's pull request, or for a branch on a PR whose head is
+  that branch in the push URL's repository (`pulls/<pr>` probed); its body opens with the
+  harness's `Rolled back act <id>: `. A lesson must have changed since the commit HEAD named at
+  the open (or a Thought be born after), the CLI shows the change and asks `y`, and it is
+  re-hashed on every read. What an undo removes is re-read inside the spawn's last step.
+  Receipt (2) is the act's latest row. Docs 02.
+- **Tests:** config `runner`: telling on another incident's PR and on an unrelated PR refused,
+  prefix and a stripped intent, an unchanged lesson refused and an edited one dropped, a comment
+  edited during the card, a later row over the correction; `branch_pr`, `forge_repo`;
+  mnemorphd lesson declined then confirmed. Eight new guards disabled: each fails its test.

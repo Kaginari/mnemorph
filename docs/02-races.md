@@ -517,7 +517,7 @@ act after it `other`.
   |---|---|---|
   | 1 | the post check — the act undone must be the post's | an act off the post, a command, an undo |
   | 2 | the undo's fingerprint | a world that cannot be read |
-  | 3 | where it goes: the act's pinned push URLs or host, read again; what the act left, still its own — a label's one add since the pin by `gh`'s login, a comment by that login on the act's pull request with the act's body (a branch is leased instead) | a remote or host retargeted since the act; a label or comment no longer certainly its own (the act moves to `reconcile`) |
+  | 3 | where it goes: the act's pinned push URLs or host, read again; what the act left, still its own — a label's one add since the pin by `gh`'s login, a comment by that login on the act's pull request with the act's body (a branch is leased instead) | a remote or host retargeted since the act; a label or comment no longer certainly its own (the act moves to `reconcile`) — read again between the recheck and the spawn, so one edited while the human reads the card is not undone |
   | 4 | the gate: **always the human** — no envelope covers an undo (`Uncovered::Undo`) | a denial: nothing runs, nothing is journaled, no incident opens |
   | 5 | the recheck at the spawn | a world that moved: asked again |
   | 6 | the incident opened (a rollback), and the undo's intent journaled — its own receipt, its rows naming the act (`undoes`) | a record that cannot be written: nothing runs |
@@ -538,9 +538,9 @@ act after it `other`.
   | Receipt | Evidence |
   |---|---|
   | 1. undone | the undo's receipt, `observed` in the witness, undoing this act |
-  | 2. journal corrected | the act's `corrected` row in the witness, naming that undo |
-  | 3. downstream told | a typed `comment` act naming the incident (`tells: <act>`), `observed` in the witness, committed after the incident opened; on the act's pull request for a label or a comment, on any the human approves for a branch |
-  | 4. lesson | a test or a `Verify:` line in the world, or a Thought, checked to exist when recorded (`mnemorph incident lesson <post> <act> test <path> \| verify <path>:<line> \| thought <id>`) and kept with its SHA-256 |
+  | 2. journal corrected | the act's latest row in the witness: `corrected`, naming that undo |
+  | 3. downstream told | a typed `comment` act naming the incident (`tells: <act>`), `observed` in the witness, committed after the incident opened, its body opening with the harness's `Rolled back act <id>: ` and the Kijin's words after; on the act's pull request for a label or a comment, and for a branch on a pull request whose head is that branch in the repository a pinned push URL names on the comment's host (`gh api …/pulls/<pr>`) |
+  | 4. lesson | a test or a `Verify:` line changed in the world since the commit HEAD named when the incident opened (or new since), or a Thought born after it; recorded once the human has read the change and said `y` (`mnemorph incident lesson <post> <act> test <path> \| verify <path>:<line> \| thought <id>`), kept with its SHA-256, and hashed again on every read — a lesson edited or removed since counts no more |
 
   Every receipt is read again from the witness and the post's intents whenever the incident is
   read: an entry naming a receipt the witness does not hold as described counts for nothing, and
@@ -551,7 +551,8 @@ act after it `other`.
     that the incident names; incidents that cannot be read suspend every envelope;
   - **its target takes no new act of the post**: the same branch on a push URL it shares, or the
     same pull request — label or comment — is refused before the gate, with the incident and what
-    it misses named; only the comment that tells of it is admitted. The target, not the post: the
+    it misses named; only the comment that tells of it is admitted, and only where no other open
+    incident holds the same target. The target, not the post: the
     act that went wrong is not repeated, and nothing lands between the undo and the telling, while
     the post's other work goes on, its standing permission already suspended. Once closed, the
     same request is asked again as a new act.
