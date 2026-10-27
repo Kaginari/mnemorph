@@ -6,6 +6,7 @@ pub mod budget;
 pub mod commission;
 pub mod compact;
 pub mod council;
+pub mod coverage_tool;
 pub mod decisions;
 pub mod gate;
 pub mod incident;
@@ -25,6 +26,7 @@ pub mod wear_tool;
 pub use beats::{Beat, conversation};
 pub use budget::{Caps, Left};
 pub use commission::{COMMISSION, CommissionTool, Commissioner};
+pub use coverage_tool::{COVERAGE, CoverageTool};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
 pub use gate::{Author, EndGate, GateVerdict, Tree, Verdict, snapshot};
 /// The configuration, for a client that opens a session from it.

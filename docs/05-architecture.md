@@ -52,6 +52,7 @@ flowchart TB
       WORLD --> LEDGER
       WORLD --> MEM
       MEM --> LEDGER
+      WORLD --> PROVING
       PROVING --> WIRE
       PROVING --> RACES
     end
@@ -87,7 +88,7 @@ mnemorph/
 │  ├─ mnemorph-wire       envelope types, parser, encoder            (no I/O)
 │  ├─ mnemorph-races      Race enum, shelves, dispatch, scores, falls (no I/O)
 │  ├─ mnemorph-ledger     usage + value ledgers, budgets, prices      (files)
-│  ├─ mnemorph-proving    Dark Elf finding records, the validator     (reads the tree)
+│  ├─ mnemorph-proving    Dark Elf finding records, coverage ledgers  (reads the tree)
 │  ├─ mnemorph-provider   streaming clients, retry ladder, caching,   (network)
 │  │                      System One decisions with an LLM fallback
 │  ├─ mnemorph-sandbox    landlock + seccomp, Seatbelt, net policy    (OS)
@@ -469,6 +470,7 @@ fails when the two differ.
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
+| Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed and each speciality's coverage ledger, append-only, outside the world and out of every command's reach | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
