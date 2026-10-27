@@ -416,13 +416,14 @@ impl Planned {
     }
 
     /// What a comment act left behind, read from what `gh pr comment` printed: the comment's URL
-    /// on this act's repository and pull request, and nothing else.
+    /// on the host it was pinned to (`github.com`, or the `GH_HOST` of an Enterprise server), this
+    /// act's repository and pull request, and nothing else.
     #[must_use]
-    pub fn commented(&self, printed: &str) -> Option<Done> {
+    pub fn commented(&self, printed: &str, host: &str) -> Option<Done> {
         let Act::Comment { repo, pr, .. } = &self.act else {
             return None;
         };
-        let head = format!("https://github.com/{repo}/pull/{pr}#issuecomment-");
+        let head = format!("https://{host}/{repo}/pull/{pr}#issuecomment-");
         let id = printed.lines().find_map(|l| l.trim().strip_prefix(&head))?;
         if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
             return None;

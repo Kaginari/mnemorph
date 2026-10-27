@@ -386,13 +386,26 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   | `AddLabel` | `gh api --method GET repos/<repo>/issues/<pr>/labels` | the pull request carries the label |
   | `Comment` | `gh api --method GET repos/<repo>/issues/comments/<id>` | the comment is on that pull request, its body's SHA-256 the act's |
 
-  Anything else — a different commit, a missing label, an edited comment, a probe that fails,
-  times out (30 s) or prints what does not read, an act that left no id — is `reconcile`, never
-  `observed`. The probe runs outside every repository with no input, git limited to the `https`,
+  What the act would make, already there when it is pinned — the branch on any push URL, the
+  label on the pull request — refuses the act: the command would exit 0 doing nothing, the probe
+  would see someone else's branch or label, and the undo would remove it. An act that exits other
+  than 0 goes straight to `reconcile` with nothing recorded, so it is neither probed nor undone
+  without the human. Anything else — a different commit, a missing label, an edited comment, a
+  probe that fails, times out (30 s) or prints what does not read, an act that left no id — is
+  `reconcile`, never `observed`. A comment's id is read from its URL on the pinned host, so an
+  Enterprise server's comments are recorded and probed there. `gh` reads its login from `gh auth`:
+  the environment's `GH_TOKEN` is a secret, removed before any command or probe, so a machine
+  that has only the token gets `reconcile` until `gh auth login` is done. The probe runs outside every repository with no input, git limited to the `https`,
   `http`, `ssh`, `git` and `file` transports, and inside the kernel guard when one is in force:
   the network open, nothing writable but its own scratch directory. The row keeps the probe,
   its output (1 KiB at most, escaped, credentials in URLs blanked) and when. A `Command` has no
-  probe: its receipt is `unobserved`, and says so. A `reconcile` is shown to the human
+  probe: its receipt is `unobserved`, and says so. The act runner observes an act before it
+  gates the next one on the same target, so no probe reads a later act's effect as an earlier
+  one's. Every row is written first to a witness under the human's state directory
+  (`$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, found again by the world's
+  path); after each command the tripwire rebuilds the journal from what it held and what the
+  witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
+  never counts. A `reconcile` is shown to the human
   (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
   `outwardCleanRate` counts against — and, from M11, what suspends the envelope that covered the
   act and may make an Oni fall.

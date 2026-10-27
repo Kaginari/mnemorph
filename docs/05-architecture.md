@@ -367,7 +367,7 @@ fails when the two differ.
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
-| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest | yes |
+| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads | yes |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
@@ -576,7 +576,8 @@ flowchart LR
   `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`, `.git/info`, a `.git` file)
   would run code outside any sandbox the next time the human runs git, and `.mnemorph/` holds the
   world's records. Each command runs between two snapshots of them; once its process group is dead,
-  every change is put back and the body is told. The file tools refuse those paths outright, but
+  every change is put back and the body is told. The Kijin post journals are put back as the
+  work queue is: what each held, plus the rows its witness gained while the command ran. The file tools refuse those paths outright, but
   one: a body's own `plan.md`, directly in its own seat, which the dispatch law reads (an Orc's
   verify lines on its Slimes' docs are written by the harness, through the `verify` tool) — written
   with the file tools; a command's write there is put back, and a plan that is a link is no plan. On

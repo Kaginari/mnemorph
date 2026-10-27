@@ -2,6 +2,7 @@
 //! the target pinned at act time, sees the effect the plan promised. Exit 0 is never enough.
 
 use std::cell::RefCell;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,6 +38,7 @@ struct Fixture {
     home: PathBuf,
     remote: PathBuf,
     other: PathBuf,
+    witness: PathBuf,
     first: String,
     head: String,
 }
@@ -75,6 +77,7 @@ impl Fixture {
             home,
             remote,
             other,
+            witness: root.join("state/kijin-forge.jsonl"),
             first,
             head,
         }
@@ -85,7 +88,8 @@ impl Fixture {
     }
 
     fn journal(&self) -> PostJournal {
-        PostJournal::of(&self.world, Post::Forge)
+        // Never the human's own state directory: the witness is the test's.
+        PostJournal::of(&self.world, Post::Forge).witnessed_at(&self.witness)
     }
 
     fn observer(&self) -> Observer {
@@ -95,7 +99,7 @@ impl Fixture {
     /// Plan, pin, commit and run a push of `feat/x`, as the harness would: the receipt pending.
     fn pushed(&self) -> Receipt {
         let planned = self.planned(&branch("feat/x"));
-        let pin = planned.pin(&self.world).unwrap();
+        let pin = planned.pin(&self.world, &self.observer()).unwrap();
         assert_eq!(
             pin,
             Pin::Push {
@@ -350,17 +354,15 @@ fn a_probe_that_errs_or_times_out_is_reconcile() {
 }
 
 fn forge_receipt(f: &Fixture, act: &Act, printed: &str) -> Receipt {
+    forge_receipt_on(f, act, printed, "github.com")
+}
+
+fn forge_receipt_on(f: &Fixture, act: &Act, printed: &str, host: &str) -> Receipt {
     let planned = f.planned(act);
     assert_eq!(planned.class(), ToolClass::Outward);
     let journal = f.journal();
     let mut r = journal
-        .commit(
-            &planned,
-            Pin::Forge {
-                host: "github.com".into(),
-            },
-            None,
-        )
+        .commit(&planned, Pin::Forge { host: host.into() }, None)
         .unwrap();
     journal.ran(&mut r, Some(0), printed).unwrap();
     r
@@ -475,7 +477,7 @@ fn an_untyped_command_is_unobserved_and_says_so() {
         "curl -X POST https://example.com/deploy".into(),
     ));
     assert_eq!(planned.class(), ToolClass::Destructive);
-    let pin = planned.pin(&f.world).unwrap();
+    let pin = planned.pin(&f.world, &f.observer()).unwrap();
     assert_eq!(pin, Pin::Unpinned);
     let journal = f.journal();
     let mut r = journal.commit(&planned, pin, None).unwrap();
@@ -523,7 +525,7 @@ fn a_remote_that_is_not_a_plain_url_cannot_be_pinned() {
     text.push_str("[remote \"origin\"]\n\tpushurl = --upload-pack=touch pwned\n");
     fs::write(&config, text).unwrap();
     let planned = f.planned(&branch("feat/x"));
-    let err = planned.pin(&f.world).unwrap_err();
+    let err = planned.pin(&f.world, &f.observer()).unwrap_err();
     assert!(err.contains("cannot read plainly"), "{err}");
 }
 
@@ -540,10 +542,11 @@ fn credentials_in_a_pinned_url_never_reach_the_journal() {
         ],
     );
     let planned = f.planned(&branch("feat/x"));
-    let pin = planned.pin(&f.world).unwrap();
+    // No network in tests: the pin's read of the remote is a fake that finds no branch.
+    let pin = planned.pin(&f.world, &Fake::says("")).unwrap();
     let journal = f.journal();
     let mut r = journal.commit(&planned, pin, None).unwrap();
-    journal.ran(&mut r, Some(128), "").unwrap();
+    journal.ran(&mut r, Some(0), "").unwrap();
     let fake = Fake::exits(128, "");
     journal.observe(&mut r, &fake, PATIENCE).unwrap();
     // The probe itself was given the URL as pinned; the journal only ever the blanked form.
@@ -584,4 +587,163 @@ fn a_probe_inside_the_guard_writes_nothing() {
         .run(&["git".to_owned(), "--version".to_owned()], PATIENCE)
         .unwrap();
     assert_eq!(seen.code, Some(0), "{seen:?}");
+}
+
+#[test]
+fn a_branch_already_on_the_remote_is_refused_at_pin() {
+    let f = Fixture::new();
+    // At the very commit HEAD names: the push would exit 0 ("Everything up-to-date"), the probe
+    // would see the plan's effect, and the undo would delete a branch the act never made.
+    git(
+        &f.world,
+        &["push", "-q", "origin", "HEAD:refs/heads/feat/x"],
+    );
+    let planned = f.planned(&branch("feat/x"));
+    let err = planned.pin(&f.world, &f.observer()).unwrap_err();
+    assert!(
+        err.starts_with("branch feat/x is already on ")
+            && err.ends_with("nothing to push, nothing to undo"),
+        "{err}"
+    );
+    // A remote that cannot be read refuses too.
+    assert!(planned.pin(&f.world, &Fake::exits(128, "")).is_err());
+}
+
+#[test]
+fn a_push_that_failed_is_reconcile_with_nothing_to_probe_or_undo() {
+    let f = Fixture::new();
+    let planned = f.planned(&branch("feat/x"));
+    let pin = planned.pin(&f.world, &f.observer()).unwrap();
+    let journal = f.journal();
+    let mut r = journal.commit(&planned, pin, None).unwrap();
+    // Between the pin and the act, someone else makes the branch: the lease refuses the push.
+    git(
+        &f.world,
+        &[
+            "push",
+            "-q",
+            "origin",
+            &format!("{}:refs/heads/feat/x", f.first),
+        ],
+    );
+    let out = Command::new("bash")
+        .args(["-c", planned.command()])
+        .current_dir(&f.world)
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "{out:?}");
+    journal.ran(&mut r, out.status.code(), "").unwrap();
+    assert_eq!(r.state(), State::Reconcile);
+    // Nothing recorded, so no undo can be rendered — their branch is never deleted.
+    assert_eq!(r.done(), None);
+    assert!(journal.observe(&mut r, &f.observer(), PATIENCE).is_err());
+    let why = f.rows().last().unwrap().why.clone().unwrap();
+    assert!(why.starts_with("the act exited 1"), "{why}");
+    assert_eq!(journal.tally().unwrap().reconcile, 1);
+}
+
+#[test]
+fn a_label_already_on_the_pull_request_is_refused_at_pin() {
+    let f = Fixture::new();
+    let planned = f.planned(&label());
+    let fake = Fake::says(r#"[{"name":"Ready"}]"#);
+    let err = planned.pin(&f.world, &fake).unwrap_err();
+    assert_eq!(
+        err,
+        r#"label "ready" is already on me/proj#12: nothing to add, nothing to undo"#
+    );
+    assert_eq!(
+        fake.asked.borrow()[0].last().unwrap(),
+        "repos/me/proj/issues/12/labels?per_page=100"
+    );
+    // Unreadable labels refuse too; an absent label pins.
+    assert!(planned.pin(&f.world, &Fake::exits(1, "")).is_err());
+    assert!(planned.pin(&f.world, &Fake::fails("timed out")).is_err());
+    assert!(matches!(
+        planned.pin(&f.world, &Fake::says(r#"[{"name":"bug"}]"#)),
+        Ok(Pin::Forge { .. })
+    ));
+    // A label act that failed records nothing: no undo.
+    let journal = f.journal();
+    let mut r = journal
+        .commit(
+            &planned,
+            Pin::Forge {
+                host: "github.com".into(),
+            },
+            None,
+        )
+        .unwrap();
+    journal.ran(&mut r, Some(1), "").unwrap();
+    assert_eq!((r.state(), r.done()), (State::Reconcile, None));
+}
+
+#[test]
+fn a_row_forged_into_the_world_journal_never_counts() {
+    let f = Fixture::new();
+    let mut r = f.pushed();
+    git(&f.remote, &["update-ref", "-d", "refs/heads/feat/x"]);
+    f.journal()
+        .observe(&mut r, &f.observer(), PATIENCE)
+        .unwrap();
+    // A body appends `observed` for the act, and a whole forged act besides.
+    let path = f.journal().path().to_path_buf();
+    let mut text = fs::read_to_string(&path).unwrap();
+    let _ = writeln!(
+        text,
+        "{{\"act\":\"{}\",\"state\":\"observed\",\"at\":\"2026-10-27T10:00:00Z\"}}",
+        r.id()
+    );
+    text.push_str("{\"act\":\"forged\",\"state\":\"observed\",\"at\":\"2026-10-27T10:00:00Z\"}\n");
+    fs::write(&path, text).unwrap();
+    let tally = f.journal().tally().unwrap();
+    assert_eq!((tally.observed, tally.reconcile), (0, 1), "{tally:?}");
+    // The journal's witness holds every harness row, and only those.
+    let witness = fs::read_to_string(&f.witness).unwrap();
+    assert_eq!(witness.lines().count(), 3, "{witness}");
+    assert!(!witness.contains("forged"));
+}
+
+#[test]
+fn status_escapes_what_a_journal_row_says() {
+    let f = Fixture::new();
+    let path = f.journal().path().to_path_buf();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        "{\"act\":\"a\\u001b]0;pwned\\u0007\",\"state\":\"reconcile\",\"at\":\"2026-10-27T10:00:00Z\",\"why\":\"red \\u001b[31mALERT\\nnext line\"}\n",
+    )
+    .unwrap();
+    let lines = reconciling(&f.world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    let line = &lines[0];
+    assert!(!line.chars().any(char::is_control), "{line:?}");
+    assert!(line.contains(r"a\u{1b}]0;pwned\u{7}"), "{line}");
+    assert!(line.contains(r"red \u{1b}[31mALERT\nnext line"), "{line}");
+}
+
+#[test]
+fn a_comment_on_an_enterprise_host_is_recorded_and_probed_there() {
+    let f = Fixture::new();
+    let body = "Shipped.";
+    let act = Act::Comment {
+        repo: "me/proj".into(),
+        pr: 12,
+        body: body.into(),
+    };
+    let printed = "https://git.corp.example/me/proj/pull/12#issuecomment-77\n";
+    let mut r = forge_receipt_on(&f, &act, printed, "git.corp.example");
+    assert_eq!(r.done(), Some(&Done::Commented { id: 77 }));
+    let fake = Fake::says(
+        &serde_json::json!({
+            "body": body,
+            "issue_url": "https://git.corp.example/api/v3/repos/me/proj/issues/12",
+        })
+        .to_string(),
+    );
+    assert_eq!(
+        f.journal().observe(&mut r, &fake, PATIENCE).unwrap(),
+        State::Observed
+    );
+    assert_eq!(fake.asked.borrow()[0][3], "git.corp.example");
 }

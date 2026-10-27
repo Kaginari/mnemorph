@@ -89,7 +89,7 @@ fn each_kind_renders_its_command_and_its_undo() {
         r"gh pr comment 12 --repo me/proj --body 'it'\''s $(rm -rf ~); done'"
     );
     let printed = "\nhttps://github.com/me/proj/pull/12#issuecomment-987654\n";
-    let done = p.commented(printed).unwrap();
+    let done = p.commented(printed, "github.com").unwrap();
     assert_eq!(done, Done::Commented { id: 987_654 });
     assert_eq!(
         p.undo(&done).unwrap(),
@@ -102,8 +102,16 @@ fn each_kind_renders_its_command_and_its_undo() {
         "https://github.com/me/proj/pull/12#issuecomment-1x",
         "https://github.com/me/proj/pull/12#issuecomment-",
     ] {
-        assert_eq!(p.commented(other), None, "{other}");
+        assert_eq!(p.commented(other, "github.com"), None, "{other}");
     }
+    // On an Enterprise server, the URL is on the host the act was pinned to.
+    let ghe = "https://git.corp.example/me/proj/pull/12#issuecomment-55\n";
+    assert_eq!(
+        p.commented(ghe, "git.corp.example"),
+        Some(Done::Commented { id: 55 })
+    );
+    assert_eq!(p.commented(ghe, "github.com"), None);
+    assert_eq!(p.commented(printed, "git.corp.example"), None);
 
     // The card says how it will be put back.
     let ask = planned(&branch("feat/undo")).ask("kijin-forge", Race::Kijin);

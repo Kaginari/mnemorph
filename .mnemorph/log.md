@@ -5480,3 +5480,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   server `an_act_in_reconcile_is_shown_to_the_human`. With the judgement disabled, 6 of 12 fail.
 - **Learned:** nothing executes a typed act yet: the receipt is the API that executor calls
   (pin with the plan, commit, run, `ran`, `observe`).
+
+---
+
+### [2026-10-27T18:25:39+01:00] rimuru — #240, reviewed (Opus, Fable): receipts that cannot read a false `observed`
+- **Done:** `pin` (now with a `Probe`) refuses what the act would make if it is already there: a
+  branch on any push URL (`git push` with the empty lease exits 0, "Everything up-to-date", when
+  the branch sits at HEAD's commit) and a label on the PR. A typed act exiting other than 0 is
+  `reconcile` with no `Done`, so no undo. Rows witnessed under
+  `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`; the tripwire rebuilds each
+  post journal as it does the queue; `tally` reads the witness alone. `status` escapes a row's
+  id and why; a ref's sha is shown only when it reads. `commented` takes the pinned host (GHE).
+  Docs 02, 05: GH_TOKEN-only machines reconcile; observe before gating the next act on a target.
+- **Tests:** config `receipt` 18 (7 fail with the judgement off); tripwire
+  `a_post_journal_keeps_the_harness_rows_and_loses_the_forged_ones`; outward GHE `commented`.
+- **Learned:** the reviewers' failed-push case was wider: a lease is never checked when there is
+  nothing to send, so exit 0 proved nothing there either — the pin-time read closes it.

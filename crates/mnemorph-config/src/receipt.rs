@@ -34,7 +34,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use mnemorph_ledger::{Journal, Timestamp};
 use mnemorph_races::Post;
 use mnemorph_tools::shell::scrubbed_env;
-use mnemorph_tools::{Policy, Sandbox};
+use mnemorph_tools::{Policy, Sandbox, kijin_witness};
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -186,10 +186,13 @@ impl Planned {
     /// # Errors
     ///
     /// The target cannot be read, or is not one a probe can reach plainly: a typed act whose
-    /// target cannot be pinned does not run, since its receipt could never be observed.
-    pub fn pin(&self, world: &Path) -> Result<Pin, String> {
+    /// target cannot be pinned does not run, since its receipt could never be observed. What the
+    /// act would make, already there, is refused too, read through `probe`: a branch on any push
+    /// URL, a label on the pull request. The command would exit 0 doing nothing, the probe would
+    /// see what someone else made, and the undo would remove it.
+    pub fn pin(&self, world: &Path, probe: &dyn Probe) -> Result<Pin, String> {
         match self.act() {
-            Act::PushNewBranch { remote, .. } => {
+            Act::PushNewBranch { remote, name } => {
                 let urls: Vec<String> =
                     world_git(world, &["remote", "get-url", "--push", "--all", remote])?
                         .lines()
@@ -211,6 +214,30 @@ impl Planned {
                 if !sha_ok(&sha) {
                     return Err("HEAD names no commit to push".into());
                 }
+                // A branch already there is refused: the push would exit 0 ("Everything
+                // up-to-date") when it is at HEAD's commit, the probe would see it, and the undo
+                // would delete a branch the act never made.
+                for url in &urls {
+                    let shown = redact(url);
+                    let seen = probe
+                        .run(&ls_remote_argv(url, name), PROBE_TIMEOUT)
+                        .map_err(|e| format!("{shown} cannot be read: {}", redact(&e)))?;
+                    if seen.code != Some(0) || seen.cut {
+                        return Err(format!(
+                            "{shown} cannot be read: {}",
+                            excerpt(&seen.err, 200)
+                        ));
+                    }
+                    let want = format!("refs/heads/{name}");
+                    if String::from_utf8_lossy(&seen.out)
+                        .lines()
+                        .any(|l| l.split_once('\t').is_some_and(|(_, r)| r == want))
+                    {
+                        return Err(format!(
+                            "branch {name} is already on {shown}: nothing to push, nothing to undo"
+                        ));
+                    }
+                }
                 Ok(Pin::Push { urls, sha })
             }
             Act::AddLabel { .. } | Act::Comment { .. } => {
@@ -218,11 +245,27 @@ impl Planned {
                     .into_iter()
                     .find(|(k, _)| k == "GH_HOST")
                     .map_or_else(|| DEFAULT_HOST.to_owned(), |(_, v)| v);
-                if host_ok(&host) {
-                    Ok(Pin::Forge { host })
-                } else {
-                    Err(format!("GH_HOST `{host}` is not a plain host name"))
+                if !host_ok(&host) {
+                    return Err(format!("GH_HOST `{host}` is not a plain host name"));
                 }
+                if let Act::AddLabel { repo, pr, label } = self.act() {
+                    let argv = labels_argv(repo, *pr, &host);
+                    let seen = probe
+                        .run(&argv, PROBE_TIMEOUT)
+                        .map_err(|e| format!("the labels of {repo}#{pr} cannot be read: {e}"))?;
+                    if seen.code != Some(0) || seen.cut {
+                        return Err(format!(
+                            "the labels of {repo}#{pr} cannot be read: {}",
+                            excerpt(&seen.err, 200)
+                        ));
+                    }
+                    if carries(&seen.out, label)? {
+                        return Err(format!(
+                            "label {label:?} is already on {repo}#{pr}: nothing to add, nothing to undo"
+                        ));
+                    }
+                }
+                Ok(Pin::Forge { host })
             }
             Act::Command(_) => Ok(Pin::Unpinned),
         }
@@ -451,19 +494,10 @@ fn probe_argv(act: &Act, pin: &Pin, done: &Done, url: Option<&str>) -> Option<Ve
     let words = |w: &[&str]| w.iter().map(|&w| w.to_owned()).collect::<Vec<_>>();
     match (act, pin, done) {
         (Act::PushNewBranch { name, .. }, Pin::Push { .. }, Done::Pushed { .. }) => {
-            let mut argv = words(&["git", "-c", "protocol.allow=never"]);
-            for p in PROTOCOLS {
-                argv.push("-c".into());
-                argv.push(format!("protocol.{p}.allow=always"));
-            }
-            argv.extend(words(&["ls-remote", "--end-of-options", url?]));
-            argv.push(format!("refs/heads/{name}"));
-            Some(argv)
+            Some(ls_remote_argv(url?, name))
         }
         (Act::AddLabel { repo, pr, .. }, Pin::Forge { host }, Done::Labelled) => {
-            let mut argv = words(&["gh", "api", "--hostname", host, "--method", "GET"]);
-            argv.push(format!("repos/{repo}/issues/{pr}/labels?per_page=100"));
-            Some(argv)
+            Some(labels_argv(repo, *pr, host))
         }
         (Act::Comment { repo, .. }, Pin::Forge { host }, Done::Commented { id }) => {
             let mut argv = words(&["gh", "api", "--hostname", host, "--method", "GET"]);
@@ -472,6 +506,47 @@ fn probe_argv(act: &Act, pin: &Pin, done: &Done, url: Option<&str>) -> Option<Ve
         }
         _ => None,
     }
+}
+
+/// The read of a branch on a remote, at a URL: no transport but `PROTOCOLS`.
+fn ls_remote_argv(url: &str, name: &str) -> Vec<String> {
+    let mut argv: Vec<String> = ["git", "-c", "protocol.allow=never"]
+        .map(str::to_owned)
+        .to_vec();
+    for p in PROTOCOLS {
+        argv.push("-c".into());
+        argv.push(format!("protocol.{p}.allow=always"));
+    }
+    argv.extend(["ls-remote", "--end-of-options", url].map(str::to_owned));
+    argv.push(format!("refs/heads/{name}"));
+    argv
+}
+
+/// The read of a pull request's labels: at most 100, all a pull request may carry.
+fn labels_argv(repo: &str, pr: u64, host: &str) -> Vec<String> {
+    [
+        "gh",
+        "api",
+        "--hostname",
+        host,
+        "--method",
+        "GET",
+        &format!("repos/{repo}/issues/{pr}/labels?per_page=100"),
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+/// Whether the labels `gh api` printed include `label`, as GitHub compares them: ignoring case.
+fn carries(out: &[u8], label: &str) -> Result<bool, String> {
+    #[derive(Deserialize)]
+    struct Label {
+        name: String,
+    }
+    let labels: Vec<Label> =
+        serde_json::from_slice(out).map_err(|e| format!("the labels do not read: {e}"))?;
+    let want = label.to_lowercase();
+    Ok(labels.iter().any(|l| l.name.to_lowercase() == want))
 }
 
 fn sha256(text: &str) -> String {
@@ -528,19 +603,15 @@ fn judge(act: &Act, pin: &Pin, seen: &Seen) -> Result<(), String> {
             match found.as_slice() {
                 [] => Err(format!("{want} is not on the remote")),
                 [one] if one == sha => Ok(()),
-                [one] => Err(format!("{want} is at {one}, not the pushed {sha}")),
+                [one] if sha_ok(one) => Err(format!("{want} is at {one}, not the pushed {sha}")),
+                [_] => Err(format!(
+                    "{want} is at an object name that does not read, not the pushed {sha}"
+                )),
                 _ => Err(format!("the remote lists {want} more than once")),
             }
         }
         (Act::AddLabel { label, .. }, Pin::Forge { .. }) => {
-            #[derive(Deserialize)]
-            struct Label {
-                name: String,
-            }
-            let labels: Vec<Label> =
-                serde_json::from_str(text).map_err(|e| format!("the labels do not read: {e}"))?;
-            let want = label.to_lowercase();
-            if labels.iter().any(|l| l.name.to_lowercase() == want) {
+            if carries(text.as_bytes(), label)? {
                 Ok(())
             } else {
                 Err(format!("the pull request does not carry label {label:?}"))
@@ -658,10 +729,29 @@ impl Receipt {
 }
 
 /// A Kijin post's journal: `.mnemorph/kijin/<post>/post.jsonl`, append-only, written by the
-/// harness alone.
+/// harness alone, and read by the post's bodies. Every row is written first to a witness under
+/// the human's state directory (`mnemorph_tools::kijin_witness`), out of every command's reach:
+/// the tripwire rebuilds the journal from it after each command, and [`PostJournal::tally`] reads
+/// the witness alone, so a row a body forges never counts.
 #[derive(Debug, Clone)]
 pub struct PostJournal {
     journal: Journal<Row>,
+    witness: Option<Journal<Row>>,
+}
+
+/// Hold a witness's lock: the file opened (made if need be) and locked whole until dropped. The
+/// tripwire rebuilds the journal under the same lock, so no row lands between its read and its
+/// write.
+fn lock(witness: &Path) -> io::Result<fs::File> {
+    if let Some(dir) = witness.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let f = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(witness)?;
+    f.lock()?;
+    Ok(f)
 }
 
 /// Where a post's journal lives in a world.
@@ -697,12 +787,43 @@ fn command_line(command: &str) -> String {
 }
 
 impl PostJournal {
-    /// The journal of `post` in `world`.
+    /// The journal of `post` in `world`, witnessed under the human's state directory when there
+    /// is one.
     #[must_use]
     pub fn of(world: &Path, post: Post) -> Self {
         Self {
             journal: Journal::new(post_journal(world, post)),
+            witness: kijin_witness(world, post.creature()).map(Journal::new),
         }
+    }
+
+    /// The same journal, witnessed in `file` instead.
+    #[must_use]
+    pub fn witnessed_at(mut self, file: &Path) -> Self {
+        self.witness = Some(Journal::new(file));
+        self
+    }
+
+    /// Where its witness is.
+    #[must_use]
+    pub fn witness(&self) -> Option<&Path> {
+        self.witness.as_ref().map(Journal::path)
+    }
+
+    /// One row: the witness first, under its lock — a row the journal holds and its witness does
+    /// not would be dropped by the next command's tripwire — then the journal.
+    fn append(&self, row: &Row) -> io::Result<()> {
+        let held = match &self.witness {
+            Some(w) => {
+                let held = lock(w.path())?;
+                w.append(row)?;
+                Some(held)
+            }
+            None => None,
+        };
+        self.journal.append(row)?;
+        drop(held);
+        Ok(())
     }
 
     /// Where it lives.
@@ -751,7 +872,7 @@ impl PostJournal {
         row.target = pin.shown();
         row.plan = plan.map(str::to_owned);
         row.expect = Some(expected(planned.act(), &pin, None));
-        self.journal.append(&row)?;
+        self.append(&row)?;
         Ok(Receipt {
             id,
             planned: planned.clone(),
@@ -761,9 +882,12 @@ impl PostJournal {
         })
     }
 
-    /// Journal that the act ran, with its exit code and what it printed. A typed act moves to
-    /// `pending observation` — whatever its exit, only a probe says what it did. A command moves
-    /// to `unobserved`, and stays there.
+    /// Journal that the act ran, with its exit code and what it printed. A typed act that exited
+    /// 0 moves to `pending observation`: only a probe says what it did. One that did not — or a
+    /// signal ended — moves straight to `reconcile`, leaving nothing recorded: what it did
+    /// outside is unknown, so it is neither probed (the outside may already hold what the plan
+    /// promised, from before) nor undone without the human. A command moves to `unobserved`, and
+    /// stays there.
     ///
     /// # Errors
     ///
@@ -776,18 +900,20 @@ impl PostJournal {
             )));
         }
         let act = receipt.planned.act();
+        let failed = exit != Some(0);
         let done = match (act, &receipt.pin) {
+            _ if failed => None,
             (Act::PushNewBranch { .. }, Pin::Push { sha, .. }) => {
                 Some(Done::Pushed { sha: sha.clone() })
             }
             (Act::AddLabel { .. }, _) => Some(Done::Labelled),
-            (Act::Comment { .. }, _) => receipt.planned.commented(printed),
+            (Act::Comment { .. }, Pin::Forge { host }) => receipt.planned.commented(printed, host),
             _ => None,
         };
-        let state = if matches!(act, Act::Command(_)) {
-            State::Unobserved
-        } else {
-            State::PendingObservation
+        let state = match act {
+            Act::Command(_) => State::Unobserved,
+            _ if failed => State::Reconcile,
+            _ => State::PendingObservation,
         };
         let mut row = Row::new(&receipt.id, state);
         row.exit = exit;
@@ -795,10 +921,17 @@ impl PostJournal {
             (State::Unobserved, _) => {
                 "a command has no probe: whatever its exit, its effect is not observed".into()
             }
+            (State::Reconcile, _) => format!(
+                "the act {}: what it did outside is unknown, so it is not probed, and nothing is undone without the human",
+                exit.map_or_else(
+                    || "was ended by a signal".to_owned(),
+                    |c| format!("exited {c}")
+                )
+            ),
             (_, None) => "the act printed no comment id: nothing can be probed".into(),
             _ => "ran; its effect is not yet observed".into(),
         });
-        self.journal.append(&row)?;
+        self.append(&row)?;
         receipt.state = state;
         receipt.done = done;
         Ok(())
@@ -871,42 +1004,37 @@ impl PostJournal {
             }
         };
         row.state = state;
-        self.journal.append(&row)?;
+        self.append(&row)?;
         receipt.state = state;
         Ok(state)
     }
 
     /// Each act's latest row, by receipt id, in the order the acts were first journaled; and
-    /// the numbers of lines that did not read.
+    /// the numbers of lines that did not read. Read from the witness when it exists, else from
+    /// the journal in the world.
     ///
     /// # Errors
     ///
-    /// The journal exists but cannot be read.
+    /// The file exists but cannot be read.
     pub fn standing(&self) -> io::Result<(Vec<Row>, Vec<usize>)> {
-        let back = self.journal.read()?;
-        let mut order: Vec<String> = Vec::new();
-        let mut last: BTreeMap<String, Row> = BTreeMap::new();
-        for row in back.rows {
-            if !last.contains_key(&row.act) {
-                order.push(row.act.clone());
-            }
-            last.insert(row.act.clone(), row);
+        match &self.witness {
+            Some(w) if w.path().exists() => fold(w),
+            _ => fold(&self.journal),
         }
-        let rows = order
-            .into_iter()
-            .filter_map(|id| last.remove(&id))
-            .collect();
-        Ok((rows, back.skipped))
     }
 
-    /// The acts by where they stand: what M11 folds into `outward_clean_rate`.
+    /// The acts by where they stand, read from the witness alone: what M11 folds into
+    /// `outward_clean_rate`. A world with no witness counts nothing.
     ///
     /// # Errors
     ///
-    /// The journal exists but cannot be read.
+    /// The witness exists but cannot be read.
     pub fn tally(&self) -> io::Result<Tally> {
-        let (rows, _) = self.standing()?;
         let mut t = Tally::default();
+        let Some(witness) = &self.witness else {
+            return Ok(t);
+        };
+        let (rows, _) = fold(witness)?;
         for row in rows {
             match row.state {
                 State::Committed | State::PendingObservation => t.open += 1,
@@ -917,6 +1045,25 @@ impl PostJournal {
         }
         Ok(t)
     }
+}
+
+/// Each act's latest row in `journal`, in the order the acts were first journaled; and the
+/// numbers of lines that did not read.
+fn fold(journal: &Journal<Row>) -> io::Result<(Vec<Row>, Vec<usize>)> {
+    let back = journal.read()?;
+    let mut order: Vec<String> = Vec::new();
+    let mut last: BTreeMap<String, Row> = BTreeMap::new();
+    for row in back.rows {
+        if !last.contains_key(&row.act) {
+            order.push(row.act.clone());
+        }
+        last.insert(row.act.clone(), row);
+    }
+    let rows = order
+        .into_iter()
+        .filter_map(|id| last.remove(&id))
+        .collect();
+    Ok((rows, back.skipped))
 }
 
 /// A post's acts by where they stand. A `reconcile` is not a clean outward act: M11 folds it into
@@ -946,9 +1093,15 @@ pub fn reconciling(world: &Path) -> Vec<String> {
                     lines.push(format!(
                         "{} act {} is in reconcile since {}: {}",
                         post.creature(),
-                        row.act,
+                        excerpt(row.act.as_bytes(), 64),
                         row.at,
-                        row.why.as_deref().unwrap_or("its effect was not seen")
+                        excerpt(
+                            row.why
+                                .as_deref()
+                                .unwrap_or("its effect was not seen")
+                                .as_bytes(),
+                            300
+                        )
                     ));
                 }
                 if !skipped.is_empty() {

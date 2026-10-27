@@ -13,7 +13,9 @@
 //! The shared work queue is put back line by line: what it held stays, and of the lines added
 //! since, only those its witness holds — every line the harness or the human's `mnemorph q` wrote,
 //! kept again under the human's state directory, out of every command's reach. So a body's
-//! command cannot forge a move, and the human's moves made while it ran are kept.
+//! command cannot forge a move, and the human's moves made while it ran are kept. Each Kijin
+//! post journal (`.mnemorph/kijin/<post>/post.jsonl`) is put back the same way from its own
+//! witness, so the rows the harness journals while a command runs are never lost.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -66,12 +68,48 @@ pub(crate) struct Snapshot {
     /// repository the command itself creates is its own.
     watched: Vec<PathBuf>,
     entries: BTreeMap<PathBuf, Entry>,
-    /// The shared work queue's bytes, kept whole and apart from the budget.
-    queue: Option<Vec<u8>>,
-    /// Where the queue's witness is.
+    /// The files put back from a witness: the work queue first, then each post journal.
+    witnessed: Vec<Witnessed>,
+}
+
+/// A file only the harness (and the human) append to, its every line written again to a witness
+/// out of every command's reach.
+#[derive(Debug)]
+struct Witnessed {
+    /// Relative to the world.
+    rel: PathBuf,
+    /// What the file is, in a note.
+    what: String,
+    /// Its bytes, kept whole and apart from the budget.
+    held: Option<Vec<u8>>,
+    /// Where its witness is.
     witness: Option<PathBuf>,
     /// How long the witness was then: what it gains after is the harness's and the human's.
     witness_len: usize,
+}
+
+/// The witnessed files of `world`: the work queue, and each Kijin post journal.
+fn witnessed(world: &Path) -> Vec<Witnessed> {
+    let mut out = vec![Witnessed {
+        rel: PathBuf::from(QUEUE),
+        what: "the work queue: only the harness and the human move it".into(),
+        held: None,
+        witness: queue_witness(world),
+        witness_len: 0,
+    }];
+    for post in mnemorph_races::Post::ALL {
+        out.push(Witnessed {
+            rel: Path::new(KIJIN).join(post.creature()).join(POST_JOURNAL),
+            what: format!(
+                "the {} post journal: only the harness writes it",
+                post.creature()
+            ),
+            held: None,
+            witness: kijin_witness(world, post.creature()),
+            witness_len: 0,
+        });
+    }
+    out
 }
 
 impl Snapshot {
@@ -88,18 +126,17 @@ impl Snapshot {
             world: world.to_path_buf(),
             watched: watched.to_vec(),
             entries: BTreeMap::new(),
-            queue: None,
-            witness: queue_witness(world),
-            witness_len: 0,
+            witnessed: witnessed(world),
         };
-        // The queue and the witness's length are read together, under the witness's lock.
-        let lock = s.witness.as_deref().and_then(locked);
-        s.queue = fs::read(world.join(QUEUE)).ok();
-        s.witness_len = lock
-            .as_ref()
-            .and_then(|f| f.metadata().ok())
-            .map_or(0, |m| usize::try_from(m.len()).unwrap_or(usize::MAX));
-        drop(lock);
+        // Each file and its witness's length are read together, under the witness's lock.
+        for w in &mut s.witnessed {
+            let lock = w.witness.as_deref().and_then(locked);
+            w.held = fs::read(world.join(&w.rel)).ok();
+            w.witness_len = lock
+                .as_ref()
+                .and_then(|f| f.metadata().ok())
+                .map_or(0, |m| usize::try_from(m.len()).unwrap_or(usize::MAX));
+        }
         let mut kept = 0usize;
         for root in watched {
             s.walk(root, &mut kept);
@@ -108,7 +145,12 @@ impl Snapshot {
     }
 
     fn walk(&mut self, path: &Path, kept: &mut usize) {
-        if skipped(&self.world, path) || path == self.world.join(QUEUE) {
+        if skipped(&self.world, path)
+            || self
+                .witnessed
+                .iter()
+                .any(|w| path == self.world.join(&w.rel))
+        {
             return;
         }
         let Ok(meta) = fs::symlink_metadata(path) else {
@@ -169,9 +211,15 @@ impl Snapshot {
                 .display()
                 .to_string()
         };
-        // Added since: removed, deepest first.
+        // Added since: removed, deepest first — but a folder the harness made for a witnessed
+        // file, which that file's rebuild answers for.
         for path in now.entries.keys().rev() {
-            if !self.entries.contains_key(path) {
+            let harness_folder = now.entries[path] == Entry::Dir
+                && self
+                    .witnessed
+                    .iter()
+                    .any(|w| self.world.join(&w.rel).starts_with(path));
+            if !self.entries.contains_key(path) && !harness_folder {
                 let gone = match now.entries[path] {
                     Entry::Dir => fs::remove_dir_all(path),
                     _ => fs::remove_file(path),
@@ -213,35 +261,39 @@ impl Snapshot {
                 Err(e) => format!("could not restore `{}`: {e}", shown(path)),
             });
         }
-        // Last: `shared/` stands again, whatever the command made of it.
-        notes.extend(self.restore_queue());
+        // Last: the witnessed files stand again, whatever the command made of them.
+        notes.extend(self.witnessed.iter().filter_map(|w| self.rebuild(w)));
         notes
     }
 }
 
 /// The shared work queue, relative to the world.
 const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
+/// The Kijin posts' folder, relative to the world.
+const KIJIN: &str = ".mnemorph/kijin";
+/// A post journal's name in its post's folder.
+const POST_JOURNAL: &str = "post.jsonl";
 
 impl Snapshot {
-    /// Rebuild the queue from what it held and what its witness gained since the snapshot, in the
-    /// witness's order: whatever the command did to the file — a forged line, a deletion, a link
-    /// in its place — never counts.
-    fn restore_queue(&self) -> Option<String> {
-        let path = self.world.join(QUEUE);
-        // Held until the queue is written: no move lands between the read and the write.
-        let _lock = self.witness.as_deref().and_then(locked);
-        let gained = self
+    /// Rebuild a witnessed file from what it held and what its witness gained since the
+    /// snapshot, in the witness's order: whatever the command did to the file — a forged line, a
+    /// deletion, a link in its place — never counts.
+    fn rebuild(&self, w: &Witnessed) -> Option<String> {
+        let path = self.world.join(&w.rel);
+        // Held until the file is written: no line lands between the read and the write.
+        let _lock = w.witness.as_deref().and_then(locked);
+        let gained = w
             .witness
             .as_ref()
-            .and_then(|w| fs::read(w).ok())
-            .map(|w| w.get(self.witness_len..).unwrap_or_default().to_vec())
+            .and_then(|f| fs::read(f).ok())
+            .map(|f| f.get(w.witness_len..).unwrap_or_default().to_vec())
             .unwrap_or_default();
-        let mut want = self.queue.clone().unwrap_or_default();
+        let mut want = w.held.clone().unwrap_or_default();
         if !want.is_empty() && !gained.is_empty() && !want.ends_with(b"\n") {
             want.push(b'\n');
         }
         want.extend_from_slice(&gained);
-        let absent = self.queue.is_none() && want.is_empty();
+        let absent = w.held.is_none() && want.is_empty();
         let meta = fs::symlink_metadata(&path);
         let unchanged = match &meta {
             Ok(m) if m.file_type().is_file() => fs::read(&path).is_ok_and(|now| now == want),
@@ -251,9 +303,9 @@ impl Snapshot {
         if unchanged {
             return None;
         }
-        Some(match write_queue(&path, &want, absent) {
-            Ok(()) => "put back the work queue: only the harness and the human move it".to_owned(),
-            Err(e) => format!("could not put back the work queue: {e}"),
+        Some(match write_whole(&path, &want, absent) {
+            Ok(()) => format!("put back {}", w.what),
+            Err(e) => format!("could not put back {}: {e}", w.what),
         })
     }
 }
@@ -265,9 +317,9 @@ fn locked(witness: &Path) -> Option<fs::File> {
     Some(f)
 }
 
-/// Write the queue afresh: whatever stands at `path` — a link, a directory, a file — is removed
-/// first, and the new file is created new (never through a link), under a real `shared/`.
-fn write_queue(path: &Path, bytes: &[u8], absent: bool) -> std::io::Result<()> {
+/// Write a witnessed file afresh: whatever stands at `path` — a link, a directory, a file — is
+/// removed first, and the new file is created new (never through a link), under a real folder.
+fn write_whole(path: &Path, bytes: &[u8], absent: bool) -> std::io::Result<()> {
     if let Ok(m) = fs::symlink_metadata(path) {
         if m.is_dir() {
             fs::remove_dir_all(path)?;
@@ -296,10 +348,36 @@ fn write_queue(path: &Path, bytes: &[u8], absent: bool) -> std::io::Result<()> {
 /// (`mnemorph_world::queue::witness_of`); a test in the loop holds the two together.
 #[must_use]
 pub fn queue_witness(world: &Path) -> Option<PathBuf> {
-    let state = std::env::var_os("XDG_STATE_HOME")
+    Some(
+        state_dir()?
+            .join("mnemorph/queue")
+            .join(format!("{}.jsonl", world_key(world))),
+    )
+}
+
+/// Where a Kijin post journal's witness lives:
+/// `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, else under `~/.local/state`;
+/// `None` when there is no home. Found again by the world's path, as the queue's and the attic's.
+#[must_use]
+pub fn kijin_witness(world: &Path, post: &str) -> Option<PathBuf> {
+    Some(
+        state_dir()?
+            .join("mnemorph/kijin")
+            .join(world_key(world))
+            .join(format!("{post}.jsonl")),
+    )
+}
+
+/// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
+fn state_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
-        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
+        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))
+}
+
+/// `<world's name>-<fnv64a of its path>`.
+fn world_key(world: &Path) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in world.as_os_str().as_encoded_bytes() {
         h ^= u64::from(*b);
@@ -309,11 +387,7 @@ pub fn queue_witness(world: &Path) -> Option<PathBuf> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    Some(
-        state
-            .join("mnemorph/queue")
-            .join(format!("{name}-{h:016x}.jsonl")),
-    )
+    format!("{name}-{h:016x}")
 }
 
 fn put_back(path: &Path, before: &Entry, after: Option<&Entry>) -> std::io::Result<()> {
@@ -365,8 +439,8 @@ mod queue_tests {
         let queue = world.join(QUEUE);
         let take = || {
             let mut s = Snapshot::take(&world);
-            s.witness = Some(witness.clone());
-            s.witness_len = fs::read(&witness).map_or(0, |w| w.len());
+            s.witnessed[0].witness = Some(witness.clone());
+            s.witnessed[0].witness_len = fs::read(&witness).map_or(0, |w| w.len());
             s
         };
         fs::write(&queue, "old\n").unwrap();
@@ -418,6 +492,64 @@ mod queue_tests {
 
         // Untouched, nothing is said.
         assert_eq!(take().restore(), Vec::<String>::new());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A post journal comes back as what it held plus the rows the harness journaled while the
+    /// command ran — its own forged rows gone — and a first row the harness wrote mid-command is
+    /// neither lost nor reported as the command's.
+    #[test]
+    fn a_post_journal_keeps_the_harness_rows_and_loses_the_forged_ones() {
+        let root = std::env::temp_dir().join(format!("mnemorph-post-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let world = root.join("w");
+        fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        let witness = root.join("forge.jsonl");
+        let journal = world.join(".mnemorph/kijin/kijin-forge/post.jsonl");
+        let take = || {
+            let mut s = Snapshot::take(&world);
+            let w = s
+                .witnessed
+                .iter_mut()
+                .find(|w| w.rel.ends_with("kijin-forge/post.jsonl"))
+                .unwrap();
+            w.witness = Some(witness.clone());
+            w.witness_len = fs::read(&witness).map_or(0, |b| b.len());
+            s
+        };
+
+        // No journal yet: the harness writes its first row while a command runs.
+        let before = take();
+        fs::create_dir_all(journal.parent().unwrap()).unwrap();
+        fs::write(&witness, "committed\n").unwrap();
+        fs::write(&journal, "committed\n").unwrap();
+        assert_eq!(before.restore(), Vec::<String>::new());
+        assert_eq!(fs::read_to_string(&journal).unwrap(), "committed\n");
+
+        // A forged `observed` row, and the harness's own row journaled meanwhile.
+        let before = take();
+        fs::write(&witness, "committed\nreconcile\n").unwrap();
+        fs::write(&journal, "committed\nobserved\nreconcile\n").unwrap();
+        let notes = before.restore();
+        assert_eq!(
+            fs::read_to_string(&journal).unwrap(),
+            "committed\nreconcile\n"
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("the kijin-forge post journal")),
+            "{notes:?}"
+        );
+
+        // Deleted whole: it comes back.
+        let before = take();
+        fs::remove_dir_all(world.join(".mnemorph/kijin")).unwrap();
+        before.restore();
+        assert_eq!(
+            fs::read_to_string(&journal).unwrap(),
+            "committed\nreconcile\n"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }
