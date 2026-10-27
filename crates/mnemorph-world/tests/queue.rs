@@ -405,8 +405,25 @@ fn a_dark_elf_doc_adds_surfaces_to_the_route() {
         "spare",
         "# dark-elf-web-2\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** lib/\n",
     );
+    w.doc(
+        "dark-elf",
+        "general",
+        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** vendor/\n",
+    );
     let r = Roster::load(&w.0);
     assert_eq!(r.creatures["dark-elf-web"].surfaces, ["api/", "auth.py"]);
+    // The generalist's Surfaces are the world's catch-all: it is routed them alone.
+    assert_eq!(r.route(&["vendor/lib.c"]), [General]);
+    // A path is read as ownership reads it: `//`, `..` and `\` do not dodge the route.
+    for dodge in [
+        "api//login.rs",
+        "src/../api/login.rs",
+        "api\\login.rs",
+        "./api/./login.rs",
+    ] {
+        assert_eq!(r.route(&[dodge]), [Web], "{dodge}");
+    }
+    assert_eq!(r.route(&["/etc/../Cargo.lock"]), [Supply]);
     assert_eq!(r.route(&["api/login.rs"]), [Web]);
     assert_eq!(
         r.route(&["./auth.py", "Cargo.lock"]),

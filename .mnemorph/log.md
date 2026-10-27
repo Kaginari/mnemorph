@@ -5714,3 +5714,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   the surface and class table; 09 the field.
 - **Learned:** the generalist is routed by the cross-surface rule alone, so the book's "routed no
   landing" became "routed exactly the landings that touch two specialities or more".
+
+---
+
+### [2026-10-27T21:30:18+01:00] rimuru — #246, Fable's review: no dead field, no unrouted law ground
+- **Done:** the generalist is routed a world's declared `Surfaces` (its catch-all); law owns
+  `crates/mnemorph-world/**`, `crates/mnemorph-ledger/**` and the loop's route, session and solo;
+  hook-laundering moves to harness, the classifier's ground; `Roster::route` reads paths through
+  `own::normal`; 02's surface table drops brace globs the matcher never read.
+- **Learned:** a surface table is a list of what a landing can rewrite unseen — the roster and
+  ownership are the law's ground as much as the race crate is.

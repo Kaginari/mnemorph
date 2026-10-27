@@ -95,6 +95,7 @@ impl Speciality {
                 ApprovalBinding,
                 TerminalEscape,
                 MemorySafety,
+                HookLaundering,
             ],
             Speciality::Agent => &[
                 PromptInjection,
@@ -108,7 +109,6 @@ impl Speciality {
                 KnownVulnerability,
                 DependencyConfusion,
                 WorkflowInjection,
-                HookLaundering,
                 ReleaseIntegrity,
                 ContainerImage,
             ],
@@ -199,13 +199,15 @@ impl Speciality {
             ],
             Speciality::Law => &[
                 "crates/mnemorph-races/**",
+                "crates/mnemorph-world/**",
+                "crates/mnemorph-ledger/**",
+                "crates/mnemorph-loop/src/budget.rs",
+                "crates/mnemorph-loop/src/route.rs",
+                "crates/mnemorph-loop/src/session.rs",
+                "crates/mnemorph-loop/src/solo.rs",
+                "crates/mnemorph-provider/src/retry.rs",
                 "docs/02-races.md",
                 "**/log.md",
-                "crates/mnemorph-ledger/src/envelope.rs",
-                "crates/mnemorph-ledger/src/caps.rs",
-                "crates/mnemorph-loop/src/budget.rs",
-                "crates/mnemorph-provider/src/retry.rs",
-                "crates/mnemorph-world/src/verify.rs",
             ],
             Speciality::General => &[],
         }
@@ -310,6 +312,7 @@ impl AttackClass {
         AttackClass::ApprovalBinding,
         AttackClass::TerminalEscape,
         AttackClass::MemorySafety,
+        AttackClass::HookLaundering,
         AttackClass::PromptInjection,
         AttackClass::ToolArgumentInjection,
         AttackClass::WireForgery,
@@ -319,7 +322,6 @@ impl AttackClass {
         AttackClass::KnownVulnerability,
         AttackClass::DependencyConfusion,
         AttackClass::WorkflowInjection,
-        AttackClass::HookLaundering,
         AttackClass::ReleaseIntegrity,
         AttackClass::ContainerImage,
         AttackClass::SecretExposure,
@@ -407,23 +409,25 @@ pub fn route<P: AsRef<str>>(paths: &[P]) -> Vec<Speciality> {
 
 /// The specialities a landing is routed to: every hunter whose surfaces — compiled, or
 /// `declared` by the world for it — any written path touches, in [`Speciality::HUNTERS`] order;
-/// and the generalist last when two or more hunters are, for the chains that cross surfaces.
-/// Empty when no path touches a surface.
+/// and the generalist last when two or more hunters are, for the chains that cross surfaces, or
+/// when a path touches the surfaces the world declares for it, its catch-all. Empty when no path
+/// touches a surface.
 #[must_use]
 pub fn route_with<P: AsRef<str>>(
     paths: &[P],
     declared: impl Fn(Speciality, &str) -> bool,
 ) -> Vec<Speciality> {
+    let touched = |s: Speciality| {
+        paths.iter().any(|p| {
+            let p = p.as_ref().trim_start_matches("./");
+            s.touches(p) || declared(s, p)
+        })
+    };
     let mut routed: Vec<Speciality> = Speciality::HUNTERS
         .into_iter()
-        .filter(|&s| {
-            paths.iter().any(|p| {
-                let p = p.as_ref().trim_start_matches("./");
-                s.touches(p) || declared(s, p)
-            })
-        })
+        .filter(|&s| touched(s))
         .collect();
-    if routed.len() >= 2 {
+    if routed.len() >= 2 || touched(Speciality::General) {
         routed.push(Speciality::General);
     }
     routed
@@ -511,6 +515,7 @@ mod tests {
                         "approval-binding",
                         "terminal-escape",
                         "memory-safety",
+                        "hook-laundering",
                     ]
                 ),
                 (
@@ -530,7 +535,6 @@ mod tests {
                         "known-vulnerability",
                         "dependency-confusion",
                         "workflow-injection",
-                        "hook-laundering",
                         "release-integrity",
                         "container-image",
                     ]
@@ -626,6 +630,33 @@ mod tests {
             route(&["README.md", "docs/03-loop.md", "site/index.html"]),
             Vec::<Speciality>::new()
         );
+    }
+
+    /// The law's own ground — the roster, ownership, the ledger, the loop's routing — routes the
+    /// law, so a landing that rewrites who is who is never unrouted.
+    #[test]
+    fn route_the_law_ground() {
+        for path in [
+            "crates/mnemorph-world/src/roster.rs",
+            "crates/mnemorph-world/src/own.rs",
+            "crates/mnemorph-ledger/src/fold.rs",
+            "crates/mnemorph-loop/src/route.rs",
+            "crates/mnemorph-loop/src/session.rs",
+            "crates/mnemorph-loop/src/solo.rs",
+        ] {
+            assert!(route(&[path]).contains(&Speciality::Law), "{path}");
+        }
+    }
+
+    #[test]
+    fn the_generalist_is_routed_its_declared_surfaces() {
+        let declared = |s: Speciality, p: &str| s == Speciality::General && p.starts_with("x/");
+        assert_eq!(route_with(&["x/y.rs"], declared), [Speciality::General]);
+        assert_eq!(
+            route_with(&["x/y.rs", "Cargo.lock"], declared),
+            [Speciality::Supply, Speciality::General]
+        );
+        assert_eq!(route_with(&["z/y.rs"], declared), Vec::<Speciality>::new());
     }
 
     #[test]

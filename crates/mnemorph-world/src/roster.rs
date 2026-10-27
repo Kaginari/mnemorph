@@ -141,10 +141,16 @@ impl Roster {
     }
 
     /// The Dark Elf specialities a landing's written paths are routed to: the compiled surfaces,
-    /// and the Surfaces each living speciality's doc adds ([`mnemorph_races::route_with`]).
+    /// and the Surfaces each living speciality's doc adds ([`mnemorph_races::route_with`]). Each
+    /// path is normalised as ownership reads it (`./`, `//`, `..`, `\\`); one that does not
+    /// normalise is matched as written.
     #[must_use]
     pub fn route<P: AsRef<str>>(&self, paths: &[P]) -> Vec<Speciality> {
-        mnemorph_races::route_with(paths, |s, path| {
+        let paths: Vec<String> = paths
+            .iter()
+            .map(|p| crate::own::normal(p.as_ref()).unwrap_or_else(|| p.as_ref().to_owned()))
+            .collect();
+        mnemorph_races::route_with(&paths, |s, path| {
             self.living()
                 .filter(|c| Speciality::of(&c.name) == Some(s))
                 .any(|c| c.surfaces.iter().any(|claim| covers(claim, path)))
