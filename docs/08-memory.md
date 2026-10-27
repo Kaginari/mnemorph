@@ -486,6 +486,6 @@ Know-how a body may load, in two levels, priced by exactly what each injects:
 - **The living-memory vector and its eight states.** Mnemorph keeps two of its pathologies
   (replay loop, lock-in) as findings with acts, adds its own (unproven write) in place of
   MNEMORPH-85's colonisation hold, and leaves out the maturity labels.
-- **Lexical similarity.** MNEMORPH-85 ranks by token overlap; Mnemorph keeps tantivy BM25, and
+- **Lexical similarity.** MNEMORPH-85 ranks by token overlap; Mnemorph keeps BM25, and
   an embedding model stays the same boundary with a bigger engine.
 - **Synthesis by concatenation.** Recall returns anchors; the body reads them.

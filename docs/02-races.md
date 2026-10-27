@@ -479,8 +479,8 @@ act after it `other`.
   (`$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, found again by the world's
   path; the folder `0700`, its files `0600`); after each command the tripwire rebuilds the journal from what it held and what the
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
-  never counts. A `reconcile` is shown to the human
-  (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
+  never counts. A `reconcile` waits for the human
+  (`mnemorph incident open` or `settle`) until a later row settles it; it is not a clean outward act, so it is what
   `outwardCleanRate` counts against — and what the human may mark an incident, which suspends the
   envelope that covered the act and, from M11, may make an Oni fall.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
@@ -548,8 +548,8 @@ act after it `other`.
 
   Every receipt is read again from the witness and the post's intents whenever the incident is
   read: an entry naming a receipt the witness does not hold as described counts for nothing, and
-  rows a body writes into the world's journal are never read. While it is open, `mnemorph status`
-  lists it with the receipts it misses, and:
+  rows a body writes into the world's journal are never read. While it is open, `mnemorph incident
+  list` shows it with the receipts it misses, and:
   - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which M11's gate
     asks before it honours an envelope): every envelope one of whose patterns reads the act, or
     that the incident names; incidents that cannot be read suspend every envelope;

@@ -382,7 +382,7 @@ sequenceDiagram
     end
 ```
 
-| Kind | Served by the solo session | Served once the world is |
+| Kind | Served | Planned |
 |---|---|---|
 | requests (client → core) | `initialize`, `session/prompt`, `session/send`, `session/interrupt`, `session/events {since}`, `shutdown` | `session/resume`, `queue/list`, `queue/move`, `world/status`, `ledger/query`, `config/explain` |
 | requests (core → client) | `gate/ask` — the human gate, the only call the core blocks on | |
@@ -471,9 +471,9 @@ Rules:
   gate as part of the turn it stops.
 - One message per line; a batch is refused by name, and a notification is never answered.
 - An unanswered gate never allows. After 10 minutes the act is denied and the body is told the
-  human did not answer; with resume (M7) the run checkpoints as `SUSPENDED` instead (a neutral
-  word: no strain, no failure) and resumes at that act when the human answers — an overnight run
-  waits instead of dying.
+  human did not answer. Planned, with no milestone: the run checkpoints as `SUSPENDED` instead (a
+  neutral word: no strain, no failure) and resumes at that act when the human answers — an
+  overnight run waits instead of dying.
 - The board's WebSocket accepts only `Host: 127.0.0.1|localhost`, checks `Origin`, and requires
   the per-launch token the CLI prints — reads included, not only acts.
 - Protocol changes are versioned; the generated TypeScript is checked in and CI fails on a diff.

@@ -5724,3 +5724,21 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   `own::normal`; 02's surface table drops brace globs the matcher never read.
 - **Learned:** a surface table is a list of what a landing can rewrite unseen — the roster and
   ownership are the law's ground as much as the race crate is.
+
+---
+
+### [2026-10-27T21:48:18+01:00] rimuru — the book audited against the code: status, milestones, stale tools and commands
+- **Done:** README's status line read from the milestones (M0–M6 and M8 built, M7 with #244 and
+  #96 open, M9's typed pull-request act in progress, M10's specialities compiled) and a "Read |
+  For" row per page; the roadmap's diagram coloured built / under way / ahead, M5b drawn, D's, M7's,
+  M9's and M10's open and built pieces named. Stale claims fixed: tantivy (recall is BM25 in
+  `mnemorph-memory`), axum, CancellationToken, thiserror/anyhow, tracing and insta in the choices;
+  `mnemorph index`; `mnemorph status` for incidents and reconciles (`mnemorph incident`); the
+  edit miss after the forgiving edit; `Config::backend` "once the CLI (M6)". Marked with a
+  milestone: `mnemorph ledger` (M12), axum and Playwright (M12), the MCP page (M13), standing
+  permissions (M11), the protocol's unserved methods and events as planned, `SUSPENDED` as
+  planned with no milestone.
+- **Left:** the client sections (README's run instructions, 01's processes, 05's top diagram,
+  tree and terminal UI, 04's terminal client and sequence diagram): the TypeScript CLI's
+  retirement rewrites them.
+- **Learned:** a choices table ages fastest — it names libraries before the code picks them.

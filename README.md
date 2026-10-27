@@ -9,13 +9,27 @@ the wire, rebuilt with a Rust core and a TypeScript terminal client and web boar
 compiled in — what each one may do, whom it answers to, how it is scored and how it ascends is
 code, not configuration.
 
-**Status:** M0 — foundations. Start with [the book](docs/README.md); the plan is the
+**Status:** M0–M6 and M8 are built — the wire and the races, the ledger, the providers, the tools,
+sandbox and human gate, configuration, the loop with its long runs and resume, the protocol and
+the terminal clients, memory and the toolbox. M7, the world, runs with two items open (the Jev
+decisions and the paired solo-versus-hierarchy measurement). M9, the Kijin, has its typed outward
+acts, fingerprints, receipts, the act runner and closure; the typed pull-request act its exit
+needs is in progress. M10's Dark Elf specialities and their routing are compiled; the board is
+M12. Start with [the book](docs/README.md); the plan is the
 [roadmap](docs/roadmap.md) and its [milestones](https://github.com/Kaginari/mnemorph/milestones).
 
 | Read | For |
 |---|---|
 | [Overview](docs/01-overview.md) | the world in one picture |
-| [Races](docs/02-races.md) | the six races, five ascensions, Kijin posts, the Dark Elf's witness rule |
+| [Races](docs/02-races.md) | the six races, five ascensions, Kijin posts and outward acts, the Dark Elf's specialities and witness rule |
+| [The loop](docs/03-loop.md) | the six beats of one turn, budgets, stress, resume |
+| [Communication](docs/04-communication.md) | the wire between bodies, the lanes, the client protocol |
+| [Architecture](docs/05-architecture.md) | crates, packages, the terminal UI, storage, sandbox, configuration |
+| [Consumption](docs/06-consumption.md) | how every token is budgeted, metered and stopped |
+| [MCP](docs/07-mcp.md) | the MCP client, agent-mcp and toolbox-mcp (M13) |
+| [Memory](docs/08-memory.md) | the archive, notes as traces, recall, the write rule |
+| [Ontology](docs/09-ontology.md) | who owns each path, facts with who said them |
+| [Lessons](docs/lessons.md) | what isekai taught, each one a test or a rule |
 | [Roadmap](docs/roadmap.md) | the book, then M0–M14, rung by rung |
 
 ## Set up a machine
