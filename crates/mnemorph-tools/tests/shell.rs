@@ -922,3 +922,39 @@ fn a_kijin_does_only_its_posts_acts() {
     );
     assert_eq!(o.content, "inside\n", "{o:?}");
 }
+
+#[test]
+fn an_approved_spawn_reads_the_harnesss_bytes_on_its_input_and_nothing_else() {
+    use mnemorph_tools::Fingerprint;
+    use mnemorph_tools::shell::{Spawned, spawn_approved};
+    let w = World::new("stdin");
+    let cx = w.cx(Race::Kijin, Arc::new(Scripted::new([])));
+    let run = |stdin: Option<&[u8]>| {
+        let command = "cat";
+        let plan = Fingerprint::of(command, &w.world()).unwrap();
+        match spawn_approved(
+            command,
+            &cx,
+            Duration::from_secs(10),
+            ToolClass::Outward,
+            plan,
+            &mut || Ok(()),
+            stdin,
+        ) {
+            Spawned::Ran(out) => out,
+            other => panic!("{other:?}"),
+        }
+    };
+    let body = "Adds the undo.\n\n- it closes, never deletes\n";
+    let out = run(Some(body.as_bytes()));
+    assert_eq!(out.meta.exit, Some(0));
+    assert!(
+        out.content.contains("it closes, never deletes"),
+        "{}",
+        out.content
+    );
+    // Without bytes, the input is empty: `cat` reads nothing and ends.
+    let out = run(None);
+    assert_eq!(out.meta.exit, Some(0));
+    assert!(out.content.starts_with("[no output]"), "{}", out.content);
+}

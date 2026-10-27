@@ -110,15 +110,15 @@ mnemorph/
 
 | Concern | Choice | Why |
 |---|---|---|
-| async runtime | tokio | the ecosystem default; cancellation via `CancellationToken` everywhere |
+| async runtime | tokio | the ecosystem default; cancellation through the run's own `Interrupt`, which reaches a running command |
 | HTTP | reqwest + rustls | no OpenSSL; private CA bundles loadable |
-| server | axum | WebSocket + static assets + JSON-RPC in one router |
+| server | JSON-RPC over stdio, three threads (writer, reader, driver); axum from M12 | the board's WebSocket + static assets + JSON-RPC in one router |
 | types → TS | ts-rs | one source of truth for the protocol |
 | config | TOML via `toml_edit` | edits preserve comments; isekai's YAML-append bug cannot exist |
-| recall | tantivy (BM25) | local, model-free by default (Nature 7) |
-| errors | `thiserror` in crates, `anyhow` only in `mnemorphd` | typed failures cross crate borders |
-| logs | `tracing` → JSON file under the world | the journal is an instrument |
-| tests | nextest, insta snapshots, proptest; Ratatui's test backend; vitest; Playwright for the board | every rung testable alone |
+| recall | BM25 in `mnemorph-memory`, no index engine | local, model-free by default (Nature 7) |
+| errors | typed error enums where a caller branches on the failure, a plain reason elsewhere | typed failures cross crate borders |
+| logs | the run's journal, JSONL under `.mnemorph/instruments/loop/` | the journal is an instrument |
+| tests | nextest, proptest; Ratatui's test backend; vitest; Playwright for the board (M12) | every rung testable alone |
 | TS tooling | Node 22, pnpm workspaces, Biome | Node is already the platform Claude Code runs on |
 | distribution | GitHub release binaries of `mnemorph` and `mnemorphd`, a curl installer; `cargo install --path` from a checkout | one plain binary for people and for servers. The name `mnemorph` on crates.io is taken: the published names are settled in phase D |
 
@@ -447,11 +447,11 @@ fails when the two differ.
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
-| derived indexes | `.mnemorph/index/` | no — rebuildable |
+| derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
 
-Every index is derived and can be deleted; `mnemorph index` rebuilds it. A stale index is rebuilt,
-never routed around.
+Every index is derived and can be deleted, and is rebuilt from what it derives from; a stale index
+is rebuilt, never routed around.
 
 ### Sandbox
 
@@ -640,7 +640,9 @@ flowchart LR
     that shows the planned effect makes the act `observed`; anything else is `reconcile`
     ([races](02-races.md)). The Kijin's act runner (`mnemorph_config::Runner`, its `outward`
     tool) spawns through the bash tool's own path (`mnemorph_tools::shell::spawn_approved`):
-    the sandbox, the tripwire's and the attic's snapshots, and the plan rechecked at the spawn —
+    the sandbox, the tripwire's and the attic's snapshots, the plan rechecked at the spawn, and
+    any text the act sends (a pull request's description) on the command's standard input from
+    the approved bytes, never a file in the world —
     with the act's intent journaled between that recheck and the spawn, so an act whose world
     moved journals nothing and is asked again. An undo (`Runner::undo`) takes the same path, the
     human always asked, and is done only when a probe sees the effect gone; its incident
@@ -818,8 +820,8 @@ an empty list or table never overrides a lower layer:
   (`vllm:qwen3-coder`) goes to that provider instead; a `:` that names no provider is part of the
   id (`qwen3:32b`); an empty id is no model. From the tracked file, a model written
   `<provider>:<id>` is a hole, as `models.provider` is. `Config::backend(model)` returns the
-  provider, its URL and key variable, and the id it knows the model by; it is honoured once a
-  binary builds runs from the configuration (`mnemorph`, M6). **Providers** name the environment
+  provider, its URL and key variable, and the id it knows the model by; every session's
+  provider, a commissioned body's included, is built from it. **Providers** name the environment
   variable holding their key (`key_env`), never the key. A provider's `kind` is `anthropic`,
   `openai` (any OpenAI-compatible server) or `systemone` (a classifier: TypeSafe's Jev, or a
   jeff server on your own machine).

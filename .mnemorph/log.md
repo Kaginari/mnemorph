@@ -5752,6 +5752,78 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T21:48:18+01:00] rimuru — the book audited against the code: status, milestones, stale tools and commands
+- **Done:** README's status line read from the milestones (M0–M6 and M8 built, M7 with #244 and
+  #96 open, M9's typed pull-request act in progress, M10's specialities and wire fields in) and a "Read |
+  For" row per page; the roadmap's diagram coloured built / under way / ahead, M5b drawn, D's, M7's,
+  M9's and M10's open and built pieces named. Stale claims fixed: tantivy (recall is BM25 in
+  `mnemorph-memory`), axum, CancellationToken, thiserror/anyhow, tracing and insta in the choices;
+  `mnemorph index`; `mnemorph status` for incidents and reconciles (`mnemorph incident`); the
+  edit miss after the forgiving edit; `Config::backend` "once the CLI (M6)". Marked with a
+  milestone: `mnemorph ledger` (M12), axum and Playwright (M12), the MCP page (M13), standing
+  permissions (M11), the protocol's unserved methods and events as planned, `SUSPENDED` as
+  planned with no milestone.
+- **Left:** the client sections (README's run instructions, 01's processes, 05's top diagram,
+  tree and terminal UI, 04's terminal client and sequence diagram): the TypeScript CLI's
+  retirement rewrites them.
+- **Learned:** a choices table ages fastest — it names libraries before the code picks them.
+
+---
+
+### [2026-10-27T22:03:02+01:00] rimuru — #249 Fable review fixes
+- 02: the M11 envelope clause no longer names a `mnemorph status` command.
+- 05: no `.mnemorph/index/` exists; recall keeps its BM25 index in memory.
+
+---
+
+### [2026-10-27T21:33:51+01:00] rimuru — M9's exit: a typed pull request, and one approval for branch and pull request
+- **Done:** `Act::OpenPullRequest { repo, base, head, title, body }` on the forge post, rendered as
+  `gh pr create --repo --base --head --title --body-file .mnemorph/tmp/pr-body-<sha256>.md` (the
+  file written after the recheck, fresh, never through a link, removed after the spawn; the card
+  shows the title and description). Pin: base and head read on the forge (`git/ref/heads/…`), a
+  head this post pushed still at its commit, none open from head into base (`already open: #N`).
+  Observe and cut-act recovery share one read (`forge::find`): exactly one open, by `gh api user`'s
+  login, head and base in the repository, the title, the description's SHA-256, the printed
+  number if any; the number kept for the undo. Undo `gh pr close <n>`, only while open, unmerged
+  and its own; gone means closed and not merged. `Runner::push_and_open` (`open-pull-request`
+  with `remote`): one card with both commands and a fingerprint of both; the push URL must name
+  the repository; the pull request runs only on an observed push, held to a fingerprint that
+  reads the post journal as absent and the target masked (the push's refs), its pin read again;
+  anything else moved asks for it alone. A pushed branch is not undone under its open pull
+  request. Incidents: a new pull request head→base, or a label or comment on the one opened, is
+  the same target. Docs 02 (pipeline, forge row), roadmap (M9 exit met).
+- **Tests:** config `pull_request` (a stub forge for `gh` and `ls-remote`, its hands rechecking
+  the plan): observed and closed, already open, foreign author / retitled / rewritten /
+  misprinted number, undo of an edited, merged or hand-closed one, four cut cases, branches
+  missing or moved, a planted description file, the pair (one ask; denied; lost push; another
+  repository; a world moved past the push), the incident's target; `outward`: argv, validation,
+  envelope face, an untyped `gh pr create` destructive. Twenty-four guards disabled one by one:
+  each fails its test.
+- **Learned:** an act's own journal rows are part of the world the next act's fingerprint reads:
+  two acts under one approval need a yardstick blind to the first act's writes, or the second
+  always asks again.
+
+---
+
+### [2026-10-27T21:55:11+01:00] rimuru — #248, Fable's review: the description on stdin, the pair's read order, one standing set
+- **Done:** a pull request renders `--body-file -`; `spawn_approved` and `Hands::spawn` take
+  `stdin`, written by the harness from the approved bytes (`Planned::stdin`) — no description
+  file in the world for a concurrent body to swap (`.mnemorph/tmp` is the tripwire's blind spot).
+  No other act read a harness-written file (a comment's body is in argv). The pair reads the plan
+  the spawn rechecks first, then the journal-blind yardstick, so no change falls between them.
+  `may_stand` (observed, reconcile, settled) is the one set for a head this post pushed and a pull
+  request still on a branch. Roadmap: M9's exit met against a stub forge; a live run remains.
+  Docs 02, 05.
+- **Tests:** tools `shell`: an approved spawn reads the given bytes, and an empty input without
+  them; config `pull_request`: the stub's stdin equals the approved description and no file is
+  written, a file left in the world is never read, a settled pull request still holds its branch.
+  The stdin write, the runner's bytes and the standing set disabled one by one: each fails its
+  test. The pair's read order has no seam a test can reach (no outside call between the reads).
+- **Learned:** a file the harness writes in the world is the world's: any text an act sends goes
+  by the process's own input, from memory.
+
+---
+
 ### [2026-10-27T22:04:07+01:00] rimuru — one `mnemorph`: the Rust binary, the TypeScript CLI retired
 - **Done:** crate `mnemorph-tui` builds the binary `mnemorph`: no subcommand (or `chat`) opens the
   terminal app; `resume <run|last>`; `status`; `run "<ask>"` asks once through the same session

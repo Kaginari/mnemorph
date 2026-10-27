@@ -270,9 +270,9 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 | left | envelope left for the active body and the session | status line |
 | cache | cache read ÷ input, rolling | status line, board |
 | burn | tokens per minute over the last 5 minutes | board |
-| per race | spend and pass rate by race over 28 days | board, `mnemorph ledger` |
+| per race | spend and pass rate by race over 28 days | board, `mnemorph ledger` (M12) |
 
-`mnemorph ledger [--by race|body|model|day]` prints the same folds in the terminal.
+From M12, `mnemorph ledger [--by race|body|model|day]` prints the same folds in the terminal.
 
 ### Building Mnemorph within your plan
 

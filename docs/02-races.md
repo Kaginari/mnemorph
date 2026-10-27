@@ -374,7 +374,7 @@ or none, stays with the human.
 | `kijin-ci` | the swordmaster who drills | `.github/workflows/`, CI config | `fetch` (CI runs and logs), `rerun-ci` |
 | `kijin-release` | the smith | changelog, versioning, release config, installers | `fetch`, `push-tag`, `publish` (registries, images, GitHub releases) — both `destructive` |
 | `kijin-deploy` | the commander | deploy manifests, environments | `fetch` (health checks), `deploy`, `rollback`, `write-outside` |
-| `kijin-forge` | the shrine keeper of records | PR templates, issue templates | `fetch` (issues, PRs), `push-branch`, `pull-request`, `comment`, `label` |
+| `kijin-forge` | the shrine keeper of records | PR templates, issue templates | `fetch` (issues, PRs), `push-branch`, `pull-request`, `comment`, `label` — typed through `outward`: a new branch, a pull request opened (alone, or with the push of its head under one approval), a label, a comment |
 | `kijin-scout` | the shadow (and **agent-mcp**: the MCP catalog's curator and conduit — [MCP](07-mcp.md)) | `.mnemorph/intel/` (machine-local, not tracked: the advisory mirror is hundreds of MB) | `fetch` only (advisory databases such as OSV, upstream releases): no outward write |
 
 The kinds, as the classifier reads them. A kind is read only from what the command's own words
@@ -408,15 +408,18 @@ act after it `other`.
   rechecked just before the act: a world that changed meanwhile runs nothing and is asked again.
 - **The act runner** (`mnemorph_config::Runner`) is the one path a typed act takes. A Kijin asks
   for one through its `outward` tool, with a typed act — `{kind: "push-new-branch", remote,
-  name}`, `{kind: "add-label", repo, pr, label}` or `{kind: "comment", repo, pr, body}`, and an
-  optional `key` (a comment may also name `tells`, below) — or `{kind: "undo", receipt}` — never a command string; an untyped outward command still goes through `bash`,
-  where it is a destructive `Command`. The steps run in this order, and none can be skipped:
+  name}`, `{kind: "open-pull-request", repo, base, head, title, body}` (with `remote`, the head
+  pushed first under the same approval, below), `{kind: "add-label", repo, pr, label}` or
+  `{kind: "comment", repo, pr, body}`, and an optional `key` (a comment may also name `tells`,
+  below) — or `{kind: "undo", receipt}` — never a command string; an untyped outward command
+  still goes through `bash`, where it is a destructive `Command` (`gh pr create` too). The steps
+  run in this order, and none can be skipped:
 
   | # | Step | What stops the act |
   |---|---|---|
   | 1 | the post check (`Planned::check_post`) | a kind the post does not hold: refused before anything is read or asked |
   | 2 | the plan's fingerprint | a world that cannot be read |
-  | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet | a key given to another request; an earlier act of the same request in `reconcile`; an open incident on the same target; the branch or label already there |
+  | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet — for a pull request, its base and head branches read on the forge (`gh api …/git/ref/heads/<branch>`) and the pull requests open from head into base | a key given to another request; an earlier act of the same request in `reconcile`; an open incident on the same target; the branch or label already there; a pull request already open from the head into the base (`already open: #N`), a base or head that is not a branch, a head this post pushed that has moved since |
   | 4 | the gate: **always the human** — Oni envelopes are not honoured before M11, and the card says so | a denial |
   | 5 | the fingerprint, rechecked just before the spawn | a world that moved: nothing is journaled, and the gate is asked again (three times at most) |
   | 6 | `commit`: the intent journaled under the request's key | a row that cannot be written: nothing runs |
@@ -438,7 +441,10 @@ act after it `other`.
   to read, two comments with its body → `reconcile`, shown to the human. A cut comment, which may
   have left no id, is found among the pull request's comments since it was committed: by its
   body's SHA-256, written by the login `gh` acts as (`gh api user`), and by its id once known —
-  someone else's identical comment is never taken for it.
+  someone else's identical comment is never taken for it. A cut pull request is found as strictly
+  as `observe` finds it: the one open from its head into its base, by that login, with its title
+  and its description's SHA-256 (and its number, once known); someone else's, or one edited since,
+  is `reconcile`.
 - **A request has a key.** Its key is the hash of its kind, its pinned target and its body (for a
   branch, the commit pushed; for a label, the label) — or, when the Kijin names the request
   (`key`), of its kind, pinned target and that name. The same key with the same request returns
@@ -460,6 +466,7 @@ act after it `other`.
   | `PushNewBranch` | `git ls-remote <pinned URL> refs/heads/<name>`, for every push URL | the branch is there at the pushed commit |
   | `AddLabel` | `gh api --method GET repos/<repo>/issues/<pr>/labels` | the pull request carries the label |
   | `Comment` | `gh api --method GET repos/<repo>/issues/comments/<id>` | the comment is on that pull request, its body's SHA-256 the act's |
+  | `OpenPullRequest` | `gh api --method GET user`, then `gh api --method GET repos/<repo>/pulls?head=<owner>:<head>&base=<base>&state=open` | exactly one is open from the head (in `<repo>`) into the base, by the login `gh` acts as, with the act's title and its description's SHA-256 — and the number `gh pr create` printed, when it printed one; that number is recorded for the undo |
 
   What the act would make, already there when it is pinned — the branch on any push URL, the
   label on the pull request — refuses the act: the command would exit 0 doing nothing, the probe
@@ -479,8 +486,8 @@ act after it `other`.
   (`$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, found again by the world's
   path; the folder `0700`, its files `0600`); after each command the tripwire rebuilds the journal from what it held and what the
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
-  never counts. A `reconcile` is shown to the human
-  (`mnemorph status`) until a later row settles it; it is not a clean outward act, so it is what
+  never counts. A `reconcile` waits for the human
+  (`mnemorphd incident open` or `settle`) until a later row settles it; it is not a clean outward act, so it is what
   `outwardCleanRate` counts against — and what the human may mark an incident, which suspends the
   envelope that covered the act and, from M11, may make an Oni fall.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
@@ -492,11 +499,18 @@ act after it `other`.
   | `PushNewBranch { remote, name }` | `git push <remote> HEAD:refs/heads/<name> --force-with-lease=refs/heads/<name>:` — the branch must not exist yet | delete it, leased on the commit the act pushed: `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>` |
   | `AddLabel { repo, pr, label }` | `gh pr edit <pr> --repo <repo> --add-label <label>` | the same label removed from the same pull request |
   | `Comment { repo, pr, body }` | `gh pr comment <pr> --repo <repo> --body <body>` | the comment deleted, by the id its URL gave at act time |
+  | `OpenPullRequest { repo, base, head, title, body }` | `gh pr create --repo <repo> --base <base> --head <head> --title <title> --body-file -`, the description on its standard input | closed, never deleted — `gh pr close <n> --repo <repo>` — only while it is still open, unmerged and its own: by `gh`'s login, from its head into its base, with its title and description |
 
   A label holds no `,` or `"` (`gh pr edit --add-label` splits on commas: one approved label adds
-  one); a comment is at most 64 KiB and holds no bidirectional, zero-width or Unicode line
-  separator character, and the approval card indents and marks each continuation line of an act,
-  so a body's lines never pass for the card's.
+  one); a comment or a pull request's description is at most 64 KiB and holds no control
+  character but line breaks and tabs, and no bidirectional, zero-width or Unicode line separator
+  character; a title is one such line of at most 256 characters; and the approval card indents
+  and marks each continuation line of an act, so a body's lines never pass for the card's. A
+  pull request's description reaches `gh` on its standard input, written by the harness from the
+  approved bytes it holds (`Planned::stdin`): no file in the world, where another command could
+  swap it between the approval and the read. The card shows the title and the description, on
+  lines of their own, with the description's size and SHA-256. An envelope reads the description
+  in the `-`'s place, bounded and screened like a comment's. The head and base are plain branch names of the act's repository, never the same.
   The repository is pinned in the act, never taken from `GH_REPO` or `-R`; a branch is a plain
   ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
   undo is never a string the model writes, so it is never declared or verified: it is derived, and
@@ -521,18 +535,33 @@ act after it `other`.
   |---|---|---|
   | 1 | the post check — the act undone must be the post's | an act off the post, a command, an undo |
   | 2 | the undo's fingerprint | a world that cannot be read |
-  | 3 | where it goes: the act's pinned push URLs or host, read again; what the act left, still its own — a label's one add since the pin by `gh`'s login, a comment by that login on the act's pull request with the act's body (a branch is leased instead) | a remote or host retargeted since the act; a label or comment no longer certainly its own (the act moves to `reconcile`) — read again between the recheck and the spawn, so one edited while the human reads the card is not undone |
+  | 3 | where it goes: the act's pinned push URLs or host, read again; what the act left, still its own — a label's one add since the pin by `gh`'s login, a comment by that login on the act's pull request with the act's body, a pull request open and unmerged, by that login, with the act's head, base, title and description (a branch is leased instead) | a remote or host retargeted since the act; a label, comment or pull request no longer certainly its own (the act moves to `reconcile`) — read again between the recheck and the spawn, so one edited while the human reads the card is not undone; a branch a pull request this post opened from it is still open on (undo the pull request first: deleting its head would close it unrecorded) |
   | 4 | the gate: **always the human** — no envelope covers an undo (`Uncovered::Undo`) | a denial: nothing runs, nothing is journaled, no incident opens |
   | 5 | the recheck at the spawn | a world that moved: asked again |
   | 6 | the incident opened (a rollback), and the undo's intent journaled — its own receipt, its rows naming the act (`undoes`) | a record that cannot be written: nothing runs |
-  | 7 | the harness-rendered undo — `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>`, `gh pr edit --remove-label`, `gh api -X DELETE …/comments/<id>` — never a model's string | — |
+  | 7 | the harness-rendered undo — `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>`, `gh pr edit --remove-label`, `gh api -X DELETE …/comments/<id>`, `gh pr close <n>` — never a model's string | — |
   | 8 | `ran`: an exit other than 0 is `reconcile` | — |
-  | 9 | a probe that must see the effect **gone**: the branch on no push URL, the label not carried, no comment of the pull request with that id (an edited one is still there) | anything else is `reconcile` |
+  | 9 | a probe that must see the effect **gone**: the branch on no push URL, the label not carried, no comment of the pull request with that id (an edited one is still there), the pull request closed and not merged (`gh api …/pulls/<n>`) | anything else — a merged pull request above all, which closing does not put back — is `reconcile` |
 
   Only then is the undo `observed`, and the act's own journal is corrected: a `corrected` row,
   appended and naming the undo (`by`), supersedes its earlier rows — never an edit. A failed
   undo is `reconcile`, never undone. An effect the probe already sees gone (the human removed it
   by hand) runs nothing: the human approves recording it, and the probe must see it gone again.
+- **A push and its pull request take one approval** (`Runner::push_and_open`; the Kijin asks with
+  `{kind: "open-pull-request", …, remote}`). One card shows both rendered commands — the push URLs
+  and the commit, the branch, the base, the title and the description — bound to one fingerprint
+  of both; a denial runs neither. Each act keeps its own pin, intent, receipt and undo:
+  - the push's URL must name the pull request's repository on the `gh` host, so its head is the
+    branch the push makes; the pull request's pin reads its base and that no pull request is open
+    from the head, which need not exist yet;
+  - the push runs and is observed first. Unless its probe sees the branch at the pushed commit,
+    the pull request does not run;
+  - then the pull request runs under the same approval only while the world is as approved but for
+    what the push wrote — the refs (the target's part of the fingerprint; the pull request reads
+    none of them) and the post journal's rows — and `gh`'s host is the one pinned, its pin read
+    again with the head now this post's push, at the pushed commit. Anything else moved, and the
+    pull request is asked for alone, saying what changed; a push that had landed before asks for
+    the pull request alone too.
 - **A rolled-back or corrected act closes on four receipts.** An incident opens in the witness,
   outside the world (`<post>.incidents.jsonl`), keyed to the act's receipt: when the human
   approves an undo (a rollback), or marks an act as one — a `reconcile`, or an observed act that
@@ -548,13 +577,14 @@ act after it `other`.
 
   Every receipt is read again from the witness and the post's intents whenever the incident is
   read: an entry naming a receipt the witness does not hold as described counts for nothing, and
-  rows a body writes into the world's journal are never read. While it is open, `mnemorph status`
-  lists it with the receipts it misses, and:
+  rows a body writes into the world's journal are never read. While it is open, `mnemorphd incident
+  list` shows it with the receipts it misses, and:
   - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which M11's gate
     asks before it honours an envelope): every envelope one of whose patterns reads the act, or
     that the incident names; incidents that cannot be read suspend every envelope;
-  - **its target takes no new act of the post**: the same branch on a push URL it shares, or the
-    same pull request — label or comment — is refused before the gate, with the incident and what
+  - **its target takes no new act of the post**: the same branch on a push URL it shares, the
+    same pull request — label or comment; for an act that opened one, the pull request it opened —
+    or a new pull request from the same head into the same base is refused before the gate, with the incident and what
     it misses named; only the comment that tells of it is admitted, and only where no other open
     incident holds the same target. The target, not the post: the
     act that went wrong is not repeated, and nothing lands between the undo and the telling, while
@@ -789,7 +819,7 @@ Rules that hold for every ascension:
   advance by the human, scoped, expiring (at most `oni.envelope_days` after its signing — 30
   unless the human's own file says, from 1 to 365), capped in uses if the human says so,
   revocable, and — once the gate honours envelopes (M11) —
-  listed in `mnemorph status`, its time and count checked at the moment of use, not only when the
+  listed to the human, its time and count checked at the moment of use, not only when the
   act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
 - **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
   that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):

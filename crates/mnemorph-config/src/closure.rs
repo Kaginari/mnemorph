@@ -21,8 +21,9 @@
 //!
 //! While an incident is open, the envelopes whose patterns read its act are suspended
 //! ([`suspended`], for the gate that honours envelopes), and the act runner refuses every new act
-//! of the post on the same target — the same branch on the same push URLs, or the same pull
-//! request — but the comment that tells downstream.
+//! of the post on the same target — the same branch on the same push URLs, the same pull request
+//! (for a pull request the act opened, the one it opened), or a pull request from the same head
+//! into the same base — but the comment that tells downstream.
 
 use std::fmt;
 use std::fs;
@@ -36,8 +37,8 @@ use serde::{Deserialize, Serialize};
 use crate::outward::envelope_reads;
 use crate::outward::sha_ok;
 use crate::receipt::{excerpt, fold, lock, private_file, sha256, world_git};
-use crate::runner::{Intent, Typed, intents_path};
-use crate::{Act, Envelope, Pin, PostJournal, Row, State};
+use crate::runner::{Intent, Left, Typed, intents_path};
+use crate::{Act, Done, Envelope, Pin, PostJournal, Row, State};
 
 /// The largest file a lesson may name, in bytes.
 const LESSON_BYTES: u64 = 4 * 1024 * 1024;
@@ -373,6 +374,8 @@ pub struct Incident {
     pub lesson: Option<Lesson>,
     /// The act, typed, and where it landed, from its intent.
     pub(crate) typed: Option<(Act, Pin)>,
+    /// What the act left, from its intent: a pull request's number above all.
+    pub(crate) left: Option<Done>,
 }
 
 impl Incident {
@@ -417,12 +420,13 @@ impl Incident {
     }
 
     /// Whether an act on `act` at `pin` lands where this incident's act did: the same branch on a
-    /// push URL they share, or the same pull request on the same host.
+    /// push URL they share, the same pull request on the same host — the one the incident's act
+    /// opened, by its number — or a pull request from the same head into the same base.
     #[must_use]
     pub fn same_target(&self, act: &Act, pin: &Pin) -> bool {
         self.typed
             .as_ref()
-            .is_some_and(|(mine, at)| same_target(mine, at, act, pin))
+            .is_some_and(|(mine, at)| same_target(mine, at, self.left.as_ref(), act, pin))
     }
 
     /// One escaped line for the human (`mnemorph status`).
@@ -445,17 +449,27 @@ impl Incident {
 }
 
 /// The pull request a forge act is on: its host, its repository (as GitHub compares it) and its
-/// number.
-fn forge_target<'a>(act: &'a Act, pin: &'a Pin) -> Option<(&'a str, String, u64)> {
-    match (act, pin) {
-        (Act::AddLabel { repo, pr, .. } | Act::Comment { repo, pr, .. }, Pin::Forge { host }) => {
-            Some((host.as_str(), repo.to_ascii_lowercase(), *pr))
+/// number — for a pull request the act opened, the number it left.
+fn forge_target<'a>(
+    act: &'a Act,
+    pin: &'a Pin,
+    left: Option<&Done>,
+) -> Option<(&'a str, String, u64)> {
+    match (act, pin, left) {
+        (
+            Act::AddLabel { repo, pr, .. } | Act::Comment { repo, pr, .. },
+            Pin::Forge { host },
+            _,
+        ) => Some((host.as_str(), repo.to_ascii_lowercase(), *pr)),
+        (Act::OpenPullRequest { repo, .. }, Pin::Forge { host }, Some(Done::Opened { number })) => {
+            Some((host.as_str(), repo.to_ascii_lowercase(), *number))
         }
         _ => None,
     }
 }
 
-fn same_target(a: &Act, pa: &Pin, b: &Act, pb: &Pin) -> bool {
+/// Whether act `b` at `pb` lands where act `a` at `pa`, which left `la`, did.
+fn same_target(a: &Act, pa: &Pin, la: Option<&Done>, b: &Act, pb: &Pin) -> bool {
     match (a, pa, b, pb) {
         (
             Act::PushNewBranch { name: na, .. },
@@ -463,7 +477,23 @@ fn same_target(a: &Act, pa: &Pin, b: &Act, pb: &Pin) -> bool {
             Act::PushNewBranch { name: nb, .. },
             Pin::Push { urls: ub, .. },
         ) => na == nb && ua.iter().any(|u| ub.contains(u)),
-        _ => match (forge_target(a, pa), forge_target(b, pb)) {
+        (
+            Act::OpenPullRequest {
+                repo: ra,
+                base: ba,
+                head: ha,
+                ..
+            },
+            Pin::Forge { host: xa },
+            Act::OpenPullRequest {
+                repo: rb,
+                base: bb,
+                head: hb,
+                ..
+            },
+            Pin::Forge { host: xb },
+        ) => xa == xb && ra.eq_ignore_ascii_case(rb) && ba == bb && ha == hb,
+        _ => match (forge_target(a, pa, la), forge_target(b, pb, None)) {
             (Some(x), Some(y)) => x == y,
             _ => false,
         },
@@ -591,6 +621,7 @@ impl PostJournal {
                     told: None,
                     lesson: None,
                     typed: intent(act).map(|i| (i.typed.act(), i.pin.pin())),
+                    left: intent(act).and_then(|i| i.left.as_ref().map(Left::done)),
                 });
             }
         }
