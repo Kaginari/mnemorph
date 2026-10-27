@@ -470,7 +470,7 @@ fails when the two differ.
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
-| Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed and each speciality's coverage ledger, append-only, outside the world and out of every command's reach | no — machine-local |
+| Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, the findings that block it and the human's waiver, append-only, outside the world and out of every command's reach | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
@@ -812,6 +812,8 @@ an empty list or table never overrides a lower layer:
   variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
   `gate.verify_secs`, how long each of the end gate's verify commands may run, is the project's
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
+  `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at
+  once (3; 1 to 7), is the human's alone: fewer reviewers delay a review.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
   envelope that is a bare `*` or admits a destructive or refused act, an envelope without the

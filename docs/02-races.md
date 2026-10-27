@@ -671,6 +671,44 @@ files none, or one that does not validate, leaves the challenge pending, and a v
 Each attack class has exactly one owning speciality, so two specialities never hunt the same
 class on the same paths.
 
+**The challenge, from opening to settling** (`mnemorph_loop::challenge`, kept by
+`mnemorph_world::challenge`):
+
+1. **Opening.** When the end gate passes a change of any body's — solo, or a commissioned
+   creature's — its changed paths are routed; a landing routed to any speciality opens a
+   challenge in the harness's records, with the SHA-256 of its tree (each written path and its
+   bytes) and its author. The gate's verdict is journaled `PASS (challenge pending)`, and the
+   pass credits nothing: the landing does not count as landed while its challenge is open.
+2. **Staffing.** At the end of each answered ask of the throne, the harness sweeps every open
+   challenge. Each routed speciality is reviewed by the living Dark Elf that bears its name
+   (`dark-elf-harness`; the plain `dark-elf` for the generalist), never the landing's author, and
+   only the throne sends it — never the Orc whose domain the landing is, nor any body between.
+   The reviewer's ask carries the landing, its written paths, its routed surfaces and its
+   speciality's playbooks for those paths (`brief`; the generalist's chains brief).
+3. **Unstaffed.** A routed speciality with no body born in the world is recorded `unstaffed` and
+   said to the human with the throne's answer; the challenge stays pending until the body is born
+   and files, or the human waives it. Nothing clears in silence.
+4. **The cap.** At most `gate.challenge_reviewers` reviewers (3 unless the human's file says, 1 to
+   7) are commissioned for one landing at one sweep, the specialities owning the most high-risk
+   classes first, routing order among equals; the rest are recorded `queued` and commissioned at
+   a later sweep — never dropped. A commission refused before it ran is queued again, its reason
+   kept.
+5. **The reserve.** Each review is a slice of the session's challenge reserve (a tenth of the
+   envelope, a quarter of that per review); once the reserve is spent, reviewers wait queued.
+   What each review spent is booked against the challenge, beside the body and who sent it.
+6. **Findings.** The reviewer's report is read through `mnemorph_proving::accept`; a valid
+   critical or high finding of its own speciality blocks the landing — the challenge reads
+   *blocked*, whatever ledgers were filed — until it is fixed or waived. Verification and seals
+   come next; this is where they attach.
+7. **Settling.** The challenge clears when every routed speciality has filed a valid ledger and
+   nothing blocks. The human may instead **waive** it, with a reason that says something (at least
+   20 characters, not a stock phrase): `mnemorphd challenge waive <landing> --why <reason>`, after
+   seeing it and answering `y`, or `/waive <landing> <reason>` in the terminal. A waiver is the
+   human's alone: the door refuses inside a body's command, the records keep it only with the
+   human as its author, a reason that holds and the tree the challenge was opened on, and a line
+   written there by anything else counts for nothing. `mnemorphd challenge list` shows what still
+   holds a landing, `show <landing>` one in full.
+
 **Playbooks.** Each speciality's attack classes are a **playbook compiled into the law**
 (`mnemorph-races`), not a Mind: a Mind is writable inside the world it would audit. Each class
 has one, a markdown file compiled into the binary

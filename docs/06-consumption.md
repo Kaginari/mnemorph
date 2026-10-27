@@ -185,6 +185,8 @@ Currency caps convert through the same table; a model with no known price is sti
 - **The challenge reserve.** 10% of the session envelope is reserved for the automatic Dark Elf
   challenges; it cannot be carved for anything else. Each challenge draws a quarter of the
   reserve's full size (or what remains), and what it does not spend goes back to the reserve.
+  Once it is spent, a routed reviewer waits queued for a later sweep; what each review spent is
+  booked against its challenge.
 - **Pre-flight**, for a carved slice (dispatch, M7). Before each model call the core estimates
   the call in wt (`estimate`: cached
   prefix at the cache-read weight, the rest uncached, `max_output` at `r`). If it does not fit
