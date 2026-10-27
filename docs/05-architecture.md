@@ -541,8 +541,38 @@ flowchart LR
   repository elsewhere: that file is kept, and put back when a command deletes it. A nested
   repository is kept as git keeps one, by its commit's name and none of its files, so the attic
   never says it holds one: a delete of it is told it was not kept. Two runs on one world take the attic in
-  turn — a lock around every snapshot and restore — never colliding on its index. The attic's
-  git runs deaf to every configuration but its own: no hooks, no filters, no attributes, no
+  turn — a lock around every snapshot and restore — never colliding on its index. An undo
+  is guarded, in the spirit of `git push --force-with-lease`: an act is sealed — a second
+  snapshot taken when it ends — and an undo touches only what the act changed between the two,
+  and only if every such path is still as the act left it: the same blob, the same mode, a link
+  to the same target, or still nothing. One path changed since, by another court or the human,
+  and nothing at all is undone: the later writer is kept, and the outcome
+  (`Restore::Conflict`) names each path with what the act left and what is there now. There is
+  no override. A path the act created is removed, and one it changed or deleted is written
+  back — never by git's checkout, which caches its look at the leading directories across a
+  batch and then unlinks and creates through them, so a directory swapped for a symlink in
+  between would lead it out of the world. Every look and every write goes through a directory
+  handle opened beneath the world, following no symlink (`openat2` with `RESOLVE_BENEATH` and
+  `RESOLVE_NO_SYMLINKS` where the kernel has it, else one `O_NOFOLLOW` component at a time): the
+  content streams from one `git cat-file --batch` into a temporary sibling, created exclusively,
+  its mode set on the handle, then renamed into place — refusing to replace anything where the
+  act left nothing — and a link is made with `symlinkat`, a removal is an `unlinkat` that never
+  removes a directory. A component swapped after the check makes the write fail; it never lands
+  outside. A path reached through a symlink, or under a file the act did not leave, is a
+  conflict, and so is a directory holding anything the undo would not remove (only empty
+  directories are ever removed). A file is read only when it is still a regular file of the
+  size the act left, opened without blocking and hashed from that handle, so a fifo or a grown
+  file never stalls the undo. A path too large for either snapshot cannot be undone, and a
+  nested repository's gitlink never is. Every outcome is written to the attic's log — a write
+  that fails part-way (a parent made unwritable, which trees do not record) with what was
+  restored and what was not. The check and the writes run under the attic's lock, which the
+  caller can hold across its own removals too; a writer outside the attic is not excluded, only
+  kept from leading the undo out of the world. Directories the act made stay, empty.
+  A commission seals its child's act the moment the child ends — so what another court
+  writes after is never taken for its act — and puts its strays back under one hold of the lock,
+  each stray restored or, if the child created it, removed through the same handles. Each
+  restore reads the act's whole diff, so n strays cost n diffs: batching them is open work. The
+  attic's git runs deaf to every configuration but its own: no hooks, no filters, no attributes, no
   fsmonitor from the world or the human's files.
   It prunes itself at most once a day: snapshots older than `attic.keep_days` (14) go, then the
   oldest while the snapshot store is over `attic.max_mb` (2048) — the newest always stays — and

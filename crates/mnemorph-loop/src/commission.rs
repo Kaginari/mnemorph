@@ -504,10 +504,9 @@ pub(crate) async fn order(
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
-    // What the world held before the child, to put back what it changes off its ground.
-    let held = held_before(cx);
-    let before = snapshot(&c.world);
+    let (held, before) = (held_before(cx), snapshot(&c.world));
     let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
+    let act = sealed(cx, held);
     drop(seat);
     // Metis's decision is booked against the commission, as a bench read is against its run.
     let spent = child.spent_wt().saturating_add(route_wt);
@@ -521,7 +520,7 @@ pub(crate) async fn order(
         &roster,
         &a.to,
         &before,
-        held.as_ref(),
+        act.as_ref(),
         &courts,
         answered,
     );
@@ -1360,10 +1359,18 @@ fn report_of(
     report.emit(DEFAULT_CAP, None)
 }
 
-/// The attic's snapshot of the world before a commission, to put back from.
+/// The attic's snapshot of the world before a commission, to put back from what the child
+/// changes off its ground.
 fn held_before(cx: &Context) -> Option<mnemorph_tools::Snapshot> {
     cx.attic()
         .and_then(|attic| attic.snapshot("before a commission").ok())
+}
+
+/// The child's act, sealed: the attic's snapshot before it and one of what it left, taken the
+/// moment it ends, so what another court writes after is never taken for it, nor undone with it.
+fn sealed(cx: &Context, held: Option<mnemorph_tools::Snapshot>) -> Option<mnemorph_tools::Act> {
+    let attic = cx.attic()?;
+    attic.seal(held?, "after a commission").ok()
 }
 
 /// The note for what another writer changed while the child ran: named, and left as it is.
@@ -1387,7 +1394,7 @@ fn repair(
     roster: &Roster,
     name: &str,
     before: &crate::gate::Tree,
-    held: Option<&mnemorph_tools::Snapshot>,
+    act: Option<&mnemorph_tools::Act>,
     courts: &[PathBuf],
     answered: bool,
 ) -> (Vec<PathBuf>, Vec<(PathBuf, bool)>, Vec<PathBuf>) {
@@ -1395,6 +1402,11 @@ fn repair(
     let mut landed = Vec::new();
     let mut put_back = Vec::new();
     let mut others = Vec::new();
+    // The attic's lock, over every restore and removal here: they run in turn with every other
+    // snapshot and restore of the world. Each path is undone only while it is still as the child
+    // left it. (Each restore reads the act's whole diff: n strays cost n diffs.)
+    let attic = cx.attic();
+    let held = attic.and_then(|a| a.hold().ok());
     for rel in changed(before, &c.world) {
         if courts.contains(&rel) {
             continue;
@@ -1412,16 +1424,17 @@ fn repair(
             continue;
         }
         let restored = if before.has(&rel) {
-            match (cx.attic(), held) {
-                (Some(attic), Some(snap)) if attic.holds(snap, &shown) => {
-                    attic.restore(snap, &[shown.as_str()]).is_ok()
+            match (attic, act, held.as_ref()) {
+                (Some(attic), Some(act), Some(held)) if attic.holds(&act.before, &shown) => {
+                    matches!(
+                        attic.restore_held(held, act, &[shown.as_str()]),
+                        Ok(mnemorph_tools::Restore::Restored(_))
+                    )
                 }
                 _ => false,
             }
         } else {
-            let path = c.world.join(&rel);
-            path.symlink_metadata().is_ok_and(|m| !m.is_dir())
-                && std::fs::remove_file(&path).is_ok()
+            matches!(mnemorph_tools::remove_created(&c.world, &rel), Ok(true))
         };
         put_back.push((rel, restored));
     }
