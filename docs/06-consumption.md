@@ -239,10 +239,14 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
   block by block, its moving breakpoints aside. A fold or a compaction may rewrite what was sent,
   and a `prefix` beat in the journal records where the prefix moved and why. A rewrite with
   nothing to explain it is a bug:
-  - it is said in a warning and a `prefix` beat (`unexplained`), and fails a debug build;
-  - since the provider rebuilds its cache from there anyway, the run strips the thinking of the
-    earlier asks from what it sends, once a session, so the cache is rebuilt smaller. The turn in
-    flight keeps the thinking its tool calls are bound to, and the journal keeps everything.
+  - it is said in a warning and a `prefix` beat (`unexplained`), in every build, and the run goes
+    on;
+  - once a session, the run strips every thinking block from what it sends, the turn in flight's
+    included. Under preserved thinking an edit invalidates every thinking block after it, and a
+    request that still carries one is refused. The provider rebuilds its cache from there
+    anyway, so it is rebuilt smaller.
+  - tool calls and words stay; a turn that held only thinking says "(reasoning omitted)", so no
+    turn vanishes. The journal keeps everything.
 - Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
   the gateway's one automatic breakpoint, which moves with the conversation. The other models
   there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.

@@ -5128,3 +5128,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - updates edited into the system prompt fail it ("request 5 rewrote the system prompt", or the
     debug guard's panic);
   - steering edited into the ask's message fails it ("one move, the fold: [(2, 2), (6, 6)]").
+
+---
+
+### [2026-10-27T14:03:35+01:00] rimuru — #231, Fable's review
+- **Fable found:**
+  1. The debug panic came after the recovery, so the recovery could never run in dev, and a
+     debug TUI died mid-session.
+  2. Under preserved thinking, an unexplained edit invalidates every later thinking block. Keeping
+     the in-flight turn's thinking guarantees a 400 that the ladder does not retry. A turn that
+     held only thinking was left whole.
+- **Fixed:**
+  1. An unexplained move is a warning and a `prefix` beat in every build.
+  2. The strip, still once a session, takes every thinking block, the turn in flight's included,
+     and keeps tool calls and words. A thinking-only turn becomes "(reasoning omitted)".
+  3. Docs 06 states the rule.
+- **Test:** `the_strip_takes_all_thinking_and_leaves_no_gap`.

@@ -821,16 +821,15 @@ impl Run {
     /// The request for the next turn, every change since the last one appended first. Every
     /// request only appends to the one before: the system prompt and the tools are built once,
     /// and a change rides as a new message. A fold or a compaction may rewrite what was sent,
-    /// and the prefix beat says which; a rewrite with nothing to explain it is said loudly, fails
-    /// a debug build, and strips the earlier asks' thinking once — the cache is rebuilt from
-    /// there anyway, so it is rebuilt smaller.
+    /// and the prefix beat says which; a rewrite with nothing to explain it is said loudly, and
+    /// strips every thinking block once — a provider that preserves thinking refuses thinking
+    /// after an edit, and the cache is rebuilt from there anyway, so it is rebuilt smaller.
     fn next_request(&mut self, max_tokens: u32) -> Request {
         for change in std::mem::take(&mut self.updates) {
             self.nudge(&format!("{UPDATE} {change}"));
         }
         let mut request = self.request(max_tokens);
         let mut now = prefix_of(&request);
-        let mut unexplained = None;
         if let Some(at) = moved(&self.sent, &now) {
             if let Some(why) = self.reshaped {
                 self.record(&Beat::Prefix {
@@ -842,10 +841,9 @@ impl Run {
                 let stripped = if self.stripped.is_some() {
                     0
                 } else {
-                    // The asks before this one only: the turn in flight keeps the thinking its
-                    // tool calls are bound to.
-                    let upto = self.ask_from.min(self.messages.len());
-                    let n = strip_thinking(&mut self.messages[..upto]);
+                    // Every turn's, the one in flight included: under preserved thinking, an edit
+                    // invalidates every thinking block after it, and one sent anyway is refused.
+                    let n = strip_thinking(&mut self.messages);
                     self.stripped = Some(n);
                     n
                 };
@@ -863,19 +861,10 @@ impl Run {
                     why: MOVED.to_owned(),
                     stripped,
                 });
-                unexplained = Some(at);
             }
         }
         self.reshaped = None;
         self.sent = now;
-        // The guard every test runs under — but the recovery's own, which makes the move.
-        if cfg!(all(debug_assertions, not(test)))
-            && let Some(at) = unexplained
-        {
-            panic!(
-                "the cached prefix moved at block {at} with no fold or compaction to explain it"
-            );
-        }
         request
     }
 
@@ -2580,6 +2569,8 @@ pub const FOLD: &str = "fold";
 pub const COMPACTION: &str = "compaction";
 /// Why the prefix moved: nothing documented — a rewrite to fix.
 pub const MOVED: &str = "unexplained";
+/// What a turn that held only thinking says once its thinking is stripped.
+pub const OMITTED: &str = "(reasoning omitted)";
 /// What opens a context update: a change mid-session, appended, never edited into the prefix.
 pub const UPDATE: &str = "[context update]";
 
@@ -2621,8 +2612,8 @@ fn prefix_of(request: &Request) -> Vec<u64> {
 }
 
 /// Strip the thinking from `messages` — the provider's thinking blocks and the reasoning an
-/// OpenAI-compatible server returned — leaving every turn its words and its tool calls, and a
-/// turn that would be left empty whole. How many blocks went.
+/// OpenAI-compatible server returned — leaving every turn its words and its tool calls. A turn
+/// that held only thinking says [`OMITTED`] instead, so no turn vanishes. How many blocks went.
 pub fn strip_thinking(messages: &mut [Message]) -> usize {
     let thinking = |b: &Block| {
         let Block::Opaque(v) = b else {
@@ -2637,11 +2628,17 @@ pub fn strip_thinking(messages: &mut [Message]) -> usize {
     let mut stripped = 0;
     for m in messages.iter_mut().filter(|m| m.role == Role::Assistant) {
         let kept = m.content.iter().filter(|b| !thinking(b)).count();
-        if kept == 0 || kept == m.content.len() {
+        if kept == m.content.len() {
             continue;
         }
         stripped += m.content.len() - kept;
         m.content.retain(|b| !thinking(b));
+        if m.content.is_empty() {
+            m.content.push(Block::Text {
+                text: OMITTED.to_owned(),
+                cache: false,
+            });
+        }
     }
     stripped
 }
@@ -2723,7 +2720,7 @@ mod tests {
     use mnemorph_tools::{Context, Sandbox, registry};
     use serde_json::json;
 
-    use super::{Beat, Body, Limits, MOVED, Run, Setup};
+    use super::{Beat, Body, Limits, MOVED, OMITTED, Run, Setup, strip_thinking};
     use crate::model::ScriptedModel;
 
     fn thought(then: Block, stop: StopReason) -> Response {
@@ -2757,8 +2754,8 @@ mod tests {
         m.content.iter().any(|b| matches!(b, Block::Opaque(_)))
     }
 
-    /// A prefix that moved with nothing to explain it is said, and the earlier asks' thinking is
-    /// stripped from what is sent — once a session; the turn in flight keeps its own.
+    /// A prefix that moved with nothing to explain it is said, and the thinking is stripped from
+    /// what is sent — once a session: a later move keeps the thinking that came after.
     #[tokio::test]
     async fn an_unexplained_move_strips_the_earlier_thinking_once() {
         let root = std::env::temp_dir().join(format!("mnemorph-strip-{}", std::process::id()));
@@ -2819,7 +2816,7 @@ mod tests {
         );
         assert!(
             thinks(&requests[2].messages[3]),
-            "the turn in flight keeps the thinking its tool call is bound to"
+            "thinking that came after the strip is sent"
         );
         assert!(
             thinks(&requests[3].messages[3]),
@@ -2837,5 +2834,58 @@ mod tests {
             .collect();
         assert_eq!(moves, [(MOVED.to_owned(), 1), (MOVED.to_owned(), 0)]);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The strip takes every thinking block, the turn in flight's included; tool calls and words
+    /// stay, and a turn that held only thinking says so instead of vanishing.
+    #[test]
+    fn the_strip_takes_all_thinking_and_leaves_no_gap() {
+        use mnemorph_provider::{Message, Role};
+        let think =
+            || Block::Opaque(json!({"type": "thinking", "thinking": "t", "signature": "s"}));
+        let reason = || {
+            Block::Opaque(
+                json!({"type": format!("{}reasoning_content", mnemorph_provider::OPAQUE_PREFIX), "text": "r"}),
+            )
+        };
+        let call = Block::ToolUse {
+            id: "t1".into(),
+            name: "read".into(),
+            input: json!({"path": "a.txt"}),
+        };
+        let assistant = |content| Message {
+            role: Role::Assistant,
+            content,
+        };
+        let mut messages = vec![
+            Message {
+                role: Role::User,
+                content: vec![said("go")],
+            },
+            assistant(vec![think()]),
+            Message {
+                role: Role::User,
+                content: vec![said("and?")],
+            },
+            assistant(vec![think(), said("so"), reason()]),
+            Message {
+                role: Role::User,
+                content: vec![said("on")],
+            },
+            assistant(vec![think(), call.clone()]),
+        ];
+        assert_eq!(strip_thinking(&mut messages), 4);
+        assert!(
+            messages.iter().all(|m| !thinks(m)),
+            "every thinking block is gone"
+        );
+        assert_eq!(messages[1].content, [said(OMITTED)], "no gap");
+        assert_eq!(messages[3].content, [said("so")]);
+        assert_eq!(
+            messages[5].content,
+            [call],
+            "the tool call in flight is kept"
+        );
+        assert_eq!(strip_thinking(&mut messages), 0);
     }
 }
