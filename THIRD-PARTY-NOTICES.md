@@ -16,6 +16,13 @@ covers, as its licence asks.
   a finding record and a coverage ledger to. The playbooks and the validators are rewritten in
   Mnemorph's own words, format and language, not copied; material taken from a later upstream
   commit moves the pin above.
+- **Adapted upstream files** (`skills/security-audit/`): `ATTACK-CLASSES.md`, `HUNTING.md`,
+  `AI-AND-LLM.md`, `SUPPLY-CHAIN-AND-RELEASE.md`, `WEB-PROTOCOL-AND-AUTH.md`,
+  `MEMORY-SAFETY-AND-BINARY.md`, `PROTOCOLS-RPC-AND-MESSAGING.md`,
+  `RESOURCE-EXHAUSTION-AND-AVAILABILITY.md`, `DATA-ISOLATION-AND-LIFECYCLE.md`,
+  `DESKTOP-MOBILE-AND-LOCAL-IPC.md`, `CLIENT-SIDE.md` and `CLOUD-AND-DEPLOYMENT.md`, into the
+  per-class playbooks under `crates/mnemorph-races/playbooks/`; `validate-findings.cjs` and
+  `validate-coverage-ledger.cjs` into `crates/mnemorph-proving`.
 
 ```text
 MIT License
