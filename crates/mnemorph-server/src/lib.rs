@@ -9,6 +9,8 @@
 
 pub mod protocol;
 
+/// The Dark Elf challenges as the human reads them.
+pub use mnemorph_loop::challenge;
 /// The human's door to the Kijin's incidents.
 pub use mnemorph_loop::incident;
 /// The wire, for the commands that speak it without a session (`check`).

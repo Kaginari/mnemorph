@@ -102,9 +102,30 @@ pub const VERIFY_SECS: u64 = 120;
 pub const VERIFY_SECS_RANGE: std::ops::RangeInclusive<u64> =
     10..=mnemorph_tools::shell::MAX_TIMEOUT.as_secs();
 
+/// How many Dark Elf reviewers a landing's challenge commissions at once, unless the configuration
+/// says.
+pub const CHALLENGE_REVIEWERS: usize = 3;
+/// The most `gate.challenge_reviewers` may be: every speciality and the generalist.
+const CHALLENGE_REVIEWERS_CEILING: i64 = 7;
+
+/// `gate.challenge_reviewers` holds a count of reviewers from 1 to every speciality.
+fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
+    if value
+        .as_integer()
+        .is_some_and(|n| (1..=CHALLENGE_REVIEWERS_CEILING).contains(&n))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{at}: gate.challenge_reviewers is a count of reviewers from 1 to {CHALLENGE_REVIEWERS_CEILING}"
+        ))
+    }
+}
+
 /// Keys only the local or global file may set: each one loosens the human gate.
 const LOOSENING: &[&str] = &[
     "gate.enabled",
+    "gate.challenge_reviewers",
     "gate.ask_rules",
     "gate.approve",
     "oni.envelopes",
@@ -137,6 +158,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gate.enabled", Kind::Bool),
     ("gate.timeout_secs", Kind::Int),
     ("gate.verify_secs", Kind::Int),
+    ("gate.challenge_reviewers", Kind::Int),
     ("gate.ask_rules", Kind::StrList),
     ("gate.approve", Kind::StrList),
     ("sandbox.allow_unguarded", Kind::Bool),
@@ -661,6 +683,7 @@ impl Config {
                         VERIFY_SECS_RANGE.end()
                     ));
                 }
+                "gate.challenge_reviewers" => reviewers(&leaf.value, at)?,
                 "oni.envelope_days"
                     if !leaf
                         .value
@@ -764,6 +787,15 @@ impl Config {
     #[must_use]
     pub fn verify_secs(&self) -> u64 {
         self.int("gate.verify_secs").unwrap_or(VERIFY_SECS)
+    }
+
+    /// How many Dark Elf reviewers one landing's challenge commissions at once; the rest wait
+    /// queued for the next sweep. Local or global file only: fewer reviewers delay a review.
+    #[must_use]
+    pub fn challenge_reviewers(&self) -> usize {
+        self.int("gate.challenge_reviewers")
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(CHALLENGE_REVIEWERS)
     }
 
     /// Commands may run with no kernel guard in force (local or global file only).

@@ -247,6 +247,20 @@ pub(crate) fn run(
             ),
             ToolClass::Read,
         ),
+        Ok(Status::Blocked { findings }) => Outcome::ok(
+            format!(
+                "filed: {speciality}'s ledger for {landing} holds; the landing stays blocked by {} \
+                 finding(s) until fixed or waived",
+                findings.len()
+            ),
+            ToolClass::Read,
+        ),
+        Ok(Status::Waived { .. }) => Outcome::ok(
+            format!(
+                "filed: {speciality}'s ledger for {landing} holds; the human waived the challenge"
+            ),
+            ToolClass::Read,
+        ),
         Err(why) => Outcome::error(format!("coverage refused: {why}")),
     }
 }

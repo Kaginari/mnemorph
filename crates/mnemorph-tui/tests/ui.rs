@@ -874,3 +874,27 @@ fn leaving_denies_the_card_and_every_act_waiting() {
     }
     assert!(m.gate.is_none() && m.waiting.is_empty());
 }
+
+/// `/waive <landing> <reason>` hands the human's waiver to the runtime; with no reason it is only
+/// explained; what the waiver came to is said in the transcript.
+#[test]
+fn waive_sends_the_human_s_reasoned_waiver() {
+    let mut m = model(Variant::Dark);
+    update(
+        &mut m,
+        Msg::Paste("/waive run-1:2 the reader is a fixture the human wrote".into()),
+    );
+    let cmds = key(&mut m, KeyCode::Enter);
+    assert!(
+        matches!(&cmds[..], [Cmd::Waive { landing, reason }]
+            if landing == "run-1:2" && reason == "the reader is a fixture the human wrote"),
+        "{cmds:?}"
+    );
+    update(&mut m, Msg::Paste("/waive run-1:2".into()));
+    let cmds = key(&mut m, KeyCode::Enter);
+    assert!(
+        cmds.iter().all(|c| !matches!(c, Cmd::Waive { .. })),
+        "{cmds:?}"
+    );
+    assert!(update(&mut m, Msg::Said("waived run-1:2: why".into())).is_empty());
+}

@@ -111,6 +111,8 @@ pub enum Msg {
     Crashed(String),
     /// The process was told to end (SIGTERM, SIGHUP): leave, the terminal restored.
     Terminate,
+    /// A line for the human from off the UI thread: what a command came to.
+    Said(String),
 }
 
 /// Work for the runtime.
@@ -139,6 +141,13 @@ pub enum Cmd {
         id: String,
         /// Its command.
         command: String,
+    },
+    /// Waive a landing's Dark Elf challenge on the human's word, with the reason.
+    Waive {
+        /// The landing.
+        landing: String,
+        /// Why.
+        reason: String,
     },
     /// Leave.
     Quit,
@@ -241,7 +250,7 @@ pub(crate) struct Hits {
 }
 
 /// The commands typed with a slash.
-pub const COMMANDS: &str = "/send <text> steer the running turn · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
+pub const COMMANDS: &str = "/send <text> steer the running turn · /waive <landing> <reason> waive a Dark Elf challenge · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
 
 impl Model {
     /// A model for a session of `header`, in `variant`, at `size`.
@@ -501,6 +510,10 @@ fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             let mut cmds = deny_all(m, "the terminal UI was told to end");
             cmds.push(Cmd::Quit);
             cmds
+        }
+        Msg::Said(text) => {
+            m.info(text);
+            Vec::new()
         }
     }
 }
@@ -823,6 +836,17 @@ fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
                 m.info(format!("sent: {arg}"));
                 return vec![Cmd::Steer(arg.to_owned())];
             }
+            "waive" => match arg.split_once(char::is_whitespace) {
+                Some((landing, reason)) if !reason.trim().is_empty() => {
+                    return vec![Cmd::Waive {
+                        landing: landing.to_owned(),
+                        reason: reason.trim().to_owned(),
+                    }];
+                }
+                _ => {
+                    m.info("/waive <landing> <reason>: the reason says why, 20 characters or more");
+                }
+            },
             _ => m.info(format!("no command /{name}; {COMMANDS}")),
         }
         return Vec::new();

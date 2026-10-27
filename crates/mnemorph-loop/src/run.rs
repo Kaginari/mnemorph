@@ -9,7 +9,7 @@ use mnemorph_ledger::{Journal, Prices, Timestamp, UsageRow, occupancy};
 use mnemorph_provider::{
     Block, Caller, Event, Message, Request, Role, StopReason, Tool as ToolSpec, usage_row,
 };
-use mnemorph_races::Race;
+use mnemorph_races::{Race, Speciality};
 use mnemorph_tools::{Context, Tool, call};
 
 use crate::beats::{Beat, block_json, clean, conversation, push_user};
@@ -342,6 +342,12 @@ pub struct Run {
     unheld: Option<(String, String)>,
     /// The model the journal last said the run rides: a change is said again at the next ask.
     rode: Option<String>,
+    /// The Dark Elf challenges' records; `None` keeps them in the human's state directory.
+    challenges: Option<mnemorph_world::challenge::Challenges>,
+    /// What sends the Dark Elves a landing's challenge routes: the throne's alone.
+    challenger: Option<Arc<crate::commission::Commissioner>>,
+    /// The session's envelope, held for its challenge reserve: each review is a slice of it.
+    reserve: Option<mnemorph_ledger::Envelope>,
 }
 
 /// What a run needs that is not the body itself.
@@ -425,7 +431,35 @@ impl Run {
             asked: String::new(),
             unheld: None,
             rode: None,
+            challenges: None,
+            challenger: None,
+            reserve: None,
         }
+    }
+
+    /// The run keeps its landings' challenges in `records`, not the human's state directory.
+    #[must_use]
+    pub fn with_challenges(mut self, records: mnemorph_world::challenge::Challenges) -> Self {
+        self.challenges = Some(records);
+        self
+    }
+
+    /// The run sends the Dark Elves each landing's challenge routes, under `challenger` — only a
+    /// throne's run does. Its records come with it, unless the run has its own.
+    #[must_use]
+    pub fn with_challenger(mut self, challenger: Arc<crate::commission::Commissioner>) -> Self {
+        if self.challenges.is_none() {
+            self.challenges.clone_from(&challenger.challenges);
+        }
+        self.challenger = Some(challenger);
+        self
+    }
+
+    /// The challenge records this run keeps its landings in.
+    fn challenge_records(&self) -> Option<mnemorph_world::challenge::Challenges> {
+        self.challenges
+            .clone()
+            .or_else(|| mnemorph_world::challenge::Challenges::of(self.cx.world()))
     }
 
     /// The run may commission: its `commission` calls run a child body under `commissioner`.
@@ -433,6 +467,9 @@ impl Run {
     pub fn with_commissioner(mut self, commissioner: Arc<crate::commission::Commissioner>) -> Self {
         if self.queue_keeper.is_none() {
             self.queue_keeper = Some(Arc::clone(&commissioner));
+        }
+        if self.challenges.is_none() {
+            self.challenges.clone_from(&commissioner.challenges);
         }
         self.commissioner = Some(commissioner);
         self
@@ -1013,7 +1050,10 @@ impl Run {
                         continue;
                     }
                     _ => match self.judge(text_of(&content), &mut gate_retried) {
-                        Some(ending) => return self.end(ending),
+                        Some(ending) => {
+                            let ending = self.challenge(ending).await;
+                            return self.end(ending);
+                        }
                         None => continue,
                     },
                 }
@@ -1070,7 +1110,9 @@ impl Run {
             verdict: verdict.verdict().word().to_owned(),
         });
         let solo = gate.author.is_none();
-        let heading = self.log_verdict(&verdict, *retried);
+        // A pass on a Dark Elf surface opens the landing's challenge: it waits on it.
+        let pending = verdict.passed() && self.open_challenge(&verdict.changed);
+        let heading = self.log_verdict(&verdict, *retried, pending);
         if verdict.passed() {
             return Some(Ending::Answered(answer));
         }
@@ -1176,14 +1218,211 @@ impl Run {
         allowed
     }
 
+    /// Opens the challenge of the landing the gate just passed, when its changed paths touch a
+    /// Dark Elf surface: whether it now waits on one.
+    fn open_challenge(&mut self, changed: &[PathBuf]) -> bool {
+        if changed.is_empty() {
+            return false;
+        }
+        let world = self.cx.world().to_path_buf();
+        let Some(records) = self.challenge_records() else {
+            self.record(&Beat::Warning {
+                text: "the landing's challenge cannot be opened: no state directory to keep it in"
+                    .to_owned(),
+            });
+            return false;
+        };
+        let id = crate::challenge::landing_id(&self.caller.run, self.steps);
+        match crate::challenge::open(&records, &world, &id, &self.body.name, changed) {
+            Ok(Some(status)) if status.open() => {
+                let routed = records
+                    .record(&id)
+                    .map(|r| {
+                        r.landing
+                            .routed
+                            .iter()
+                            .map(|x| x.speciality.creature())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
+                self.record(&Beat::Note {
+                    text: format!("challenge opened on landing {id}: routed to {routed}"),
+                });
+                true
+            }
+            Ok(_) => false,
+            Err(e) => {
+                self.record(&Beat::Warning {
+                    text: format!("the landing's challenge could not be opened: {e}"),
+                });
+                false
+            }
+        }
+    }
+
+    /// The throne's answer, with the challenges its sweep moved said beside it.
+    async fn challenge(&mut self, ending: Ending) -> Ending {
+        let Ending::Answered(text) = ending else {
+            return ending;
+        };
+        let (lines, open) = self.sweep().await;
+        match crate::challenge::notice(&lines, open) {
+            Some(notice) => Ending::Answered(format!("{text}\n\n{notice}")),
+            None => Ending::Answered(text),
+        }
+    }
+
+    /// The challenge sweep, at the end of a throne's answered ask: every challenge still open is
+    /// staffed by its plan — its routed specialities' bodies commissioned up to the cap, each from
+    /// the challenge reserve, the rest queued, the unborn unstaffed — and each reviewer's report
+    /// read for the findings that block. Only the throne sends a Dark Elf: never the Orc whose
+    /// domain a landing is, nor any body below the throne. The lines say each challenge the sweep
+    /// moved, and whether any still holds its landing.
+    pub async fn sweep(&mut self) -> (Vec<String>, bool) {
+        use mnemorph_world::challenge::Staff;
+        let mut lines = Vec::new();
+        let mut open = false;
+        if self.body.race.base() != Race::Rimuru || self.caller.commission.is_some() {
+            return (lines, open);
+        }
+        let Some(c) = self
+            .challenger
+            .clone()
+            .or_else(|| self.commissioner.clone())
+        else {
+            return (lines, open);
+        };
+        let Some(records) = self.challenge_records() else {
+            return (lines, open);
+        };
+        let roster = mnemorph_world::Roster::load(&c.world);
+        let cap = c.reviewers.max(1);
+        for (id, record) in records.records() {
+            if !record.status.open() {
+                continue;
+            }
+            let plan = crate::challenge::plan(&roster, &record, cap);
+            let had = |s: Speciality, want: &Staff| {
+                record.staff.iter().any(|(t, st)| *t == s && st == want)
+            };
+            let mut moved = false;
+            for s in plan.unstaffed {
+                if !had(s, &Staff::Unstaffed) {
+                    moved |= records.staff(&id, s, Staff::Unstaffed).is_ok();
+                }
+            }
+            let past_cap = Staff::Queued {
+                why: format!("past the cap of {cap} reviewers"),
+            };
+            for s in plan.queued {
+                if !had(s, &past_cap) {
+                    moved |= records.staff(&id, s, past_cap.clone()).is_ok();
+                }
+            }
+            for (s, body) in plan.commission {
+                if self.interrupt.flag().load(Ordering::SeqCst) {
+                    break;
+                }
+                moved = true;
+                self.review(&c, &records, &record, s, &body).await;
+            }
+            if moved && let Some(now) = records.record(&id) {
+                open |= now.status.open();
+                lines.push(crate::challenge::said(&now));
+            }
+        }
+        for line in &lines {
+            self.record(&Beat::Note {
+                text: format!("challenge: {line}"),
+            });
+        }
+        (lines, open)
+    }
+
+    /// One reviewer commissioned on a landing's challenge, from the challenge reserve: its
+    /// staffing recorded, its spend booked against the challenge, its blocking findings kept.
+    async fn review(
+        &mut self,
+        c: &Arc<crate::commission::Commissioner>,
+        records: &mnemorph_world::challenge::Challenges,
+        record: &mnemorph_world::challenge::Record,
+        s: Speciality,
+        body: &str,
+    ) {
+        use mnemorph_world::challenge::Staff;
+        let id = &record.landing.id;
+        // With an envelope, each review is a slice of its challenge reserve; with none, the
+        // review is unbounded and what it spent is booked against the challenge alone.
+        let slice = match self.limits.budget_wt {
+            Some(b) => {
+                let reserve = self
+                    .reserve
+                    .get_or_insert_with(|| mnemorph_ledger::Envelope::session(b));
+                let Some(slice) = reserve.challenge() else {
+                    let why = "the challenge reserve is spent".to_owned();
+                    let _ = records.staff(id, s, Staff::Queued { why });
+                    return;
+                };
+                Some(slice)
+            }
+            None => None,
+        };
+        let mut input = serde_json::json!({"to": body, "ask": crate::challenge::ask(record, s)});
+        if let Some(slice) = &slice {
+            input["budget_wt"] = serde_json::json!(slice.of());
+        }
+        let left = slice.as_ref().map(mnemorph_ledger::Slice::of);
+        let interrupt = Arc::clone(&self.interrupt);
+        let throne = self.body.clone();
+        let order =
+            crate::commission::order(c, &throne, left, &self.cx, &interrupt, &input.to_string())
+                .await;
+        if let (Some(slice), Some(reserve)) = (slice, self.reserve.as_mut()) {
+            let _ = reserve.settle(slice, order.spent);
+        }
+        self.spent_wt = self.spent_wt.saturating_add(order.spent);
+        if order.interrupted {
+            self.interrupt.fire();
+        }
+        // A commission refused before it ran spent nothing: the speciality waits for the next
+        // sweep, the reason kept.
+        if order.outcome.is_error && order.spent == 0 {
+            let why: String = order.outcome.content.chars().take(300).collect();
+            let _ = records.staff(id, s, Staff::Queued { why });
+            return;
+        }
+        let _ = records.staff(
+            id,
+            s,
+            Staff::Commissioned {
+                body: body.to_owned(),
+                by: self.body.name.clone(),
+                wt: order.spent,
+            },
+        );
+        if let Some(answer) = &order.answer {
+            for blocker in crate::challenge::blockers(&c.world, s, answer) {
+                let _ = records.block(id, blocker);
+            }
+        }
+    }
+
     /// Every verdict goes to the world's journal through its append-only writer.
-    fn log_verdict(&mut self, verdict: &crate::gate::GateVerdict, retried: bool) -> Option<String> {
+    fn log_verdict(
+        &mut self,
+        verdict: &crate::gate::GateVerdict,
+        retried: bool,
+        pending: bool,
+    ) -> Option<String> {
         // An answer that changed nothing passed untouched: there is nothing to journal.
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
             return None;
         }
         let word = verdict.verdict().word();
-        let word = if verdict.unrun() {
+        let word = if pending {
+            format!("{word} (challenge pending)")
+        } else if verdict.unrun() {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
             format!("{word}, handed back")
@@ -1217,8 +1456,10 @@ impl Run {
         };
         match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
             Ok(heading) => {
-                // A change landed only when the gate passed it: a failure is no new outcome.
+                // A change landed only when the gate passed it: a failure is no new outcome, and
+                // a landing whose challenge is pending has not landed yet.
                 if verdict.passed()
+                    && !pending
                     && let Some(h) = heading.as_deref()
                 {
                     self.landed_in_ask = Some(h.to_owned());
@@ -2196,7 +2437,7 @@ impl Run {
             // The commands a ledger cites are held to this body's own journal.
             let beats = self.journal.read().map(|r| r.rows).unwrap_or_default();
             let ran = crate::coverage_tool::ran_of(&beats);
-            return match mnemorph_world::challenge::Challenges::of(world) {
+            return match self.challenge_records() {
                 Some(c) => crate::coverage_tool::run(&c, world, &ran, &self.body.name, input),
                 None => mnemorph_tools::Outcome::error(
                     "coverage: no state directory to keep the challenge records in",
