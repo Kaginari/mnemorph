@@ -5285,3 +5285,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   check removed the malformed test fails.
 - **Learned:** the classifier calls a branch delete destructive, so a new branch's only undo is
   refused: a `feat/*` push envelope covers a push only with an outward undo (a revert), else asks.
+
+---
+
+### [2026-10-27T17:02:07+01:00] rimuru — #101, reviewed (Opus, Fable on Opus): the undo is the harness's; pushes and `gh api` read closer
+- **Done:** a model-written undo string could be outward and fake (`gh help`), and the real undos
+  (deletes) are destructive, so `check_undo` and `Effect` are gone. `Act` is typed:
+  `PushNewBranch` (create-only lease), `AddLabel`, `Comment` — the harness renders the command
+  and, from `Done` (pushed sha, comment id read only from this act's own URL), the undo; the repo
+  pinned in the act. `Command(String)` outward is destructive, no envelope covers it. Envelope
+  patterns are read against the act's words (printable ASCII, no `:` `'` `"` or shell character).
+  Classifier: `git push` outward only as one plain branch push (unknown options, every ref outside
+  `refs/heads/`, renames, multiple refspecs, `--all`, `--receive-pack`, `-o` destructive; the
+  create-only lease is not); `gh api` writes on any non-GET method, field, `--input` or graphql.
+  vet fills an in-word `*` with a plain name. Docs 02. Standing effects and remote-URL
+  resolution: M11.
+- **Tests:** config `outward.rs` (6), corpus rows for every refspec and `gh api` hole. Disabled
+  one at a time — command class, envelope guard, refspec parse, `gh api`, word check, branch-name
+  check — each fails its test.
+- **Learned:** the classifier takes the highest class over every argument prefix, so a guard must
+  read a flag with nothing after it yet as nothing, or every `-X GET` reads as a write.

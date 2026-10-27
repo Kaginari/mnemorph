@@ -14,9 +14,9 @@
 //! says, never more than a year), may cap its uses, and stays in the file once revoked, so the
 //! record of what was allowed is never lost.
 //!
-//! The Kijin's plan step lives beside the envelopes it is read against: each outward act declares
-//! its undo and, standing, its expiry, and an act with neither is destructive, which no envelope
-//! covers ([`plan`], [`Envelope::covers`]).
+//! The Kijin's plan step lives beside the envelopes it is read against: an outward act is typed,
+//! and only a kind whose undo the harness derives can be covered; every other outward act is
+//! destructive, which no envelope covers ([`plan`], [`Envelope::covers`]).
 //!
 //! Unknown keys are reported as holes and the session goes on; a file that does not parse, a
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
@@ -35,9 +35,7 @@ use mnemorph_races::{ModelTier, Race};
 use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
-pub use outward::{
-    Act, Effect, FAR_EXPIRY, Malformed, NO_EXPIRY, NO_UNDO, Planned, Uncovered, Undo, plan,
-};
+pub use outward::{Act, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, Uncovered, plan};
 pub use write::{revoke, set};
 
 /// The compiled defaults: the lowest layer, and the reference `config explain` shows.
@@ -1368,10 +1366,18 @@ fn vet(name: &str, pattern: &str, place: &Place, at: &Origin) -> Result<(), Stri
         ));
     }
     let words: Vec<&str> = pattern.split_whitespace().collect();
+    // A `*` inside a word stands for a plain name (`feat/*` as `feat/x`): the classifier reads a
+    // literal `*` in a refspec as a glob.
     let literal = |fill: &str| -> String {
         words
             .iter()
-            .map(|w| if *w == "*" { fill } else { w })
+            .map(|w| {
+                if *w == "*" {
+                    fill.to_owned()
+                } else {
+                    w.replace('*', "x")
+                }
+            })
             .collect::<Vec<_>>()
             .join(" ")
     };

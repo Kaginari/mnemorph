@@ -88,6 +88,12 @@ write     ls {a,b}/x > out.txt
 outward   git push origin main
 outward   git push origin main:main
 outward   git push --dry-run origin main
+outward   git push -u origin feat/x
+outward   git push -uq origin feat/x
+outward   git push origin HEAD:refs/heads/feat/x
+outward   git push origin HEAD:refs/heads/feat/x --force-with-lease=refs/heads/feat/x:
+outward   gh api repos/x/y/pulls
+outward   gh api -X GET repos/x/y/pulls
 outward   git fetch
 outward   git pull --rebase=false
 outward   git clone https://github.com/x/y
@@ -122,7 +128,6 @@ outward   gh pr merge 42 --squash
 outward   gh repo view OWNER/repo
 outward   gh repo clone OWNER/repo
 outward   gh api /repos/OWNER/repo
-outward   gh api -X POST /repos/x/y/issues -f title=bug
 outward   gh auth status
 outward   gh repo edit OWNER/repo --description "new desc"
 outward   gh issue close 12
@@ -179,6 +184,39 @@ destructive gh gpg-key delete ABC123
 destructive gh api -X DELETE /repos/OWNER/repo
 destructive gh api repos/OWNER/repo --method DELETE
 destructive gh api --method=delete /repos/x/y
+destructive gh api -X POST /repos/x/y/issues -f title=bug
+destructive gh api -X PUT /repos/x/y/collaborators/u
+destructive gh api --method PATCH /repos/x/y
+destructive gh api -XPOST /repos/x/y/forks
+destructive gh api --method=post /repos/x/y/forks
+destructive gh api /repos/x/y/issues -f title=bug
+destructive gh api /repos/x/y/issues -F title=bug
+destructive gh api /repos/x/y/issues --raw-field title=bug
+destructive gh api /repos/x/y/issues -ftitle=bug
+destructive gh api /repos/x/y/issues --input body.json
+destructive gh api -X GET /repos/x/y -f per_page=1
+destructive gh api graphql -f query='query { viewer { login } }'
+destructive gh api graphql -f query='mutation { deleteRepository }'
+destructive gh api -X $M /repos/x/y
+destructive git push origin feat/x:main
+destructive git push origin feat/x:refs/tags/v9
+destructive git push origin refs/heads/a:refs/notes/x
+destructive git push origin HEAD:refs/meta/config
+destructive git push origin refs/notes/x
+destructive git push origin 'refs/heads/*:refs/heads/*'
+destructive git push origin feat/x main
+destructive git push --all origin
+destructive git push --branches origin
+destructive git push --mirror origin
+destructive git push --receive-pack=/tmp/x origin main
+destructive git push --exec=/tmp/x origin main
+destructive git push --push-option=ci.skip origin main
+destructive git push -o ci.skip origin main
+destructive git push --repo=https://example.com/x origin main
+destructive git push --force-with-lease=refs/heads/main:abc123 origin main
+destructive git push --force-with-lease=main: origin main
+destructive git push -uf origin main
+destructive git push origin HEAD:refs/heads/
 destructive gh repo edit OWNER/repo --visibility public
 destructive rm -rf /tmp/build-cache
 destructive rm -rf /h/old-project

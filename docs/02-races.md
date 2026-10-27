@@ -230,7 +230,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | `read` | look inside the world | everyone |
 | `write` | change files inside the world — including deleting or renaming inside the writer's own soil; whatever it takes away is kept in the attic first | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
-| `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world — and any outward act its plan gives no undo, or a standing effect no expiry | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
+| `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world — and any outward act whose undo the harness cannot derive | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
 | `dispatch` | commission another body | Rimuru, Elf, Orc (and High Elf, see Ascension) |
 | `seal` | propose freezing landings on a territory | Dark Elf, Arch Dark Elf — a seal always takes the human's confirm |
 
@@ -370,23 +370,28 @@ Kijin hold one of five **posts**, also compiled in (`mnemorph_races::Post`):
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. A run cut between intent and result is never
   replayed; it is gated again.
-- **The plan declares the undo** (`mnemorph_config::Act`, classed by `plan`). Each outward act
-  names how it is put back — a rollback command, a revert, or `none` — and a standing effect (a
-  deploy, a feature flag, a scheduled job) names the day it ends. The line between `outward` and
-  `destructive` is computed from the plan:
-  - an outward act whose undo is `none` is **destructive**, and its approval card reads
-    `no undo — destructive` before anything else;
-  - a standing effect with no expiry, or one more than a year out, is **destructive**; an expiry
-    on or before the day it is planned refuses the plan;
-  - the classifier's destructive patterns stay the first reading: a declared undo never lowers a
-    force push or a publish.
+- **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
+  outward act is typed, and for a small closed set of kinds the harness renders both the command
+  and its undo from the act's own fields; the gate runs the stored command exactly:
 
-  An undo is checked as an act itself, one level deep: it is a command, not the act again, not
-  refused by the guard, **outward** (a read or a write inside the machine puts nothing outside
-  back) and **not destructive** — its own undo is never asked for, so a destructive undo would be
-  an irreversible act with nothing behind it. An undo that fails a check refuses the plan; to act
-  anyway, the plan says `none`, and the act goes to the human as destructive. A branch whose only
-  undo is deleting it therefore always asks.
+  | Kind | The act | Its undo |
+  |---|---|---|
+  | `PushNewBranch { remote, name }` | `git push <remote> HEAD:refs/heads/<name> --force-with-lease=refs/heads/<name>:` — the branch must not exist yet | delete it, leased on the commit the act pushed: `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>` |
+  | `AddLabel { repo, pr, label }` | `gh pr edit <pr> --repo <repo> --add-label <label>` | the same label removed from the same pull request |
+  | `Comment { repo, pr, body }` | `gh pr comment <pr> --repo <repo> --body <body>` | the comment deleted, by the id its URL gave at act time |
+
+  The repository is pinned in the act, never taken from `GH_REPO` or `-R`; a branch is a plain
+  ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
+  undo is never a string the model writes, so it is never declared or verified: it is derived, and
+  it runs as an act of its own, through the gate. Every other outward act is a `Command`: the
+  harness derives no undo for it, so it is **destructive**, and its approval card reads
+  `no undo — destructive` before anything else. The classifier still reads every rendered command
+  first: a typed act it calls destructive stays so.
+
+  A standing effect (a deploy, a feature flag, a scheduled job) is not a typed kind, so it is
+  destructive until an expiry runner can end what it starts (M11). Also M11: resolving a remote's
+  URL at act time, so a `pushurl` or `insteadOf` in the repository's config cannot retarget a
+  push.
 - **Secrets** never enter the context. The Kijin names a secret (`secret:GH_TOKEN`); the core
   injects it into the sandboxed process environment and redacts it from every output.
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
@@ -503,13 +508,16 @@ Rules that hold for every ascension:
   act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
 - **What an envelope can never cover** (compiled, whatever the envelope says):
   - any `destructive` act — tag pushes, registry publishes, force pushes, history rewrites, and
-    every outward act its plan gives no undo or a standing effect no expiry. The envelope is read
+    every outward act the harness cannot undo: whatever is not a typed kind. The envelope is read
     against the planned act (`Envelope::covers`): its class first, so a destructive act is refused
     before the envelope's time, count or patterns are looked at;
-  - a command that chains, redirects, expands or globs (`;`, `&&`, `|`, `$(…)`, `*`, `~`): a
-    pattern matches words, not what the shell makes of them, so such a command always asks. A
-    `*` word ending a pattern stands for the rest of the command, a word ending in `*` (`feat/*`)
-    for one word;
+  - an act whose words are not plain: a pattern is read against the act's own words — for a
+    branch `git push <remote> <name>`, for the others the rendered words — never the shell's
+    reading of a string, and a word holding anything but printable ASCII, or a character that quotes,
+    chains, expands, globs or names another ref (`;`, `&`, `|`, `$`, `*`, `~`, `:`, `'`, `"`, …),
+    is never matched. A `*` word ending a pattern stands for the rest, a word ending in `*`
+    (`feat/*`) for one word. Name the repository in the pattern to pin it:
+    `gh pr edit * --repo owner/name --add-label *`;
   - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests
     — a pushed workflow runs with the repository's secrets, so that push is always asked;
   - deploys to any environment marked `protected` (production by default);
