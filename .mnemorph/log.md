@@ -5268,6 +5268,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T16:50:55+01:00] rimuru — #45: a forgiving edit — one candidate only, and it says what it forgave
+- **Done:** mnemorph-tools `forgive`: with no exact match, `edit` (and each `multiedit` edit) climbs
+  line endings → trailing whitespace → inner whitespace → indentation, taking a rung only when exactly
+  one region matches; two or more stop the ladder, name each line, write nothing (an edit miss); none
+  matching keeps the closest-line error. Indentation matches level by level and re-indents the
+  replacement in the file's tabs or spaces; line endings stay the file's. The result reads e.g.
+  "forgiven: indentation (+4 spaces) at lines 2–4". No anchor matching. A rung stops past 20M line
+  comparisons (strict). Docs: lessons.md, the edit tool's description.
+- **Tests:** tools `each_forgiving_rung_takes_one_region_and_says_so` (CRLF and tabs kept),
+  `a_forgiving_rung_with_two_places_names_both_and_writes_nothing` (with the uniqueness check
+  disabled — first candidate taken — it fails), `an_exact_match_forgives_nothing`.
+- **Learned:** the edit tool lives in files.rs, not patch.rs (patch applies unified diffs).
+
+---
+
+### [2026-10-27T16:59:44+01:00] rimuru — #236, reviewed: meaningful whitespace stays strict
+- **Done:** the inner-whitespace rung refuses a changed run inside a quote (odd `"`, `'` or backtick
+  count before it); Markdown files keep trailing whitespace strict (a hard break); indentation levels
+  are read from `old_string` alone, a half-step replacement line keeps its extra spaces, and in a
+  tab-indented file stays strict. Docs: lessons.md, the edit description.
+- **Tests:** tools `meaningful_whitespace_is_never_forgiven`.
+
+---
+
 ### [2026-10-27T16:41:09+01:00] rimuru — #101: an outward plan with no declared undo is destructive
 - **Done:** mnemorph-config module `outward`: the Kijin's plan step typed — `Act` (command,
   `Undo::{Rollback, Revert, None}`, `Effect::{Once, Standing { expires }}`), `plan` classes it
