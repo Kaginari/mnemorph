@@ -5101,6 +5101,52 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-27T13:48:18+01:00] rimuru — #38, append-only requests
+- **Why:** the bench read a 94% cache hit rate against OpenCode's 97%. Every move of the cached
+  prefix resends the whole history uncached.
+- **Audit** of the loop and the providers' request building, for what rewrites an earlier part
+  of the request mid-session:
+  - append-only already: the manifest and the opening (taken once, in the ask's message), recall
+    and `@ONTO` (the ask's message), a Mind worn (a tool result), steering, gate failures, stress
+    and top-up notes (appended), `forget_reads` (the read tracker, not the conversation), the
+    wake's lines (the next ask's message). The model, the date and the configuration never
+    changed mid-session: there was no lane for them;
+  - documented rewrites: the fold, the structured compaction;
+  - accidental: the drain and salvage turns cleared the tool list, so the turn with the fullest
+    context of the run was resent uncached.
+- **Fix:**
+  - the frame (system prompt and tools) is built once in `Run::new`;
+  - drain and salvage send the tools and keep only the words of a reply;
+  - `Run::update` and `Run::switch_model` append a `[context update]` note;
+  - `Beat::Prefix` records each move: fold, compaction or unexplained;
+  - an unexplained move warns, panics in a debug build, and strips the earlier asks' thinking
+    once.
+- **Tests:**
+  - an eight-turn session with steering, a Mind, a fallback, a config reload and a fold;
+  - the recovery's unit test.
+- **Proof the session test is not vacuous:**
+  - updates edited into the system prompt fail it ("request 5 rewrote the system prompt", or the
+    debug guard's panic);
+  - steering edited into the ask's message fails it ("one move, the fold: [(2, 2), (6, 6)]").
+
+---
+
+### [2026-10-27T14:03:35+01:00] rimuru — #231, Fable's review
+- **Fable found:**
+  1. The debug panic came after the recovery, so the recovery could never run in dev, and a
+     debug TUI died mid-session.
+  2. Under preserved thinking, an unexplained edit invalidates every later thinking block. Keeping
+     the in-flight turn's thinking guarantees a 400 that the ladder does not retry. A turn that
+     held only thinking was left whole.
+- **Fixed:**
+  1. An unexplained move is a warning and a `prefix` beat in every build.
+  2. The strip, still once a session, takes every thinking block, the turn in flight's included,
+     and keeps tool calls and words. A thinking-only turn becomes "(reasoning omitted)".
+  3. Docs 06 states the rule.
+- **Test:** `the_strip_takes_all_thinking_and_leaves_no_gap`.
+
+---
+
 ### [2026-10-27T13:30:18+01:00] rimuru — #184, toolchain credentials closed on Linux
 - **Task:** Landlock granted `.cargo` and `.cache` whole, so `.cargo/credentials*`,
   `.cache/huggingface/token` and `.cache/git` stayed readable to a sandboxed command on Linux.

@@ -223,20 +223,40 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 - Compaction rewrites the conversation from its first folded message on, so it folds only in
   rare, large batches ([The loop](03-loop.md)): between folds, the history is read, not resent.
 - Every request only appends to the one before, between folds. The system prompt and the tools
-  are built once, when the session opens, and anything new rides as a new message — never a
-  rebuilt prefix. The run checks it each turn — the system prompt and the tools, then the
-  conversation block by block, its moving breakpoints aside: a
-  request that rewrote what was sent, with no fold to explain it, is said in a warning, since the
-  provider rebuilds its cache from there.
+  are built once, when the run is made, and sent byte-identical for the whole session. Anything
+  that changes mid-session rides as a new message, never a rebuilt prefix:
+  - the model falling back, the date, the working directory, the mode or a reloaded
+    configuration is a `[context update]` line appended before the next request
+    (`Run::update`, `Run::switch_model`; a new model changes only the request's model field);
+  - a Mind worn is the `wear` call's result;
+  - the toolbox manifest, the journal's opening, recall and the ontology ride in the ask's own
+    message;
+  - a steering line, a gate failure handed back and a stress warning are notes appended after
+    the turn's results;
+  - the summary, drain and salvage turns send the tools as any turn does, and tell the body in
+    words to call none.
+- The run checks the prefix each turn: the system prompt and the tools, then the conversation
+  block by block, its moving breakpoints aside. A fold or a compaction may rewrite what was sent,
+  and a `prefix` beat in the journal records where the prefix moved and why. A rewrite with
+  nothing to explain it is a bug:
+  - it is said in a warning and a `prefix` beat (`unexplained`), in every build, and the run goes
+    on;
+  - once a session, the run strips every thinking block from what it sends, the turn in flight's
+    included. Under preserved thinking an edit invalidates every thinking block after it, and a
+    request that still carries one is refused. The provider rebuilds its cache from there
+    anyway, so it is rebuilt smaller.
+  - tool calls and words stay; a turn that held only thinking says "(reasoning omitted)", so no
+    turn vanishes. The journal keeps everything.
 - Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
   the gateway's one automatic breakpoint, which moves with the conversation. The other models
   there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.
 
 - The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
   offering different tools per turn never breaks the cache.
-- A test renders two consecutive turns for each race and asserts every tier up to breakpoint 3
-  is byte-identical, tool JSON included. Any timestamp, map ordering or counter that leaks into
-  the stable prefix fails CI.
+- A test runs a session of eight turns through a steering line, a Mind worn, a model fallback,
+  a reloaded configuration and a fold. It asserts the system prompt and the tool JSON are
+  byte-identical in every request, and that each request only appends to the one before except
+  at the fold. Any timestamp, map ordering or counter that leaks into the stable prefix fails CI.
 - Each provider and model has a minimum cacheable prefix; a test asserts each breakpoint's
   prefix meets the minimum of every configured model, or the breakpoint is merged into the next.
 - Caches are per model: "identical for every body" pays off among bodies on the same model.

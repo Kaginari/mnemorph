@@ -146,7 +146,7 @@ the summary turn's reading of the full one. An ask compacts at most twice (`Limi
 come back drains instead.
 
 **A full context drains** once its compactions are spent: the body gets one more turn —
-without tools, capped at 4096 tokens, within what is left of the clock up to two minutes — to write down what is not durable, `@U <law|colony|territory> <fact>`
+told to call no tool but sent with the same tools as any turn, so the cached prefix is read, capped at 4096 tokens, within what is left of the clock up to two minutes — to write down what is not durable, `@U <law|colony|territory> <fact>`
 for each thing it learned that is written nowhere, then what is left. Each `@U law` or `@U colony`
 line is kept as the body's proposed note (tagged `drain`, beside its home); each `@U territory`
 fact is filed to the ontology, as a report's is ([Memory](08-memory.md)). The checkpoint carries
@@ -154,9 +154,16 @@ the turn as its salvage, and an escalation keeps it before the report it hands u
 once — a resume reads that from its journal — and a jump that leaves less than two such turns of
 room in the window checkpoints without one.
 
-**A clock death salvages**: one more turn, without tools and capped at 4096 tokens, in a grace of
+**A clock death salvages**: one more turn, told to call no tool, sent with the tools and capped at 4096 tokens, in a grace of
 a tenth of the clock (2–60 s), to write down what the body did, learned and left. The
 checkpoint carries it.
+A tool the body calls anyway on a drain or salvage turn never runs: only its words are kept.
+
+**Changes mid-session append.** The system prompt and the tools are built once, when the run is
+made. A model fallback, a new date, working directory or mode, or a reloaded configuration is
+said to the body as a `[context update]` line before its next request, and journaled as a note,
+so a resume rebuilds the same conversation. Only a fold or a compaction rewrites what was sent; a
+`prefix` beat records each such move ([Consumption](06-consumption.md)).
 
 ### The session: queue and interrupt
 
