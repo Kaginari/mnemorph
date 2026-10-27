@@ -92,23 +92,25 @@ config:
 ---
 flowchart LR
     subgraph user["your machine"]
-      CLI["mnemorph CLI<br/>TypeScript · Ink"]
+      CLI["mnemorph<br/>Rust · Ratatui<br/>the core in-process"]
       BOARD["board<br/>TypeScript · React<br/>in the browser"]
-      CORE["mnemorphd<br/>Rust core"]
+      CORE["mnemorphd<br/>Rust core, served"]
       SB["sandboxed tools<br/>landlock + seccomp / Seatbelt"]
       W[(".mnemorph/<br/>docs · log.md · ledgers")]
     end
     LLM[("model providers<br/>Anthropic · OpenAI-compatible")]
 
-    CLI <-->|JSON-RPC over stdio| CORE
     BOARD <-->|WebSocket, loopback + token| CORE
+    CLI --> SB
+    CLI <--> W
+    CLI <-->|HTTPS streaming| LLM
     CORE --> SB
     CORE <--> W
     CORE <-->|HTTPS streaming| LLM
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
-    class CLI,BOARD ts
+    class BOARD ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class CORE rs
+    class CLI,CORE rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SB gate
     classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
@@ -118,12 +120,15 @@ flowchart LR
     style user fill:#f8fafc,stroke:#94a3b8
 ```
 
-- **`mnemorphd`** (Rust) owns everything that must be correct: the loop, the races, the gate, the
-  sandbox, the ledgers, the provider clients. It has no UI.
-- **`mnemorph`** (TypeScript, Ink) is the terminal client. It starts `mnemorphd` as a child process
-  and speaks JSON-RPC 2.0 over stdio. It renders; it decides nothing.
-- **`mnemorph-tui`** (Rust, Ratatui) is a terminal UI that hosts the core in its own process: no
-  protocol between them, the same events drawn ([the terminal UI](05-architecture.md#the-terminal-ui)).
+- **The core** (Rust crates) owns everything that must be correct: the loop, the races, the gate,
+  the sandbox, the ledgers, the provider clients. It has no UI, and every surface links the same
+  crates.
+- **`mnemorph`** (Rust, Ratatui) is the command you run. With no subcommand it is the terminal
+  app; `mnemorph run "<ask>"` asks once without it, for scripts. It hosts the session in its own
+  process — no protocol between the screen and the core — and draws the same events the server
+  sends ([the terminal UI](05-architecture.md#the-terminal-ui)). It renders; it decides nothing.
+- **`mnemorphd`** (Rust) is the core as a server: JSON-RPC 2.0 over stdio for the TypeScript SDK,
+  and the world's admin commands (`mnemorphd runs`, `mnemorphd memory status`, `mnemorphd q list`, …).
 - **The board** (TypeScript, React) is the web cockpit, served by `mnemorphd` on loopback. It
   speaks the same protocol over a WebSocket.
 - One protocol, defined once in Rust; the TypeScript types are generated from it. A client can

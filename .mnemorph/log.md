@@ -5821,3 +5821,25 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   test. The pair's read order has no seam a test can reach (no outside call between the reads).
 - **Learned:** a file the harness writes in the world is the world's: any text an act sends goes
   by the process's own input, from memory.
+
+---
+
+### [2026-10-27T22:04:07+01:00] rimuru — one `mnemorph`: the Rust binary, the TypeScript CLI retired
+- **Done:** crate `mnemorph-tui` builds the binary `mnemorph`: no subcommand (or `chat`) opens the
+  terminal app; `resume <run|last>`; `status`; `run "<ask>"` asks once through the same session
+  and end gate (`headless`: stderr progress escaped, the answer on stdout, `--json` event lines
+  then a `result` line, exits 0/1/2/3, gated acts denied unless `--gate-tty`, `--core` ignored).
+  `mnemorphd` keeps the server and the admin commands; hints now name `mnemorphd` for them, and
+  the commands test checks each program against its own help. `packages/cli` deleted, `tsup`
+  dropped; slime-cli's territory is the binary's crate; the in-repo bench runs `mnemorph run`.
+- **Learned:** worktrees sharing one `CARGO_TARGET_DIR` can reuse another checkout's artifact of
+  a path crate (same name, newer mtime): touching the sources forces the rebuild.
+
+---
+
+### [2026-10-27T22:43:47+01:00] rimuru — #250, Fable's review: the tty card, raw stdout when piped, Ctrl+C
+- **Done:** `--gate-tty` asks through `tty_gate`: the card escaped by `shown`, the act whole,
+  typeahead flushed (`tcdrain` then `tcflush`) after the card is shown, only `y`/`yes` approves,
+  end of input or an error denies, `GATE_WAIT` as deadline; Ctrl+C fires the interrupt and denies
+  a waiting card (exit 1); the answer is escaped only on a terminal stdout.
+- **Learned:** a gate that was never live hides its gaps — the first caller inherits them.

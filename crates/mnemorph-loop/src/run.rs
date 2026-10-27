@@ -140,7 +140,10 @@ pub enum Ending {
 }
 
 impl Ending {
-    fn words(&self) -> String {
+    /// How it ended, in words: `answered`, `checkpoint: …`, `escalate: …`, `failed: …` or
+    /// `interrupted` — what the journal's end beat and the clients say.
+    #[must_use]
+    pub fn words(&self) -> String {
         match self {
             Ending::Answered(_) => "answered".into(),
             Ending::Checkpoint { why, .. } => format!("checkpoint: {why}"),
@@ -1358,7 +1361,7 @@ impl Run {
                     self.record(&Beat::Warning {
                         text: format!(
                             "memory: retired, kept dormant — its failures outnumber its passes \
-                             (`mnemorph memory wake <id>` undoes it): {}",
+                             (`mnemorphd memory wake <id>` undoes it): {}",
                             r.retired.join(", ")
                         ),
                     });

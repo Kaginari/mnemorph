@@ -487,7 +487,7 @@ act after it `other`.
   path; the folder `0700`, its files `0600`); after each command the tripwire rebuilds the journal from what it held and what the
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
   never counts. A `reconcile` waits for the human
-  (`mnemorph incident open` or `settle`) until a later row settles it; it is not a clean outward act, so it is what
+  (`mnemorphd incident open` or `settle`) until a later row settles it; it is not a clean outward act, so it is what
   `outwardCleanRate` counts against — and what the human may mark an incident, which suspends the
   envelope that covered the act and, from M11, may make an Oni fall.
 - **The undo is the harness's, not the plan's** (`mnemorph_config::Act`, classed by `plan`). An
@@ -565,7 +565,7 @@ act after it `other`.
 - **A rolled-back or corrected act closes on four receipts.** An incident opens in the witness,
   outside the world (`<post>.incidents.jsonl`), keyed to the act's receipt: when the human
   approves an undo (a rollback), or marks an act as one — a `reconcile`, or an observed act that
-  was wrong (a correction) — with `mnemorph incident open <post> <act>`. It closes only when all
+  was wrong (a correction) — with `mnemorphd incident open <post> <act>`. It closes only when all
   four receipts exist, each with its evidence:
 
   | Receipt | Evidence |
@@ -573,11 +573,11 @@ act after it `other`.
   | 1. undone | the undo's receipt, `observed` in the witness, undoing this act |
   | 2. journal corrected | the act's latest row in the witness: `corrected`, naming that undo |
   | 3. downstream told | a typed `comment` act naming the incident (`tells: <act>`), `observed` in the witness, committed after the incident opened, its body opening with the harness's `Rolled back act <id>: ` and the Kijin's words after; on the act's pull request for a label or a comment, and for a branch on a pull request whose head is that branch in the repository a pinned push URL names on the comment's host (`gh api …/pulls/<pr>`) |
-  | 4. lesson | a test or a `Verify:` line changed in the world since the commit HEAD named when the incident opened (or new since), or a Thought born after it; recorded once the human has read the change and said `y` (`mnemorph incident lesson <post> <act> test <path> \| verify <path>:<line> \| thought <id>`), kept with its SHA-256, and hashed again on every read — a lesson edited or removed since counts no more |
+  | 4. lesson | a test or a `Verify:` line changed in the world since the commit HEAD named when the incident opened (or new since), or a Thought born after it; recorded once the human has read the change and said `y` (`mnemorphd incident lesson <post> <act> test <path> \| verify <path>:<line> \| thought <id>`), kept with its SHA-256, and hashed again on every read — a lesson edited or removed since counts no more |
 
   Every receipt is read again from the witness and the post's intents whenever the incident is
   read: an entry naming a receipt the witness does not hold as described counts for nothing, and
-  rows a body writes into the world's journal are never read. While it is open, `mnemorph incident
+  rows a body writes into the world's journal are never read. While it is open, `mnemorphd incident
   list` shows it with the receipts it misses, and:
   - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which M11's gate
     asks before it honours an envelope): every envelope one of whose patterns reads the act, or
@@ -592,7 +592,7 @@ act after it `other`.
     same request is asked again as a new act.
 
   A `reconcile` that is no incident — the act is fine as it stands — the human settles with
-  `mnemorph incident settle <post> <act>`: a `settled` row, nothing undone, and it leaves the list.
+  `mnemorphd incident settle <post> <act>`: a `settled` row, nothing undone, and it leaves the list.
 - **A rollback is a lease on what the act left.** `kijin-deploy` rolls back only while the
   version deployed is still the one its act deployed: the post journal's deploy (the
   environment, the version before, ours) against what the target reports now. A later deploy, by

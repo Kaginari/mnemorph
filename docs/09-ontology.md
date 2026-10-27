@@ -122,7 +122,7 @@ reads every creature.
 
 A ground field is a list of paths inside the world: a directory written with its trailing `/`
 (`src/`, `.github/workflows/`), covering what lies under it, or a file written with a `/` in it
-(`./CHANGELOG.md`, `packages/cli/package.json`), covering that file alone. Anything else — a
+(`./CHANGELOG.md`, `packages/sdk/package.json`), covering that file alone. Anything else — a
 sentence, a bare word, an absolute path, a `..` — makes the doc unreadable, and an unreadable doc
 is reported, never guessed: the creature is not in the roster until it reads. So is a doc that
 cannot be read at all, and a race's directory that cannot be listed. A
@@ -168,7 +168,7 @@ blocks.
 
 The order is the rule: a creature that claims `.mnemorph` itself does not swallow every seat, the
 queue and scratch, because rules 1–3 are asked first. The gate's *right author*, the dispatch card
-and `mnemorph onto owner <path>` call this one function. The tool policy cannot: it sits below the
+and `mnemorphd onto owner <path>` call this one function. The tool policy cannot: it sits below the
 world in the crate graph and checks soil as prefixes. The loop hands each body the soil `own`
 yields for it when it dispatches, as prefixes with exclusions (its territory minus the seats, queue and scratch the
 earlier rules give away), so the policy and the gate never disagree: the longest claim that
@@ -177,7 +177,7 @@ by every rule but a domain — an Orc's soil is its seat and scratch. Its exclus
 asking `own` of every claim inside the body's, never by restating the rules, and a test holds
 the two to the same answer on every tracked file.
 
-`mnemorph onto owner <path>...` prints, for each path, its owner, the rule that gave it and the
+`mnemorphd onto owner <path>...` prints, for each path, its owner, the rule that gave it and the
 claim that matched — `crates/mnemorph-wire/src/lib.rs  slime-wire  zone crates/mnemorph-wire/`.
 A path is the human's: relative to where they stand, or absolute; one outside the world is
 nobody's. It reads the docs alone, so it needs no key and opens no session; a doc that does not
@@ -301,7 +301,7 @@ fixture grows with each miss found in a real world.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
 proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground,
-or the human (`mnemorph onto settle <id>`); a landing by the path's owner that passed its gate and
+or the human (`mnemorphd onto settle <id>`); a landing by the path's owner that passed its gate and
 cites the fact is the third route, not yet built. A
 creature's projection (`@ONTO`, [communication](04-communication.md#the-wire-envelope)) shows a
 contested fact with both sides, the way recall always seats one dissenting note: each ask carries
@@ -339,7 +339,7 @@ states and $R_B$ the set B states, each read from A's side through inverses:
 | only one end states anything | partial: lawful, shown as one-sided |
 | both ends state relations and $R_A \cap R_B = \emptyset$ | a `dimension-obstruction` finding, reported to Rimuru |
 
-`mnemorph onto check --dimension` reads the neighbours' manifests (on this machine, inward) and
+`mnemorphd onto check --dimension` reads the neighbours' manifests (on this machine, inward) and
 never edits them; a fix goes to the other world through its own throne, one hop at a time.
 
 **Learning a relation.** A body that sees a cross-world reference — an image another world
@@ -385,7 +385,7 @@ blocking. Findings are never summed into a score.
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |
 | `untriaged-fact` | low | a free fact landed beside similar ones without the parent's label |
 
-`mnemorph onto check` prints `@S PASS|FAIL <n> findings`, then one line per finding — severity,
+`mnemorphd onto check` prints `@S PASS|FAIL <n> findings`, then one line per finding — severity,
 code, `file:line` (the doc's field the finding stands on) and what it says — most severe first;
 evolution's overlay must add none. It fails on a critical or high finding, and on a doc that
 does not read, which is said on stderr. `unowned-soil` reads the tracked files from git and is

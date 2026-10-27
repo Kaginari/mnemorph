@@ -195,7 +195,7 @@ by exactly one of:
 | **checked** | the end gate passed *and* ran at least one verify line over a non-empty diff | work that wrote files |
 | **accepted** | the commissioner's verdict names the claim and accepts it (the verdict-current) | research, reads, reviews — work with nothing to test |
 | **corroborated** | a second creature lands a matching claim from different evidence anchors | anything, including failed runs |
-| **confirmed** | the human says so: `mnemorph memory confirm <claim>` | anything |
+| **confirmed** | the human says so: `mnemorphd memory confirm <claim>` | anything |
 
 An answer that changed nothing passes the end gate untouched; that pass proves nothing about
 its claims, so it never counts as **checked**. Its `@U` lines wait for **accepted**: the parent
@@ -382,13 +382,13 @@ evidence retirement weighs failures against. Every third pass since its last gro
 confidence ($\kappa \leftarrow \min(0.95, \kappa + 0.05)$); it never gains salience by repetition
 alone.
 
-`mnemorph memory status` lists each retired note with its undo; `mnemorph memory wake <note>` —
+`mnemorphd memory status` lists each retired note with its undo; `mnemorphd memory wake <note>` —
 the human's alone, refused to a body — grounds it again in every tier that holds it, and only
 evidence after the waking counts. It undoes only a retirement: a note put to sleep otherwise, or
 never grounded, keeps its standing and its route.
 
 It also lists each creature's proposed claims, newest first, ten at most, each with its vouch:
-`mnemorph memory confirm <claim>` — the human's alone, refused to a body — grounds the claim by
+`mnemorphd memory confirm <claim>` — the human's alone, refused to a body — grounds the claim by
 the **confirmed** route, in its creature's tier and in shared memory, citing the human's word.
 
 ### Consolidation and forgetting
@@ -413,7 +413,7 @@ tier is that place: git's local exclude, set when a session opens, keeps it off 
 
 ### Pathologies as instruments
 
-`mnemorph memory status` reports, per creature, three findings read by code:
+`mnemorphd memory status` reports, per creature, three findings read by code:
 
 | Finding | Read as | The lawful act |
 |---|---|---|
@@ -433,7 +433,7 @@ An event resolves by its author and its proof:
 
 A standing is a `grounded` status or a confidence. An unresolved event touching a creature — in
 its personal or short tier, or on a shared note it owns — freezes that creature's proposals,
-groundings, revisions and cache; `mnemorph memory status` names each event, its file and why, and
+groundings, revisions and cache; `mnemorphd memory status` names each event, its file and why, and
 exits 1 until the human removes or re-proves it. A run that recalls past one says so in a warning.
 A shared note with no owner freezes no creature; its unresolved events are reported under their
 own row. A schema rests on schemas too, and an heir inherits a schema with every note it links
@@ -478,8 +478,8 @@ Know-how a body may load, in two levels, priced by exactly what each injects:
   never wears one over 2,000 tokens: the body below that needs it wears it and dies with its
   task.
 - **Every command a prompt or hint names exists in the build.** A test reads every backticked
-  `mnemorph …` or `mnemorphd …` command in the shipped sources against the help the CLI and the
-  core print.
+  `mnemorph …` or `mnemorphd …` command in the shipped sources against the help of the binary it
+  names — `mnemorph` or `mnemorphd`.
 
 ### Not taken
 

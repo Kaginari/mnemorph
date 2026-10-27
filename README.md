@@ -5,13 +5,13 @@
 <p><img src="assets/portraits/rimuru@64.png" width="48" alt="Rimuru"> <img src="assets/portraits/elf@64.png" width="48" alt="Elf"> <img src="assets/portraits/orc@64.png" width="48" alt="Orc"> <img src="assets/portraits/slime@64.png" width="48" alt="Slime"> <img src="assets/portraits/kijin@64.png" width="48" alt="Kijin"> <img src="assets/portraits/dark-elf@64.png" width="48" alt="Dark Elf"> <img src="assets/portraits/high-elf@64.png" width="48" alt="High Elf"> <img src="assets/portraits/high-orc@64.png" width="48" alt="High Orc"> <img src="assets/portraits/named-slime@64.png" width="48" alt="Named Slime"> <img src="assets/portraits/oni@64.png" width="48" alt="Oni"> <img src="assets/portraits/arch-dark-elf@64.png" width="48" alt="Arch Dark Elf"></p>
 
 An agent harness grown from [isekai](https://github.com/Kaginari/isekai): the nine natures and
-the wire, rebuilt with a Rust core and a TypeScript terminal client and web board. Races are
-compiled in — what each one may do, whom it answers to, how it is scored and how it ascends is
-code, not configuration.
+the wire, rebuilt as a Rust core with a Rust terminal app — `mnemorph` — plus a TypeScript SDK
+for the web board to come. Races are compiled in — what each one may do, whom it answers to, how
+it is scored and how it ascends is code, not configuration.
 
 **Status:** M0–M6 and M8 are built — the wire and the races, the ledger, the providers, the tools,
 sandbox and human gate, configuration, the loop with its long runs and resume, the protocol and
-the terminal clients, memory and the toolbox. M7, the world, runs with two items open (the Jev
+the terminal app, memory and the toolbox. M7, the world, runs with two items open (the Jev
 decisions and the paired solo-versus-hierarchy measurement). M9, the Kijin, has its typed outward
 acts, fingerprints, receipts, the act runner, closure and the typed pull request — a branch and
 its pull request under one approval; its exit is met against a stub forge, a live run remains. M10's Dark Elf specialities, their routing and the wire's finding fields
@@ -49,28 +49,56 @@ just         # the full check: Rust, TypeScript, the layering, the book, the wor
 just docs-dev  # read the book as a website while writing it
 ```
 
-Run Mnemorph from the checkout once `just` has built it — the CLI starts the core built there:
+### Install `mnemorph`
+
+`mnemorph` is one Rust binary: the terminal app, and `mnemorph run` for scripts. It hosts the
+session in its own process. `mnemorphd` is the core as a server — the client protocol for the
+SDK and the board — and holds the world's admin commands.
 
 ```sh
-pnpm --filter @mnemorph/cli build
-node packages/cli/dist/cli.js status          # the build, the key's origin, the sandbox in force
-node packages/cli/dist/cli.js                 # a session in this world
-node packages/cli/dist/cli.js run "<ask>"     # one ask, the answer on stdout
+cargo install --path crates/mnemorph-tui      # mnemorph, into ~/.cargo/bin
+cargo install --path crates/mnemorphd         # mnemorphd: the server and the admin commands
 ```
 
-Or the terminal UI in Rust, the core in its own process
-([the terminal UI](docs/05-architecture.md#the-terminal-ui)):
+Name a provider and a model once, for every world, in `~/.config/mnemorph/config.toml`
+(`$XDG_CONFIG_HOME/mnemorph/config.toml`); a world's `.mnemorph/config.local.toml` overrides it
+([configuration](docs/05-architecture.md#configuration)):
+
+```toml
+[providers.openrouter]
+kind = "openai"
+base_url = "https://openrouter.ai/api"
+key_env = "OPENROUTER_API_KEY"     # the key is read from this variable, never from the file
+
+[models]
+provider = "openrouter"
+default = "anthropic/claude-sonnet-5.5"
+```
+
+### Run it
 
 ```sh
-cargo run -p mnemorph-tui -- --world .
+export OPENROUTER_API_KEY=…
+mnemorph                            # a session in this world, in the terminal app
+mnemorph --world ~/code/project     # …in another
+mnemorph status                     # the model, the key's origin, the sandbox, the config's holes
+mnemorph run "<ask>"                # one ask without the app: the answer on stdout
+echo "<ask>" | mnemorph run --json  # every event as a JSON line, then a result line
+mnemorph resume last                # pick up the newest run that stopped
+mnemorphd runs                      # the runs that may be resumed
 ```
+
+`mnemorph run` goes through the same session and end gate as the app, and exits 0 only when the
+answer landed; it denies every act that needs your approval unless you pass `--gate-tty`
+([`mnemorph run`](docs/05-architecture.md#mnemorph-run)). From a checkout, `cargo run -p
+mnemorph-tui --` runs the same binary.
 
 ## Layout
 
 | Path | Holds |
 |---|---|
 | `crates/` | the Rust core — one crate per concern, layered ([architecture](docs/05-architecture.md)) |
-| `packages/` | the TypeScript clients: protocol, sdk, cli, board |
+| `packages/` | the TypeScript side: protocol, sdk, theme, board |
 | `docs/` | the book |
 | `site/` | the book as a website (VitePress) |
 | `assets/` | race portraits and cards |

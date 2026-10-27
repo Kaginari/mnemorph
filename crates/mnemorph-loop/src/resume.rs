@@ -214,7 +214,7 @@ pub fn take(world: &Path, which: &str) -> Result<(String, Hold, Vec<Beat>), Stri
         which.to_owned()
     } else {
         return Err(format!(
-            "`{which}` names no session's run: give its id (`r…`, as `mnemorph runs` lists it) or `last`"
+            "`{which}` names no session's run: give its id (`r…`, as `mnemorphd runs` lists it) or `last`"
         ));
     };
     let path = dir.join(format!("{run}.jsonl"));

@@ -11,7 +11,7 @@
 //! `intel/` (the scout's mirror).
 //!
 //! The shared work queue is put back line by line: what it held stays, and of the lines added
-//! since, only those its witness holds — every line the harness or the human's `mnemorph q` wrote,
+//! since, only those its witness holds — every line the harness or the human's `mnemorphd q` wrote,
 //! kept again under the human's state directory, out of every command's reach. So a body's
 //! command cannot forge a move, and the human's moves made while it ran are kept. Each Kijin
 //! post journal (`.mnemorph/kijin/<post>/post.jsonl`) is put back the same way from its own

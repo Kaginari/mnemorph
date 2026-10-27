@@ -82,7 +82,7 @@ fn a_retired_note_is_listed_and_the_human_wakes_it() {
     assert_eq!(code, Some(0), "a retirement waits on nobody: {out}");
     assert!(
         out.contains(
-            "retired, kept dormant: n1 — skip the fixture (undo: mnemorph memory wake n1)"
+            "retired, kept dormant: n1 — skip the fixture (undo: mnemorphd memory wake n1)"
         ),
         "{out}"
     );
@@ -168,7 +168,7 @@ fn the_human_confirms_a_proposed_claim_and_a_body_cannot() {
     let (_, out) = status(&world, false);
     assert!(
         out.contains(&format!(
-            "proposed: {id} — run uv before pytest (vouch: mnemorph memory confirm {id})"
+            "proposed: {id} — run uv before pytest (vouch: mnemorphd memory confirm {id})"
         )),
         "{out}"
     );

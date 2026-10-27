@@ -89,7 +89,7 @@ fn words(value: &str) -> Vec<String> {
 
 /// One claim of a ground field: a directory written with its trailing `/` (`src/`,
 /// `.github/workflows/`), or a file written with a `/` in it (`./CHANGELOG.md`,
-/// `packages/cli/package.json`). Inside the world, never absolute, never climbing out of it.
+/// `packages/sdk/package.json`). Inside the world, never absolute, never climbing out of it.
 pub(crate) fn claim(word: &str) -> Option<String> {
     let path_like = word.contains('/') && !word.starts_with('/');
     if !path_like || word.chars().any(char::is_control) {

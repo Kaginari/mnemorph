@@ -1,89 +1,159 @@
-//! `mnemorph-tui` — a Mnemorph session in the terminal, the core hosted in this process.
+//! `mnemorph` — a Mnemorph session in the terminal, the core hosted in this process: the terminal
+//! app with no subcommand, one ask without it with `run`.
 
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use mnemorph_tui::app::Model;
+use mnemorph_tui::cli::{Command, HELP, VERSION, parse};
+use mnemorph_tui::headless;
 use mnemorph_tui::kit::highlight;
 use mnemorph_tui::pictures::Pictures;
 use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
 
-const HELP: &str = "mnemorph-tui — a Mnemorph session in the terminal
-
-Usage: mnemorph-tui [--world <dir>] [--resume <run|last>] [--theme dark|light|auto] [--probe]
-
-Options:
-  --world <dir>     the world to work in (default: the current directory)
-  --resume <run>    pick up a run that stopped, from its journal: its id, or last for the
-                    newest (`mnemorph runs` lists them); gated like a fresh session
-  --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
-  --probe           print what the terminal can draw (the portraits' image protocol), and exit
-  -h, --help        this help
-  -V, --version     the version
-
-Portraits are real pixels where the terminal draws images — Kitty, iTerm2's inline images
-(iTerm2, WezTerm, VS Code with terminal.integrated.enableImages), Sixel — else glyphs.
-MNEMORPH_TUI_IMAGES=auto|kitty|iterm|sixel|blocks|off overrides the choice, and
-MNEMORPH_TUI_GLYPHS=half|quadrants|sextants|octants the glyphs.
-
-Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
-pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
-ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · at an approval, 1 (y)
-yes, 2 (n) no or 3 no with a reason, then enter. The mouse is the UI's: hold shift to select
-text.
-";
-
 fn main() -> ExitCode {
-    let mut world = None;
-    let mut theme = None;
-    let mut resume: Option<String> = None;
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-h" | "--help" => {
-                print!("{HELP}");
-                return ExitCode::SUCCESS;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let command = match parse(&args) {
+        Ok(c) => c,
+        Err(e) => return fail(&e, 2),
+    };
+    match command {
+        Command::Help => {
+            print!("{HELP}");
+            ExitCode::SUCCESS
+        }
+        Command::Version => {
+            println!("{VERSION}");
+            ExitCode::SUCCESS
+        }
+        Command::Probe => {
+            print!("{}", probe(&|k| std::env::var(k).ok()).report());
+            ExitCode::SUCCESS
+        }
+        Command::Chat {
+            world,
+            resume,
+            theme,
+        } => chat(world, resume.as_deref(), theme.as_deref()),
+        Command::Run {
+            ask,
+            world,
+            json,
+            gate_tty,
+        } => ask_once(ask, world, json, gate_tty),
+        Command::Status { world } => status(world),
+    }
+}
+
+/// The world: the directory given, or the current one, canonical.
+fn world_of(world: Option<PathBuf>) -> Result<PathBuf, String> {
+    let world = world
+        .map_or_else(std::env::current_dir, Ok)
+        .map_err(|e| format!("the current directory: {e}"))?;
+    match world.canonicalize() {
+        Ok(w) if w.is_dir() => Ok(w),
+        Ok(w) => Err(format!("{} is not a directory", w.display())),
+        Err(e) => Err(format!("{}: {e}", world.display())),
+    }
+}
+
+/// `run`: one ask, without the app.
+fn ask_once(ask: Option<String>, world: Option<PathBuf>, json: bool, gate_tty: bool) -> ExitCode {
+    let ask = match ask {
+        Some(a) => a,
+        None if std::io::stdin().is_terminal() => {
+            return fail(
+                "run needs an ask: mnemorph run \"<ask>\", or one on stdin",
+                2,
+            );
+        }
+        None => {
+            let mut text = String::new();
+            if let Err(e) = std::io::stdin().read_to_string(&mut text) {
+                return fail(&format!("stdin: {e}"), 2);
             }
-            "-V" | "--version" => {
-                println!("mnemorph-tui {}", env!("CARGO_PKG_VERSION"));
-                return ExitCode::SUCCESS;
+            text
+        }
+    };
+    let ask = ask.trim();
+    if ask.is_empty() {
+        return fail("run: nothing to ask", 2);
+    }
+    let world = match world_of(world) {
+        Ok(w) => w,
+        Err(e) => return fail(&e, 2),
+    };
+    let (tx, rx) = headless::channel();
+    let gate = headless::gate(tx.clone(), gate_tty);
+    let opened = mnemorph_loop::open(&world, gate.clone(), headless::observer(tx.clone()), |v| {
+        std::env::var(v).ok()
+    });
+    let opened = match opened {
+        Ok(o) => o,
+        Err(e) => return fail(&e, 2),
+    };
+    #[cfg(unix)]
+    if let Err(e) = headless::on_ctrl_c(opened.session.interrupt(), gate) {
+        return fail(&format!("ctrl+c could not be caught: {e}"), 2);
+    }
+    let options = headless::Options {
+        json,
+        escape: std::io::stdout().is_terminal(),
+    };
+    let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr());
+    match headless::run(opened, ask, options, (tx, rx), &mut out, &mut err) {
+        Ok(code) => ExitCode::from(code),
+        Err(e) => fail(&e, 1),
+    }
+}
+
+/// `status`: what a session here would open with.
+fn status(world: Option<PathBuf>) -> ExitCode {
+    let world = match world_of(world) {
+        Ok(w) => w,
+        Err(e) => return fail(&e, 2),
+    };
+    let opened = mnemorph_loop::open(
+        &world,
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |v| std::env::var(v).ok(),
+    );
+    match opened {
+        Ok(opened) => {
+            for line in headless::status(&opened) {
+                println!("{line}");
             }
-            "--probe" => {
-                print!("{}", probe(&|k| std::env::var(k).ok()).report());
-                return ExitCode::SUCCESS;
-            }
-            "--world" => match args.next() {
-                Some(dir) => world = Some(PathBuf::from(dir)),
-                None => return fail("--world needs a directory"),
-            },
-            "--resume" => match args.next() {
-                Some(run) if !run.starts_with('-') => resume = Some(run),
-                _ => return fail("--resume needs a run's id, or last"),
-            },
-            "--theme" => match args.next() {
-                Some(t) if ["dark", "light", "auto"].contains(&t.as_str()) => theme = Some(t),
-                _ => return fail("--theme is dark, light or auto"),
-            },
-            other => return fail(&format!("unknown argument `{other}`; see --help")),
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("{:<9}{}", "mnemorph", env!("CARGO_PKG_VERSION"));
+            println!(
+                "{:<9}did not open — {}",
+                "session",
+                mnemorph_tui::safe::one_line(&e)
+            );
+            ExitCode::FAILURE
         }
     }
-    let world = match world.map_or_else(std::env::current_dir, Ok) {
+}
+
+/// The terminal app.
+fn chat(world: Option<PathBuf>, resume: Option<&str>, theme: Option<&str>) -> ExitCode {
+    let world = match world_of(world) {
         Ok(w) => w,
-        Err(e) => return fail(&format!("the current directory: {e}")),
+        Err(e) => return fail(&e, 1),
     };
-    let world = match world.canonicalize() {
-        Ok(w) if w.is_dir() => w,
-        Ok(w) => return fail(&format!("{} is not a directory", w.display())),
-        Err(e) => return fail(&format!("{}: {e}", world.display())),
-    };
-    let variant = Variant::choose(theme.as_deref(), |k| std::env::var(k).ok());
+    let variant = Variant::choose(theme, |k| std::env::var(k).ok());
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
     let env = |v: &str| std::env::var(v).ok();
-    let opened = match &resume {
+    let opened = match resume {
         Some(run) => {
             mnemorph_loop::resume(&world, run, gate(tx.clone()), observer(tx.clone()), env)
         }
@@ -91,7 +161,7 @@ fn main() -> ExitCode {
     };
     let opened = match opened {
         Ok(o) => o,
-        Err(e) => return fail(&e),
+        Err(e) => return fail(&e, 1),
     };
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
@@ -123,7 +193,7 @@ fn main() -> ExitCode {
     }
     let host = match Host::start(opened, tx.clone()) {
         Ok(h) => h,
-        Err(e) => return fail(&e),
+        Err(e) => return fail(&e, 1),
     };
     // The sidebar's memory and races come from the world, read off the UI thread.
     host.run(model.survey());
@@ -131,11 +201,12 @@ fn main() -> ExitCode {
     host.stop();
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(e) => fail(&format!("the terminal: {e}")),
+        Err(e) => fail(&format!("the terminal: {e}"), 1),
     }
 }
 
-fn fail(why: &str) -> ExitCode {
-    eprintln!("mnemorph-tui: {why}");
-    ExitCode::FAILURE
+/// Say why on stderr, as `mnemorph: <why>` — a script reads the last such line — and exit `code`.
+fn fail(why: &str, code: u8) -> ExitCode {
+    eprintln!("mnemorph: {}", mnemorph_tui::safe::one_line(why));
+    ExitCode::from(code)
 }

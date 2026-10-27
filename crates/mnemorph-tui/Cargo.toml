@@ -1,6 +1,6 @@
 [package]
 name = "mnemorph-tui"
-description = "The terminal UI: one session hosted in-process, drawn with Ratatui."
+description = "The `mnemorph` command: the terminal app (one session hosted in-process, drawn with Ratatui) and `mnemorph run`, one ask without it."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "mnemorph-tui"
+name = "mnemorph"
 path = "src/main.rs"
 
 [dependencies]

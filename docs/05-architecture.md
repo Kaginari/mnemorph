@@ -12,16 +12,15 @@ config:
 ---
 flowchart TB
     subgraph ts["TypeScript — packages/"]
-      CLI["cli<br/>Ink terminal UI"]
       BOARD["board<br/>React web cockpit"]
       SDK["sdk<br/>client, reconnect, typed calls"]
       PROTO["protocol<br/>generated types"]
-      CLI --> SDK
       BOARD --> SDK
       SDK --> PROTO
     end
     subgraph rs["Rust — crates/"]
-      TUI["tui<br/>Ratatui terminal UI, the session in-process"]
+      TUI["tui — the mnemorph command<br/>Ratatui app · run · the session in-process"]
+      D["mnemorphd<br/>the server · admin commands"]
       SERVER["server<br/>JSON-RPC · stdio · WebSocket"]
       LOOP["loop<br/>six beats"]
       WORLD["world<br/>creatures · territory · dispatch · gate"]
@@ -34,6 +33,7 @@ flowchart TB
       MEM["memory<br/>tiers · recall · write rule"]
       CONFIG["config<br/>layers · origins · loosening"]
       SERVER --> LOOP
+      D --> SERVER
       TUI --> SERVER
       TUI --> LOOP
       LOOP --> CONFIG --> TOOLS
@@ -55,9 +55,9 @@ flowchart TB
     PROTO -. generated from .-> SERVER
     SDK <==>|JSON-RPC| SERVER
     classDef ts fill:#fde7f3,stroke:#db2777,stroke-width:1.5px,color:#500724
-    class CLI,BOARD,SDK,PROTO ts
+    class BOARD,SDK,PROTO ts
     classDef rs fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#431407
-    class TUI,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
+    class TUI,D,SERVER,LOOP,WORLD,RACES,WIRE,TOOLS,PROV,LEDGER,MEM,CONFIG rs
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
     class SANDBOX gate
     style ts fill:#fdf2f8,stroke:#db2777
@@ -67,9 +67,9 @@ flowchart TB
 ## In plain words
 
 All the decisions live in Rust, in small crates that each do one thing and can be tested alone.
-The clients only show things and ask you questions: the TypeScript terminal client and the web
-board speak to the core over its protocol, and the Rust terminal UI hosts the core in its own
-process — three windows onto the same core. The arrows only point downward — `races` knows nothing about
+The clients only show things and ask you questions: `mnemorph`, the Rust terminal app, hosts the
+core in its own process, and the web board speaks to `mnemorphd` over the protocol through the
+TypeScript SDK — two windows onto the same core. The arrows only point downward — `races` knows nothing about
 networks, `wire` knows nothing about models — so each piece can be proven before the next is
 built on it. `tools/check-layers.mjs` holds the same graph and fails on any edge it does not
 draw.
@@ -93,12 +93,13 @@ mnemorph/
 │  ├─ mnemorph-world      creatures, onto, dispatch, gate, Minds      (files)
 │  ├─ mnemorph-loop       the six beats, journal, resume              (all above)
 │  ├─ mnemorph-server     JSON-RPC, WebSocket, board assets           (network: loopback)
-│  ├─ mnemorph-tui        the terminal UI, the session in-process     (terminal)
-│  └─ mnemorphd           the binary
+│  ├─ mnemorph-tui        `mnemorph`: the terminal app and `run`,     (terminal)
+│  │                      the session in-process
+│  └─ mnemorphd           the server binary and the admin commands
 ├─ packages/
 │  ├─ protocol           generated from crates via ts-rs; checked in
 │  ├─ sdk                transport (stdio | ws), reconnect by seq
-│  ├─ cli                `mnemorph` — Ink + React
+│  ├─ theme              the palette the board shares with the terminal app
 │  └─ board              Vite + React; built into mnemorphd
 ├─ docs/                 this book
 ├─ .mnemorph/             Mnemorph builds itself as a world
@@ -117,27 +118,80 @@ mnemorph/
 | recall | BM25 in `mnemorph-memory`, no index engine | local, model-free by default (Nature 7) |
 | errors | typed error enums where a caller branches on the failure, a plain reason elsewhere | typed failures cross crate borders |
 | logs | the run's journal, JSONL under `.mnemorph/instruments/loop/` | the journal is an instrument |
-| tests | nextest, proptest; vitest + ink-testing-library; Playwright for the board (M12) | every rung testable alone |
-| TS tooling | Node 22, pnpm workspaces, tsup, Biome | Node is already the platform Claude Code runs on |
-| distribution | an npm package with per-platform optional deps carrying `mnemorphd`; plus a curl installer and GitHub release binaries | one `npm i -g` for users, a plain binary for servers. The names `mnemorph` on npm and crates.io are taken: the published names are settled in phase D |
+| tests | nextest, proptest; Ratatui's test backend; vitest; Playwright for the board (M12) | every rung testable alone |
+| TS tooling | Node 22, pnpm workspaces, Biome | Node is already the platform Claude Code runs on |
+| distribution | GitHub release binaries of `mnemorph` and `mnemorphd`, a curl installer; `cargo install --path` from a checkout | one plain binary for people and for servers. The name `mnemorph` on crates.io is taken: the published names are settled in phase D |
 
 ### The terminal UI
 
-`mnemorph-tui` is a terminal UI in Rust, drawn with [Ratatui](https://ratatui.rs). It hosts the
-session in its own process: `mnemorph_loop::open` gives it the session, an observer turns what the
-run does into the same events the server sends (`mnemorph_server::events`), and the model's stream
-arrives as text deltas. No protocol sits between the screen and the core.
+`mnemorph` is the command you run: a terminal app in Rust, drawn with
+[Ratatui](https://ratatui.rs), in the crate `mnemorph-tui`. It hosts the session in its own
+process: `mnemorph_loop::open` gives it the session, an observer turns what the run does into the
+same events the server sends (`mnemorph_server::events`), and the model's stream arrives as text
+deltas. No protocol sits between the screen and the core. It lives in the terminal crate rather
+than a crate of its own: `run` needs nothing the app does not already depend on, so the layering
+keeps the edges it had.
 
 ```sh
-cargo run -p mnemorph-tui -- --world <dir>            # a session in that world
-cargo run -p mnemorph-tui -- --resume last           # pick up the newest run that stopped
-cargo run -p mnemorph-tui -- --theme light            # dark, light or auto
-cargo run -p mnemorph-tui -- --probe                  # what the terminal draws, then exit
+mnemorph                          # a session in this world (also: mnemorph chat)
+mnemorph --world <dir>            # a session in that world
+mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
+mnemorph --theme light            # dark, light or auto
+mnemorph --probe                  # what the terminal draws, then exit
+mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes
+mnemorph run "<ask>"              # one ask without the app
 ```
 
-`--resume <run|last>` opens the session on a run that stopped instead of a new one, through the
+`mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
+board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
+`housekeep` and `relief` (`mnemorphd --help`).
+
+`resume <run|last>` opens the session on a run that stopped instead of a new one, through the
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
-to resume is refused in plain text, before the terminal is taken.
+to resume is refused in plain text, before the terminal is taken. `mnemorphd runs` lists them.
+
+#### `mnemorph run`
+
+`mnemorph run "<ask>"` asks once, without the app, through the same session: the same opening,
+loop and end gate. With no ask, or `-`, it reads the ask from stdin. Progress — the streamed text,
+each call, a failed result, warnings, the end gate's verdict — goes to stderr, escaped as the app
+escapes it; the answer alone goes to stdout, escaped the same way when stdout is a terminal and as
+the model wrote it when piped. Any ending but an answer is said on stderr's last line
+as `mnemorph: <ending>` (`checkpoint: …`, `escalate: …`, `failed: …`, `interrupted`).
+
+| Exit | When |
+|---|---|
+| 0 | answered, the end gate passed |
+| 1 | failed — a failed end gate included — escalated, or interrupted (Ctrl+C) |
+| 2 | the command line did not read, or the session could not open |
+| 3 | stopped at a checkpoint: `mnemorph resume <run>` goes on |
+
+No one is there to approve a gated act, so `run` denies every one and says so on stderr
+(`mnemorph: denied <class> act …`); with `--gate-tty` it puts each to you on the terminal
+(`/dev/tty`) instead. That card shows the whole act, with every part a model chose escaped by the
+core's rule, so no carriage return or escape code can redraw what is approved; keys typed before
+the card reached the screen are thrown away; only `y` or `yes` typed after it approves, and
+anything else, the end of input or ten minutes of silence denies. It never approves on its own.
+
+Ctrl+C stops the run as Esc stops the app's turn: the interrupt fires, a running command and
+everything it started are killed, a question on the terminal is denied, the turn ends
+`interrupted` in the journal, and `run` exits 1.
+
+`--json` writes every event to stdout as a JSON line — the protocol's event, named by `type`
+(`turnStarted`, `textDelta`, `toolCall`, `toolResult`, `note`, `warning`, `usage`,
+`gateVerdict`, `turnEnded`, …), with `session`, `run`, `body` (a commissioned body's own name and
+run for its events) and `seq` — and then one `result` line:
+
+```json
+{"type": "result", "session": "s…", "run": "r…", "ending": "answered", "answered": true,
+ "answer": "…", "exit": 0,
+ "gate": {"passed": true, "verdict": "PASS", "changed": ["…"], "failures": [], "unverified": []},
+ "usage": {"calls": 3, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "usd": 0.01}}
+```
+
+`answer` is `null` unless it answered; `gate` is the session's last verdict, `null` when no gate
+ran; `usage.usd` is `null` when a turn could not be priced. `--core <path>` is read and ignored:
+the session runs in this process.
 
 `--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
 background as `COLORFGBG` reports it, else dark.
@@ -174,7 +228,7 @@ background as `COLORFGBG` reports it, else dark.
 | welcome | the card the conversation opens on: on first run it sits at the top of the conversation, like a header, and scrolls away with the transcript as messages come — a short transcript fills from the top, the room it leaves below it, above the input. The MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
 | transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
-| sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorph memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
+| sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorphd memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
 | approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, the plan its approval binds to, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
 | toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring; never drawn over an open approval |
@@ -260,7 +314,7 @@ Control is never a reply: Ctrl+C and Esc always reach the UI, so they stop, quit
 4. **glyphs** otherwise — and whenever a cell's size in pixels is unknown, or inside tmux.
 
 `MNEMORPH_TUI_IMAGES` overrides it: `auto` (the default), `kitty`, `iterm`, `sixel`, `blocks`, or
-`off` — glyphs, nothing asked of the terminal. `mnemorph-tui --probe` prints what was found,
+`off` — glyphs, nothing asked of the terminal. `mnemorph --probe` prints what was found,
 the replies as they came, and the choice.
 
 The portrait's box is 32 columns, and as many rows as make it square — or, when its columns hold
@@ -318,7 +372,7 @@ draws glyphs, and `--probe` names its version (`VTE_VERSION`) and what would giv
 
 To see the pictures in VS Code's terminal, turn on `terminal.integrated.enableImages` in the
 settings and reload the window: xterm.js then lists Sixel in DA1, and Mnemorph draws iTerm2's
-inline images. `mnemorph-tui --probe` says `drawing iterm` when it took.
+inline images. `mnemorph --probe` says `drawing iterm` when it took.
 
 The sidebar takes 36 columns on the right from a 100-column terminal up, and folds away below it.
 It shows only what the run or the world gives. The observer sends the chain of bodies each
@@ -369,7 +423,7 @@ layout caches once, keep a cold-start margin (under 250 ms).
 The UI is built in the Elm architecture, on a kit that rebuilds the good parts of Charm's
 ecosystem:
 
-| Charm | `mnemorph-tui` | What it gives |
+| Charm | `mnemorph` | What it gives |
 |---|---|---|
 | Bubble Tea | `app` | one model, a message enum, a pure `update` returning commands the runtime runs off the UI thread, a `view` |
 | Lip Gloss | `kit::style`, `kit::text` | a chainable box style — padding, borders with titles set in, width, alignment, margins — blocks joined across and down, all measured in terminal cells |
@@ -621,9 +675,9 @@ flowchart LR
   (Python's `start_new_session`, Go's `Setsid`, a pty) fails there with `EPERM`, and coreutils
   `timeout` signals the whole command when it fires. Seatbelt has no such rule on macOS. The shared
   work queue is rebuilt from what it held and what its witness gained since — the witness, under the
-  human's state directory, keeps every line the harness and the human's `mnemorph q` wrote — so
+  human's state directory, keeps every line the harness and the human's `mnemorphd q` wrote — so
   nothing the command did to the file counts, a link in its place included, and the human's
-  concurrent moves are kept. A body's own `mnemorph q` refuses (every command carries
+  concurrent moves are kept. A body's own `mnemorphd q` refuses (every command carries
   `MNEMORPH_BODY`, a courtesy; the tripwire is the border). `tmp/`, `intel/` and `report/` (where a check writes what it leaves) stay writable; a
   repository the command itself creates is its own. The snapshot keeps up to 16 MiB of content; a
   change to a protected file beyond that is reported, not undone.
@@ -931,7 +985,7 @@ flowchart LR
   unless `decide.bench = false`; when the classifier fails, the fallback asks `decide.llm` through
   the run's own provider. What leaves for the decider is the command and the last 12 000
   bytes of its output; test output can print anything, so a provider outside the machine sees
-  what the tests print. It is honoured once a binary builds runs from the configuration (the CLI,
+  what the tests print. It is honoured once a binary builds runs from the configuration (`mnemorph`,
   M6). **`model.route` is Metis** (`decide.route = true`, off by default, the human's files
   only): `route(config, decisions, caller, work, stop, meter)` returns the model a body rides
   and why, moving it within its office's band on a sure answer (*Metis routes within a band*,

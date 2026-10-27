@@ -82,7 +82,7 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
   names (and an npm scope) are settled here; then the GitHub repository is created
   (`gh repo create`, your call: public or private);
 - whether Mnemorph has distributions (isekai's agent-one lineage: one engine, a lexicon file plus
-  defaults) — it shapes the CLI's wording and the card text;
+  defaults) — it shapes the terminal app's wording and the card text;
 - one diagram checked in a GitHub preview: if GitHub ignores the hand-drawn look, the look is set
   in the docs site's config instead and the pages keep plain Mermaid;
 - canvases reviewed like code: a `.tldraw` file can carry document scripts that run when opened.
@@ -201,9 +201,10 @@ Esc stops a running command within a second.
 
 - `mnemorph-server`: JSON-RPC over stdio, events with `seq`, reconnect, gate request; `mnemorph
   status` (version and commit, key origins, the sandbox in force).
-- `@mnemorph/protocol` generated, `@mnemorph/sdk`, `@mnemorph/cli` with Ink: streaming text, tool
-  call cards, the gate prompt, slash commands, status line with spend / left / cache / held,
-  themes; Enter queues while a turn runs, `/send`.
+- `@mnemorph/protocol` generated, `@mnemorph/sdk`; the terminal client is `mnemorph`, in Rust with
+  Ratatui, the session in its own process: streaming text, tool call cards, the gate prompt,
+  status line with spend / left / cache / held, themes; Enter queues while a turn runs;
+  `mnemorph run` for scripts.
 - The UX bar is Claude Code and OpenCode: input history, multi-line editing, paste, selection and
   copy, resize, interrupt with Esc, no flicker.
 
@@ -224,7 +225,7 @@ build Mnemorph in solo mode.
   as a bench read is against its run, so routing is never free of the budget it routes.
 - The send and wake lanes per body (a report wakes its own parent), the shared work queue —
   revisioned snapshots with a witness out of reach, the rank law, relay-hold, the `queue` tool — and
-  its door in the terminal, `mnemorph q`.
+  its door in the terminal, `mnemorphd q`.
 - The ontology, following [its page](09-ontology.md), rungs lowest first:
   1. the graph derived from the docs' Territory, Domain, chain and Minds fields, and inference to
      its fixed point, rebuilt on the docs' fingerprint;
@@ -268,7 +269,7 @@ point at it, and only a route's proof grounds a note into shared memory. Rungs, 
    writes nothing; a human's correction lands grounded; confidence gained on repeated passes.
 5. **Consolidation and forgetting.** The desk's distillation, dissent exempt; `dormant`,
    `abstract`, and `tombstone` on machine-local tiers only.
-6. **Pathologies.** `mnemorph memory status`: the replay loop, lock-in and the unproven write
+6. **Pathologies.** `mnemorphd memory status`: the replay loop, lock-in and the unproven write
    (the fold checks every event's `by` and proof), each with its act.
 7. **Session start, toolbox, drain.** Session start injects the law and the recent log through
    the harness itself; the toolbox's two levels with priced manifests; the compaction drain, whose

@@ -1,4 +1,4 @@
-//! The human's door to the Kijin's incidents (`mnemorph incident …`): list the open ones, mark a
+//! The human's door to the Kijin's incidents (`mnemorphd incident …`): list the open ones, mark a
 //! `reconcile` (or a wrong observed act) as one, settle a `reconcile` as none, and record an
 //! incident's lesson. Every incident and receipt lives beside the post's witness, outside the
 //! world ([`mnemorph_config::Incident`]); a body never runs any of this.

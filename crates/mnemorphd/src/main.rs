@@ -1,5 +1,5 @@
-//! `mnemorphd` — the Mnemorph core. It speaks the client protocol on stdio; the CLI and the board
-//! are its clients, and decide nothing.
+//! `mnemorphd` — the Mnemorph core. It speaks the client protocol on stdio; the SDK and the board
+//! are its clients, and decide nothing. It also holds the world's admin commands.
 
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -24,8 +24,9 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
 
-Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout. The
-`mnemorph` CLI starts it; run it by hand only to test a client.
+Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
+SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
+commands below are the world's, for the human.
 
 `onto owner` names each path's owner, the rule that gave it and the claim that matched, read
 from the creature docs; it needs no key and opens no session. A path is relative to the
@@ -609,7 +610,7 @@ fn memory(args: &[String]) -> ExitCode {
                 mnemorph_server::world::memory::retired(&world, name).unwrap_or_default()
             {
                 seen.push(format!(
-                    "retired, kept dormant: {id} — {text} (undo: mnemorph memory wake {id})"
+                    "retired, kept dormant: {id} — {text} (undo: mnemorphd memory wake {id})"
                 ));
             }
             // What waits for a route, newest first: the human may vouch for any of it. JSON
@@ -620,7 +621,7 @@ fn memory(args: &[String]) -> ExitCode {
             let open = proposed_of(&world, name);
             for (id, text) in open.iter().take(PROPOSED_SHOWN) {
                 seen.push(format!(
-                    "proposed: {id} — {text} (vouch: mnemorph memory confirm {id})"
+                    "proposed: {id} — {text} (vouch: mnemorphd memory confirm {id})"
                 ));
             }
             if open.len() > PROPOSED_SHOWN {
@@ -737,7 +738,7 @@ fn confirm(world: &Path, id: &str) -> ExitCode {
         }
     }
     refused(&format!(
-        "no creature holds `{id}` as a proposed claim: `mnemorph memory status` lists them"
+        "no creature holds `{id}` as a proposed claim: `mnemorphd memory status` lists them"
     ))
 }
 
