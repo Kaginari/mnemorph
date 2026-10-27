@@ -52,7 +52,7 @@ Three parts share the work:
   need" — and hands over only those specs.
 
 So an agent's context holds the few tools its task needs, not a hundred definitions it will never
-use.
+use. All three parts come with M13 ([roadmap](roadmap.md)).
 
 ## Technical detail
 

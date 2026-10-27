@@ -66,7 +66,7 @@ Two races stand beside the chain, both answering to Rimuru:
 
 - **Kijin** are the hands that reach outside: pushing branches, opening pull requests, watching
   CI, publishing releases, deploying. Nobody else can. Every outside act still asks you first,
-  unless you have signed a standing permission for it.
+  unless you have signed a standing permission for it (honoured from M11).
 - **Dark Elves** are the adversaries. They attack the code that the others wrote: security
   reviews, known vulnerabilities in dependencies, leaked secrets, unsafe patterns. They cannot
   fix anything themselves. A finding only counts if it comes with proof: a failing test or a
