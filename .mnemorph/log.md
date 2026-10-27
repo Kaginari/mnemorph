@@ -5272,15 +5272,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorph_tools::Fingerprint` (module `fingerprint`): the act, HEAD, the diff (index as
   listed, tracked bytes and mode bit, untracked-not-ignored; a world with no repository: every
   file its ignore files leave in) and the target (branch, every ref, `remote.*`/`branch.*`/
-  `push.*`/`url.*` config), read through a deaf git and hashed by the harness one component at a
+  `push.*`/`url.*` config, each remote's resolved push URLs, `GH_REPO`/`GH_HOST`), read through a deaf git and hashed by the harness one component at a
   time, no symlink followed, no blocking open. `Ask.fingerprint`; the bash tool binds every
   approved command and recomputes right before `spawn`: a mismatch runs nothing and asks again
   ("the world changed since approval", what moved), three re-asks at most. The short form on the
   TUI card (escaped), the terminal card, the CLI card and `gate/ask`'s `plan`; the result keeps
   the plan the act ran against and every stale one. Docs 02, 04, 05 (Sandbox).
 - **Tests:** tools `fingerprint.rs` — diff A approved, diff B at the spawn: re-asked, never pushed;
-  HEAD moved and target changed re-asked; an unchanged world runs once; a churning world never
-  runs; a second approval binds anew. With the recheck disabled 5 of the 8 fail (the other three
+  HEAD moved, target changed and a push rerouted by `set-url`, `pushurl` or `pushInsteadOf`
+  (each a Write in the world) re-asked; an unchanged world runs once; a churning world never
+  runs; a second approval binds anew. With the recheck disabled 6 of the 9 fail (the other three
   check the fingerprint alone or the unchanged world). TUI: the plan on the hostile card, escaped.
 - **Learned:** a world inside a larger repository sees the empty files the harness makes for an
   approved outside path; the recheck reads them as the absence the human was shown.

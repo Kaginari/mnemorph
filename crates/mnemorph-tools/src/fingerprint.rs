@@ -46,7 +46,8 @@ pub struct Fingerprint {
     /// hashes every file its ignore files leave in.
     pub diff: String,
     /// SHA-256 over where an outward act lands: the branch HEAD names, every ref and the commit
-    /// it names, and the remote, branch, push and url configuration (every scope git reads).
+    /// it names, the remote, branch, push and url configuration (every scope git reads), each
+    /// remote's resolved push URLs, and `GH_REPO` and `GH_HOST`.
     pub target: String,
 }
 
@@ -339,8 +340,35 @@ fn target(top: &Path) -> String {
         }
         None => h.update(b"unreadable"),
     }
+    // Each remote's push URLs as git resolves them, `insteadOf` and `pushInsteadOf` applied: a
+    // reroute is a different target however it was written.
+    h.update(b"\0push urls\0");
+    if let Some(remotes) = git(top, &["remote"]) {
+        for remote in String::from_utf8_lossy(&remotes).lines() {
+            h.update(remote.as_bytes());
+            h.update(b"\n");
+            h.update(
+                git(top, &["remote", "get-url", "--push", "--all", remote])
+                    .as_deref()
+                    .unwrap_or(b"unresolved"),
+            );
+            h.update([0]);
+        }
+    }
+    // Where `gh` acts when the command names no `-R`: its repository and host from the
+    // environment the command gets (its default remote is in the configuration above).
+    h.update(b"gh\0");
+    for (name, value) in scrubbed_env() {
+        if GH_TARGET.contains(&name.as_str()) {
+            h.update(format!("{name}={value}").as_bytes());
+            h.update([0]);
+        }
+    }
     hex(&h.finalize())
 }
+
+/// The environment that tells `gh` which repository and host to act on.
+const GH_TARGET: &[&str] = &["GH_REPO", "GH_HOST"];
 
 #[cfg(test)]
 mod tests {

@@ -505,8 +505,12 @@ flowchart LR
     (`mnemorph_tools::Fingerprint`) of the command, the commit HEAD names (**head**), the
     working tree (**diff** — the index as listed, every tracked file's bytes and mode bit, and
     every untracked file git does not ignore), and where the act lands (**target** — the branch
-    HEAD names, every ref and its commit, and the `remote.*`, `branch.*`, `push.*` and `url.*`
-    configuration of every scope git reads). Its short form, `plan 3f9a1c2e4b5d · head 1a2b3c4d
+    HEAD names, every ref and its commit, the `remote.*`, `branch.*`, `push.*` and `url.*`
+    configuration of every scope git reads, each remote's push URLs as git resolves them —
+    `insteadOf` and `pushInsteadOf` applied — and `GH_REPO` and `GH_HOST`, where `gh` acts when
+    the command names no `-R`). A write inside the world needs no approval, so `git remote
+    set-url`, a `pushurl` or an `insteadOf` can reroute an approved push without touching HEAD,
+    the diff or the command: the target is what catches it. Its short form, `plan 3f9a1c2e4b5d · head 1a2b3c4d
     · diff 5d6e7f8a · target 9a8b7c6d`, is on the approval card and in `gate/ask`. Every
     command the gate approves is bound: outward and destructive acts, and a guard rule the human
     turned into a question. A write inside the world asks no one, so there is no approval to

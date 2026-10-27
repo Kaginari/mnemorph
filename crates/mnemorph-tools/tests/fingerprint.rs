@@ -272,6 +272,52 @@ fn a_changed_target_is_asked_again() {
     );
 }
 
+/// A write in the world can reroute an approved push without touching HEAD, the diff or the
+/// command: each way is a changed target.
+#[test]
+fn a_rerouted_push_is_asked_again() {
+    let reroutes: [&[&str]; 3] = [
+        &["remote", "set-url", "origin", "ELSEWHERE"],
+        &["config", "remote.origin.pushurl", "ELSEWHERE"],
+        &["config", "url.ELSEWHERE.pushInsteadOf", "ORIGIN"],
+    ];
+    for (i, reroute) in reroutes.iter().enumerate() {
+        let w = World::new(&format!("reroute{i}"));
+        let world = w.world();
+        let origin = w.root.join("origin.git").to_str().unwrap().to_owned();
+        let elsewhere = w.root.join("elsewhere.git").to_str().unwrap().to_owned();
+        let args: Vec<String> = reroute
+            .iter()
+            .map(|a| {
+                a.replace("ELSEWHERE", &elsewhere)
+                    .replace("ORIGIN", &origin)
+            })
+            .collect();
+        let gate = Late::new(vec![
+            (
+                Some(Box::new(move || {
+                    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+                    git(&world, &args);
+                })),
+                Answer::Approve,
+            ),
+            (None, Answer::Deny("no".into())),
+        ]);
+        let o = push(&mut w.cx(gate.clone()));
+        assert!(o.is_error, "{reroute:?}: {o:?}");
+        assert!(
+            !w.pushed_to("origin.git") && !w.pushed_to("elsewhere.git"),
+            "{reroute:?}"
+        );
+        let asked = gate.asked();
+        assert_eq!(asked.len(), 2, "{reroute:?}");
+        assert!(
+            asked[1].why[0].contains("the target changed"),
+            "{reroute:?}"
+        );
+    }
+}
+
 #[test]
 fn an_unchanged_world_runs_once() {
     let w = World::new("same");
