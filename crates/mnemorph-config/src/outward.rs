@@ -66,7 +66,7 @@ pub enum Act {
         head: String,
         /// The title: one line of at most [`TITLE_CHARS`] characters.
         title: String,
-        /// The description, given to `gh` in a file the harness writes just before the spawn.
+        /// The description, given to `gh` on its standard input from the approved bytes.
         body: String,
     },
     /// Any other command: the harness derives no undo for it, so an outward one is destructive.
@@ -197,14 +197,6 @@ pub const BODY_BYTES: usize = 65_536;
 
 /// The longest pull request title, in characters.
 pub const TITLE_CHARS: usize = 256;
-
-/// Where the harness writes a pull request's description for `gh`, relative to the world: in the
-/// world's scratch folder, named by the description's SHA-256, so the rendered command — what the
-/// approval's fingerprint binds — names exactly the text the human read.
-#[must_use]
-pub fn body_file(body: &str) -> String {
-    format!(".mnemorph/tmp/pr-body-{}.md", crate::receipt::sha256(body))
-}
 
 /// Characters that make text read otherwise than it is: bidirectional overrides and isolates,
 /// zero-width characters and marks, and the Unicode line and paragraph separators.
@@ -373,8 +365,10 @@ fn render(act: &Act) -> Result<Option<Vec<String>>, Malformed> {
                 head,
                 "--title",
                 title,
+                // The description is read from standard input, written by the harness from the
+                // approved bytes: no file in the world another command could swap meanwhile.
                 "--body-file",
-                &body_file(body),
+                "-",
             ])
         }
         Act::Command(_) => return Ok(None),
@@ -409,13 +403,12 @@ pub fn plan(act: &Act, place: &Place) -> Result<Planned, Malformed> {
         Verdict::Refuse { reason, .. } => return Err(Malformed::Refused(reason)),
     };
     if let Act::OpenPullRequest { title, body, .. } = act {
-        // The command names the description by its file: the card shows the text itself.
+        // The command reads the description on its input: the card shows the text itself.
         why.push(format!("title: {title}"));
         why.push(format!(
-            "description ({} bytes, sha256 {}, written to {} just before the spawn):\n{body}",
+            "description ({} bytes, sha256 {}, given to gh on its standard input):\n{body}",
             body.len(),
             crate::receipt::sha256(body),
-            body_file(body)
         ));
     }
     let class = match (argv.is_some(), read) {
@@ -523,7 +516,7 @@ pub(crate) fn face_of(act: &Act) -> Option<Vec<String>> {
     }
 }
 
-/// A pull request's rendered argv with its description in place of the file that carries it: an
+/// A pull request's rendered argv with its description in place of the `-` that reads it: an
 /// envelope reads the text that leaves, bounded and screened like a comment's.
 fn faced(act: &Act, mut argv: Vec<String>) -> Vec<String> {
     if let (Act::OpenPullRequest { body, .. }, Some(last)) = (act, argv.last_mut()) {
@@ -558,6 +551,16 @@ impl Planned {
     #[must_use]
     pub fn command(&self) -> &str {
         &self.command
+    }
+
+    /// What the command reads on its standard input, from the act's own approved fields: a pull
+    /// request's description; nothing for any other act, or an undo.
+    #[must_use]
+    pub fn stdin(&self) -> Option<&[u8]> {
+        match &self.act {
+            Act::OpenPullRequest { body, .. } if !self.undo => Some(body.as_bytes()),
+            _ => None,
+        }
     }
 
     /// Whether the Kijin named `body` may do this act: every kind of outward act in it must be
@@ -690,7 +693,7 @@ impl Planned {
 
     /// The words an envelope pattern is read against: the act as a human would write it — for a
     /// branch `git push <remote> <name>`, for the others the rendered argv, the repository in
-    /// it, and a pull request's description in place of its file. Never the shell's reading of a
+    /// it, and a pull request's description in place of the `-` that reads it. Never the shell's reading of a
     /// string.
     fn face(&self) -> Vec<&str> {
         match &self.act {

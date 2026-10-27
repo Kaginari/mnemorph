@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use mnemorph_config::{
     Act, Hands, Incident, Paired, Planned, PostJournal, Probe, Refusal, Report, Request, Row,
-    Runner, Seen, State, body_file,
+    Runner, Seen, State,
 };
 use mnemorph_ledger::Journal;
 use mnemorph_races::{Post, Race, ToolClass};
@@ -108,6 +108,8 @@ struct HubState {
     push_lost: bool,
     /// `gh pr create` prints another pull request's URL than the one it opened.
     misprint: bool,
+    /// What the last spawn was given on its input.
+    stdin: Option<Vec<u8>>,
 }
 
 /// A stub of GitHub's `me/proj`: `gh api` reads and `git ls-remote` (the probe), `git push`,
@@ -280,7 +282,9 @@ impl Hands for Hub {
         cx: &Context,
         plan: Fingerprint,
         before: BeforeSpawn<'_>,
+        stdin: Option<&[u8]>,
     ) -> Spawned {
+        self.state.lock().unwrap().stdin = stdin.map(<[u8]>::to_vec);
         // As the bash tool's spawn does: the plan rechecked, then the step before the spawn.
         let now = Fingerprint::of(planned.command(), cx.world()).unwrap();
         if now != plan {
@@ -327,8 +331,10 @@ impl Hands for Hub {
             }
             (false, Act::OpenPullRequest { head, .. }) => {
                 // `gh` reads the description from the file the command names, in the world.
-                let file = words.last().unwrap();
-                let body = fs::read_to_string(cx.world().join(file)).unwrap();
+                // `gh` reads the description on its input: `--body-file -`.
+                assert_eq!(words.last(), Some(&"-"));
+                let body =
+                    String::from_utf8(stdin.expect("the description on stdin").to_vec()).unwrap();
                 let mut s = self.state.lock().unwrap();
                 if s.pulls.iter().any(|p| p.open && &p.head == head) {
                     (1, "a pull request for branch already exists".to_owned())
@@ -552,10 +558,7 @@ fn a_pull_request_opens_observed_and_its_undo_closes_it_never_deletes_it() {
     let card = f.human.ask(1);
     assert_eq!(
         card.act,
-        format!(
-            "gh pr create --repo me/proj --base main --head feat/x --title 'Add the undo' --body-file {}",
-            body_file(BODY)
-        )
+        "gh pr create --repo me/proj --base main --head feat/x --title 'Add the undo' --body-file -"
     );
     assert!(card.fingerprint.is_some());
     for line in [
@@ -573,10 +576,18 @@ fn a_pull_request_opens_observed_and_its_undo_closes_it_never_deletes_it() {
             .iter()
             .any(|w| w.starts_with("undo: close this pull request"))
     );
-    // `gh` read the description from its file; the file is gone once the command ran.
+    // `gh` read the description on its input: the approved bytes, and no file in the world.
     let opened = f.hub.pull(7);
     assert_eq!((opened.title.as_str(), opened.body.as_str()), (TITLE, BODY));
-    assert!(!f.world.join(body_file(BODY)).exists());
+    assert_eq!(
+        f.hub.state.lock().unwrap().stdin.as_deref(),
+        Some(BODY.as_bytes())
+    );
+    let scratch = f.world.join(".mnemorph/tmp");
+    assert!(
+        !scratch.exists() || fs::read_dir(&scratch).unwrap().next().is_none(),
+        "a file was written in the world's scratch folder"
+    );
     let observed = f.rows().into_iter().last().unwrap();
     assert!(observed.expect.unwrap().contains("pull request #7"));
     // The undo closes #7, by its number, and sees it closed.
@@ -795,15 +806,33 @@ fn a_pull_request_whose_branches_are_not_there_is_refused_before_the_gate() {
 }
 
 #[test]
-fn a_planted_description_file_is_replaced_by_the_approved_text() {
+fn a_description_file_in_the_world_is_never_what_gh_reads() {
     let f = Fixture::new();
     f.push();
-    let file = f.world.join(body_file(BODY));
-    fs::create_dir_all(file.parent().unwrap()).unwrap();
-    fs::write(&file, "Planted text.").unwrap();
+    // A file another command left where the old rendering named one: never read, never touched.
+    let planted = f.world.join(".mnemorph/tmp/pr-body.md");
+    fs::create_dir_all(planted.parent().unwrap()).unwrap();
+    fs::write(&planted, "Planted text.").unwrap();
     let report = f.act(&pull_request()).unwrap();
     assert_eq!(report.state, State::Observed);
     assert_eq!(f.hub.pull(7).body, BODY);
+    assert_eq!(fs::read_to_string(&planted).unwrap(), "Planted text.");
+}
+
+#[test]
+fn a_branch_is_held_to_a_pull_request_the_human_settled_as_any_standing_one() {
+    // The pull request edited, its undo refused (reconcile), then settled as fine: it still stands
+    // open on the branch, so the branch is not deleted under it.
+    let f = Fixture::new();
+    let push = f.push();
+    let act = f.act(&pull_request()).unwrap().receipt;
+    f.hub
+        .with_pull(7, |p| p.body = "Edited by a reviewer.".into());
+    refused(&f.undo(&act), "it was edited");
+    f.journal().settle(&act, Some("the edit is fine")).unwrap();
+    assert_eq!(f.latest(&act), State::Settled);
+    refused(&f.undo(&push), "undo it first");
+    assert_eq!(f.hub.branch("feat/x").as_deref(), Some(f.head.as_str()));
 }
 
 #[test]
@@ -820,10 +849,7 @@ fn a_push_and_its_pull_request_ask_once_and_are_receipted_each_on_its_own() {
         lines,
         [
             "git push origin HEAD:refs/heads/feat/x --force-with-lease=refs/heads/feat/x:",
-            &format!(
-                "gh pr create --repo me/proj --base main --head feat/x --title 'Add the undo' --body-file {}",
-                body_file(BODY)
-            )
+            "gh pr create --repo me/proj --base main --head feat/x --title 'Add the undo' --body-file -"
         ]
     );
     for line in [

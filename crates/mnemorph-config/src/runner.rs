@@ -125,13 +125,15 @@ impl std::error::Error for Refusal {}
 /// What spawns an approved act. The harness's is [`Sandboxed`]; a test may stand in its own.
 pub trait Hands {
     /// Spawn `planned`'s command, approved against `plan`, running `before` between the plan's
-    /// recheck and the spawn.
+    /// recheck and the spawn, and giving it `stdin` — the approved bytes the harness holds
+    /// ([`Planned::stdin`]) — on its standard input.
     fn spawn(
         &self,
         planned: &Planned,
         cx: &Context,
         plan: Fingerprint,
         before: BeforeSpawn<'_>,
+        stdin: Option<&[u8]>,
     ) -> Spawned;
 }
 
@@ -147,6 +149,7 @@ impl Hands for Sandboxed {
         cx: &Context,
         plan: Fingerprint,
         before: BeforeSpawn<'_>,
+        stdin: Option<&[u8]>,
     ) -> Spawned {
         spawn_approved(
             planned.command(),
@@ -155,6 +158,7 @@ impl Hands for Sandboxed {
             planned.class(),
             plan,
             before,
+            stdin,
         )
     }
 }
@@ -1104,7 +1108,7 @@ impl<'a> Runner<'a> {
     }
 
     /// The latest act of this post that pushed `head` to a URL naming `repo` on `host`, still
-    /// standing (`observed`, or a `reconcile` the human settled): its receipt and the commit.
+    /// standing ([`may_stand`]): its receipt and the commit — a head it may have left is held to it.
     fn pushed(
         &self,
         head: &str,
@@ -1120,7 +1124,7 @@ impl<'a> Runner<'a> {
             };
             let holds = standing
                 .iter()
-                .any(|r| r.act == i.act && matches!(r.state, State::Observed | State::Settled));
+                .any(|r| r.act == i.act && may_stand(r.state));
             let there = urls
                 .iter()
                 .filter_map(|u| forge_repo(u, host))
@@ -1152,11 +1156,6 @@ impl<'a> Runner<'a> {
         let kept_pin = Pinned::of(&pin)
             .ok_or_else(|| Refusal::Refused("the pin is not of this act".into()))?;
         let short = plan.short();
-        let world = self.cx.world();
-        let description = match planned.act() {
-            Act::OpenPullRequest { body, .. } => Some(body.as_str()),
-            _ => None,
-        };
         let mut committed: Option<Receipt> = None;
         let mut intent_written = |id: &str| {
             self.keep(&Intent {
@@ -1172,12 +1171,6 @@ impl<'a> Runner<'a> {
             })
         };
         let mut before = || {
-            // A pull request's description is written where its command names it, after the
-            // recheck: the file the human's approval never saw cannot be there before.
-            if let Some(body) = description {
-                forge::write_body(world, body)
-                    .map_err(|e| format!("the description's file could not be written: {e}"))?;
-            }
             let receipt = self
                 .journal
                 .commit_then(planned, pin.clone(), Some(&short), &mut intent_written)
@@ -1185,10 +1178,10 @@ impl<'a> Runner<'a> {
             committed = Some(receipt);
             Ok(())
         };
-        let spawned = self.hands.spawn(planned, self.cx, plan, &mut before);
-        if let Some(body) = description {
-            forge::remove_body(world, body);
-        }
+        // A pull request's description goes to `gh` on its input, from the approved bytes.
+        let spawned = self
+            .hands
+            .spawn(planned, self.cx, plan, &mut before, planned.stdin());
         let out = match spawned {
             Spawned::Ran(out) => out,
             Spawned::Changed { approved, now } => {
@@ -1406,6 +1399,13 @@ impl<'a> Runner<'a> {
         reask: &mut Reask,
     ) -> Result<Report, Refusal> {
         let world = self.cx.world();
+        // The plan the spawn rechecks is read first, then the world held to the approval: a change
+        // after the first read is seen by the second, and one after the second by the recheck.
+        let fresh = Fingerprint::of(planned.command(), world).map_err(|e| {
+            Refusal::Refused(format!(
+                "the plan the pull request was approved against could not be read again: {e}"
+            ))
+        })?;
         let now = self.beside_journal(planned)?;
         // The refs the push moved are the target's; every other part must be as approved.
         let masked = Fingerprint {
@@ -1425,11 +1425,6 @@ impl<'a> Runner<'a> {
             );
             return self.run_held(planned, request, reask);
         }
-        let fresh = Fingerprint::of(planned.command(), world).map_err(|e| {
-            Refusal::Refused(format!(
-                "the plan the pull request was approved against could not be read again: {e}"
-            ))
-        })?;
         // The pin read again, the push now this post's: the head must be at the pushed commit.
         let card = match &ready.pin {
             Pin::Forge { host } => self.pull_pin(planned.act(), host, None)?,
@@ -1819,7 +1814,7 @@ impl<'a> Runner<'a> {
             };
             let holds = standing
                 .iter()
-                .any(|r| r.act == pr.act && matches!(r.state, State::Observed | State::Reconcile));
+                .any(|r| r.act == pr.act && may_stand(r.state));
             if head != name || !holds {
                 continue;
             }
@@ -1964,7 +1959,10 @@ impl<'a> Runner<'a> {
             committed = Some(id);
             Ok(())
         };
-        let out = match self.hands.spawn(undo, self.cx, plan, &mut before) {
+        let out = match self
+            .hands
+            .spawn(undo, self.cx, plan, &mut before, undo.stdin())
+        {
             Spawned::Ran(out) => out,
             Spawned::Changed { approved, now } => {
                 reask.changed = approved.changes(&now);
@@ -2128,6 +2126,14 @@ impl<'a> Runner<'a> {
             notes,
         })
     }
+}
+
+/// Whether an act at `state` may still stand outside: seen landed (`observed`), uncertain
+/// (`reconcile`), or settled by the human as fine (`settled`). One set for every question of what
+/// this post's earlier acts left — the head a pull request opens from, the pull request a branch
+/// still carries — so no act counts as standing for one and gone for the other.
+fn may_stand(state: State) -> bool {
+    matches!(state, State::Observed | State::Reconcile | State::Settled)
 }
 
 /// What every undo's report says of the incident it opened.

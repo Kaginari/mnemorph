@@ -203,6 +203,7 @@ impl Hands for Cut {
         cx: &Context,
         _: Fingerprint,
         before: BeforeSpawn<'_>,
+        _: Option<&[u8]>,
     ) -> Spawned {
         before().unwrap();
         if self.act {
@@ -579,6 +580,7 @@ impl Hands for Forge {
         _: &Context,
         _: Fingerprint,
         before: BeforeSpawn<'_>,
+        _: Option<&[u8]>,
     ) -> Spawned {
         if let Err(e) = before() {
             return Spawned::Failed(Outcome::error(e));
@@ -899,7 +901,14 @@ fn an_observed_act_whose_effect_is_gone_is_not_replayed_as_done() {
 struct Broken;
 
 impl Hands for Broken {
-    fn spawn(&self, _: &Planned, _: &Context, _: Fingerprint, before: BeforeSpawn<'_>) -> Spawned {
+    fn spawn(
+        &self,
+        _: &Planned,
+        _: &Context,
+        _: Fingerprint,
+        before: BeforeSpawn<'_>,
+        _: Option<&[u8]>,
+    ) -> Spawned {
         before().unwrap();
         Spawned::Failed(Outcome::error("could not start bash: no such file"))
     }

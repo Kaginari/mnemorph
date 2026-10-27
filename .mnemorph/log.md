@@ -5730,3 +5730,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** an act's own journal rows are part of the world the next act's fingerprint reads:
   two acts under one approval need a yardstick blind to the first act's writes, or the second
   always asks again.
+
+---
+
+### [2026-10-27T21:55:11+01:00] rimuru — #248, Fable's review: the description on stdin, the pair's read order, one standing set
+- **Done:** a pull request renders `--body-file -`; `spawn_approved` and `Hands::spawn` take
+  `stdin`, written by the harness from the approved bytes (`Planned::stdin`) — no description
+  file in the world for a concurrent body to swap (`.mnemorph/tmp` is the tripwire's blind spot).
+  No other act read a harness-written file (a comment's body is in argv). The pair reads the plan
+  the spawn rechecks first, then the journal-blind yardstick, so no change falls between them.
+  `may_stand` (observed, reconcile, settled) is the one set for a head this post pushed and a pull
+  request still on a branch. Roadmap: M9's exit met against a stub forge; a live run remains.
+  Docs 02, 05.
+- **Tests:** tools `shell`: an approved spawn reads the given bytes, and an empty input without
+  them; config `pull_request`: the stub's stdin equals the approved description and no file is
+  written, a file left in the world is never read, a settled pull request still holds its branch.
+  The stdin write, the runner's bytes and the standing set disabled one by one: each fails its
+  test. The pair's read order has no seam a test can reach (no outside call between the reads).
+- **Learned:** a file the harness writes in the world is the world's: any text an act sends goes
+  by the process's own input, from memory.

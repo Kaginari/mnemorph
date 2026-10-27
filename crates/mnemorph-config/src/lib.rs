@@ -48,7 +48,7 @@ use toml::{Table, Value};
 pub use closure::{Cause, Incident, Lesson, RECEIPTS, incidents, suspended};
 pub use outward::{
     Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, TITLE_CHARS,
-    Uncovered, body_file, plan,
+    Uncovered, plan,
 };
 pub use receipt::{
     Observer, PROBE_TIMEOUT, Pin, PostJournal, Probe, Receipt, Row, SEEN_BYTES, Seen, State, Tally,

@@ -2,7 +2,7 @@
 
 use mnemorph_config::{
     Act, COVERED_TEXT, Done, Envelope, Lapse, Malformed, NO_UNDO, NoUndo, Planned, TITLE_CHARS,
-    Uncovered, body_file, plan,
+    Uncovered, plan,
 };
 use mnemorph_ledger::Day;
 use mnemorph_races::{Race, ToolClass};
@@ -334,20 +334,18 @@ fn pull(title: &str, body: &str) -> Act {
 }
 
 #[test]
-fn a_pull_request_renders_a_fixed_argv_its_description_in_a_file_and_its_undo_a_close() {
+fn a_pull_request_renders_a_fixed_argv_its_description_on_its_input_and_its_undo_a_close() {
     let body = "Adds the undo.\n\n- one\n- two";
     let p = planned(&pull("Add the undo", body));
     assert_eq!(p.class(), ToolClass::Outward, "{:?}", p.why());
     assert_eq!(
         p.command(),
-        format!(
-            "gh pr create --repo me/proj --base main --head feat/undo --title 'Add the undo' --body-file {}",
-            body_file(body)
-        )
+        "gh pr create --repo me/proj --base main --head feat/undo --title 'Add the undo' --body-file -"
     );
-    // The file is named by the description's hash: the command binds the text the human read.
-    assert_ne!(body_file(body), body_file("Adds the undo."));
-    assert!(body_file(body).starts_with(".mnemorph/tmp/pr-body-"));
+    // The description goes to `gh` on its input, from the act's own approved bytes; nothing else
+    // reads any, and an undo none.
+    assert_eq!(p.stdin(), Some(body.as_bytes()));
+    assert_eq!(planned(&comment("hi")).stdin(), None);
     // The card shows the title and the description itself, not only the file.
     assert!(
         p.why().iter().any(|w| w == "title: Add the undo"),

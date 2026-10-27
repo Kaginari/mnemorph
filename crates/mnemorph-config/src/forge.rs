@@ -1,21 +1,16 @@
 //! What the act runner reads of the forge, through the harness's probe: who `gh` acts as, a
-//! branch's tip, and the pull requests a typed act opened — and the file a pull request's
-//! description travels in.
+//! branch's tip, and the pull requests a typed act opened.
 //!
 //! A pull request is the act's only when every field the human approved reads back from the forge
 //! as approved: the head and base branches, the head in the act's repository, the author the login
 //! `gh` acts as, the title, and the description's SHA-256. Someone else's pull request with the
 //! same branches is never taken for it.
 
-use std::fs;
-use std::io::{self, Write as _};
-use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::outward::{body_file, sha_ok};
+use crate::outward::sha_ok;
 use crate::receipt::{excerpt, redact, sha256};
 use crate::{Act, PROBE_TIMEOUT, Probe};
 
@@ -349,51 +344,4 @@ pub(crate) fn still_open_and_ours(
         Some(why) => Err(why),
         None => Ok(()),
     }
-}
-
-/// Write `body` where the rendered command names it ([`body_file`]), in the world's scratch
-/// folder, just before the spawn: a fresh file, private, never through a link. Returns its path.
-///
-/// # Errors
-///
-/// The scratch folder is not a plain folder of the world (a link above all), or the file cannot
-/// be written.
-pub(crate) fn write_body(world: &Path, body: &str) -> io::Result<PathBuf> {
-    let mut dir = world.to_path_buf();
-    for part in [".mnemorph", "tmp"] {
-        dir.push(part);
-        match fs::symlink_metadata(&dir) {
-            Ok(m) if m.is_dir() => {}
-            Ok(_) => {
-                return Err(io::Error::other(format!(
-                    "{} is not a plain folder",
-                    dir.display()
-                )));
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                fs::DirBuilder::new().mode(0o700).create(&dir)?;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    let path = world.join(body_file(body));
-    // Whatever stands at the name goes (a link is removed, never followed); the file is made new.
-    match fs::remove_file(&path) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-        _ => {}
-    }
-    // `create_new` is O_CREAT | O_EXCL: it fails on a link at the name rather than follow it.
-    let mut f = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&path)?;
-    f.write_all(body.as_bytes())?;
-    f.sync_all()?;
-    Ok(path)
-}
-
-/// Remove the description's file once the command has run; a file already gone is fine.
-pub(crate) fn remove_body(world: &Path, body: &str) {
-    let _ = fs::remove_file(world.join(body_file(body)));
 }

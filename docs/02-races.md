@@ -498,19 +498,18 @@ act after it `other`.
   | `PushNewBranch { remote, name }` | `git push <remote> HEAD:refs/heads/<name> --force-with-lease=refs/heads/<name>:` — the branch must not exist yet | delete it, leased on the commit the act pushed: `git push <remote> --delete refs/heads/<name> --force-with-lease=refs/heads/<name>:<sha>` |
   | `AddLabel { repo, pr, label }` | `gh pr edit <pr> --repo <repo> --add-label <label>` | the same label removed from the same pull request |
   | `Comment { repo, pr, body }` | `gh pr comment <pr> --repo <repo> --body <body>` | the comment deleted, by the id its URL gave at act time |
-  | `OpenPullRequest { repo, base, head, title, body }` | `gh pr create --repo <repo> --base <base> --head <head> --title <title> --body-file .mnemorph/tmp/pr-body-<sha256>.md` | closed, never deleted — `gh pr close <n> --repo <repo>` — only while it is still open, unmerged and its own: by `gh`'s login, from its head into its base, with its title and description |
+  | `OpenPullRequest { repo, base, head, title, body }` | `gh pr create --repo <repo> --base <base> --head <head> --title <title> --body-file -`, the description on its standard input | closed, never deleted — `gh pr close <n> --repo <repo>` — only while it is still open, unmerged and its own: by `gh`'s login, from its head into its base, with its title and description |
 
   A label holds no `,` or `"` (`gh pr edit --add-label` splits on commas: one approved label adds
   one); a comment or a pull request's description is at most 64 KiB and holds no control
   character but line breaks and tabs, and no bidirectional, zero-width or Unicode line separator
   character; a title is one such line of at most 256 characters; and the approval card indents
   and marks each continuation line of an act, so a body's lines never pass for the card's. A
-  pull request's description travels in a file named by its SHA-256, so the command — what the
-  approval's fingerprint binds — names exactly the text the card shows (title and description
-  both, on lines of their own); the harness writes it fresh in the world's scratch folder after
-  the recheck, just before the spawn, never through a link, and removes it once the command has
-  run. An envelope reads the description in the file's place, bounded and screened like a
-  comment's. The head and base are plain branch names of the act's repository, never the same.
+  pull request's description reaches `gh` on its standard input, written by the harness from the
+  approved bytes it holds (`Planned::stdin`): no file in the world, where another command could
+  swap it between the approval and the read. The card shows the title and the description, on
+  lines of their own, with the description's size and SHA-256. An envelope reads the description
+  in the `-`'s place, bounded and screened like a comment's. The head and base are plain branch names of the act's repository, never the same.
   The repository is pinned in the act, never taken from `GH_REPO` or `-R`; a branch is a plain
   ref name (no `:`, `+`, `..`, space or glob, not under `refs/`), a remote a configured name. An
   undo is never a string the model writes, so it is never declared or verified: it is derived, and
