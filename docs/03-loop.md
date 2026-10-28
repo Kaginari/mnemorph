@@ -340,7 +340,9 @@ The world repairs itself in small, mechanical steps, each one written to the led
   entry; only the field's own line changes, and nothing is written through a link. A doc that
   cannot be read, two seats with one name, a loop in the chain are said and left to judgment.
   Without `--heal` it says what it would fix. It exits 0 when the roster is whole, 1 while anything
-  is left or a repair waits for `--heal`, 2 on an error or inside a body's command.
+  is left or a repair waits for `--heal`, 2 on an error or inside a body's command. With
+  `--verify` it walks the chained journals instead and anchors their heads in `log.md`
+  ([the chain](06-consumption.md#the-usage-row)).
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
 ### The end gate

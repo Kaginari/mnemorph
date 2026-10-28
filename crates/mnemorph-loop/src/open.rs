@@ -320,7 +320,9 @@ fn build(
     let instruments = world.join(".mnemorph/instruments");
     // The caps against what this world already spent. A cap that cannot be read opens no
     // session: spend it cannot see would be spend it cannot stop.
-    let usage: Journal<mnemorph_ledger::UsageRow> = Journal::new(instruments.join("usage.jsonl"));
+    // Chained: every row names the digest of the one before, so an edit of the spend is found.
+    let usage: Journal<mnemorph_ledger::UsageRow> =
+        Journal::chained(instruments.join("usage.jsonl"));
     let (caps, capped, unread, budget) = read_caps(config, &usage, &session_id)?;
     let mut tools = registry();
     tools.push(Box::new(crate::wear_tool::WearTool));

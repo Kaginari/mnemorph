@@ -149,7 +149,7 @@ mnemorph run "<ask>"              # one ask without the app
 
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
-`housekeep` and `relief` (`mnemorphd --help`).
+`housekeep` (`--verify` walks the chained journals) and `relief` (`mnemorphd --help`).
 
 **Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
 a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
@@ -470,14 +470,14 @@ fails when the two differ.
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
-| Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only, outside the world and out of every command's reach | no — machine-local |
+| Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)), outside the world and out of every command's reach | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
 | relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references seen, the ledger relations are learned from | yes |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
-| usage + value ledgers | `.mnemorph/instruments/*.jsonl` | no — machine-local |
+| usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its head anchored in `log.md` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
 | derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
 

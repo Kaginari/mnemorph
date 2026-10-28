@@ -11,7 +11,9 @@
 //! `0700` and the file `0600`. Every read and every write holds the file's lock, so a filing is
 //! checked against the records and written whole before another is read. A ledger is kept only
 //! once it validates, and every filing is validated again when the records are read, so a line
-//! written by anything else counts for nothing.
+//! written by anything else counts for nothing. Every row is chained by hash
+//! ([`mnemorph_ledger::chain`]), so an edit of the value ledger's history is found
+//! ([`crate::chains`]).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,6 +21,7 @@ use std::fs::File;
 use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
+use mnemorph_ledger::chain::Walk;
 use mnemorph_proving::World;
 use mnemorph_proving::coverage::{
     CoverageLedger, Landing, Ran, Refused, Routed, Sources, Surface, stamp, validate, validate_in,
@@ -545,34 +548,29 @@ pub struct Record {
     pub status: Status,
 }
 
-/// The records, opened and locked whole until dropped.
+/// The records, opened and locked whole until dropped, and the chain walked through them.
 struct Held {
     file: File,
     all: BTreeMap<String, Open>,
+    walk: Walk,
 }
 
 impl Held {
-    /// Appends `row` as one line, in one write, and syncs it: a torn line left by a crash is
-    /// closed first, so the row stands on a line of its own.
+    /// Appends `row` as one line, in one write, chained to the records' head, and syncs it: a
+    /// torn line left by a crash is closed first, so the row stands on a line of its own, and
+    /// the row records it.
     fn append(&mut self, row: &Row) -> Result<(), Refusal> {
-        let mut line = serde_json::to_vec(row).map_err(|e| Refusal::Unwritten(e.to_string()))?;
+        let line = serde_json::to_vec(row).map_err(|e| Refusal::Unwritten(e.to_string()))?;
         if line.len() >= MAX_ROW {
             return Err(Refusal::TooLarge(line.len()));
         }
-        line.push(b'\n');
         let io = |e: std::io::Error| Refusal::Unwritten(e.to_string());
-        let len = self.file.metadata().map_err(io)?.len();
-        if len > 0 {
-            let mut last = [0u8; 1];
-            self.file.seek(SeekFrom::End(-1)).map_err(io)?;
-            self.file.read_exact(&mut last).map_err(io)?;
-            if last[0] != b'\n' {
-                line.insert(0, b'\n');
-            }
-        }
+        let (bytes, walk) = self.walk.seal(&line).map_err(io)?;
         self.file.seek(SeekFrom::End(0)).map_err(io)?;
-        self.file.write_all(&line).map_err(io)?;
-        self.file.sync_data().map_err(io)
+        self.file.write_all(&bytes).map_err(io)?;
+        self.file.sync_data().map_err(io)?;
+        self.walk = walk;
+        Ok(())
     }
 }
 
@@ -799,9 +797,12 @@ impl Challenges {
         file.lock().map_err(io)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).map_err(io)?;
+        let mut walk = Walk::new();
+        walk.feed(&bytes);
         Ok(Held {
             file,
             all: fold(&bytes),
+            walk,
         })
     }
 }
@@ -836,7 +837,7 @@ fn record_of(open: Open) -> Record {
 fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
     let mut all: BTreeMap<String, Open> = BTreeMap::new();
     for (n, line) in (0u64..).zip(bytes.split(|&b| b == b'\n')) {
-        let Ok(row) = serde_json::from_slice::<Row>(line) else {
+        let Ok(row) = serde_json::from_slice::<Row>(&mnemorph_ledger::chain::body(line)) else {
             continue;
         };
         match row {
@@ -1556,6 +1557,45 @@ mod tests {
         for id in &ids {
             assert_eq!(c.status(id), Some(Status::Cleared), "{id}");
         }
+        // Every filing chained, one after another, under the lock.
+        let chain = mnemorph_ledger::chain::verify(&file).unwrap();
+        assert!(chain.holds() && chain.truncated.is_none(), "{chain}");
+        assert_eq!(
+            chain.rows,
+            std::fs::read_to_string(&file).unwrap().lines().count()
+        );
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// Records written before the chain read as before; the first chained row is the genesis,
+    /// and an edit of an earlier row is found.
+    #[test]
+    fn old_records_read_as_before_and_the_chain_starts_after_them() {
+        let w = temp("genesis");
+        let file = w.join("challenges.jsonl");
+        let l = landing(&["Cargo.lock"]);
+        let opened = Row::Opened {
+            landing: l.clone(),
+            opening: Some(opening()),
+        };
+        std::fs::write(&file, serde_json::to_string(&opened).unwrap() + "\n").unwrap();
+        let c = Challenges::at(&file);
+        assert!(c.status(&l.id).is_some_and(|s| s.open()));
+        assert_eq!(
+            c.file(full(&l, Speciality::Supply), &tree(&l), &ran()),
+            Ok(Status::Cleared)
+        );
+        let chain = mnemorph_ledger::chain::verify(&file).unwrap();
+        assert!(chain.holds(), "{chain}");
+        assert_eq!((chain.legacy, chain.rows), (1, 1));
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.lines().nth(1).unwrap().contains("\"genesis\":true"));
+        std::fs::write(&file, text.replacen("Cargo.lock", "Cargo.lockx", 1)).unwrap();
+        let chain = mnemorph_ledger::chain::verify(&file).unwrap();
+        assert_eq!(
+            chain.broken,
+            Some((2, mnemorph_ledger::chain::Break::Unlinked))
+        );
         let _ = std::fs::remove_dir_all(&w);
     }
 }

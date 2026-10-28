@@ -13,6 +13,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd onto check [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
+       mnemorphd housekeep --verify [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
@@ -72,6 +73,12 @@ upheld rate and the last ten — and the rise or fall it proposes, which only th
 `decide <landing> <fingerprint> upheld|false-positive --why <reason>` records the human's word on
 one finding for that score, after showing it and asking for `y` at the terminal. A body never
 runs it.
+
+`housekeep --verify` walks each chained journal — the usage ledger and the Dark Elf's value
+ledger — once, and says for each: OK with its head, a torn tail (a truncation, not tampering) with
+the head it holds to, or the first broken link with its line. It anchors the heads in `log.md`, so
+a later walk is checked against a head kept outside the files. It exits 0 when every chain holds,
+1 on a broken link, 2 on an error.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -426,10 +433,12 @@ fn housekeep(args: &[String]) -> ExitCode {
     }
     let mut world = None;
     let mut apply = false;
+    let mut verify = false;
     let mut it = args.iter();
     while let Some(w) = it.next() {
         match w.as_str() {
             "--heal" => apply = true,
+            "--verify" => verify = true,
             "--world" => match it.next() {
                 Some(v) => world = Some(PathBuf::from(v)),
                 None => return refused(&"--world needs a value"),
@@ -441,6 +450,12 @@ fn housekeep(args: &[String]) -> ExitCode {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    if verify {
+        if apply {
+            return refused(&"--verify walks the chains and heals nothing; run --heal on its own");
+        }
+        return verify_chains(&world);
+    }
     let found = match mnemorph_server::world::heal::heal(&world, apply) {
         Ok(found) => found,
         Err(e) => return refused(&format!("the heal could not write: {e}")),
@@ -465,6 +480,54 @@ fn housekeep(args: &[String]) -> ExitCode {
     } else {
         ExitCode::from(1)
     }
+}
+
+/// `housekeep --verify`: each chained journal walked, its reading said escaped, and the heads
+/// anchored in `log.md`.
+fn verify_chains(world: &Path) -> ExitCode {
+    use mnemorph_server::world::chains;
+    let safe = mnemorph_server::challenge::safe;
+    let readings = chains::verify(world);
+    let mut out = std::io::stdout().lock();
+    let mut code = ExitCode::SUCCESS;
+    for (journal, reading) in &readings {
+        let text = match reading {
+            Ok(r) => {
+                if !r.holds() {
+                    code = ExitCode::from(1);
+                }
+                r.to_string()
+            }
+            Err(e) => {
+                code = ExitCode::from(2);
+                format!("unreadable: {e}")
+            }
+        };
+        let _ = writeln!(
+            out,
+            "{} ({}): {}",
+            journal.name,
+            safe(&journal.path.display().to_string()),
+            safe(&text)
+        );
+    }
+    match chains::anchor(world, "housekeep", &readings) {
+        Ok(Some(heading)) => {
+            let _ = writeln!(out, "anchored in log.md: {}", safe(&heading));
+        }
+        Ok(None) => {
+            let _ = writeln!(out, "no log.md in this world: the heads are not anchored");
+        }
+        Err(e) => {
+            let _ = writeln!(
+                out,
+                "the heads could not be anchored: {}",
+                safe(&e.to_string())
+            );
+            code = ExitCode::from(2);
+        }
+    }
+    code
 }
 
 /// What `q` was asked.

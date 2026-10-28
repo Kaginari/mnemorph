@@ -6127,3 +6127,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-10-28T03:22:15+01:00] rimuru — #259, Fable's review: what calibration sends, a SHA-256 Mind digest, #104's remainder named
 - **Done:** the recipe and docs 02 state that free models may log or train on prompts and exactly what travels (claims and the gold set's code, never the live tree; a Dark Elf's playbooks too), print it before sending, and say calibration has not run and measures claim-judging, not detection. A Mind's digest is the harness's SHA-256. Docs 02 name the unguarded `.mnemorph/minds/` writes and the missing owner field. `fp-configured-budget` reads its figure from config only.
 - **Learned:** a "configured" false positive must show no default in its code, or the label lies.
+
+---
+
+### [2026-10-28T09:08:16+01:00] rimuru — #91: hash-chained trust journals, the head anchored in log.md
+- **Done:** `mnemorph_ledger::chain`: a chained row is the row's own JSON with `prev` first and
+  `digest` last (`{"prev":…[,"genesis":true][,"torn":n],<row>,"digest":…}`); the digest is the
+  SHA-256 of the line's bytes before `,"digest"`, so nothing is re-serialised, and the row's fields
+  are recovered byte for byte. `Journal::chained` keeps the head in memory, walks once on its
+  first append and catches up under the file's lock. The genesis' `prev` is the digest of the
+  unchained bytes before it. A torn tail is a truncation the next row records (`torn`). Chained: the
+  usage ledger and the value ledger (challenge records). Anchored: `mnemorphd housekeep --verify`
+  (walks, says, writes the heads into `log.md`) and solo's escalation handoff;
+  `chains::anchor_lines` is the hook for the ascension, probation and fall entries, which nothing
+  writes yet. The law playbook's `ledger-integrity` walks the chains. Docs 02, 03, 05, 06.
+- **Tests:** append and verify; a middle edit found at its row, a deleted row, the genesis lost, a
+  false `torn`, a late genesis; a torn tail (once and twice) as truncation, then resumed; an
+  unchained file then a genesis; four writers (own and shared heads) linear; the anchored head
+  matches, and a dropped last row does not; challenge records chained under their lock; the
+  handoff's head is a row of the ledger; `housekeep --verify` OK, broken, `--heal` refused.
+  Mutation: with the digest check disabled, three chain tests fail.
+- **Learned:** a `torn` record may excuse only a tail the appender itself closed; excusing any bad
+  run let a writer that does not chain slip a row past the walk. Open (@?): gate verdicts, seals,
+  envelopes (#88's use-count journal) and Kijin posts are not chained yet; each is a
+  `Journal::chained` and a line in `chains::journals`. The value ledger's records rewalk on every
+  hold, as their fold already reads the whole file.
