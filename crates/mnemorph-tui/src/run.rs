@@ -273,6 +273,12 @@ impl Host {
                     }
                 });
             }
+            Cmd::Waive { landing, reason } => {
+                let (tx, world) = (self.tx.clone(), self.world.clone());
+                self.runtime.spawn_blocking(move || {
+                    let _ = tx.send(Msg::Said(waive(&world, &landing, &reason)));
+                });
+            }
             Cmd::Quit => return false,
         }
         true
@@ -283,6 +289,20 @@ impl Host {
         self.interrupt.fire();
         drop(self.lines);
         self.runtime.shutdown_timeout(Duration::from_secs(1));
+    }
+}
+
+/// The human's waiver of a landing's challenge, typed in the session: what it came to, in words.
+fn waive(world: &std::path::Path, landing: &str, reason: &str) -> String {
+    use mnemorph_server::world::challenge::{Challenges, Waiver};
+    let world = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    let Some(records) = Challenges::of(&world) else {
+        return "waive: no state directory to keep the challenges in".to_owned();
+    };
+    let safe = mnemorph_server::challenge::safe;
+    match Waiver::human(reason).and_then(|w| records.waive(landing, &w)) {
+        Ok(_) => format!("waived {}: {}", safe(landing), safe(reason)),
+        Err(e) => format!("waive refused: {}", safe(&e.to_string())),
     }
 }
 

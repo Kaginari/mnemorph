@@ -5953,3 +5953,38 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   whole speciality; the generalist's brief non-empty and within 1.5 KiB; coverage 100%.
 - **Learned:** routing speaks in written paths; an API keyed by glob strings silently falls back
   to loading everything.
+
+---
+
+### [2026-10-28T00:22:42+01:00] rimuru — Dark Elf PR 7: challenge routing at the gate
+- **Done:** the end gate's pass routes the changed paths; a routed landing opens a challenge
+  (`mnemorph_world::challenge`, now with its tree hash, author, staffing, blocking findings and
+  the human's waiver) and is journaled `PASS (challenge pending)`, crediting nothing. At the end of
+  each answered throne ask the harness sweeps the open challenges (`mnemorph_loop::challenge`):
+  each routed speciality's body by roster name, never the author, sent by the throne only; up to
+  `gate.challenge_reviewers` (3) per landing by high-risk classes owned, the rest queued; each
+  review a slice of the challenge reserve, its spend booked on the challenge; the unborn
+  `unstaffed` and said to the human. Reports go through `accept`; a valid critical or high finding
+  of the reviewer's own speciality blocks. The ask carries `brief` (PR 6). Doors:
+  `mnemorphd challenge list|show|waive` and `/waive`. Docs 02, 03, 05, 06.
+- **Tests:** ScriptedModel worlds — harness landing pending then cleared by a valid ledger, a
+  reviewer filing in-run, cross-surface generalist with the cap queueing it to the next sweep,
+  unstaffed said, the Slime's Orc never sending, a high finding blocking; forged and unreasoned
+  waivers refused (records and CLI). Each guard disabled in turn fails its test (the two
+  body-refusals of a waiver mask each other: only both off fails).
+- **Learned:** a guard duplicated across a door and its library is invisible to a disable check
+  of either alone; say so instead of pretending each is tested.
+
+---
+
+### [2026-10-28T01:01:21+01:00] rimuru — #255, Fable's review: the challenge fails closed and credits nothing while open
+- **Done:** a routed landing whose challenge cannot be recorded is `PASS (challenge unrecorded)`,
+  uncredited; large landings keep a 256-path sample with count and hash, so no row overflows; a
+  pending pass sets no checked proof and the dispatcher's report says "written, not landed"; the
+  author and its chain neither review nor file; paths, names, claims and reasons escaped in asks,
+  answers, CLI and TUI; open challenges said every answer, unfiled reviewers resent after 3
+  sweeps; the waiver's `y` is read at `/dev/tty`, piped input refused. Docs 02, 03.
+- **Tests:** unrecorded and 10k-path landings, no checked proof while pending, the Orc's report,
+  author/chain filing and review, hostile path and claim, resend, waive at a pty (`script`) and
+  refused piped. Each guard disabled fails its test; `is_terminal` alone is masked by `/dev/tty`.
+- **Learned:** never `git checkout -- file` to undo a mutation over uncommitted work: commit first.

@@ -115,6 +115,10 @@ impl World {
             router,
             slice_floor,
             queue: Some(mnemorph_loop::world::Queue::at(&queue_of(&self.0))),
+            challenges: Some(mnemorph_loop::world::challenge::Challenges::at(
+                &self.0.with_extension("challenges.jsonl"),
+            )),
+            reviewers: mnemorph_loop::challenge::REVIEWERS,
         };
         let setup = Setup {
             model,

@@ -23,6 +23,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
+       mnemorphd challenge list|show|waive [--all] [<landing>] [--why <reason>]
+                 [--world <dir>]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
 SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
@@ -55,6 +57,13 @@ wrong, as an incident; `settle` closes a reconcile that is no incident; `lesson`
 fourth receipt — a test or a verify line changed in the world since the incident opened, or a
 Thought born since — after showing the change and asking for `y`. The post is
 `forge` or `kijin-forge`, and so on. A body never runs it.
+
+`challenge` is the human's door to the Dark Elf challenges, kept under the human's state
+directory. `list` shows each landing whose challenge holds it — pending, blocked — with who it
+awaits and who is unstaffed or queued (`--all` adds the settled ones); `show <landing>` says one
+in full; `waive <landing> --why <reason>` settles one on the human's word, after showing it and
+asking for `y` at the terminal (`/dev/tty`; piped input is refused): the reason is kept with it,
+and is at least 20 characters that say why. A body never runs it.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -105,6 +114,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("incident") {
         return incident(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("challenge") {
+        return challenge(&all[1..]);
     }
     let mut resume = None;
     let mut args = all.into_iter();
@@ -887,6 +899,145 @@ fn incident(args: &[String]) -> ExitCode {
         }
         _ => refused(&"incident needs a verb: list, open, settle or lesson; see --help"),
     }
+}
+
+/// `challenge …`: the human lists the Dark Elf challenges, shows one, or waives one with a reason.
+/// A body never does.
+fn challenge(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::challenge::{Challenges, Waiver};
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: a challenge is the human's to waive, never a body's"
+        ));
+    }
+    let (mut world, mut why, mut all) = (None, None, false);
+    let mut words = Vec::new();
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            "--why" => match it.next() {
+                Some(v) => why = Some(v.clone()),
+                None => return refused(&"--why needs a value"),
+            },
+            "--all" => all = true,
+            _ => words.push(w.clone()),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let Some(records) = Challenges::of(&world) else {
+        return refused(&"no state directory: the challenges cannot be read");
+    };
+    match words.as_slice() {
+        [verb] if verb == "list" => {
+            let shown: Vec<String> = records
+                .records()
+                .values()
+                .filter(|r| all || r.status.open())
+                .map(mnemorph_server::challenge::said)
+                .collect();
+            if shown.is_empty() {
+                println!("no challenge holds a landing");
+            }
+            for line in shown {
+                println!("{line}");
+            }
+            ExitCode::SUCCESS
+        }
+        [verb, id] if verb == "show" => match records.record(id) {
+            Some(r) => {
+                println!("{}", full(&r));
+                ExitCode::SUCCESS
+            }
+            None => refused(&format!("no challenge is open for landing `{id}`")),
+        },
+        [verb, id] if verb == "waive" => {
+            let Some(why) = why else {
+                return refused(&"a waiver says why: --why <reason>");
+            };
+            let waiver = match Waiver::human(&why) {
+                Ok(w) => w,
+                Err(e) => return refused(&e),
+            };
+            let Some(r) = records.record(id) else {
+                return refused(&format!("no challenge is open for landing `{id}`"));
+            };
+            // The human reads what they waive before it is recorded.
+            println!("{}", full(&r));
+            match at_terminal(&format!("waive the challenge of {id}?")) {
+                Ok(true) => {}
+                Ok(false) => return refused(&"the challenge was not waived"),
+                Err(e) => return refused(&e),
+            }
+            match records.waive(id, &waiver) {
+                Ok(_) => {
+                    println!("waived {id}: {}", waiver.reason());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => refused(&e),
+            }
+        }
+        _ => refused(&"challenge needs a verb: list, show or waive; see --help"),
+    }
+}
+
+/// One challenge in full, as `show` and the waiver say it, escaped.
+fn full(r: &mnemorph_server::world::challenge::Record) -> String {
+    use mnemorph_server::world::challenge::Staff;
+    let mut lines = vec![mnemorph_server::challenge::said(r)];
+    // What a model chose — paths, names, reasons — is escaped before a terminal shows it.
+    let safe = mnemorph_server::challenge::safe;
+    lines.push(format!("  tree {}", safe(&r.opening.tree)));
+    let wrote: Vec<String> = r.landing.written.iter().map(|p| safe(p)).collect();
+    lines.push(format!("  wrote {}", wrote.join(", ")));
+    if let Some(n) = r.opening.paths {
+        lines.push(format!(
+            "  (a sample of {n} paths, SHA-256 {})",
+            safe(&r.opening.paths_sha256)
+        ));
+    }
+    for (s, staff) in &r.staff {
+        lines.push(match staff {
+            Staff::Commissioned { body, by, wt, .. } => format!(
+                "  {s}: reviewed by {}, sent by {}, {wt} wt",
+                safe(body),
+                safe(by)
+            ),
+            Staff::Queued { why } => format!("  {s}: queued — {}", safe(why)),
+            Staff::Unstaffed => format!("  {s}: unstaffed — no body born"),
+        });
+    }
+    lines.join("\n")
+}
+
+/// The human's `y`, read at the controlling terminal: piped input — a script, a body's command —
+/// is no human's answer, so with no terminal the question is refused, never answered.
+fn at_terminal(question: &str) -> Result<bool, String> {
+    use std::io::{BufRead as _, IsTerminal as _};
+    let tty = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .map_err(|e| format!("this is answered at a terminal, and there is none: {e}"))?;
+    if !tty.is_terminal() {
+        return Err("this is answered at a terminal, never piped".to_owned());
+    }
+    let mut out = tty.try_clone().map_err(|e| e.to_string())?;
+    write!(out, "{question} [y/N] ")
+        .and_then(|()| out.flush())
+        .map_err(|e| e.to_string())?;
+    let mut answer = String::new();
+    std::io::BufReader::new(tty)
+        .read_line(&mut answer)
+        .map_err(|e| e.to_string())?;
+    Ok(answer.trim().eq_ignore_ascii_case("y"))
 }
 
 /// `q …`: the shared work queue, for the human. Inside a body's command it refuses: a body moves

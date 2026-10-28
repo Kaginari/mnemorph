@@ -112,6 +112,11 @@ pub struct Commissioner {
     pub slice_floor: u64,
     /// The shared work queue a report's `@$` orders are held on; `None` holds none.
     pub queue: Option<mnemorph_world::Queue>,
+    /// The Dark Elf challenges' records; `None` keeps them in the human's state directory.
+    pub challenges: Option<mnemorph_world::challenge::Challenges>,
+    /// How many reviewers one landing's challenge commissions at one sweep
+    /// ([`crate::challenge::REVIEWERS`] unless the configuration says).
+    pub reviewers: usize,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -133,6 +138,9 @@ pub struct Order {
     /// The claims its report offered for acceptance, `(owner, id)`: the only ones the dispatcher's
     /// answer may accept, this ask.
     pub offered: Vec<(String, String)>,
+    /// The child's own answer, as it gave it, when it answered: what a challenge reads findings
+    /// from.
+    pub answer: Option<String>,
 }
 
 /// The creatures an Elf's open plan items name: `- [ ] <creature>: …` lines of the `plan.md`
@@ -445,15 +453,7 @@ pub(crate) async fn order(
     interrupt: &Arc<crate::run::Interrupt>,
     input: &str,
 ) -> Order {
-    let refused = |text: String| Order {
-        outcome: Outcome::error(text),
-        spent: 0,
-        landed: Vec::new(),
-        put_back: Vec::new(),
-        at: crate::gate::Tree::default(),
-        interrupted: false,
-        offered: Vec::new(),
-    };
+    let refused = refused_order;
     let a: CommissionArgs = match serde_json::from_str(input) {
         Ok(a) => a,
         Err(e) => return refused(format!("commission: {e}")),
@@ -545,8 +545,23 @@ pub(crate) async fn order(
         &put_back,
         checked_proof(&a.to, child.passed_gate()).as_ref(),
         &child.evidence(),
+        child.challenged(),
     );
     order_of((report, offered), spent, landed, put_back, before, &ending)
+}
+
+/// An order refused before any body ran: the reason, nothing spent, nothing landed.
+fn refused_order(text: String) -> Order {
+    Order {
+        outcome: Outcome::error(text),
+        spent: 0,
+        landed: Vec::new(),
+        put_back: Vec::new(),
+        at: crate::gate::Tree::default(),
+        interrupted: false,
+        offered: Vec::new(),
+        answer: None,
+    }
 }
 
 /// The order a commission returns: its report and the claims it offers, its spend, what landed,
@@ -572,6 +587,10 @@ fn order_of(
         at: before,
         interrupted: matches!(ending, Ending::Interrupted),
         offered,
+        answer: match ending {
+            Ending::Answered(text) => Some(text.clone()),
+            _ => None,
+        },
     }
 }
 
@@ -1031,10 +1050,13 @@ fn report_for(
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
     evidence: &[String],
+    pending: &[String],
 ) -> (String, Vec<(String, String)>) {
     let mut notes = notes;
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
+    // A landing waiting on its challenge is written, not landed: said as a hole, never cut.
+    triage.extend(pending.iter().cloned());
     let (kept, offered) = remember(&c.world, to, ending, checked, evidence);
     notes.extend(kept);
     // Each claim left proposed is offered as a hole too: never cut, however much the body said.
@@ -1304,6 +1326,9 @@ fn child_run(
     }
     if c.queue.is_some() {
         child = child.with_queue(Arc::clone(c));
+    }
+    if let Some(records) = &c.challenges {
+        child = child.with_challenges(records.clone());
     }
     child
 }

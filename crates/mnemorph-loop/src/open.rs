@@ -27,7 +27,8 @@ use crate::solo::{configure, solo};
 fn equip(
     mut run: Run,
     world: &Path,
-    commissioner: Option<crate::commission::Commissioner>,
+    commissioner: Arc<crate::commission::Commissioner>,
+    dispatches: bool,
     caps: Option<mnemorph_ledger::Caps>,
     decided: Option<crate::Decisions>,
 ) -> Run {
@@ -40,8 +41,10 @@ fn equip(
     }
     let roster = mnemorph_world::Roster::load(world);
     run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
-    if let Some(c) = commissioner {
-        run = run.with_commissioner(Arc::new(c));
+    // The throne sends the Dark Elves a landing's challenge routes, lanes or none.
+    run = run.with_challenger(Arc::clone(&commissioner));
+    if dispatches {
+        run = run.with_commissioner(commissioner);
     }
     if let Some(caps) = caps {
         run = run.with_caps(caps);
@@ -312,10 +315,7 @@ fn build(
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     limits.steps = session_steps(config, &lanes, limits.steps);
     if let Some(dir) = attic {
-        let (keep_days, max_mb) = config.attic_limits();
-        let kept = mnemorph_tools::Attic::at(dir, world)
-            .ok_or_else(|| format!("{}: the attic needs git", dir.display()))?;
-        cx = cx.with_attic(kept.with_limits(keep_days, max_mb));
+        cx = cx.with_attic(attic_of(config, dir, world)?);
     }
     let instruments = world.join(".mnemorph/instruments");
     // The caps against what this world already spent. A cap that cannot be read opens no
@@ -335,7 +335,7 @@ fn build(
     }
     // One decider for the session's run and its commissioner's routes.
     let decided = decisions(config, world, model.clone(), env)?;
-    let commissioner = (!lanes.is_empty()).then(|| crate::commission::Commissioner {
+    let commissioner = Arc::new(crate::commission::Commissioner {
         world: cx.world().to_path_buf(),
         model: model.clone(),
         prices: prices.clone(),
@@ -352,6 +352,8 @@ fn build(
         router: Some(router(config, decided.clone(), model.provider())),
         slice_floor: crate::commission::SLICE_FLOOR,
         council: council_keys(config),
+        challenges: None,
+        reviewers: config.challenge_reviewers(),
     });
     let setup = Setup {
         model: model.clone(),
@@ -377,7 +379,14 @@ fn build(
     }
     .with_observer(observer)
     .with_gate(gate);
-    let run = equip(run, world, commissioner, capped.then_some(caps), decided);
+    let run = equip(
+        run,
+        world,
+        commissioner,
+        !lanes.is_empty(),
+        capped.then_some(caps),
+        decided,
+    );
     Ok(Opened {
         session: hold.into_iter().fold(Session::new(run), Session::holding),
         world: world.to_path_buf(),
@@ -385,21 +394,35 @@ fn build(
         provider: model.provider().to_owned(),
         session_id,
         run_id,
-        holes: config
-            .holes()
-            .iter()
-            .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
-            .chain(unread)
-            // An outward act whose effect a probe did not see waits for the human.
-            .chain(mnemorph_config::reconciling(world))
-            // An incident stays open until its four receipts are recorded.
-            .chain(mnemorph_config::incidents(world))
-            .collect(),
+        holes: holes(config, unread, world),
         budget,
         key: None,
         // The network is opened only for an approved outward act, so the standing state is off.
         sandbox: mnemorph_tools::Sandbox::detect().status(false),
     })
+}
+
+/// The session's attic at `dir`, kept within the configuration's limits.
+fn attic_of(config: &Config, dir: &Path, world: &Path) -> Result<mnemorph_tools::Attic, String> {
+    let (keep_days, max_mb) = config.attic_limits();
+    let kept = mnemorph_tools::Attic::at(dir, world)
+        .ok_or_else(|| format!("{}: the attic needs git", dir.display()))?;
+    Ok(kept.with_limits(keep_days, max_mb))
+}
+
+/// What the session opens saying it cannot do or still waits on: the configuration's holes, the
+/// caps it could not read, the outward acts waiting for the human, the open incidents.
+fn holes(config: &Config, unread: Vec<String>, world: &Path) -> Vec<String> {
+    config
+        .holes()
+        .iter()
+        .map(|h| format!("{} ({}): {}", h.key, h.origin, h.why))
+        .chain(unread)
+        // An outward act whose effect a probe did not see waits for the human.
+        .chain(mnemorph_config::reconciling(world))
+        // An incident stays open until its four receipts are recorded.
+        .chain(mnemorph_config::incidents(world))
+        .collect()
 }
 
 /// The world made ready for a session: the report folder a check writes into, ignored locally —

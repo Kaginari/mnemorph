@@ -1,6 +1,8 @@
-//! A landing's Dark Elf challenge, as the harness keeps it: the landing as it was routed, and each
-//! routed speciality's coverage ledger. The challenge is pending until every routed speciality has
-//! filed a ledger that holds; then it clears.
+//! A landing's Dark Elf challenge, as the harness keeps it: the landing as it was routed, its tree
+//! and its author, how each routed speciality is staffed, each routed speciality's coverage
+//! ledger, the findings that block it, and the human's waiver. The challenge is pending until every
+//! routed speciality has filed a ledger that holds; a valid critical or high finding blocks it
+//! whatever was filed; a human waiver, with its reason, settles it either way.
 //!
 //! The records are the harness's, outside the world and out of every command's reach:
 //! `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl`, one row per line, the folder
@@ -77,6 +79,152 @@ pub fn route(roster: &Roster, id: &str, written: &[String]) -> Landing {
     }
 }
 
+/// Who stands over every body: the only author a waiver may have.
+pub const HUMAN: &str = "human";
+
+/// What the harness knows of a landing as it opens its challenge.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Opening {
+    /// The SHA-256 of the landing's tree: every written path with its bytes as the landing left
+    /// them, a removed one as absent.
+    pub tree: String,
+    /// The body whose landing it is: never one of its reviewers, never the one that sends them.
+    pub by: String,
+    /// The bodies above the author, nearest first: none of them files a ledger for it either.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain: Vec<String>,
+    /// How many paths the landing wrote, when the routed landing keeps only a sample of them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paths: Option<u64>,
+    /// The SHA-256 of every written path, sorted, one per line, when only a sample is kept.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub paths_sha256: String,
+}
+
+impl Opening {
+    /// Whether `body` is the landing's author or above it: such a body never clears it.
+    #[must_use]
+    pub fn holds_author(&self, body: &str) -> bool {
+        self.by == body || self.chain.iter().any(|c| c == body)
+    }
+}
+
+/// How one routed speciality stands for its review.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "staff", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Staff {
+    /// Waiting: past the landing's cap of reviewers, or for the challenge reserve. It is
+    /// commissioned at a later sweep, never dropped.
+    Queued {
+        /// Why it waits.
+        why: String,
+    },
+    /// No living body of the world bears the speciality's name: the human is told, and the
+    /// challenge stays pending.
+    Unstaffed,
+    /// Its body was commissioned on the landing.
+    Commissioned {
+        /// The body, by name.
+        body: String,
+        /// Who sent it: the throne, never the landing's author.
+        by: String,
+        /// The weighted tokens its review spent, booked against the challenge.
+        wt: u64,
+        /// How many sweeps since found it commissioned with no ledger filed: past
+        /// a few, it is sent again.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        waited: u32,
+    },
+}
+
+// Serde's `skip_serializing_if` passes the field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// A valid critical or high finding on the landing: it blocks the landing until it is fixed or
+/// the human waives the challenge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Blocker {
+    /// The speciality that found it, by its creature name.
+    pub speciality: String,
+    /// Its root-cause fingerprint.
+    pub fingerprint: String,
+    /// `critical` or `high`.
+    pub severity: String,
+    /// What it claims.
+    pub claim: String,
+}
+
+impl fmt::Display for Blocker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "#{} {} ({}): {}",
+            self.fingerprint, self.severity, self.speciality, self.claim
+        )
+    }
+}
+
+/// The human's word that a landing stands without the rest of its challenge. Only
+/// [`Waiver::human`] makes one, and the records keep it only with a reason that says something,
+/// bound to the tree the challenge was opened on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Waiver {
+    by: String,
+    reason: String,
+    #[serde(default)]
+    tree: String,
+}
+
+impl Waiver {
+    /// The human's waiver, with `reason`. Refused inside a body's command (`MNEMORPH_BODY` is
+    /// set there): a body never waives its own challenge.
+    ///
+    /// # Errors
+    ///
+    /// A body asks, or the reason says nothing (under 20 characters, a stock phrase, an
+    /// unreadable character, over 1 KiB).
+    pub fn human(reason: &str) -> Result<Waiver, Refusal> {
+        if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+            return Err(Refusal::NotHuman(body.to_string_lossy().into_owned()));
+        }
+        let reason = reason.trim();
+        if !reasoned(reason) {
+            return Err(Refusal::Unreasoned);
+        }
+        Ok(Waiver {
+            by: HUMAN.to_owned(),
+            reason: reason.to_owned(),
+            tree: String::new(),
+        })
+    }
+
+    /// Why the human waived it.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// Whether the records keep it for a challenge opened on `tree`.
+    fn holds(&self, tree: &str) -> bool {
+        self.by == HUMAN && reasoned(&self.reason) && self.tree == tree
+    }
+}
+
+/// A reason that says something: substantive, readable, at most 1 KiB.
+fn reasoned(reason: &str) -> bool {
+    reason.len() <= mnemorph_proving::coverage::MAX_TEXT
+        && mnemorph_proving::coverage::substantive(reason)
+        && !reason
+            .chars()
+            .any(|c| c.is_control() || mnemorph_wire::invisible(c))
+}
+
 /// Where a landing's challenge stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -85,8 +233,26 @@ pub enum Status {
         /// They, in routing order.
         awaiting: Vec<Speciality>,
     },
-    /// Every routed speciality has.
+    /// A valid critical or high finding blocks the landing, whatever was filed.
+    Blocked {
+        /// The findings, in the order they were found.
+        findings: Vec<Blocker>,
+    },
+    /// Every routed speciality has filed, and nothing blocks.
     Cleared,
+    /// The human waived it.
+    Waived {
+        /// Why.
+        reason: String,
+    },
+}
+
+impl Status {
+    /// Whether the landing still waits on its challenge: pending or blocked.
+    #[must_use]
+    pub fn open(&self) -> bool {
+        matches!(self, Status::Pending { .. } | Status::Blocked { .. })
+    }
 }
 
 /// Why a filing or an opening was refused.
@@ -102,6 +268,14 @@ pub enum Refusal {
     AlreadyFiled(Speciality),
     /// The ledger breaks the state table.
     Invalid(Refused),
+    /// A body asked for what only the human gives.
+    NotHuman(String),
+    /// A waiver with no reason worth the name.
+    Unreasoned,
+    /// The challenge was waived already.
+    AlreadyWaived(String),
+    /// The landing's author, or a body above it, filed for it.
+    Author(String),
     /// The row would be over [`MAX_ROW`] bytes.
     TooLarge(usize),
     /// The records could not be read or written.
@@ -121,6 +295,18 @@ impl fmt::Display for Refusal {
                 f,
                 "the ledger breaks the state table; fix every line and file it again:\n{r}"
             ),
+            Refusal::NotHuman(body) => write!(
+                f,
+                "{body} asks: a challenge is the human's to waive, never a body's"
+            ),
+            Refusal::Unreasoned => f.write_str(
+                "a waiver says why: at least 20 characters of reason, not a stock phrase",
+            ),
+            Refusal::AlreadyWaived(id) => write!(f, "the challenge of `{id}` is waived already"),
+            Refusal::Author(body) => write!(
+                f,
+                "{body} wrote this landing, or commands who did: it never clears its own challenge"
+            ),
             Refusal::TooLarge(n) => write!(f, "the filing is {n} bytes, over {MAX_ROW}"),
             Refusal::Unwritten(why) => write!(f, "the challenge records cannot be kept: {why}"),
         }
@@ -131,19 +317,63 @@ impl fmt::Display for Refusal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "row", rename_all = "kebab-case", deny_unknown_fields)]
 enum Row {
-    Opened { landing: Landing },
-    Filed { ledger: CoverageLedger },
+    Opened {
+        landing: Landing,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opening: Option<Opening>,
+    },
+    Filed {
+        ledger: CoverageLedger,
+    },
+    Staffed {
+        landing: String,
+        speciality: String,
+        staff: Staff,
+    },
+    Blocked {
+        landing: String,
+        blocker: Blocker,
+    },
+    Waived {
+        landing: String,
+        waiver: Waiver,
+    },
 }
 
 /// One landing's challenge as the records fold it.
 #[derive(Debug, Clone)]
 struct Open {
     landing: Landing,
+    opening: Opening,
     filed: BTreeMap<Speciality, CoverageLedger>,
+    staff: BTreeMap<Speciality, Staff>,
+    blockers: Vec<Blocker>,
+    waived: Option<Waiver>,
 }
 
 impl Open {
+    fn new(landing: Landing, opening: Opening) -> Open {
+        Open {
+            landing,
+            opening,
+            filed: BTreeMap::new(),
+            staff: BTreeMap::new(),
+            blockers: Vec::new(),
+            waived: None,
+        }
+    }
+
     fn status(&self) -> Status {
+        if let Some(w) = &self.waived {
+            return Status::Waived {
+                reason: w.reason.clone(),
+            };
+        }
+        if !self.blockers.is_empty() {
+            return Status::Blocked {
+                findings: self.blockers.clone(),
+            };
+        }
         let awaiting: Vec<Speciality> = self
             .landing
             .routed
@@ -157,6 +387,23 @@ impl Open {
             Status::Pending { awaiting }
         }
     }
+
+    fn routed(&self, s: Speciality) -> bool {
+        self.landing.routed.iter().any(|r| r.speciality == s)
+    }
+}
+
+/// A challenge as the board, the CLI and the harness read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Record {
+    /// The landing as it was routed.
+    pub landing: Landing,
+    /// Its tree and its author.
+    pub opening: Opening,
+    /// How each routed speciality is staffed, in routing order; one never staffed yet is absent.
+    pub staff: Vec<(Speciality, Staff)>,
+    /// Where it stands.
+    pub status: Status,
 }
 
 /// The records, opened and locked whole until dropped.
@@ -211,13 +458,23 @@ impl Challenges {
         }
     }
 
-    /// Opens the challenge of `landing`. A landing routed to no speciality has nothing to clear,
-    /// and is not recorded.
+    /// Opens the challenge of `landing`, with no tree and no author on record. See
+    /// [`Challenges::open_at`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Challenges::open_at`].
+    pub fn open(&self, landing: &Landing) -> Result<Status, Refusal> {
+        self.open_at(landing, &Opening::default())
+    }
+
+    /// Opens the challenge of `landing`, opened on `opening`'s tree, by its author. A landing
+    /// routed to no speciality has nothing to clear, and is not recorded.
     ///
     /// # Errors
     ///
     /// The id is malformed or already open, or the records cannot be kept.
-    pub fn open(&self, landing: &Landing) -> Result<Status, Refusal> {
+    pub fn open_at(&self, landing: &Landing, opening: &Opening) -> Result<Status, Refusal> {
         if !is_id(&landing.id) {
             return Err(Refusal::BadId);
         }
@@ -230,12 +487,107 @@ impl Challenges {
         }
         held.append(&Row::Opened {
             landing: landing.clone(),
+            opening: Some(opening.clone()),
         })?;
-        Ok(Open {
-            landing: landing.clone(),
-            filed: BTreeMap::new(),
+        Ok(Open::new(landing.clone(), opening.clone()).status())
+    }
+
+    /// Records how `speciality` stands for the review of `landing`; the latest row stands.
+    ///
+    /// # Errors
+    ///
+    /// No such open landing, a speciality it was not routed, or records that cannot be kept.
+    pub fn staff(
+        &self,
+        landing: &str,
+        speciality: Speciality,
+        staff: Staff,
+    ) -> Result<(), Refusal> {
+        let mut held = self.hold()?;
+        let open = held
+            .all
+            .get(landing)
+            .ok_or_else(|| Refusal::NoSuchLanding(landing.to_owned()))?;
+        if !open.routed(speciality) {
+            return Err(Refusal::NoSuchLanding(format!("{landing} ({speciality})")));
         }
-        .status())
+        held.append(&Row::Staffed {
+            landing: landing.to_owned(),
+            speciality: speciality.creature().to_owned(),
+            staff,
+        })
+    }
+
+    /// Records a valid critical or high finding on `landing`: it blocks the landing until it is
+    /// fixed or the challenge is waived. One fingerprint blocks once.
+    ///
+    /// # Errors
+    ///
+    /// No such open landing, or records that cannot be kept.
+    pub fn block(&self, landing: &str, blocker: Blocker) -> Result<Status, Refusal> {
+        let mut held = self.hold()?;
+        let open = held
+            .all
+            .get_mut(landing)
+            .ok_or_else(|| Refusal::NoSuchLanding(landing.to_owned()))?;
+        if open
+            .blockers
+            .iter()
+            .any(|b| b.fingerprint == blocker.fingerprint)
+        {
+            return Ok(open.status());
+        }
+        open.blockers.push(blocker.clone());
+        let status = open.status();
+        held.append(&Row::Blocked {
+            landing: landing.to_owned(),
+            blocker,
+        })?;
+        Ok(status)
+    }
+
+    /// Waives the challenge of `landing` on the human's word: it is bound to the tree the
+    /// challenge was opened on, and settles it whatever is pending or blocks.
+    ///
+    /// # Errors
+    ///
+    /// No such open landing, one waived already, or records that cannot be kept.
+    pub fn waive(&self, landing: &str, waiver: &Waiver) -> Result<Status, Refusal> {
+        let mut held = self.hold()?;
+        let open = held
+            .all
+            .get_mut(landing)
+            .ok_or_else(|| Refusal::NoSuchLanding(landing.to_owned()))?;
+        if open.waived.is_some() {
+            return Err(Refusal::AlreadyWaived(landing.to_owned()));
+        }
+        let mut waiver = waiver.clone();
+        waiver.tree.clone_from(&open.opening.tree);
+        if !waiver.holds(&open.opening.tree) {
+            return Err(Refusal::Unreasoned);
+        }
+        open.waived = Some(waiver.clone());
+        let status = open.status();
+        held.append(&Row::Waived {
+            landing: landing.to_owned(),
+            waiver,
+        })?;
+        Ok(status)
+    }
+
+    /// The challenge of `landing` as the records hold it; `None` when none is open under that id.
+    #[must_use]
+    pub fn record(&self, landing: &str) -> Option<Record> {
+        self.read().remove(landing).map(record_of)
+    }
+
+    /// Every challenge kept, by landing id.
+    #[must_use]
+    pub fn records(&self) -> BTreeMap<String, Record> {
+        self.read()
+            .into_iter()
+            .map(|(id, open)| (id, record_of(open)))
+            .collect()
     }
 
     /// Files `ledger` for its landing and gives the challenge's status after it. Its commands
@@ -262,6 +614,9 @@ impl Challenges {
         };
         if open.filed.contains_key(&ledger.speciality) {
             return Err(Refusal::AlreadyFiled(ledger.speciality));
+        }
+        if open.opening.holds_author(ledger.speciality.creature()) {
+            return Err(Refusal::Author(ledger.speciality.creature().to_owned()));
         }
         let sources = Sources {
             tree: Some(tree),
@@ -305,7 +660,7 @@ impl Challenges {
             .into_iter()
             .filter_map(|(id, open)| match open.status() {
                 Status::Pending { awaiting } => Some((id, awaiting)),
-                Status::Cleared => None,
+                _ => None,
             })
             .collect()
     }
@@ -340,9 +695,31 @@ impl Challenges {
     }
 }
 
+/// A folded challenge, as it is read out.
+fn record_of(open: Open) -> Record {
+    let status = open.status();
+    let staff = open
+        .landing
+        .routed
+        .iter()
+        .filter_map(|r| {
+            open.staff
+                .get(&r.speciality)
+                .map(|s| (r.speciality, s.clone()))
+        })
+        .collect();
+    Record {
+        landing: open.landing,
+        opening: open.opening,
+        staff,
+        status,
+    }
+}
+
 /// The records folded: the first opening of an id stands; a filing counts only when its landing
-/// is open, its speciality has not filed yet, and its ledger validates again. A line that does
-/// not parse — a torn write, a hand edit — counts for nothing.
+/// is open, its speciality has not filed yet, and its ledger validates again; a staffing only for
+/// a routed speciality, the latest standing; a waiver only the human's, reasoned and bound to the
+/// opened tree. A line that does not parse — a torn write, a hand edit — counts for nothing.
 fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
     let mut all: BTreeMap<String, Open> = BTreeMap::new();
     for line in bytes.split(|&b| b == b'\n') {
@@ -350,20 +727,48 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
             continue;
         };
         match row {
-            Row::Opened { landing } => {
+            Row::Opened { landing, opening } => {
                 if is_id(&landing.id) && !all.contains_key(&landing.id) {
                     all.insert(
                         landing.id.clone(),
-                        Open {
-                            landing,
-                            filed: BTreeMap::new(),
-                        },
+                        Open::new(landing, opening.unwrap_or_default()),
                     );
+                }
+            }
+            Row::Staffed {
+                landing,
+                speciality,
+                staff,
+            } => {
+                if let Some(open) = all.get_mut(&landing)
+                    && let Some(s) = Speciality::of(&speciality)
+                    && open.routed(s)
+                {
+                    open.staff.insert(s, staff);
+                }
+            }
+            Row::Blocked { landing, blocker } => {
+                if let Some(open) = all.get_mut(&landing)
+                    && !open
+                        .blockers
+                        .iter()
+                        .any(|b| b.fingerprint == blocker.fingerprint)
+                {
+                    open.blockers.push(blocker);
+                }
+            }
+            Row::Waived { landing, waiver } => {
+                if let Some(open) = all.get_mut(&landing)
+                    && open.waived.is_none()
+                    && waiver.holds(&open.opening.tree)
+                {
+                    open.waived = Some(waiver);
                 }
             }
             Row::Filed { ledger } => {
                 if let Some(open) = all.get_mut(&ledger.landing)
                     && !open.filed.contains_key(&ledger.speciality)
+                    && !open.opening.holds_author(ledger.speciality.creature())
                     && validate(&ledger, &open.landing).is_ok()
                 {
                     open.filed.insert(ledger.speciality, ledger);
@@ -733,6 +1138,231 @@ mod tests {
             assert_eq!(mode(&file), 0o600);
             assert_eq!(mode(&w.join("private")), 0o700);
         }
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    fn opening() -> Opening {
+        Opening {
+            tree: HASH.to_owned(),
+            by: "orc-o".to_owned(),
+            ..Default::default()
+        }
+    }
+
+    /// The opening's tree and author stand; staffing folds to the latest row, only for a routed
+    /// speciality; the records read back whole.
+    #[test]
+    fn a_challenge_keeps_its_tree_author_and_staffing() {
+        let w = temp("staff");
+        let c = Challenges::at(&w.join("challenges.jsonl"));
+        let l = landing(&["crates/mnemorph-tools/src/files.rs", "Cargo.lock"]);
+        c.open_at(&l, &opening()).unwrap();
+        c.staff(&l.id, Speciality::Harness, Staff::Unstaffed)
+            .unwrap();
+        c.staff(
+            &l.id,
+            Speciality::Supply,
+            Staff::Queued {
+                why: "past the cap".into(),
+            },
+        )
+        .unwrap();
+        c.staff(
+            &l.id,
+            Speciality::Supply,
+            Staff::Commissioned {
+                body: "dark-elf-supply".into(),
+                by: "rimuru".into(),
+                wt: 7,
+                waited: 0,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            c.staff(&l.id, Speciality::Web, Staff::Unstaffed),
+            Err(Refusal::NoSuchLanding(_))
+        ));
+        assert!(matches!(
+            c.staff("nope", Speciality::Web, Staff::Unstaffed),
+            Err(Refusal::NoSuchLanding(_))
+        ));
+        let r = c.record(&l.id).unwrap();
+        assert_eq!(r.opening, opening());
+        assert_eq!(
+            r.staff,
+            [
+                (Speciality::Harness, Staff::Unstaffed),
+                (
+                    Speciality::Supply,
+                    Staff::Commissioned {
+                        body: "dark-elf-supply".into(),
+                        by: "rimuru".into(),
+                        wt: 7,
+                        waited: 0,
+                    }
+                ),
+            ]
+        );
+        assert!(r.status.open());
+        assert_eq!(c.records().len(), 1);
+        assert!(c.record("nope").is_none());
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// A valid high finding blocks the landing even once every ledger is filed; one fingerprint
+    /// blocks once.
+    #[test]
+    fn a_blocking_finding_holds_the_landing() {
+        let w = temp("block");
+        let c = Challenges::at(&w.join("challenges.jsonl"));
+        let l = landing(&["Cargo.lock"]);
+        c.open_at(&l, &opening()).unwrap();
+        let b = Blocker {
+            speciality: "dark-elf-supply".into(),
+            fingerprint: "0123456789abcdef".into(),
+            severity: "high".into(),
+            claim: "a yanked crate".into(),
+        };
+        assert!(b.to_string().contains("#0123456789abcdef high"));
+        let blocked = Status::Blocked {
+            findings: vec![b.clone()],
+        };
+        assert_eq!(c.block(&l.id, b.clone()), Ok(blocked.clone()));
+        assert_eq!(c.block(&l.id, b.clone()), Ok(blocked.clone()));
+        assert_eq!(
+            c.file(full(&l, Speciality::Supply), &tree(&l), &ran()),
+            Ok(blocked.clone())
+        );
+        assert_eq!(c.status(&l.id), Some(blocked));
+        assert!(c.pending().is_empty(), "blocked is not awaiting a ledger");
+        assert!(matches!(c.block("nope", b), Err(Refusal::NoSuchLanding(_))));
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// The human's waiver settles a pending or blocked challenge, with its reason kept; a waiver
+    /// with no reason, or a row no human wrote, is refused or counts for nothing.
+    #[test]
+    fn a_waiver_is_the_human_s_reasoned_and_bound_to_the_tree() {
+        let w = temp("waive");
+        let file = w.join("challenges.jsonl");
+        let c = Challenges::at(&file);
+        let l = landing(&["Cargo.lock"]);
+        c.open_at(&l, &opening()).unwrap();
+        assert_eq!(Waiver::human("ok").unwrap_err(), Refusal::Unreasoned);
+        assert_eq!(Waiver::human("n/a").unwrap_err(), Refusal::Unreasoned);
+        assert_eq!(
+            Waiver::human("the lock moved only by a\u{202e} patch").unwrap_err(),
+            Refusal::Unreasoned
+        );
+        // Forged rows, as anything but the waiver door would write them: a body as the author,
+        // a stock reason, a tree the challenge was not opened on.
+        let reason = "the lockfile change is a revert of yesterday's bump";
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file)
+            .unwrap();
+        for (by, why, tree) in [
+            ("orc-o", reason, HASH),
+            (HUMAN, "not relevant", HASH),
+            (HUMAN, reason, "f00d"),
+        ] {
+            let row = Row::Waived {
+                landing: l.id.clone(),
+                waiver: Waiver {
+                    by: by.to_owned(),
+                    reason: why.to_owned(),
+                    tree: tree.to_owned(),
+                },
+            };
+            writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+        }
+        drop(f);
+        assert!(
+            matches!(c.status(&l.id), Some(Status::Pending { .. })),
+            "a forged waiver counts for nothing"
+        );
+        let waiver = Waiver::human(reason).unwrap();
+        assert_eq!(waiver.reason(), reason);
+        assert_eq!(
+            c.waive(&l.id, &waiver),
+            Ok(Status::Waived {
+                reason: reason.to_owned()
+            })
+        );
+        assert_eq!(
+            c.status(&l.id),
+            Some(Status::Waived {
+                reason: reason.to_owned()
+            })
+        );
+        assert!(!c.status(&l.id).unwrap().open());
+        assert_eq!(
+            c.waive(&l.id, &waiver),
+            Err(Refusal::AlreadyWaived(l.id.clone()))
+        );
+        assert!(matches!(
+            c.waive("nope", &waiver),
+            Err(Refusal::NoSuchLanding(_))
+        ));
+        for r in [
+            Refusal::NotHuman("orc-o".into()),
+            Refusal::Unreasoned,
+            Refusal::AlreadyWaived("x".into()),
+        ] {
+            assert_ne!(r.to_string(), "");
+        }
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// The landing's author, or a body above it, never clears its own challenge: its filing is
+    /// refused, and one written into the records counts for nothing.
+    #[test]
+    fn the_author_never_files_for_its_own_landing() {
+        let w = temp("author");
+        let file = w.join("challenges.jsonl");
+        let c = Challenges::at(&file);
+        let l = landing(&["Cargo.lock"]);
+        c.open_at(
+            &l,
+            &Opening {
+                tree: HASH.to_owned(),
+                by: "dark-elf-supply".to_owned(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            c.file(full(&l, Speciality::Supply), &tree(&l), &ran()),
+            Err(Refusal::Author("dark-elf-supply".to_owned()))
+        );
+        let mut above = l.clone();
+        above.id = "run-7:9".to_owned();
+        c.open_at(
+            &above,
+            &Opening {
+                tree: HASH.to_owned(),
+                by: "slime-s".to_owned(),
+                chain: vec!["orc-o".to_owned(), "dark-elf-supply".to_owned()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            c.file(full(&above, Speciality::Supply), &tree(&above), &ran()),
+            Err(Refusal::Author(_))
+        ));
+        // Written by hand, the author's filing is dropped on read.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file)
+            .unwrap();
+        let mut stamped = full(&l, Speciality::Supply);
+        stamp(&mut stamped, &ran());
+        let row = Row::Filed { ledger: stamped };
+        writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+        drop(f);
+        assert!(matches!(c.status(&l.id), Some(Status::Pending { .. })));
+        assert_ne!(Refusal::Author("x".into()).to_string(), "");
         let _ = std::fs::remove_dir_all(&w);
     }
 

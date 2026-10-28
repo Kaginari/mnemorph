@@ -419,8 +419,13 @@ construction: the whole repository is solo's soil, and the tripwire keeps `.git`
 `.mnemorph` out. An answer that changed nothing passes untouched. A first failure goes back to
 the body as a note; a second ends the run as FAIL, every verdict journaled.
 
-A landing on a risk surface passes as `PASS (challenge pending)` and opens a Dark Elf commission
-automatically ([Rimuru's challenge duty](02-races.md#-rimuru--the-throne)).
+A landing on a Dark Elf surface passes as `PASS (challenge pending)`: its challenge opens at the
+gate (or, if it cannot be recorded, it reads `PASS (challenge unrecorded)` and waits all the
+same), the pass credits nothing, and the throne's harness commissions the routed specialities at the
+end of its ask, from the challenge reserve, at most `gate.challenge_reviewers` at once. The
+throne's answer says each challenge it moved — pending, blocked, unstaffed, queued or cleared — and
+the landing counts as landed only once its challenge clears or the human waives it
+([the challenge](02-races.md#-dark-elf--the-adversary)).
 
 The verdict goes to `log.md` through the append-only writer: one entry per verdict, stamped,
 naming the body and the verdict — `PASS`, `FAIL` or `NOT_VERIFIED`, with `, handed back` on a
