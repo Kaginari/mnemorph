@@ -1190,11 +1190,11 @@ Rules that hold for every ascension:
   the plan's recheck, the uses ledger locked — and only that second reading admits: it records
   the use, then the act's intent, under the same lock, so two acts never both take an envelope's
   last use. Every other step still runs: the post check, the fingerprint, the pin, the recheck,
-  the intent, the probe and the receipt. The act's `committed` row says `admitted by envelope
-  <name> (use n/cap)`, its intent names the envelope (an incident opened on it names it too), the
+  the intent, the probe and the receipt. The act's `committed` row says
+  `admitted by envelope <name> (use n/cap)`, its intent names the envelope (an incident opened on it names it too), the
   Kijin's receipt carries the same line, and the human is shown it as it happens — a line in the
-  session, a `warning` event to a client, a line on the terminal — and in `mnemorphd envelope
-  list`, with every act each envelope admitted. `mnemorphd envelope revoke <name>` is the human's
+  session, a `warning` event to a client, a line on the terminal — and in
+  `mnemorphd envelope list`, with every act each envelope admitted. `mnemorphd envelope revoke <name>` is the human's
   alone, asked at the terminal and journaled beside the uses.
 - **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
   that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):
