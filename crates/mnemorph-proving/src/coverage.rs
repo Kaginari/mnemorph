@@ -292,19 +292,49 @@ pub struct CoverageLedger {
 }
 
 /// The commands a body ran, as its run journal recorded them: each command, trimmed, to the
-/// SHA-256 of every output it gave.
+/// SHA-256 of every output it gave, and whether each run failed.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Ran {
     outputs: BTreeMap<String, Vec<String>>,
+    failed: BTreeMap<String, Vec<bool>>,
 }
 
 impl Ran {
-    /// Records that `command` was run and printed `output`.
+    /// Records that `command` was run and printed `output`, and ended well.
     pub fn record(&mut self, command: &str, output: &str) {
+        self.record_exit(command, output, false);
+    }
+
+    /// Records that `command` was run and printed `output`; `failed` when it ended in an error —
+    /// a non-zero exit, a signal, a timeout.
+    pub fn record_exit(&mut self, command: &str, output: &str, failed: bool) {
+        let key = command.trim().to_owned();
         self.outputs
-            .entry(command.trim().to_owned())
+            .entry(key.clone())
             .or_default()
             .push(sha256_hex(output.as_bytes()));
+        self.failed.entry(key).or_default().push(failed);
+    }
+
+    /// Whether the last run of `command` failed; `None` when it was never run.
+    #[must_use]
+    pub fn last_failed(&self, command: &str) -> Option<bool> {
+        self.failed
+            .get(command.trim())
+            .and_then(|f| f.last().copied())
+    }
+
+    /// Whether `command` was run, gave the output hashed `sha256`, and failed in that run.
+    #[must_use]
+    pub fn shows_failed(&self, command: &str, sha256: &str) -> bool {
+        let key = command.trim();
+        let (Some(hashes), Some(failed)) = (self.outputs.get(key), self.failed.get(key)) else {
+            return false;
+        };
+        hashes
+            .iter()
+            .zip(failed)
+            .any(|(h, f)| *f && h.eq_ignore_ascii_case(sha256))
     }
 
     /// Whether `command` was run, and — with `sha256` — gave that output.

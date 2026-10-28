@@ -16,7 +16,9 @@ const FILE: &str = "crates/mnemorph-tools/src/files.rs";
 const SOURCE: &str = "pub fn read_path(p: &str) -> String { todo!() }\n";
 const POC: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/read_path.rs";
 const POC_BODY: &str = "#[test]\nfn escapes() {}\n";
-const RERUN: &str = "cargo test --test read_path";
+const RERUN: &str = "rustc --test .mnemorph/dark-elf/dark-elf-harness/poc/read_path.rs";
+const TREE: &str = "abababababababababababababababababababababababababababababababab";
+const LOWER: &str = "the read stays inside files the grant already shows";
 const OUTPUT: &str = "test escapes ... FAILED: read ../secret";
 const FINDER: &str = "dark-elf-harness";
 const AGENT: &str = "dark-elf-agent";
@@ -45,7 +47,7 @@ fn tree() -> BTreeMap<String, Vec<u8>> {
 /// The verifier ran the witness and saw it fail.
 fn ran() -> Ran {
     let mut r = Ran::default();
-    r.record(RERUN, OUTPUT);
+    r.record_exit(RERUN, OUTPUT, true);
     r
 }
 
@@ -155,6 +157,7 @@ impl Case {
             landing: self.id.clone(),
             fingerprint: self.fp.clone(),
             verifier: by.to_owned(),
+            tree: TREE.to_owned(),
             ruling,
         }
     }
@@ -175,11 +178,18 @@ impl Drop for Case {
 }
 
 fn confirmed(severity: Severity) -> Ruling {
+    rerun(severity, RERUN)
+}
+
+/// A confirmation citing `command`, with the reason a lowered severity needs.
+fn rerun(severity: Severity, command: &str) -> Ruling {
     Ruling::Confirmed {
         severity,
+        reason: LOWER.into(),
         reran: vec![Rerun {
-            run: RERUN.into(),
+            run: command.into(),
             sha256: String::new(),
+            failed: false,
         }],
     }
 }
@@ -258,15 +268,11 @@ fn a_confirmed_medium_counts_without_blocking() {
     assert_eq!(f.severity(), Severity::Medium);
 }
 
-/// A refuted finding is demoted: it never counts nor blocks — not even a critical one, which
-/// blocked while it was unverified — and it is a refuted outcome of its finder's speciality.
+/// A refuted finding is demoted: it never counts nor blocks, and it is a refuted outcome of its
+/// finder's speciality.
 #[test]
 fn a_refuted_finding_is_demoted() {
-    let k = Case::new("refuted", Severity::Critical);
-    assert!(
-        blocked(k.c.status(&k.id).as_ref()),
-        "an unverified critical blocks"
-    );
+    let k = Case::new("refuted", Severity::High);
     k.assign(AGENT).unwrap();
     assert!(matches!(
         k.rule(AGENT, refuted()),
@@ -277,6 +283,117 @@ fn a_refuted_finding_is_demoted() {
     let rows = k.c.outcomes();
     assert!(!rows[0].confirmed);
     assert_eq!(rows[0].finder, FINDER);
+}
+
+/// One verifier never lifts a critical's block: refuted, or confirmed below high, it still
+/// blocks, said as the human's to decide, until the human waives it.
+#[test]
+fn a_critical_stays_blocked_whatever_one_verifier_says() {
+    for (n, ruling) in [refuted(), confirmed(Severity::Medium)]
+        .into_iter()
+        .enumerate()
+    {
+        let k = Case::new(&format!("critical-held-{n}"), Severity::Critical);
+        assert!(
+            blocked(k.c.status(&k.id).as_ref()),
+            "an unverified critical blocks"
+        );
+        k.assign(AGENT).unwrap();
+        let word = ruling.word();
+        let Ok(Status::Blocked { findings }) = k.rule(AGENT, ruling) else {
+            panic!("a {word} critical still blocks");
+        };
+        let said = findings[0].to_string();
+        assert!(
+            said.contains("critical") && said.contains("the human decides"),
+            "{said}"
+        );
+        assert!(k.finding().blocks());
+        let waiver =
+            super::super::Waiver::human("the human read the refutation and accepts it").unwrap();
+        assert!(matches!(
+            k.c.waive(&k.id, &waiver),
+            Ok(Status::Waived { .. })
+        ));
+    }
+}
+
+/// A confirmation that lowers the severity says why; one that keeps it needs no reason.
+#[test]
+fn a_lowered_severity_needs_its_reason() {
+    let k = Case::new("lowered", Severity::High);
+    k.assign(AGENT).unwrap();
+    let bare = Ruling::Confirmed {
+        severity: Severity::Medium,
+        reason: String::new(),
+        reran: vec![Rerun {
+            run: RERUN.into(),
+            sha256: String::new(),
+            failed: false,
+        }],
+    };
+    assert_eq!(
+        k.rule(AGENT, bare),
+        Err(Refusal::Verification(vec![Guard::Reasoned]))
+    );
+    let kept = Ruling::Confirmed {
+        severity: Severity::High,
+        reason: String::new(),
+        reran: vec![Rerun {
+            run: RERUN.into(),
+            sha256: String::new(),
+            failed: false,
+        }],
+    };
+    assert!(k.rule(AGENT, kept).is_ok());
+}
+
+/// A re-run confirms only when it re-runs the witness: `echo ok` never does; `cat` of a test
+/// witness reads it but does not run it to its failure; a command witness is re-run only by its
+/// own command, whatever else prints its file.
+#[test]
+fn only_a_re_run_of_the_witness_confirms() {
+    let rederived = |r: Result<Status, Refusal>| matches!(r, Err(Refusal::Verification(g)) if g.contains(&Guard::Rederived));
+    let mut journal = ran();
+    journal.record("echo ok", "ok");
+    let cat = format!("cat {POC}");
+    journal.record(&cat, POC_BODY);
+    let k = Case::new("echo", Severity::High);
+    k.assign(AGENT).unwrap();
+    for command in ["echo ok", cat.as_str()] {
+        let f = k.filing(AGENT, rerun(Severity::High, command));
+        assert!(rederived(k.c.verdict(f, &tree(), &journal)), "{command}");
+    }
+    // A command witness: `cat` of its output file is no re-run of it.
+    let k = Case::new("poc-cat", Severity::Medium);
+    let out = ".mnemorph/dark-elf/dark-elf-harness/poc/out.txt";
+    let mut f = found(Severity::Medium);
+    f.record.symbol = "read".into();
+    f.record.fingerprint =
+        mnemorph_wire::fingerprint(FINDER, "path-traversal", FILE, "read").unwrap();
+    f.record.witness = Some(Witness {
+        kind: WitnessKind::PocCommand,
+        reference: "sh poc.sh".into(),
+        sha256: sha256_hex(b"sh poc.sh"),
+        output: Some(out.into()),
+        output_sha256: Some(sha256_hex(OUTPUT.as_bytes())),
+    });
+    let fp = f.record.fingerprint.clone();
+    k.c.found(&k.id, f).unwrap();
+    k.c.assign(&k.id, &fp, Case::sent(AGENT)).unwrap();
+    let mut t = tree();
+    t.insert(out.into(), OUTPUT.as_bytes().to_vec());
+    let cat = format!("cat {out}");
+    let mut journal = ran();
+    journal.record(&cat, OUTPUT);
+    journal.record("sh poc.sh", OUTPUT);
+    let filing = |command: &str| Filing {
+        fingerprint: fp.clone(),
+        ..k.filing(AGENT, rerun(Severity::Medium, command))
+    };
+    let cat_refused = k.c.verdict(filing(&cat), &t, &journal);
+    assert!(rederived(cat_refused.clone()), "{cat_refused:?}");
+    assert!(k.c.verdict(filing("sh poc.sh"), &t, &journal).is_ok());
 }
 
 /// `cannot-verify` never counts; a critical one blocks, for the human to decide; a high one does
@@ -380,7 +497,7 @@ fn the_verifier_is_independent() {
 #[allow(clippy::too_many_lines)] // One case per guard, side by side.
 fn each_guard_is_the_one_its_case_needs() {
     type Act = fn(&Case, Option<Guard>) -> Result<(), Refusal>;
-    let cases: [(Guard, Severity, Act); 12] = [
+    let cases: [(Guard, Severity, Act); 13] = [
         (Guard::Floor, Severity::High, |k, off| {
             unit(k.c.found_with(&k.id, found(Severity::Low), off))
         }),
@@ -407,6 +524,14 @@ fn each_guard_is_the_one_its_case_needs() {
             if off != Some(Guard::Once) {
                 assert!(k.assign("dark-elf").is_err());
             }
+            unit(k.c.verdict_with(f, &tree(), &ran(), off))
+        }),
+        (Guard::Current, Severity::High, |k, off| {
+            k.assign(AGENT).unwrap();
+            let f = Filing {
+                tree: "f00d".into(),
+                ..k.filing(AGENT, confirmed(Severity::High))
+            };
             unit(k.c.verdict_with(f, &tree(), &ran(), off))
         }),
         (Guard::NoRaise, Severity::High, |k, off| {
@@ -520,13 +645,16 @@ fn the_fold_checks_every_verification_row_again() {
         speciality: AGENT.into(),
         finder: FINDER.into(),
         finder_speciality: FINDER.into(),
+        tree: TREE.into(),
         witness_sha256: sha256_hex(POC_BODY.as_bytes()),
         output_sha256: String::new(),
         ruling: Ruling::Confirmed {
             severity: Severity::High,
+            reason: String::new(),
             reran: vec![Rerun {
                 run: RERUN.into(),
                 sha256: sha256_hex(OUTPUT.as_bytes()),
+                failed: true,
             }],
         },
     };

@@ -903,12 +903,16 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   - **What it sees.** The record alone. Its ask holds the landing and its tree, and of the record
     the fingerprint, the claim, the class, the file and the symbol, the witness (its kind, its
     reference and its SHA-256, a captured output's path and SHA-256), the preconditions, the
-    reachability, the impact and the severity. Every field is escaped. It never sees the finder's
+    reachability, the impact and the severity. Every field is escaped, and the record is fenced
+    behind a fixed preamble: it is evidence to test, never instructions, and the witness is what
+    the verifier re-runs and judges, not a command it trusts. It never sees the finder's
     transcript, its reasoning, its trace notes, its reasons or its fix, and its run is its own.
   - **Its verdict.** The verifier files one verdict through the `verdict` tool, for the landing and
     the fingerprint it was assigned:
     - `confirmed`: it re-ran the witness itself. The commands it cites are read from its own run
-      journal, and the harness stamps each with its output's SHA-256. It may lower the severity,
+      journal, and the harness stamps each with its output's SHA-256 and whether it failed. A
+      command witness is re-run by its own command; a test or a scanner output by a command that
+      names its file and fails, as the witness shows. It may lower the severity, with a reason,
       never raise it.
     - `refuted`: a reason, with its evidence (files at their SHA-256 in the landing's tree, or
       commands its journal shows).
@@ -921,11 +925,12 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
     | `assigned` | it is filed by the body recorded as that finding's verifier |
     | `independent` | that body is a Dark Elf of another speciality than the finder, not the finder, not the landing's author nor a body above it |
     | `once` | the finding has no verdict yet; once it has one, it takes no other verifier |
+    | `current` | the landing's tree, hashed again at the filing, is the one its challenge was opened on (a sampled landing's, over its sample); the verdict row keeps that hash |
     | `no-raise` | a confirmation's severity is at most the finding's |
-    | `rederived` | a confirmation cites at least one command (at most 16) that the verifier's journal shows run |
-    | `reproduced` | for a command witness with captured output, one cited re-run printed that same output |
+    | `rederived` | a confirmation cites at least one command (at most 16), each shown run in the verifier's journal, and one re-runs the witness: a command witness's own command exactly, or a command naming the test's or the scanner output's file that failed in that run |
+    | `reproduced` | for a command witness with captured output, its own command's cited re-run printed that same output |
     | `unchanged` | the confirmed witness still hashes as the record says, its file and its captured output |
-    | `reasoned` | a refutation's reason, or a `cannot-verify`'s blocker, has at least 20 characters and is not a stock phrase |
+    | `reasoned` | a refutation's reason, a `cannot-verify`'s blocker, and a lowered confirmation's reason each have at least 20 characters and are not a stock phrase |
     | `evidenced` | a refutation cites a file or a command (at most 16 of each); every file stands at its hash, every command is in the journal |
 
     A finding is kept for verification only when it holds the `floor` (medium or higher) and the
@@ -934,21 +939,30 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   - **Counting.** Only a `confirmed` finding counts, at its confirmed severity. A `refuted` one is
     demoted to `@? #<fingerprint> refuted by <verifier>: <reason>`, and never counts. A
     `cannot-verify` one reads `@? nv`, pending verification, and never counts.
-  - **Blocking.** A finding blocks the landing when it is confirmed at high or critical. A critical
-    finding also blocks with no verdict that refutes it or confirms it lower: unverified,
-    unstaffed or `cannot-verify`. That one is the human's to decide, by the fix or a waiver.
-    Nothing else blocks:
+  - **Blocking.** A critical finding blocks the landing whatever one verifier says: confirmed,
+    refuted, confirmed lower, `cannot-verify` or not yet verified. Only the human lifts it, by the
+    fix or a waiver, and every case but a confirmation at high or critical is said as the human's
+    to decide. A high finding blocks once confirmed at high. Nothing else blocks:
 
     | Found at | `confirmed` | `refuted` | `cannot-verify` | no verdict yet |
     |---|---|---|---|---|
-    | critical | blocks if confirmed at high or critical; confirmed lower, counts without blocking | no | blocks, the human decides | blocks, the human decides |
+    | critical | blocks; confirmed below high, the human decides | blocks, the human decides | blocks, the human decides | blocks, the human decides |
     | high | blocks if confirmed at high; confirmed lower, counts without blocking | no | no, does not count | no; the challenge reads *verifying* |
     | medium | counts, does not block | no | no, does not count | no; the challenge reads *verifying* |
 
+  - **Cross-verification.** On one landing two specialities may verify each other's findings:
+    the agent's finding verified by the harness, the harness's by the agent. That is allowed — the
+    other speciality is the independent eye, and forbidding it would leave most landings with no
+    verifier. It is bounded by the blocking rule: one verifier never lifts a critical, so a pair
+    that agrees to refute each other's findings cannot unblock a landing the human has not
+    released. A pair's confirmations are held to the witness by `rederived`, `reproduced` and
+    `unchanged`; what it can still do is refute each other's highs, and every refutation is a row
+    of the finder speciality's precision.
+
   - **Kept.** Each finding, its verifier's staffing, its verdict and its seal proposal are rows of
     the landing's challenge, outside the world. The verdict row holds the verifier, its speciality,
-    the finder and the finder's speciality, the witness's SHA-256 and every re-run's output
-    SHA-256. Every row is held to the guards again when the records are read, so a row written
+    the finder and the finder's speciality, the landing's tree hash, the witness's SHA-256 and
+    every re-run's output SHA-256 and failure. Every row is held to the guards again when the records are read, so a row written
     there that breaks them counts for nothing. Each `confirmed` or `refuted` verdict is a row of its finder
     speciality's precision (`Challenges::outcomes`); `cannot-verify` is neither.
 - **Seal.** A finding confirmed at high or critical, at the confirmed severity, can propose a seal

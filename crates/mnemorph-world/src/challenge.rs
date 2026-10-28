@@ -2,8 +2,8 @@
 //! and its author, how each routed speciality is staffed, each routed speciality's coverage
 //! ledger, the findings that block it, and the human's waiver. The challenge is pending until every
 //! routed speciality has filed a ledger that holds, and every finding of medium or higher has its
-//! verifier's verdict ([`verification`]); a finding confirmed at high or critical, or a critical
-//! one not refuted nor confirmed lower, blocks it whatever was filed; a human waiver, with its
+//! verifier's verdict ([`verification`]); a critical finding, whatever its verdict, or a high one
+//! confirmed at high, blocks it whatever was filed; a human waiver, with its
 //! reason, settles it either way.
 //!
 //! The records are the harness's, outside the world and out of every command's reach:
@@ -108,9 +108,23 @@ pub struct Opening {
     /// The SHA-256 of every written path, sorted, one per line, when only a sample is kept.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub paths_sha256: String,
+    /// When only a sample is kept, the SHA-256 of the sample's tree, as [`Opening::tree`] hashes
+    /// the whole: what a later filing can hash again from the records.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sample_tree: String,
 }
 
 impl Opening {
+    /// The tree a filing is held to: the sample's when only a sample is kept, else the whole's.
+    #[must_use]
+    pub fn current_tree(&self) -> &str {
+        if self.paths.is_some() {
+            &self.sample_tree
+        } else {
+            &self.tree
+        }
+    }
+
     /// Whether `body` is the landing's author or above it: such a body never clears it.
     #[must_use]
     pub fn holds_author(&self, body: &str) -> bool {
@@ -152,8 +166,8 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
-/// A finding that blocks the landing until it is fixed or the human waives the challenge: one
-/// confirmed at high or critical, or a critical one no verdict refuted or lowered.
+/// A finding that blocks the landing until it is fixed or the human waives the challenge: a
+/// critical one, whatever one verifier says, or a high one confirmed at high.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Blocker {
@@ -248,8 +262,8 @@ pub enum Status {
         /// They, in routing order.
         awaiting: Vec<Speciality>,
     },
-    /// A finding confirmed at high or critical, or a critical one unverified, blocks the
-    /// landing, whatever was filed.
+    /// A critical finding, whatever one verifier says, or a high one confirmed at high, blocks
+    /// the landing, whatever was filed.
     Blocked {
         /// The findings, in the order they were found.
         findings: Vec<Blocker>,

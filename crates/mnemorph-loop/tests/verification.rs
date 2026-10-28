@@ -22,14 +22,20 @@ use sha2::{Digest as _, Sha256};
 
 const FILE: &str = "crates/mnemorph-tools/src/files.rs";
 const BODY: &str = "pub fn read_path(p: &str) -> String { std::fs::read_to_string(p).unwrap() }\n";
-const POC: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/read_path.rs";
-const POC_BODY: &str = "#[test]\nfn escapes() { assert!(read_path(\"../x\").is_err()); }\n";
+const POC: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/read_path.sh";
+/// The proof-of-concept test: it fails, for the stated reason.
+const POC_BODY: &str = "echo 'read_path read ../x: it left the world'\nexit 1\n";
+/// A command witness and the output it captured.
+const LEAK: &str = "sh .mnemorph/dark-elf/dark-elf-harness/poc/leak.sh";
+const LEAK_SH: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/leak.sh";
+const LEAK_OUT: &str = ".mnemorph/dark-elf/dark-elf-harness/poc/leak.out";
+const LEAKED: &str = "read ../x\n";
 /// What only the finder's own run holds: its reasoning, never its verifier's.
 const SECRET: &str = "FINDER-SECRET-REASONING";
 const IMPACT_REASON: &str = "the test reads a file outside the world";
 const FIX: &str = "refuse dot-dot before the read";
 const NOTE: &str = "read without a check";
-const RERUN: &str = "cat .mnemorph/dark-elf/dark-elf-harness/poc/read_path.rs";
+const RERUN: &str = "sh .mnemorph/dark-elf/dark-elf-harness/poc/read_path.sh";
 
 fn sha(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
@@ -177,6 +183,11 @@ impl World {
     /// The finder's proving ground: its proof-of-concept and its record at `severity`; the
     /// finding's fingerprint, and the finder's report naming it.
     fn finding(&self, severity: Severity) -> (String, String) {
+        self.finding_by(severity, false)
+    }
+
+    /// As [`World::finding`]; with `command`, the witness is [`LEAK`] and its captured output.
+    fn finding_by(&self, severity: Severity, command: bool) -> (String, String) {
         let fp =
             mnemorph_wire::fingerprint("dark-elf-harness", "path-traversal", FILE, "read_path")
                 .unwrap();
@@ -201,12 +212,22 @@ impl World {
                     note: NOTE.into(),
                 },
             ],
-            witness: Some(Witness {
-                kind: WitnessKind::Test,
-                reference: POC.into(),
-                sha256: sha(POC_BODY.as_bytes()),
-                output: None,
-                output_sha256: None,
+            witness: Some(if command {
+                Witness {
+                    kind: WitnessKind::PocCommand,
+                    reference: LEAK.into(),
+                    sha256: sha(LEAK.as_bytes()),
+                    output: Some(LEAK_OUT.into()),
+                    output_sha256: Some(sha(LEAKED.as_bytes())),
+                }
+            } else {
+                Witness {
+                    kind: WitnessKind::Test,
+                    reference: POC.into(),
+                    sha256: sha(POC_BODY.as_bytes()),
+                    output: None,
+                    output_sha256: None,
+                }
             }),
             preconditions: vec!["the body reads an untrusted repository".into()],
             reachability: "a repository file names the path the tool reads".into(),
@@ -223,13 +244,20 @@ impl World {
             invariant: "no read leaves the world".into(),
             rec: rec.clone(),
         };
-        for (path, text) in [(POC, POC_BODY.to_owned()), (rec.as_str(), record.to_json())] {
+        let files = [
+            (POC, POC_BODY.to_owned()),
+            (LEAK_SH, "printf 'read ../x\\n'\n".to_owned()),
+            (LEAK_OUT, LEAKED.to_owned()),
+            (rec.as_str(), record.to_json()),
+        ];
+        for (path, text) in files {
             let at = self.world().join(path);
             fs::create_dir_all(at.parent().unwrap()).unwrap();
             fs::write(at, text).unwrap();
         }
         let report = format!(
-            "@S DONE\n@F #{fp} {FILE}:1 read_path follows dot-dot out of the world witness:{POC} rec:{rec}\n@E"
+            "@S DONE\n@F #{fp} {FILE}:1 read_path follows dot-dot out of the world witness:{} rec:{rec}\n@E",
+            if command { LEAK_OUT } else { POC }
         );
         (fp, report)
     }
@@ -363,14 +391,19 @@ async fn a_confirmed_finding_counts_blocks_and_proposes_a_seal() {
     let v = f.verdict.as_ref().unwrap();
     assert_eq!(v.speciality, "dark-elf-agent");
     assert_eq!(v.finder_speciality, "dark-elf-harness");
-    let Ruling::Confirmed { severity, reran } = &v.ruling else {
+    let Ruling::Confirmed {
+        severity, reran, ..
+    } = &v.ruling
+    else {
         panic!("confirmed");
     };
     assert_eq!(*severity, Severity::High);
+    // The re-run's output and its failure, stamped from the verifier's journal.
+    assert_eq!(reran[0].sha256.len(), 64);
+    assert!(reran[0].failed, "the witness test failed again");
     assert_eq!(
-        reran[0].sha256,
-        sha(POC_BODY.as_bytes()),
-        "the re-run's output, stamped"
+        v.tree, r.opening.tree,
+        "the verdict is bound to the opened tree"
     );
     let seal = f.proposal.as_ref().unwrap();
     assert_eq!(
@@ -552,4 +585,44 @@ async fn with_no_other_speciality_born_the_finding_waits_unverified() {
     let r = w.only();
     assert!(matches!(r.status, Status::Verifying { .. }));
     assert_eq!(r.findings[0].staff, Some(Staff::Unstaffed));
+}
+
+/// A command witness with captured output confirms through `reproduced`: the verifier runs the
+/// witness's own command, and it prints the captured output again — while `cat` of that output,
+/// filed first, is refused.
+#[tokio::test]
+async fn a_command_witness_confirms_by_reproducing_its_output() {
+    let w = World::new("reproduced", &["dark-elf-harness", "dark-elf-agent"]);
+    let (fp, report) = w.finding_by(Severity::High, true);
+    let cat = format!("cat {LEAK_OUT}");
+    let model = script(
+        &report,
+        vec![
+            ScriptedModel::tool("r0", "bash", json!({"command": cat})),
+            verdict(
+                &fp,
+                &json!({"verdict": "confirmed", "commands": [{"run": cat}]}),
+            ),
+            ScriptedModel::tool("r1", "bash", json!({"command": LEAK})),
+            verdict(
+                &fp,
+                &json!({"verdict": "confirmed", "commands": [{"run": LEAK}]}),
+            ),
+            ScriptedModel::text("@S DONE\n@E"),
+        ],
+    );
+    let mut run = w.throne(model);
+    let text = answer(&mut run, "add a reader").await;
+    assert!(text.contains("confirmed by dark-elf-agent"), "{text}");
+    let f = &w.only().findings[0];
+    assert!(f.counts(), "{f:?}");
+    let Some(Ruling::Confirmed { reran, .. }) = f.verdict.as_ref().map(|v| &v.ruling) else {
+        panic!("confirmed");
+    };
+    assert_eq!(reran[0].run, LEAK);
+    assert_eq!(
+        reran[0].sha256,
+        sha(LEAKED.as_bytes()),
+        "the captured output, printed again"
+    );
 }

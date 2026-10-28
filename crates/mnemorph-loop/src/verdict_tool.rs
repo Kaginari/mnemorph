@@ -30,7 +30,7 @@ impl Tool for VerdictTool {
     }
 
     fn description(&self) -> &'static str {
-        "File your verdict on the finding you were commissioned to verify — one verdict, for that landing and that fingerprint only. `confirmed`: you re-ran the witness yourself; list the `bash` commands exactly as you ran them (the harness reads their output from your own journal; a command's captured output must be printed again), and give a lower `severity` if the evidence shows less — never a higher one. `refuted`: `reason` says why it does not hold, with the `files` (path and `sha256sum`) or the `commands` that show it. `cannot-verify`: `blocker` says what stopped you. Reasons and blockers state their own fact: 20 characters or more, never `n/a`. A refused verdict comes back with every guard it broke."
+        "File your verdict on the finding you were commissioned to verify — one verdict, for that landing and that fingerprint only. `confirmed`: you re-ran the witness yourself; list the `bash` commands exactly as you ran them (the harness reads their output and exit from your own journal). A command witness is re-run by its own command, to its captured output if it has one; a test or a scanner output by a command naming its file that fails as the witness shows. Give a lower `severity`, with its `reason`, if the evidence shows less — never a higher one. `refuted`: `reason` says why it does not hold, with the `files` (path and `sha256sum`) or the `commands` that show it. `cannot-verify`: `blocker` says what stopped you. Reasons and blockers state their own fact: 20 characters or more, never `n/a`. A refused verdict comes back with every guard it broke."
     }
 
     fn schema(&self) -> Value {
@@ -42,7 +42,7 @@ impl Tool for VerdictTool {
                 "fingerprint": {"type": "string", "description": "The finding's fingerprint, as your commission names it."},
                 "verdict": {"type": "string", "enum": ["confirmed", "refuted", "cannot-verify"]},
                 "severity": {"type": "string", "enum": ["informational", "low", "medium", "high", "critical"], "description": "For `confirmed`: the severity the evidence shows, at most the record's. Left out, the record's stands."},
-                "reason": {"type": "string", "description": "For `refuted`: why it does not hold."},
+                "reason": {"type": "string", "description": "For `refuted`: why it does not hold. For `confirmed` at a lower severity: why the evidence shows less."},
                 "blocker": {"type": "string", "description": "For `cannot-verify`: what stopped you."},
                 "files": {"type": "array", "items": {
                     "type": "object",
@@ -134,12 +134,18 @@ pub(crate) fn run(
         .map(|c| Rerun {
             run: c.run,
             sha256: String::new(),
+            failed: false,
         })
         .collect();
+    let record = challenges.record(&a.landing);
+    // The tree as it stands now, hashed as the challenge hashed it when it opened.
+    let tree = record.as_ref().map_or_else(String::new, |r| {
+        crate::challenge::tree_hash(world, &r.landing.written)
+    });
     let ruling = match a.verdict.as_str() {
         "confirmed" => {
             // Left out, the severity the finding was found at stands.
-            let found = challenges.record(&a.landing).and_then(|r| {
+            let found = record.as_ref().and_then(|r| {
                 r.findings
                     .iter()
                     .find(|f| f.fingerprint() == a.fingerprint)
@@ -152,7 +158,11 @@ pub(crate) fn run(
                     crate::challenge::safe(&a.landing)
                 ));
             };
-            Ruling::Confirmed { severity, reran }
+            Ruling::Confirmed {
+                severity,
+                reason: a.reason.unwrap_or_default(),
+                reran,
+            }
         }
         "refuted" => Ruling::Refuted {
             reason: a.reason.unwrap_or_default(),
@@ -174,6 +184,7 @@ pub(crate) fn run(
         landing: a.landing.clone(),
         fingerprint: a.fingerprint.clone(),
         verifier: body.to_owned(),
+        tree,
         ruling,
     };
     match challenges.verdict(filing, &Tree::new(world), ran) {
@@ -220,7 +231,11 @@ mod tests {
             "l-1",
             &["crates/mnemorph-tools/src/files.rs".to_owned()],
         );
-        c.open(&l).unwrap();
+        let opening = mnemorph_world::challenge::Opening {
+            tree: crate::challenge::tree_hash(&w, &l.written),
+            ..Default::default()
+        };
+        c.open_at(&l, &opening).unwrap();
         let record = serde_json::from_value(json!({
             "verdict": "finding",
             "fingerprint": "0123456789abcdef",
@@ -269,7 +284,18 @@ mod tests {
             "{}",
             raised.content
         );
-        let lowered = run(&c, &w, &ran, "dark-elf-agent", &filing("medium"));
+        let bare = run(&c, &w, &ran, "dark-elf-agent", &filing("medium"));
+        assert!(
+            bare.is_error && bare.content.contains("reasoned"),
+            "{}",
+            bare.content
+        );
+        let reasoned = json!({"landing": "l-1", "fingerprint": "0123456789abcdef",
+            "verdict": "confirmed", "severity": "medium",
+            "reason": "the read stays inside files the grant already shows",
+            "commands": [{"run": "cargo test"}]})
+        .to_string();
+        let lowered = run(&c, &w, &ran, "dark-elf-agent", &reasoned);
         assert!(!lowered.is_error, "{}", lowered.content);
         assert!(
             lowered.content.contains("filed: confirmed"),

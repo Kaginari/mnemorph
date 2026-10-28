@@ -186,10 +186,10 @@ pub(crate) fn ran_of(beats: &[Beat]) -> Ran {
             Beat::Result {
                 tool_use_id,
                 content,
-                ..
+                is_error,
             } => {
                 if let Some(command) = commands.get(tool_use_id) {
-                    ran.record(command, content);
+                    ran.record_exit(command, content, *is_error);
                 }
             }
             _ => {}

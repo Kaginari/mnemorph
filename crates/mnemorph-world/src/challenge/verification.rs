@@ -9,9 +9,9 @@
 //! - The verdict ([`Ruling`]) is `confirmed`, with the verifier's own re-run of the witness
 //!   (the severity may be lowered, never raised); `refuted`, with a reason and its evidence; or
 //!   `cannot-verify`, with the blocker. Each [`Guard`] a filing breaks is named in the refusal.
-//! - **Counting:** only a confirmed finding counts. **Blocking:** a finding blocks the landing
-//!   when it is confirmed at high or critical, or when it is critical and not confirmed lower or
-//!   refuted — unverified, unstaffed or `cannot-verify` — which the human decides.
+//! - **Counting:** only a confirmed finding counts. **Blocking:** a critical finding blocks the
+//!   landing whatever one verifier says — refuted, lowered, unverified or `cannot-verify` alike,
+//!   for the human to settle by the fix or a waiver — and a high one once confirmed at high.
 //! - **Seals:** a finding confirmed at high or critical may be proposed as a seal, with its
 //!   witness frozen by hash ([`Challenges::propose`]); nothing here applies one — a seal is the
 //!   human's.
@@ -79,6 +79,15 @@ pub struct Rerun {
     /// The SHA-256 of its output, stamped from the journal; empty when the journal holds none.
     #[serde(default)]
     pub sha256: String,
+    /// Whether that run failed — a non-zero exit, a signal, a timeout — stamped from the journal.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub failed: bool,
+}
+
+// Serde's `skip_serializing_if` passes the field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// A file the verifier read, at the hash it stands at in the landing's tree.
@@ -99,6 +108,9 @@ pub enum Ruling {
     Confirmed {
         /// The severity as it stands: the finder's, or lower — never higher.
         severity: Severity,
+        /// Why it is lower than the finder's: required when it is.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
         /// The verifier's own re-run of the witness.
         reran: Vec<Rerun>,
     },
@@ -146,6 +158,9 @@ pub struct Verification {
     pub finder: String,
     /// The finder's speciality, by its creature name: what a precision fold reads per speciality.
     pub finder_speciality: String,
+    /// The landing's tree the verdict was filed on: the one its challenge was opened on.
+    #[serde(default)]
+    pub tree: String,
     /// The witness's SHA-256 when it was verified.
     pub witness_sha256: String,
     /// The witness's captured output's SHA-256, when it has one.
@@ -225,16 +240,15 @@ impl Finding {
         )
     }
 
-    /// Whether it blocks the landing: confirmed at high or critical, or critical with no verdict
-    /// that lowers or refutes it — unverified, unstaffed or `cannot-verify`, for the human to
-    /// decide.
+    /// Whether it blocks the landing: a critical finding always — whatever one verifier says, it
+    /// is the human's to settle, by the fix or a waiver — and any other once confirmed at high.
     #[must_use]
     pub fn blocks(&self) -> bool {
-        match self.verdict.as_ref().map(|v| &v.ruling) {
-            Some(Ruling::Confirmed { severity, .. }) => *severity >= Severity::High,
-            Some(Ruling::Refuted { .. }) => false,
-            Some(Ruling::CannotVerify { .. }) | None => self.found.severity() == Severity::Critical,
-        }
+        self.found.severity() == Severity::Critical
+            || matches!(
+                self.verdict.as_ref().map(|v| &v.ruling),
+                Some(Ruling::Confirmed { severity, .. }) if *severity >= Severity::High
+            )
     }
 
     /// Whether it still waits on a verdict.
@@ -245,20 +259,35 @@ impl Finding {
 
     /// It as a blocker, with where its verification stands.
     pub(super) fn blocker(&self) -> Blocker {
+        let held = self.severity() < Severity::High;
         let standing = match &self.verdict {
             Some(v) => match &v.ruling {
+                Ruling::Confirmed { severity, .. } if held => format!(
+                    "critical, confirmed by {} at {}: the human decides",
+                    v.verifier,
+                    severity.word()
+                ),
                 Ruling::Confirmed { .. } => format!("confirmed by {}", v.verifier),
                 Ruling::CannotVerify { blocker } => {
                     format!("critical, cannot be verified ({blocker}): the human decides")
                 }
-                Ruling::Refuted { .. } => String::new(),
+                Ruling::Refuted { reason, .. } => format!(
+                    "critical, refuted by {}: {reason} — the human decides",
+                    v.verifier
+                ),
             },
             None => "critical, unverified: the human decides".to_owned(),
+        };
+        // A critical held for the human reads as found; a confirmed one at its confirmed severity.
+        let severity = if held {
+            self.found.severity()
+        } else {
+            self.severity()
         };
         Blocker {
             speciality: self.found.record.speciality.clone(),
             fingerprint: self.fingerprint().to_owned(),
-            severity: self.severity().word().to_owned(),
+            severity: severity.word().to_owned(),
             claim: self.found.record.claim.clone(),
             standing,
         }
@@ -296,16 +325,20 @@ pub enum Guard {
     Independent,
     /// A finding takes one verdict.
     Once,
+    /// The verdict is filed on the landing's tree as its challenge was opened on.
+    Current,
     /// A confirmation never raises the severity.
     NoRaise,
-    /// A confirmation cites the verifier's own re-run of the witness, shown in its journal.
+    /// A confirmation cites the verifier's own re-run of the witness, shown in its journal: a
+    /// command witness's own command, or a command naming a test's or scanner output's file that
+    /// failed as the witness shows.
     Rederived,
     /// A witness with captured output is confirmed only by a re-run that printed that output.
     Reproduced,
     /// A confirmed witness is the one found: its file still hashes as the record says.
     Unchanged,
-    /// A refutation says why, and a `cannot-verify` its blocker: at least 20 characters, not a
-    /// stock phrase.
+    /// A refutation says why, a `cannot-verify` its blocker, and a confirmation that lowers the
+    /// severity why: at least 20 characters, not a stock phrase.
     Reasoned,
     /// A refutation shows its evidence; every cited file stands at its hash in the tree, every
     /// command in the verifier's journal; no more than [`MAX_EVIDENCE`] of each.
@@ -316,12 +349,13 @@ pub enum Guard {
 
 impl Guard {
     /// Every guard, in the order they are reported.
-    pub const ALL: [Guard; 12] = [
+    pub const ALL: [Guard; 13] = [
         Guard::Floor,
         Guard::Finder,
         Guard::Assigned,
         Guard::Independent,
         Guard::Once,
+        Guard::Current,
         Guard::NoRaise,
         Guard::Rederived,
         Guard::Reproduced,
@@ -340,6 +374,7 @@ impl Guard {
             Guard::Assigned => "assigned",
             Guard::Independent => "independent",
             Guard::Once => "once",
+            Guard::Current => "current",
             Guard::NoRaise => "no-raise",
             Guard::Rederived => "rederived",
             Guard::Reproduced => "reproduced",
@@ -362,20 +397,27 @@ impl Guard {
                  landing's author nor a body above it"
             }
             Guard::Once => "this finding has its verdict already",
+            Guard::Current => {
+                "the landing's tree is no longer the one its challenge was opened on: the verdict \
+                 would judge other code"
+            }
             Guard::NoRaise => "a confirmation may lower the severity, never raise it",
             Guard::Rederived => {
-                "a confirmation cites a command you ran through `bash` that re-runs the witness"
+                "a confirmation cites a command you ran through `bash` that re-runs the witness: a \
+                 command witness exactly as recorded, or a command naming the test's or the \
+                 scanner output's file that fails as the witness shows"
             }
             Guard::Reproduced => {
-                "the witness captured its output: a confirmation re-runs it to that same output"
+                "the witness captured its output: a confirmation re-runs its command to that same \
+                 output"
             }
             Guard::Unchanged => {
                 "the witness no longer hashes as the record says: what was found is not what is \
                  there"
             }
             Guard::Reasoned => {
-                "a refutation says why and a `cannot-verify` its blocker: at least 20 characters, \
-                 not a stock phrase"
+                "a refutation says why, a `cannot-verify` its blocker, and a lowered severity its \
+                 reason: at least 20 characters, not a stock phrase"
             }
             Guard::Evidenced => {
                 "a refutation cites a file at its hash or a command you ran; every cited file \
@@ -475,25 +517,43 @@ pub(super) fn verdict_breaks(
             || Speciality::of(&v.verifier).map(Speciality::creature) != Some(v.speciality.as_str()),
     );
     flag(Guard::Once, finding.verdict.is_some());
+    flag(Guard::Current, v.tree != opening.current_tree());
     let shown = |r: &Rerun| match sources {
         Some((_, ran)) => !r.sha256.is_empty() && ran.shows(&r.run, Some(&r.sha256)),
         None => is_sha256(&r.sha256),
     };
     match &v.ruling {
-        Ruling::Confirmed { severity, reran } => {
+        Ruling::Confirmed {
+            severity,
+            reason,
+            reran,
+        } => {
             flag(Guard::NoRaise, *severity > finding.found.severity());
             flag(
-                Guard::Rederived,
-                reran.is_empty() || reran.len() > MAX_EVIDENCE || !reran.iter().all(shown),
+                Guard::Reasoned,
+                *severity < finding.found.severity() && !reasoned(reason),
             );
             let witness = record.witness.as_ref();
-            // A command's captured output is reproduced only by a re-run that printed it again.
+            let rederives =
+                |r: &Rerun| witness.is_some_and(|w| shown(r) && rederives(w, r, sources));
+            flag(
+                Guard::Rederived,
+                reran.is_empty()
+                    || reran.len() > MAX_EVIDENCE
+                    || !reran.iter().all(shown)
+                    || !reran.iter().any(rederives),
+            );
+            // A command's captured output is reproduced only by its own command printing it again.
             let captured = witness
                 .filter(|w| w.kind == WitnessKind::PocCommand)
-                .and_then(|w| w.output_sha256.as_deref());
+                .and_then(|w| Some((w.reference.trim(), w.output_sha256.as_deref()?)));
             flag(
                 Guard::Reproduced,
-                captured.is_some_and(|out| !reran.iter().any(|r| r.sha256 == out)),
+                captured.is_some_and(|(command, out)| {
+                    !reran
+                        .iter()
+                        .any(|r| r.run.trim() == command && r.sha256 == out)
+                }),
             );
             flag(Guard::Unchanged, !unchanged(witness, v, sources));
         }
@@ -521,6 +581,30 @@ pub(super) fn verdict_breaks(
         Ruling::CannotVerify { blocker } => flag(Guard::Reasoned, !reasoned(blocker)),
     }
     broken
+}
+
+/// Whether `r` re-runs witness `w`: a command witness's own command; for a test or a scanner's
+/// output, a command naming its file that failed — the failure the witness shows — as the
+/// verifier's journal recorded it.
+fn rederives(w: &Witness, r: &Rerun, sources: Sources<'_>) -> bool {
+    match w.kind {
+        WitnessKind::PocCommand => r.run.trim() == w.reference.trim(),
+        WitnessKind::Test | WitnessKind::ScannerOutput => {
+            names_path(&r.run, &w.reference)
+                && r.failed
+                && sources.is_none_or(|(_, ran)| ran.shows_failed(&r.run, &r.sha256))
+        }
+    }
+}
+
+/// Whether `command` names `path` as one of its words, bare, `./`-prefixed or quoted.
+fn names_path(command: &str, path: &str) -> bool {
+    let path = path.trim_start_matches("./");
+    !path.is_empty()
+        && command.split_whitespace().any(|word| {
+            let word = word.trim_matches(|c| matches!(c, '\'' | '"' | ';' | '(' | ')'));
+            word.trim_start_matches("./") == path
+        })
 }
 
 /// Whether the witness `v` confirms is the one found: the hashes it carries are the record's,
@@ -572,6 +656,8 @@ pub struct Filing {
     pub fingerprint: String,
     /// The verifier, by body: the one whose run files it.
     pub verifier: String,
+    /// The landing's tree as the harness hashed it at the filing.
+    pub tree: String,
     /// The verdict.
     pub ruling: Ruling,
 }
@@ -755,6 +841,7 @@ impl Challenges {
         if let Ruling::Confirmed { reran, .. } | Ruling::Refuted { reran, .. } = &mut ruling {
             for r in reran.iter_mut() {
                 r.sha256 = ran.last(&r.run).cloned().unwrap_or_default();
+                r.failed = ran.last_failed(&r.run).unwrap_or(false);
             }
         }
         let witness = finding.found.record.witness.as_ref();
@@ -766,6 +853,7 @@ impl Challenges {
                 .unwrap_or_default(),
             finder: finding.found.finder.clone(),
             finder_speciality: finding.found.record.speciality.clone(),
+            tree: filing.tree.clone(),
             witness_sha256: witness.map(|w| w.sha256.clone()).unwrap_or_default(),
             output_sha256: witness
                 .and_then(|w| w.output_sha256.clone())
