@@ -6150,3 +6150,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   ledger's rows are the challenge records' settling rows in `mnemorph-world`, and evolution rows
   are M11's. Open (@?): the challenge rows deny unknown fields, so a binary from before this change
   skips a stamped row instead of folding it — a downgrade reads fewer findings.
+
+---
+
+### [2026-10-28T09:30:31+01:00] rimuru — #260, Fable's review: unreadable challenge rows fail closed; a dirty build says so
+- **Done:** `Row` reads past unknown fields, so an older and a newer binary read each other's
+  rows. A line the fold cannot parse is no longer skipped: the challenge it names, or every one
+  opened before it, stays `Pending { unreadable }`, said as `unreadable row N` by `list`, the
+  coverage tool and `score`. A known blocker still blocks. The stamp's commit carries `-dirty` on
+  uncommitted tracked changes. The PR now refers to #98 and #105 rather than closing them. Docs 02,
+  05, 06.
+- **Tests:** a row with an extra field reads; a cleared challenge goes pending on a row naming it
+  and on a torn line, while a landing opened after it does not; a critical's row of an unknown kind
+  holds it pending, and a critical stays blocked after a torn line; `list` and `score` say the row.
+- **Learned:** a fold that drops what it cannot read fails open. The index is not watched for the
+  dirty mark, since a plain `git status` would rebuild everything above the ledger. Open (@?): an
+  unreadable *opening* row leaves no challenge to hold. #98 remains for `status`, the board and the
+  other races' meters, and #105 for M11's evolution rows.

@@ -993,7 +993,7 @@ fn challenge(args: &[String]) -> ExitCode {
         [verb] if verb == "score" => match mnemorph_server::world::challenge::scores(&world) {
             Ok(folded) => {
                 let roster = mnemorph_server::world::Roster::load(&world);
-                for line in score(&folded, &roster) {
+                for line in score(&folded, &roster, &records.unreadable()) {
                     println!("{line}");
                 }
                 ExitCode::SUCCESS
@@ -1068,17 +1068,27 @@ fn decide(
 /// Each speciality's value ledger, as `challenge score` says it, escaped: the counts; precision,
 /// the upheld rate on the race's meter, the last ten and the `cannot-verify` rate, each with its
 /// count and 95% interval; the builds its findings were settled under; and what is proposed to
-/// the human.
+/// the human — after the records' unreadable rows, when there are any.
 fn score(
     folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
     roster: &mnemorph_server::world::Roster,
+    unreadable: &[u64],
 ) -> Vec<String> {
     use mnemorph_server::world::challenge::Ascension;
     let safe = mnemorph_server::challenge::safe;
-    if folded.is_empty() {
-        return vec!["no Dark Elf finding is on record".to_owned()];
-    }
     let mut lines = Vec::new();
+    if !unreadable.is_empty() {
+        let rows: Vec<String> = unreadable.iter().map(u64::to_string).collect();
+        lines.push(format!(
+            "the records hold unreadable rows ({}): what they held is not counted, and the \
+             challenges they could be stay pending",
+            rows.join(", ")
+        ));
+    }
+    if folded.is_empty() {
+        lines.push("no Dark Elf finding is on record".to_owned());
+        return lines;
+    }
     for (speciality, f) in folded {
         // The form is the living body's that bears the speciality's name, when one is born.
         let form = roster

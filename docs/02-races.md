@@ -669,6 +669,11 @@ and the generalist, each from the challenge reserve. No model chooses, and Rimur
 The landing's `PASS (challenge pending)` clears only when every routed speciality, the generalist
 included, has filed a valid coverage ledger for it (below); a speciality that
 files none, or one that does not validate, leaves the challenge pending, and a verified finding from any of them goes the way of every finding.
+A line of the challenge records that does not parse — a torn write, a hand edit, a row of a kind
+this binary does not know — fails closed: the challenge it names, or every challenge opened before
+it when it names none, stays pending on it (`unreadable row N`, said by `list` and `score`) and
+never clears; a blocking finding already read still blocks. A field this binary does not know is
+read past, so an older and a newer binary read each other's rows.
 Each attack class has exactly one owning speciality, so two specialities never hunt the same
 class on the same paths.
 

@@ -402,6 +402,29 @@ fn the_human_decides_a_finding_at_the_terminal() {
     );
 }
 
+/// A row the fold cannot read is said, by `list` and by `score`, and holds the landing pending.
+#[test]
+fn an_unreadable_row_is_said() {
+    let f = Fixture::new("unreadable");
+    let file = records(&f.state, &f.world);
+    let before = fs::read_to_string(&file).unwrap();
+    fs::write(&file, format!("{before}{{\"row\":\"found\",\"landing\":\n")).unwrap();
+    let n = before.lines().count() + 1;
+    let out = f.run(&["list"], "", None);
+    assert!(
+        text(&out).contains(&format!("unreadable row {n}")),
+        "{}",
+        text(&out)
+    );
+    let out = f.run(&["score"], "", None);
+    assert!(
+        text(&out).starts_with(&format!("the records hold unreadable rows ({n})")),
+        "{}",
+        text(&out)
+    );
+    assert!(matches!(f.status(), Some(Status::Pending { .. })));
+}
+
 /// A living Dark Elf at the bars is proposed its rise — to the human, applied by nothing here.
 #[test]
 fn a_rise_is_proposed_to_the_human() {

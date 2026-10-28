@@ -213,7 +213,7 @@ pub fn wait_on(records: &Challenges, record: &Record) {
             );
         }
     }
-    let Status::Pending { awaiting } = &record.status else {
+    let Status::Pending { awaiting, .. } = &record.status else {
         return;
     };
     for (s, staff) in &record.staff {
@@ -558,12 +558,20 @@ pub fn said(record: &Record) -> String {
     let id = safe(id);
     let by = safe(&record.opening.by);
     let mut line = match &record.status {
-        Status::Pending { awaiting } => {
-            let names: Vec<&str> = awaiting.iter().map(|s| s.creature()).collect();
-            format!(
-                "- `{id}` by {by}: challenge pending — awaiting {}",
-                names.join(", ")
-            )
+        Status::Pending {
+            awaiting,
+            unreadable,
+        } => {
+            let mut why: Vec<String> = Vec::new();
+            if !awaiting.is_empty() {
+                let names: Vec<&str> = awaiting.iter().map(|s| s.creature()).collect();
+                why.push(format!("awaiting {}", names.join(", ")));
+            }
+            if !unreadable.is_empty() {
+                let rows: Vec<String> = unreadable.iter().map(u64::to_string).collect();
+                why.push(format!("unreadable row {}", rows.join(", ")));
+            }
+            format!("- `{id}` by {by}: challenge pending — {}", why.join("; "))
         }
         Status::Blocked { findings } => {
             let f: Vec<String> = findings.iter().map(|b| safe(&b.to_string())).collect();
@@ -986,6 +994,7 @@ mod tests {
         assert!(!text.contains("## Playbooks (dark-elf-harness)"), "{text}");
         r.status = Status::Pending {
             awaiting: vec![Speciality::Supply],
+            unreadable: vec![],
         };
         r.staff.push((Speciality::Supply, Staff::Unstaffed));
         let line = said(&r);

@@ -946,6 +946,43 @@ fn settling_rows_carry_their_build() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A critical finding blocks whatever line follows it: a torn row after it changes nothing; the
+/// critical's own row, unreadable to this binary, holds the landing pending on it — never
+/// cleared — and with a field this binary does not know, it reads and blocks.
+#[test]
+fn a_critical_blocks_through_an_unreadable_row() {
+    let dir = temp("unreadable-critical");
+    let file = dir.join("challenges.jsonl");
+    let c = Challenges::at(&file);
+    open_landing(&c, "run-1:1");
+    let blocked = |c: &Challenges| matches!(c.status("run-1:1"), Some(Status::Blocked { .. }));
+    assert!(matches!(
+        c.found("run-1:1", found(Severity::Critical)),
+        Ok(Status::Blocked { .. })
+    ));
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        format!("{text}{{\"row\":\"found\",\"landing\":\"run-1:\n"),
+    )
+    .unwrap();
+    assert!(blocked(&c), "a torn line after a critical still blocks");
+    // The critical's row as a newer binary wrote it, of a kind this one does not know.
+    let n = u64::try_from(text.lines().count()).unwrap();
+    let newer = text.replace(r#""row":"found""#, r#""row":"found-v2""#);
+    std::fs::write(&file, &newer).unwrap();
+    assert!(matches!(
+        c.status("run-1:1"),
+        Some(Status::Pending { ref unreadable, .. }) if unreadable == &[n]
+    ));
+    // With a field this binary does not know, it reads, and blocks.
+    let extra = text.replace(r#""row":"found","#, r#""row":"found","future":1,"#);
+    assert_ne!(extra, text);
+    std::fs::write(&file, &extra).unwrap();
+    assert!(blocked(&c));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// One root cause found on two landings — refuted on the first, confirmed on the second after
 /// its line moved — counts once, upheld: the fingerprint is line-free.
 #[test]

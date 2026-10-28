@@ -305,6 +305,9 @@ pub enum Status {
     Pending {
         /// They, in routing order.
         awaiting: Vec<Speciality>,
+        /// The records' lines, from 1, that did not parse and could be this landing's: until
+        /// they are, nothing they held is known, so the challenge cannot clear.
+        unreadable: Vec<u64>,
     },
     /// A critical finding, whatever one verifier says, or a high one confirmed at high, blocks
     /// the landing, whatever was filed.
@@ -416,9 +419,10 @@ impl fmt::Display for Refusal {
     }
 }
 
-/// One line of the records.
+/// One line of the records. Unknown fields are read past, so an older and a newer binary read
+/// each other's rows; a line that still does not parse holds its challenge pending ([`fold`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "row", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(tag = "row", rename_all = "kebab-case")]
 enum Row {
     Opened {
         landing: Landing,
@@ -487,6 +491,8 @@ struct Open {
     /// Per fingerprint, the line of the record that last settled it — found, ruled or decided —
     /// and the build that wrote it.
     at: BTreeMap<String, (u64, Build)>,
+    /// Lines, from 1, that did not parse and could be this landing's.
+    unreadable: Vec<u64>,
 }
 
 impl Open {
@@ -500,6 +506,7 @@ impl Open {
             findings: Vec::new(),
             waived: None,
             at: BTreeMap::new(),
+            unreadable: Vec::new(),
         }
     }
 
@@ -521,8 +528,11 @@ impl Open {
             .map(|r| r.speciality)
             .filter(|s| !self.filed.contains_key(s))
             .collect();
-        if !awaiting.is_empty() {
-            return Status::Pending { awaiting };
+        if !awaiting.is_empty() || !self.unreadable.is_empty() {
+            return Status::Pending {
+                awaiting,
+                unreadable: self.unreadable.clone(),
+            };
         }
         let verifying = self.verifying();
         if verifying.is_empty() {
@@ -780,10 +790,23 @@ impl Challenges {
         self.read()
             .into_iter()
             .filter_map(|(id, open)| match open.status() {
-                Status::Pending { awaiting } => Some((id, awaiting)),
+                Status::Pending { awaiting, .. } => Some((id, awaiting)),
                 _ => None,
             })
             .collect()
+    }
+
+    /// The records' lines, from 1, that did not parse and hold a challenge pending.
+    #[must_use]
+    pub fn unreadable(&self) -> Vec<u64> {
+        let mut lines: Vec<u64> = self
+            .read()
+            .into_values()
+            .flat_map(|open| open.unreadable)
+            .collect();
+        lines.sort_unstable();
+        lines.dedup();
+        lines
     }
 
     /// The records folded, read under the lock; empty when they cannot be read.
@@ -842,12 +865,17 @@ fn record_of(open: Open) -> Record {
 /// is open, its speciality has not filed yet, and its ledger validates again; a staffing only for
 /// a routed speciality, the latest standing; a waiver only the human's, reasoned and bound to the
 /// opened tree; a decision on a finding only the human's, reasoned and bound to the opened tree,
-/// the latest standing. A line that does not parse — a torn write, a hand edit — counts for nothing.
+/// the latest standing. A line that does not parse — a torn write, a hand edit, a row of a kind
+/// this binary does not know — fails closed ([`unreadable`]).
 #[allow(clippy::too_many_lines)] // one arm per kind of row
 fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
     let mut all: BTreeMap<String, Open> = BTreeMap::new();
     for (n, line) in (0u64..).zip(bytes.split(|&b| b == b'\n')) {
+        if line.iter().all(u8::is_ascii_whitespace) {
+            continue;
+        }
         let Ok(row) = serde_json::from_slice::<Row>(line) else {
+            unreadable(&mut all, n + 1, line);
             continue;
         };
         match row {
@@ -951,6 +979,33 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
         }
     }
     all
+}
+
+/// A line that did not parse, line `n` from 1: never skipped. The landing it names, when it names
+/// one already open, stays pending on it; one that names none could be any landing opened before
+/// it, and holds each of them pending. A landing opened after it is not its.
+fn unreadable(all: &mut BTreeMap<String, Open>, n: u64, line: &[u8]) {
+    let named = serde_json::from_slice::<serde_json::Value>(line)
+        .ok()
+        .and_then(|v| {
+            let id = v
+                .get("landing")
+                .and_then(|l| l.as_str().or_else(|| l.get("id")?.as_str()))
+                .or_else(|| v.get("ledger")?.get("landing")?.as_str());
+            id.map(str::to_owned)
+        });
+    match named {
+        Some(id) => {
+            if let Some(open) = all.get_mut(&id) {
+                open.unreadable.push(n);
+            }
+        }
+        None => {
+            for open in all.values_mut() {
+                open.unreadable.push(n);
+            }
+        }
+    }
 }
 
 /// Creates `dir`, its owner's alone where the platform says so.
@@ -1128,13 +1183,15 @@ mod tests {
         assert_eq!(
             c.open(&l),
             Ok(Status::Pending {
-                awaiting: vec![Speciality::Agent, Speciality::Supply, Speciality::General]
+                awaiting: vec![Speciality::Agent, Speciality::Supply, Speciality::General],
+                unreadable: vec![],
             })
         );
         assert_eq!(
             c.file(full(&l, Speciality::Agent), &files, &ran()),
             Ok(Status::Pending {
-                awaiting: vec![Speciality::Supply, Speciality::General]
+                awaiting: vec![Speciality::Supply, Speciality::General],
+                unreadable: vec![],
             })
         );
         // An invalid ledger is refused, and changes nothing.
@@ -1146,13 +1203,14 @@ mod tests {
         assert_eq!(r.rules(), [Rule::MissingPair]);
         assert!(matches!(
             c.status(&l.id),
-            Some(Status::Pending { ref awaiting }) if awaiting.len() == 2
+            Some(Status::Pending { ref awaiting, .. }) if awaiting.len() == 2
         ));
         assert_eq!(c.pending().len(), 1);
         assert_eq!(
             c.file(full(&l, Speciality::Supply), &files, &ran()),
             Ok(Status::Pending {
-                awaiting: vec![Speciality::General]
+                awaiting: vec![Speciality::General],
+                unreadable: vec![],
             })
         );
         // The generalist owns no class: its ledger is empty, and filing it says its review ran.
@@ -1175,6 +1233,70 @@ mod tests {
             c.file(full(&l, Speciality::Agent), &files, &ran()),
             Err(Refusal::AlreadyFiled(Speciality::Agent))
         );
+        let _ = std::fs::remove_dir_all(&w);
+    }
+
+    /// A line the fold cannot read never clears a challenge: one that names no landing holds
+    /// every landing opened before it pending, one that names a landing holds that one, and a
+    /// landing opened after it is not its. A row with a field this binary does not know reads.
+    #[test]
+    fn an_unreadable_row_holds_its_challenge_pending() {
+        use std::io::Write as _;
+        let w = temp("unreadable");
+        let c = Challenges::at(&w.join("records/challenges.jsonl"));
+        let l = landing(&["crates/mnemorph-wire/src/report.rs", "Cargo.lock"]);
+        let files = tree(&l);
+        c.open(&l).unwrap();
+        for s in [Speciality::Agent, Speciality::Supply, Speciality::General] {
+            c.file(full(&l, s), &files, &ran()).unwrap();
+        }
+        assert_eq!(c.status(&l.id), Some(Status::Cleared));
+        let append = |line: &str| {
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&c.path)
+                .unwrap();
+            writeln!(f, "{line}").unwrap();
+        };
+        let lines = |c: &Challenges| {
+            u64::try_from(std::fs::read_to_string(&c.path).unwrap().lines().count()).unwrap()
+        };
+        // A newer binary's row, with a field this one does not know: read, not dropped.
+        append(&format!(
+            r#"{{"row":"staffed","landing":"{}","speciality":"{}","staff":{{"staff":"unstaffed"}},"future":1}}"#,
+            l.id,
+            Speciality::Agent.creature()
+        ));
+        let r = c.record(&l.id).unwrap();
+        assert_eq!(r.staff[0], (Speciality::Agent, Staff::Unstaffed));
+        assert_eq!(r.status, Status::Cleared);
+        // A row naming another landing, unreadable: this one stays cleared.
+        append(r#"{"row":"martian","landing":"run-9:9"}"#);
+        assert_eq!(c.status(&l.id), Some(Status::Cleared));
+        // A row naming this landing, of a kind this binary does not know: pending on it.
+        append(&format!(r#"{{"row":"martian","landing":"{}"}}"#, l.id));
+        let named = lines(&c);
+        // A torn line names nothing: it could be any landing opened before it.
+        append(r#"{"row":"found","landing":"#);
+        let torn = lines(&c);
+        assert_eq!(
+            c.status(&l.id),
+            Some(Status::Pending {
+                awaiting: vec![],
+                unreadable: vec![named, torn],
+            })
+        );
+        assert_eq!(c.unreadable(), [named, torn]);
+        // A landing opened after the torn line is not held by it.
+        let later = Landing {
+            id: "l2".into(),
+            ..l.clone()
+        };
+        c.open(&later).unwrap();
+        assert!(matches!(
+            c.status("l2"),
+            Some(Status::Pending { ref unreadable, .. }) if unreadable.is_empty()
+        ));
         let _ = std::fs::remove_dir_all(&w);
     }
 
