@@ -15,7 +15,8 @@
       "!**/*.md",
       "!assets",
       "!crates/mnemorph-tui/assets",
-      "!packages/protocol/src/generated"
+      "!packages/protocol/src/generated",
+      "!crates/mnemorph-proving/fixtures"
     ]
   },
   "formatter": {
