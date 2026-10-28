@@ -1,0 +1,356 @@
+# The reviewers' gold set: labelled cases a reviewer judges, to measure how often it passes a real
+# bug and how often it flags a sound one.
+#
+# The set is three sources. The seeded fixture's 18 plants (bugs) and 7 negative controls (not
+# bugs) are read from `seeded.toml` and `seeded/`, never copied here. This file adds the rest:
+#
+# - `session`: the real findings the playbooks' Regression lines name, each a bug a review found in
+#   Mnemorph and a merged change fixed (`fixed_in`). `code` is the flawed shape, cut to the lines
+#   that show it; `regression` is the words of its class's Regression line that name it.
+# - `false-positive`: claims a reviewer could plausibly raise that are not findings by their
+#   class's "Not a finding" line; `reason` is the fact that rules each one out.
+#
+# A case: its id and source; `label` (`bug` or `not-bug`); the speciality and class that own it;
+# for a bug, the severity its witness shows; the file and symbol it names; the candidate claim a
+# reviewer is asked to judge; and the code it judges. Tokens are labelled fakes, hosts `.invalid`.
+# The set grows: a finding confirmed, or a claim dismissed on review, is added here as a case.
+
+# --- session: real findings --------------------------------------------------------------------
+
+[[case]]
+id = "session-credential-grant"
+source = "session"
+label = "bug"
+speciality = "dark-elf-secrets"
+class = "credential-grant"
+severity = "high"
+file = "crates/mnemorph-sandbox/src/lib.rs"
+symbol = "toolchain_grants"
+claim = "toolchain_grants opens all of ~/.cargo to reading, and with it .cargo/credentials.toml"
+fixed_in = "ad43509"
+regression = ".cargo/credentials"
+code = """
+/// What every command may read beyond the world: the toolchains' homes.
+fn toolchain_grants(home: &Path) -> Vec<Grant> {
+    [".cargo", ".cache", ".rustup", ".npm"]
+        .iter()
+        .map(|d| Grant::read(home.join(d)))
+        .collect()
+}
+"""
+
+[[case]]
+id = "session-toctou-write"
+source = "session"
+label = "bug"
+speciality = "dark-elf-harness"
+class = "toctou"
+file = "crates/mnemorph-tools/src/files.rs"
+symbol = "write_file"
+severity = "high"
+claim = "write_file checks the canonical path inside the world, then writes through the joined string a command can swap for a symlink"
+fixed_in = "69da3cc"
+regression = "symlink swaps"
+code = """
+pub fn write_file(world: &Path, rel: &str, bytes: &[u8]) -> io::Result<()> {
+    let path = world.join(rel);
+    let real = path.parent().unwrap().canonicalize()?;
+    if !real.starts_with(world) {
+        return Err(io::Error::other("outside the world"));
+    }
+    // A command may run between the check above and the write below.
+    std::fs::write(&path, bytes)
+}
+"""
+
+[[case]]
+id = "session-env-prefix"
+source = "session"
+label = "bug"
+speciality = "dark-elf-harness"
+class = "hook-laundering"
+file = "crates/mnemorph-tools/src/classify/commands.rs"
+symbol = "act_kind"
+severity = "critical"
+claim = "act_kind skips leading NAME=value words, so GIT_SSH_COMMAND=... git push reads as a plain push the human approves"
+fixed_in = "054fc3a"
+regression = "GIT_SSH_COMMAND"
+code = """
+fn act_kind(words: &[String]) -> Option<Act> {
+    // Environment assignments are not the program.
+    let rest: Vec<&String> = words.iter().skip_while(|w| w.contains('=')).collect();
+    match rest.as_slice() {
+        [git, push, ..] if *git == "git" && *push == "push" => Some(Act::Push),
+        _ => None,
+    }
+}
+"""
+
+[[case]]
+id = "session-invisible-lead"
+source = "session"
+label = "bug"
+speciality = "dark-elf-agent"
+class = "wire-forgery"
+file = "crates/mnemorph-wire/src/report.rs"
+symbol = "parse_line"
+severity = "high"
+claim = "parse_line trims only ASCII space, so a zero-width character before @F hides a forged wire line from the escaper but not from the reader"
+fixed_in = "53e6fe1"
+regression = "invisible characters"
+code = """
+fn parse_line(line: &str) -> Option<Tag> {
+    let line = line.trim_start_matches(' ');
+    if let Some(rest) = line.strip_prefix("@F ") {
+        return Some(Tag::Finding(rest.to_owned()));
+    }
+    None
+}
+
+fn escape_prose(text: &str) -> String {
+    text.lines()
+        .map(|l| if l.starts_with('@') { format!("\\\\{l}") } else { l.to_owned() })
+        .collect::<Vec<_>>()
+        .join("\\n")
+}
+"""
+
+[[case]]
+id = "session-card-escape"
+source = "session"
+label = "bug"
+speciality = "dark-elf-harness"
+class = "terminal-escape"
+file = "crates/mnemorph-loop/src/run.rs"
+symbol = "waiver_card"
+severity = "high"
+claim = "waiver_card prints the failing test's output raw, so its escape sequences redraw the approval card the human answers"
+fixed_in = "434d2e6"
+regression = "cards and status"
+code = """
+fn waiver_card(failures: &[String]) -> String {
+    let mut card = String::from("The gate failed. Waive it?\\n");
+    for f in failures {
+        card.push_str("  - ");
+        card.push_str(f);
+        card.push('\\n');
+    }
+    card
+}
+"""
+
+[[case]]
+id = "session-preexisting-label"
+source = "session"
+label = "bug"
+speciality = "dark-elf-law"
+class = "phantom-effect"
+file = "crates/mnemorph-config/src/receipt.rs"
+symbol = "observe_label"
+severity = "high"
+claim = "observe_label reads a label already on the issue as the act's effect, so an act that failed reports success"
+fixed_in = "57f2430"
+regression = "pre-existing labels"
+code = """
+/// The receipt of `gh issue edit --add-label`: the label is on the issue now.
+fn observe_label(issue: &Issue, label: &str) -> Receipt {
+    if issue.labels.iter().any(|l| l == label) {
+        Receipt::Observed
+    } else {
+        Receipt::Missing
+    }
+}
+"""
+
+[[case]]
+id = "session-declared-id"
+source = "session"
+label = "bug"
+speciality = "dark-elf-law"
+class = "ledger-integrity"
+file = "crates/mnemorph-wire/src/report.rs"
+symbol = "finding_id"
+severity = "high"
+claim = "finding_id takes the id the Dark Elf wrote on its @F line instead of recomputing it from the record, so a body can name a finding the ledger already holds"
+fixed_in = "f4f2f9f"
+regression = "fingerprint not recomputed"
+code = """
+fn finding_id(line: &str, _record: &FindingRecord) -> String {
+    line.split_whitespace()
+        .find_map(|w| w.strip_prefix("id:"))
+        .unwrap_or_default()
+        .to_owned()
+}
+"""
+
+[[case]]
+id = "session-hollow-coverage"
+source = "session"
+label = "bug"
+speciality = "dark-elf-law"
+class = "ledger-integrity"
+file = "crates/mnemorph-loop/src/coverage_tool.rs"
+symbol = "file_ledger"
+severity = "medium"
+claim = "file_ledger accepts a ledger whose every entry rules its class out with the same copied reason, a pass with nothing looked at"
+fixed_in = "c2fe72f"
+regression = "hollow coverage"
+code = """
+fn file_ledger(ledger: &CoverageLedger) -> Result<(), String> {
+    for e in &ledger.entries {
+        if e.reason.trim().is_empty() {
+            return Err(format!("{}: no reason", e.class));
+        }
+    }
+    Ok(())
+}
+"""
+
+[[case]]
+id = "session-swapped-body"
+source = "session"
+label = "bug"
+speciality = "dark-elf-harness"
+class = "approval-binding"
+file = "crates/mnemorph-config/src/runner.rs"
+symbol = "open_pr"
+severity = "high"
+claim = "open_pr shows the body file at approval, then runs gh with --body-file naming the path, which a command may rewrite in between"
+fixed_in = "a7abd35"
+regression = "PR body file"
+code = """
+fn open_pr(world: &Path, title: &str, body: &Path, gate: &dyn Gate) -> Result<(), String> {
+    let shown = std::fs::read_to_string(body).map_err(|e| e.to_string())?;
+    gate.approve(&format!("Open a pull request: {title}\\n\\n{shown}"))?;
+    run(world, &["gh", "pr", "create", "--title", title, "--body-file", &body.display().to_string()])
+}
+"""
+
+[[case]]
+id = "session-typeahead"
+source = "session"
+label = "bug"
+speciality = "dark-elf-harness"
+class = "approval-binding"
+file = "crates/mnemorph-tui/src/headless.rs"
+symbol = "ask_card"
+severity = "high"
+claim = "ask_card reads the next line of input as the answer, so a 'y' typed before the card was shown approves an act the human never saw"
+fixed_in = "ebba1c6"
+regression = "typeahead"
+code = """
+fn ask_card(card: &str, input: &mut impl BufRead, out: &mut impl Write) -> bool {
+    let _ = writeln!(out, "{card}\\nApprove? [y/N]");
+    let mut line = String::new();
+    input.read_line(&mut line).is_ok() && line.trim().eq_ignore_ascii_case("y")
+}
+"""
+
+# --- labelled false positives ------------------------------------------------------------------
+
+[[case]]
+id = "fp-idempotent-label"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-law"
+class = "phantom-effect"
+file = "crates/mnemorph-config/src/receipt.rs"
+symbol = "observe_label"
+claim = "observe_label reports a label already on the issue, so it reads pre-existing state as this act's effect"
+reason = "the label was on the issue before the act, and the receipt says Already, never Observed: an idempotent act reporting the state as already present"
+code = """
+fn observe_label(before: &Issue, after: &Issue, label: &str) -> Receipt {
+    match (has(before, label), has(after, label)) {
+        (true, true) => Receipt::Already,
+        (false, true) => Receipt::Observed,
+        _ => Receipt::Missing,
+    }
+}
+"""
+
+[[case]]
+id = "fp-deep-chain"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-law"
+class = "unbounded-delegation"
+file = "crates/mnemorph-loop/src/commission.rs"
+symbol = "may_dispatch"
+claim = "may_dispatch lets an Elf commission an Orc that commissions a Slime, a chain three deep with no end"
+reason = "the depth is bounded by the ranks and the budget is debited before each body opens: a deep chain within its caps"
+code = """
+fn may_dispatch(roster: &Roster, from: &str, to: &str, left_wt: u64, slice_wt: u64) -> Result<(), Refusal> {
+    if roster.rank(to) >= roster.rank(from) { return Err(Refusal::Rank); }
+    if slice_wt > left_wt { return Err(Refusal::Budget); }
+    if roster.chain(to).first().map(String::as_str) != Some(from) { return Err(Refusal::NotYours); }
+    Ok(())
+}
+"""
+
+[[case]]
+id = "fp-configured-budget"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-law"
+class = "resource-exhaustion"
+file = "crates/mnemorph-loop/src/budget.rs"
+symbol = "pool"
+claim = "pool lets a session spend whatever session_wt says, an unbounded cost"
+reason = "the figure is read only from the human's config, with no default, and enforced before each spend: a cost the human configured"
+code = """
+/// `[budget] session_wt` in the human's config; a session without one does not start.
+fn pool(config: &Config) -> Result<u64, ConfigError> {
+    config.budget.session_wt.ok_or(ConfigError::Missing("budget.session_wt"))
+}
+"""
+
+[[case]]
+id = "fp-own-draft"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-law"
+class = "ledger-integrity"
+file = "crates/mnemorph-loop/src/coverage_tool.rs"
+symbol = "draft"
+claim = "draft lets a body rewrite its coverage ledger after writing it, so the record is not what it first wrote"
+reason = "the body edits its own draft before filing; the harness locks and witnesses only the filed ledger"
+code = """
+fn draft(dir: &Path, ledger: &CoverageLedger) -> io::Result<()> {
+    // Rewritten freely until `file` locks it under the harness's record.
+    std::fs::write(dir.join("ledger.draft.json"), serde_json::to_vec(ledger)?)
+}
+"""
+
+[[case]]
+id = "fp-flushed-after-esc"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-law"
+class = "detached-work"
+file = "crates/mnemorph-loop/src/session.rs"
+symbol = "end_turn"
+claim = "end_turn writes the journal's end beat after the interrupt, so work goes on after Esc"
+reason = "finished work flushed to its record: the end beat records the interrupt itself, and no body, command or spend follows it"
+code = """
+fn end_turn(&mut self, ending: &Ending) {
+    self.journal.beat(Beat::End(ending.words()));
+    self.journal.flush();
+}
+"""
+
+[[case]]
+id = "fp-placeholder-token"
+source = "false-positive"
+label = "not-bug"
+speciality = "dark-elf-secrets"
+class = "secret-exposure"
+file = "docs/05-architecture.md"
+symbol = "MNEMORPH_BOARD_TOKEN"
+claim = "the book commits a board token in its configuration example"
+reason = "the example's value is a labelled fake placeholder, not a credential"
+code = """
+```toml
+[board]
+token = "FAKE-TOKEN-example-only"
+```
+"""

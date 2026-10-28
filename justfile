@@ -61,6 +61,20 @@ seeded-eval model="nvidia/nemotron-3.5-lightning:free":
     test -n "${OPENROUTER_API_KEY:-}" || { echo "seeded-eval: set OPENROUTER_API_KEY"; exit 1; }
     MNEMORPH_LIVE=1 MNEMORPH_LIVE_OR_MODEL='{{model}}' cargo nextest run -p mnemorph-loop --test seeded --run-ignored only --no-capture seeded_eval
 
+# The reviewers' calibration: a reviewer — `dark-elf` (each case by its own speciality),
+# `dark-elf-<speciality>` or `fable` — judges every case of the gold set, and its recall,
+# precision, false accepts and rejects and severity agreement are written to a report under
+# `$XDG_STATE_HOME/mnemorph/calibration/`, outside the world. Never part of `check`. `models` is a
+# comma-separated panel, free by default; the key travels only through OPENROUTER_API_KEY and is
+# never printed. Free models may log or train on what they are sent: each case's claim and its code
+# — the seeded fixture's files and gold.toml's reconstructions, never the live tree — and, for a
+# Dark Elf, its compiled playbooks. It measures judging claims on the gold set, not detection in a
+# live repository.
+calibrate reviewer="dark-elf" models="nvidia/nemotron-3.5-lightning:free":
+    test -n "${OPENROUTER_API_KEY:-}" || { echo "calibrate: set OPENROUTER_API_KEY"; exit 1; }
+    echo "calibrate: sends to {{models}}, which may log or train on it: each gold case's claim and code (fixture files and reconstructions, never the live tree){{ if reviewer == "fable" { "" } else { ", and the compiled playbooks" } }}."
+    MNEMORPH_LIVE=1 MNEMORPH_CALIBRATE_REVIEWER='{{reviewer}}' MNEMORPH_CALIBRATE_MODELS='{{models}}' cargo nextest run -p mnemorph-loop --test calibrate --run-ignored only --no-capture calibrate_live
+
 # Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
     # No merge left half-done: a conflict marker anywhere tracked fails the check.

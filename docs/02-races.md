@@ -767,7 +767,24 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
      and trust boundaries — the seed of every speciality's coverage ledger there.
   6. **Attack chains** (`dark-elf`) across surfaces.
   7. **Law audit** (`dark-elf-law`) — what isekai's Dark Elf did: gate verdicts and `log.md`
-     integrity, and the budgets, retries and detached work an interrupt must stop.
+     integrity, and the budgets, retries and detached work an interrupt must stop. Two checklist
+     items are in its playbooks, each with its witness:
+     - **Stop propagation** (`detached-work`). One interrupt is shared by a run and every body it
+       commissions, and a command runs in its own process group, so an Esc stops every
+       descendant body and command — three bodies down, the Slime's backgrounded child with its
+       group — and no body calls its model after it. An order the wake had claimed off the shared
+       queue is released, held again with its note (`settle`). An Arch Dark Elf's background
+       campaign takes the same interrupt and budget. Witnessed by
+       `esc_stops_every_descendant_and_releases_its_order` and
+       `esc_stops_a_running_command_and_keeps_its_output`.
+     - **Mind provenance** (`ledger-integrity`). A Mind is know-how, never law: the playbooks are
+       compiled in, and what wearing a Mind injects names its doc and the digest of the bytes
+       worn. A Mind marked `- **Retired:** yes` — outworn, or found poisoned — no longer loads
+       ([the toolbox](08-memory.md#the-toolbox)). Not yet held: no guard covers writes under
+       `.mnemorph/minds/`, so a body whose soil holds it can retire or un-retire a Mind; a Mind
+       names no owner of its own (who wears it is read from the docs' Minds fields); and no
+       Arch Dark Elf campaign exists yet to stop. The audit asks each of these again. Witnessed by `a_retired_mind_never_loads`
+       and `a_worn_mind_names_its_source`.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
   `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, the `verdict` tool to
   file a verification, `seal` proposals.
@@ -1054,6 +1071,32 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   ignored test, never run in CI; its model is a free OpenRouter one unless named, its key
   travels only through `OPENROUTER_API_KEY`, never printed, and its reviewers' commands run
   under the machine's sandbox as a normal session's do — with none, no command runs.
+- **Calibration.** How often a reviewer passes a real bug, or flags a sound case, is measured on a
+  **gold set**: labelled cases, each a candidate finding, the code it names, and the truth. The
+  seeded fixture's plants (bugs) and controls (not bugs) are read from its key;
+  `crates/mnemorph-proving/fixtures/gold.toml` adds the real findings the playbooks' Regression
+  lines name — credential grants, a TOCTOU write, env-prefix laundering, a forged wire line, an
+  escape into a card, a pre-existing label read as an effect, a self-declared id, hollow
+  coverage, a swapped body file, approval typeahead — each with its severity and the commit that
+  fixed it, and labelled false positives, each with the playbook fact that rules it out. The set
+  grows: a confirmed finding, or a claim dismissed on review, is added as a case. `just calibrate
+  [reviewer] [models]` puts every case to a reviewer — `dark-elf` (each case by its own
+  speciality, briefed with its playbooks), `dark-elf-<speciality>`, or `fable`, a milestone's
+  fresh review with no playbook — and writes a report under
+  `$XDG_STATE_HOME/mnemorph/calibration/`, outside the world: per speciality and per model
+  family, recall and precision over the cases judged, coverage with abstentions and failed calls
+  apart, false accepts and false rejects with 95% Wilson intervals, severity agreement, and how
+  often the panel's models split. Like the paid evaluation it is an ignored test on free
+  OpenRouter models by default, its key only in `OPENROUTER_API_KEY`. Free models may log or train
+  on their prompts, so what travels is stated, and the recipe prints it before anything is sent:
+  in every mode, each case's claim and code — the seeded fixture's files and `gold.toml`'s
+  reconstructions of the flawed shapes, never the live tree; in Dark Elf mode, also the compiled
+  playbooks its `brief` loads for the case's file; in `fable` mode, nothing more. It measures how
+  a reviewer judges a stated claim on the gold set, not how it finds flaws in a live repository,
+  and it has not yet been run. With no model,
+  `mnemorph-proving`'s `calibrate` tests hold the set — its labels to the class table and the
+  Regression lines, the prompt carrying the case and never its answer — and the scorer to numbers
+  worked out by hand.
 
 ---
 

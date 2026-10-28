@@ -344,18 +344,19 @@ In order:
 11. the law audit's checks ([#104](https://github.com/Kaginari/mnemorph/issues/104)) and the
     gold-set hooks ([#106](https://github.com/Kaginari/mnemorph/issues/106))
 
-Built: rungs 1 to 10 — the specialities, each one's attack classes compiled with its
+Built: every rung, 1 to 11 — the specialities, each one's attack classes compiled with its
 surfaces, `route`, the wire's finding fields, the finding record and the coverage ledger with
 their validators (`mnemorph-proving`), the compiled playbooks, one per class, loaded by speciality
 and surface (`for_landing`), the challenge routed from the reserve, and the seeded fixture
 repository ([races](02-races.md#-dark-elf--the-adversary)): 18 planted flaws and 7 negative
 controls over all six hunters, held with no model to routing, the playbook brief, the finding
 and coverage validators and the challenge's block, with a paid evaluation of recall and precision
-(`just seeded-eval`) kept out of CI, the fresh verifier, and each speciality's score folded
+(`just seeded-eval`) kept out of CI, the fresh verifier, each speciality's score folded
 from the challenge records, its rise or fall proposed to the human
-(`mnemorphd challenge score`). Toward the exit still: seals, the witness rule's coverage of the
-cited line, the seal lifting on a fix that carries the frozen witness, and applying a proposed
-rise or fall (M11).
+(`mnemorphd challenge score`), the law audit's stop-propagation and Mind-provenance checks, each
+with its witness, and the reviewers' calibration on a gold set (`just calibrate`). Toward the
+exit still: seals, the witness rule's coverage of the cited line, the seal lifting on a fix that
+carries the frozen witness, and applying a proposed rise or fall (M11).
 
 **Exit:** on a seeded vulnerable fixture repo, the routed specialities find the planted flaws
 with witnesses, each verified by a fresh verifier, seal, and the seal lifts only when the fix

@@ -950,6 +950,70 @@ async fn an_interrupted_order_waits_again() {
     );
 }
 
+/// The law audit's stop propagation (#104): an Esc during a woken order, three bodies down, stops
+/// every descendant — the Slime's command and the child it put in the background, the Orc that
+/// commissioned it, any later model call — and the order it had claimed is released, held again.
+#[tokio::test]
+async fn esc_stops_every_descendant_and_releases_its_order() {
+    use mnemorph_loop::world::queue::State;
+    let w = World::new("wake-esc");
+    let q = mnemorph_loop::world::Queue::at(&queue_of(&w.0));
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let item = q
+        .add(&roster, Some("orc-o"), "elf-e", "look around", 0)
+        .unwrap();
+    // The background child is known by its own duration: an interrupted court's writes are put
+    // back, so no pid file it wrote survives to name it.
+    let child = format!("sleep 47.{}", std::process::id());
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "slime-s"),
+        ScriptedModel::tool(
+            "b1",
+            "bash",
+            json!({"command": format!("{child} & touch src/running; sleep 30")}),
+        ),
+        ScriptedModel::text("never: the Slime after the interrupt"),
+        ScriptedModel::text("never: the Orc after the interrupt"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let interrupt = run.interrupt();
+    let running = w.0.join("src/running");
+    // A thread of its own: the command blocks the test's runtime while it runs, as in the loop.
+    std::thread::spawn(move || {
+        while !running.exists() {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        interrupt.fire();
+    });
+    let started = std::time::Instant::now();
+    run.wake(&Ending::Answered(String::new())).await;
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        model.requests().len(),
+        2,
+        "no body called its model after the interrupt"
+    );
+    let alive = std::process::Command::new("pgrep")
+        .args(["-f", &child])
+        .status()
+        .unwrap()
+        .success();
+    assert!(!alive, "the Slime's background child died with its group");
+    let now = &q.items()[&item.id];
+    assert_eq!(now.state, State::Held, "the claim is released: {now:?}");
+    assert!(
+        now.notes
+            .last()
+            .unwrap()
+            .contains("waits again: INTERRUPTED"),
+        "{now:?}"
+    );
+}
+
 /// Bodies read the queue for free and move only what they hold or stand over; there is no claim.
 #[tokio::test]
 async fn the_queue_tool_follows_the_rank_law() {

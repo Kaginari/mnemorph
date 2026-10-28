@@ -75,7 +75,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | Class | What | Read from |
 |---|---|---|
 | a race (`Slime`, `Orc`, `Elf`, `Kijin`, `DarkElf`, the throne and the ascended) | a creature | its doc under `.mnemorph/<race>/<name>/` |
-| `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes` — and a doc's Minds field |
+| `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes`, or `- **Retired:** yes`, which stops it loading — and a doc's Minds field |
 | `Doc` | a creature's document | the file itself |
 | `Fact` (`Territory`) | something learned about a path | `@U territory` lines, as events |
 | `World` | this world and its neighbours | `.mnemorph/dimension.toml` |
@@ -377,7 +377,7 @@ blocking. Findings are never summed into a score.
 | `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
-| `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` |
+| `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` or `- **Retired:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `doc-provenance` | medium | a date (`YYYY-MM-DD`) or a change note (`added on`, `updated on`, `edited on`, `as of`, `at the request of`, `per the human`, each as words of its own) in the law or a creature's doc, code in fences or backticks aside — provenance lives only in `log.md` |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
