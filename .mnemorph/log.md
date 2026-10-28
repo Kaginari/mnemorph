@@ -5999,8 +5999,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   files `confirmed` (re-runs stamped from its journal; severity lowered, never raised), `refuted`
   (reason and evidence) or `cannot-verify` (blocker) through the `verdict` tool, held to nine
   named guards (twelve with floor, finder and sealable). Only confirmed counts; confirmed
-  high/critical blocks, and so does a critical with no refuting or lowering verdict; the challenge reads *verifying* while a verdict is missing. A
-  confirmed high/critical is proposed as a seal, witness frozen by hash, never applied. Verdict rows
+  high/critical blocks, and so does a critical with no refuting or lowering verdict; the
+  challenge reads *verifying* while a verdict is missing. A confirmed high/critical is proposed
+  as a seal, witness frozen by hash, never applied. Verdict rows
   carry both specialities and the evidence hashes; `Challenges::outcomes` is PR 10's precision
   hook. Docs 02, 03, 05.
 - **Tests:** ScriptedModel worlds: confirmed (blocks, seal proposed, a later landing on the file
