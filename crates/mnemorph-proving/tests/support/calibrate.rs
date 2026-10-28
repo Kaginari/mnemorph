@@ -373,16 +373,10 @@ pub fn ratio(a: usize, b: usize) -> Option<f64> {
     (b > 0).then(|| f(a) / f(b))
 }
 
-/// The 95% Wilson score interval of `k` in `n`; none when `n` is zero.
+/// The 95% Wilson score interval of `k` in `n`; none when `n` is zero: the race law's.
 pub fn wilson(k: usize, n: usize) -> Option<(f64, f64)> {
-    let p = ratio(k, n)?;
-    let n = ratio(n, 1)?;
-    let z = 1.96_f64;
-    let z2 = z * z;
-    let denom = 1.0 + z2 / n;
-    let center = (p + z2 / (2.0 * n)) / denom;
-    let half = z * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt() / denom;
-    Some(((center - half).max(0.0), (center + half).min(1.0)))
+    let f = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    mnemorph_races::wilson(f(k), f(n), mnemorph_races::Z95)
 }
 
 /// A run's score.

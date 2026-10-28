@@ -103,6 +103,17 @@ Anthropic's (`crates/mnemorph-provider/prices/anthropic.toml`) prices Claude Opu
 Sonnet 5.5 and Claude Fable 5.1; a model whose four prices are not all published, such as Claude
 Haiku 5.5's cache prices, stays unpriced until they are.
 
+### The build on value rows
+
+Every row the value ledger folds — a Dark Elf finding found, ruled or decided — carries the build
+that wrote it, as `build: { version, commit }`: the crate version and the commit `status` prints,
+from one source (`mnemorph_ledger::Build::this`, stamped at build time; a tree with uncommitted
+changes to tracked files stamps its commit `-dirty`, and a build without git `unknown`). M11's evolution and
+ascension rows carry it the same way. A row written before rows were stamped reads as `unknown`.
+The row is written whole, in one write, stamp included. A fold groups or filters by build, so a
+replay can tell a rate earned under old gate rules from one earned under new; the scoring reads
+every build alike.
+
 ### The unit: weighted tokens
 
 A budget counts what a call really costs, not how long its context is. Re-sent context served

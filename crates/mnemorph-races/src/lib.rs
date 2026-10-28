@@ -20,6 +20,6 @@ pub use shelf::{
 };
 pub use speciality::{AttackClass, Speciality, glob, route, route_with};
 pub use value::{
-    Band, DECLINE_COOLDOWN_RUNS, FallReading, Meter, RECOVER_REPORTS, Recent, Signals, falls,
-    meter, recovers, rises, score,
+    Band, DECLINE_COOLDOWN_RUNS, FallReading, Meter, RECOVER_REPORTS, Rate, Recent, Signals, Z95,
+    falls, meter, recovers, rises, score, wilson,
 };
