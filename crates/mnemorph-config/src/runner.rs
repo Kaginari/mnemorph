@@ -5,10 +5,12 @@
 //! 2. the plan's fingerprint ([`Fingerprint`]), what the human's approval binds to;
 //! 3. the pin — where the act lands, read now; the request's key looked up; what the act would
 //!    make must not exist yet;
-//! 4. the gate — the human, always: an Oni envelope is not honoured before M11
-//!    ([`ENVELOPES_UNWIRED`]);
+//! 4. the gate — an Oni's envelope, read now and again at the moment of use
+//!    ([`crate::EnvelopeGate`]); else the human, the card saying why no envelope admitted it;
 //! 5. the fingerprint rechecked just before the spawn — a world that moved is asked again;
-//! 6. `commit` — the intent journaled, under the request's key;
+//!    for an envelope's act, the envelope read again there, the uses ledger held: one that no
+//!    longer admits it sends the act to the human;
+//! 6. `commit` — the intent journaled, under the request's key, with the envelope's use;
 //! 7. the rendered command, run in the sandbox;
 //! 8. `ran`;
 //! 9. `observe`, with the read-only probe;
@@ -51,15 +53,18 @@ use serde_json::{Value, json};
 
 use crate::closure::{Entry, forge_repo, told_prefix};
 use crate::forge::{self, Login, PAGE, forge_get, login, probed};
+use crate::oni::{Admitted, EnvelopeGate, admit, use_row};
 use crate::receipt::{
     branch_tips, carries, command_line, excerpt, labels_argv, ls_remote_argv, private_file,
     pull_vacant, receipt_id, redact, sha256,
 };
 use crate::{Act, Done, PROBE_TIMEOUT, Pin, Planned, PostJournal, Probe, Receipt, Row, State};
 
-/// What every approval card of a typed act says while envelopes are unwired.
-pub const ENVELOPES_UNWIRED: &str =
-    "no Oni envelope is honoured before M11: the human decides every outward act";
+/// What the card of a push and its pull request under one approval says of envelopes.
+pub const PAIR_ASKS: &str = "no envelope admits a push and its pull request under one approval: the human decides the pair; asked for as two acts, each is read against the Oni's envelopes";
+
+/// What the card of an undo says of envelopes.
+pub const UNDO_ASKS: &str = "no envelope admits an undo: an undo always asks the human";
 
 /// How many times an act whose world changed between the approval and the spawn is asked again.
 const MAX_REASKS: usize = 3;
@@ -319,6 +324,29 @@ pub(crate) struct Intent {
     /// For a comment: the act whose incident it tells downstream of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tells: Option<String>,
+    /// The envelope that admitted it, when one did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) envelope: Option<String>,
+}
+
+impl Intent {
+    /// The intent of `planned`, ready at the gate, before its receipt's id is known.
+    fn draft(planned: &Planned, ready: &Ready, request: &Request) -> Result<Self, Refusal> {
+        Ok(Self {
+            act: String::new(),
+            key: ready.key.clone(),
+            request: ready.digest.clone(),
+            pinned: ready.pinned,
+            at: ready.pinned,
+            typed: Typed::of(planned.act())
+                .ok_or_else(|| Refusal::Refused("an untyped command is not a typed act".into()))?,
+            pin: Pinned::of(&ready.pin)
+                .ok_or_else(|| Refusal::Refused("the pin is not of this act".into()))?,
+            left: None,
+            tells: request.tells.clone(),
+            envelope: None,
+        })
+    }
 }
 
 /// Where a post's intents are kept: beside its witness.
@@ -691,12 +719,24 @@ pub struct Runner<'a> {
     journal: PostJournal,
     probe: &'a dyn Probe,
     hands: &'a dyn Hands,
+    envelopes: Option<EnvelopeGate>,
+}
+
+/// Why an act an envelope admitted before the recheck does not run under it.
+enum AtUse {
+    /// The envelope no longer admits it: the human decides it.
+    Lapsed(String),
+    /// The uses ledger cannot be held: nothing runs.
+    Failed(String),
 }
 
 /// What the gate is asked about a re-ask, once.
 struct Reask {
     changed: Vec<String>,
     notes: Vec<String>,
+    /// Why an envelope that admitted the act no longer did at the moment of use: the human
+    /// decides it from then on.
+    human: Option<String>,
 }
 
 /// An act ready for the gate: the plan its approval binds to, where it lands, its key, when its
@@ -764,7 +804,37 @@ impl<'a> Runner<'a> {
             journal,
             probe,
             hands,
+            envelopes: None,
         }
+    }
+
+    /// The same runner, reading an Oni's envelopes and counting their uses through `envelopes`;
+    /// with none, every act asks the human.
+    #[must_use]
+    pub fn with_envelopes(mut self, envelopes: Option<EnvelopeGate>) -> Self {
+        self.envelopes = envelopes;
+        self
+    }
+
+    /// Whether an envelope admits `planned`, landing at `pin`, today; `held` at the moment of use.
+    fn admit(
+        &self,
+        planned: &Planned,
+        pin: &Pin,
+        held: Option<&mnemorph_ledger::Held<'_>>,
+    ) -> Result<Admitted, String> {
+        admit(
+            self.envelopes.as_ref(),
+            self.cx.race(),
+            planned,
+            pin,
+            self.cx.world(),
+            self.probe,
+            &self.journal,
+            self.cx.body(),
+            Timestamp::now().day(),
+            held,
+        )
     }
 
     fn witness(&self) -> Result<&Path, Refusal> {
@@ -936,6 +1006,7 @@ impl<'a> Runner<'a> {
         let mut reask = Reask {
             changed: Vec::new(),
             notes: self.recover_held()?,
+            human: None,
         };
         self.run_held(&planned, request, &mut reask)
     }
@@ -1022,9 +1093,19 @@ impl<'a> Runner<'a> {
             Prepared::Replayed(report) => return Ok(Some(report)),
             Prepared::Ready(ready) => ready,
         };
-        // 4. The gate: the human, always, until M11 honours envelopes.
-        self.ask(planned, &ready.plan, &reask.changed, &ready.card)?;
-        self.execute(planned, request, ready, reask)
+        // 4. The gate: an Oni's envelope, read again at the moment of use; else the human.
+        let preview = match reask
+            .human
+            .clone()
+            .map_or_else(|| self.admit(planned, &ready.pin, None), Err)
+        {
+            Ok(admitted) => Some(admitted),
+            Err(why) => {
+                self.ask(planned, &ready.plan, &reask.changed, &ready.card, &why)?;
+                None
+            }
+        };
+        self.execute(planned, request, ready, reask, preview.as_ref())
     }
 
     /// Steps 2 and 3: the plan the approval binds to, the pin, the key, and what the act would make
@@ -1135,47 +1216,66 @@ impl<'a> Runner<'a> {
 
     /// Steps 5 to 10 of an approved act: the recheck, the intent, the spawn, the result and the
     /// probe; `None` when the world moved before the spawn and the gate must be asked again.
+    /// `preview` is the envelope that admitted it before the recheck, if one did: it is read
+    /// again at the moment of use, and only that reading admits.
     fn execute(
         &self,
         planned: &Planned,
         request: &Request,
         ready: Ready,
         reask: &mut Reask,
+        preview: Option<&Admitted>,
     ) -> Result<Option<Report>, Refusal> {
-        let Ready {
-            plan,
-            pin,
-            key,
-            digest,
-            pinned,
-            ..
-        } = ready;
         // 5–7. The recheck, the intent, the spawn — in that order, in the hands.
-        let typed = Typed::of(planned.act())
-            .ok_or_else(|| Refusal::Refused("an untyped command is not a typed act".into()))?;
-        let kept_pin = Pinned::of(&pin)
-            .ok_or_else(|| Refusal::Refused("the pin is not of this act".into()))?;
+        let draft = Intent::draft(planned, &ready, request)?;
+        let (plan, pin) = (ready.plan, ready.pin);
         let short = plan.short();
+        let shown_plan = plan.clone();
         let mut committed: Option<Receipt> = None;
-        let mut intent_written = |id: &str| {
-            self.keep(&Intent {
-                act: id.to_owned(),
-                key: key.clone(),
-                request: digest.clone(),
-                pinned,
-                at: Timestamp::now(),
-                typed: typed.clone(),
-                pin: kept_pin.clone(),
-                left: None,
-                tells: request.tells.clone(),
-            })
-        };
+        let mut admitted: Option<Admitted> = None;
+        let mut lapsed: Option<String> = None;
         let mut before = || {
-            let receipt = self
-                .journal
-                .commit_then(planned, pin.clone(), Some(&short), &mut intent_written)
-                .map_err(|e| format!("the intent could not be journaled: {e}"))?;
+            // The moment of use: the envelope read again, the uses ledger held until the use and
+            // the intent are written, so no other act takes the same use meanwhile.
+            let used = match self.at_use(planned, &pin, preview) {
+                Ok(used) => used,
+                Err(AtUse::Lapsed(why)) => {
+                    let said = format!(
+                        "the envelope no longer admits the act at the moment of use: {why}"
+                    );
+                    lapsed = Some(why);
+                    return Err(said);
+                }
+                Err(AtUse::Failed(e)) => return Err(e),
+            };
+            let line = used.as_ref().map(|(_, by)| by.to_string());
+            let receipt = {
+                let mut first = |id: &str| {
+                    if let Some((held, by)) = &used {
+                        held.record(&use_row(by, id, &self.journal, planned))?;
+                    }
+                    let mut intent = draft.clone();
+                    id.clone_into(&mut intent.act);
+                    intent.at = Timestamp::now();
+                    intent.envelope = used.as_ref().map(|(_, by)| by.envelope.name.clone());
+                    self.keep(&intent)
+                };
+                self.journal
+                    .commit_then(
+                        planned,
+                        pin.clone(),
+                        Some(&short),
+                        line.as_deref(),
+                        &mut first,
+                    )
+                    .map_err(|e| format!("the intent could not be journaled: {e}"))?
+            };
             committed = Some(receipt);
+            if let Some((held, by)) = used {
+                drop(held);
+                self.show(planned, &shown_plan, &by);
+                admitted = Some(by);
+            }
             Ok(())
         };
         // A pull request's description goes to `gh` on its input, from the approved bytes.
@@ -1191,6 +1291,16 @@ impl<'a> Runner<'a> {
                     approved.id(),
                     reask.changed.join("; ")
                 ));
+                return Ok(None);
+            }
+            Spawned::Failed(_) if committed.is_none() && lapsed.is_some() => {
+                // The envelope lapsed between the preview and the use: nothing was journaled, and
+                // the human decides it now.
+                let why = lapsed.unwrap_or_default();
+                reask.notes.push(format!(
+                    "the envelope that admitted the act no longer did at the moment of use, so the human was asked: {why}"
+                ));
+                reask.human = Some(why);
                 return Ok(None);
             }
             Spawned::Failed(out) => {
@@ -1213,24 +1323,60 @@ impl<'a> Runner<'a> {
         };
         let receipt = committed
             .ok_or_else(|| Refusal::Failed("the act ran without its intent journaled".into()))?;
-        self.finish(receipt, out, std::mem::take(&mut reask.notes))
-            .map(Some)
+        let mut notes = std::mem::take(&mut reask.notes);
+        if let Some(by) = admitted {
+            notes.insert(0, format!("{by}: the human was not asked, and is shown it"));
+        }
+        self.finish(receipt, out, notes).map(Some)
+    }
+
+    /// The moment of use of an act `preview` admitted before the recheck: the uses ledger held,
+    /// the envelopes read again. `None` when no envelope admitted it, and the human did.
+    fn at_use(
+        &self,
+        planned: &Planned,
+        pin: &Pin,
+        preview: Option<&Admitted>,
+    ) -> Result<Option<(mnemorph_ledger::Held<'_>, Admitted)>, AtUse> {
+        if preview.is_none() {
+            return Ok(None);
+        }
+        let uses = self
+            .envelopes
+            .as_ref()
+            .map(EnvelopeGate::uses)
+            .ok_or_else(|| AtUse::Lapsed("there is no envelope uses ledger".into()))?;
+        let held = uses
+            .hold()
+            .map_err(|e| AtUse::Failed(format!("the envelope uses cannot be held: {e}")))?;
+        let by = self
+            .admit(planned, pin, Some(&held))
+            .map_err(AtUse::Lapsed)?;
+        Ok(Some((held, by)))
+    }
+
+    /// Show the human an act an envelope admitted: nothing outward happens unseen.
+    fn show(&self, planned: &Planned, plan: &Fingerprint, by: &Admitted) {
+        let mut ask = planned.ask(self.cx.body(), self.cx.race());
+        ask.fingerprint = Some(plan.clone());
+        self.cx.gate().admitted(&ask, &by.to_string());
     }
 
     /// Put the act to the human, bound to `plan`; `changed` is what made an earlier approval
-    /// stale, `card` what the pin read of the target. No envelope is read: until M11 the human
-    /// decides every act.
+    /// stale, `card` what the pin read of the target, `no_envelope` why no envelope admitted it.
     fn ask(
         &self,
         planned: &Planned,
         plan: &Fingerprint,
         changed: &[String],
         card: &[String],
+        no_envelope: &str,
     ) -> Result<(), Refusal> {
         let mut ask = planned.ask(self.cx.body(), self.cx.race());
         ask.fingerprint = Some(plan.clone());
         ask.why.extend(card.iter().cloned());
-        ask.why.push(ENVELOPES_UNWIRED.to_owned());
+        ask.why
+            .push(format!("no envelope admits it: {no_envelope}"));
         if !changed.is_empty() {
             ask.why.insert(
                 0,
@@ -1282,6 +1428,7 @@ impl<'a> Runner<'a> {
         let mut reask = Reask {
             changed: Vec::new(),
             notes: self.recover_held()?,
+            human: None,
         };
         for _ in 0..=MAX_REASKS {
             if let Some(paired) = self.pair_once(&push_plan, push, &pull_plan, pull, &mut reask)? {
@@ -1358,7 +1505,7 @@ impl<'a> Runner<'a> {
             &pull_ready,
             &reask.changed,
         )?;
-        let Some(pushed) = self.execute(push_plan, push, push_ready, reask)? else {
+        let Some(pushed) = self.execute(push_plan, push, push_ready, reask, None)? else {
             return Ok(None);
         };
         if pushed.state != State::Observed {
@@ -1440,7 +1587,7 @@ impl<'a> Runner<'a> {
             card,
             ..ready
         };
-        match self.execute(planned, request, again, reask)? {
+        match self.execute(planned, request, again, reask, None)? {
             Some(report) => Ok(report),
             None => self.run_held(planned, request, reask),
         }
@@ -1483,7 +1630,7 @@ impl<'a> Runner<'a> {
         ask.outside.extend(second.outside);
         let plan = both(&push_ready.plan, &pull_ready.plan);
         ask.fingerprint = Some(plan.clone());
-        ask.why.push(ENVELOPES_UNWIRED.to_owned());
+        ask.why.push(PAIR_ASKS.to_owned());
         if !changed.is_empty() {
             ask.why.insert(
                 0,
@@ -1882,6 +2029,7 @@ impl<'a> Runner<'a> {
         let mut reask = Reask {
             changed: Vec::new(),
             notes,
+            human: None,
         };
         for _ in 0..=MAX_REASKS {
             if let Some(report) = self.undo_once(&intent, &undo, &mut reask)? {
@@ -1937,7 +2085,13 @@ impl<'a> Runner<'a> {
         }
         self.still_its_own(intent)?;
         // 4. The human, always: no envelope covers an undo.
-        self.ask(undo, &plan, &reask.changed, &[])?;
+        self.ask(
+            undo,
+            &plan,
+            &reask.changed,
+            &[],
+            "an undo always asks the human",
+        )?;
         let short = plan.short();
         let mut committed: Option<String> = None;
         let mut before = || {
@@ -2098,7 +2252,7 @@ impl<'a> Runner<'a> {
                 "a probe sees the effect of act {of} already gone: approving records its undo, and runs nothing"
             ),
         );
-        ask.why.push(ENVELOPES_UNWIRED.to_owned());
+        ask.why.push(UNDO_ASKS.to_owned());
         if let Answer::Deny(why) = self.cx.gate().ask(&ask) {
             return Err(Refusal::Denied(format!("{why} ({})", plan.short())));
         }
@@ -2424,7 +2578,8 @@ impl Tool for OutwardTool {
         };
         let journal = PostJournal::of(cx.world(), post);
         let observer = crate::Observer::new(cx.sandbox().clone(), cx.home());
-        let runner = Runner::new(cx, journal, &observer, &Sandboxed);
+        let envelopes = crate::EnvelopeGate::of(cx.world());
+        let runner = Runner::new(cx, journal, &observer, &Sandboxed).with_envelopes(envelopes);
         match call {
             Call::Act(request) => outcome(runner.act(&request)),
             Call::Pair(push, pull) => paired(runner.push_and_open(&push, &pull)),

@@ -414,7 +414,7 @@ world, model, provider, session, run, holes, budget}`; a client that speaks anot
 rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
-`{race, class, act, why, outside, plan?}`, and the client answers `{allow, reason?}`. `plan` is
+`{race, class, act, why, outside, plan?}`, and the client answers `{allow, reason?}`. An act an Oni envelope admitted asks nothing: the client is shown it as a `warning` event. `plan` is
 the short form of the plan a command's approval binds to
 ([the sandbox](05-architecture.md#sandbox)); an ask that spawns nothing has none. A `usage` event
 carries the turn's tokens, cache reads and writes, its price, and the run's spend and context

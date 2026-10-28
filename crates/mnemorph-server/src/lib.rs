@@ -11,6 +11,8 @@ pub mod protocol;
 
 /// The Dark Elf challenges as the human reads them.
 pub use mnemorph_loop::challenge;
+/// The human's door to the Oni's envelopes.
+pub use mnemorph_loop::envelope;
 /// The human's door to the Kijin's incidents.
 pub use mnemorph_loop::incident;
 /// The wire, for the commands that speak it without a session (`check`).
@@ -215,6 +217,13 @@ impl Gate for ClientGate {
             .unwrap_or_else(PoisonError::into_inner)
             .remove(&id);
         answer
+    }
+
+    fn admitted(&self, ask: &GateAsk, by: &str) {
+        // A warning: the human's to see, never the model's.
+        self.0.emit(&Event::Warning {
+            text: mnemorph_loop::gate_admitted_line(ask, by),
+        });
     }
 }
 
