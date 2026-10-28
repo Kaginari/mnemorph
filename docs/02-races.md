@@ -1008,6 +1008,12 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
     *precision* = upheld ÷ (upheld + refuted), so `cannot-verify` is in neither. The **last ten**
     are the ten latest settled findings (upheld or refuted), ordered by the record that settled
     each: the Arch Dark Elf's fall reads their precision, and only once ten are settled.
+    `cannot-verify` is in neither side of precision, so a body could stall its fall by filing
+    findings no verifier can settle: over its last ten findings, settled or not, a
+    `cannot-verify` rate over 50% proposes probation too, once ten are filed.
+  - **Order does not matter.** Across landings the strongest verdict wins whichever came first:
+    a confirmation beats a refutation, and a later refutation of a confirmed finding counts only
+    once the human decides it a false positive.
   - **Proposals, never applied.** The fold feeds `Signals` and `Recent` to `rises` and `falls`
     per speciality, read against the living body's form. A Dark Elf at the bars is proposed to
     rise; an Arch Dark Elf under its fall bar is proposed probation. Both go to the human, and
@@ -1094,7 +1100,7 @@ The two thresholds are apart on purpose (hysteresis), so a creature does not fla
 | <img src="../assets/portraits/high-orc@64.png" width="28" alt="High Orc"> **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10% | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
 | <img src="../assets/portraits/named-slime@64.png" width="28" alt="Named Slime"> **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5% | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
 | <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks and zero corrections in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
-| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% — per speciality, each its own record | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 findings |
+| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% — per speciality, each its own record | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 settled findings, or cannot-verify > 50% of the last 10 findings filed |
 
 How a fall is read (`mnemorph-races`, `falls`):
 

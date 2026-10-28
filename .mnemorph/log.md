@@ -6083,3 +6083,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (the check switched off lets the forgery count); the CLI's score, decide and rise proposal.
 - **Learned:** an order across landings needs the record's line, not the landing id: the fold
   keeps, per finding, the line of the row that settled it.
+
+---
+
+### [2026-10-28T03:17:55+01:00] rimuru — #258, Fable's review: a fall cannot be stalled on cannot-verify
+- **Done:** over the last ten findings, settled or not, a `cannot-verify` rate over 50%
+  (`CANNOT_VERIFY_BAR`) proposes an Arch Dark Elf's probation, once ten are filed; `challenge
+  score` shows that rate. Docs 02: the bar beside the others, and that the strongest verdict wins
+  in either order — a later refutation of a confirmed finding counts only once the human decides.
+- **Tests:** `a_cannot_verify_heavy_record_proposes_probation` (at the bar holds, nine filed holds).
+- **Learned:** a rate that excludes a verdict invites filing that verdict: watch its share too.

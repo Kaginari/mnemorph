@@ -24,6 +24,11 @@ use mnemorph_races::{FallReading, Meter, Race, Recent, Signals, falls, meter, ri
 /// How many settled findings a fall reads.
 pub const WINDOW: usize = 10;
 
+/// The share of the last [`WINDOW`] findings, settled or not, past which an Arch Dark Elf's
+/// `cannot-verify` rate proposes probation: findings no verifier can settle never reach the
+/// precision a fall reads, so a body could stall its fall by filing them.
+pub const CANNOT_VERIFY_BAR: f64 = 50.0;
+
 /// Where one finding stands on one landing, as its challenge records it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standing {
@@ -103,6 +108,10 @@ pub struct SpecialityFold {
     pub unverified: u32,
     /// The latest settled findings, oldest first, at most [`WINDOW`]: `true` upheld.
     pub recent: Vec<bool>,
+    /// The latest findings, settled or not, at most [`WINDOW`]: how many.
+    pub last_filed: u32,
+    /// Of those, how many its verifier could not verify.
+    pub last_cannot_verify: u32,
 }
 
 /// What the fold proposes to the human for a speciality. Nothing here applies it.
@@ -110,7 +119,8 @@ pub struct SpecialityFold {
 pub enum Ascension {
     /// The Dark Elf has met the Arch Dark Elf's bars.
     Rise,
-    /// The Arch Dark Elf's precision over its last ten fell under the fall bar: probation.
+    /// The Arch Dark Elf's precision over its last ten settled fell under the fall bar, or its
+    /// `cannot-verify` rate over its last ten findings rose past [`CANNOT_VERIFY_BAR`]: probation.
     Probation,
 }
 
@@ -142,6 +152,13 @@ impl SpecialityFold {
         )
     }
 
+    /// `cannot-verify ÷ findings` over the last ten findings, settled or not, a percentage;
+    /// `None` with no finding.
+    #[must_use]
+    pub fn cannot_verify_rate(&self) -> Option<f64> {
+        pct(self.last_cannot_verify, self.last_filed)
+    }
+
     /// The readings the race law judges over the whole record.
     #[must_use]
     pub fn signals(&self) -> Signals {
@@ -170,12 +187,18 @@ impl SpecialityFold {
     }
 
     /// What to propose to the human for a body of `form`: a Dark Elf at the rise bars rises; an
-    /// Arch Dark Elf under the fall bar on a full last ten goes on probation.
+    /// Arch Dark Elf under the fall bar on a full last ten settled, or past the `cannot-verify`
+    /// bar on a full last ten findings, goes on probation.
     #[must_use]
     pub fn proposal(&self, form: Race) -> Option<Ascension> {
+        let stalled = self.last_filed as usize >= WINDOW
+            && self
+                .cannot_verify_rate()
+                .is_some_and(|r| r > CANNOT_VERIFY_BAR);
         match form {
             Race::DarkElf => rises(Race::ArchDarkElf, &self.signals()).then_some(Ascension::Rise),
-            Race::ArchDarkElf => (falls(Race::ArchDarkElf, &self.last()) != FallReading::Holds)
+            Race::ArchDarkElf => (stalled
+                || falls(Race::ArchDarkElf, &self.last()) != FallReading::Holds)
                 .then_some(Ascension::Probation),
             _ => None,
         }
@@ -206,7 +229,12 @@ fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFo
     }
     let mut out: BTreeMap<String, SpecialityFold> = BTreeMap::new();
     let mut settled: BTreeMap<&str, Vec<(u64, bool)>> = BTreeMap::new();
+    let mut filed: BTreeMap<&str, Vec<(u64, bool)>> = BTreeMap::new();
     for ((speciality, _), (standing, at)) in causes {
+        filed
+            .entry(speciality)
+            .or_default()
+            .push((at, standing == Standing::CannotVerify));
         let f = out.entry(speciality.to_owned()).or_default();
         f.findings += 1;
         match standing {
@@ -225,6 +253,15 @@ fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFo
         let from = s.len().saturating_sub(WINDOW);
         if let Some(f) = out.get_mut(speciality) {
             f.recent = s[from..].iter().map(|(_, u)| *u).collect();
+        }
+    }
+    for (speciality, mut s) in filed {
+        s.sort_by_key(|(at, _)| *at);
+        let last = &s[s.len().saturating_sub(WINDOW)..];
+        if let Some(f) = out.get_mut(speciality) {
+            f.last_filed = u32::try_from(last.len()).unwrap_or(u32::MAX);
+            f.last_cannot_verify =
+                u32::try_from(last.iter().filter(|(_, nv)| *nv).count()).unwrap_or(u32::MAX);
         }
     }
     out
@@ -400,6 +437,51 @@ mod tests {
             harness(&seven).proposal(Race::ArchDarkElf),
             Some(Ascension::Probation)
         );
+    }
+
+    /// An Arch Dark Elf cannot stall its fall with findings no verifier can settle: past half
+    /// `cannot-verify` over its last ten findings, probation is proposed — only on a full ten.
+    #[test]
+    fn a_cannot_verify_heavy_record_proposes_probation() {
+        // Four settled, all upheld; six cannot-verify: the precision window is not full.
+        let mut rows: Vec<FindingRow> = (0..10u64)
+            .map(|i| {
+                let s = if i < 4 {
+                    Standing::Confirmed
+                } else {
+                    Standing::CannotVerify
+                };
+                row(&format!("f{i}"), "l1", s, i)
+            })
+            .collect();
+        let f = harness(&rows);
+        assert_eq!((f.last_filed, f.last_cannot_verify), (10, 6));
+        assert_eq!(f.cannot_verify_rate(), Some(60.0));
+        assert_eq!(
+            f.last().0.findings,
+            4,
+            "the settled window alone would hold"
+        );
+        assert_eq!(f.proposal(Race::ArchDarkElf), Some(Ascension::Probation));
+        // Half is at the bar: it holds.
+        rows[4].standing = Standing::Confirmed;
+        assert_eq!(harness(&rows).proposal(Race::ArchDarkElf), None);
+        // Nine findings, six of them cannot-verify: not a full ten, it holds.
+        rows[4].standing = Standing::CannotVerify;
+        rows.remove(0);
+        assert_eq!(
+            harness(&rows).cannot_verify_rate().map(f64::round),
+            Some(67.0)
+        );
+        assert_eq!(harness(&rows).proposal(Race::ArchDarkElf), None);
+        // Older findings fall out of the last ten: ten fresh confirmations hold the form.
+        for i in 0..10u64 {
+            rows.push(row(&format!("g{i}"), "l2", Standing::Confirmed, 100 + i));
+        }
+        let f = harness(&rows);
+        assert_eq!((f.last_filed, f.last_cannot_verify), (10, 0));
+        assert_eq!(f.proposal(Race::ArchDarkElf), None);
+        assert_eq!(harness(&[]).cannot_verify_rate(), None);
     }
 
     /// A rise is proposed at the bars — twenty findings, upheld 80, precision 85 — never short.

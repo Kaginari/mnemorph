@@ -311,7 +311,10 @@ fn the_score_folds_each_speciality() {
         "{shown}"
     );
     assert!(
-        shown.contains("precision — · upheld 0% (unranked) · last 0 settled: precision —"),
+        shown.contains(
+            "precision — · upheld 0% (unranked) · last 0 settled: precision — · last 1 filed: \
+             cannot-verify 0%"
+        ),
         "{shown}"
     );
     assert!(!shown.contains("proposed"), "{shown}");

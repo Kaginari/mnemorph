@@ -23,7 +23,9 @@ pub use envelope::{
     BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Slice,
     TopUpError,
 };
-pub use findings::{Ascension, FindingRow, SpecialityFold, Standing, WINDOW, fold_findings};
+pub use findings::{
+    Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW, fold_findings,
+};
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};
 pub use prices::{DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};

@@ -1100,18 +1100,24 @@ fn score(
         ));
         let m = f.meter();
         lines.push(format!(
-            "  precision {} · {} {} ({}) · last {} settled: precision {}",
+            "  precision {} · {} {} ({}) · last {} settled: precision {} · last {} filed: \
+             cannot-verify {}",
             pct(f.precision()),
             m.label.to_lowercase(),
             pct(f.upheld_rate()),
             format!("{:?}", m.band).to_lowercase(),
             f.recent.len(),
-            pct(f.recent_precision())
+            pct(f.recent_precision()),
+            f.last_filed,
+            pct(f.cannot_verify_rate())
         ));
         if let Some(a) = form.and_then(|r| f.proposal(r)) {
             let what = match a {
                 Ascension::Rise => "rise to Arch Dark Elf",
-                Ascension::Probation => "probation: precision under 70% over the last ten",
+                Ascension::Probation => {
+                    "probation: precision under 70% over the last ten settled, or cannot-verify \
+                     over 50% of the last ten filed"
+                }
             };
             lines.push(format!(
                 "  proposed to the human: {what} — nothing changes until the human applies it"

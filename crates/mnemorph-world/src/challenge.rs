@@ -30,7 +30,9 @@ use crate::roster::Roster;
 
 pub mod verification;
 
-pub use mnemorph_ledger::{Ascension, FindingRow, SpecialityFold, Standing, WINDOW};
+pub use mnemorph_ledger::{
+    Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW,
+};
 pub use verification::{
     Decision, FLOOR, Filing, Finding, Found, Guard, Outcome, Pinned, Proposal, Rerun, Ruling,
     Verification,
