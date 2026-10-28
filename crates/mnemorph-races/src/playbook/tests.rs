@@ -337,7 +337,7 @@ fn the_generalist_is_briefed_on_chains() {
     assert_eq!(for_landing(Speciality::General, &["src/auth/"]), []);
 }
 
-/// The law audit's checklist (#104): stop propagation and Mind provenance, each with the files to
+/// The law audit's checklist (#104): stop propagation, Mind provenance and the journal chains, each with the files to
 /// read and the tests that witness it, loaded whenever the law is routed to their surfaces.
 #[test]
 fn the_law_audit_holds_its_checklist() {
@@ -367,6 +367,9 @@ fn the_law_audit_holds_its_checklist() {
                 "un-retire",
                 "a_retired_mind_never_loads",
                 "a_worn_mind_names_its_source",
+                "`chains::verify`",
+                "anchored",
+                "a_silent_edit_is_found_at_its_row",
             ],
         ),
     ];

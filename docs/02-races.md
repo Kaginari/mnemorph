@@ -791,6 +791,13 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
        names no owner of its own (who wears it is read from the docs' Minds fields); and no
        Arch Dark Elf campaign exists yet to stop. The audit asks each of these again. Witnessed by `a_retired_mind_never_loads`
        and `a_worn_mind_names_its_source`.
+     - **Journal chains** (`ledger-integrity`). The usage ledger and the value ledger are
+       hash-chained ([the chain](06-consumption.md#the-usage-row)): the audit walks each
+       (`mnemorph_world::chains::verify`, the walk `mnemorphd housekeep --verify` runs) and checks
+       its head against the newest head kept under the state directory or anchored in `log.md`. A broken link is found
+       at its line; a torn tail is a truncation; a kept head the chain no longer holds means rows
+       were dropped from the end or the chain was rooted again. Witnessed by `a_silent_edit_is_found_at_its_row` and
+       `the_head_anchored_in_log_md_matches_the_journal`.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
   `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, the `verdict` tool to
   file a verification, `seal` proposals.

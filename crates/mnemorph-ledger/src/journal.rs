@@ -1,9 +1,13 @@
-//! The append-only JSONL journal: one row per line, never rewritten.
+//! The append-only JSONL journal: one row per line, never rewritten; chained by choice
+//! ([`crate::chain`]).
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
+
+use crate::chain::{Head, Report, Walk};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -12,7 +16,19 @@ use serde::de::DeserializeOwned;
 #[derive(Debug, Clone)]
 pub struct Journal<T> {
     path: PathBuf,
+    /// A chained journal's walk so far, shared by its clones; `None` for an unchained one.
+    chain: Option<Arc<Mutex<Option<Tip>>>>,
+    /// Where a chained journal's every appended byte is written again, out of every command's
+    /// reach, for the tripwire to put the journal back from.
+    witness: Option<PathBuf>,
     rows: PhantomData<fn() -> T>,
+}
+
+/// Where a chained journal's walk stands: the walk, and the file's length it walked to.
+#[derive(Debug)]
+struct Tip {
+    walk: Walk,
+    len: u64,
 }
 
 /// What reading a journal back found.
@@ -30,8 +46,43 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Journal {
             path: path.into(),
+            chain: None,
+            witness: None,
             rows: PhantomData,
         }
+    }
+
+    /// A chained journal at `path`: each row appended carries `prev` and `digest`
+    /// ([`crate::chain`]). Unchained rows already there read as before; the first row this
+    /// appends is the chain's genesis. Every writer of a chained journal chains: the head is kept
+    /// in memory, walked once on the first append, and caught up under the file's lock when
+    /// another writer appended since.
+    #[must_use]
+    pub fn chained(path: impl Into<PathBuf>) -> Self {
+        Journal {
+            path: path.into(),
+            chain: Some(Arc::new(Mutex::new(None))),
+            witness: None,
+            rows: PhantomData,
+        }
+    }
+
+    /// The same chained journal, every byte it appends written first to `file` too, under that
+    /// file's lock: the witness the tripwire rebuilds the journal from after a command, so a row
+    /// the harness wrote while the command ran is never dropped. An unchained journal keeps no
+    /// witness.
+    #[must_use]
+    pub fn witnessed_at(mut self, file: impl Into<PathBuf>) -> Self {
+        if self.chain.is_some() {
+            self.witness = Some(file.into());
+        }
+        self
+    }
+
+    /// Whether the journal chains its rows.
+    #[must_use]
+    pub fn is_chained(&self) -> bool {
+        self.chain.is_some()
     }
 
     /// Where it lives.
@@ -48,6 +99,9 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     /// The row does not serialise, or the file cannot be opened, written or synced.
     pub fn append(&self, row: &T) -> io::Result<()> {
         use std::io::{Read, Seek, SeekFrom};
+        if let Some(chain) = &self.chain {
+            return self.append_chained(chain, row);
+        }
         let mut line = serde_json::to_vec(row).map_err(io::Error::other)?;
         line.push(b'\n');
         let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
@@ -79,8 +133,88 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         Ok(())
     }
 
+    /// [`Journal::append`] for a chained journal: under the file's exclusive lock, the walk is
+    /// caught up with what other writers appended, and the row is sealed to its head.
+    fn append_chained(&self, chain: &Mutex<Option<Tip>>, row: &T) -> io::Result<()> {
+        let body = serde_json::to_vec(row).map_err(io::Error::other)?;
+        let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
+        if let Some(dir) = dir {
+            std::fs::create_dir_all(dir)?;
+        }
+        // The witness first, then the journal: the tripwire reads both under the witness's lock.
+        let witness = match &self.witness {
+            Some(w) => {
+                if let Some(d) = w.parent() {
+                    std::fs::create_dir_all(d)?;
+                }
+                let f = OpenOptions::new().create(true).append(true).open(w)?;
+                f.lock()?;
+                Some(f)
+            }
+            None => None,
+        };
+        let created = !self.path.exists();
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&self.path)?;
+        file.lock()?;
+        let mut tip = chain.lock().unwrap_or_else(PoisonError::into_inner);
+        // Taken: a write that fails leaves no tip, and the next append walks again.
+        let walked = caught_up(tip.take(), &file)?;
+        let (bytes, walk) = walked.walk.seal(&body)?;
+        if let Some(mut w) = witness.as_ref() {
+            w.write_all(&bytes)?;
+            w.sync_data()?;
+        }
+        (&file).write_all(&bytes)?;
+        file.sync_data()?;
+        if created && let Some(dir) = dir {
+            File::open(dir)?.sync_all()?;
+        }
+        *tip = Some(Tip {
+            walk,
+            len: walked.len + bytes.len() as u64,
+        });
+        Ok(())
+    }
+
+    /// The chain's head: the newest row whose digest holds, read from the walk kept in memory and
+    /// caught up with the file; `None` for an unchained journal or one no row is chained in yet.
+    ///
+    /// # Errors
+    ///
+    /// The file exists but cannot be read.
+    pub fn head(&self) -> io::Result<Option<Head>> {
+        let Some(chain) = &self.chain else {
+            return Ok(None);
+        };
+        let file = match File::open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        file.lock_shared()?;
+        let mut tip = chain.lock().unwrap_or_else(PoisonError::into_inner);
+        let walked = caught_up(tip.take(), &file)?;
+        let head = walked.walk.report().head;
+        *tip = Some(walked);
+        Ok(head)
+    }
+
+    /// Walks the whole file once and reports its chain ([`crate::chain::verify`]).
+    ///
+    /// # Errors
+    ///
+    /// The file exists but cannot be read.
+    pub fn verify(&self) -> io::Result<Report> {
+        crate::chain::verify(&self.path)
+    }
+
     /// Reads every row back. A missing file is an empty journal; a line that does not parse is
-    /// skipped and its number reported.
+    /// skipped and its number reported, and so is an unchained line once the chain has begun: no
+    /// writer of a chained journal writes one.
     ///
     /// # Errors
     ///
@@ -100,6 +234,7 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             rows: Vec::new(),
             skipped: Vec::new(),
         };
+        let mut chained = false;
         for (n, line) in BufReader::new(file).split(b'\n').enumerate() {
             let mut line = line?;
             if n == 0 && line.starts_with(b"\xEF\xBB\xBF") {
@@ -108,13 +243,40 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             if line.iter().all(u8::is_ascii_whitespace) {
                 continue;
             }
-            match serde_json::from_slice(&line) {
+            let sealed = crate::chain::is_sealed(&line);
+            chained |= sealed;
+            if chained && !sealed {
+                back.skipped.push(n + 1);
+                continue;
+            }
+            match serde_json::from_slice(&crate::chain::body(&line)) {
                 Ok(row) => back.rows.push(row),
                 Err(_) => back.skipped.push(n + 1),
             }
         }
         Ok(back)
     }
+}
+
+/// `tip` caught up with `file`, read under its lock: what was appended since is walked on; a file
+/// shorter than the walk, or no walk yet, is walked from its start.
+fn caught_up(tip: Option<Tip>, file: &File) -> io::Result<Tip> {
+    use std::io::{Read as _, Seek, SeekFrom};
+    let len = file.metadata()?.len();
+    let mut tip = match tip {
+        Some(t) if t.len <= len => t,
+        _ => Tip {
+            walk: Walk::new(),
+            len: 0,
+        },
+    };
+    if tip.len < len {
+        let mut f = file;
+        f.seek(SeekFrom::Start(tip.len))?;
+        tip.walk.feed_from(f.take(len - tip.len))?;
+        tip.len = len;
+    }
+    Ok(tip)
 }
 
 #[cfg(test)]

@@ -6153,6 +6153,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-28T09:08:16+01:00] rimuru — #91: hash-chained trust journals, the head anchored in log.md
+- **Done:** `mnemorph_ledger::chain`: a chained row is the row's own JSON with `prev` first and
+  `digest` last (`{"prev":…[,"genesis":true][,"torn":n],<row>,"digest":…}`); the digest is the
+  SHA-256 of the line's bytes before `,"digest"`, so nothing is re-serialised, and the row's fields
+  are recovered byte for byte. `Journal::chained` keeps the head in memory, walks once on its
+  first append and catches up under the file's lock. The genesis' `prev` is the digest of the
+  unchained bytes before it. A torn tail is a truncation the next row records (`torn`). Chained: the
+  usage ledger and the value ledger (challenge records). Anchored: `mnemorphd housekeep --verify`
+  (walks, says, writes the heads into `log.md`) and solo's escalation handoff;
+  `chains::anchor_lines` is the hook for the ascension, probation and fall entries, which nothing
+  writes yet. The law playbook's `ledger-integrity` walks the chains. Docs 02, 03, 05, 06.
+- **Tests:** append and verify; a middle edit found at its row, a deleted row, the genesis lost, a
+  false `torn`, a late genesis; a torn tail (once and twice) as truncation, then resumed; an
+  unchained file then a genesis; four writers (own and shared heads) linear; the anchored head
+  matches, and a dropped last row does not; challenge records chained under their lock; the
+  handoff's head is a row of the ledger; `housekeep --verify` OK, broken, `--heal` refused.
+  Mutation: with the digest check disabled, three chain tests fail.
+- **Learned:** a `torn` record may excuse only a tail the appender itself closed; excusing any bad
+  run let a writer that does not chain slip a row past the walk. Open (@?): gate verdicts, seals,
+  envelopes (#88's use-count journal) and Kijin posts are not chained yet; each is a
+  `Journal::chained` and a line in `chains::journals`. The value ledger's records rewalk on every
+  hold, as their fold already reads the whole file.
+
+---
+
 ### [2026-10-28T09:30:31+01:00] rimuru — #260, Fable's review: unreadable challenge rows fail closed; a dirty build says so
 - **Done:** `Row` reads past unknown fields, so an older and a newer binary read each other's
   rows. A line the fold cannot parse is no longer skipped: the challenge it names, or every one
@@ -6167,3 +6192,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   dirty mark, since a plain `git status` would rebuild everything above the ledger. Open (@?): an
   unreadable *opening* row leaves no challenge to hold. #98 remains for `status`, the board and the
   other races' meters, and #105 for M11's evolution rows.
+
+---
+
+### [2026-10-28T09:33:06+01:00] rimuru — #91, Fable's review: the anchor is read back, a whole line is never torn, the usage ledger witnessed
+- **Done:** `housekeep --verify` keeps each head that holds under `$XDG_STATE_HOME/mnemorph/anchors/`
+  beside `log.md`'s entry, and holds each walk to the newest kept head (`Break::Anchor`: a
+  dropped tail or a chain rooted again), saying when `log.md` and the kept copy disagree; a walk
+  that fails anchors nothing new. A line that is whole JSON is never torn; reading a chained
+  journal skips unchained lines after the genesis. The usage ledger's every byte is witnessed
+  under `$XDG_STATE_HOME/mnemorph/usage/`, and the tripwire rebuilds it from the witness as it
+  does the queue, so a parallel run's rows survive a command. Docs 02, 05, 06.
+- **Tests:** a dropped tail, a chain rooted again and an edit of `log.md` alone, each found; a
+  forged whole row before a torn tail breaks the chain after an honest append; the witness holds
+  the journal's bytes; the tripwire keeps a parallel run's usage rows and undoes the command's edit;
+  `housekeep --verify` exits 1 on a dropped last row.
+- **Learned:** an anchor that is only written proves nothing: a check must read the kept head back,
+  from a place the checked files' writers cannot reach.

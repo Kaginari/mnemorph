@@ -82,6 +82,52 @@ append-only: one row per line, appended and synced before the call returns (a ne
 directory is synced too). A torn last line is closed before the next row is written, and is
 skipped and reported when the journal is read back, never fatal; a byte-order mark is ignored.
 
+**The chain.** The usage ledger is a chained journal (`mnemorph_ledger::chain`), so an edit of
+past spend is found, not believed. Each row carries the chain's fields around its own, in a
+fixed order:
+
+```json
+{"prev":"<sha-256 hex>","ts":"…","session":"…", … ,"digest":"<sha-256 hex>"}
+```
+
+- `digest` is the SHA-256 of every byte of the line before `,"digest"` — the bytes as written,
+  never a re-serialisation — and `prev` is the previous row's `digest`. The row's own fields are
+  recovered byte for byte, so a reader parses a chained line as it parses a plain one.
+- **Genesis.** A journal becomes chained from its first chained row, marked `"genesis":true`,
+  whose `prev` is the SHA-256 of every byte the file held before it: rows written before the
+  chain read as before, and an edit of them breaks the genesis link.
+- **The head** — the newest row's digest — is kept in memory by the writer and found on open by
+  walking the file once; another writer's rows are walked on under the file's lock before the
+  next row is sealed, so concurrent writers keep the chain linear. Every writer of a chained
+  journal chains: an unchained row after the genesis is a break, and reading the journal back
+  skips it.
+- **A torn last line** (a crash mid-write; it ends without its newline) is a truncation, not
+  tampering: the next row closes it, links to the last whole row, and records it as
+  `"torn":<line>`. Only a partial line is ever torn: a line that is whole JSON breaks the chain at
+  once, whatever comes after it.
+- **The head is anchored outside the file**: by `mnemorphd housekeep --verify`, in `log.md` and
+  in a copy under the human's state directory (`$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl`),
+  out of every command's reach; in the handoff when solo escalates (and the run's journal beside
+  it); and in an ascension, probation or fall entry when one is written. Dropping the last rows,
+  or stripping the chain's fields and rooting it again, leaves a chain whose links hold; the walk
+  is held to the newest kept head (the state directory's, else `log.md`'s), which must still be a
+  row at its line or later, or the chain breaks at the anchor. A walk that does not hold anchors no
+  new head.
+- **`mnemorphd housekeep --verify`** walks each chained journal once and says, escaped: OK with
+  the head, a truncation with the head the chain holds to, or the first broken link with its line
+  and why (an edited row, a removed or inserted one, a line no row recorded torn, a lost genesis,
+  a kept head the chain no longer holds), and whether `log.md`'s newest anchor and the state
+  directory's disagree. The Dark Elf's law audit calls the same walk
+  (`mnemorph_world::chains::verify`).
+- **The tripwire** puts the usage ledger back after each command from what it held plus what its
+  witness (`$XDG_STATE_HOME/mnemorph/usage/<world>-<fnv64a>.jsonl`, every byte the harness
+  appended, written there first) gained meanwhile: a command's edit is undone, and a parallel
+  run's rows are kept.
+
+Chained today: the usage ledger and the Dark Elf's value ledger (its challenge records). Gate
+verdicts, seals, envelopes and Kijin posts are chained as each is opened with
+`Journal::chained` and named in `mnemorph_world::chains::journals`.
+
 Two meters, one implementation each, never confused:
 
 - **occupancy** — how full the window was at the last call: that call's `input + cacheRead +

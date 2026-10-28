@@ -15,7 +15,9 @@
 //! kept again under the human's state directory, out of every command's reach. So a body's
 //! command cannot forge a move, and the human's moves made while it ran are kept. Each Kijin
 //! post journal (`.mnemorph/kijin/<post>/post.jsonl`) is put back the same way from its own
-//! witness, so the rows the harness journals while a command runs are never lost.
+//! witness, so the rows the harness journals while a command runs are never lost; and so is the
+//! usage ledger (`.mnemorph/instruments/usage.jsonl`), whose every chained byte the harness writes
+//! to its witness first, so a parallel run's rows written while a command ran are kept.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -88,15 +90,24 @@ struct Witnessed {
     witness_len: usize,
 }
 
-/// The witnessed files of `world`: the work queue, and each Kijin post journal.
+/// The witnessed files of `world`: the work queue, the usage ledger, and each Kijin post journal.
 fn witnessed(world: &Path) -> Vec<Witnessed> {
-    let mut out = vec![Witnessed {
-        rel: PathBuf::from(QUEUE),
-        what: "the work queue: only the harness and the human move it".into(),
-        held: None,
-        witness: queue_witness(world),
-        witness_len: 0,
-    }];
+    let mut out = vec![
+        Witnessed {
+            rel: PathBuf::from(QUEUE),
+            what: "the work queue: only the harness and the human move it".into(),
+            held: None,
+            witness: queue_witness(world),
+            witness_len: 0,
+        },
+        Witnessed {
+            rel: PathBuf::from(USAGE),
+            what: "the usage ledger: only the harness writes it".into(),
+            held: None,
+            witness: usage_witness(world),
+            witness_len: 0,
+        },
+    ];
     for post in mnemorph_races::Post::ALL {
         out.push(Witnessed {
             rel: Path::new(KIJIN).join(post.creature()).join(POST_JOURNAL),
@@ -269,6 +280,8 @@ impl Snapshot {
 
 /// The shared work queue, relative to the world.
 const QUEUE: &str = ".mnemorph/shared/queue.jsonl";
+/// The usage ledger, relative to the world.
+const USAGE: &str = ".mnemorph/instruments/usage.jsonl";
 /// The Kijin posts' folder, relative to the world.
 const KIJIN: &str = ".mnemorph/kijin";
 /// A post journal's name in its post's folder.
@@ -351,6 +364,18 @@ pub fn queue_witness(world: &Path) -> Option<PathBuf> {
     Some(
         state_dir()?
             .join("mnemorph/queue")
+            .join(format!("{}.jsonl", world_key(world))),
+    )
+}
+
+/// Where the usage ledger's witness lives: `$XDG_STATE_HOME/mnemorph/usage/<world>-<fnv64a>.jsonl`,
+/// else under `~/.local/state`; `None` when there is no home. The loop's chained usage journal
+/// writes every byte it appends here first (`Journal::witnessed_at`).
+#[must_use]
+pub fn usage_witness(world: &Path) -> Option<PathBuf> {
+    Some(
+        state_dir()?
+            .join("mnemorph/usage")
             .join(format!("{}.jsonl", world_key(world))),
     )
 }
@@ -550,6 +575,64 @@ mod queue_tests {
             fs::read_to_string(&journal).unwrap(),
             "committed\nreconcile\n"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A command that rewrites the usage ledger loses nothing the harness wrote: a parallel run's
+    /// rows, witnessed while the command ran, stand after it, and the command's own edit is gone.
+    #[test]
+    fn the_usage_ledger_keeps_the_rows_a_parallel_run_wrote() {
+        let root = std::env::temp_dir().join(format!("mnemorph-usage-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let world = root.join("w");
+        fs::create_dir_all(world.join(".mnemorph/instruments")).unwrap();
+        let witness = root.join("usage.jsonl");
+        let ledger = world.join(USAGE);
+        let take = || {
+            let mut s = Snapshot::take(&world);
+            let w = s
+                .witnessed
+                .iter_mut()
+                .find(|w| w.rel == Path::new(USAGE))
+                .unwrap();
+            w.witness = Some(witness.clone());
+            w.witness_len = fs::read(&witness).map_or(0, |b| b.len());
+            s
+        };
+        fs::write(&ledger, "row-1\n").unwrap();
+        fs::write(&witness, "row-1\n").unwrap();
+        let before = take();
+        // While the command runs, a parallel run appends its row, through the witness first.
+        fs::write(&witness, "row-1\nparallel\n").unwrap();
+        fs::write(&ledger, "row-1\nparallel\n").unwrap();
+        // The command edits the ledger.
+        fs::write(&ledger, "forged\nparallel\n").unwrap();
+        let notes = before.restore();
+        assert_eq!(fs::read_to_string(&ledger).unwrap(), "row-1\nparallel\n");
+        assert!(
+            notes.iter().any(|n| n.contains("the usage ledger")),
+            "{notes:?}"
+        );
+        // Untouched, with a parallel row: kept, nothing said.
+        let before = take();
+        fs::write(&witness, "row-1\nparallel\nmore\n").unwrap();
+        fs::write(&ledger, "row-1\nparallel\nmore\n").unwrap();
+        assert_eq!(before.restore(), Vec::<String>::new());
+        assert_eq!(
+            fs::read_to_string(&ledger).unwrap(),
+            "row-1\nparallel\nmore\n"
+        );
+        assert!(usage_witness(&world).is_none_or(|p| p.ends_with(format!(
+            "mnemorph/usage/w-{:016x}.jsonl",
+            {
+                let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+                for b in world.as_os_str().as_encoded_bytes() {
+                    h ^= u64::from(*b);
+                    h = h.wrapping_mul(0x0100_0000_01b3);
+                }
+                h
+            }
+        ))));
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -25,4 +25,4 @@ pub use mnemorph_sandbox::Policy;
 pub use mnemorph_sandbox::Sandbox;
 pub use pinned::remove_created;
 pub use tool::{Context, Grant, Meta, Outcome, OwnerOf, Tool, call, ignored, registry};
-pub use tripwire::{kijin_witness, queue_witness};
+pub use tripwire::{kijin_witness, queue_witness, usage_witness};
