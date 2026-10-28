@@ -126,7 +126,9 @@ race codex.
 - Envelopes carved by plan weight with maximum shares and the challenge reserve, pre-flight,
   recorded spend, the return of unspent slices; caps across sessions.
 - Folds per body, race, model and day, with cache-hit and prefix shares. (The value fold —
-  signals for the score formulas — needs the world's verdicts and lands with M11.)
+  signals for the score formulas — needs the world's verdicts and lands with M11; it re-asserts
+  the honesty properties of `fold_reports` against itself: honest bad news never lowers a score,
+  `holeRate` is the harness's, no prose is read.)
 
 **Exit:** a random tree of up to 50 commissions, sequential and parallel, never exceeds any
 envelope, and every weighted item gets a slice while its parent has budget (proptest); the folds

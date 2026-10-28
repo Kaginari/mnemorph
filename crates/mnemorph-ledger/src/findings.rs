@@ -648,7 +648,9 @@ mod tests {
     /// the rows inside that window, folded again, give the same reading and the same decision.
     #[test]
     fn a_proposal_is_explained_and_recomputes_from_its_window() {
-        // Older confirmations, then ten settled: six refuted.
+        // Older confirmations, then ten settled: six refuted. Root cause `x` has rows on both
+        // sides of the window's first: confirmed before it, refuted inside it — it stands
+        // confirmed, before the window.
         let mut rows: Vec<FindingRow> = (0..5u64)
             .map(|i| row(&format!("old{i}"), "l0", Standing::Confirmed, 1 + i))
             .collect();
@@ -658,8 +660,10 @@ mod tests {
             } else {
                 Standing::Confirmed
             };
-            row(&format!("f{i}"), "l1", s, 20 + i)
+            row(&format!("f{i}"), "l1", s, 20 + 2 * i)
         }));
+        rows.push(row("x", "l0", Standing::Confirmed, 8));
+        rows.push(row("x", "l1", Standing::Refuted, 25));
         let f = harness(&rows);
         let p = f.proposed(Race::ArchDarkElf, Some("ab12")).unwrap();
         assert_eq!(p.ascension, Ascension::Probation);
@@ -668,20 +672,27 @@ mod tests {
         assert_eq!(
             e.to_string(),
             "probation: precision 0.40 < 0.70 (last 10 findings); recover: >= 0.70 within 5 \
-             findings; re-rise: precision >= 0.85 over 20 findings; ledger head ab12, rows 20–29"
+             findings; re-rise: precision >= 0.85 over 20 findings; ledger head ab12, rows 20–38"
         );
-        // Recomputed from the window alone: the same reading, the same decision.
+        // Recomputed from the records up to the window's last row: the same reading, the same
+        // decision. The rows inside the window alone would not do: `x`'s refutation there would
+        // stand once its earlier confirmation is left out.
         let (from, to) = (e.from.unwrap(), e.to.unwrap());
-        let window: Vec<FindingRow> = rows
-            .iter()
-            .filter(|r| (from..=to).contains(&r.at))
-            .cloned()
-            .collect();
-        let again = harness(&window);
+        let upto: Vec<FindingRow> = rows.iter().filter(|r| r.at <= to).cloned().collect();
+        let again = harness(&upto);
         assert_eq!(again.recent_precision(), Some(e.reading));
         assert!(e.op.holds(e.reading, e.threshold));
         assert_eq!(
             again.proposed(Race::ArchDarkElf, Some("ab12")),
+            Some(p.clone())
+        );
+        let inside: Vec<FindingRow> = rows
+            .iter()
+            .filter(|r| (from..=to).contains(&r.at))
+            .cloned()
+            .collect();
+        assert_ne!(
+            harness(&inside).proposed(Race::ArchDarkElf, Some("ab12")),
             Some(p.clone())
         );
         assert_eq!(f.proposal(Race::ArchDarkElf), Some(Ascension::Probation));

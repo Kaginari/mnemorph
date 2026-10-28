@@ -1208,8 +1208,10 @@ Every decision is explained (`explain_rise`, `explain_fall`, `Explanation`):
 - **The lines are the decision.** `rises`, `falls` and `recovers` read the same bars the lines
   name, so a line cannot say one thing while the law does another; each line, its reading held
   against its threshold (`Explanation::holds`), recomputes it. Given a line and the records, the
-  chain walked again holds at the named head, and the rows inside the window, folded again, give
-  the same reading and the same proposal.
+  chain walked again holds at the named head, and the records up to the window's last row,
+  folded again, give the same reading and the same proposal — the whole prefix, since one root
+  cause's rows can lie on both sides of the window's first. The fold and the head come from one
+  read of the records, so the head is the head of the rows folded.
 - **The Dark Elf's proposals carry their lines** (`SpecialityFold::proposed`): the
   `cannot-verify` bar is a line of its own (`cannotVerifyRate > 0.50`, recovering at `<= 0.50`,
   rising again on `upheldRate`). The challenge records number their rows by line, from 1, as their
@@ -1231,6 +1233,9 @@ about each report — the gate's word on its landing, a first-try pass, the hole
   always does; and a gate verdict never depends on a report's prose — any answer that says
   something, a claimed pass included, gets the verdict and the failures the plain one does. Only
   an empty answer fails, on *duties done*.
+- **`fold_reports` has no journal behind it yet.** When M11 builds the general report fold over
+  the journal, that fold must keep these properties: they are re-asserted against it, not assumed
+  from this one.
 
 Rules that hold for every ascension:
 

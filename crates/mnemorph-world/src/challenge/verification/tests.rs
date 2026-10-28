@@ -1118,18 +1118,18 @@ fn the_ledger_reads_only_the_records_outside_the_world() {
         found_on("b", Severity::High),
         Some(refuted()),
     );
-    let folded = super::super::scores_at(&world, &state, true).unwrap();
+    let (folded, _) = super::super::scored_at(&world, &state, true).unwrap();
     assert_eq!((folded[FINDER].findings, folded[FINDER].upheld), (1, 0));
     assert!(matches!(
-        super::super::scores_at(&world, &inside, true),
+        super::super::scored_at(&world, &inside, true),
         Err(Refusal::InWorld(_))
     ));
     // A records path not there yet inside the world is refused too.
     assert!(matches!(
-        super::super::scores_at(&world, &world.join("new/c.jsonl"), true),
+        super::super::scored_at(&world, &world.join("new/c.jsonl"), true),
         Err(Refusal::InWorld(_))
     ));
-    let unchecked = super::super::scores_at(&world, &inside, false).unwrap();
+    let (unchecked, _) = super::super::scored_at(&world, &inside, false).unwrap();
     assert_eq!(
         unchecked[FINDER].upheld, 1,
         "without the check the forgery counts"
@@ -1146,7 +1146,8 @@ fn the_ledger_reads_only_the_records_outside_the_world() {
 }
 
 /// A proposal names the records' chain head and the rows of the window it read: the chain walked
-/// again holds at that head, and the rows inside the window, folded again, give the same lines.
+/// again holds at that head, and the records up to the window's last row, folded again, give the
+/// same lines. The fold and the head come from one read.
 #[test]
 fn a_proposal_recomputes_from_the_chained_records() {
     let dir = temp("explained");
@@ -1166,8 +1167,11 @@ fn a_proposal_recomputes_from_the_chained_records() {
             Some(ruling),
         );
     }
-    let chain = c.chain().unwrap();
+    let (rows, chain) = c.finding_rows_chained();
+    assert_eq!(rows, c.finding_rows());
+    let chain = chain.unwrap();
     assert!(chain.holds(), "{chain}");
+    assert_eq!(chain, c.chain().unwrap());
     let head = chain.head.unwrap().digest;
     let p = harness_of(&c)
         .proposed(mnemorph_races::Race::ArchDarkElf, Some(&head))
@@ -1186,10 +1190,12 @@ fn a_proposal_recomputes_from_the_chained_records() {
         let line = text.lines().nth(usize::try_from(at - 1).unwrap()).unwrap();
         assert!(line.contains(r#""row":"ruled""#), "{line}");
     }
+    // The records up to the window's last row, folded again: one root cause's rows on both sides
+    // of the window's first fold as they did.
     let window: Vec<_> = c
         .finding_rows()
         .into_iter()
-        .filter(|r| (from..=to).contains(&r.at))
+        .filter(|r| r.at <= to)
         .collect();
     let again = mnemorph_ledger::fold_findings(&window)
         .remove(FINDER)

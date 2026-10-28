@@ -6241,3 +6241,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a rate defined in words on a struct field is law nobody tests; folding it in code
   is what let the property find the fail-word penalty. Open (@?): the report fold is not wired to
   a journal yet (M11 reads it); the gate fails an empty answer, which the docs define.
+
+---
+
+### [2026-10-28T10:32:34+01:00] rimuru — #97/#99, Fable's review: the window recomputes from the records' prefix; fold and head from one read
+- **Done:** an explanation recomputes from the records up to its window's last row, since one root
+  cause's rows can lie on both sides of the window's first; `challenge score` takes the fold and
+  the chain head from one read under the lock (`scored`, `finding_rows_chained`). Docs 02 and the
+  roadmap say the honesty properties are re-asserted against M11's journal fold.
+- **Tests:** a root cause confirmed before the window and refuted inside it recomputes from the
+  prefix, and not from the window alone; the chained-records test reads rows and chain in one go.
+- **Learned:** a window's rows are not its inputs when a fold dedupes across them.

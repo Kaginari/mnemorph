@@ -1127,10 +1127,10 @@ fn challenge(args: &[String]) -> ExitCode {
                 Err(e) => refused(&e),
             }
         }
-        [verb] if verb == "score" => match mnemorph_server::world::challenge::scores(&world) {
-            Ok(folded) => {
+        [verb] if verb == "score" => match mnemorph_server::world::challenge::scored(&world) {
+            Ok((folded, chain)) => {
                 let roster = mnemorph_server::world::Roster::load(&world);
-                for line in score(&folded, &roster, &records) {
+                for line in score(&folded, &roster, &records, chain.as_ref()) {
                     println!("{line}");
                 }
                 ExitCode::SUCCESS
@@ -1212,6 +1212,7 @@ fn score(
     folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
     roster: &mnemorph_server::world::Roster,
     records: &mnemorph_server::world::challenge::Challenges,
+    chain: Option<&mnemorph_server::world::challenge::ChainReport>,
 ) -> Vec<String> {
     use mnemorph_server::world::challenge::Ascension;
     let safe = mnemorph_server::challenge::safe;
@@ -1225,15 +1226,15 @@ fn score(
             rows.join(", ")
         ));
     }
-    // A proposal names the records' chain head, so it can be recomputed from them.
-    let chain = records.chain();
-    let head = match &chain {
-        Ok(r) if r.holds() => r.head.as_ref().map(|h| h.digest.clone()),
-        Ok(r) => {
+    // A proposal names the records' chain head — walked over the very bytes the fold read — so it
+    // can be recomputed from them.
+    let head = match chain {
+        Some(r) if r.holds() => r.head.as_ref().map(|h| h.digest.clone()),
+        Some(r) => {
             lines.push(format!("the records' chain does not hold: {r}"));
             None
         }
-        Err(_) => None,
+        None => None,
     };
     let head = head.as_deref();
     if folded.is_empty() {

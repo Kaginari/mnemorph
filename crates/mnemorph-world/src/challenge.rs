@@ -33,6 +33,8 @@ use crate::roster::Roster;
 
 pub mod verification;
 
+/// The records' hash chain, as a walk reports it.
+pub use mnemorph_ledger::Report as ChainReport;
 pub use mnemorph_ledger::{
     Ascension, Build, CANNOT_VERIFY_BAR, FindingRow, Proposed, SpecialityFold, Standing, WINDOW,
     fold_findings_by_build,
@@ -104,17 +106,27 @@ pub fn route(roster: &Roster, id: &str, written: &[String]) -> Landing {
 ///
 /// There is no home to keep records under, or the records' path lies inside the world.
 pub fn scores(world: &Path) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
-    let records = records_of(world).ok_or(Refusal::NoState)?;
-    scores_at(world, &records, true)
+    scored(world).map(|(folded, _)| folded)
 }
 
-/// The fold of `records` for `world`; `outside` off skips the source check: how a test shows it
-/// is needed.
-fn scores_at(
-    world: &Path,
-    records: &Path,
-    outside: bool,
-) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
+/// [`scores`], with the records' hash chain walked over the same bytes the fold read — one read
+/// under the lock, so the head a proposal names is the head of the rows it was folded from;
+/// `None` when the records cannot be read.
+///
+/// # Errors
+///
+/// As [`scores`].
+pub fn scored(world: &Path) -> Result<Scored, Refusal> {
+    let records = records_of(world).ok_or(Refusal::NoState)?;
+    scored_at(world, &records, true)
+}
+
+/// Each speciality's fold, and the records' chain as the same read walked it.
+pub type Scored = (BTreeMap<String, SpecialityFold>, Option<ChainReport>);
+
+/// The fold of `records` for `world`, and the chain the same read walked; `outside` off skips the
+/// source check: how a test shows it is needed.
+fn scored_at(world: &Path, records: &Path, outside: bool) -> Result<Scored, Refusal> {
     let real = |p: &Path| {
         p.canonicalize().unwrap_or_else(|_| {
             // Not there yet: its nearest existing ancestor, resolved, with the rest.
@@ -129,9 +141,8 @@ fn scores_at(
     if outside && real(records).starts_with(real(world)) {
         return Err(Refusal::InWorld(records.to_path_buf()));
     }
-    Ok(mnemorph_ledger::fold_findings(
-        &Challenges::at(records).finding_rows(),
-    ))
+    let (rows, chain) = Challenges::at(records).finding_rows_chained();
+    Ok((mnemorph_ledger::fold_findings(&rows), chain))
 }
 
 /// Who stands over every body: the only author a waiver may have.
