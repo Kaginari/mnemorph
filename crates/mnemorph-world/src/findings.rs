@@ -400,7 +400,7 @@ never a claim — claim it in the field, or say whose it is",
 
 /// `orphan-mind`: a Mind under `.mnemorph/minds/` — a directory with a `README.md`, or a
 /// `<name>.md` file, named for the entry — that no living creature wears, and whose doc is not
-/// marked `- **Shared:** yes`.
+/// marked `- **Shared:** yes` or `- **Retired:** yes`.
 #[must_use]
 pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
     let dir = world.join(".mnemorph").join("minds");
@@ -425,13 +425,11 @@ pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
             if name.starts_with('.') || name == "README" || worn.contains(name.as_str()) {
                 return None;
             }
-            let shared = std::fs::read_to_string(&doc).is_ok_and(|t| {
-                t.lines()
-                    .take_while(|l| !l.starts_with("##"))
-                    .filter_map(|l| l.trim().strip_prefix("- **Shared:**"))
-                    .any(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "yes" | "true"))
+            // A shared Mind is worn by any body; a retired one by none, and that is its end.
+            let kept = std::fs::read_to_string(&doc).is_ok_and(|t| {
+                crate::minds::marked(&t, "Shared") || crate::minds::marked(&t, "Retired")
             });
-            (!shared).then(|| Finding {
+            (!kept).then(|| Finding {
                 code: "orphan-mind",
                 severity: Severity::Medium,
                 at: format!(".mnemorph/minds/{file}"),

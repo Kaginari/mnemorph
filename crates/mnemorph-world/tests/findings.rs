@@ -296,7 +296,7 @@ fn a_dead_line_of_heirs_is_heir_dead() {
 
 /// `orphan-mind`: a Mind no living creature wears and not marked shared — a directory with a
 /// README or a `.md` file. A worn Mind, a shared one, and one worn only by a retired creature
-/// (an orphan) are told apart.
+/// (an orphan) are told apart; a retired Mind is worn by none, lawfully.
 #[test]
 fn a_mind_nobody_wears_and_not_shared_is_an_orphan() {
     let w = std::env::temp_dir().join(format!("mnemorph-minds-{}", std::process::id()));
@@ -312,6 +312,11 @@ fn a_mind_nobody_wears_and_not_shared_is_an_orphan() {
     .unwrap();
     std::fs::write(minds.join("lonely.md"), "# lonely\n").unwrap();
     std::fs::write(minds.join("old.md"), "# old\n").unwrap();
+    std::fs::write(
+        minds.join("retired.md"),
+        "# retired\n\n- **Retired:** yes\n",
+    )
+    .unwrap();
     for (short, body) in [
         (
             "s",

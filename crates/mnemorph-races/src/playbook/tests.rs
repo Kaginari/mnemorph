@@ -336,3 +336,50 @@ fn the_generalist_is_briefed_on_chains() {
     assert_eq!(brief::<&str>(Speciality::General, &[]), "");
     assert_eq!(for_landing(Speciality::General, &["src/auth/"]), []);
 }
+
+/// The law audit's checklist (#104): stop propagation and Mind provenance, each with the files to
+/// read and the tests that witness it, loaded whenever the law is routed to their surfaces.
+#[test]
+fn the_law_audit_holds_its_checklist() {
+    let items: [(AttackClass, &str, &[&str]); 2] = [
+        (
+            AttackClass::DetachedWork,
+            "crates/mnemorph-loop/src/session.rs",
+            &[
+                "every descendant body and command",
+                "never left claimed",
+                "`Interrupt`",
+                "process group",
+                "`settle`",
+                "background campaign",
+                "esc_stops_every_descendant_and_releases_its_order",
+                "esc_stops_a_running_command_and_keeps_its_output",
+            ],
+        ),
+        (
+            AttackClass::LedgerIntegrity,
+            "crates/mnemorph-world/src/minds.rs",
+            &[
+                "never law",
+                "doc and digest",
+                "retired Mind stops loading",
+                "`- **Retired:** yes`",
+                "un-retire",
+                "a_retired_mind_never_loads",
+                "a_worn_mind_names_its_source",
+            ],
+        ),
+    ];
+    for (class, surface, needles) in items {
+        let text = class.playbook();
+        for needle in needles {
+            assert!(text.contains(needle), "{class}: {needle}");
+        }
+        assert!(
+            for_landing(Speciality::Law, &[surface])
+                .iter()
+                .any(|&(c, _)| c == class),
+            "{surface} loads {class}"
+        );
+    }
+}

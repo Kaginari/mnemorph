@@ -61,6 +61,16 @@ seeded-eval model="nvidia/nemotron-3.5-lightning:free":
     test -n "${OPENROUTER_API_KEY:-}" || { echo "seeded-eval: set OPENROUTER_API_KEY"; exit 1; }
     MNEMORPH_LIVE=1 MNEMORPH_LIVE_OR_MODEL='{{model}}' cargo nextest run -p mnemorph-loop --test seeded --run-ignored only --no-capture seeded_eval
 
+# The reviewers' calibration: a reviewer — `dark-elf` (each case by its own speciality),
+# `dark-elf-<speciality>` or `fable` — judges every case of the gold set, and its recall,
+# precision, false accepts and rejects and severity agreement are written to a report under
+# `$XDG_STATE_HOME/mnemorph/calibration/`, outside the world. Never part of `check`. `models` is a
+# comma-separated panel, free by default; the key travels only through OPENROUTER_API_KEY and is
+# never printed.
+calibrate reviewer="dark-elf" models="nvidia/nemotron-3.5-lightning:free":
+    test -n "${OPENROUTER_API_KEY:-}" || { echo "calibrate: set OPENROUTER_API_KEY"; exit 1; }
+    MNEMORPH_LIVE=1 MNEMORPH_CALIBRATE_REVIEWER='{{reviewer}}' MNEMORPH_CALIBRATE_MODELS='{{models}}' cargo nextest run -p mnemorph-loop --test calibrate --run-ignored only --no-capture calibrate_live
+
 # Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
     # No merge left half-done: a conflict marker anywhere tracked fails the check.

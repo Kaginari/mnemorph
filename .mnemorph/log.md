@@ -6064,3 +6064,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   each fail.
 - **Learned:** the journal check of a failed run masks the row's own `failed` flag at filing; only
   a read of a written row tests the flag.
+
+---
+
+### [2026-10-28T03:09:38+01:00] rimuru — Dark Elf PR 11: the law audit's checklist (#104) and the reviewers' calibration (#106)
+- **Done:** the `dark-elf-law` playbooks carry #104's two items with their files and witnesses:
+  stop propagation (`detached-work`: one shared interrupt, the process group, the wake's claim
+  released by `settle`, a campaign under the same interrupt; `setsid`, which the Linux jail
+  refuses) and Mind provenance (`ledger-integrity`). A Mind marked `- **Retired:** yes` no longer
+  loads, and is no orphan; what wearing injects names its doc and the FNV-1a digest of the bytes
+  worn. The gold set: the seeded plants and controls from their key, plus `fixtures/gold.toml` —
+  the ten real findings the Regression lines name, each with its severity and fixing commit, and
+  six labelled false positives (41 cases: 28 bugs, 13 sound). `just calibrate [reviewer]
+  [models]` puts each case to a Dark Elf speciality or the Fable review on free OpenRouter models
+  and writes a report under `$XDG_STATE_HOME/mnemorph/calibration/`: recall, precision, severity
+  agreement per speciality and model family, coverage and abstentions apart, false accepts and
+  rejects with Wilson intervals, panel splits. Not run. Docs 02, 08, 09, roadmap.
+- **Tests:** `esc_stops_every_descendant_and_releases_its_order` (three bodies down: no model call
+  after the Esc, the backgrounded child dead, the order held again); `a_retired_mind_never_loads`,
+  `a_worn_mind_names_its_source`, the orphan check sparing a retired Mind;
+  `the_law_audit_holds_its_checklist`; `mnemorph-proving`'s `calibrate`: the set loads, labels hold
+  to the class table and the Regression lines, prompts never carry the answer, verdict lines, Wilson
+  values, a scripted three-model panel scored to hand-worked numbers, the oracle and the flag-all
+  extremes. Mutation: a `setsid` child survives the group kill and fails the stop test.
+- **Learned:** an interrupted court's writes are put back, so a witness of what survived it must
+  live outside the world (a process found by its own command line, not a pid file). Open (@?): the
+  Arch Dark Elf's campaigns do not exist yet, so their stop is a checklist line with no test; a
+  retirement written in the Mind's own file can be undone by whoever writes it — revocation held
+  outside the world remains.

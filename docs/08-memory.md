@@ -472,11 +472,15 @@ Know-how a body may load, in two levels, priced by exactly what each injects:
   Minds field names, and every Mind marked `- **Shared:** yes` — one line each:
   `@T mind:<name> — <what it is for> (~<tokens> tokens)`. It rides the changing tail, never the
   tool definitions, so the cached prefix holds whatever Minds the world has.
-- **Level two, wearing.** The `wear` tool, on every body's shelf, injects the Mind's whole text;
-  the manifest's price is that injected text at four bytes a token, and the ledger counts the
+- **Level two, wearing.** The `wear` tool, on every body's shelf, injects the Mind's whole text,
+  headed by its source — its doc and the FNV-1a digest of the bytes worn — so a worn Mind is
+  traced to them, and a changed one reads as another; the manifest's price is that injected text at four bytes a token, and the ledger counts the
   real tokens once it is worn. A worn Mind cannot be unloaded, so a throne that can hand work down
   never wears one over 2,000 tokens: the body below that needs it wears it and dies with its
   task.
+- **Retiring a Mind.** A Mind is know-how, never law. One marked `- **Retired:** yes` in its
+  header — outworn, or found poisoned — no longer loads: no manifest offers it and no body may
+  wear it, whoever names it. Its file stays on disk.
 - **Every command a prompt or hint names exists in the build.** A test reads every backticked
   `mnemorph …` or `mnemorphd …` command in the shipped sources against the help of the binary it
   names — `mnemorph` or `mnemorphd`.
