@@ -6,6 +6,7 @@
 //! caps and folds read the journal back; a journal may chain its rows by
 //! hash ([`chain`]), so a silent edit is found. The book's page is `docs/06-consumption.md`.
 
+mod build;
 mod caps;
 pub mod chain;
 mod clock;
@@ -17,6 +18,7 @@ mod prices;
 mod row;
 mod usage;
 
+pub use build::{Build, UNKNOWN};
 pub use caps::{
     CapReading, Caps, UNSEEN_FLOOR_WT, UNSEEN_RESERVE_PCT, check_caps, unseen_against, unseen_wt,
 };
@@ -28,6 +30,7 @@ pub use envelope::{
 };
 pub use findings::{
     Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW, fold_findings,
+    fold_findings_by_build,
 };
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};

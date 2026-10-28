@@ -6130,6 +6130,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-28T09:05:06+01:00] rimuru — #98 and #105: meters show their count and 95% interval; value rows carry their build
+- **Done:** `mnemorph_races::wilson(successes, n, z)` and `Rate` (successes of n): every meter
+  carries its rate and prints as `Upheld 0.85 (17/20, 95% 0.64–0.95)`, `no reports` at n = 0.
+  `mnemorphd challenge score` shows precision, the upheld meter, the last ten and the
+  `cannot-verify` rate that way, and the builds the findings were settled under. Showing only:
+  every bar still reads the point estimate. The build stamp moved from `mnemorphd`'s build script
+  to `mnemorph-ledger` (`Build::this`), and `--version` and the server's hello read it from
+  there, so `status` and the rows can never print different builds. Found, ruled and decided
+  challenge rows carry `build: { version, commit }`; old rows read `unknown`; `FindingRow` and
+  `SpecialityFold.builds` carry it, and `fold_findings_by_build` folds each build apart. The
+  calibration support's Wilson now calls the race law's. Docs 02, 05, 06.
+- **Tests:** Wilson's known values (18/20 → 0.699–0.972, 0/10, 10/10, 5/10, n = 0, k > n, a wider
+  z); the display strings with n and with none; a Named Slime at exactly 18/20 rises though its
+  lower bound is 0.70; a Dark Elf rise proposed while precision's lower bound (0.84) is under its
+  85 bar; stamped rows carry `--version`'s build, the same rows unstamped read `unknown`, and a
+  later decision splits the fold by build. mnemorph-races at 100% regions.
+- **Learned:** there were no value or evolution rows in `mnemorph-ledger` to stamp: the value
+  ledger's rows are the challenge records' settling rows in `mnemorph-world`, and evolution rows
+  are M11's. Open (@?): the challenge rows deny unknown fields, so a binary from before this change
+  skips a stamped row instead of folding it — a downgrade reads fewer findings.
+
+---
+
 ### [2026-10-28T09:08:16+01:00] rimuru — #91: hash-chained trust journals, the head anchored in log.md
 - **Done:** `mnemorph_ledger::chain`: a chained row is the row's own JSON with `prev` first and
   `digest` last (`{"prev":…[,"genesis":true][,"torn":n],<row>,"digest":…}`); the digest is the
@@ -6152,6 +6175,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   envelopes (#88's use-count journal) and Kijin posts are not chained yet; each is a
   `Journal::chained` and a line in `chains::journals`. The value ledger's records rewalk on every
   hold, as their fold already reads the whole file.
+
+---
+
+### [2026-10-28T09:30:31+01:00] rimuru — #260, Fable's review: unreadable challenge rows fail closed; a dirty build says so
+- **Done:** `Row` reads past unknown fields, so an older and a newer binary read each other's
+  rows. A line the fold cannot parse is no longer skipped: the challenge it names, or every one
+  opened before it, stays `Pending { unreadable }`, said as `unreadable row N` by `list`, the
+  coverage tool and `score`. A known blocker still blocks. The stamp's commit carries `-dirty` on
+  uncommitted tracked changes. The PR now refers to #98 and #105 rather than closing them. Docs 02,
+  05, 06.
+- **Tests:** a row with an extra field reads; a cleared challenge goes pending on a row naming it
+  and on a torn line, while a landing opened after it does not; a critical's row of an unknown kind
+  holds it pending, and a critical stays blocked after a torn line; `list` and `score` say the row.
+- **Learned:** a fold that drops what it cannot read fails open. The index is not watched for the
+  dirty mark, since a plain `git status` would rebuild everything above the ledger. Open (@?): an
+  unreadable *opening* row leaves no challenge to hold. #98 remains for `status`, the board and the
+  other races' meters, and #105 for M11's evolution rows.
 
 ---
 
