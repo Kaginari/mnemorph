@@ -305,7 +305,7 @@ pub(crate) enum Entry {
         at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         why: Option<String>,
-        /// The envelope that covered the act, once the gate honours envelopes (M11).
+        /// The envelope that admitted the act, when one did.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         envelope: Option<String>,
         /// The commit HEAD named when it opened: a lesson is written after it.
@@ -694,6 +694,20 @@ impl PostJournal {
             .collect())
     }
 
+    /// The envelope that admitted act `act`, as its kept intent says; `None` when the human
+    /// approved it, or the intents cannot be read.
+    fn envelope_of(&self, act: &str) -> Option<String> {
+        let path = intents_path(self.witness()?);
+        Journal::<Intent>::new(path)
+            .read()
+            .ok()?
+            .rows
+            .into_iter()
+            .rev()
+            .find(|i| i.act == act)
+            .and_then(|i| i.envelope)
+    }
+
     /// Open a rollback incident on `act`, unless one is already open or closed on it.
     pub(crate) fn open_rollback(&self, act: &str) -> io::Result<()> {
         if self.incident(act)?.is_some() {
@@ -704,7 +718,7 @@ impl PostJournal {
             cause: Cause::Rollback,
             at: Timestamp::now(),
             why: None,
-            envelope: None,
+            envelope: self.envelope_of(act),
             commit: head(&self.world),
         })
     }
@@ -757,7 +771,11 @@ impl PostJournal {
             cause,
             at: Timestamp::now(),
             why: why.map(str::to_owned),
-            envelope: None,
+            envelope: kept
+                .iter()
+                .rev()
+                .find(|i| i.act == act)
+                .and_then(|i| i.envelope.clone()),
             commit: head(&self.world),
         })
         .map_err(|e| format!("the incident could not be recorded: {e}"))?;

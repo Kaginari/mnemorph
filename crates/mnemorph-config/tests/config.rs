@@ -495,6 +495,10 @@ fn an_envelope_admits_only_while_in_force() {
         expires: signed.plus(ENVELOPE_DAYS),
         uses: Some(3),
         revoked: None,
+        world: None,
+        repo: None,
+        post: None,
+        body: None,
     };
     assert_eq!(e.admits(signed, 0), Ok(()));
     assert_eq!(e.admits(signed.plus(-1), 0), Err(Lapse::NotYet(signed)));

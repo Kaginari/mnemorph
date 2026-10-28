@@ -421,9 +421,9 @@ act after it `other`.
   | 1 | the post check (`Planned::check_post`) | a kind the post does not hold: refused before anything is read or asked |
   | 2 | the plan's fingerprint | a world that cannot be read |
   | 3 | the pin: the push URLs and HEAD's commit, or the `gh` host; the request's key looked up; what the act would make must not exist yet — for a pull request, its base and head branches read on the forge (`gh api …/git/ref/heads/<branch>`) and the pull requests open from head into base | a key given to another request; an earlier act of the same request in `reconcile`; an open incident on the same target; the branch or label already there; a pull request already open from the head into the base (`already open: #N`), a base or head that is not a branch, a head this post pushed that has moved since |
-  | 4 | the gate: **always the human** — Oni envelopes are not honoured before M11, and the card says so | a denial |
-  | 5 | the fingerprint, rechecked just before the spawn | a world that moved: nothing is journaled, and the gate is asked again (three times at most) |
-  | 6 | `commit`: the intent journaled under the request's key | a row that cannot be written: nothing runs |
+  | 4 | the gate: an Oni's envelope that admits the act ([the admission](#ascension--earned-granted-revocable)) — else the human, the card saying why no envelope admitted it | a denial |
+  | 5 | the fingerprint, rechecked just before the spawn; for an act an envelope admitted, the envelope read again there, the uses ledger held | a world that moved: nothing is journaled, and the gate is asked again (three times at most); an envelope that no longer admits the act: nothing is journaled, and the human is asked, told why |
+  | 6 | `commit`: the envelope's use recorded, then the intent journaled under the request's key, the uses ledger still held | a row that cannot be written: nothing runs (a use recorded stays spent) |
   | 7 | the rendered command, in the sandbox, as `bash` runs an approved command | — |
   | 8 | `ran`: its exit and what it left | — |
   | 9 | `observe`, with the read-only probe | — |
@@ -551,7 +551,8 @@ act after it `other`.
 - **A push and its pull request take one approval** (`Runner::push_and_open`; the Kijin asks with
   `{kind: "open-pull-request", …, remote}`). One card shows both rendered commands — the push URLs
   and the commit, the branch, the base, the title and the description — bound to one fingerprint
-  of both; a denial runs neither. Each act keeps its own pin, intent, receipt and undo:
+  of both; a denial runs neither. No envelope admits a pair: asked for as two acts, each is read
+  against the Oni's envelopes on its own. Each act keeps its own pin, intent, receipt and undo:
   - the push's URL must name the pull request's repository on the `gh` host, so its head is the
     branch the push makes; the pull request's pin reads its base and that no pull request is open
     from the head, which need not exist yet;
@@ -580,8 +581,8 @@ act after it `other`.
   read: an entry naming a receipt the witness does not hold as described counts for nothing, and
   rows a body writes into the world's journal are never read. While it is open, `mnemorphd incident
   list` shows it with the receipts it misses, and:
-  - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which M11's gate
-    asks before it honours an envelope): every envelope one of whose patterns reads the act, or
+  - **the envelope that covered it is suspended** (`mnemorph_config::suspended`, which the gate
+    asks before it admits an act under an envelope): every envelope one of whose patterns reads the act, or
     that the incident names; incidents that cannot be read suspend every envelope;
   - **its target takes no new act of the post**: the same branch on a push URL it shares, the
     same pull request — label or comment; for an act that opened one, the pull request it opened —
@@ -1202,8 +1203,8 @@ Every decision is explained (`explain_rise`, `explain_fall`, `Explanation`):
   rise: precision 0.90 >= 0.85 (over 20 findings); ledger head 3f…9a, rows 3–40
   ```
 
-  A rate reads as a proportion, with the digits that keep it apart from its bar (`0.7495 <
-  0.75`); a count reads whole.
+  A rate reads as a proportion, with the digits that keep it apart from its bar
+  (`0.7495 < 0.75`); a count reads whole.
 - **The lines are the decision.** `rises`, `falls` and `recovers` read the same bars the lines
   name, so a line cannot say one thing while the law does another; each line, its reading held
   against its threshold (`Explanation::holds`), recomputes it. Given a line and the records, the
@@ -1236,9 +1237,40 @@ Rules that hold for every ascension:
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
   advance by the human, scoped, expiring (at most `oni.envelope_days` after its signing — 30
   unless the human's own file says, from 1 to 365), capped in uses if the human says so,
-  revocable, and — once the gate honours envelopes (M11) —
-  listed to the human, its time and count checked at the moment of use, not only when the
-  act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
+  revocable, listed to the human, and its time and count checked at the moment of use, not only
+  when the act was planned. A revoked envelope stays on record ([config](05-architecture.md#configuration)).
+- **How the gate admits an act under an envelope** (`mnemorph_config::EnvelopeGate`, step 4 of
+  [the act runner](#-kijin--the-hands-that-reach-outside)). It reads, in this order, and stops at
+  the first that fails — the act then goes to the human, the card saying why:
+  1. the body is an Oni, by the race the roster gives it;
+  2. the act is typed, not an undo, and classed `outward`, never `destructive`;
+  3. the envelopes, read afresh from the human's global file alone, so one revoked a moment ago
+     is seen revoked. A file in the world — the local one too — is never read for them, since
+     whatever runs there as the human may write it (`mnemorphd envelope list` says when a local
+     file signs some, ignored); nor is a global file git tracks in the world, a link, a file
+     another user owns, or one others may write or that sits in a folder others may write;
+  4. an envelope one of whose patterns reads the act and that is signed for it: each names its
+     `world` (an absolute path, compared canonically) or its forge `repo` (`owner/name`), or both,
+     and one naming neither admits nothing — so a clone that ships an Oni in its roster gains
+     nothing from an envelope signed for another world. An optional `post` (`kijin-forge`, …) and
+     `body` narrow it further;
+  5. the compiled exclusions below — read only now, so no remote is asked about an act no
+     envelope could cover;
+  6. that envelope in force (not revoked, signed, not expired) and under its cap: its uses
+     counted in the uses ledger under the human's state directory (`mnemorph/oni/uses.jsonl`, one
+     row per admitted act, for every world), a row that does not read giving no count;
+  7. that envelope not suspended by an open incident.
+
+  The runner reads this once to decide whether to ask, and again at the moment of use — after
+  the plan's recheck, the uses ledger locked — and only that second reading admits: it records
+  the use, then the act's intent, under the same lock, so two acts never both take an envelope's
+  last use. Every other step still runs: the post check, the fingerprint, the pin, the recheck,
+  the intent, the probe and the receipt. The act's `committed` row says
+  `admitted by envelope <name> (use n/cap)`, its intent names the envelope (an incident opened on it names it too), the
+  Kijin's receipt carries the same line, and the human is shown it as it happens — a line in the
+  session, a `warning` event to a client, a line on the terminal — and in
+  `mnemorphd envelope list`, with every act each envelope admitted. `mnemorphd envelope revoke <name>` is the human's
+  alone, asked at the terminal and journaled beside the uses.
 - **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
   that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):
   it covers nothing until the incident closes on its four receipts; an incident record that
@@ -1260,11 +1292,22 @@ Rules that hold for every ascension:
     is never matched. A `*` word ending a pattern stands for the rest, a word ending in `*`
     (`feat/*`) for one word. Name the repository in the pattern to pin it:
     `gh pr edit * --repo owner/name --add-label *`;
-  - a push whose diff touches CI workflows, deploy or release config, or the workspace manifests
-    — a pushed workflow runs with the repository's secrets, so that push is always asked;
-  - deploys to any environment marked `protected` (production by default);
-  - outbound text (PR bodies, comments) that has not passed the secret-redaction pass, or above
-    4 KB.
+  - any act but a branch push, a pull request, a comment or a label;
+  - a push or pull request whose diff touches CI configuration (`.github/`, `.gitlab-ci.yml`, a
+    `justfile` or `Makefile`, …), deploy or release configuration (`Dockerfile`, `deploy/`,
+    `*.tf`, `release-plz.toml`, …), a manifest or lock file at any depth (`Cargo.toml`,
+    `package.json`, `build.rs`, `.cargo/`, …) or the world's tracked `.mnemorph/config.toml` — a
+    pushed workflow runs with the repository's secrets, so that push is always asked. A push is
+    judged by every commit it brings that no branch on its pinned URL holds (read with `git
+    ls-remote --heads` at the pinned URL), a pull request by the forge's comparison of its base
+    and head; a diff that cannot be read whole asks;
+  - every deploy: until a typed deploy names its environment, every environment counts as
+    `protected`;
+  - outbound text — a comment, a pull request's title or description, every word of the act —
+    above 4 KB (4096 bytes), or holding what looks like a secret: credentials in a URL, a private
+    key, a service's token (`ghp_…`, `glpat-…`, an AWS key id, …), a JSON web token, a long
+    random-looking string, or the value of an environment variable the harness keeps from
+    commands as a secret.
 - **Nothing skips the human** for a seal, a destructive act, or a rule that reaches other
   bodies' prompts.
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).

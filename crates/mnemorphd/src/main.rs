@@ -21,6 +21,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd incident list | open <post> <act> [--why <text>] | settle <post> <act>
                  [--why <text>] | lesson <post> <act> test <path> | verify <path>:<line>
                  | thought <id>   [--world <dir>]
+       mnemorphd envelope list | revoke <name>   [--world <dir>]
        mnemorphd q list [--all] | show <id> | add <ask> [--for <body>] [--rank <n>]
                  | claim <id> [--as <body>] | touch <id> <note> | requeue <id>
                  | close <id> [--drop]   [--world <dir>] [--json]
@@ -61,6 +62,16 @@ wrong, as an incident; `settle` closes a reconcile that is no incident; `lesson`
 fourth receipt — a test or a verify line changed in the world since the incident opened, or a
 Thought born since — after showing the change and asking for `y`. The post is
 `forge` or `kijin-forge`, and so on. A body never runs it.
+
+`envelope` is the human's door to the Oni's envelopes, the standing permissions signed in the
+human's global file (a world's local file is never read for them, and `list` says when it signs
+any). `list` shows each: the world, repository, post and body it is signed for, its patterns,
+the day it was signed and the day it expires, its uses against its cap, whether it is in force,
+revoked, expired, spent or suspended by an open incident — and every act it admitted, with its
+post, receipt and command, so nothing outward happens unseen. `revoke <name>` writes `revoked = <today>` into the file that holds it, after
+showing it and asking for `y` at the terminal (`/dev/tty`; piped input is refused), and journals
+the revocation beside the uses; the envelope stays on record and admits nothing from then on.
+A body never runs it.
 
 `challenge` is the human's door to the Dark Elf challenges, kept under the human's state
 directory. `list` shows each landing whose challenge holds it — pending, blocked — with who it
@@ -129,6 +140,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("incident") {
         return incident(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("envelope") {
+        return envelope(&all[1..]);
     }
     if all.first().map(String::as_str) == Some("challenge") {
         return challenge(&all[1..]);
@@ -962,6 +976,71 @@ fn incident(args: &[String]) -> ExitCode {
             }
         }
         _ => refused(&"incident needs a verb: list, open, settle or lesson; see --help"),
+    }
+}
+
+/// `envelope …`: the human lists the Oni's envelopes, or revokes one. A body never does.
+fn envelope(args: &[String]) -> ExitCode {
+    use mnemorph_server::envelope;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: an envelope is the human's to sign and revoke"
+        ));
+    }
+    let mut world = None;
+    let mut words = Vec::new();
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--world" => match it.next() {
+                Some(v) => world = Some(PathBuf::from(v)),
+                None => return refused(&"--world needs a value"),
+            },
+            _ => words.push(w.clone()),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = match world.canonicalize() {
+        Ok(w) if w.is_dir() => w,
+        Ok(w) => return refused(&format!("{} is not a directory", w.display())),
+        Err(e) => return refused(&format!("{}: {e}", world.display())),
+    };
+    let listed = || match envelope::list(&world) {
+        Ok(lines) => Ok(lines.join("\n")),
+        Err(e) => Err(e),
+    };
+    match words.as_slice() {
+        [verb] if verb == "list" => match listed() {
+            Ok(text) => {
+                println!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => refused(&e),
+        },
+        [verb, name] if verb == "revoke" => {
+            // The human reads what they revoke before it is written.
+            match listed() {
+                Ok(text) => println!("{text}"),
+                Err(e) => return refused(&e),
+            }
+            let safe = mnemorph_server::challenge::safe;
+            match at_terminal(&format!("revoke envelope {}?", safe(name))) {
+                Ok(true) => {}
+                Ok(false) => return refused(&"the envelope was not revoked"),
+                Err(e) => return refused(&e),
+            }
+            match envelope::revoke(&world, name) {
+                Ok(line) => {
+                    println!("{line}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => refused(&e),
+            }
+        }
+        _ => refused(&"envelope needs a verb: list, or revoke <name>; see --help"),
     }
 }
 

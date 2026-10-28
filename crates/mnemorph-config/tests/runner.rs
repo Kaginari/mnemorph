@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mnemorph_config::{
-    Act, Cause, ENVELOPES_UNWIRED, Envelope, Hands, Incident, Lesson, Observer, Planned,
-    PostJournal, Probe, Refusal, Request, Row, Runner, Sandboxed, Seen, State, reconciling,
+    Act, Cause, Envelope, Hands, Incident, Lesson, Observer, Planned, PostJournal, Probe, Refusal,
+    Request, Row, Runner, Sandboxed, Seen, State, reconciling,
 };
 use mnemorph_ledger::{Day, Journal, Timestamp};
 use mnemorph_races::{Post, Race, ToolClass};
@@ -243,13 +243,16 @@ fn the_full_pipeline_lands_observed() {
     assert!(!report.replayed);
     assert_eq!(report.exit, Some(0));
     assert_eq!(f.remote_branch().as_deref(), Some(f.head.as_str()));
-    // The human was asked once, bound to a plan, and told no envelope decides.
+    // The human was asked once, bound to a plan, and told why no envelope admitted it.
     let asks = f.human.asks.lock().unwrap().clone();
     assert_eq!(asks.len(), 1);
     assert_eq!(asks[0].class, ToolClass::Outward);
     assert!(asks[0].fingerprint.is_some());
     assert!(
-        asks[0].why.iter().any(|w| w == ENVELOPES_UNWIRED),
+        asks[0]
+            .why
+            .iter()
+            .any(|w| w == "no envelope admits it: only an Oni acts under an envelope, and this body is a kijin"),
         "{:?}",
         asks[0].why
     );
@@ -971,6 +974,10 @@ fn envelope(allow: &str) -> Envelope {
         expires: today.plus(29),
         uses: None,
         revoked: None,
+        world: None,
+        repo: None,
+        post: None,
+        body: None,
     }
 }
 
