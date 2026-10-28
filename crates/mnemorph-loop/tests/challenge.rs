@@ -368,9 +368,10 @@ async fn an_unstaffed_speciality_is_said_to_the_human() {
     assert!(matches!(r.status, Status::Pending { .. }));
 }
 
-/// A valid high finding of the reviewer's own speciality blocks the landing, whatever it filed.
+/// A valid high finding of the reviewer's own speciality is kept for its verifier: unverified,
+/// it does not block, and with no other speciality born it waits, said to the human.
 #[tokio::test]
-async fn a_high_finding_blocks_the_landing() {
+async fn a_high_finding_waits_on_its_verifier() {
     use mnemorph_proving::{
         FindingRecord, Impact, Likelihood, Severity, Step, StepKind, Verdict, Witness, WitnessKind,
     };
@@ -437,11 +438,10 @@ async fn a_high_finding_blocks_the_landing() {
     let Ending::Answered(text) = run.ask("add a reader", &mut |_| {}).await else {
         panic!("answered");
     };
-    assert!(text.contains(&format!("blocked — #{fp} high")), "{text}");
-    let Status::Blocked { findings } = w.only().status else {
-        panic!("blocked");
-    };
-    assert_eq!(findings[0].fingerprint, fp);
+    assert!(text.contains(&format!("#{fp} high unverified")), "{text}");
+    let r = w.only();
+    assert!(matches!(r.status, Status::Verifying { ref findings } if *findings == [fp.clone()]));
+    assert_eq!(r.findings[0].fingerprint(), fp);
 }
 
 /// The chain: an Orc's Slime lands on the harness surface. The challenge is sent by the throne

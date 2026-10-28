@@ -1360,6 +1360,7 @@ impl Run {
                 }
                 self.review(&c, &records, &record, s, &body).await;
             }
+            self.verify_all(&c, &records, &roster, &id, cap).await;
             // Every challenge still holding its landing is said at every sweep, so none falls
             // silent; one this sweep settled is said once.
             if let Some(now) = records.record(&id) {
@@ -1376,7 +1377,8 @@ impl Run {
     }
 
     /// One reviewer commissioned on a landing's challenge, from the challenge reserve: its
-    /// staffing recorded, its spend booked against the challenge, its blocking findings kept.
+    /// staffing recorded, its spend booked against the challenge, its findings of medium or
+    /// higher kept for their verifiers.
     async fn review(
         &mut self,
         c: &Arc<crate::commission::Commissioner>,
@@ -1387,23 +1389,130 @@ impl Run {
     ) {
         use mnemorph_world::challenge::Staff;
         let id = &record.landing.id;
-        // With an envelope, each review is a slice of its challenge reserve; with none, the
-        // review is unbounded and what it spent is booked against the challenge alone.
+        let order = match self.send(c, body, &crate::challenge::ask(record, s)).await {
+            Ok(order) => order,
+            Err(why) => {
+                let _ = records.staff(id, s, Staff::Queued { why });
+                return;
+            }
+        };
+        let _ = records.staff(
+            id,
+            s,
+            Staff::Commissioned {
+                body: body.to_owned(),
+                by: self.body.name.clone(),
+                wt: order.spent,
+                waited: 0,
+            },
+        );
+        if let Some(answer) = &order.answer {
+            for found in crate::challenge::found(&c.world, s, body, answer) {
+                let _ = records.found(id, found);
+            }
+        }
+    }
+
+    /// The verification step of a sweep on the challenge `id`: each finding with no verdict sent
+    /// to its verifier — up to `cap`, the rest queued, one no body may verify unstaffed — and
+    /// each finding confirmed at high or critical proposed to the human as a seal.
+    async fn verify_all(
+        &mut self,
+        c: &Arc<crate::commission::Commissioner>,
+        records: &mnemorph_world::challenge::Challenges,
+        roster: &mnemorph_world::Roster,
+        id: &str,
+        cap: usize,
+    ) {
+        use mnemorph_world::challenge::Staff;
+        let Some(record) = records.record(id) else {
+            return;
+        };
+        let plan = crate::challenge::verifying(roster, &record, cap);
+        let had = |fp: &str, want: &Staff| {
+            record
+                .findings
+                .iter()
+                .any(|f| f.fingerprint() == fp && f.staff.as_ref() == Some(want))
+        };
+        for fp in plan.unstaffed {
+            if !had(&fp, &Staff::Unstaffed) {
+                let _ = records.assign(id, &fp, Staff::Unstaffed);
+            }
+        }
+        let past_cap = Staff::Queued {
+            why: format!("past the cap of {cap} verifiers"),
+        };
+        for fp in plan.queued {
+            if !had(&fp, &past_cap) {
+                let _ = records.assign(id, &fp, past_cap.clone());
+            }
+        }
+        for (fp, body) in plan.commission {
+            if self.interrupt.flag().load(Ordering::SeqCst) {
+                break;
+            }
+            let Some(finding) = record.findings.iter().find(|f| f.fingerprint() == fp) else {
+                continue;
+            };
+            // Assigned before it runs: only the body assigned may file the verdict.
+            let throne = self.body.name.clone();
+            let sent = |wt| Staff::Commissioned {
+                body: body.clone(),
+                by: throne.clone(),
+                wt,
+                waited: 0,
+            };
+            if records.assign(id, &fp, sent(0)).is_err() {
+                continue;
+            }
+            let ask = crate::challenge::verify_ask(&record, finding);
+            match self.send(c, &body, &ask).await {
+                Ok(order) => {
+                    let _ = records.assign(id, &fp, sent(order.spent));
+                }
+                Err(why) => {
+                    let _ = records.assign(id, &fp, Staff::Queued { why });
+                }
+            }
+        }
+        // A seal is only proposed: the human confirms it, never the harness.
+        if let Some(now) = records.record(id) {
+            for f in &now.findings {
+                if f.counts()
+                    && f.severity() >= mnemorph_proving::Severity::High
+                    && f.proposal.is_none()
+                {
+                    let _ = records.propose(id, f.fingerprint(), &self.body.name);
+                }
+            }
+        }
+    }
+
+    /// One Dark Elf sent on a challenge's work with `ask`, from the challenge reserve; what it
+    /// spent is booked. The reason it waits instead — the reserve spent, or a commission refused
+    /// before it ran — for the caller to queue it with.
+    async fn send(
+        &mut self,
+        c: &Arc<crate::commission::Commissioner>,
+        body: &str,
+        ask: &str,
+    ) -> Result<crate::commission::Order, String> {
+        // With an envelope, each send is a slice of its challenge reserve; with none, it is
+        // unbounded and what it spent is booked against the challenge alone.
         let slice = match self.limits.budget_wt {
             Some(b) => {
                 let reserve = self
                     .reserve
                     .get_or_insert_with(|| mnemorph_ledger::Envelope::session(b));
                 let Some(slice) = reserve.challenge() else {
-                    let why = "the challenge reserve is spent".to_owned();
-                    let _ = records.staff(id, s, Staff::Queued { why });
-                    return;
+                    return Err("the challenge reserve is spent".to_owned());
                 };
                 Some(slice)
             }
             None => None,
         };
-        let mut input = serde_json::json!({"to": body, "ask": crate::challenge::ask(record, s)});
+        let mut input = serde_json::json!({"to": body, "ask": ask});
         if let Some(slice) = &slice {
             input["budget_wt"] = serde_json::json!(slice.of());
         }
@@ -1420,28 +1529,12 @@ impl Run {
         if order.interrupted {
             self.interrupt.fire();
         }
-        // A commission refused before it ran spent nothing: the speciality waits for the next
-        // sweep, the reason kept.
+        // A commission refused before it ran spent nothing: it waits for the next sweep, the
+        // reason kept.
         if order.outcome.is_error && order.spent == 0 {
-            let why: String = order.outcome.content.chars().take(300).collect();
-            let _ = records.staff(id, s, Staff::Queued { why });
-            return;
+            return Err(order.outcome.content.chars().take(300).collect());
         }
-        let _ = records.staff(
-            id,
-            s,
-            Staff::Commissioned {
-                body: body.to_owned(),
-                by: self.body.name.clone(),
-                wt: order.spent,
-                waited: 0,
-            },
-        );
-        if let Some(answer) = &order.answer {
-            for blocker in crate::challenge::blockers(&c.world, s, answer) {
-                let _ = records.block(id, blocker);
-            }
-        }
+        Ok(order)
     }
 
     /// Every verdict goes to the world's journal through its append-only writer.
@@ -2423,6 +2516,28 @@ impl Run {
         }
     }
 
+    /// A `coverage` or `verdict` call, on this body's shelf: a challenge's records are the
+    /// harness's, outside the world, so the loop files the ledger or the verdict in this body's
+    /// name, the commands it cites held to this body's own journal. `None` for any other call.
+    fn challenge_tool(&self, name: &str, input: &str) -> Option<mnemorph_tools::Outcome> {
+        let file = match name {
+            crate::coverage_tool::COVERAGE => crate::coverage_tool::run,
+            crate::verdict_tool::VERDICT => crate::verdict_tool::run,
+            _ => return None,
+        };
+        if !self.tools.iter().any(|t| t.name() == name) {
+            return None;
+        }
+        let beats = self.journal.read().map(|r| r.rows).unwrap_or_default();
+        let ran = crate::coverage_tool::ran_of(&beats);
+        Some(match self.challenge_records() {
+            Some(c) => file(&c, self.cx.world(), &ran, &self.body.name, input),
+            None => mnemorph_tools::Outcome::error(format!(
+                "{name}: no state directory to keep the challenge records in"
+            )),
+        })
+    }
+
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
         // Arguments the model sent as no JSON: never run, answered so the model can resend them.
@@ -2466,24 +2581,8 @@ impl Run {
         {
             return crate::verify_tool::run(self.cx.world(), &self.body.name, input);
         }
-        // A challenge's records are the harness's, outside the world: the loop files the ledger
-        // in this body's name.
-        if name == crate::coverage_tool::COVERAGE
-            && self
-                .tools
-                .iter()
-                .any(|t| t.name() == crate::coverage_tool::COVERAGE)
-        {
-            let world = self.cx.world();
-            // The commands a ledger cites are held to this body's own journal.
-            let beats = self.journal.read().map(|r| r.rows).unwrap_or_default();
-            let ran = crate::coverage_tool::ran_of(&beats);
-            return match self.challenge_records() {
-                Some(c) => crate::coverage_tool::run(&c, world, &ran, &self.body.name, input),
-                None => mnemorph_tools::Outcome::error(
-                    "coverage: no state directory to keep the challenge records in",
-                ),
-            };
+        if let Some(out) = self.challenge_tool(name, input) {
+            return out;
         }
         // The shared queue is the harness's: the loop moves it in this body's name.
         if name == crate::queue_tool::QUEUE

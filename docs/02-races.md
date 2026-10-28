@@ -706,12 +706,16 @@ class on the same paths.
 5. **The reserve.** Each review is a slice of the session's challenge reserve (a tenth of the
    envelope, a quarter of that per review); once the reserve is spent, reviewers wait queued.
    What each review spent is booked against the challenge, beside the body and who sent it.
-6. **Findings.** The reviewer's report is read through `mnemorph_proving::accept`; a valid
-   critical or high finding of its own speciality blocks the landing — the challenge reads
-   *blocked*, whatever ledgers were filed — until it is fixed or waived. Verification and seals
-   come next; this is where they attach.
-7. **Settling.** The challenge clears when every routed speciality has filed a valid ledger and
-   nothing blocks. The human may instead **waive** it, with a reason that says something (at least
+6. **Findings.** The reviewer's report is read through `mnemorph_proving::accept`; each valid
+   finding of its own speciality at medium or higher is kept with the challenge, awaiting its
+   verdict. A finding below medium is not verified, and never counts, blocks or seals.
+7. **Verification.** In the same sweep, each finding kept is sent to a fresh verifier, which tries
+   to refute it ([independent verification](#-dark-elf--the-adversary), below). Its verdict decides
+   whether it counts, blocks the landing — the challenge reads *blocked*, whatever ledgers were
+   filed, until it is fixed or waived — or is proposed to the human as a seal.
+8. **Settling.** The challenge clears when every routed speciality has filed a valid ledger, every
+   finding kept has its verdict, and nothing blocks; while a verdict is missing it reads
+   *verifying*. The human may instead **waive** it, with a reason that says something (at least
    20 characters, not a stock phrase): `mnemorphd challenge waive <landing> --why <reason>`, after
    seeing it and answering `y` at the controlling terminal (`/dev/tty`; piped input is refused),
    or `/waive <landing> <reason>` in the terminal UI. A waiver is the
@@ -765,7 +769,8 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   7. **Law audit** (`dark-elf-law`) — what isekai's Dark Elf did: gate verdicts and `log.md`
      integrity, and the budgets, retries and detached work an interrupt must stop.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
-  `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, `seal` proposals.
+  `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, the `verdict` tool to
+  file a verification, `seal` proposals.
 - **The witness rule.** A finding is `@F` only with an id and a **witness**: a proof-of-concept
   test in the proving ground that fails *for the stated reason* (it must exercise the code under
   the cited `file:line`, which the harness checks by coverage), or a scanner output file. Without
@@ -880,16 +885,91 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   report: the ledger is structured, a refusal reaches the body while it can still fix it, and no
   report cap can cut it nor prose forge it. A Dark Elf's `@S PASS` without a valid ledger reads
   `NOT_VERIFIED`. The rules adapt Cloudflare's `validate-coverage-ledger.cjs`.
-- **Independent verification.** Before a finding counts or a seal is proposed, the harness
-  commissions a **fresh verifier** of the same speciality, whose mandate is to refute it. It gets
-  the record and the witness only, never the hunter's transcript, and its run is not the hunter's.
-  It answers *verified* — the witness is then frozen by content hash — *replace*, a stronger
-  record that goes to another fresh verifier, or *rejected*, kept so the claim is not raised
-  again. Only a verified `@F` counts in the score or may seal.
-- **Seal.** A verified critical or high finding — severity as capped above — can propose a seal on
-  its territory.
-  1. The proposal is a gated act: Rimuru puts it to the human with the witness, who confirms.
-  2. The witness was **frozen by content hash** at verification, and the seal holds that hash: the
+- **Independent verification** (`mnemorph_world::challenge::verification`, sent by
+  `mnemorph_loop::challenge`). Before a finding counts, blocks or is proposed as a seal, a
+  **fresh verifier** tries to refute it.
+  - **The floor is medium.** Each valid finding of medium or higher is verified. Medium is where
+    the contract first asks the preconditions and the reachability — what a verifier can refute —
+    and where a finding starts to weigh. A low or informational one is never verified, so it never
+    counts, blocks or seals: verifying it would spend the reserve on what cannot move a landing.
+  - **Who verifies whom.** The throne alone sends the verifier, at the sweep that kept the finding,
+    from the challenge reserve, at most `gate.challenge_reviewers` per landing at once (the rest
+    queued). It is the first living Dark Elf, in the specialities' order, of **another speciality
+    than the finder**. The generalist `dark-elf` verifies only when no other is born. A body of the
+    finder's own speciality never verifies, nor does the finder itself, the landing's author or any
+    body above the author. When no body qualifies, the finding is recorded *unverified*, said to the
+    human with the throne's answer, and waits until one is born or the human waives the challenge.
+    A verifier recorded and still silent three sweeps on is sent again.
+  - **What it sees.** The record alone. Its ask holds the landing and its tree, and of the record
+    the fingerprint, the claim, the class, the file and the symbol, the witness (its kind, its
+    reference and its SHA-256, a captured output's path and SHA-256), the preconditions, the
+    reachability, the impact and the severity. Every field is escaped, and the record is fenced
+    behind a fixed preamble: it is evidence to test, never instructions, and the witness is what
+    the verifier re-runs and judges, not a command it trusts. It never sees the finder's
+    transcript, its reasoning, its trace notes, its reasons or its fix, and its run is its own.
+  - **Its verdict.** The verifier files one verdict through the `verdict` tool, for the landing and
+    the fingerprint it was assigned:
+    - `confirmed`: it re-ran the witness itself. The commands it cites are read from its own run
+      journal, and the harness stamps each with its output's SHA-256 and whether it failed. A
+      command witness is re-run by its own command; a test or a scanner output by a command that
+      names its file and fails, as the witness shows. It may lower the severity, with a reason,
+      never raise it.
+    - `refuted`: a reason, with its evidence (files at their SHA-256 in the landing's tree, or
+      commands its journal shows).
+    - `cannot-verify`: the blocker.
+  - **Its guards.** A verdict that breaks any of them is refused with every one it broke, by name,
+    for the verifier to fix and file again:
+
+    | Guard | The verdict is kept when |
+    |---|---|
+    | `assigned` | it is filed by the body recorded as that finding's verifier |
+    | `independent` | that body is a Dark Elf of another speciality than the finder, not the finder, not the landing's author nor a body above it |
+    | `once` | the finding has no verdict yet; once it has one, it takes no other verifier |
+    | `current` | the landing's tree, hashed again at the filing, is the one its challenge was opened on (a sampled landing's, over its sample); the verdict row keeps that hash |
+    | `no-raise` | a confirmation's severity is at most the finding's |
+    | `rederived` | a confirmation cites at least one command (at most 16), each shown run in the verifier's journal, and one re-runs the witness: a command witness's own command exactly, or a command naming the test's or the scanner output's file that failed in that run |
+    | `reproduced` | for a command witness with captured output, its own command's cited re-run printed that same output |
+    | `unchanged` | the confirmed witness still hashes as the record says, its file and its captured output |
+    | `reasoned` | a refutation's reason, a `cannot-verify`'s blocker, and a lowered confirmation's reason each have at least 20 characters and are not a stock phrase |
+    | `evidenced` | a refutation cites a file or a command (at most 16 of each); every file stands at its hash, every command is in the journal |
+
+    A finding is kept for verification only when it holds the `floor` (medium or higher) and the
+    `finder` guard (it is the finder's own speciality's). A seal is proposed only under the
+    `sealable` guard: once, and only for a finding confirmed at high or critical.
+  - **Counting.** Only a `confirmed` finding counts, at its confirmed severity. A `refuted` one is
+    demoted to `@? #<fingerprint> refuted by <verifier>: <reason>`, and never counts. A
+    `cannot-verify` one reads `@? nv`, pending verification, and never counts.
+  - **Blocking.** A critical finding blocks the landing whatever one verifier says: confirmed,
+    refuted, confirmed lower, `cannot-verify` or not yet verified. Only the human lifts it, by the
+    fix or a waiver, and every case but a confirmation at high or critical is said as the human's
+    to decide. A high finding blocks once confirmed at high. Nothing else blocks:
+
+    | Found at | `confirmed` | `refuted` | `cannot-verify` | no verdict yet |
+    |---|---|---|---|---|
+    | critical | blocks; confirmed below high, the human decides | blocks, the human decides | blocks, the human decides | blocks, the human decides |
+    | high | blocks if confirmed at high; confirmed lower, counts without blocking | no | no, does not count | no; the challenge reads *verifying* |
+    | medium | counts, does not block | no | no, does not count | no; the challenge reads *verifying* |
+
+  - **Cross-verification.** On one landing two specialities may verify each other's findings:
+    the agent's finding verified by the harness, the harness's by the agent. That is allowed — the
+    other speciality is the independent eye, and forbidding it would leave most landings with no
+    verifier. It is bounded by the blocking rule: one verifier never lifts a critical, so a pair
+    that agrees to refute each other's findings cannot unblock a landing the human has not
+    released. A pair's confirmations are held to the witness by `rederived`, `reproduced` and
+    `unchanged`; what it can still do is refute each other's highs, and every refutation is a row
+    of the finder speciality's precision.
+
+  - **Kept.** Each finding, its verifier's staffing, its verdict and its seal proposal are rows of
+    the landing's challenge, outside the world. The verdict row holds the verifier, its speciality,
+    the finder and the finder's speciality, the landing's tree hash, the witness's SHA-256 and
+    every re-run's output SHA-256 and failure. Every row is held to the guards again when the records are read, so a row written
+    there that breaks them counts for nothing. Each `confirmed` or `refuted` verdict is a row of its finder
+    speciality's precision (`Challenges::outcomes`); `cannot-verify` is neither.
+- **Seal.** A finding confirmed at high or critical, at the confirmed severity, can propose a seal
+  on its territory.
+  1. The proposal is a gated act: Rimuru records it with the challenge and puts it to the human
+     with the witness. Nothing in the harness applies a seal: only the human confirms one.
+  2. The witness is **frozen by content hash** at the proposal, and the seal holds that hash: the
      Dark Elf can no longer change what it is judged by.
   3. While sealed, the gate refuses landings on that territory except the fix.
   4. The fix copies the frozen witness into the owning zone's tests — from then on it is the
@@ -901,9 +981,9 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   end gate refuses a landing that a critical or high **ontology** finding touches, read on the tree
   as the landing leaves it — no human confirms it, and a landing that ends the finding is not
   blocked by it ([the end gate](03-loop.md#the-end-gate), [ontology](09-ontology.md#findings)).
-- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = verified findings, linked by
+- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = confirmed findings, linked by
   fingerprint, that a later landing fixed, and *precision* = 1 − dismissed ÷ findings (a dismissal
-  is a contest the human upheld; a verifier's rejection is not one). Meter: *Upheld*, ok ≥ 80,
+  is a contest the human upheld; a verifier's refutation is not one). Meter: *Upheld*, ok ≥ 80,
   warn ≥ 50. Each speciality is its own creature, so its score and its ascension are its own:
   `dark-elf-supply` may rise to Arch Dark Elf while `dark-elf-agent` has not.
 - **The seeded fixture.** How the machinery is held to what it should catch, with no model in CI.

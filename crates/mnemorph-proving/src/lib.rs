@@ -20,7 +20,7 @@ pub use accept::{Accepted, accept};
 pub use finding::{
     CLAIM_BYTES, FIELD_BYTES, FindingRecord, Impact, LIST_ITEMS, Likelihood, RECORD_BYTES, Rule,
     Severity, Step, StepKind, TEXT_BYTES, TRACE_STEPS, Valid, Verdict, Witness, WitnessKind,
-    record_path, validate,
+    record_path, sha256_hex, validate,
 };
 pub use world::{READ_BYTES, Tree, World};
 

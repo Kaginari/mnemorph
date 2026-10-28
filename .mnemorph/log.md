@@ -5991,6 +5991,32 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ---
 
+### [2026-10-28T01:41:30+01:00] rimuru — Dark Elf PR 8: independent verification before a finding counts, blocks or seals
+- **Done:** each valid finding of medium or higher a reviewer reports is kept with its challenge
+  (`mnemorph_world::challenge::verification`) and, in the same sweep, sent by the throne to a
+  fresh verifier: the first living Dark Elf of another speciality, the generalist only when none is
+  born, never the finder, the author or its chain. Its ask is the record alone (`verify_ask`). It
+  files `confirmed` (re-runs stamped from its journal; severity lowered, never raised), `refuted`
+  (reason and evidence) or `cannot-verify` (blocker) through the `verdict` tool, held to nine
+  named guards (twelve with floor, finder and sealable). Only confirmed counts; confirmed
+  high/critical blocks, and so does a critical with no refuting or lowering verdict; the
+  challenge reads *verifying* while a verdict is missing. A confirmed high/critical is proposed
+  as a seal, witness frozen by hash, never applied. Verdict rows
+  carry both specialities and the evidence hashes; `Challenges::outcomes` is PR 10's precision
+  hook. Docs 02, 03, 05.
+- **Tests:** ScriptedModel worlds: confirmed (blocks, seal proposed, a later landing on the file
+  still passes, the verifier's requests hold no finder transcript, reason, note or fix), refuted by
+  the generalist, cannot-verify critical blocks and high doesn't count, raised and unrederived
+  confirmations refused, no other speciality born; world cases for every guard with it on and off;
+  loop selection, plan and ask. Mutations: removing the author check, putting the generalist first,
+  leaking a reason into the ask, assigning after the send, unblocking an unverified critical, or
+  counting any verdict each fails its tests.
+- **Learned:** the finder-speciality and finder-body checks mask each other (a speciality's body is
+  the creature of its name), and the loop's floor filter is masked by the records' `floor` guard:
+  only both off fails. Say so instead of claiming each is tested alone.
+
+---
+
 ### [2026-10-28T01:45:45+01:00] rimuru — Dark Elf PR 9: the seeded fixture repository (#13)
 - **Done:** `crates/mnemorph-proving/fixtures/seeded/`, a data-only world on Mnemorph's surfaces:
   18 plants (harness 5, agent 2, supply 4, secrets 3, web 2, law 2; 17 classes), each one flaw
@@ -6018,3 +6044,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `the_eval_session_is_guarded` (the context and a reviewer's inherited one).
 - **Learned:** a live hook shares its harness with scripted tests: give it its own containment,
   and a test that says so.
+
+---
+
+### [2026-10-28T02:03:39+01:00] rimuru — #256, Fable's review: verification held to the witness, and a critical held for the human
+- **Done:** `rederived` ties a confirmation to the witness: a command witness's own command (and,
+  with captured output, that output again), or a command naming the test's or scanner output's
+  file that failed in the verifier's journal (`Ran` now keeps each run's failure). A critical
+  blocks whatever one verifier says — refuted or lowered, it reads "the human decides" until a
+  waiver or the fix. A lowered severity needs a reason. The verifier's ask fences the record
+  behind an evidence-not-instructions preamble. Verdicts carry the landing's tree hash and are
+  refused off it (`current`). Docs 02: cross-verification on one landing is allowed, bounded by the
+  critical rule. Merged main's seeded fixture: its end-to-end plants now block through a verifier
+  of another speciality that re-runs the witness and confirms, not a fresh validation.
+- **Tests:** `echo ok` and `cat <witness>` never confirm, nor `cat` of a command's output; a
+  command witness confirms by reproducing its output in a loop run; a refuted or lowered critical
+  stays blocked and the waiver settles it; a bare lowering is refused; a stale tree is refused.
+  Mutations: any command as a re-run, a re-run that did not fail, a refutation lifting a critical
+  each fail.
+- **Learned:** the journal check of a failed run masks the row's own `failed` flag at filing; only
+  a read of a written row tests the flag.

@@ -1271,9 +1271,11 @@ fn child_run(
     if c.queue.is_some() {
         tools.push(Box::new(crate::queue_tool::QueueTool));
     }
-    // A Dark Elf files the coverage ledger of each landing it is routed.
+    // A Dark Elf files the coverage ledger of each landing it is routed, and the verdict on each
+    // finding it is sent to verify.
     if creature.race.base() == mnemorph_races::Race::DarkElf {
         tools.push(Box::new(crate::coverage_tool::CoverageTool));
+        tools.push(Box::new(crate::verdict_tool::VerdictTool));
     }
     // A Kijin's typed outward acts take the act runner's one path; untyped ones stay with bash.
     if creature.race.base() == mnemorph_races::Race::Kijin {

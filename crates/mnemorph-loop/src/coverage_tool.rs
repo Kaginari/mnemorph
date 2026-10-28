@@ -186,10 +186,10 @@ pub(crate) fn ran_of(beats: &[Beat]) -> Ran {
             Beat::Result {
                 tool_use_id,
                 content,
-                ..
+                is_error,
             } => {
                 if let Some(command) = commands.get(tool_use_id) {
-                    ran.record(command, content);
+                    ran.record_exit(command, content, *is_error);
                 }
             }
             _ => {}
@@ -251,6 +251,14 @@ pub(crate) fn run(
             format!(
                 "filed: {speciality}'s ledger for {landing} holds; the landing stays blocked by {} \
                  finding(s) until fixed or waived",
+                findings.len()
+            ),
+            ToolClass::Read,
+        ),
+        Ok(Status::Verifying { findings }) => Outcome::ok(
+            format!(
+                "filed: {speciality}'s ledger for {landing} holds; {} finding(s) still wait on \
+                 their verifier's verdict",
                 findings.len()
             ),
             ToolClass::Read,
