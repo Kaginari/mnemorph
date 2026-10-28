@@ -5988,3 +5988,33 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   author/chain filing and review, hostile path and claim, resend, waive at a pty (`script`) and
   refused piped. Each guard disabled fails its test; `is_terminal` alone is masked by `/dev/tty`.
 - **Learned:** never `git checkout -- file` to undo a mutation over uncommitted work: commit first.
+
+---
+
+### [2026-10-28T01:45:45+01:00] rimuru — Dark Elf PR 9: the seeded fixture repository (#13)
+- **Done:** `crates/mnemorph-proving/fixtures/seeded/`, a data-only world on Mnemorph's surfaces:
+  18 plants (harness 5, agent 2, supply 4, secrets 3, web 2, law 2; 17 classes), each one flaw
+  from a playbook's Regression or Look line, and 7 negative controls from the "Not a finding"
+  lines. The key, `fixtures/seeded.toml`, sits beside the world, never in it. Tokens are
+  `FAKE-TOKEN-…`, hosts `.invalid`, no file executable; Biome skips the folder. `just
+  seeded-eval [model]`: an ignored live test scoring recall and precision per speciality, free
+  OpenRouter model by default, key from the environment only — not run. Docs 02, roadmap M10.
+- **Tests:** routing and the brief per plant; a scripted report of every plant accepted whole
+  under derived fingerprints, a forged id demoted; a ledger from the key holding for every keyed
+  file and routed hunter; controls unrouted or `not_applicable`; 17 single-routed plants end to
+  end through the challenge to `blocked`, the record re-validated fresh as the verifier's stand-in;
+  a control's landing cleared. A wrong symbol in the key fails three tests.
+- **Learned:** the validators hold shape, not truth — a ledger ruling a plant out holds, and a
+  finding copied onto the look-alike `.env.example` validates; the tests pin both so no one reads
+  more into a green run. #13 stays open: the verifier, seals and the witness's lift remain.
+
+---
+
+### [2026-10-28T01:56:52+01:00] rimuru — #257, Fable's review: the paid evaluation runs guarded
+- **Done:** `seeded_eval`'s session takes a normal session's containment — `Sandbox::detect()`,
+  never unguarded — and its live reviewers inherit it; the scripted tests, which run no command,
+  keep theirs. The end-to-end count is pinned to every plant but `env-unredacted` (two hunters).
+  Docs 02.
+- **Tests:** `the_eval_session_is_guarded` (the context and a reviewer's inherited one).
+- **Learned:** a live hook shares its harness with scripted tests: give it its own containment,
+  and a test that says so.

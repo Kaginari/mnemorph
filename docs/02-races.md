@@ -906,6 +906,40 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   is a contest the human upheld; a verifier's rejection is not one). Meter: *Upheld*, ok ≥ 80,
   warn ≥ 50. Each speciality is its own creature, so its score and its ascension are its own:
   `dark-elf-supply` may rise to Arch Dark Elf while `dark-elf-agent` has not.
+- **The seeded fixture.** How the machinery is held to what it should catch, with no model in CI.
+  `crates/mnemorph-proving/fixtures/seeded/` is a small world shaped like Mnemorph's surfaces —
+  a sandbox launcher, a shell tool, an approval card, a wire emitter, workflows, a Dockerfile, a
+  Cargo source replacement, an env file, a grant list, a journal, a server route, a board card,
+  an effect check, a ledger fold — each file planting **one** known flaw taken from a playbook's
+  *Regression* or *Look* line: 18 plants over 17 classes, from 2 to 5 per hunter. Beside them sit
+  7 **negative controls**, look-alikes that are *Not a finding* by their class's playbook (a
+  constant argv, the harness's own styling, a `..` refused before any I/O, event data passed
+  through `env:`, an empty example token, a public health route, the human's own shell history).
+  The fixture is data: cargo never builds it, nothing in it runs, its tokens are labelled fakes
+  (`FAKE-TOKEN-…`) and its hosts `.invalid`. Its answer key, `fixtures/seeded.toml`, lives beside
+  the world, never in it, so a model hunting the world cannot read the answers; it names each
+  plant's speciality, class, file and symbol — the expected minimal finding — and each control's
+  ruling fact. The deterministic tests (`mnemorph-proving`'s and `mnemorph-loop`'s `seeded`)
+  show that:
+  1. each plant's path routes to its speciality, and that speciality's brief carries the class's
+     playbook;
+  2. a scripted report naming every plant is accepted whole — each record valid, each id the
+     fingerprint the harness derives — and a forged id is demoted;
+  3. a coverage ledger built from the key holds the state table for a landing of every keyed file,
+     for every hunter routed to it;
+  4. each control is routed nowhere, or ruled `not_applicable` with its own file as evidence;
+  5. end to end, for every plant whose file routes one hunter, a landing opens a challenge, the
+     scripted reviewer files its ledger and the finding, the record read back fresh from the
+     world validates, and the landing is blocked on it; a control's landing clears.
+
+  What they do not show is judgement: a ledger ruling a plant out still holds the table, and a
+  finding copied onto the empty example token validates, since the two name the same key. That
+  is the independent verifier's to catch, and the **paid evaluation**'s to measure: `just
+  seeded-eval [model]` lands the whole world before a live Dark Elf of each speciality and prints
+  each one's recall and precision against the key, findings on controls counted apart. It is an
+  ignored test, never run in CI; its model is a free OpenRouter one unless named, its key
+  travels only through `OPENROUTER_API_KEY`, never printed, and its reviewers' commands run
+  under the machine's sandbox as a normal session's do — with none, no command runs.
 
 ---
 

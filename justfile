@@ -54,6 +54,13 @@ bench:
 workflows:
     actionlint
 
+# The Dark Elf's paid evaluation: real models hunt the seeded fixture, and each speciality's
+# recall and precision are scored against its key. Never part of `check`. A free model by
+# default; the key travels only through OPENROUTER_API_KEY and is never printed.
+seeded-eval model="nvidia/nemotron-3.5-lightning:free":
+    test -n "${OPENROUTER_API_KEY:-}" || { echo "seeded-eval: set OPENROUTER_API_KEY"; exit 1; }
+    MNEMORPH_LIVE=1 MNEMORPH_LIVE_OR_MODEL='{{model}}' cargo nextest run -p mnemorph-loop --test seeded --run-ignored only --no-capture seeded_eval
+
 # Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
 docs:
     # No merge left half-done: a conflict marker anywhere tracked fails the check.
