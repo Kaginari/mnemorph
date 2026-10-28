@@ -1201,15 +1201,22 @@ Rules that hold for every ascension:
   the first that fails — the act then goes to the human, the card saying why:
   1. the body is an Oni, by the race the roster gives it;
   2. the act is typed, not an undo, and classed `outward`, never `destructive`;
-  3. the compiled exclusions below, read before any envelope;
-  4. the envelopes, read afresh from the human's own file — global or local, never the tracked
-     one, and never a file git tracks in the world, a link, or a file others may write — so one
-     revoked a moment ago is seen revoked;
-  5. an envelope one of whose patterns reads the act, in force (not revoked, signed, not expired)
-     and under its cap: its uses counted in the uses ledger under the human's state directory
-     (`mnemorph/oni/uses.jsonl`, one row per admitted act, for every world), a row that does not
-     read giving no count;
-  6. that envelope not suspended by an open incident.
+  3. the envelopes, read afresh from the human's global file alone, so one revoked a moment ago
+     is seen revoked. A file in the world — the local one too — is never read for them, since
+     whatever runs there as the human may write it (`mnemorphd envelope list` says when a local
+     file signs some, ignored); nor is a global file git tracks in the world, a link, a file
+     another user owns, or one others may write or that sits in a folder others may write;
+  4. an envelope one of whose patterns reads the act and that is signed for it: each names its
+     `world` (an absolute path, compared canonically) or its forge `repo` (`owner/name`), or both,
+     and one naming neither admits nothing — so a clone that ships an Oni in its roster gains
+     nothing from an envelope signed for another world. An optional `post` (`kijin-forge`, …) and
+     `body` narrow it further;
+  5. the compiled exclusions below — read only now, so no remote is asked about an act no
+     envelope could cover;
+  6. that envelope in force (not revoked, signed, not expired) and under its cap: its uses
+     counted in the uses ledger under the human's state directory (`mnemorph/oni/uses.jsonl`, one
+     row per admitted act, for every world), a row that does not read giving no count;
+  7. that envelope not suspended by an open incident.
 
   The runner reads this once to decide whether to ask, and again at the moment of use — after
   the plan's recheck, the uses ledger locked — and only that second reading admits: it records

@@ -64,10 +64,11 @@ Thought born since — after showing the change and asking for `y`. The post is
 `forge` or `kijin-forge`, and so on. A body never runs it.
 
 `envelope` is the human's door to the Oni's envelopes, the standing permissions signed in the
-human's own file. `list` shows each: its patterns, the day it was signed and the day it expires,
-its uses against its cap, whether it is in force, revoked, expired, spent or suspended by an open
-incident — and every act it admitted, with its post, receipt and command, so nothing outward
-happens unseen. `revoke <name>` writes `revoked = <today>` into the file that holds it, after
+human's global file (a world's local file is never read for them, and `list` says when it signs
+any). `list` shows each: the world, repository, post and body it is signed for, its patterns,
+the day it was signed and the day it expires, its uses against its cap, whether it is in force,
+revoked, expired, spent or suspended by an open incident — and every act it admitted, with its
+post, receipt and command, so nothing outward happens unseen. `revoke <name>` writes `revoked = <today>` into the file that holds it, after
 showing it and asking for `y` at the terminal (`/dev/tty`; piped input is refused), and journals
 the revocation beside the uses; the envelope stays on record and admits nothing from then on.
 A body never runs it.

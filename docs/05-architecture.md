@@ -827,15 +827,19 @@ an empty list or table never overrides a lower layer:
   `expires` is sooner; never on or before the signing, never past that limit. Raising the limit
   loosens the gate, so the tracked file cannot set it. A revoked envelope covers nothing, so a
   limit lowered after it was signed does not judge it; a live one past the new limit is an error
-  that says to sign it again, revoke it or delete its record. Days are UTC calendar days. A list
-  of envelopes in the local file replaces the global one whole, as every list does. `uses` caps the acts an envelope covers in
+  that says to sign it again, revoke it or delete its record. Days are UTC calendar days. The gate
+  reads envelopes from the global file alone: a local file's are ignored, and
+  `mnemorphd envelope list` says so. Each names the `world` (absolute) or the `repo`
+  (`owner/name`) it is signed for, or both — one naming neither admits nothing — and may name a
+  `post` and a `body`. `uses` caps the acts an envelope covers in
   all, at least one; no two envelopes share a name. `Envelope::admits(today,
   used)` is the check the gate makes at the moment of use ([races](02-races.md#ascension--earned-granted-revocable)),
   with the count of acts the envelope already admitted, kept in the uses ledger
   (`mnemorph_ledger::Uses`, `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl`, outside every world and
   counted under its lock); it names the lapse that stops one: revoked, not yet in force, expired,
-  or spent. The gate reads the envelopes afresh at each use, and only from a file that is the
-  human's own: one git tracks in the world, a link, or one others may write is not honoured.
+  or spent. The gate reads the envelopes afresh at each use, and only from a global file that is
+  the human's own: one git tracks in the world, a link, another user's, or one that it or its
+  folder lets others write is not honoured.
   Revoking (`mnemorphd envelope revoke <name>`) writes `revoked = <day>` into the
   human's file that holds the envelope, through `toml_edit` like any write, and only once: the
   envelope stays on record and covers nothing again; the revocation is journaled beside the
@@ -930,6 +934,8 @@ envelope_days = 30                 # the longest an envelope lasts (1–365); 30
 
 [[oni.envelopes]]
 name = "feature branches"
+world = "/home/me/src/name"
+repo = "owner/name"
 allow = ["git push origin feat/*", "gh pr comment * --repo owner/name --body *"]
 signed = 2026-10-24                # expires 2026-11-23, unless `expires` says sooner
 uses = 50                          # optional: at most 50 acts in all

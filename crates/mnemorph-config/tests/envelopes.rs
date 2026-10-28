@@ -109,6 +109,7 @@ impl Fixture {
         );
         let global = root.join("config/mnemorph/config.toml");
         fs::create_dir_all(global.parent().unwrap()).unwrap();
+        fs::set_permissions(global.parent().unwrap(), fs::Permissions::from_mode(0o700)).unwrap();
         Self {
             _tmp: tmp,
             world,
@@ -120,10 +121,29 @@ impl Fixture {
         }
     }
 
-    /// Sign envelopes in the human's global file, private to them.
+    /// Sign envelopes in the human's global file, private to them, each for this world unless it
+    /// names its own world or repository (or `# unbound`).
     fn sign(&self, toml: &str) {
-        fs::write(&self.global, toml).unwrap();
+        fs::write(&self.global, self.bound(toml)).unwrap();
         fs::set_permissions(&self.global, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// `toml` with each envelope signed for this world, unless one already names its scope.
+    fn bound(&self, toml: &str) -> String {
+        if toml.contains("world =") || toml.contains("repo =") || toml.contains("# unbound") {
+            return toml.to_owned();
+        }
+        let line = format!("world = {:?}", self.world.display().to_string());
+        toml.lines()
+            .flat_map(|l| {
+                if l.starts_with("name = ") {
+                    vec![l.to_owned(), line.clone()]
+                } else {
+                    vec![l.to_owned()]
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn paths(&self) -> Paths {
@@ -542,7 +562,7 @@ type ProjectCase = (
 fn a_project_file_never_signs_or_extends_an_envelope() {
     let t = today();
     // (what, the global file, the tracked file, the local file, commit the local file, its mode)
-    let cases: [ProjectCase; 5] = [
+    let cases: [ProjectCase; 6] = [
         (
             "the tracked file signs one",
             String::new(),
@@ -565,6 +585,14 @@ fn a_project_file_never_signs_or_extends_an_envelope() {
             "",
             Some(envelope(-1, 20, "")),
             true,
+            0o600,
+        ),
+        (
+            "a local file of the human's own, untracked and private",
+            String::new(),
+            "",
+            Some(envelope(-1, 20, "")),
+            false,
             0o600,
         ),
         (
@@ -603,7 +631,7 @@ fn a_project_file_never_signs_or_extends_an_envelope() {
         }
         if let Some(text) = local {
             let path = dir.join("config.local.toml");
-            fs::write(&path, text).unwrap();
+            fs::write(&path, w.bound(&text)).unwrap();
             fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
             if commit {
                 git(&w.world, &["add", "-f", ".mnemorph/config.local.toml"]);
@@ -616,6 +644,120 @@ fn a_project_file_never_signs_or_extends_an_envelope() {
         assert_eq!(w.human.asked(), 1, "{what}: admitted without the human");
         assert_eq!(w.uses().len(), 1, "{what}: a use was counted");
     }
+}
+
+#[test]
+fn an_envelope_admits_only_where_it_is_signed_for() {
+    // (what, the envelope's scope given the world and another place, admitted, what the card says)
+    type Scope = fn(&Path, &Path) -> String;
+    let cases: [(&str, Scope, bool, &str); 8] = [
+        (
+            "its world",
+            |w, _| format!("world = {:?}", w.display().to_string()),
+            true,
+            "",
+        ),
+        (
+            "the same envelope in another world",
+            |_, o| format!("world = {:?}", o.display().to_string()),
+            false,
+            "signed for the world",
+        ),
+        (
+            "its repository",
+            |_, _| "repo = \"Me/Proj\"".into(),
+            true,
+            "",
+        ),
+        (
+            "another repository",
+            |_, _| "repo = \"them/other\"".into(),
+            false,
+            "signed for the repository them/other",
+        ),
+        (
+            "neither a world nor a repository",
+            |_, _| "# unbound".into(),
+            false,
+            "signed for nothing",
+        ),
+        (
+            "its post and body",
+            |w, _| {
+                format!(
+                    "world = {:?}\npost = \"kijin-forge\"\nbody = \"kijin-forge\"",
+                    w.display().to_string()
+                )
+            },
+            true,
+            "",
+        ),
+        (
+            "another post",
+            |w, _| format!("world = {:?}\npost = \"kijin-ci\"", w.display().to_string()),
+            false,
+            "signed for the post kijin-ci",
+        ),
+        (
+            "another body",
+            |w, _| {
+                format!(
+                    "world = {:?}\nbody = \"oni-other\"",
+                    w.display().to_string()
+                )
+            },
+            false,
+            "signed for the body oni-other",
+        ),
+    ];
+    for (what, scope, admitted, says) in cases {
+        let w = Fixture::new();
+        let other = Fixture::new();
+        w.sign(&envelope(-1, 20, &scope(&w.world, &other.world)));
+        let forge = Forge::new();
+        let report = w.oni_comment("Looks fine.", &forge).unwrap();
+        assert_eq!(report.state, State::Observed, "{what}");
+        if admitted {
+            assert_eq!(w.human.asked(), 0, "{what}: the human was asked");
+            assert_eq!(w.uses().len(), 1, "{what}");
+        } else {
+            assert_eq!(w.human.asked(), 1, "{what}: admitted without the human");
+            let why = w.human.why_not();
+            assert!(why.iter().any(|w| w.contains(says)), "{what}: {why:?}");
+            assert!(w.uses().is_empty(), "{what}: a use was counted");
+        }
+    }
+    // An unbound envelope is listed as admitting nothing.
+    let w = Fixture::new();
+    w.sign(&envelope(-1, 20, "# unbound"));
+    let lines = w.gate().lines(&w.world).join("\n");
+    assert!(lines.contains("signed for no world or repo"), "{lines}");
+}
+
+#[test]
+fn a_local_file_and_a_folder_others_may_write_are_never_read_for_envelopes() {
+    // A local file's envelopes are ignored, and the list says so.
+    let w = Fixture::new();
+    let dir = w.world.join(".mnemorph");
+    fs::create_dir_all(&dir).unwrap();
+    let local = dir.join("config.local.toml");
+    fs::write(&local, w.bound(&envelope(-1, 20, ""))).unwrap();
+    fs::set_permissions(&local, fs::Permissions::from_mode(0o600)).unwrap();
+    let forge = Forge::new();
+    w.oni_comment("Looks fine.", &forge).unwrap();
+    assert_eq!(w.human.asked(), 1, "a local file's envelope admitted");
+    let lines = w.gate().lines(&w.world).join("\n");
+    assert!(lines.contains("config.local.toml are ignored"), "{lines}");
+    // The global file in a folder others may write: it may be replaced.
+    let w = Fixture::new();
+    w.sign(&envelope(-1, 20, ""));
+    let parent = w.global.parent().unwrap();
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o777)).unwrap();
+    w.oni_comment("Looks fine.", &forge).unwrap();
+    assert_eq!(w.human.asked(), 1, "a file in a shared folder admitted");
+    let why = w.human.why_not();
+    assert!(why.iter().any(|w| w.contains("may be replaced")), "{why:?}");
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]

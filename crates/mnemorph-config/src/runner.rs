@@ -831,6 +831,7 @@ impl<'a> Runner<'a> {
             self.cx.world(),
             self.probe,
             &self.journal,
+            self.cx.body(),
             Timestamp::now().day(),
             held,
         )

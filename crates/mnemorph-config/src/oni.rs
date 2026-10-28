@@ -6,16 +6,21 @@
 //!
 //! 1. the body is an Oni: an ascended Kijin, by the race the roster gives it;
 //! 2. the act is a typed act, not an undo, and classed `outward` — never `destructive`;
-//! 3. the compiled exclusions ([`excluded`]), whatever any envelope or `gate.approve` says: only a
+//! 3. the envelopes, read afresh from the human's global file alone — never a file in the world,
+//!    which whatever runs there may write, nor a file git tracks, a link, a file another user
+//!    owns, or one others may write or sit in a folder others may write;
+//! 4. an envelope whose pattern reads the act and that is signed for it: for this world (its
+//!    canonical path) and/or this forge repository (`owner/name`) — one naming neither admits
+//!    nothing — and, when it names them, this post and this body;
+//! 5. the compiled exclusions ([`excluded`]), whatever any envelope or `gate.approve` says: only a
 //!    branch push, a pull request, a comment or a label; no deploy (every environment is
 //!    `protected` until a typed deploy names its own); no outbound text above
 //!    [`COVERED_TEXT`] bytes or holding what looks like a secret; no push or pull request whose
-//!    diff touches CI, deploy or release configuration or a manifest;
-//! 4. the envelopes, read afresh from the human's own file — global or local, never the tracked
-//!    one, and never a file git tracks, a link, or one others may write;
-//! 5. one envelope whose pattern reads the act and that is in force: not revoked, signed, not
-//!    expired, and its uses so far, counted in the uses ledger outside the world, under its cap;
-//! 6. that envelope not suspended by an open incident ([`crate::suspended`]).
+//!    diff touches CI, deploy or release configuration or a manifest — read only once an
+//!    envelope could apply, so no remote is asked for an act no envelope reads;
+//! 6. that envelope in force: not revoked, signed, not expired, and its uses so far, counted in
+//!    the uses ledger outside the world, under its cap;
+//! 7. that envelope not suspended by an open incident ([`crate::suspended`]).
 //!
 //! The runner reads it once to decide whether to ask, and again at the moment of use — after the
 //! plan's recheck, the uses ledger held — and only that second reading admits: it records the use
@@ -105,22 +110,23 @@ impl EnvelopeGate {
         &self.uses
     }
 
-    /// The envelopes the human signed, read afresh from their own file — so one revoked a moment
-    /// ago is seen revoked.
+    /// The envelopes the human signed, read afresh from their global file — so one revoked a
+    /// moment ago is seen revoked. A file in the world is never read for them: whatever runs
+    /// there, as the human, may write it.
     ///
     /// # Errors
     ///
-    /// The configuration does not load, or the file holding the envelopes is not the human's own:
-    /// tracked by git in `world`, a link, or writable by others.
+    /// The global file does not load, or is not the human's own: tracked by git in `world`, a
+    /// link, another user's, or writable by others.
     pub fn signed(&self, world: &Path) -> Result<Vec<Envelope>, String> {
-        let config = Config::load(&self.paths)
+        let config = Config::load_global(&self.paths)
             .map_err(|e| format!("the configuration does not load, so no envelope is read: {e}"))?;
         let Some(leaf) = config.get("oni.envelopes") else {
             return Ok(Vec::new());
         };
-        if !matches!(leaf.origin.layer, Layer::Global | Layer::Local) {
+        if leaf.origin.layer != Layer::Global {
             return Err(format!(
-                "envelopes come only from the human's own file, not the {} one",
+                "envelopes come only from the human's global file, not the {} one",
                 leaf.origin.layer
             ));
         }
@@ -132,6 +138,116 @@ impl EnvelopeGate {
         own_file(&file, world)?;
         Ok(config.envelopes())
     }
+
+    /// Whether the world's local file signs envelopes, which the gate never honours.
+    #[must_use]
+    pub fn local_ignored(&self) -> bool {
+        fs::read_to_string(&self.paths.local)
+            .ok()
+            .and_then(|t| toml::from_str::<toml::Table>(&t).ok())
+            .is_some_and(|t| {
+                t.get("oni")
+                    .and_then(toml::Value::as_table)
+                    .is_some_and(|o| o.contains_key("envelopes"))
+            })
+    }
+}
+
+/// What an envelope is signed for, as the human reads it.
+fn scope(e: &Envelope) -> String {
+    let mut parts = Vec::new();
+    if let Some(w) = &e.world {
+        parts.push(format!("world {}", w.display()));
+    }
+    if let Some(r) = &e.repo {
+        parts.push(format!("repo {r}"));
+    }
+    if let Some(p) = &e.post {
+        parts.push(format!("post {p}"));
+    }
+    if let Some(b) = &e.body {
+        parts.push(format!("body {b}"));
+    }
+    if parts.is_empty() {
+        "no world or repo".into()
+    } else {
+        parts.join(", ")
+    }
+}
+
+/// The repository an act lands on, `owner/name`: its own field, or for a push the one every
+/// pinned URL names. `None` when it names none plainly.
+fn act_repo(planned: &Planned, pin: &Pin) -> Option<String> {
+    match (planned.act(), pin) {
+        (
+            Act::AddLabel { repo, .. }
+            | Act::Comment { repo, .. }
+            | Act::OpenPullRequest { repo, .. },
+            _,
+        ) => Some(repo.clone()),
+        (Act::PushNewBranch { .. }, Pin::Push { urls, .. }) => {
+            let mut repos = urls.iter().map(|u| url_repo(u));
+            let first = repos.next()??;
+            repos
+                .all(|r| r.is_some_and(|r| r.eq_ignore_ascii_case(&first)))
+                .then_some(first)
+        }
+        _ => None,
+    }
+}
+
+/// The `owner/name` a push URL names on its own host.
+fn url_repo(url: &str) -> Option<String> {
+    let host = match url.split_once("://") {
+        Some((_, rest)) => rest.split('/').next()?,
+        None => url.split_once(':')?.0,
+    };
+    crate::closure::forge_repo(url, host)
+}
+
+/// Whether `envelope` is signed for this act: from `world`, on its repository, by `post` and
+/// `body`. One naming neither a world nor a repository is signed for nothing.
+fn bound(
+    envelope: &Envelope,
+    world: &Path,
+    planned: &Planned,
+    pin: &Pin,
+    post: &str,
+    body: &str,
+) -> Result<(), String> {
+    if envelope.world.is_none() && envelope.repo.is_none() {
+        return Err(
+            "it names neither a `world` nor a `repo`, so it is signed for nothing: sign it for one"
+                .into(),
+        );
+    }
+    if let Some(w) = &envelope.world {
+        let canon = |p: &Path| p.canonicalize().ok();
+        if canon(w).is_none() || canon(w) != canon(world) {
+            return Err(format!(
+                "it is signed for the world {}, not this one",
+                w.display()
+            ));
+        }
+    }
+    if let Some(r) = &envelope.repo
+        && !act_repo(planned, pin).is_some_and(|a| a.eq_ignore_ascii_case(r))
+    {
+        return Err(format!(
+            "it is signed for the repository {r}, not this act's"
+        ));
+    }
+    if let Some(p) = &envelope.post
+        && p != post
+    {
+        return Err(format!("it is signed for the post {p}, not {post}"));
+    }
+    if let Some(b) = &envelope.body
+        && b != body
+    {
+        return Err(format!("it is signed for the body {b}, not {body}"));
+    }
+    Ok(())
 }
 
 /// A revocation, journaled beside the uses: which envelope, when, and the file it was written in.
@@ -170,12 +286,18 @@ impl EnvelopeGate {
     pub fn lines(&self, world: &Path) -> Vec<String> {
         let today = Timestamp::now().day();
         let mut out = Vec::new();
+        if self.local_ignored() {
+            out.push(format!(
+                "the envelopes in {} are ignored: only the global file signs one, since a file in the world may be written by whatever runs there",
+                said(&self.paths.local.display().to_string(), 300)
+            ));
+        }
         let signed = match self.signed(world) {
             Ok(s) => s,
             Err(e) => {
                 out.push(format!("no envelope is honoured: {}", said(&e, 400)));
-                // Shown anyway, from what the configuration holds, so the human sees what is there.
-                Config::load(&self.paths)
+                // Shown anyway, from what the global file holds, so the human sees what is there.
+                Config::load_global(&self.paths)
                     .map(|c| c.envelopes())
                     .unwrap_or_default()
             }
@@ -199,6 +321,9 @@ impl EnvelopeGate {
                 .map_or_else(|| "no cap".to_owned(), |c| c.to_string());
             let state = match e.admits(today, used) {
                 Err(lapse) => lapse.to_string(),
+                Ok(()) if e.world.is_none() && e.repo.is_none() => {
+                    "signed for no world or repo, so it admits nothing".into()
+                }
                 Ok(()) if crate::suspended(world, e) => {
                     "suspended: an incident on an act it reads is open".into()
                 }
@@ -211,6 +336,7 @@ impl EnvelopeGate {
                 e.signed,
                 e.expires
             ));
+            out.push(format!("    for: {}", said(&scope(e), 400)));
             for pattern in &e.allow {
                 out.push(format!("    allows: {}", said(pattern, 200)));
             }
@@ -237,7 +363,7 @@ impl EnvelopeGate {
     /// The configuration does not load, no envelope has that name, it is revoked already, or the
     /// file or journal cannot be written.
     pub fn revoke(&self, name: &str) -> Result<String, String> {
-        let config = Config::load(&self.paths)?;
+        let config = Config::load_global(&self.paths)?;
         let today = Timestamp::now().day();
         let envelope = config
             .envelopes()
@@ -269,9 +395,9 @@ impl EnvelopeGate {
     }
 }
 
-/// Whether `file` is the human's own: not a link, not writable by group or others, and not a
-/// file git tracks in `world` — a local file committed to the repository is the project's,
-/// whatever its name.
+/// Whether `file` is the human's own: not a link, owned by this user, neither it nor its folder
+/// writable by group or others, and not a file git tracks in `world` — a file committed to the
+/// repository is the project's, whatever its name.
 fn own_file(file: &Path, world: &Path) -> Result<(), String> {
     let meta = fs::symlink_metadata(file)
         .map_err(|e| format!("{}: cannot be read ({e})", file.display()))?;
@@ -283,11 +409,30 @@ fn own_file(file: &Path, world: &Path) -> Result<(), String> {
     }
     #[cfg(unix)]
     {
+        use std::os::unix::fs::MetadataExt as _;
         use std::os::unix::fs::PermissionsExt as _;
+        if meta.uid() != rustix::process::geteuid().as_raw() {
+            return Err(format!(
+                "{} is another user's: no envelope in it is honoured",
+                file.display()
+            ));
+        }
         if meta.permissions().mode() & 0o022 != 0 {
             return Err(format!(
                 "{} may be written by others than its owner: no envelope in it is honoured",
                 file.display()
+            ));
+        }
+        let parent = file
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let dir = fs::metadata(parent)
+            .map_err(|e| format!("{}: cannot be read ({e})", parent.display()))?;
+        if dir.permissions().mode() & 0o022 != 0 {
+            return Err(format!(
+                "{} may be written by others than its owner, so the file in it may be replaced: no envelope in it is honoured",
+                parent.display()
             ));
         }
     }
@@ -323,6 +468,7 @@ pub(crate) fn admit(
     world: &Path,
     probe: &dyn Probe,
     journal: &PostJournal,
+    body: &str,
     today: Day,
     held: Option<&Held<'_>>,
 ) -> Result<Admitted, String> {
@@ -346,9 +492,7 @@ pub(crate) fn admit(
         }
         other => return Err(format!("a {other} act is not an envelope's to cover")),
     }
-    // 3. What no standing approval covers.
-    excluded(planned, pin, world, probe)?;
-    // 4. The envelopes, from the human's own file.
+    // 3. The envelopes, from the human's global file.
     let signed = gate.signed(world)?;
     let reading: Vec<&Envelope> = signed
         .iter()
@@ -361,8 +505,25 @@ pub(crate) fn admit(
             "no envelope's pattern reads this act".into()
         });
     }
-    // 5 and 6. In force, under its cap, and not suspended.
+    // 4. Signed for this world or repository, post and body.
+    let post = journal.post.creature();
     let mut why = Vec::new();
+    let reading: Vec<&Envelope> = reading
+        .into_iter()
+        .filter(|e| match bound(e, world, planned, pin, post, body) {
+            Ok(()) => true,
+            Err(e2) => {
+                why.push(format!("{}: {e2}", e.name));
+                false
+            }
+        })
+        .collect();
+    if reading.is_empty() {
+        return Err(why.join("; "));
+    }
+    // 5. What no standing approval covers: only now, when an envelope could apply.
+    excluded(planned, pin, world, probe)?;
+    // 6 and 7. In force, under its cap, and not suspended.
     for envelope in reading {
         let used = match held {
             Some(held) => held.count(&envelope.name, envelope.signed),
@@ -497,8 +658,11 @@ pub fn excluded(
 
 /// The paths the commits a push would bring to each pinned URL touch: every commit from `sha`
 /// that no branch on that URL already holds, merges diffed against each parent, renames as a
-/// delete and an add. A URL whose branches cannot be read is taken to hold nothing: every commit
-/// counts.
+/// delete and an add.
+///
+/// # Errors
+///
+/// A URL whose branches cannot be read, or a diff that cannot: the push then asks.
 fn pushed_paths(
     world: &Path,
     urls: &[String],
@@ -800,7 +964,16 @@ pub fn secret_in(text: &str) -> Option<String> {
     if text.contains("-----BEGIN") && text.contains("PRIVATE KEY") {
         return Some("a private key".into());
     }
-    let word_char = |c: char| c.is_ascii_alphanumeric() || "_-+/=.".contains(c);
+    // A JSON web token keeps its dots; every other shape is read in pieces split at `=`, `:`,
+    // `/`, `.`, quotes and anything else no token holds, so `token=ghp_…` or `…/glpat-…` is seen.
+    let jwt_char = |c: char| c.is_ascii_alphanumeric() || "_-.".contains(c);
+    if text
+        .split(|c: char| !jwt_char(c))
+        .any(|w| w.starts_with("eyJ") && w.matches('.').count() == 2 && w.len() >= 30)
+    {
+        return Some("a JSON web token".into());
+    }
+    let word_char = |c: char| c.is_ascii_alphanumeric() || "_-+".contains(c);
     for word in text.split(|c: char| !word_char(c)) {
         if let Some(p) = TOKEN_PREFIXES
             .iter()
@@ -816,13 +989,8 @@ pub fn secret_in(text: &str) -> Option<String> {
         {
             return Some("an AWS access key id".into());
         }
-        if word.starts_with("eyJ") && word.matches('.').count() == 2 && word.len() >= 30 {
-            return Some("a JSON web token".into());
-        }
-        for piece in word.split(['.', '/']) {
-            if random_looking(piece) {
-                return Some("a long random-looking string".into());
-            }
+        if random_looking(word) {
+            return Some("a long random-looking string".into());
         }
     }
     let kept: BTreeSet<String> = mnemorph_tools::shell::scrubbed_env()
@@ -894,6 +1062,26 @@ mod tests {
             "key: Zx9Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz2Xc4",
         ] {
             assert!(secret_in(text).is_some(), "{text}");
+        }
+        // Each shape glued to what may sit around it. The tokens are put together here, never
+        // written whole, so no scanner reads a fixture as a leak.
+        let tail = "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dE3fG5";
+        for (before, prefix, after) in [
+            ("token=", "ghp", "_"),
+            ("https://gitlab.example.com/", "glpat", "-"),
+            ("\"", "ghp", "_"),
+            ("auth:", "xoxb", "-"),
+            ("file.", "npm", "_"),
+            ("'", "sk_live", "_"),
+        ] {
+            let text = format!("{before}{prefix}{after}{tail}'\"");
+            assert!(secret_in(&text).is_some(), "{text}");
+        }
+        for text in [
+            format!("id={}{};", "AKIA", "IOSFODNN7EXAMPLE"),
+            format!("a/{tail}/b"),
+        ] {
+            assert!(secret_in(&text).is_some(), "{text}");
         }
         for text in [
             "Fixed in 3f2a9c1d4e5b6a7980c1d2e3f4a5b6c7d8e9f0a1.",

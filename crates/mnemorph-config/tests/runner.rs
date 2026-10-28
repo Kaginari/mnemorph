@@ -974,6 +974,10 @@ fn envelope(allow: &str) -> Envelope {
         expires: today.plus(29),
         uses: None,
         revoked: None,
+        world: None,
+        repo: None,
+        post: None,
+        body: None,
     }
 }
 

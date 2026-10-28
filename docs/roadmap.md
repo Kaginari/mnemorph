@@ -370,7 +370,8 @@ includes the witness.
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed
-  act an envelope admits runs without the human, read again at the moment of use — its bounds
+  act an envelope admits runs without the human, read again at the moment of use — from the
+  human's global file alone, signed for a world or a repository (and a post or body) — its bounds
   (signed, expiring within `oni.envelope_days`, a use cap counted in the ledger's uses under a
   lock, revocable with `mnemorphd envelope revoke`), `suspended`, and the compiled exclusions —
   and shown to the human, in the session and in `mnemorphd envelope list`

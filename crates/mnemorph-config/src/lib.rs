@@ -416,6 +416,14 @@ pub struct Envelope {
     pub uses: Option<u64>,
     /// The day the human revoked it. A revoked envelope stays in the file and covers nothing.
     pub revoked: Option<Day>,
+    /// The world it is signed for, an absolute path: it admits acts only from there.
+    pub world: Option<PathBuf>,
+    /// The forge repository it is signed for, `owner/name`: it admits acts only on it.
+    pub repo: Option<String>,
+    /// The post it is signed for (`kijin-forge`, …): when set, only that post's acts.
+    pub post: Option<String>,
+    /// The body it is signed for, by name: when set, only that body's acts.
+    pub body: Option<String>,
 }
 
 /// Why an envelope does not cover an act on a given day.
@@ -475,6 +483,20 @@ impl Config {
     /// A file that does not parse, a known key with the wrong type, a floor rule asked to ask,
     /// an envelope covering a destructive act, a fallback cycle — each naming its file.
     pub fn load(paths: &Paths) -> Result<Self, String> {
+        Self::load_layers(paths, &[Layer::Global, Layer::Tracked, Layer::Local])
+    }
+
+    /// Read the defaults and the human's global file alone: where the gate reads Oni envelopes,
+    /// since a file inside the world may be written by whatever runs there.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::load`], for the global file.
+    pub fn load_global(paths: &Paths) -> Result<Self, String> {
+        Self::load_layers(paths, &[Layer::Global])
+    }
+
+    fn load_layers(paths: &Paths, layers: &[Layer]) -> Result<Self, String> {
         let mut config = Self::default();
         let defaults: Table =
             toml::from_str(DEFAULTS).map_err(|e| format!("the built-in defaults: {e}"))?;
@@ -486,7 +508,7 @@ impl Config {
             },
         )?;
         let mut files = Vec::new();
-        for layer in [Layer::Global, Layer::Tracked, Layer::Local] {
+        for &layer in layers {
             let Some(path) = paths.of(layer) else {
                 continue;
             };
@@ -1106,7 +1128,7 @@ impl Config {
         out
     }
 
-    /// The Oni envelopes the human signed (local or global file only), revoked and expired ones
+    /// The Oni envelopes the human signed (local or global file; the gate reads only the global), revoked and expired ones
     /// included: [`Envelope::admits`] says which are in force.
     #[must_use]
     pub fn envelopes(&self) -> Vec<Envelope> {
@@ -1353,6 +1375,7 @@ fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, Str
                     })?,
             ),
         };
+        let (world, repo, post, body) = scope(t, name, at)?;
         if out.iter().any(|e: &Envelope| e.name == name) {
             return Err(format!(
                 "{at}: two envelopes are called `{name}`; a name is how one is revoked, so each is \
@@ -1366,9 +1389,52 @@ fn envelopes(value: &Value, at: &Origin, days: i64) -> Result<Vec<Envelope>, Str
             expires,
             uses,
             revoked,
+            world,
+            repo,
+            post,
+            body,
         });
     }
     Ok(out)
+}
+
+/// What an envelope is signed for: its world, repository, post and body, each optional.
+type Scope = (
+    Option<PathBuf>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+fn scope(t: &Table, name: &str, at: &Origin) -> Result<Scope, String> {
+    let text = |key: &str| -> Result<Option<String>, String> {
+        match t.get(key) {
+            None => Ok(None),
+            Some(v) => v
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| Some(s.to_owned()))
+                .ok_or_else(|| format!("{at}: envelope `{name}`: `{key}` is a non-empty string")),
+        }
+    };
+    let world = text("world")?.map(PathBuf::from);
+    if world.as_ref().is_some_and(|w| !w.is_absolute()) {
+        return Err(format!(
+            "{at}: envelope `{name}`: `world` is the world's absolute path"
+        ));
+    }
+    let repo = text("repo")?;
+    if repo.as_ref().is_some_and(|r| {
+        let mut parts = r.split('/');
+        !(parts.next().is_some_and(|p| !p.is_empty())
+            && parts.next().is_some_and(|p| !p.is_empty())
+            && parts.next().is_none())
+    }) {
+        return Err(format!("{at}: envelope `{name}`: `repo` is `owner/name`"));
+    }
+    let post = text("post")?;
+    let body = text("body")?;
+    Ok((world, repo, post, body))
 }
 
 /// An envelope's date: a bare TOML date (`2026-10-24`), never a time or a string.
