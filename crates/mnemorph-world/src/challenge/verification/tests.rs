@@ -9,7 +9,7 @@ use mnemorph_proving::{
 };
 
 use super::super::{Challenges, Opening, Refusal, Row, Staff, Status, route};
-use super::{Filing, Found, Guard, Pinned, Rerun, Ruling};
+use super::{Decision, Filing, Found, Guard, Pinned, Rerun, Ruling};
 use crate::roster::Roster;
 
 const FILE: &str = "crates/mnemorph-tools/src/files.rs";
@@ -795,4 +795,252 @@ fn no_such_landing_or_finding() {
     for r in [confirmed(Severity::High), refuted(), cannot()] {
         assert_ne!(r.word(), "");
     }
+}
+
+/// A finding of the harness on `symbol`: its own root cause.
+fn found_on(symbol: &str, severity: Severity) -> Found {
+    let mut f = found(severity);
+    f.record.symbol = symbol.into();
+    f.record.fingerprint =
+        mnemorph_wire::fingerprint(FINDER, "path-traversal", FILE, symbol).unwrap();
+    f.record.rec = mnemorph_proving::record_path(FINDER, &f.record.fingerprint);
+    f
+}
+
+/// Opens landing `id` on `c`, by `orc-o`, on the test tree.
+fn open_landing(c: &Challenges, id: &str) {
+    let l = route(&Roster::default(), id, &[FILE.to_owned()]);
+    c.open_at(
+        &l,
+        &Opening {
+            tree: TREE.into(),
+            by: "orc-o".into(),
+            ..Opening::default()
+        },
+    )
+    .unwrap();
+}
+
+/// Keeps `f` on `landing` and has the agent rule it.
+fn found_and_ruled(c: &Challenges, landing: &str, f: Found, ruling: Option<Ruling>) -> String {
+    let fp = f.fingerprint().to_owned();
+    c.found(landing, f).unwrap();
+    if let Some(ruling) = ruling {
+        c.assign(landing, &fp, Case::sent(AGENT)).unwrap();
+        let filing = Filing {
+            landing: landing.into(),
+            fingerprint: fp.clone(),
+            verifier: AGENT.into(),
+            tree: TREE.into(),
+            ruling,
+        };
+        c.verdict(filing, &tree(), &ran()).unwrap();
+    }
+    fp
+}
+
+fn harness_of(c: &Challenges) -> mnemorph_ledger::SpecialityFold {
+    mnemorph_ledger::fold_findings(&c.finding_rows())
+        .remove(FINDER)
+        .unwrap_or_default()
+}
+
+/// A confirmed, a refuted, a `cannot-verify` and an unverified finding fold into their
+/// speciality's ledger: precision is upheld over upheld and refuted, `cannot-verify` in neither.
+#[test]
+fn the_ledger_folds_the_verdicts() {
+    let dir = temp("ledger-fold");
+    let c = Challenges::at(&dir.join("challenges.jsonl"));
+    open_landing(&c, "run-1:1");
+    found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("a", Severity::High),
+        Some(confirmed(Severity::High)),
+    );
+    found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("b", Severity::High),
+        Some(refuted()),
+    );
+    found_and_ruled(&c, "run-1:1", found_on("c", Severity::High), Some(cannot()));
+    found_and_ruled(&c, "run-1:1", found_on("d", Severity::Medium), None);
+    let f = harness_of(&c);
+    assert_eq!(
+        (
+            f.findings,
+            f.upheld,
+            f.refuted,
+            f.cannot_verify,
+            f.unverified
+        ),
+        (4, 1, 1, 1, 1)
+    );
+    assert_eq!(f.precision(), Some(50.0));
+    assert_eq!(f.upheld_rate(), Some(25.0));
+    // The window is in the order the verdicts were filed.
+    assert_eq!(f.recent, vec![true, false]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// One root cause found on two landings — refuted on the first, confirmed on the second after
+/// its line moved — counts once, upheld: the fingerprint is line-free.
+#[test]
+fn the_ledger_counts_a_root_cause_once_across_landings() {
+    let dir = temp("ledger-dedupe");
+    let c = Challenges::at(&dir.join("challenges.jsonl"));
+    open_landing(&c, "run-1:1");
+    open_landing(&c, "run-2:1");
+    let first = found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("a", Severity::High),
+        Some(refuted()),
+    );
+    let mut moved = found_on("a", Severity::High);
+    moved.record.trace[0].at = format!("{FILE}:7");
+    let second = found_and_ruled(&c, "run-2:1", moved, Some(confirmed(Severity::High)));
+    assert_eq!(first, second);
+    assert_eq!(c.finding_rows().len(), 2, "each landing keeps its row");
+    let f = harness_of(&c);
+    assert_eq!((f.findings, f.upheld, f.refuted), (1, 1, 0));
+    assert_eq!(f.precision(), Some(100.0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The human decides: a confirmed finding dismissed as a false positive counts refuted; a
+/// critical its verifier refuted is neither until the human upholds it. Only the human's
+/// reasoned decision, bound to the opened tree, is kept.
+#[test]
+fn the_human_decides_what_a_verifier_cannot() {
+    let dir = temp("ledger-human");
+    let c = Challenges::at(&dir.join("challenges.jsonl"));
+    open_landing(&c, "run-1:1");
+    let fp = found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("a", Severity::High),
+        Some(confirmed(Severity::High)),
+    );
+    let crit = found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("b", Severity::Critical),
+        Some(refuted()),
+    );
+    let f = harness_of(&c);
+    assert_eq!((f.upheld, f.refuted, f.held), (1, 0, 1));
+    let reason = "the grant check refuses the path before any read";
+    c.decide("run-1:1", &fp, &Decision::human(false, reason).unwrap())
+        .unwrap();
+    let held = "the proof-of-concept escapes once the grant is widened";
+    c.decide("run-1:1", &crit, &Decision::human(true, held).unwrap())
+        .unwrap();
+    let f = harness_of(&c);
+    assert_eq!((f.upheld, f.refuted, f.held), (1, 1, 0));
+    let r = c.record("run-1:1").unwrap();
+    let d = r.findings[0].decision.as_ref().unwrap();
+    assert!(!d.upheld() && d.reason() == reason);
+    assert!(r.status.open(), "a decision lifts no block");
+    // Refused: no reason worth the name, no such finding, no such landing.
+    assert!(matches!(
+        Decision::human(true, "n/a"),
+        Err(Refusal::Unreasoned)
+    ));
+    let ok = Decision::human(true, held).unwrap();
+    assert!(matches!(
+        c.decide("run-1:1", "nope", &ok),
+        Err(Refusal::NoSuchLanding(_))
+    ));
+    assert!(matches!(
+        c.decide("nope", &fp, &ok),
+        Err(Refusal::NoSuchLanding(_))
+    ));
+    let mut bare = ok.clone();
+    bare.reason = "short".into();
+    assert!(matches!(
+        c.decide("run-1:1", &fp, &bare),
+        Err(Refusal::Unreasoned)
+    ));
+    // Forged decisions: not the human's, or bound to another tree, count for nothing.
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(dir.join("challenges.jsonl"))
+        .unwrap();
+    let mut body = ok.clone();
+    body.by = "dark-elf-harness".into();
+    body.tree = TREE.into();
+    let mut other = ok;
+    other.tree = "cd".repeat(32);
+    for decision in [body, other] {
+        let row = Row::Decided {
+            landing: "run-1:1".into(),
+            fingerprint: fp.clone(),
+            decision,
+        };
+        writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+    }
+    drop(f);
+    let f = harness_of(&c);
+    assert_eq!((f.upheld, f.refuted), (1, 1), "the forged rows are ignored");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The ledger is folded from the records outside the world alone: challenge rows and finding
+/// records forged inside the world are never read, and records kept inside it are refused. With
+/// the source check off, the forged rows would count: the case needs it.
+#[test]
+fn the_ledger_reads_only_the_records_outside_the_world() {
+    let dir = temp("ledger-source");
+    let world = dir.join("world");
+    let state = dir.join("state/challenges.jsonl");
+    // A body forges a challenge with a confirmed finding inside the world.
+    let inside = world.join(".mnemorph/challenges.jsonl");
+    std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+    let forged = Challenges::at(&inside);
+    open_landing(&forged, "run-1:1");
+    found_and_ruled(
+        &forged,
+        "run-1:1",
+        found_on("a", Severity::High),
+        Some(confirmed(Severity::High)),
+    );
+    let rec = world.join(found_on("a", Severity::High).rec);
+    std::fs::create_dir_all(rec.parent().unwrap()).unwrap();
+    std::fs::write(&rec, serde_json::to_vec(&record(Severity::High)).unwrap()).unwrap();
+    // The real records, outside: one refuted finding.
+    let real = Challenges::at(&state);
+    open_landing(&real, "run-1:1");
+    found_and_ruled(
+        &real,
+        "run-1:1",
+        found_on("b", Severity::High),
+        Some(refuted()),
+    );
+    let folded = super::super::scores_at(&world, &state, true).unwrap();
+    assert_eq!((folded[FINDER].findings, folded[FINDER].upheld), (1, 0));
+    assert!(matches!(
+        super::super::scores_at(&world, &inside, true),
+        Err(Refusal::InWorld(_))
+    ));
+    // A records path not there yet inside the world is refused too.
+    assert!(matches!(
+        super::super::scores_at(&world, &world.join("new/c.jsonl"), true),
+        Err(Refusal::InWorld(_))
+    ));
+    let unchecked = super::super::scores_at(&world, &inside, false).unwrap();
+    assert_eq!(
+        unchecked[FINDER].upheld, 1,
+        "without the check the forgery counts"
+    );
+    assert!(
+        Refusal::InWorld(inside)
+            .to_string()
+            .contains("inside the world")
+    );
+    assert!(Refusal::NoState.to_string().contains("no state directory"));
+    // A world's own records, wherever the state directory is, fold or are refused — never panic.
+    let _ = super::super::scores(&world);
+    let _ = std::fs::remove_dir_all(&dir);
 }

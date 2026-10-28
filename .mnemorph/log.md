@@ -6064,3 +6064,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   each fail.
 - **Learned:** the journal check of a failed run masks the row's own `failed` flag at filing; only
   a read of a written row tests the flag.
+
+---
+
+### [2026-10-28T03:07:50+01:00] rimuru — Dark Elf PR 10: the ledger folds each speciality's findings
+- **Done:** `mnemorph_ledger::fold_findings` folds the challenge records' finding rows
+  (`Challenges::finding_rows`) per speciality: findings, upheld, refuted, cannot-verify, held for
+  the human, unverified, precision = upheld ÷ (upheld + refuted), upheld rate = upheld ÷ findings,
+  and the last ten settled. One root cause counts once, by fingerprint, across landings. The human's
+  decision on a finding (`Decision`, `mnemorphd challenge decide`) counts it upheld or refuted; a
+  critical refuted by its verifier is neither until decided. The fold feeds `Signals`/`Recent` to
+  `rises`/`falls` against the living body's form and only proposes; applying is M11's.
+  `challenge::scores` refuses records inside the world. `mnemorphd challenge score` shows it,
+  escaped. Docs 02 (the score's source, dedupe, formulas), roadmap.
+- **Tests:** precision with confirmed, refuted and cannot-verify; dedupe across two landings (and
+  the dedupe switched off fails); a fall only on a full ten under 70; a rise at the bars; the human's
+  decisions and forged decisions; forged in-world records ignored, records inside the world refused
+  (the check switched off lets the forgery count); the CLI's score, decide and rise proposal.
+- **Learned:** an order across landings needs the record's line, not the landing id: the fold
+  keeps, per finding, the line of the row that settled it.

@@ -863,6 +863,7 @@ mod tests {
             staff: None,
             verdict: None,
             proposal: None,
+            decision: None,
         }
     }
 

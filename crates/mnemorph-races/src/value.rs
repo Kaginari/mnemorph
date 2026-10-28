@@ -42,9 +42,10 @@ pub struct Signals {
     pub outward_clean_rate: f64,
     /// Verify lines green at the gate (self-gated authors).
     pub verify_green_rate: f64,
-    /// Findings, linked by id, that a later landing fixed (Dark Elves).
+    /// Findings upheld — confirmed by their verifier or by the human — over findings filed, each
+    /// root cause once (Dark Elves).
     pub upheld_rate: f64,
-    /// One less the share of findings the human dismissed on contest (Dark Elves).
+    /// Findings upheld over those upheld or refuted; `cannot-verify` is in neither (Dark Elves).
     pub precision: f64,
 }
 

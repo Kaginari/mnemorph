@@ -964,7 +964,8 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
     the finder and the finder's speciality, the landing's tree hash, the witness's SHA-256 and
     every re-run's output SHA-256 and failure. Every row is held to the guards again when the records are read, so a row written
     there that breaks them counts for nothing. Each `confirmed` or `refuted` verdict is a row of its finder
-    speciality's precision (`Challenges::outcomes`); `cannot-verify` is neither.
+    speciality's precision (`Challenges::outcomes`); `cannot-verify` is neither. Each finding,
+    with its verdict and the human's decision, is a row of its speciality's score (below).
 - **Seal.** A finding confirmed at high or critical, at the confirmed severity, can propose a seal
   on its territory.
   1. The proposal is a gated act: Rimuru records it with the challenge and puts it to the human
@@ -981,11 +982,38 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   end gate refuses a landing that a critical or high **ontology** finding touches, read on the tree
   as the landing leaves it — no human confirms it, and a landing that ends the finding is not
   blocked by it ([the end gate](03-loop.md#the-end-gate), [ontology](09-ontology.md#findings)).
-- **Score** `0.7·upheldRate + 0.3·precision`, where *upheld* = confirmed findings, linked by
-  fingerprint, that a later landing fixed, and *precision* = 1 − dismissed ÷ findings (a dismissal
-  is a contest the human upheld; a verifier's refutation is not one). Meter: *Upheld*, ok ≥ 80,
-  warn ≥ 50. Each speciality is its own creature, so its score and its ascension are its own:
-  `dark-elf-supply` may rise to Arch Dark Elf while `dark-elf-agent` has not.
+- **Score** `0.7·upheldRate + 0.3·precision`, per speciality: each speciality is its own
+  creature, so its score and its ascension are its own — `dark-elf-supply` may rise to Arch Dark
+  Elf while `dark-elf-agent` has not. Meter: *Upheld*, ok ≥ 80, warn ≥ 50, ranked on findings.
+  - **Its source.** The value ledger folds the challenge records alone
+    (`mnemorph_ledger::fold_findings` over `Challenges::finding_rows`), each world's from its own
+    file in the human's state directory, outside the world. Never the in-world journal, a finding
+    record under `.mnemorph/dark-elf/` or any file a body can write: records whose path lies inside
+    the world are refused, not folded. Each row is held to the verification guards again as it is
+    read, so a row forged into the records counts for nothing.
+  - **One root cause counts once.** Findings are deduplicated by fingerprint within a speciality,
+    across landings. The fingerprint is line-free, so a finding filed again after its line moved,
+    or confirmed on a later landing, is the same finding.
+  - **Its standing** is the human's latest decision on it when there is one. Otherwise it is the
+    strongest verdict any landing holds: confirmed, then a critical held for the human, then
+    refuted, then `cannot-verify`, then none.
+  - **Upheld**: confirmed by its verifier, or by the human — the human's word stands for a fix that
+    proved it. **Refuted**: refuted by its verifier, or dismissed by the human as a false positive.
+    A critical its verifier refuted waits for the human and is neither until decided, nor is a
+    `cannot-verify` or an unverified finding. The human decides one finding with
+    `mnemorphd challenge decide <landing> <fingerprint> upheld|false-positive --why <reason>`,
+    at the terminal. A decision lifts no block: the fix or a waiver does that. A waiver of the
+    whole challenge decides no finding.
+  - **The formulas.** *findings* = distinct root causes filed; *upheldRate* = upheld ÷ findings;
+    *precision* = upheld ÷ (upheld + refuted), so `cannot-verify` is in neither. The **last ten**
+    are the ten latest settled findings (upheld or refuted), ordered by the record that settled
+    each: the Arch Dark Elf's fall reads their precision, and only once ten are settled.
+  - **Proposals, never applied.** The fold feeds `Signals` and `Recent` to `rises` and `falls`
+    per speciality, read against the living body's form. A Dark Elf at the bars is proposed to
+    rise; an Arch Dark Elf under its fall bar is proposed probation. Both go to the human, and
+    nothing in the harness applies either: applying them is M11's.
+    `mnemorphd challenge score` prints each speciality's findings, upheld, refuted,
+    `cannot-verify`, held, unverified, precision, upheld rate, last ten and proposal, escaped.
 - **The seeded fixture.** How the machinery is held to what it should catch, with no model in CI.
   `crates/mnemorph-proving/fixtures/seeded/` is a small world shaped like Mnemorph's surfaces —
   a sandbox launcher, a shell tool, an approval card, a wire emitter, workflows, a Dockerfile, a

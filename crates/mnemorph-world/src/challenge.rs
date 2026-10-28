@@ -30,8 +30,10 @@ use crate::roster::Roster;
 
 pub mod verification;
 
+pub use mnemorph_ledger::{Ascension, FindingRow, SpecialityFold, Standing, WINDOW};
 pub use verification::{
-    FLOOR, Filing, Finding, Found, Guard, Outcome, Pinned, Proposal, Rerun, Ruling, Verification,
+    Decision, FLOOR, Filing, Finding, Found, Guard, Outcome, Pinned, Proposal, Rerun, Ruling,
+    Verification,
 };
 
 /// The longest one row may be, in bytes: a filing past it is refused, never split.
@@ -85,6 +87,45 @@ pub fn route(roster: &Roster, id: &str, written: &[String]) -> Landing {
         written,
         routed,
     }
+}
+
+/// The Dark Elf's value ledger for `world`: its findings folded per speciality, from the
+/// challenge records alone ([`Challenges::finding_rows`]). The records are read only from the
+/// human's state directory, outside the world: never a journal, a finding record or any file a
+/// body could write inside it.
+///
+/// # Errors
+///
+/// There is no home to keep records under, or the records' path lies inside the world.
+pub fn scores(world: &Path) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
+    let records = records_of(world).ok_or(Refusal::NoState)?;
+    scores_at(world, &records, true)
+}
+
+/// The fold of `records` for `world`; `outside` off skips the source check: how a test shows it
+/// is needed.
+fn scores_at(
+    world: &Path,
+    records: &Path,
+    outside: bool,
+) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
+    let real = |p: &Path| {
+        p.canonicalize().unwrap_or_else(|_| {
+            // Not there yet: its nearest existing ancestor, resolved, with the rest.
+            p.ancestors()
+                .find_map(|a| {
+                    let rest = p.strip_prefix(a).ok()?;
+                    a.canonicalize().ok().map(|r| r.join(rest))
+                })
+                .unwrap_or_else(|| p.to_path_buf())
+        })
+    };
+    if outside && real(records).starts_with(real(world)) {
+        return Err(Refusal::InWorld(records.to_path_buf()));
+    }
+    Ok(mnemorph_ledger::fold_findings(
+        &Challenges::at(records).finding_rows(),
+    ))
 }
 
 /// Who stands over every body: the only author a waiver may have.
@@ -321,6 +362,10 @@ pub enum Refusal {
     TooLarge(usize),
     /// The records could not be read or written.
     Unwritten(String),
+    /// There is no home to keep the records under.
+    NoState,
+    /// The records' path lies inside the world, where a body could write them.
+    InWorld(PathBuf),
 }
 
 impl fmt::Display for Refusal {
@@ -357,6 +402,13 @@ impl fmt::Display for Refusal {
             }
             Refusal::TooLarge(n) => write!(f, "the filing is {n} bytes, over {MAX_ROW}"),
             Refusal::Unwritten(why) => write!(f, "the challenge records cannot be kept: {why}"),
+            Refusal::NoState => f.write_str("no state directory: the challenges cannot be read"),
+            Refusal::InWorld(p) => write!(
+                f,
+                "the challenge records at {} lie inside the world, where a body could write \
+                 them: they are never folded",
+                p.display()
+            ),
         }
     }
 }
@@ -400,6 +452,11 @@ enum Row {
         landing: String,
         proposal: Proposal,
     },
+    Decided {
+        landing: String,
+        fingerprint: String,
+        decision: Decision,
+    },
     Waived {
         landing: String,
         waiver: Waiver,
@@ -416,6 +473,8 @@ struct Open {
     blockers: Vec<Blocker>,
     findings: Vec<Finding>,
     waived: Option<Waiver>,
+    /// Per fingerprint, the line of the record that last settled it: found, ruled or decided.
+    at: BTreeMap<String, u64>,
 }
 
 impl Open {
@@ -428,6 +487,7 @@ impl Open {
             blockers: Vec::new(),
             findings: Vec::new(),
             waived: None,
+            at: BTreeMap::new(),
         }
     }
 
@@ -769,10 +829,11 @@ fn record_of(open: Open) -> Record {
 /// The records folded: the first opening of an id stands; a filing counts only when its landing
 /// is open, its speciality has not filed yet, and its ledger validates again; a staffing only for
 /// a routed speciality, the latest standing; a waiver only the human's, reasoned and bound to the
-/// opened tree. A line that does not parse — a torn write, a hand edit — counts for nothing.
+/// opened tree; a decision on a finding only the human's, reasoned and bound to the opened tree,
+/// the latest standing. A line that does not parse — a torn write, a hand edit — counts for nothing.
 fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
     let mut all: BTreeMap<String, Open> = BTreeMap::new();
-    for line in bytes.split(|&b| b == b'\n') {
+    for (n, line) in (0u64..).zip(bytes.split(|&b| b == b'\n')) {
         let Ok(row) = serde_json::from_slice::<Row>(line) else {
             continue;
         };
@@ -809,7 +870,10 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
             }
             Row::Found { landing, found } => {
                 if let Some(open) = all.get_mut(&landing) {
-                    open.fold_found(*found);
+                    let fp = found.fingerprint().to_owned();
+                    if open.fold_found(*found) {
+                        open.at.insert(fp, n);
+                    }
                 }
             }
             Row::Assigned {
@@ -826,12 +890,26 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                 verification,
             } => {
                 if let Some(open) = all.get_mut(&landing) {
-                    open.fold_ruled(verification);
+                    let fp = verification.fingerprint.clone();
+                    if open.fold_ruled(verification) {
+                        open.at.insert(fp, n);
+                    }
                 }
             }
             Row::Proposed { landing, proposal } => {
                 if let Some(open) = all.get_mut(&landing) {
                     open.fold_proposed(proposal);
+                }
+            }
+            Row::Decided {
+                landing,
+                fingerprint,
+                decision,
+            } => {
+                if let Some(open) = all.get_mut(&landing)
+                    && open.fold_decided(&fingerprint, decision)
+                {
+                    open.at.insert(fingerprint, n);
                 }
             }
             Row::Waived { landing, waiver } => {
