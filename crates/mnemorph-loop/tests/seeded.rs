@@ -1,7 +1,7 @@
 //! The seeded fixture end to end, against scripted models: the throne lands a plant, the landing
 //! opens a challenge routed to the plant's speciality, the scripted reviewer files its coverage
-//! ledger and the plant's finding, a fresh check of the finding's record confirms it, and the
-//! landing blocks on the high finding.
+//! ledger and the plant's finding, a verifier of another speciality re-runs its witness and
+//! confirms it, and the landing blocks on the confirmed finding.
 //!
 //! The paid evaluation over the same fixture, with real models, is `seeded_eval` below: ignored,
 //! never run in CI.
@@ -41,9 +41,9 @@ impl Model for Reviewing {
         on: &'a mut (dyn FnMut(Event) + Send),
     ) -> Completion<'a> {
         let seen = format!("{request:?}");
-        let landing = seen
-            .split("Challenge the landing `")
-            .nth(1)
+        let landing = ["Challenge the landing `", "on the landing `"]
+            .iter()
+            .find_map(|m| seen.split(m).nth(1))
             .and_then(|rest| rest.split('`').next())
             .map(str::to_owned);
         let inner = self.0.complete(request, on);
@@ -201,12 +201,9 @@ fn single_routed() -> Vec<Plant> {
 }
 
 /// Every plant whose file routes one hunter, end to end: the throne writes the plant; its
-/// speciality's reviewer is commissioned, files a ledger that holds and the plant's finding; the
-/// finding's record, read fresh from the world, validates under the harness's fingerprint; and the
-/// landing is blocked on it.
-///
-/// The fresh check stands in for independent verification (the Dark Elf plan's PR 8) until it
-/// lands: then the verifier's verdict replaces it here.
+/// speciality's reviewer is commissioned, files a ledger that holds and the plant's finding; a
+/// verifier of another speciality, sent the record alone, re-runs the witness (scripted, a run of
+/// it that fails) and confirms it; and the landing is blocked on the confirmed finding.
 #[tokio::test]
 async fn each_plant_blocks_its_landing() {
     let key = manifest();
@@ -223,7 +220,12 @@ async fn each_plant_blocks_its_landing() {
     assert!(!plants.iter().any(|p| p.id == "env-unredacted"));
     for p in &plants {
         let s = p.speciality();
-        let w = World::new(&p.id, &[s.creature()]);
+        let checker = if s == Speciality::Agent {
+            Speciality::Harness
+        } else {
+            Speciality::Agent
+        };
+        let w = World::new(&p.id, &[s.creature(), checker.creature()]);
         // The proving ground, as the reviewer leaves it.
         let mut proven = fixture.clone();
         let record = seeded::prove(&mut proven, p);
@@ -237,6 +239,7 @@ async fn each_plant_blocks_its_landing() {
             &looked(&key, &fixture, s, &written),
         );
         let report = format!("@S DONE\n{}\n@E", finding_line(p, &record));
+        let rerun = format!("sh {}", seeded::poc_path(p));
         let model: Arc<dyn Model> = Arc::new(ScriptedModel::new([
             write("w1", &p.file, &fixture[&p.file]),
             ScriptedModel::text("Wrote it."),
@@ -246,6 +249,15 @@ async fn each_plant_blocks_its_landing() {
                 json!({"landing": "LANDING", "entries": filed.entries}),
             ),
             ScriptedModel::text(&report),
+            // The verifier: it re-runs the witness, which fails, and confirms.
+            ScriptedModel::tool("r1", "bash", json!({"command": rerun})),
+            ScriptedModel::tool(
+                "v1",
+                "verdict",
+                json!({"landing": "LANDING", "fingerprint": record.fingerprint,
+                       "verdict": "confirmed", "commands": [{"run": rerun}]}),
+            ),
+            ScriptedModel::text("@S DONE\n@E"),
         ]));
         let model: Arc<dyn Model> = Arc::new(Reviewing(model));
         let mut run = w.throne(model.clone(), model, "claude-sonnet-5-5", 3, false);
@@ -278,12 +290,11 @@ async fn each_plant_blocks_its_landing() {
             "{}: {text}",
             p.id
         );
-        // The fresh check: the record as the world holds it now, validated against the world.
-        let world = mnemorph_proving::Tree::new(w.world());
-        let bytes = mnemorph_proving::World::read(&world, &record.rec).expect("the record");
-        let read = mnemorph_proving::FindingRecord::parse(&record.rec, &bytes).expect("parses");
-        let valid = mnemorph_proving::validate(&read, &world).expect("verified");
-        assert_eq!(valid.fingerprint(), derived, "{}", p.id);
+        // Confirmed by the verifier of another speciality: it counts.
+        let f = &r.findings[0];
+        assert!(f.counts(), "{}: {f:?}", p.id);
+        let verdict = f.verdict.as_ref().expect("a verdict");
+        assert_eq!(verdict.speciality, checker.creature(), "{}", p.id);
     }
 }
 

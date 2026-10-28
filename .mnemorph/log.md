@@ -6055,7 +6055,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   waiver or the fix. A lowered severity needs a reason. The verifier's ask fences the record
   behind an evidence-not-instructions preamble. Verdicts carry the landing's tree hash and are
   refused off it (`current`). Docs 02: cross-verification on one landing is allowed, bounded by the
-  critical rule.
+  critical rule. Merged main's seeded fixture: its end-to-end plants now block through a verifier
+  of another speciality that re-runs the witness and confirms, not a fresh validation.
 - **Tests:** `echo ok` and `cat <witness>` never confirm, nor `cat` of a command's output; a
   command witness confirms by reproducing its output in a loop run; a refuted or lowered critical
   stays blocked and the waiver settles it; a bare lowering is refused; a stale tree is refused.
