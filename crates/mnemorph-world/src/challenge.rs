@@ -1,8 +1,10 @@
 //! A landing's Dark Elf challenge, as the harness keeps it: the landing as it was routed, its tree
 //! and its author, how each routed speciality is staffed, each routed speciality's coverage
 //! ledger, the findings that block it, and the human's waiver. The challenge is pending until every
-//! routed speciality has filed a ledger that holds; a valid critical or high finding blocks it
-//! whatever was filed; a human waiver, with its reason, settles it either way.
+//! routed speciality has filed a ledger that holds, and every finding of medium or higher has its
+//! verifier's verdict ([`verification`]); a finding confirmed at high or critical, or a critical
+//! one not refuted nor confirmed lower, blocks it whatever was filed; a human waiver, with its
+//! reason, settles it either way.
 //!
 //! The records are the harness's, outside the world and out of every command's reach:
 //! `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl`, one row per line, the folder
@@ -25,6 +27,12 @@ use mnemorph_races::Speciality;
 use serde::{Deserialize, Serialize};
 
 use crate::roster::Roster;
+
+pub mod verification;
+
+pub use verification::{
+    FLOOR, Filing, Finding, Found, Guard, Outcome, Pinned, Proposal, Rerun, Ruling, Verification,
+};
 
 /// The longest one row may be, in bytes: a filing past it is refused, never split.
 pub const MAX_ROW: usize = 1024 * 1024;
@@ -144,8 +152,8 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
-/// A valid critical or high finding on the landing: it blocks the landing until it is fixed or
-/// the human waives the challenge.
+/// A finding that blocks the landing until it is fixed or the human waives the challenge: one
+/// confirmed at high or critical, or a critical one no verdict refuted or lowered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Blocker {
@@ -157,6 +165,9 @@ pub struct Blocker {
     pub severity: String,
     /// What it claims.
     pub claim: String,
+    /// Where its verification stands: who confirmed it, or why the human decides.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub standing: String,
 }
 
 impl fmt::Display for Blocker {
@@ -165,7 +176,11 @@ impl fmt::Display for Blocker {
             f,
             "#{} {} ({}): {}",
             self.fingerprint, self.severity, self.speciality, self.claim
-        )
+        )?;
+        if !self.standing.is_empty() {
+            write!(f, " [{}]", self.standing)?;
+        }
+        Ok(())
     }
 }
 
@@ -233,12 +248,19 @@ pub enum Status {
         /// They, in routing order.
         awaiting: Vec<Speciality>,
     },
-    /// A valid critical or high finding blocks the landing, whatever was filed.
+    /// A finding confirmed at high or critical, or a critical one unverified, blocks the
+    /// landing, whatever was filed.
     Blocked {
         /// The findings, in the order they were found.
         findings: Vec<Blocker>,
     },
-    /// Every routed speciality has filed, and nothing blocks.
+    /// Every routed speciality has filed and nothing blocks, but findings of medium or higher
+    /// still wait on their verifier's verdict.
+    Verifying {
+        /// Their fingerprints, in the order they were found.
+        findings: Vec<String>,
+    },
+    /// Every routed speciality has filed, every finding has its verdict, and nothing blocks.
     Cleared,
     /// The human waived it.
     Waived {
@@ -248,10 +270,13 @@ pub enum Status {
 }
 
 impl Status {
-    /// Whether the landing still waits on its challenge: pending or blocked.
+    /// Whether the landing still waits on its challenge: pending, blocked or verifying.
     #[must_use]
     pub fn open(&self) -> bool {
-        matches!(self, Status::Pending { .. } | Status::Blocked { .. })
+        matches!(
+            self,
+            Status::Pending { .. } | Status::Blocked { .. } | Status::Verifying { .. }
+        )
     }
 }
 
@@ -276,6 +301,8 @@ pub enum Refusal {
     AlreadyWaived(String),
     /// The landing's author, or a body above it, filed for it.
     Author(String),
+    /// A finding, a verifier, a verdict or a seal proposal breaks these guards.
+    Verification(Vec<Guard>),
     /// The row would be over [`MAX_ROW`] bytes.
     TooLarge(usize),
     /// The records could not be read or written.
@@ -307,6 +334,13 @@ impl fmt::Display for Refusal {
                 f,
                 "{body} wrote this landing, or commands who did: it never clears its own challenge"
             ),
+            Refusal::Verification(guards) => {
+                let said: Vec<String> = guards
+                    .iter()
+                    .map(|g| format!("{g}: {}", g.asks()))
+                    .collect();
+                write!(f, "refused — {}", said.join("; "))
+            }
             Refusal::TooLarge(n) => write!(f, "the filing is {n} bytes, over {MAX_ROW}"),
             Refusal::Unwritten(why) => write!(f, "the challenge records cannot be kept: {why}"),
         }
@@ -330,9 +364,27 @@ enum Row {
         speciality: String,
         staff: Staff,
     },
+    /// A blocker recorded before findings were verified: it still blocks — fail closed.
     Blocked {
         landing: String,
         blocker: Blocker,
+    },
+    Found {
+        landing: String,
+        found: Box<Found>,
+    },
+    Assigned {
+        landing: String,
+        fingerprint: String,
+        staff: Staff,
+    },
+    Ruled {
+        landing: String,
+        verification: Verification,
+    },
+    Proposed {
+        landing: String,
+        proposal: Proposal,
     },
     Waived {
         landing: String,
@@ -348,6 +400,7 @@ struct Open {
     filed: BTreeMap<Speciality, CoverageLedger>,
     staff: BTreeMap<Speciality, Staff>,
     blockers: Vec<Blocker>,
+    findings: Vec<Finding>,
     waived: Option<Waiver>,
 }
 
@@ -359,6 +412,7 @@ impl Open {
             filed: BTreeMap::new(),
             staff: BTreeMap::new(),
             blockers: Vec::new(),
+            findings: Vec::new(),
             waived: None,
         }
     }
@@ -369,10 +423,10 @@ impl Open {
                 reason: w.reason.clone(),
             };
         }
-        if !self.blockers.is_empty() {
-            return Status::Blocked {
-                findings: self.blockers.clone(),
-            };
+        let mut blockers = self.blockers.clone();
+        blockers.extend(self.blocking());
+        if !blockers.is_empty() {
+            return Status::Blocked { findings: blockers };
         }
         let awaiting: Vec<Speciality> = self
             .landing
@@ -381,10 +435,16 @@ impl Open {
             .map(|r| r.speciality)
             .filter(|s| !self.filed.contains_key(s))
             .collect();
-        if awaiting.is_empty() {
+        if !awaiting.is_empty() {
+            return Status::Pending { awaiting };
+        }
+        let verifying = self.verifying();
+        if verifying.is_empty() {
             Status::Cleared
         } else {
-            Status::Pending { awaiting }
+            Status::Verifying {
+                findings: verifying,
+            }
         }
     }
 
@@ -402,6 +462,9 @@ pub struct Record {
     pub opening: Opening,
     /// How each routed speciality is staffed, in routing order; one never staffed yet is absent.
     pub staff: Vec<(Speciality, Staff)>,
+    /// The findings of medium or higher its reviewers reported, in the order they were found,
+    /// each with its verifier, its verdict and its seal proposal.
+    pub findings: Vec<Finding>,
     /// Where it stands.
     pub status: Status,
 }
@@ -516,34 +579,6 @@ impl Challenges {
             speciality: speciality.creature().to_owned(),
             staff,
         })
-    }
-
-    /// Records a valid critical or high finding on `landing`: it blocks the landing until it is
-    /// fixed or the challenge is waived. One fingerprint blocks once.
-    ///
-    /// # Errors
-    ///
-    /// No such open landing, or records that cannot be kept.
-    pub fn block(&self, landing: &str, blocker: Blocker) -> Result<Status, Refusal> {
-        let mut held = self.hold()?;
-        let open = held
-            .all
-            .get_mut(landing)
-            .ok_or_else(|| Refusal::NoSuchLanding(landing.to_owned()))?;
-        if open
-            .blockers
-            .iter()
-            .any(|b| b.fingerprint == blocker.fingerprint)
-        {
-            return Ok(open.status());
-        }
-        open.blockers.push(blocker.clone());
-        let status = open.status();
-        held.append(&Row::Blocked {
-            landing: landing.to_owned(),
-            blocker,
-        })?;
-        Ok(status)
     }
 
     /// Waives the challenge of `landing` on the human's word: it is bound to the tree the
@@ -712,6 +747,7 @@ fn record_of(open: Open) -> Record {
         landing: open.landing,
         opening: open.opening,
         staff,
+        findings: open.findings,
         status,
     }
 }
@@ -755,6 +791,33 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                         .any(|b| b.fingerprint == blocker.fingerprint)
                 {
                     open.blockers.push(blocker);
+                }
+            }
+            Row::Found { landing, found } => {
+                if let Some(open) = all.get_mut(&landing) {
+                    open.fold_found(*found);
+                }
+            }
+            Row::Assigned {
+                landing,
+                fingerprint,
+                staff,
+            } => {
+                if let Some(open) = all.get_mut(&landing) {
+                    open.fold_assigned(&fingerprint, staff);
+                }
+            }
+            Row::Ruled {
+                landing,
+                verification,
+            } => {
+                if let Some(open) = all.get_mut(&landing) {
+                    open.fold_ruled(verification);
+                }
+            }
+            Row::Proposed { landing, proposal } => {
+                if let Some(open) = all.get_mut(&landing) {
+                    open.fold_proposed(proposal);
                 }
             }
             Row::Waived { landing, waiver } => {
@@ -1209,33 +1272,44 @@ mod tests {
         let _ = std::fs::remove_dir_all(&w);
     }
 
-    /// A valid high finding blocks the landing even once every ledger is filed; one fingerprint
-    /// blocks once.
+    /// A blocker recorded before findings were verified still blocks, even once every ledger is
+    /// filed — fail closed; one fingerprint blocks once.
     #[test]
-    fn a_blocking_finding_holds_the_landing() {
+    fn a_legacy_blocker_still_holds_the_landing() {
         let w = temp("block");
-        let c = Challenges::at(&w.join("challenges.jsonl"));
+        let file = w.join("challenges.jsonl");
+        let c = Challenges::at(&file);
         let l = landing(&["Cargo.lock"]);
         c.open_at(&l, &opening()).unwrap();
-        let b = Blocker {
+        let blocker = Blocker {
             speciality: "dark-elf-supply".into(),
             fingerprint: "0123456789abcdef".into(),
             severity: "high".into(),
             claim: "a yanked crate".into(),
+            standing: String::new(),
         };
-        assert!(b.to_string().contains("#0123456789abcdef high"));
-        let blocked = Status::Blocked {
-            findings: vec![b.clone()],
+        assert!(blocker.to_string().contains("#0123456789abcdef high"));
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file)
+            .unwrap();
+        let row = Row::Blocked {
+            landing: l.id.clone(),
+            blocker: blocker.clone(),
         };
-        assert_eq!(c.block(&l.id, b.clone()), Ok(blocked.clone()));
-        assert_eq!(c.block(&l.id, b.clone()), Ok(blocked.clone()));
+        for _ in 0..2 {
+            writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+        }
+        drop(f);
+        let held = Status::Blocked {
+            findings: vec![blocker.clone()],
+        };
         assert_eq!(
             c.file(full(&l, Speciality::Supply), &tree(&l), &ran()),
-            Ok(blocked.clone())
+            Ok(held.clone())
         );
-        assert_eq!(c.status(&l.id), Some(blocked));
+        assert_eq!(c.status(&l.id), Some(held));
         assert!(c.pending().is_empty(), "blocked is not awaiting a ledger");
-        assert!(matches!(c.block("nope", b), Err(Refusal::NoSuchLanding(_))));
         let _ = std::fs::remove_dir_all(&w);
     }
 

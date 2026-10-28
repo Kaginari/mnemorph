@@ -423,8 +423,10 @@ A landing on a Dark Elf surface passes as `PASS (challenge pending)`: its challe
 gate (or, if it cannot be recorded, it reads `PASS (challenge unrecorded)` and waits all the
 same), the pass credits nothing, and the throne's harness commissions the routed specialities at the
 end of its ask, from the challenge reserve, at most `gate.challenge_reviewers` at once. The
-throne's answer says each challenge it moved — pending, blocked, unstaffed, queued or cleared — and
-the landing counts as landed only once its challenge clears or the human waives it
+throne's answer says each challenge it moved — pending, verifying, blocked, unstaffed, queued or
+cleared — with each finding's verdict, and the landing counts as landed only once its challenge
+clears or the human waives it. A reviewer's finding of medium or higher is sent in the same sweep
+to a verifier of another speciality, given the record alone
 ([the challenge](02-races.md#-dark-elf--the-adversary)).
 
 The verdict goes to `log.md` through the append-only writer: one entry per verdict, stamped,

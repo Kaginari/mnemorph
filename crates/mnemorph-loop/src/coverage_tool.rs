@@ -255,6 +255,14 @@ pub(crate) fn run(
             ),
             ToolClass::Read,
         ),
+        Ok(Status::Verifying { findings }) => Outcome::ok(
+            format!(
+                "filed: {speciality}'s ledger for {landing} holds; {} finding(s) still wait on \
+                 their verifier's verdict",
+                findings.len()
+            ),
+            ToolClass::Read,
+        ),
         Ok(Status::Waived { .. }) => Outcome::ok(
             format!(
                 "filed: {speciality}'s ledger for {landing} holds; the human waived the challenge"

@@ -21,6 +21,7 @@ pub mod sequence;
 pub mod session;
 pub mod solo;
 pub mod stress;
+pub mod verdict_tool;
 pub mod verify_tool;
 pub mod wear_tool;
 
@@ -56,3 +57,4 @@ pub use sequence::validate;
 pub use session::{Queue, Session};
 pub use solo::{SOLO_PROMPT, configure, solo};
 pub use stress::{Bench, Read, Reading, Signal, Stress, bench_of, muted};
+pub use verdict_tool::{VERDICT, VerdictTool};

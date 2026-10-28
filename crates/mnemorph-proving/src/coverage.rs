@@ -308,13 +308,16 @@ impl Ran {
     }
 
     /// Whether `command` was run, and — with `sha256` — gave that output.
-    fn shows(&self, command: &str, sha256: Option<&str>) -> bool {
+    #[must_use]
+    pub fn shows(&self, command: &str, sha256: Option<&str>) -> bool {
         self.outputs.get(command.trim()).is_some_and(|hashes| {
             sha256.is_none_or(|h| hashes.iter().any(|o| o.eq_ignore_ascii_case(h)))
         })
     }
 
-    fn last(&self, command: &str) -> Option<&String> {
+    /// The hash of the last output `command` gave; `None` when it was never run.
+    #[must_use]
+    pub fn last(&self, command: &str) -> Option<&String> {
         self.outputs.get(command.trim()).and_then(|h| h.last())
     }
 }

@@ -1014,6 +1014,19 @@ fn full(r: &mnemorph_server::world::challenge::Record) -> String {
             Staff::Unstaffed => format!("  {s}: unstaffed — no body born"),
         });
     }
+    // A proposed seal is shown with its frozen witness: it is the human's to confirm.
+    for p in r.findings.iter().filter_map(|f| f.proposal.as_ref()) {
+        lines.push(format!(
+            "  seal proposed on `{}` (#{} {}), confirmed by {}: witness `{}` frozen at SHA-256 {} \
+             — nothing is sealed until the human confirms",
+            safe(&p.file),
+            safe(&p.fingerprint),
+            p.severity.word(),
+            safe(&p.verifier),
+            safe(&p.witness.reference),
+            safe(&p.witness.sha256)
+        ));
+    }
     lines.join("\n")
 }
 

@@ -654,7 +654,9 @@ fn is_sha256(hex: &str) -> bool {
     hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+/// The SHA-256 of `bytes`, in lowercase hex.
+#[must_use]
+pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .fold(String::with_capacity(64), |mut hex, b| {
