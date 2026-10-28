@@ -31,7 +31,8 @@ use crate::roster::Roster;
 pub mod verification;
 
 pub use mnemorph_ledger::{
-    Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW,
+    Ascension, Build, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW,
+    fold_findings_by_build,
 };
 pub use verification::{
     Decision, FLOOR, Filing, Finding, Found, Guard, Outcome, Pinned, Proposal, Rerun, Ruling,
@@ -437,9 +438,13 @@ enum Row {
         landing: String,
         blocker: Blocker,
     },
+    /// Found, ruled and decided rows settle a finding's standing — the value ledger's rows — and
+    /// carry the build that wrote them; a row from before stamps reads as `unknown`.
     Found {
         landing: String,
         found: Box<Found>,
+        #[serde(default)]
+        build: Build,
     },
     Assigned {
         landing: String,
@@ -449,6 +454,8 @@ enum Row {
     Ruled {
         landing: String,
         verification: Verification,
+        #[serde(default)]
+        build: Build,
     },
     Proposed {
         landing: String,
@@ -458,6 +465,8 @@ enum Row {
         landing: String,
         fingerprint: String,
         decision: Decision,
+        #[serde(default)]
+        build: Build,
     },
     Waived {
         landing: String,
@@ -475,8 +484,9 @@ struct Open {
     blockers: Vec<Blocker>,
     findings: Vec<Finding>,
     waived: Option<Waiver>,
-    /// Per fingerprint, the line of the record that last settled it: found, ruled or decided.
-    at: BTreeMap<String, u64>,
+    /// Per fingerprint, the line of the record that last settled it — found, ruled or decided —
+    /// and the build that wrote it.
+    at: BTreeMap<String, (u64, Build)>,
 }
 
 impl Open {
@@ -833,6 +843,7 @@ fn record_of(open: Open) -> Record {
 /// a routed speciality, the latest standing; a waiver only the human's, reasoned and bound to the
 /// opened tree; a decision on a finding only the human's, reasoned and bound to the opened tree,
 /// the latest standing. A line that does not parse — a torn write, a hand edit — counts for nothing.
+#[allow(clippy::too_many_lines)] // one arm per kind of row
 fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
     let mut all: BTreeMap<String, Open> = BTreeMap::new();
     for (n, line) in (0u64..).zip(bytes.split(|&b| b == b'\n')) {
@@ -870,11 +881,15 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                     open.blockers.push(blocker);
                 }
             }
-            Row::Found { landing, found } => {
+            Row::Found {
+                landing,
+                found,
+                build,
+            } => {
                 if let Some(open) = all.get_mut(&landing) {
                     let fp = found.fingerprint().to_owned();
                     if open.fold_found(*found) {
-                        open.at.insert(fp, n);
+                        open.at.insert(fp, (n, build));
                     }
                 }
             }
@@ -890,11 +905,12 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
             Row::Ruled {
                 landing,
                 verification,
+                build,
             } => {
                 if let Some(open) = all.get_mut(&landing) {
                     let fp = verification.fingerprint.clone();
                     if open.fold_ruled(verification) {
-                        open.at.insert(fp, n);
+                        open.at.insert(fp, (n, build));
                     }
                 }
             }
@@ -907,11 +923,12 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                 landing,
                 fingerprint,
                 decision,
+                build,
             } => {
                 if let Some(open) = all.get_mut(&landing)
                     && open.fold_decided(&fingerprint, decision)
                 {
-                    open.at.insert(fingerprint, n);
+                    open.at.insert(fingerprint, (n, build));
                 }
             }
             Row::Waived { landing, waiver } => {

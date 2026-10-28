@@ -105,7 +105,8 @@ impl Race {
 fn may_dispatch(from: Race, to: Race, ctx: &DispatchContext) -> Result<Route, Refusal>;
 fn check_class(race: Race, class: ToolClass) -> Result<(), ShelfRefusal>;
 fn score(race: Race, s: &Signals) -> f64;    // 0..=100
-fn meter(race: Race, s: &Signals) -> Meter;
+fn meter(race: Race, s: &Signals) -> Meter;  // its value, band and Rate (successes of n)
+fn wilson(successes: u32, n: u32, z: f64) -> Option<(f64, f64)>;  // shown, never judged on
 fn rises(risen: Race, window: &Signals) -> bool;
 fn falls(risen: Race, recent: &Recent) -> FallReading;   // Holds | Probation | Immediate
 fn recovers(risen: Race, since: &Recent) -> bool;
@@ -1008,6 +1009,11 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
     record under `.mnemorph/dark-elf/` or any file a body can write: records whose path lies inside
     the world are refused, not folded. Each row is held to the verification guards again as it is
     read, so a row forged into the records counts for nothing.
+  - **Each settling row carries its build** — the version and commit that wrote it, a row from
+    before stamps reading as `unknown` — and the fold counts findings by the build of the record
+    that settled each (`mnemorph_ledger::fold_findings_by_build` folds each build apart), so a
+    rate earned under old rules is told from one earned under new. The score reads every build.
+    `mnemorphd challenge score` shows each rate with its count and interval, and the builds.
   - **One root cause counts once.** Findings are deduplicated by fingerprint within a speciality,
     across landings. The fingerprint is line-free, so a finding filed again after its line moved,
     or confirmed on a later landing, is the same finding.
@@ -1162,6 +1168,13 @@ How a fall is read (`mnemorph-races`, `falls`):
   the meter is shown, never ranked.
 - **Every meter has an ok bar and a warn bar**: warn ≥ 70 for the Orc and the Kijin, whose acts
   reach the gate or the outside, and warn ≥ 50 for every other race; below warn it reads low.
+- **Every meter is shown with its count and its 95% interval**: its value, its `n` in the race's
+  own unit and its Wilson score interval (`wilson`, `Rate`) — `Upheld 0.85 (17/20, 95%
+  0.64–0.95)` — and `no reports` when `n` is zero. Eighteen of twenty is a lower bound near 0.70,
+  and none seen is never no risk: the interval says how far the record can be trusted.
+- **The interval is shown, never judged on.** Every bar — a meter's band, a rise, a fall, a
+  recovery — reads the point estimate, so a record exactly at a rise bar rises whatever its lower
+  bound. Judging on the lower bound would change the law; that is the human's decision to make.
 
 Rules that hold for every ascension:
 

@@ -27,7 +27,7 @@ use mnemorph_races::Speciality;
 use serde::{Deserialize, Serialize};
 
 use super::{Blocker, Challenges, HUMAN, Open, Opening, Refusal, Row, Staff, Status, reasoned};
-use mnemorph_ledger::{FindingRow, Standing};
+use mnemorph_ledger::{Build, FindingRow, Standing};
 
 /// The lowest severity a finding is verified at. Medium is where the contract first asks a
 /// finding's preconditions and reachability — what a verifier can try to refute — and where it
@@ -867,6 +867,7 @@ impl Challenges {
         held.append(&Row::Found {
             landing: landing.to_owned(),
             found: Box::new(found),
+            build: Build::this(),
         })?;
         Ok(status)
     }
@@ -967,6 +968,7 @@ impl Challenges {
         held.append(&Row::Ruled {
             landing: filing.landing.clone(),
             verification: v.clone(),
+            build: Build::this(),
         })?;
         let open = held
             .all
@@ -1062,6 +1064,7 @@ impl Challenges {
             landing: landing.to_owned(),
             fingerprint: fingerprint.to_owned(),
             decision,
+            build: Build::this(),
         })
     }
 
@@ -1074,12 +1077,16 @@ impl Challenges {
             .into_iter()
             .flat_map(|(id, open)| {
                 let at = open.at;
-                open.findings.into_iter().map(move |f| FindingRow {
-                    speciality: f.found.record.speciality.clone(),
-                    fingerprint: f.fingerprint().to_owned(),
-                    landing: id.clone(),
-                    standing: f.standing(),
-                    at: at.get(f.fingerprint()).copied().unwrap_or_default(),
+                open.findings.into_iter().map(move |f| {
+                    let (at, build) = at.get(f.fingerprint()).cloned().unwrap_or_default();
+                    FindingRow {
+                        speciality: f.found.record.speciality.clone(),
+                        fingerprint: f.fingerprint().to_owned(),
+                        landing: id.clone(),
+                        standing: f.standing(),
+                        at,
+                        build,
+                    }
                 })
             })
             .collect()

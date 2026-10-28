@@ -6127,3 +6127,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-10-28T03:22:15+01:00] rimuru — #259, Fable's review: what calibration sends, a SHA-256 Mind digest, #104's remainder named
 - **Done:** the recipe and docs 02 state that free models may log or train on prompts and exactly what travels (claims and the gold set's code, never the live tree; a Dark Elf's playbooks too), print it before sending, and say calibration has not run and measures claim-judging, not detection. A Mind's digest is the harness's SHA-256. Docs 02 name the unguarded `.mnemorph/minds/` writes and the missing owner field. `fp-configured-budget` reads its figure from config only.
 - **Learned:** a "configured" false positive must show no default in its code, or the label lies.
+
+---
+
+### [2026-10-28T09:05:06+01:00] rimuru — #98 and #105: meters show their count and 95% interval; value rows carry their build
+- **Done:** `mnemorph_races::wilson(successes, n, z)` and `Rate` (successes of n): every meter
+  carries its rate and prints as `Upheld 0.85 (17/20, 95% 0.64–0.95)`, `no reports` at n = 0.
+  `mnemorphd challenge score` shows precision, the upheld meter, the last ten and the
+  `cannot-verify` rate that way, and the builds the findings were settled under. Showing only:
+  every bar still reads the point estimate. The build stamp moved from `mnemorphd`'s build script
+  to `mnemorph-ledger` (`Build::this`), and `--version` and the server's hello read it from
+  there, so `status` and the rows can never print different builds. Found, ruled and decided
+  challenge rows carry `build: { version, commit }`; old rows read `unknown`; `FindingRow` and
+  `SpecialityFold.builds` carry it, and `fold_findings_by_build` folds each build apart. The
+  calibration support's Wilson now calls the race law's. Docs 02, 05, 06.
+- **Tests:** Wilson's known values (18/20 → 0.699–0.972, 0/10, 10/10, 5/10, n = 0, k > n, a wider
+  z); the display strings with n and with none; a Named Slime at exactly 18/20 rises though its
+  lower bound is 0.70; a Dark Elf rise proposed while precision's lower bound (0.84) is under its
+  85 bar; stamped rows carry `--version`'s build, the same rows unstamped read `unknown`, and a
+  later decision splits the fold by build. mnemorph-races at 100% regions.
+- **Learned:** there were no value or evolution rows in `mnemorph-ledger` to stamp: the value
+  ledger's rows are the challenge records' settling rows in `mnemorph-world`, and evolution rows
+  are M11's. Open (@?): the challenge rows deny unknown fields, so a binary from before this change
+  skips a stamped row instead of folding it — a downgrade reads fewer findings.

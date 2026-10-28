@@ -2,8 +2,9 @@
 //! under and just over its threshold.
 
 use mnemorph_races::{
-    Band, DispatchContext, FallReading, OutwardKind, Post, RECOVER_REPORTS, Race, Recent, Refusal,
-    Route, Signals, check_post, falls, may_dispatch, meter, recovers, rises, score,
+    Band, DispatchContext, FallReading, OutwardKind, Post, RECOVER_REPORTS, Race, Rate, Recent,
+    Refusal, Route, Signals, Z95, check_post, falls, may_dispatch, meter, recovers, rises, score,
+    wilson,
 };
 
 const ALL_TRUE: DispatchContext = DispatchContext {
@@ -809,4 +810,75 @@ fn a_post_holds_only_its_acts() {
         assert!(e.to_string().contains("holds no kijin post"), "{e}");
         assert!(e.to_string().contains("every kijin post holds it"), "{e}");
     }
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() < 5e-4
+}
+
+/// The Wilson interval against known values: 18 of 20 is 0.699–0.972; none of ten still leaves
+/// risk above zero; all of ten is short of one below and exactly one above; no trial, none.
+#[test]
+fn wilson_known_values_and_edges() {
+    let (lo, hi) = wilson(18, 20, Z95).unwrap();
+    assert!(near(lo, 0.6990) && near(hi, 0.9721), "{lo} {hi}");
+    let (lo, hi) = wilson(0, 10, Z95).unwrap();
+    assert!(lo == 0.0 && near(hi, 0.2775), "{lo} {hi}");
+    let (lo, hi) = wilson(10, 10, Z95).unwrap();
+    assert!(near(lo, 0.7225) && (hi - 1.0).abs() < 1e-12, "{lo} {hi}");
+    let (lo, hi) = wilson(5, 10, Z95).unwrap();
+    assert!(near(lo, 0.2366) && near(hi, 0.7634), "{lo} {hi}");
+    assert_eq!(wilson(0, 0, Z95), None);
+    // Successes past n count as n; a wider z widens the interval.
+    assert_eq!(wilson(12, 10, Z95), wilson(10, 10, Z95));
+    let (wide, _) = wilson(18, 20, 2.576).unwrap();
+    assert!(wide < 0.6990);
+}
+
+/// A meter is shown with its value, its count and its interval; with no record, `no reports`.
+#[test]
+fn meters_show_their_count_and_interval() {
+    assert_eq!(Rate::of(18, 20).to_string(), "0.90 (18/20, 95% 0.70–0.97)");
+    assert_eq!(Rate::of(0, 3).to_string(), "0.00 (0/3, 95% 0.00–0.56)");
+    assert_eq!(Rate::of(0, 0).to_string(), "no reports");
+    assert_eq!(Rate::default().value(), None);
+    assert_eq!(Rate::of(4, 3).value(), Some(1.0));
+    let s = Signals {
+        reports: 20,
+        land_rate: 90.0,
+        ..Signals::default()
+    };
+    let m = meter(Race::Slime, &s);
+    assert_eq!(m.rate, Rate::of(18, 20));
+    assert_eq!(m.to_string(), "Landed 0.90 (18/20, 95% 0.70–0.97)");
+    // A Dark Elf counts findings: a third upheld of three is one.
+    let d = meter(
+        Race::DarkElf,
+        &Signals {
+            findings: 3,
+            upheld_rate: 100.0 / 3.0,
+            ..Signals::default()
+        },
+    );
+    assert_eq!(d.rate, Rate::of(1, 3));
+    assert_eq!(
+        meter(Race::Slime, &Signals::default()).to_string(),
+        "Landed no reports"
+    );
+}
+
+/// Showing only: a Named Slime at exactly its bars on the point estimate — 18 of 20 landed —
+/// rises, though its interval's lower bound (0.70) is far under the 90 bar.
+#[test]
+fn the_interval_never_moves_a_bar() {
+    let s = Signals {
+        reports: 20,
+        land_rate: 90.0,
+        gate_rate: 90.0,
+        hole_rate: 5.0,
+        ..Signals::default()
+    };
+    let (lo, _) = meter(Race::Slime, &s).rate.interval().unwrap();
+    assert!(lo * 100.0 < 90.0);
+    assert!(rises(Race::NamedSlime, &s));
 }

@@ -8,7 +8,7 @@ use mnemorph_proving::{
     sha256_hex,
 };
 
-use super::super::{Challenges, Opening, Refusal, Row, Staff, Status, route};
+use super::super::{Build, Challenges, Opening, Refusal, Row, Staff, Status, route};
 use super::{Decision, Filing, Found, Guard, Pinned, Rerun, Ruling};
 use crate::roster::Roster;
 
@@ -391,6 +391,7 @@ fn only_a_re_run_of_the_witness_confirms() {
     let row = Row::Ruled {
         landing: k.id.clone(),
         verification: forged,
+        build: Build::default(),
     };
     writeln!(file, "{}", serde_json::to_string(&row).unwrap()).unwrap();
     drop(file);
@@ -701,6 +702,7 @@ fn the_fold_checks_every_verification_row_again() {
         Row::Ruled {
             landing: k.id.clone(),
             verification: forged.clone(),
+            build: Build::default(),
         },
         Row::Proposed {
             landing: k.id.clone(),
@@ -724,6 +726,7 @@ fn the_fold_checks_every_verification_row_again() {
                     mnemorph_wire::fingerprint(FINDER, "path-traversal", FILE, "other").unwrap();
                 low
             }),
+            build: Build::default(),
         },
     ];
     for row in &rows {
@@ -751,6 +754,7 @@ fn the_fold_checks_every_verification_row_again() {
         line(&Row::Ruled {
             landing: k.id.clone(),
             verification: forged,
+            build: Build::default(),
         })
     )
     .unwrap();
@@ -884,6 +888,64 @@ fn the_ledger_folds_the_verdicts() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Every row that settles a finding carries the build that wrote it, the one `status` prints; a
+/// row written before rows were stamped reads as `unknown`, and a fold by build keeps the two
+/// apart.
+#[test]
+fn settling_rows_carry_their_build() {
+    let dir = temp("ledger-build");
+    let file = dir.join("challenges.jsonl");
+    let c = Challenges::at(&file);
+    open_landing(&c, "run-1:1");
+    let fp = found_and_ruled(
+        &c,
+        "run-1:1",
+        found_on("a", Severity::High),
+        Some(confirmed(Severity::High)),
+    );
+    found_and_ruled(&c, "run-1:1", found_on("b", Severity::Medium), None);
+    let this = Build::this();
+    let rows = c.finding_rows();
+    assert!(rows.iter().all(|r| r.build == this), "{rows:?}");
+    let text = std::fs::read_to_string(&file).unwrap();
+    let stamped: Vec<&str> = text
+        .lines()
+        .filter(|l| l.contains(r#""row":"found""#) || l.contains(r#""row":"ruled""#))
+        .collect();
+    assert_eq!(stamped.len(), 3);
+    for l in &stamped {
+        let v: serde_json::Value = serde_json::from_str(l).unwrap();
+        assert_eq!(v["build"]["version"], this.version.as_str());
+        assert_eq!(v["build"]["commit"], this.commit.as_str());
+    }
+    // The same records as an older build wrote them, with no stamp: `unknown`.
+    let mut old = String::new();
+    for l in text.lines() {
+        let mut v: serde_json::Value = serde_json::from_str(l).unwrap();
+        if let Some(o) = v.as_object_mut() {
+            o.remove("build");
+        }
+        old.push_str(&v.to_string());
+        old.push('\n');
+    }
+    std::fs::write(&file, old).unwrap();
+    let rows = c.finding_rows();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.build == Build::default()));
+    assert_eq!(harness_of(&c).upheld, 1, "an unstamped row still folds");
+    // A later decision under this build settles `a` again: the fold tells the builds apart.
+    let reason = "the fix proved the read escaped the grant";
+    c.decide("run-1:1", &fp, &Decision::human(true, reason).unwrap())
+        .unwrap();
+    let f = harness_of(&c);
+    assert_eq!(f.builds[&this], 1);
+    assert_eq!(f.builds[&Build::default()], 1);
+    let by = super::super::fold_findings_by_build(&c.finding_rows());
+    assert_eq!(by[&this][FINDER].upheld, 1);
+    assert_eq!(by[&Build::default()][FINDER].unverified, 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// One root cause found on two landings — refuted on the first, confirmed on the second after
 /// its line moved — counts once, upheld: the fingerprint is line-free.
 #[test]
@@ -978,6 +1040,7 @@ fn the_human_decides_what_a_verifier_cannot() {
             landing: "run-1:1".into(),
             fingerprint: fp.clone(),
             decision,
+            build: Build::default(),
         };
         writeln!(f, "{}", serde_json::to_string(&row).unwrap()).unwrap();
     }

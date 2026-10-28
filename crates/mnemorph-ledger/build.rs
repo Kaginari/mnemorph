@@ -1,4 +1,5 @@
-//! Stamps the build's commit into the version, so a stale binary is never judged as the new one.
+//! Stamps the build's commit, so a stale binary is never judged as the new one and every value
+//! row carries the build that wrote it.
 
 use std::process::Command;
 

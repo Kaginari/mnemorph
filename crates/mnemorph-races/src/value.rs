@@ -2,6 +2,11 @@
 //!
 //! Every input is a [`Signals`] fold the ledger computes; nothing here asks a model. Rates are
 //! percentages, `0.0..=100.0`.
+//!
+//! A meter is shown with its count and its 95% Wilson interval ([`wilson`], [`Rate`]); the bars
+//! that decide a rise or a fall read the point estimate, never the interval.
+
+use std::fmt;
 
 use crate::Race;
 
@@ -96,6 +101,73 @@ pub enum Band {
     Unranked,
 }
 
+/// The z of a two-sided 95% interval.
+pub const Z95: f64 = 1.96;
+
+/// The Wilson score interval of `successes` in `n` trials at `z`, as proportions `(lo, hi)`
+/// within `0.0..=1.0`; `None` with no trial. Successes past `n` count as `n`. Zero successes
+/// still give an upper bound over zero: no event seen is never no risk.
+#[must_use]
+pub fn wilson(successes: u32, n: u32, z: f64) -> Option<(f64, f64)> {
+    if n == 0 {
+        return None;
+    }
+    let n = f64::from(n);
+    let p = f64::from(successes).min(n) / n;
+    let z2 = z * z;
+    let centre = p + z2 / (2.0 * n);
+    let half = z * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
+    let scale = 1.0 + z2 / n;
+    Some((
+        ((centre - half) / scale).max(0.0),
+        ((centre + half) / scale).min(1.0),
+    ))
+}
+
+/// A rate as its counts: `successes` of `n`. Shown as its proportion, its counts and its 95%
+/// Wilson interval — `0.90 (18/20, 95% 0.70–0.97)` — or `no reports` when `n` is zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Rate {
+    /// What succeeded.
+    pub successes: u32,
+    /// Of how many.
+    pub n: u32,
+}
+
+impl Rate {
+    /// `successes` of `n`.
+    #[must_use]
+    pub fn of(successes: u32, n: u32) -> Rate {
+        Rate { successes, n }
+    }
+
+    /// The point estimate, a proportion; `None` with no trial.
+    #[must_use]
+    pub fn value(&self) -> Option<f64> {
+        (self.n > 0).then(|| f64::from(self.successes.min(self.n)) / f64::from(self.n))
+    }
+
+    /// The 95% Wilson interval; `None` with no trial.
+    #[must_use]
+    pub fn interval(&self) -> Option<(f64, f64)> {
+        wilson(self.successes, self.n, Z95)
+    }
+}
+
+impl fmt::Display for Rate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.value(), self.interval()) {
+            (Some(p), Some((lo, hi))) => write!(
+                f,
+                "{p:.2} ({}/{}, 95% {lo:.2}–{hi:.2})",
+                self.successes.min(self.n),
+                self.n
+            ),
+            _ => f.write_str("no reports"),
+        }
+    }
+}
+
 /// One race's headline reading.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Meter {
@@ -105,6 +177,16 @@ pub struct Meter {
     pub value: f64,
     /// Its band.
     pub band: Band,
+    /// The reading as counts over the race's own unit (reports; findings for a Dark Elf,
+    /// outward acts for a Kijin), for its interval: shown, never judged on.
+    pub rate: Rate,
+}
+
+impl fmt::Display for Meter {
+    /// `Upheld 0.85 (17/20, 95% 0.64–0.95)`, or `Upheld no reports`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.label, self.rate)
+    }
 }
 
 /// The race's meter over `s`.
@@ -132,7 +214,20 @@ pub fn meter(race: Race, s: &Signals) -> Meter {
     } else {
         Band::Low
     };
-    Meter { label, value, band }
+    // The successes the percentage stands for over the record: exact when the fold's rate is
+    // over the same unit.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to 0..=record first"
+    )]
+    let successes = (value.clamp(0.0, 100.0) * f64::from(record) / 100.0).round() as u32;
+    Meter {
+        label,
+        value,
+        band,
+        rate: Rate::of(successes, record),
+    }
 }
 
 /// Whether a body of `risen`'s base race has earned `risen` over the window (the 28-day

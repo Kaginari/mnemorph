@@ -83,13 +83,11 @@ Options:
   -V, --version   the version
 ";
 
-/// The version and the commit it was built from: `0.0.0 (a1b2c3d4e5)`.
-const VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("MNEMORPH_COMMIT"),
-    ")"
-);
+/// The version and the commit it was built from: `0.0.0 (a1b2c3d4e5)` — the build every value row
+/// it writes carries.
+fn version() -> String {
+    mnemorph_server::world::challenge::Build::this().to_string()
+}
 
 fn main() -> ExitCode {
     let mut world = None;
@@ -99,7 +97,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if all.iter().any(|a| a == "-V" || a == "--version") {
-        println!("mnemorphd {VERSION}");
+        println!("mnemorphd {}", version());
         return ExitCode::SUCCESS;
     }
     if all.first().map(String::as_str) == Some("onto") {
@@ -136,7 +134,7 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-V" | "--version" => {
-                println!("mnemorphd {VERSION}");
+                println!("mnemorphd {}", version());
                 return ExitCode::SUCCESS;
             }
             "--world" => match args.next() {
@@ -164,7 +162,7 @@ fn main() -> ExitCode {
         Some(run) => mnemorph_server::resumer(world, run),
         None => mnemorph_server::opener(world),
     };
-    match mnemorph_server::serve(input, std::io::stdout(), VERSION, opener) {
+    match mnemorph_server::serve(input, std::io::stdout(), &version(), opener) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&e),
     }
@@ -1067,15 +1065,16 @@ fn decide(
     }
 }
 
-/// Each speciality's value ledger, as `challenge score` says it, escaped: the counts, precision,
-/// the upheld rate on the race's meter, the last ten, and what is proposed to the human.
+/// Each speciality's value ledger, as `challenge score` says it, escaped: the counts; precision,
+/// the upheld rate on the race's meter, the last ten and the `cannot-verify` rate, each with its
+/// count and 95% interval; the builds its findings were settled under; and what is proposed to
+/// the human.
 fn score(
     folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
     roster: &mnemorph_server::world::Roster,
 ) -> Vec<String> {
     use mnemorph_server::world::challenge::Ascension;
     let safe = mnemorph_server::challenge::safe;
-    let pct = |p: Option<f64>| p.map_or_else(|| "—".to_owned(), |p| format!("{p:.0}%"));
     if folded.is_empty() {
         return vec!["no Dark Elf finding is on record".to_owned()];
     }
@@ -1100,17 +1099,25 @@ fn score(
         ));
         let m = f.meter();
         lines.push(format!(
-            "  precision {} · {} {} ({}) · last {} settled: precision {} · last {} filed: \
-             cannot-verify {}",
-            pct(f.precision()),
+            "  precision {} · {} {} ({})",
+            f.precision_rate(),
             m.label.to_lowercase(),
-            pct(f.upheld_rate()),
+            m.rate,
             format!("{:?}", m.band).to_lowercase(),
-            f.recent.len(),
-            pct(f.recent_precision()),
-            f.last_filed,
-            pct(f.cannot_verify_rate())
         ));
+        lines.push(format!(
+            "  last {} settled: precision {} · last {} filed: cannot-verify {}",
+            f.recent.len(),
+            f.recent_rate(),
+            f.last_filed,
+            f.cannot_verify_counts()
+        ));
+        let builds: Vec<String> = f
+            .builds
+            .iter()
+            .map(|(b, n)| format!("{} {n}", safe(&b.to_string())))
+            .collect();
+        lines.push(format!("  settled under: {}", builds.join(" · ")));
         if let Some(a) = form.and_then(|r| f.proposal(r)) {
             let what = match a {
                 Ascension::Rise => "rise to Arch Dark Elf",
