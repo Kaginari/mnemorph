@@ -8,8 +8,6 @@
 
 use std::path::Path;
 
-use mnemorph_wire::fnv64a;
-
 use crate::Roster;
 
 /// A Mind costing more than this, in tokens, is heavy: worn by a body below, never by a throne
@@ -32,10 +30,10 @@ pub struct Mind {
 }
 
 impl Mind {
-    /// The digest of its text: the 64-bit FNV-1a of its bytes, in hex.
+    /// The digest of its text: the SHA-256 of its bytes, in hex, computed by the harness.
     #[must_use]
     pub fn digest(&self) -> String {
-        format!("{:016x}", fnv64a(self.text.as_bytes()))
+        mnemorph_proving::sha256_hex(self.text.as_bytes())
     }
 
     /// Exactly what wearing it injects: its source — the doc and the digest of the bytes worn —
@@ -43,7 +41,7 @@ impl Mind {
     #[must_use]
     pub fn injected(&self) -> String {
         format!(
-            "The Mind `{}` ({}, fnv64a {}), worn:\n\n{}",
+            "The Mind `{}` ({}, sha256 {}), worn:\n\n{}",
             self.name,
             self.doc,
             self.digest(),
@@ -262,11 +260,11 @@ mod tests {
         let before = load(&w).remove(1);
         assert_eq!(
             before.digest(),
-            format!("{:016x}", super::fnv64a(before.text.as_bytes()))
+            mnemorph_proving::sha256_hex(before.text.as_bytes())
         );
         assert!(
             before.injected().starts_with(&format!(
-                "The Mind `release` (.mnemorph/minds/release.md, fnv64a {}), worn:",
+                "The Mind `release` (.mnemorph/minds/release.md, sha256 {}), worn:",
                 before.digest()
             )),
             "{}",

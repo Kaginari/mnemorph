@@ -780,8 +780,10 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
      - **Mind provenance** (`ledger-integrity`). A Mind is know-how, never law: the playbooks are
        compiled in, and what wearing a Mind injects names its doc and the digest of the bytes
        worn. A Mind marked `- **Retired:** yes` — outworn, or found poisoned — no longer loads
-       ([the toolbox](08-memory.md#the-toolbox)). The audit asks whether a body that writes
-       `.mnemorph/minds/` could un-retire one unseen. Witnessed by `a_retired_mind_never_loads`
+       ([the toolbox](08-memory.md#the-toolbox)). Not yet held: no guard covers writes under
+       `.mnemorph/minds/`, so a body whose soil holds it can retire or un-retire a Mind; a Mind
+       names no owner of its own (who wears it is read from the docs' Minds fields); and no
+       Arch Dark Elf campaign exists yet to stop. The audit asks each of these again. Witnessed by `a_retired_mind_never_loads`
        and `a_worn_mind_names_its_source`.
 - **Shelf.** `read`, scanners in the sandbox without network, `write` only in its proving ground
   `.mnemorph/dark-elf/` (self-gated), the `coverage` tool to file its ledger, the `verdict` tool to
@@ -1051,7 +1053,13 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   family, recall and precision over the cases judged, coverage with abstentions and failed calls
   apart, false accepts and false rejects with 95% Wilson intervals, severity agreement, and how
   often the panel's models split. Like the paid evaluation it is an ignored test on free
-  OpenRouter models by default, its key only in `OPENROUTER_API_KEY`. With no model,
+  OpenRouter models by default, its key only in `OPENROUTER_API_KEY`. Free models may log or train
+  on their prompts, so what travels is stated, and the recipe prints it before anything is sent:
+  in every mode, each case's claim and code — the seeded fixture's files and `gold.toml`'s
+  reconstructions of the flawed shapes, never the live tree; in Dark Elf mode, also the compiled
+  playbooks its `brief` loads for the case's file; in `fable` mode, nothing more. It measures how
+  a reviewer judges a stated claim on the gold set, not how it finds flaws in a live repository,
+  and it has not yet been run. With no model,
   `mnemorph-proving`'s `calibrate` tests hold the set — its labels to the class table and the
   Regression lines, the prompt carrying the case and never its answer — and the scorer to numbers
   worked out by hand.

@@ -473,7 +473,7 @@ Know-how a body may load, in two levels, priced by exactly what each injects:
   `@T mind:<name> — <what it is for> (~<tokens> tokens)`. It rides the changing tail, never the
   tool definitions, so the cached prefix holds whatever Minds the world has.
 - **Level two, wearing.** The `wear` tool, on every body's shelf, injects the Mind's whole text,
-  headed by its source — its doc and the FNV-1a digest of the bytes worn — so a worn Mind is
+  headed by its source — its doc and the SHA-256 of the bytes worn, computed by the harness — so a worn Mind is
   traced to them, and a changed one reads as another; the manifest's price is that injected text at four bytes a token, and the ledger counts the
   real tokens once it is worn. A worn Mind cannot be unloaded, so a throne that can hand work down
   never wears one over 2,000 tokens: the body below that needs it wears it and dies with its

@@ -295,12 +295,12 @@ speciality = "dark-elf-law"
 class = "resource-exhaustion"
 file = "crates/mnemorph-loop/src/budget.rs"
 symbol = "pool"
-claim = "pool lets a session spend two million weighted tokens, an unbounded cost"
-reason = "the figure is the human's configured budget, enforced before each spend: a cost the human configured"
+claim = "pool lets a session spend whatever session_wt says, an unbounded cost"
+reason = "the figure is read only from the human's config, with no default, and enforced before each spend: a cost the human configured"
 code = """
-fn pool(config: &Config) -> u64 {
-    // `[budget] session_wt` in the human's config.
-    config.budget.session_wt.unwrap_or(2_000_000)
+/// `[budget] session_wt` in the human's config; a session without one does not start.
+fn pool(config: &Config) -> Result<u64, ConfigError> {
+    config.budget.session_wt.ok_or(ConfigError::Missing("budget.session_wt"))
 }
 """
 

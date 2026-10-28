@@ -6092,3 +6092,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   Arch Dark Elf's campaigns do not exist yet, so their stop is a checklist line with no test; a
   retirement written in the Mind's own file can be undone by whoever writes it — revocation held
   outside the world remains.
+
+---
+
+### [2026-10-28T03:22:15+01:00] rimuru — #259, Fable's review: what calibration sends, a SHA-256 Mind digest, #104's remainder named
+- **Done:** the recipe and docs 02 state that free models may log or train on prompts and exactly what travels (claims and the gold set's code, never the live tree; a Dark Elf's playbooks too), print it before sending, and say calibration has not run and measures claim-judging, not detection. A Mind's digest is the harness's SHA-256. Docs 02 name the unguarded `.mnemorph/minds/` writes and the missing owner field. `fp-configured-budget` reads its figure from config only.
+- **Learned:** a "configured" false positive must show no default in its code, or the label lies.
