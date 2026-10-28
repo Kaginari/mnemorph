@@ -16,7 +16,8 @@
 //!   witness frozen by hash ([`Challenges::propose`]); nothing here applies one — a seal is the
 //!   human's.
 //! - Every confirmed and refuted verdict is a row a precision fold reads per finder speciality
-//!   ([`Challenges::outcomes`]).
+//!   ([`Challenges::outcomes`]); every finding, with its verdict and the human's decision on it
+//!   ([`Decision`]), is a row of its speciality's value ledger ([`Challenges::finding_rows`]).
 
 use std::fmt;
 
@@ -25,7 +26,8 @@ use mnemorph_proving::{FindingRecord, Severity, Witness, WitnessKind, World, sha
 use mnemorph_races::Speciality;
 use serde::{Deserialize, Serialize};
 
-use super::{Blocker, Challenges, Open, Opening, Refusal, Row, Staff, Status, reasoned};
+use super::{Blocker, Challenges, HUMAN, Open, Opening, Refusal, Row, Staff, Status, reasoned};
+use mnemorph_ledger::{FindingRow, Standing};
 
 /// The lowest severity a finding is verified at. Medium is where the contract first asks a
 /// finding's preconditions and reachability — what a verifier can try to refute — and where it
@@ -204,6 +206,8 @@ pub struct Finding {
     pub verdict: Option<Verification>,
     /// Its seal proposal, once made.
     pub proposal: Option<Proposal>,
+    /// The human's decision on it, once given: the latest stands.
+    pub decision: Option<Decision>,
 }
 
 impl Finding {
@@ -213,6 +217,30 @@ impl Finding {
             staff: None,
             verdict: None,
             proposal: None,
+            decision: None,
+        }
+    }
+
+    /// Where it stands in its speciality's value ledger: the human's decision when given, else
+    /// its verdict — a critical its verifier refuted is held for the human, neither upheld nor
+    /// refuted until decided.
+    #[must_use]
+    pub fn standing(&self) -> Standing {
+        if let Some(d) = &self.decision {
+            return if d.upheld {
+                Standing::Upheld
+            } else {
+                Standing::Dismissed
+            };
+        }
+        match self.verdict.as_ref().map(|v| &v.ruling) {
+            None => Standing::Unverified,
+            Some(Ruling::Confirmed { .. }) => Standing::Confirmed,
+            Some(Ruling::CannotVerify { .. }) => Standing::CannotVerify,
+            Some(Ruling::Refuted { .. }) if self.found.severity() == Severity::Critical => {
+                Standing::Held
+            }
+            Some(Ruling::Refuted { .. }) => Standing::Refuted,
         }
     }
 
@@ -291,6 +319,62 @@ impl Finding {
             claim: self.found.record.claim.clone(),
             standing,
         }
+    }
+}
+
+/// The human's decision on one finding, for its speciality's value ledger: it holds — confirmed,
+/// or proven by its fix — and counts upheld, or it is a false positive and counts refuted. It lifts
+/// no block: a waiver or the fix does that. Only [`Decision::human`] makes one, and the records
+/// keep it only with a reason that says something, bound to the tree the challenge was opened on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Decision {
+    by: String,
+    upheld: bool,
+    reason: String,
+    #[serde(default)]
+    tree: String,
+}
+
+impl Decision {
+    /// The human's decision: `upheld`, or a false positive. Refused inside a body's command
+    /// (`MNEMORPH_BODY` is set there): a body never scores a finding.
+    ///
+    /// # Errors
+    ///
+    /// A body asks, or the reason says nothing (under 20 characters, a stock phrase, an
+    /// unreadable character, over 1 KiB).
+    pub fn human(upheld: bool, reason: &str) -> Result<Decision, Refusal> {
+        if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+            return Err(Refusal::NotHuman(body.to_string_lossy().into_owned()));
+        }
+        let reason = reason.trim();
+        if !reasoned(reason) {
+            return Err(Refusal::Unreasoned);
+        }
+        Ok(Decision {
+            by: HUMAN.to_owned(),
+            upheld,
+            reason: reason.to_owned(),
+            tree: String::new(),
+        })
+    }
+
+    /// Whether the human upheld it; else it is a false positive.
+    #[must_use]
+    pub fn upheld(&self) -> bool {
+        self.upheld
+    }
+
+    /// Why.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// Whether the records keep it for a challenge opened on `tree`.
+    fn holds(&self, tree: &str) -> bool {
+        self.by == HUMAN && reasoned(&self.reason) && self.tree == tree
     }
 }
 
@@ -693,10 +777,13 @@ impl Open {
             .collect()
     }
 
-    pub(super) fn fold_found(&mut self, found: Found) {
-        if self.finding(found.fingerprint()).is_none() && found_breaks(&found, None).is_empty() {
+    pub(super) fn fold_found(&mut self, found: Found) -> bool {
+        let kept =
+            self.finding(found.fingerprint()).is_none() && found_breaks(&found, None).is_empty();
+        if kept {
             self.findings.push(Finding::new(found));
         }
+        kept
     }
 
     pub(super) fn fold_assigned(&mut self, fingerprint: &str, staff: Staff) {
@@ -708,7 +795,7 @@ impl Open {
         }
     }
 
-    pub(super) fn fold_ruled(&mut self, v: Verification) {
+    pub(super) fn fold_ruled(&mut self, v: Verification) -> bool {
         let opening = self.opening.clone();
         if let Some(f) = self.finding_mut(&v.fingerprint)
             && v.finder == f.found.finder
@@ -716,7 +803,20 @@ impl Open {
             && verdict_breaks(f, &opening, &v, None, None).is_empty()
         {
             f.verdict = Some(v);
+            return true;
         }
+        false
+    }
+
+    pub(super) fn fold_decided(&mut self, fingerprint: &str, d: Decision) -> bool {
+        let tree = self.opening.tree.clone();
+        if let Some(f) = self.finding_mut(fingerprint)
+            && d.holds(&tree)
+        {
+            f.decision = Some(d);
+            return true;
+        }
+        false
     }
 
     pub(super) fn fold_proposed(&mut self, p: Proposal) {
@@ -931,6 +1031,58 @@ impl Challenges {
             proposal: p.clone(),
         })?;
         Ok(p)
+    }
+
+    /// Records the human's decision on `fingerprint`, a finding of `landing`, bound to the tree its
+    /// challenge was opened on; the latest stands. It lifts no block.
+    ///
+    /// # Errors
+    ///
+    /// No such open landing or finding, or records that cannot be kept.
+    pub fn decide(
+        &self,
+        landing: &str,
+        fingerprint: &str,
+        decision: &Decision,
+    ) -> Result<(), Refusal> {
+        let mut held = self.hold()?;
+        let open = held
+            .all
+            .get(landing)
+            .ok_or_else(|| Refusal::NoSuchLanding(landing.to_owned()))?;
+        if open.finding(fingerprint).is_none() {
+            return Err(Refusal::NoSuchLanding(format!("{landing} #{fingerprint}")));
+        }
+        let mut decision = decision.clone();
+        decision.tree.clone_from(&open.opening.tree);
+        if !decision.holds(&open.opening.tree) {
+            return Err(Refusal::Unreasoned);
+        }
+        held.append(&Row::Decided {
+            landing: landing.to_owned(),
+            fingerprint: fingerprint.to_owned(),
+            decision,
+        })
+    }
+
+    /// Every finding the records keep, each landing's with where it stands and the order of the
+    /// record that settled it: the rows the Dark Elf's value ledger folds per speciality
+    /// ([`mnemorph_ledger::fold_findings`]).
+    #[must_use]
+    pub fn finding_rows(&self) -> Vec<FindingRow> {
+        self.read()
+            .into_iter()
+            .flat_map(|(id, open)| {
+                let at = open.at;
+                open.findings.into_iter().map(move |f| FindingRow {
+                    speciality: f.found.record.speciality.clone(),
+                    fingerprint: f.fingerprint().to_owned(),
+                    landing: id.clone(),
+                    standing: f.standing(),
+                    at: at.get(f.fingerprint()).copied().unwrap_or_default(),
+                })
+            })
+            .collect()
     }
 
     /// Every confirmed and refuted verdict the records keep, landing by landing: the rows a
