@@ -5974,3 +5974,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   body-refusals of a waiver mask each other: only both off fails).
 - **Learned:** a guard duplicated across a door and its library is invisible to a disable check
   of either alone; say so instead of pretending each is tested.
+
+---
+
+### [2026-10-28T01:01:21+01:00] rimuru — #255, Fable's review: the challenge fails closed and credits nothing while open
+- **Done:** a routed landing whose challenge cannot be recorded is `PASS (challenge unrecorded)`,
+  uncredited; large landings keep a 256-path sample with count and hash, so no row overflows; a
+  pending pass sets no checked proof and the dispatcher's report says "written, not landed"; the
+  author and its chain neither review nor file; paths, names, claims and reasons escaped in asks,
+  answers, CLI and TUI; open challenges said every answer, unfiled reviewers resent after 3
+  sweeps; the waiver's `y` is read at `/dev/tty`, piped input refused. Docs 02, 03.
+- **Tests:** unrecorded and 10k-path landings, no checked proof while pending, the Orc's report,
+  author/chain filing and review, hostile path and claim, resend, waive at a pty (`script`) and
+  refused piped. Each guard disabled fails its test; `is_terminal` alone is masked by `/dev/tty`.
+- **Learned:** never `git checkout -- file` to undo a mutation over uncommitted work: commit first.

@@ -677,14 +677,24 @@ class on the same paths.
 1. **Opening.** When the end gate passes a change of any body's — solo, or a commissioned
    creature's — its changed paths are routed; a landing routed to any speciality opens a
    challenge in the harness's records, with the SHA-256 of its tree (each written path and its
-   bytes) and its author. The gate's verdict is journaled `PASS (challenge pending)`, and the
-   pass credits nothing: the landing does not count as landed while its challenge is open.
+   bytes), its author and the chain above it. A landing of more than 256 paths, or 64 KiB of
+   them, keeps a sample — its routed paths first — with the count and the SHA-256 of them all, so
+   its record always fits. The gate's verdict is journaled `PASS (challenge pending)`, and the
+   pass credits nothing: no checked proof for the body's claims, and its dispatcher's report says
+   the paths were written, not landed, until its challenge settles. Opening fails closed: a routed
+   landing whose challenge cannot be recorded — no state directory, a disk or lock error, a
+   refusal — is journaled `PASS (challenge unrecorded)`, credits nothing all the same, and is
+   said as written and not landed.
 2. **Staffing.** At the end of each answered ask of the throne, the harness sweeps every open
    challenge. Each routed speciality is reviewed by the living Dark Elf that bears its name
-   (`dark-elf-harness`; the plain `dark-elf` for the generalist), never the landing's author, and
-   only the throne sends it — never the Orc whose domain the landing is, nor any body between.
+   (`dark-elf-harness`; the plain `dark-elf` for the generalist) — never the landing's author nor
+   a body above it, and none of them may file its ledger — and only the throne sends it — never the Orc whose domain the landing is, nor any body between.
    The reviewer's ask carries the landing, its written paths, its routed surfaces and its
-   speciality's playbooks for those paths (`brief`; the generalist's chains brief).
+   speciality's playbooks for those paths (`brief`; the generalist's chains brief). Every path,
+   name, claim and reason a model chose is escaped where it is embedded or shown — control and
+   invisible characters, backslashes and backticks — in the ask, the throne's answer, the CLI and
+   the terminal. Every challenge still open is said with each of the throne's answers; a reviewer
+   commissioned three sweeps ago with no ledger filed is sent again.
 3. **Unstaffed.** A routed speciality with no body born in the world is recorded `unstaffed` and
    said to the human with the throne's answer; the challenge stays pending until the body is born
    and files, or the human waives it. Nothing clears in silence.
@@ -703,7 +713,8 @@ class on the same paths.
 7. **Settling.** The challenge clears when every routed speciality has filed a valid ledger and
    nothing blocks. The human may instead **waive** it, with a reason that says something (at least
    20 characters, not a stock phrase): `mnemorphd challenge waive <landing> --why <reason>`, after
-   seeing it and answering `y`, or `/waive <landing> <reason>` in the terminal. A waiver is the
+   seeing it and answering `y` at the controlling terminal (`/dev/tty`; piped input is refused),
+   or `/waive <landing> <reason>` in the terminal UI. A waiver is the
    human's alone: the door refuses inside a body's command, the records keep it only with the
    human as its author, a reason that holds and the tree the challenge was opened on, and a line
    written there by anything else counts for nothing. `mnemorphd challenge list` shows what still
