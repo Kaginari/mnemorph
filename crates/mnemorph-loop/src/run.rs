@@ -55,6 +55,9 @@ pub struct Limits {
     pub max_tokens: u32,
     /// The carved budget, in weighted tokens, if any.
     pub budget_wt: Option<u64>,
+    /// The human's cap that set [`Limits::budget_wt`] — `session`, `day` or `month` — when the
+    /// run spends the session's budget itself; `None` for a slice a commander carved.
+    pub budget_cap: Option<&'static str>,
     /// How many structured compactions one ask may take before a full context drains.
     pub compactions: u32,
     /// Recall's weights, floor and saturations, from the human's `recall.*` keys.
@@ -74,6 +77,7 @@ impl Limits {
             compactions: COMPACTIONS,
             max_tokens: 8192,
             budget_wt: None,
+            budget_cap: None,
         }
     }
 }
@@ -1519,9 +1523,15 @@ impl Run {
         let left = slice.as_ref().map(mnemorph_ledger::Slice::of);
         let interrupt = Arc::clone(&self.interrupt);
         let throne = self.body.clone();
-        let order =
-            crate::commission::order(c, &throne, left, &self.cx, &interrupt, &input.to_string())
-                .await;
+        let order = crate::commission::order(
+            c,
+            &throne,
+            (left, None),
+            &self.cx,
+            &interrupt,
+            &input.to_string(),
+        )
+        .await;
         if let (Some(slice), Some(reserve)) = (slice, self.reserve.as_mut()) {
             let _ = reserve.settle(slice, order.spent);
         }
@@ -1953,6 +1963,17 @@ impl Run {
         None
     }
 
+    /// What this run has left to carve, and the human's cap that sets it when the run spends the
+    /// session's budget itself: what a commission is granted from, and a refusal names.
+    fn budget(&self) -> (Option<u64>, Option<&'static str>) {
+        (
+            self.limits
+                .budget_wt
+                .map(|b| b.saturating_sub(self.spent_wt)),
+            self.limits.budget_cap,
+        )
+    }
+
     /// The human's caps against the ledger as it is now: why the run must stop, if it must.
     fn over_a_cap(&mut self) -> Option<String> {
         let caps = self.caps?;
@@ -2378,13 +2399,10 @@ impl Run {
             },
         });
         let input = serde_json::json!({"to": to, "ask": handoff}).to_string();
-        let left = self
-            .limits
-            .budget_wt
-            .map(|b| b.saturating_sub(self.spent_wt));
+        let budget = self.budget();
         let interrupt = Arc::clone(&self.interrupt);
         let body = self.body.clone();
-        let order = crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+        let order = crate::commission::order(&c, &body, budget, &self.cx, &interrupt, &input).await;
         self.spent_wt = self.spent_wt.saturating_add(order.spent);
         self.landed.extend(order.landed);
         if order.interrupted {
@@ -2480,8 +2498,16 @@ impl Run {
             })
             .to_string();
             let interrupt = Arc::clone(&self.interrupt);
-            let order =
-                crate::commission::order(&c, &body, left, &self.cx, &interrupt, &input).await;
+            let order = crate::commission::order(
+                &c,
+                &body,
+                // The wake's draw is no cap of the human's: a refusal names the commander.
+                (left, None),
+                &self.cx,
+                &interrupt,
+                &input,
+            )
+            .await;
             // Only an order that ran counts toward the wake's three: a refusal spent nothing.
             if !order.outcome.is_error {
                 ran += 1;
@@ -2612,13 +2638,10 @@ impl Run {
         match self.commissioner.clone() {
             // A commission runs a whole child body: the loop runs it, not the tool.
             Some(c) if name == crate::commission::COMMISSION => {
-                let left = self
-                    .limits
-                    .budget_wt
-                    .map(|b| b.saturating_sub(self.spent_wt));
+                let budget = self.budget();
                 let interrupt = Arc::clone(&self.interrupt);
                 let order =
-                    crate::commission::order(&c, &self.body, left, &self.cx, &interrupt, input)
+                    crate::commission::order(&c, &self.body, budget, &self.cx, &interrupt, input)
                         .await;
                 self.spent_wt = self.spent_wt.saturating_add(order.spent);
                 // Court work and what was put back are judged already: the baseline takes them,

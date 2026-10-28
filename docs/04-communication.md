@@ -234,7 +234,7 @@ envelope has left). A refusal names the creature the order goes to instead:
 | not your line | ask the target's own commander |
 | no plan item | open a plan item that names the target |
 | verify first | code the verify line on the target's doc |
-| budget | `@? budget: need ~<n> wt, have <m> wt` to the dispatcher's commander |
+| budget | `@? budget: need ~<n> wt, have <m> wt` to the dispatcher's commander; the refusal names the shortfall and the top-up that lets the slice fit, and where it comes from — `refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session)`, or `(@? budget to your commander)` for a carved envelope |
 
 A name that is no living creature is refused before the law is asked: Rimuru routes its birth;
 so is a route that would name one — a retired commander takes no order. The verify fact is

@@ -1515,6 +1515,9 @@ dependencies = [
 [[package]]
 name = "mnemorph-races"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "mnemorph-sandbox"

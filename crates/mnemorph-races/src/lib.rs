@@ -6,6 +6,7 @@
 //! two could read differently, this crate is what runs and the page is corrected.
 
 mod dispatch;
+mod explain;
 mod playbook;
 mod race;
 mod shelf;
@@ -13,6 +14,7 @@ mod speciality;
 mod value;
 
 pub use dispatch::{DispatchContext, Refusal, Route, may_dispatch};
+pub use explain::{Explanation, Kind, Op, Recover, Rerise, Scale};
 pub use playbook::{CHAINS, MAX_CLASS, MAX_SPECIALITY, brief, for_landing, playbook};
 pub use race::{ModelTier, Race};
 pub use shelf::{
@@ -20,6 +22,7 @@ pub use shelf::{
 };
 pub use speciality::{AttackClass, Speciality, glob, route, route_with};
 pub use value::{
-    Band, DECLINE_COOLDOWN_RUNS, FallReading, Meter, RECOVER_REPORTS, Rate, Recent, Signals, Z95,
-    falls, meter, recovers, rises, score, wilson,
+    Band, DECLINE_COOLDOWN_RUNS, FallReading, GateWord, Meter, Outcome, RECOVER_REPORTS, Rate,
+    Recent, Said, Signals, Z95, explain_fall, explain_rise, falls, fold_reports, meter, recovers,
+    rerise, rises, score, wilson,
 };

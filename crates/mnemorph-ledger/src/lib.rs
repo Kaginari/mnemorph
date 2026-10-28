@@ -25,12 +25,12 @@ pub use caps::{
 pub use chain::{Break, Head, Report};
 pub use clock::{Day, Timestamp};
 pub use envelope::{
-    BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Slice,
-    TopUpError,
+    BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Shortfall,
+    Slice, TopUpError,
 };
 pub use findings::{
-    Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW, fold_findings,
-    fold_findings_by_build,
+    Ascension, CANNOT_VERIFY_BAR, FindingRow, Proposed, SpecialityFold, Standing, WINDOW,
+    fold_findings, fold_findings_by_build,
 };
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};

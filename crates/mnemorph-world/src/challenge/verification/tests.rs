@@ -1144,3 +1144,59 @@ fn the_ledger_reads_only_the_records_outside_the_world() {
     let _ = super::super::scores(&world);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A proposal names the records' chain head and the rows of the window it read: the chain walked
+/// again holds at that head, and the rows inside the window, folded again, give the same lines.
+#[test]
+fn a_proposal_recomputes_from_the_chained_records() {
+    let dir = temp("explained");
+    let file = dir.join("challenges.jsonl");
+    let c = Challenges::at(&file);
+    open_landing(&c, "run-1:1");
+    for i in 0..10 {
+        let ruling = if i < 6 {
+            refuted()
+        } else {
+            confirmed(Severity::High)
+        };
+        found_and_ruled(
+            &c,
+            "run-1:1",
+            found_on(&format!("f{i}"), Severity::High),
+            Some(ruling),
+        );
+    }
+    let chain = c.chain().unwrap();
+    assert!(chain.holds(), "{chain}");
+    let head = chain.head.unwrap().digest;
+    let p = harness_of(&c)
+        .proposed(mnemorph_races::Race::ArchDarkElf, Some(&head))
+        .unwrap();
+    let e = &p.why[0];
+    assert_eq!(e.head.as_deref(), Some(head.as_str()));
+    assert!(
+        e.to_string()
+            .starts_with("probation: precision 0.40 < 0.70"),
+        "{e}"
+    );
+    // The window's rows are the records' own lines, from 1: each a verdict that settled a finding.
+    let text = std::fs::read_to_string(&file).unwrap();
+    let (from, to) = (e.from.unwrap(), e.to.unwrap());
+    for at in [from, to] {
+        let line = text.lines().nth(usize::try_from(at - 1).unwrap()).unwrap();
+        assert!(line.contains(r#""row":"ruled""#), "{line}");
+    }
+    let window: Vec<_> = c
+        .finding_rows()
+        .into_iter()
+        .filter(|r| (from..=to).contains(&r.at))
+        .collect();
+    let again = mnemorph_ledger::fold_findings(&window)
+        .remove(FINDER)
+        .unwrap();
+    assert_eq!(
+        again.proposed(mnemorph_races::Race::ArchDarkElf, Some(&head)),
+        Some(p.clone())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

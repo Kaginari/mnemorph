@@ -79,6 +79,63 @@ impl fmt::Display for BudgetShort {
     }
 }
 
+impl BudgetShort {
+    /// The least top-up that lets the call fit: what it needs past what is left.
+    #[must_use]
+    pub fn top_up(&self) -> u64 {
+        self.need.saturating_sub(self.have)
+    }
+
+    /// The refusal, explained: the shortfall and the top-up that would let it fit, from `cap`
+    /// (`session`, `day` or `month`: the human's cap, raised under `budget.<cap>`) or, with none,
+    /// from the commander that carved the envelope.
+    #[must_use]
+    pub fn refusal(self, cap: Option<&'static str>) -> Shortfall {
+        Shortfall { short: self, cap }
+    }
+}
+
+/// A budget refusal, explained: `refused: needs 41k wt, 12k left this session; top up >= 29k wt
+/// (budget.session)`. Weighted tokens show in thousands from ten thousand up: what is needed and
+/// the top-up rounded up, what is left rounded down, so the top-up named always suffices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shortfall {
+    /// What is needed and what is left.
+    pub short: BudgetShort,
+    /// The human's cap that sets what is left: `session`, `day` or `month`; `None` for an
+    /// envelope a commander carved.
+    pub cap: Option<&'static str>,
+}
+
+/// `n` weighted tokens, in thousands from ten thousand up, rounded `up` or down.
+fn wt(n: u64, up: bool) -> String {
+    if n < 10_000 {
+        n.to_string()
+    } else if up {
+        format!("{}k", n.div_ceil(1000))
+    } else {
+        format!("{}k", n / 1000)
+    }
+}
+
+impl fmt::Display for Shortfall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (left, from) = match self.cap {
+            Some("day") => ("today", "budget.day".to_owned()),
+            Some("month") => ("this month", "budget.month".to_owned()),
+            Some(cap) => ("this session", format!("budget.{cap}")),
+            None => ("in your envelope", "@? budget to your commander".to_owned()),
+        };
+        write!(
+            f,
+            "refused: needs {} wt, {} left {left}; top up >= {} wt ({from})",
+            wt(self.short.need, true),
+            wt(self.short.have, false),
+            wt(self.short.top_up(), true)
+        )
+    }
+}
+
 /// A slice refused at settlement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettleError {
@@ -350,6 +407,46 @@ mod tests {
             BudgetShort { need: 5, have: 3 }.to_string(),
             "budget: need ~5 wt, have 3 wt"
         );
+    }
+
+    /// A refusal names the shortfall and the top-up that lets the call fit, and where it comes
+    /// from: the human's cap, or the commander.
+    #[test]
+    fn a_refusal_names_the_shortfall_and_the_top_up() {
+        let short = BudgetShort {
+            need: 40_500,
+            have: 12_300,
+        };
+        assert_eq!(short.top_up(), 28_200);
+        assert_eq!(
+            short.refusal(Some("session")).to_string(),
+            "refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session)"
+        );
+        assert_eq!(
+            short.refusal(Some("day")).to_string(),
+            "refused: needs 41k wt, 12k left today; top up >= 29k wt (budget.day)"
+        );
+        assert_eq!(
+            short.refusal(Some("month")).to_string(),
+            "refused: needs 41k wt, 12k left this month; top up >= 29k wt (budget.month)"
+        );
+        assert_eq!(
+            BudgetShort {
+                need: 9_000,
+                have: 0
+            }
+            .refusal(None)
+            .to_string(),
+            "refused: needs 9000 wt, 0 left in your envelope; top up >= 9000 wt (@? budget to \
+             your commander)"
+        );
+        // The top-up named always suffices.
+        let s = Envelope::session(100_000);
+        let Err(short) = s.preflight(95_001) else {
+            panic!("it does not fit")
+        };
+        assert_eq!(short.top_up(), 5_001);
+        assert_eq!(BudgetShort { need: 1, have: 5 }.top_up(), 0);
     }
 
     #[test]
