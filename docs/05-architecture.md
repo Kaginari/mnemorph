@@ -477,7 +477,7 @@ fails when the two differ.
 | relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references seen, the ledger relations are learned from | yes |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
-| usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its head anchored in `log.md` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
+| usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its every byte witnessed under `$XDG_STATE_HOME/mnemorph/usage/` for the tripwire, its head anchored in `log.md` and kept under `$XDG_STATE_HOME/mnemorph/anchors/` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
 | derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
 
@@ -688,8 +688,8 @@ flowchart LR
   `core.fsmonitor`, `core.sshCommand`, filter drivers — `.git/hooks`, `.git/info`, a `.git` file)
   would run code outside any sandbox the next time the human runs git, and `.mnemorph/` holds the
   world's records. Each command runs between two snapshots of them; once its process group is dead,
-  every change is put back and the body is told. The Kijin post journals are put back as the
-  work queue is: what each held, plus the rows its witness gained while the command ran. The file tools refuse those paths outright, but
+  every change is put back and the body is told. The Kijin post journals and the usage ledger
+  are put back as the work queue is: what each held, plus the rows its witness gained while the command ran. The file tools refuse those paths outright, but
   one: a body's own `plan.md`, directly in its own seat, which the dispatch law reads (an Orc's
   verify lines on its Slimes' docs are written by the harness, through the `verify` tool) — written
   with the file tools; a command's write there is put back, and a plan that is a link is no plan. On

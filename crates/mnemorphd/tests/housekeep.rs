@@ -65,6 +65,20 @@ fn verify_says_each_chain_and_anchors_its_head() {
         "{log}"
     );
 
+    // The last row dropped: every link holds, the head kept under the state directory does not.
+    fs::write(&usage, &first).unwrap();
+    let out = core()
+        .args(["housekeep", "--verify", "--world", w])
+        .env("XDG_STATE_HOME", &state)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{text}");
+    assert!(
+        text.contains("broken at line 2: the anchored head"),
+        "{text}"
+    );
+
     // The first row edited: found at its line, exit 1.
     fs::write(
         &usage,

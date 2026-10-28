@@ -6152,3 +6152,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   envelopes (#88's use-count journal) and Kijin posts are not chained yet; each is a
   `Journal::chained` and a line in `chains::journals`. The value ledger's records rewalk on every
   hold, as their fold already reads the whole file.
+
+---
+
+### [2026-10-28T09:33:06+01:00] rimuru — #91, Fable's review: the anchor is read back, a whole line is never torn, the usage ledger witnessed
+- **Done:** `housekeep --verify` keeps each head that holds under `$XDG_STATE_HOME/mnemorph/anchors/`
+  beside `log.md`'s entry, and holds each walk to the newest kept head (`Break::Anchor`: a
+  dropped tail or a chain rooted again), saying when `log.md` and the kept copy disagree; a walk
+  that fails anchors nothing new. A line that is whole JSON is never torn; reading a chained
+  journal skips unchained lines after the genesis. The usage ledger's every byte is witnessed
+  under `$XDG_STATE_HOME/mnemorph/usage/`, and the tripwire rebuilds it from the witness as it
+  does the queue, so a parallel run's rows survive a command. Docs 02, 05, 06.
+- **Tests:** a dropped tail, a chain rooted again and an edit of `log.md` alone, each found; a
+  forged whole row before a torn tail breaks the chain after an honest append; the witness holds
+  the journal's bytes; the tripwire keeps a parallel run's usage rows and undoes the command's edit;
+  `housekeep --verify` exits 1 on a dropped last row.
+- **Learned:** an anchor that is only written proves nothing: a check must read the kept head back,
+  from a place the checked files' writers cannot reach.

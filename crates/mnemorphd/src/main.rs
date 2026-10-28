@@ -75,10 +75,12 @@ one finding for that score, after showing it and asking for `y` at the terminal.
 runs it.
 
 `housekeep --verify` walks each chained journal — the usage ledger and the Dark Elf's value
-ledger — once, and says for each: OK with its head, a torn tail (a truncation, not tampering) with
-the head it holds to, or the first broken link with its line. It anchors the heads in `log.md`, so
-a later walk is checked against a head kept outside the files. It exits 0 when every chain holds,
-1 on a broken link, 2 on an error.
+ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
+torn tail (a truncation, not tampering) with the head it holds to, or the first broken link with
+its line — a dropped tail or a chain rooted again breaks the anchor. It says when `log.md`'s
+newest anchor and the copy kept under the state directory disagree. Then it anchors each head
+that holds in both. It exits 0 when every chain holds, 1 on a broken link or a disagreement, 2
+on an error.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -490,25 +492,18 @@ fn verify_chains(world: &Path) -> ExitCode {
     let readings = chains::verify(world);
     let mut out = std::io::stdout().lock();
     let mut code = ExitCode::SUCCESS;
-    for (journal, reading) in &readings {
-        let text = match reading {
-            Ok(r) => {
-                if !r.holds() {
-                    code = ExitCode::from(1);
-                }
-                r.to_string()
-            }
-            Err(e) => {
-                code = ExitCode::from(2);
-                format!("unreadable: {e}")
-            }
-        };
+    for r in &readings {
+        if r.report.is_err() {
+            code = ExitCode::from(2);
+        } else if !r.holds() && code == ExitCode::SUCCESS {
+            code = ExitCode::from(1);
+        }
         let _ = writeln!(
             out,
             "{} ({}): {}",
-            journal.name,
-            safe(&journal.path.display().to_string()),
-            safe(&text)
+            r.journal.name,
+            safe(&r.journal.path.display().to_string()),
+            safe(&r.text())
         );
     }
     match chains::anchor(world, "housekeep", &readings) {

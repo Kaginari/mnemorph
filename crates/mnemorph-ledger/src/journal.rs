@@ -18,6 +18,9 @@ pub struct Journal<T> {
     path: PathBuf,
     /// A chained journal's walk so far, shared by its clones; `None` for an unchained one.
     chain: Option<Arc<Mutex<Option<Tip>>>>,
+    /// Where a chained journal's every appended byte is written again, out of every command's
+    /// reach, for the tripwire to put the journal back from.
+    witness: Option<PathBuf>,
     rows: PhantomData<fn() -> T>,
 }
 
@@ -44,6 +47,7 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         Journal {
             path: path.into(),
             chain: None,
+            witness: None,
             rows: PhantomData,
         }
     }
@@ -58,8 +62,21 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         Journal {
             path: path.into(),
             chain: Some(Arc::new(Mutex::new(None))),
+            witness: None,
             rows: PhantomData,
         }
+    }
+
+    /// The same chained journal, every byte it appends written first to `file` too, under that
+    /// file's lock: the witness the tripwire rebuilds the journal from after a command, so a row
+    /// the harness wrote while the command ran is never dropped. An unchained journal keeps no
+    /// witness.
+    #[must_use]
+    pub fn witnessed_at(mut self, file: impl Into<PathBuf>) -> Self {
+        if self.chain.is_some() {
+            self.witness = Some(file.into());
+        }
+        self
     }
 
     /// Whether the journal chains its rows.
@@ -124,6 +141,18 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         if let Some(dir) = dir {
             std::fs::create_dir_all(dir)?;
         }
+        // The witness first, then the journal: the tripwire reads both under the witness's lock.
+        let witness = match &self.witness {
+            Some(w) => {
+                if let Some(d) = w.parent() {
+                    std::fs::create_dir_all(d)?;
+                }
+                let f = OpenOptions::new().create(true).append(true).open(w)?;
+                f.lock()?;
+                Some(f)
+            }
+            None => None,
+        };
         let created = !self.path.exists();
         let file = OpenOptions::new()
             .create(true)
@@ -135,6 +164,10 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         // Taken: a write that fails leaves no tip, and the next append walks again.
         let walked = caught_up(tip.take(), &file)?;
         let (bytes, walk) = walked.walk.seal(&body)?;
+        if let Some(mut w) = witness.as_ref() {
+            w.write_all(&bytes)?;
+            w.sync_data()?;
+        }
         (&file).write_all(&bytes)?;
         file.sync_data()?;
         if created && let Some(dir) = dir {
@@ -180,7 +213,8 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     }
 
     /// Reads every row back. A missing file is an empty journal; a line that does not parse is
-    /// skipped and its number reported.
+    /// skipped and its number reported, and so is an unchained line once the chain has begun: no
+    /// writer of a chained journal writes one.
     ///
     /// # Errors
     ///
@@ -200,12 +234,19 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             rows: Vec::new(),
             skipped: Vec::new(),
         };
+        let mut chained = false;
         for (n, line) in BufReader::new(file).split(b'\n').enumerate() {
             let mut line = line?;
             if n == 0 && line.starts_with(b"\xEF\xBB\xBF") {
                 line.drain(..3);
             }
             if line.iter().all(u8::is_ascii_whitespace) {
+                continue;
+            }
+            let sealed = crate::chain::is_sealed(&line);
+            chained |= sealed;
+            if chained && !sealed {
+                back.skipped.push(n + 1);
                 continue;
             }
             match serde_json::from_slice(&crate::chain::body(&line)) {

@@ -320,9 +320,7 @@ fn build(
     let instruments = world.join(".mnemorph/instruments");
     // The caps against what this world already spent. A cap that cannot be read opens no
     // session: spend it cannot see would be spend it cannot stop.
-    // Chained: every row names the digest of the one before, so an edit of the spend is found.
-    let usage: Journal<mnemorph_ledger::UsageRow> =
-        Journal::chained(instruments.join("usage.jsonl"));
+    let usage = usage_ledger(world);
     let (caps, capped, unread, budget) = read_caps(config, &usage, &session_id)?;
     let mut tools = registry();
     tools.push(Box::new(crate::wear_tool::WearTool));
@@ -542,6 +540,17 @@ fn router(
         config: Arc::new(config.clone()),
         decisions,
         provider: provider.to_owned(),
+    }
+}
+
+/// The world's usage ledger, chained — every row names the digest of the one before, so an edit
+/// of the spend is found — and witnessed under the human's state directory, so the tripwire puts
+/// it back with a parallel run's rows kept.
+fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
+    let usage = Journal::chained(world.join(".mnemorph/instruments/usage.jsonl"));
+    match mnemorph_tools::usage_witness(world) {
+        Some(witness) => usage.witnessed_at(witness),
+        None => usage,
     }
 }
 

@@ -63,6 +63,9 @@ pub enum Break {
     LateGenesis,
     /// A row records a torn line where there was none.
     FalseTorn,
+    /// The head anchored outside the file is not a row of the chain at its line or later: rows
+    /// were dropped from the end, or the chain was rooted again after it.
+    Anchor,
 }
 
 impl fmt::Display for Break {
@@ -81,6 +84,10 @@ impl fmt::Display for Break {
             }
             Break::LateGenesis => "a row past the chain's first claims to be its genesis",
             Break::FalseTorn => "the row records a torn line where there was none",
+            Break::Anchor => {
+                "the anchored head is not in the chain at its line or later: rows were dropped \
+                 from the end, or the chain was rooted again"
+            }
         })
     }
 }
@@ -94,6 +101,8 @@ pub struct Report {
     pub legacy: usize,
     /// The newest row whose digest holds; `None` while no row is chained.
     pub head: Option<Head>,
+    /// The chain's first row, marked genesis.
+    pub genesis: Option<Head>,
     /// Torn lines a later row recorded: truncations the chain resumed after.
     pub healed: Vec<usize>,
     /// The first line of a torn tail no row has closed yet: a truncation, not tampering.
@@ -226,6 +235,12 @@ pub fn body(line: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     }
 }
 
+/// Whether `line` carries the chain's fields.
+#[must_use]
+pub fn is_sealed(line: &[u8]) -> bool {
+    parse(line).is_some()
+}
+
 /// A walk along a journal, line by line: what [`verify`] reports, and where the next row links.
 /// It is fed bytes in order, in any slices, and keeps only the chain's state and an unfinished
 /// line.
@@ -239,6 +254,8 @@ pub struct Walk {
     before: Option<Sha256>,
     /// The first line since the head that is not a row of the chain, and what it is.
     bad_from: Option<(usize, Break)>,
+    /// The head anchored outside the file, and whether the walk has met it.
+    anchor: Option<(Head, bool)>,
     report: Report,
 }
 
@@ -249,6 +266,7 @@ impl Default for Walk {
             carry: Vec::new(),
             before: Some(Sha256::new()),
             bad_from: None,
+            anchor: None,
             report: Report::default(),
         }
     }
@@ -259,6 +277,14 @@ impl Walk {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The walk, held to `anchor`: a head kept outside the file, which must be a row of the chain
+    /// at its line or later ([`Break::Anchor`]).
+    #[must_use]
+    pub fn anchored(mut self, anchor: Head) -> Self {
+        self.anchor = Some((anchor, false));
+        self
     }
 
     /// Walks on through `bytes`, the journal's next bytes.
@@ -315,6 +341,9 @@ impl Walk {
                 report.broken.get_or_insert((line, kind));
             }
         }
+        if let Some((anchor, false)) = &end.anchor {
+            report.broken.get_or_insert((anchor.line, Break::Anchor));
+        }
         report
     }
 
@@ -332,7 +361,13 @@ impl Walk {
         let Some(s) = sealed.filter(|_| holds) else {
             if self.report.head.is_some() {
                 let kind = if looks { Break::Edited } else { Break::NotARow };
-                self.bad_from.get_or_insert((n, kind));
+                // A crash leaves a partial line; a whole JSON value is never torn, so it breaks
+                // the chain at once and no later row may record it.
+                if serde_json::from_slice::<serde::de::IgnoredAny>(line).is_ok() {
+                    self.broke(n, kind);
+                } else {
+                    self.bad_from.get_or_insert((n, kind));
+                }
                 return;
             }
             // Before the chain: an unchained row, bound by the genesis to come. A chained row
@@ -370,10 +405,20 @@ impl Walk {
         if let Some(t) = s.torn {
             self.report.healed.push(t);
         }
-        self.report.head = Some(Head {
+        let head = Head {
             digest: String::from_utf8_lossy(s.digest).into_owned(),
             line: n,
-        });
+        };
+        if let Some((anchor, met)) = &mut self.anchor
+            && anchor.digest == head.digest
+            && n >= anchor.line
+        {
+            *met = true;
+        }
+        if self.report.head.is_none() {
+            self.report.genesis = Some(head.clone());
+        }
+        self.report.head = Some(head);
         self.report.rows += 1;
         self.bad_from = None;
         self.before = None;
@@ -444,13 +489,26 @@ impl Walk {
 ///
 /// The file exists but cannot be read.
 pub fn verify(path: &Path) -> io::Result<Report> {
+    verify_against(path, None)
+}
+
+/// [`verify`], held to `anchor` — a head kept outside the file: a chain that does not hold it at
+/// its line or later is broken ([`Break::Anchor`]), even when every link holds.
+///
+/// # Errors
+///
+/// The file exists but cannot be read.
+pub fn verify_against(path: &Path, anchor: Option<&Head>) -> io::Result<Report> {
+    let mut walk = Walk::new();
+    if let Some(a) = anchor {
+        walk = walk.anchored(a.clone());
+    }
     let file = match File::open(path) {
         Ok(f) => f,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Report::default()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(walk.report()),
         Err(e) => return Err(e),
     };
     file.lock_shared()?;
-    let mut walk = Walk::new();
     walk.feed_from(&file)?;
     Ok(walk.report())
 }
@@ -741,6 +799,86 @@ mod tests {
         j.append(&Empty {}).unwrap();
         assert!(j.verify().unwrap().holds());
         assert_eq!(j.read().unwrap().rows.len(), 2);
+    }
+
+    #[test]
+    fn a_whole_row_is_never_torn() {
+        let (_dir, j) = written(2);
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(j.path())
+            .unwrap();
+        std::io::Write::write_all(&mut f, b"{\"n\":7,\"text\":\"forged\"}\n{\"pr").unwrap();
+        drop(f);
+        assert_eq!(j.verify().unwrap().broken, Some((3, Break::NotARow)));
+        j.append(&row(2)).unwrap();
+        let r = j.verify().unwrap();
+        assert_eq!(r.broken, Some((3, Break::NotARow)), "{r}");
+        assert!(!lines(&j)[4].contains("\"torn\":3"), "{}", lines(&j)[4]);
+        // Read back, the unchained row after the genesis is no row.
+        let back = j.read().unwrap();
+        assert_eq!(back.rows.iter().map(|r| r.n).collect::<Vec<_>>(), [0, 1, 2]);
+        assert_eq!(back.skipped, [3, 4]);
+    }
+
+    #[test]
+    fn a_kept_anchor_finds_a_dropped_tail_and_a_new_root() {
+        let (_dir, j) = written(4);
+        let anchor = j.head().unwrap().unwrap();
+        assert!(verify_against(j.path(), Some(&anchor)).unwrap().holds());
+        j.append(&row(4)).unwrap();
+        assert!(
+            verify_against(j.path(), Some(&anchor)).unwrap().holds(),
+            "rows after the anchor are growth"
+        );
+        // The last rows dropped: every link holds, the anchor does not.
+        let raw = lines(&j);
+        rewrite(&j, &raw[..3]);
+        assert!(j.verify().unwrap().holds());
+        let r = verify_against(j.path(), Some(&anchor)).unwrap();
+        assert_eq!(r.broken, Some((4, Break::Anchor)), "{r}");
+        assert!(r.to_string().contains("anchored head"));
+        // Rooted again: the chain's fields stripped, a fresh genesis appended.
+        let stripped: Vec<String> = raw
+            .iter()
+            .map(|l| String::from_utf8(body(l.as_bytes()).into_owned()).unwrap())
+            .collect();
+        rewrite(&j, &stripped);
+        let again = Journal::<Row>::chained(j.path());
+        for n in 5..9 {
+            again.append(&row(n)).unwrap();
+        }
+        let r = again.verify().unwrap();
+        assert!(r.holds(), "{r}");
+        assert_eq!(r.genesis.map(|g| g.line), Some(6));
+        assert_eq!(
+            verify_against(j.path(), Some(&anchor)).unwrap().broken,
+            Some((4, Break::Anchor))
+        );
+        // A missing journal holds no anchor either.
+        let gone = verify_against(&j.path().with_extension("gone"), Some(&anchor)).unwrap();
+        assert_eq!(gone.broken, Some((4, Break::Anchor)));
+    }
+
+    #[test]
+    fn a_witness_holds_every_byte_the_journal_gained() {
+        let dir = tempfile::tempdir().unwrap();
+        let witness = dir.path().join("state/usage.jsonl");
+        let j = Journal::<Row>::chained(dir.path().join("usage.jsonl")).witnessed_at(&witness);
+        for n in 0..3 {
+            j.append(&row(n)).unwrap();
+        }
+        assert_eq!(
+            std::fs::read(&witness).unwrap(),
+            std::fs::read(j.path()).unwrap()
+        );
+        let plain =
+            Journal::<Row>::new(dir.path().join("plain.jsonl")).witnessed_at(dir.path().join("w2"));
+        plain.append(&row(0)).unwrap();
+        assert!(
+            !dir.path().join("w2").exists(),
+            "an unchained journal keeps no witness"
+        );
     }
 
     #[test]
