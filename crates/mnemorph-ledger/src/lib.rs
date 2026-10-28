@@ -1,4 +1,5 @@
-//! The usage ledger: weighted tokens, prices, budgets and envelopes, caps, folds.
+//! The usage ledger: weighted tokens, prices, budgets and envelopes, caps, folds; and the value
+//! ledger's Dark Elf folds, findings per speciality ([`fold_findings`]).
 //!
 //! Budget flows down like context; spend flows up like memory. Every model call writes one
 //! [`UsageRow`] to an append-only journal; envelopes carve the session's budget down the chain;
@@ -7,6 +8,7 @@
 mod caps;
 mod clock;
 mod envelope;
+mod findings;
 mod fold;
 mod journal;
 mod prices;
@@ -20,6 +22,9 @@ pub use clock::{Day, Timestamp};
 pub use envelope::{
     BudgetShort, CHALLENGE_RESERVE_PCT, Envelope, Item, PARENT_RESERVE_PCT, SettleError, Slice,
     TopUpError,
+};
+pub use findings::{
+    Ascension, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW, fold_findings,
 };
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack};

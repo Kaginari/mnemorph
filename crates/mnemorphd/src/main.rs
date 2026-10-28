@@ -25,6 +25,9 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  | close <id> [--drop]   [--world <dir>] [--json]
        mnemorphd challenge list|show|waive [--all] [<landing>] [--why <reason>]
                  [--world <dir>]
+       mnemorphd challenge score [--world <dir>]
+       mnemorphd challenge decide <landing> <fingerprint> upheld|false-positive
+                 --why <reason> [--world <dir>]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
 SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
@@ -63,7 +66,12 @@ directory. `list` shows each landing whose challenge holds it — pending, block
 awaits and who is unstaffed or queued (`--all` adds the settled ones); `show <landing>` says one
 in full; `waive <landing> --why <reason>` settles one on the human's word, after showing it and
 asking for `y` at the terminal (`/dev/tty`; piped input is refused): the reason is kept with it,
-and is at least 20 characters that say why. A body never runs it.
+and is at least 20 characters that say why. `score` prints each Dark Elf speciality's findings
+folded from those records — upheld, refuted, cannot-verify, held for the human, precision, the
+upheld rate and the last ten — and the rise or fall it proposes, which only the human applies;
+`decide <landing> <fingerprint> upheld|false-positive --why <reason>` records the human's word on
+one finding for that score, after showing it and asking for `y` at the terminal. A body never
+runs it.
 
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
@@ -984,8 +992,139 @@ fn challenge(args: &[String]) -> ExitCode {
                 Err(e) => refused(&e),
             }
         }
-        _ => refused(&"challenge needs a verb: list, show or waive; see --help"),
+        [verb] if verb == "score" => match mnemorph_server::world::challenge::scores(&world) {
+            Ok(folded) => {
+                let roster = mnemorph_server::world::Roster::load(&world);
+                for line in score(&folded, &roster) {
+                    println!("{line}");
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => refused(&e),
+        },
+        [verb, id, fp, answer] if verb == "decide" => {
+            decide(&records, id, fp, answer, why.as_deref())
+        }
+        _ => refused(&"challenge needs a verb: list, show, waive, score or decide; see --help"),
     }
+}
+
+/// `challenge decide`: the human's word on one finding of `id`, for the Dark Elf's score: shown
+/// first, escaped, and asked for `y` at the terminal.
+fn decide(
+    records: &mnemorph_server::world::challenge::Challenges,
+    id: &str,
+    fp: &str,
+    answer: &str,
+    why: Option<&str>,
+) -> ExitCode {
+    use mnemorph_server::world::challenge::Decision;
+    let upheld = match answer {
+        "upheld" => true,
+        "false-positive" => false,
+        _ => return refused(&"a decision is `upheld` or `false-positive`"),
+    };
+    let Some(why) = why else {
+        return refused(&"a decision says why: --why <reason>");
+    };
+    let decision = match Decision::human(upheld, why) {
+        Ok(d) => d,
+        Err(e) => return refused(&e),
+    };
+    let safe = mnemorph_server::challenge::safe;
+    let Some(f) = records
+        .record(id)
+        .and_then(|r| r.findings.into_iter().find(|f| f.fingerprint() == fp))
+    else {
+        return refused(&format!(
+            "no finding #{} on landing `{}`",
+            safe(fp),
+            safe(id)
+        ));
+    };
+    // The human reads the finding before their word on it is recorded.
+    println!(
+        "#{} {} ({}): {} — {}",
+        safe(fp),
+        f.severity().word(),
+        safe(&f.found.record.speciality),
+        safe(&f.found.record.claim),
+        f.verdict
+            .as_ref()
+            .map_or("no verdict yet", |v| v.ruling.word())
+    );
+    match at_terminal(&format!("record it as {answer}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was recorded"),
+        Err(e) => return refused(&e),
+    }
+    match records.decide(id, fp, &decision) {
+        Ok(()) => {
+            println!("decided #{}: {answer} — {}", safe(fp), decision.reason());
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// Each speciality's value ledger, as `challenge score` says it, escaped: the counts, precision,
+/// the upheld rate on the race's meter, the last ten, and what is proposed to the human.
+fn score(
+    folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
+    roster: &mnemorph_server::world::Roster,
+) -> Vec<String> {
+    use mnemorph_server::world::challenge::Ascension;
+    let safe = mnemorph_server::challenge::safe;
+    let pct = |p: Option<f64>| p.map_or_else(|| "—".to_owned(), |p| format!("{p:.0}%"));
+    if folded.is_empty() {
+        return vec!["no Dark Elf finding is on record".to_owned()];
+    }
+    let mut lines = Vec::new();
+    for (speciality, f) in folded {
+        // The form is the living body's that bears the speciality's name, when one is born.
+        let form = roster
+            .living()
+            .find(|c| &c.name == speciality)
+            .map(|c| c.race);
+        lines.push(format!(
+            "{} ({}): {} findings — {} upheld, {} refuted, {} cannot-verify, {} held for the \
+             human, {} unverified",
+            safe(speciality),
+            form.map_or("no living body", |r| r.name()),
+            f.findings,
+            f.upheld,
+            f.refuted,
+            f.cannot_verify,
+            f.held,
+            f.unverified
+        ));
+        let m = f.meter();
+        lines.push(format!(
+            "  precision {} · {} {} ({}) · last {} settled: precision {} · last {} filed: \
+             cannot-verify {}",
+            pct(f.precision()),
+            m.label.to_lowercase(),
+            pct(f.upheld_rate()),
+            format!("{:?}", m.band).to_lowercase(),
+            f.recent.len(),
+            pct(f.recent_precision()),
+            f.last_filed,
+            pct(f.cannot_verify_rate())
+        ));
+        if let Some(a) = form.and_then(|r| f.proposal(r)) {
+            let what = match a {
+                Ascension::Rise => "rise to Arch Dark Elf",
+                Ascension::Probation => {
+                    "probation: precision under 70% over the last ten settled, or cannot-verify \
+                     over 50% of the last ten filed"
+                }
+            };
+            lines.push(format!(
+                "  proposed to the human: {what} — nothing changes until the human applies it"
+            ));
+        }
+    }
+    lines
 }
 
 /// One challenge in full, as `show` and the waiver say it, escaped.

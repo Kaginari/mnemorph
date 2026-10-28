@@ -1,13 +1,14 @@
 //! `mnemorphd challenge …` is the human's door to the Dark Elf challenges, kept under the human's
 //! state directory (a temporary `XDG_STATE_HOME` here): listing what holds a landing, showing one,
-//! and waiving one with a reason — never a body's, never without a reason.
+//! and waiving one with a reason — never a body's, never without a reason; the Dark Elf's score
+//! folded from them, and the human's decision on one finding.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use mnemorph_server::world::Roster;
-use mnemorph_server::world::challenge::{Challenges, Opening, Status, route};
+use mnemorph_server::world::challenge::{Challenges, Decision, Found, Opening, Status, route};
 
 /// Where the harness keeps a world's challenges: `<state>/mnemorph/challenges/<name>-<fnv64a>.jsonl`.
 fn records(state: &Path, world: &Path) -> PathBuf {
@@ -214,7 +215,7 @@ fn a_forged_or_unreasoned_waiver_is_refused() {
             "no challenge is open",
         ),
         (vec!["show", "nope"], None, "no challenge is open"),
-        (vec!["frob"], None, "list, show or waive"),
+        (vec!["frob"], None, "score or decide"),
     ] {
         let out = f.run(&args, "y\n", body);
         assert_eq!(out.status.code(), Some(2), "{args:?}: {}", text(&out));
@@ -256,5 +257,168 @@ fn a_hostile_path_is_shown_escaped() {
         text(&out).contains("a\\u{60}\\u{a}\\u{1b}[31mred.rs"),
         "{}",
         text(&out)
+    );
+}
+
+/// A harness finding on `symbol`, kept on `run-1:2`: its claim carries what a terminal would act
+/// on. Returns its fingerprint.
+fn finding(f: &Fixture, symbol: &str) -> String {
+    let fp = format!(
+        "{:016x}",
+        symbol.len() as u64 * 7919 + u64::from(symbol.as_bytes()[0])
+    );
+    let found: Found = serde_json::from_value(serde_json::json!({
+        "finder": "dark-elf-harness",
+        "rec": "",
+        "record": {
+            "verdict": "finding",
+            "fingerprint": fp,
+            "speciality": "dark-elf-harness",
+            "class": "path-traversal",
+            "file": "crates/mnemorph-tools/src/files.rs",
+            "symbol": symbol,
+            "claim": "read_path escapes\n\u{1b}[2J `the world`",
+            "severity": "high",
+            "impact": "disclosure",
+            "impact_reason": "a file outside the world is read",
+            "fix": "refuse ..",
+            "preconditions": ["an untrusted repository"],
+            "reachability": "a repository file names the path"
+        }
+    }))
+    .unwrap();
+    Challenges::at(&records(&f.state, &f.world))
+        .found("run-1:2", found)
+        .unwrap();
+    fp
+}
+
+/// `score` folds the records per speciality, escaped, and says nothing is on record when so.
+#[test]
+fn the_score_folds_each_speciality() {
+    let f = Fixture::new("score");
+    let out = f.run(&["score"], "", None);
+    assert_eq!(text(&out), "no Dark Elf finding is on record\n");
+    finding(&f, "read_path");
+    let out = f.run(&["score"], "", None);
+    assert!(out.status.success(), "{}", text(&out));
+    let shown = text(&out);
+    assert!(
+        shown.contains(
+            "dark-elf-harness (no living body): 1 findings — 0 upheld, 0 refuted, 0 \
+             cannot-verify, 0 held for the human, 1 unverified"
+        ),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(
+            "precision — · upheld 0% (unranked) · last 0 settled: precision — · last 1 filed: \
+             cannot-verify 0%"
+        ),
+        "{shown}"
+    );
+    assert!(!shown.contains("proposed"), "{shown}");
+    let out = f.run(&["score"], "", Some("dark-elf-harness"));
+    assert_eq!(out.status.code(), Some(2), "a body never reads it here");
+}
+
+/// The human's decision is asked at the terminal, after the finding is shown escaped; a
+/// false positive counts refuted. Piped, a bad word, no reason or no finding: refused.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_human_decides_a_finding_at_the_terminal() {
+    let f = Fixture::new("decide");
+    let fp = finding(&f, "read_path");
+    for (args, says) in [
+        (
+            vec!["decide", "run-1:2", &fp, "maybe", "--why", WHY],
+            "`upheld` or `false-positive`",
+        ),
+        (
+            vec!["decide", "run-1:2", &fp, "upheld"],
+            "a decision says why",
+        ),
+        (
+            vec!["decide", "run-1:2", &fp, "upheld", "--why", "n/a"],
+            "at least 20 characters",
+        ),
+        (
+            vec!["decide", "run-1:2", "nope", "upheld", "--why", WHY],
+            "no finding #nope",
+        ),
+        (
+            vec!["decide", "run-1:2", &fp, "upheld", "--why", WHY],
+            "answered at a terminal",
+        ),
+    ] {
+        let out = f.run(&args, "y\n", None);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {}", text(&out));
+        assert!(text(&out).contains(says), "{args:?}: {}", text(&out));
+    }
+    let out = f.at_tty(
+        &["decide", "run-1:2", &fp, "false-positive", "--why", WHY],
+        "n\n",
+    );
+    assert!(
+        text(&out).contains("nothing was recorded"),
+        "{}",
+        text(&out)
+    );
+    let out = f.at_tty(
+        &["decide", "run-1:2", &fp, "false-positive", "--why", WHY],
+        "y\n",
+    );
+    let shown = text(&out);
+    assert!(
+        shown.contains(&format!("decided #{fp}: false-positive")),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains('\u{1b}'),
+        "the claim is shown escaped: {shown:?}"
+    );
+    assert!(shown.contains("no verdict yet"), "{shown}");
+    let out = f.run(&["score"], "", None);
+    assert!(
+        text(&out).contains("1 findings — 0 upheld, 1 refuted"),
+        "{}",
+        text(&out)
+    );
+    assert!(text(&out).contains("precision 0%"), "{}", text(&out));
+}
+
+/// A living Dark Elf at the bars is proposed its rise — to the human, applied by nothing here.
+#[test]
+fn a_rise_is_proposed_to_the_human() {
+    let f = Fixture::new("rise");
+    let seat = f.world.join(".mnemorph/dark-elf/dark-elf-harness");
+    fs::create_dir_all(&seat).unwrap();
+    fs::write(
+        seat.join("README.md"),
+        "# dark-elf-harness\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+    )
+    .unwrap();
+    let c = Challenges::at(&records(&f.state, &f.world));
+    let upheld = Decision::human(true, WHY).unwrap();
+    for i in 0..20 {
+        let fp = finding(&f, &format!("{}sym{i}", char::from(b'a' + i)));
+        c.decide("run-1:2", &fp, &upheld).unwrap();
+    }
+    let out = f.run(&["score"], "", None);
+    let shown = text(&out);
+    assert!(
+        shown.contains("dark-elf-harness (dark-elf): 20 findings — 20 upheld"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(
+            "proposed to the human: rise to Arch Dark Elf — nothing changes until the human \
+             applies it"
+        ),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("upheld 100% (ok) · last 10 settled: precision 100%"),
+        "{shown}"
     );
 }
