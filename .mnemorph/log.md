@@ -5988,3 +5988,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   author/chain filing and review, hostile path and claim, resend, waive at a pty (`script`) and
   refused piped. Each guard disabled fails its test; `is_terminal` alone is masked by `/dev/tty`.
 - **Learned:** never `git checkout -- file` to undo a mutation over uncommitted work: commit first.
+
+---
+
+### [2026-10-28T01:41:30+01:00] rimuru — Dark Elf PR 8: independent verification before a finding counts, blocks or seals
+- **Done:** each valid finding of medium or higher a reviewer reports is kept with its challenge
+  (`mnemorph_world::challenge::verification`) and, in the same sweep, sent by the throne to a
+  fresh verifier: the first living Dark Elf of another speciality, the generalist only when none is
+  born, never the finder, the author or its chain. Its ask is the record alone (`verify_ask`). It
+  files `confirmed` (re-runs stamped from its journal; severity lowered, never raised), `refuted`
+  (reason and evidence) or `cannot-verify` (blocker) through the `verdict` tool, held to eleven
+  named guards. Only confirmed counts; confirmed high/critical blocks, and so does a critical with
+  no refuting or lowering verdict; the challenge reads *verifying* while a verdict is missing. A
+  confirmed high/critical is proposed as a seal, witness frozen by hash, never applied. Verdict rows
+  carry both specialities and the evidence hashes; `Challenges::outcomes` is PR 10's precision
+  hook. Docs 02, 03, 05.
+- **Tests:** ScriptedModel worlds: confirmed (blocks, seal proposed, a later landing on the file
+  still passes, the verifier's requests hold no finder transcript, reason, note or fix), refuted by
+  the generalist, cannot-verify critical blocks and high doesn't count, raised and unrederived
+  confirmations refused, no other speciality born; world cases for every guard with it on and off;
+  loop selection, plan and ask. Mutations: removing the author check, putting the generalist first,
+  leaking a reason into the ask, assigning after the send, unblocking an unverified critical, or
+  counting any verdict each fails its tests.
+- **Learned:** the finder-speciality and finder-body checks mask each other (a speciality's body is
+  the creature of its name), and the loop's floor filter is masked by the records' `floor` guard:
+  only both off fails. Say so instead of claiming each is tested alone.
