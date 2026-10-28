@@ -113,6 +113,26 @@ impl Pending {
 pub trait Gate: Send + Sync {
     /// Ask, and wait.
     fn ask(&self, ask: &Ask) -> Answer;
+
+    /// Show the human an act a standing permission they signed admitted without asking — an Oni
+    /// envelope — and `by`, which one and which use: nothing outward happens unseen. Nothing is
+    /// asked and nothing waits. Unless a channel shows it its own way, it is said on standard
+    /// error.
+    fn admitted(&self, ask: &Ask, by: &str) {
+        eprintln!("{}", admitted_line(ask, by));
+    }
+}
+
+/// The line an act an envelope admitted is shown as: who, what, and by which envelope.
+#[must_use]
+pub fn admitted_line(ask: &Ask, by: &str) -> String {
+    format!(
+        "{} ({}) ran a {} act without asking — {by}: {}",
+        ask.body,
+        ask.race,
+        ask.class,
+        indented(&ask.act)
+    )
 }
 
 /// Denies everything: the gate of a run with no human attached (headless, a benchmark).
@@ -191,6 +211,17 @@ impl Gate for Terminal {
         });
         pending.wait(self.deadline)
     }
+
+    fn admitted(&self, ask: &Ask, by: &str) {
+        let line = format!("\n── {} ──\n", admitted_line(ask, by));
+        let shown = OpenOptions::new()
+            .write(true)
+            .open("/dev/tty")
+            .and_then(|mut tty| tty.write_all(line.as_bytes()));
+        if shown.is_err() {
+            eprint!("{line}");
+        }
+    }
 }
 
 /// A scripted gate for tests: answers in order, records every question.
@@ -198,6 +229,7 @@ impl Gate for Terminal {
 pub struct Scripted {
     answers: Mutex<Vec<Answer>>,
     asked: Mutex<Vec<Ask>>,
+    shown: Mutex<Vec<String>>,
 }
 
 impl Scripted {
@@ -209,12 +241,21 @@ impl Scripted {
         Self {
             answers: Mutex::new(answers),
             asked: Mutex::new(Vec::new()),
+            shown: Mutex::new(Vec::new()),
         }
     }
 
     /// Every question asked so far.
     pub fn asked(&self) -> Vec<Ask> {
         self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Every act shown as admitted without asking, as its line.
+    pub fn shown(&self) -> Vec<String> {
+        self.shown
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -232,5 +273,12 @@ impl Gate for Scripted {
             .unwrap_or_else(PoisonError::into_inner)
             .pop()
             .unwrap_or_else(|| Answer::Deny("the script ran out of answers".into()))
+    }
+
+    fn admitted(&self, ask: &Ask, by: &str) {
+        self.shown
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(admitted_line(ask, by));
     }
 }

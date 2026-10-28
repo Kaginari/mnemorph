@@ -830,11 +830,16 @@ an empty list or table never overrides a lower layer:
   that says to sign it again, revoke it or delete its record. Days are UTC calendar days. A list
   of envelopes in the local file replaces the global one whole, as every list does. `uses` caps the acts an envelope covers in
   all, at least one; no two envelopes share a name. `Envelope::admits(today,
-  used)` is the check the gate makes at the moment of use, once it honours envelopes (M11), with
-  the ledger's count of acts the envelope already covered; it names the lapse that stops one:
-  revoked, not yet in force, expired, or spent. Revoking writes `revoked = <day>` into the
+  used)` is the check the gate makes at the moment of use ([races](02-races.md#ascension--earned-granted-revocable)),
+  with the count of acts the envelope already admitted, kept in the uses ledger
+  (`mnemorph_ledger::Uses`, `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl`, outside every world and
+  counted under its lock); it names the lapse that stops one: revoked, not yet in force, expired,
+  or spent. The gate reads the envelopes afresh at each use, and only from a file that is the
+  human's own: one git tracks in the world, a link, or one others may write is not honoured.
+  Revoking (`mnemorphd envelope revoke <name>`) writes `revoked = <day>` into the
   human's file that holds the envelope, through `toml_edit` like any write, and only once: the
-  envelope stays on record and covers nothing again. An envelope signed ahead may be revoked
+  envelope stays on record and covers nothing again; the revocation is journaled beside the
+  uses (`revoked.jsonl`). An envelope signed ahead may be revoked
   before its signing day. The dates are the ledger's `Day`, the one calendar in the
   workspace, so config reads the ledger crate.
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again
@@ -925,7 +930,7 @@ envelope_days = 30                 # the longest an envelope lasts (1–365); 30
 
 [[oni.envelopes]]
 name = "feature branches"
-allow = ["git push origin feat/*", "gh run rerun *"]
+allow = ["git push origin feat/*", "gh pr comment * --repo owner/name --body *"]
 signed = 2026-10-24                # expires 2026-11-23, unless `expires` says sooner
 uses = 50                          # optional: at most 50 acts in all
 ```

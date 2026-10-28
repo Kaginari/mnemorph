@@ -9,6 +9,7 @@ pub mod compact;
 pub mod council;
 pub mod coverage_tool;
 pub mod decisions;
+pub mod envelope;
 pub mod gate;
 pub mod incident;
 pub mod model;
@@ -39,7 +40,9 @@ pub use mnemorph_races::ToolClass;
 /// The plan a gate approval binds to.
 pub use mnemorph_tools::Fingerprint as GateFingerprint;
 /// The human gate's types, for a client that answers it.
-pub use mnemorph_tools::gate::{Answer as GateAnswer, Ask as GateAsk, Gate};
+pub use mnemorph_tools::gate::{
+    Answer as GateAnswer, Ask as GateAsk, Gate, admitted_line as gate_admitted_line,
+};
 pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};

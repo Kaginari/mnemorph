@@ -369,11 +369,13 @@ includes the witness.
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject` —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
-  protected deploys, unredacted or oversized text). Their bounds are already config's (signed,
-  expiring within `oni.envelope_days`, a use cap, revocable, `Envelope::admits`); M11 adds the
-  ledger's use rows and the gate reading `admits` — and `suspended`, an open incident on an act
-  the envelope reads — at the moment of use
-  ([#88](https://github.com/Kaginari/mnemorph/issues/88)).
+  protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed
+  act an envelope admits runs without the human, read again at the moment of use — its bounds
+  (signed, expiring within `oni.envelope_days`, a use cap counted in the ledger's uses under a
+  lock, revocable with `mnemorphd envelope revoke`), `suspended`, and the compiled exclusions —
+  and shown to the human, in the session and in `mnemorphd envelope list`
+  ([#88](https://github.com/Kaginari/mnemorph/issues/88)). `mnemorph status` listing envelopes
+  (M6) is still to come.
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 

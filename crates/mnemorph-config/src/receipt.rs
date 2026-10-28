@@ -172,7 +172,16 @@ fn host_ok(host: &str) -> bool {
 
 /// Git in the world, read-only and deaf to what it could run, in the environment the act gets.
 pub(crate) fn world_git(world: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+    world_git_with(world, args, None)
+}
+
+/// [`world_git`], given `input` on its standard input.
+pub(crate) fn world_git_with(
+    world: &Path,
+    args: &[&str],
+    input: Option<&[u8]>,
+) -> Result<String, String> {
+    let mut child = Command::new("git")
         .args([
             "--no-optional-locks",
             "-c",
@@ -184,9 +193,31 @@ pub(crate) fn world_git(world: &Path, args: &[&str]) -> Result<String, String> {
         .current_dir(world)
         .env_clear()
         .envs(scrubbed_env())
-        .stdin(Stdio::null())
-        .output()
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+    // Written on a thread, so a large output never waits on an input not yet taken.
+    let writer = match (input, child.stdin.take()) {
+        (Some(bytes), Some(mut stdin)) => {
+            let bytes = bytes.to_vec();
+            Some(std::thread::spawn(move || {
+                let _ = std::io::Write::write_all(&mut stdin, &bytes);
+            }))
+        }
+        _ => None,
+    };
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+    if let Some(w) = writer {
+        let _ = w.join();
+    }
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
@@ -617,6 +648,19 @@ pub(crate) fn ls_remote_argv(url: &str, name: &str) -> Vec<String> {
     argv
 }
 
+/// The read of every branch a URL holds, for what a push would bring to it.
+pub(crate) fn ls_heads_argv(url: &str) -> Vec<String> {
+    let mut argv: Vec<String> = ["git", "-c", "protocol.allow=never"]
+        .map(str::to_owned)
+        .to_vec();
+    for p in PROTOCOLS {
+        argv.push("-c".into());
+        argv.push(format!("protocol.{p}.allow=always"));
+    }
+    argv.extend(["ls-remote", "--heads", "--end-of-options", url].map(str::to_owned));
+    argv
+}
+
 /// The read of a pull request's labels: at most 100, all a pull request may carry.
 pub(crate) fn labels_argv(repo: &str, pr: u64, host: &str) -> Vec<String> {
     [
@@ -981,16 +1025,18 @@ impl PostJournal {
     /// The act is not this post's, the pin is not of this act, or the row cannot be written:
     /// the act must not run.
     pub fn commit(&self, planned: &Planned, pin: Pin, plan: Option<&str>) -> io::Result<Receipt> {
-        self.commit_then(planned, pin, plan, &mut |_| Ok(()))
+        self.commit_then(planned, pin, plan, None, &mut |_| Ok(()))
     }
 
     /// [`Self::commit`], with `first` run on the receipt's id before its row is written: the act
-    /// runner keeps the request's key and intent there. Its failure writes no row.
+    /// runner keeps the request's key and intent there, and an envelope's use. Its failure writes
+    /// no row. `why` is why the act runs: the envelope that admitted it, when one did.
     pub(crate) fn commit_then(
         &self,
         planned: &Planned,
         pin: Pin,
         plan: Option<&str>,
+        why: Option<&str>,
         first: &mut dyn FnMut(&str) -> io::Result<()>,
     ) -> io::Result<Receipt> {
         planned
@@ -1029,6 +1075,7 @@ impl PostJournal {
         row.target = pin.shown();
         row.plan = plan.map(str::to_owned);
         row.expect = Some(expected(planned.act(), &pin, None));
+        row.why = why.map(str::to_owned);
         first(&id)?;
         self.append(&row)?;
         Ok(Receipt {

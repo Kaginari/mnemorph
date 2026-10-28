@@ -8,7 +8,7 @@
 //! still reads every rendered command first, so a typed act it calls destructive stays so.
 //!
 //! A standing effect (a deploy, a feature flag, a scheduled job) is not a typed kind: it is a
-//! command, so destructive, until the gate honours envelopes and an expiry runner ends what it
+//! command, so destructive, until a typed deploy and an expiry runner end what it
 //! starts (M11).
 
 use std::fmt;
@@ -571,6 +571,11 @@ impl Planned {
     /// The [`PostRefusal`] naming the first kind its post does not hold.
     pub fn check_post(&self, body: &str) -> Result<(), PostRefusal> {
         check_post(body, &self.acts)
+    }
+
+    /// The kinds of outward act the classifier read in its command.
+    pub(crate) fn kinds(&self) -> &[OutwardKind] {
+        &self.acts
     }
 
     /// Its class: the classifier's, raised to `destructive` for a command the harness cannot

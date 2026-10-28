@@ -93,4 +93,10 @@ impl Gate for TuiGate {
         }
         pending.wait(GATE_WAIT)
     }
+
+    fn admitted(&self, ask: &GateAsk, by: &str) {
+        // A line in the session, every character the act's text reaches passed through `shown`.
+        let line = shown(&mnemorph_tools::gate::admitted_line(ask, by));
+        let _ = self.tx.send(Msg::Said(line));
+    }
 }

@@ -30,6 +30,7 @@
 
 mod closure;
 mod forge;
+mod oni;
 mod outward;
 mod receipt;
 mod runner;
@@ -46,6 +47,7 @@ use mnemorph_tools::{Place, Rule, Verdict, classify};
 use toml::{Table, Value};
 
 pub use closure::{Cause, Incident, Lesson, RECEIPTS, incidents, suspended};
+pub use oni::{Admitted, EnvelopeGate, Revocation, excluded, guarded, secret_in, uses_path};
 pub use outward::{
     Act, BODY_BYTES, COVERED_TEXT, Done, Malformed, NO_UNDO, NoUndo, Planned, TITLE_CHARS,
     Uncovered, plan,
@@ -55,8 +57,8 @@ pub use receipt::{
     excerpt, post_journal, reconciling, redact,
 };
 pub use runner::{
-    ENVELOPES_UNWIRED, Hands, OUTWARD, OutwardTool, Paired, Refusal, Report, Request, Runner,
-    Sandboxed,
+    Hands, OUTWARD, OutwardTool, PAIR_ASKS, Paired, Refusal, Report, Request, Runner, Sandboxed,
+    UNDO_ASKS,
 };
 pub use write::{revoke, set};
 
