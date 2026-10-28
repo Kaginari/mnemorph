@@ -2360,8 +2360,22 @@ impl Run {
         } else {
             return ending;
         };
+        // The usage ledger's chain head goes with the work, kept outside the ledger: the run's
+        // journal and the commission hold it, and a later walk is checked against it.
+        let head = self
+            .ledger
+            .as_ref()
+            .and_then(|l| l.head().ok().flatten())
+            .map(|h| format!("the usage chain's head is {h}"));
+        let handoff = match &head {
+            Some(h) => format!("{handoff}\n\nAt this handoff {h}."),
+            None => handoff,
+        };
         self.record(&Beat::Note {
-            text: format!("solo escalates to {to}: {signal}"),
+            text: match &head {
+                Some(h) => format!("solo escalates to {to}: {signal}; {h}"),
+                None => format!("solo escalates to {to}: {signal}"),
+            },
         });
         let input = serde_json::json!({"to": to, "ask": handoff}).to_string();
         let left = self

@@ -15,11 +15,17 @@
 //! - **The last ten**: the ten latest findings that are upheld or refuted, by the record that
 //!   settled each, are what a fall is read on ([`Recent`]).
 //!
+//! - **The build**: each row carries the build of the record that settled it ([`Build`]); a fold
+//!   counts its findings per build, and [`fold_findings_by_build`] folds each build's rows on
+//!   their own, so a rate earned under old rules is told apart. The scoring reads every build.
+//!
 //! A rise or a fall is only ever proposed here ([`Ascension`]): applying one is the human's.
 
 use std::collections::BTreeMap;
 
-use mnemorph_races::{FallReading, Meter, Race, Recent, Signals, falls, meter, rises};
+use mnemorph_races::{FallReading, Meter, Race, Rate, Recent, Signals, falls, meter, rises};
+
+use crate::Build;
 
 /// How many settled findings a fall reads.
 pub const WINDOW: usize = 10;
@@ -89,6 +95,9 @@ pub struct FindingRow {
     pub standing: Standing,
     /// The order of the record that settled it there: a later record is greater.
     pub at: u64,
+    /// The build that wrote the record that settled it there; `unknown` for a record written
+    /// before records were stamped.
+    pub build: Build,
 }
 
 /// One speciality's findings, folded.
@@ -112,6 +121,9 @@ pub struct SpecialityFold {
     pub last_filed: u32,
     /// Of those, how many its verifier could not verify.
     pub last_cannot_verify: u32,
+    /// Findings per build of the record that settled each: which rules the record was earned
+    /// under. Shown, never scored apart.
+    pub builds: BTreeMap<Build, u32>,
 }
 
 /// What the fold proposes to the human for a speciality. Nothing here applies it.
@@ -157,6 +169,28 @@ impl SpecialityFold {
     #[must_use]
     pub fn cannot_verify_rate(&self) -> Option<f64> {
         pct(self.last_cannot_verify, self.last_filed)
+    }
+
+    /// Precision as its counts, for its interval: upheld of upheld and refuted.
+    #[must_use]
+    pub fn precision_rate(&self) -> Rate {
+        Rate::of(self.upheld, self.upheld + self.refuted)
+    }
+
+    /// The precision over [`SpecialityFold::recent`] as its counts.
+    #[must_use]
+    pub fn recent_rate(&self) -> Rate {
+        let upheld = self.recent.iter().filter(|u| **u).count();
+        Rate::of(
+            u32::try_from(upheld).unwrap_or(u32::MAX),
+            u32::try_from(self.recent.len()).unwrap_or(u32::MAX),
+        )
+    }
+
+    /// The `cannot-verify` rate over the last ten findings as its counts.
+    #[must_use]
+    pub fn cannot_verify_counts(&self) -> Rate {
+        Rate::of(self.last_cannot_verify, self.last_filed)
     }
 
     /// The readings the race law judges over the whole record.
@@ -211,17 +245,33 @@ pub fn fold_findings(rows: &[FindingRow]) -> BTreeMap<String, SpecialityFold> {
     fold_with(rows, true)
 }
 
+/// `rows` grouped by the build of the record that settled each, and each build's rows folded on
+/// their own: a rate earned under one build's rules, apart from another's. A root cause settled
+/// under two builds counts in both.
+#[must_use]
+pub fn fold_findings_by_build(
+    rows: &[FindingRow],
+) -> BTreeMap<Build, BTreeMap<String, SpecialityFold>> {
+    let mut by: BTreeMap<&Build, Vec<FindingRow>> = BTreeMap::new();
+    for r in rows {
+        by.entry(&r.build).or_default().push(r.clone());
+    }
+    by.into_iter()
+        .map(|(b, rows)| (b.clone(), fold_findings(&rows)))
+        .collect()
+}
+
 /// The fold; `dedupe` off counts every landing's row: how a test shows the dedupe is needed.
 fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFold> {
-    // Per speciality, per root cause: its standing and the record that settled it.
-    let mut causes: BTreeMap<(&str, String), (Standing, u64)> = BTreeMap::new();
+    // Per speciality, per root cause: its standing, the record that settled it and its build.
+    let mut causes: BTreeMap<(&str, String), (Standing, u64, &Build)> = BTreeMap::new();
     for (n, r) in rows.iter().enumerate() {
         let key = if dedupe {
             r.fingerprint.clone()
         } else {
             format!("{}#{n}", r.fingerprint)
         };
-        let now = (r.standing, r.at);
+        let now = (r.standing, r.at, &r.build);
         causes
             .entry((r.speciality.as_str(), key))
             .and_modify(|was| *was = stronger(*was, now))
@@ -230,13 +280,14 @@ fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFo
     let mut out: BTreeMap<String, SpecialityFold> = BTreeMap::new();
     let mut settled: BTreeMap<&str, Vec<(u64, bool)>> = BTreeMap::new();
     let mut filed: BTreeMap<&str, Vec<(u64, bool)>> = BTreeMap::new();
-    for ((speciality, _), (standing, at)) in causes {
+    for ((speciality, _), (standing, at, build)) in causes {
         filed
             .entry(speciality)
             .or_default()
             .push((at, standing == Standing::CannotVerify));
         let f = out.entry(speciality.to_owned()).or_default();
         f.findings += 1;
+        *f.builds.entry(build.clone()).or_default() += 1;
         match standing {
             Standing::Confirmed | Standing::Upheld => f.upheld += 1,
             Standing::Refuted | Standing::Dismissed => f.refuted += 1,
@@ -269,7 +320,10 @@ fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFo
 
 /// Of two standings of one root cause, the one that stands: the human's latest word, else the
 /// strongest verdict, the earlier record on a tie.
-fn stronger(a: (Standing, u64), b: (Standing, u64)) -> (Standing, u64) {
+fn stronger<'a>(
+    a: (Standing, u64, &'a Build),
+    b: (Standing, u64, &'a Build),
+) -> (Standing, u64, &'a Build) {
     match (a.0.human(), b.0.human()) {
         (true, true) => {
             if b.1 > a.1 {
@@ -301,6 +355,7 @@ mod tests {
             landing: landing.into(),
             standing,
             at,
+            build: Build::default(),
         }
     }
 
@@ -511,5 +566,41 @@ mod tests {
         rows[0].standing = Standing::Confirmed;
         rows.pop();
         assert_eq!(harness(&rows).proposal(Race::DarkElf), None);
+    }
+
+    /// Each row carries its build; old rows read as `unknown`. The fold counts findings per the
+    /// build that settled each, and a fold by build keeps each build's rates apart — the
+    /// whole-record score unchanged.
+    #[test]
+    fn a_fold_groups_by_build() {
+        let new = Build {
+            version: "0.2.0".into(),
+            commit: "a1b2c3d4e5".into(),
+        };
+        let mut rows = vec![
+            row("a", "l1", Standing::Refuted, 1),
+            row("b", "l1", Standing::Refuted, 2),
+        ];
+        // Root cause `a` is settled again, under the new build; `c` and `d` are new.
+        for (fp, at) in [("a", 3), ("c", 4), ("d", 5)] {
+            rows.push(FindingRow {
+                build: new.clone(),
+                ..row(fp, "l2", Standing::Confirmed, at)
+            });
+        }
+        let all = harness(&rows);
+        assert_eq!((all.upheld, all.refuted), (3, 1));
+        assert_eq!(all.builds[&Build::default()], 1);
+        assert_eq!(all.builds[&new], 3);
+        let by = fold_findings_by_build(&rows);
+        assert_eq!(by.len(), 2);
+        let old = &by[&Build::default()]["dark-elf-harness"];
+        let now = &by[&new]["dark-elf-harness"];
+        assert_eq!((old.precision(), now.precision()), (Some(0.0), Some(100.0)));
+        // The counts behind each shown rate.
+        assert_eq!(all.precision_rate(), Rate::of(3, 4));
+        assert_eq!(all.recent_rate(), Rate::of(3, 4));
+        assert_eq!(all.cannot_verify_counts(), Rate::of(0, 4));
+        assert_eq!(all.meter().rate, Rate::of(3, 4));
     }
 }

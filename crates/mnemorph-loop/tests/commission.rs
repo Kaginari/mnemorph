@@ -125,7 +125,9 @@ impl World {
             tools,
             cx,
             journal: Journal::new(journals.join("rimuru.jsonl")),
-            ledger: None,
+            ledger: Some(Journal::chained(
+                self.0.join(".mnemorph/instruments/usage.jsonl"),
+            )),
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
@@ -1556,6 +1558,21 @@ async fn solo_escalates_on_an_act_it_does_not_hold() {
     assert!(
         handoff.contains("it is yours to do") && handoff.contains("gh pr comment 7"),
         "{handoff}"
+    );
+    // The usage chain's head goes with the handoff: a row of the ledger, which still verifies.
+    let usage = w.0.join(".mnemorph/instruments/usage.jsonl");
+    let head = handoff
+        .split("the usage chain's head is ")
+        .nth(1)
+        .and_then(|rest| rest.get(..64))
+        .unwrap_or_else(|| panic!("no head in the handoff: {handoff}"));
+    let chain = mnemorph_ledger::chain::verify(&usage).unwrap();
+    assert!(chain.holds(), "{chain}");
+    assert!(
+        std::fs::read_to_string(&usage)
+            .unwrap()
+            .contains(&format!("\"digest\":\"{head}\"")),
+        "{head}"
     );
     // No signal: the ending stands.
     let quiet = run.ask("say hello", &mut |_| {}).await;

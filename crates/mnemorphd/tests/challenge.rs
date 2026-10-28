@@ -312,9 +312,20 @@ fn the_score_folds_each_speciality() {
     );
     assert!(
         shown.contains(
-            "precision — · upheld 0% (unranked) · last 0 settled: precision — · last 1 filed: \
-             cannot-verify 0%"
+            "  precision no reports · upheld 0.00 (0/1, 95% 0.00–0.79) (unranked)\n  last 0 \
+             settled: precision no reports · last 1 filed: cannot-verify 0.00 (0/1, 95% \
+             0.00–0.79)\n"
         ),
+        "{shown}"
+    );
+    // The finding was settled under the build `--version` prints.
+    let version = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    let build = text(&version).trim().replace("mnemorphd ", "");
+    assert!(
+        shown.contains(&format!("  settled under: {build} 1\n")),
         "{shown}"
     );
     assert!(!shown.contains("proposed"), "{shown}");
@@ -384,7 +395,34 @@ fn the_human_decides_a_finding_at_the_terminal() {
         "{}",
         text(&out)
     );
-    assert!(text(&out).contains("precision 0%"), "{}", text(&out));
+    assert!(
+        text(&out).contains("precision 0.00 (0/1, 95% 0.00–0.79)"),
+        "{}",
+        text(&out)
+    );
+}
+
+/// A row the fold cannot read is said, by `list` and by `score`, and holds the landing pending.
+#[test]
+fn an_unreadable_row_is_said() {
+    let f = Fixture::new("unreadable");
+    let file = records(&f.state, &f.world);
+    let before = fs::read_to_string(&file).unwrap();
+    fs::write(&file, format!("{before}{{\"row\":\"found\",\"landing\":\n")).unwrap();
+    let n = before.lines().count() + 1;
+    let out = f.run(&["list"], "", None);
+    assert!(
+        text(&out).contains(&format!("unreadable row {n}")),
+        "{}",
+        text(&out)
+    );
+    let out = f.run(&["score"], "", None);
+    assert!(
+        text(&out).starts_with(&format!("the records hold unreadable rows ({n})")),
+        "{}",
+        text(&out)
+    );
+    assert!(matches!(f.status(), Some(Status::Pending { .. })));
 }
 
 /// A living Dark Elf at the bars is proposed its rise — to the human, applied by nothing here.
@@ -418,7 +456,13 @@ fn a_rise_is_proposed_to_the_human() {
         "{shown}"
     );
     assert!(
-        shown.contains("upheld 100% (ok) · last 10 settled: precision 100%"),
+        shown.contains("upheld 1.00 (20/20, 95% 0.84–1.00) (ok)"),
+        "{shown}"
+    );
+    // Showing only: precision's lower bound, 0.84, is under its 85 bar, and the rise stands.
+    assert!(
+        shown.contains("precision 1.00 (20/20, 95% 0.84–1.00)")
+            && shown.contains("last 10 settled: precision 1.00 (10/10, 95% 0.72–1.00)"),
         "{shown}"
     );
 }

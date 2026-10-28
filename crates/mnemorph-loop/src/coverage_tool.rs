@@ -236,14 +236,29 @@ pub(crate) fn run(
             ),
             ToolClass::Read,
         ),
-        Ok(Status::Pending { awaiting }) => Outcome::ok(
+        Ok(Status::Pending {
+            awaiting,
+            unreadable,
+        }) => Outcome::ok(
             format!(
-                "filed: {speciality}'s ledger for {landing} holds; the challenge still awaits {}",
+                "filed: {speciality}'s ledger for {landing} holds; the challenge still awaits {}{}",
                 awaiting
                     .iter()
                     .map(|s| s.creature())
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", "),
+                if unreadable.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "; the records hold unreadable rows ({}) that keep it pending",
+                        unreadable
+                            .iter()
+                            .map(u64::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
             ),
             ToolClass::Read,
         ),

@@ -13,6 +13,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd onto check [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
+       mnemorphd housekeep --verify [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
@@ -83,6 +84,14 @@ upheld rate and the last ten — and the rise or fall it proposes, which only th
 one finding for that score, after showing it and asking for `y` at the terminal. A body never
 runs it.
 
+`housekeep --verify` walks each chained journal — the usage ledger and the Dark Elf's value
+ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
+torn tail (a truncation, not tampering) with the head it holds to, or the first broken link with
+its line — a dropped tail or a chain rooted again breaks the anchor. It says when `log.md`'s
+newest anchor and the copy kept under the state directory disagree. Then it anchors each head
+that holds in both. It exits 0 when every chain holds, 1 on a broken link or a disagreement, 2
+on an error.
+
 `q` is the shared work queue's door for the human, who stands over every body: a refusal exits 2
 and says why.
 
@@ -93,13 +102,11 @@ Options:
   -V, --version   the version
 ";
 
-/// The version and the commit it was built from: `0.0.0 (a1b2c3d4e5)`.
-const VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("MNEMORPH_COMMIT"),
-    ")"
-);
+/// The version and the commit it was built from: `0.0.0 (a1b2c3d4e5)` — the build every value row
+/// it writes carries.
+fn version() -> String {
+    mnemorph_server::world::challenge::Build::this().to_string()
+}
 
 fn main() -> ExitCode {
     let mut world = None;
@@ -109,7 +116,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if all.iter().any(|a| a == "-V" || a == "--version") {
-        println!("mnemorphd {VERSION}");
+        println!("mnemorphd {}", version());
         return ExitCode::SUCCESS;
     }
     if all.first().map(String::as_str) == Some("onto") {
@@ -149,7 +156,7 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-V" | "--version" => {
-                println!("mnemorphd {VERSION}");
+                println!("mnemorphd {}", version());
                 return ExitCode::SUCCESS;
             }
             "--world" => match args.next() {
@@ -177,7 +184,7 @@ fn main() -> ExitCode {
         Some(run) => mnemorph_server::resumer(world, run),
         None => mnemorph_server::opener(world),
     };
-    match mnemorph_server::serve(input, std::io::stdout(), VERSION, opener) {
+    match mnemorph_server::serve(input, std::io::stdout(), &version(), opener) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&e),
     }
@@ -439,10 +446,12 @@ fn housekeep(args: &[String]) -> ExitCode {
     }
     let mut world = None;
     let mut apply = false;
+    let mut verify = false;
     let mut it = args.iter();
     while let Some(w) = it.next() {
         match w.as_str() {
             "--heal" => apply = true,
+            "--verify" => verify = true,
             "--world" => match it.next() {
                 Some(v) => world = Some(PathBuf::from(v)),
                 None => return refused(&"--world needs a value"),
@@ -454,6 +463,12 @@ fn housekeep(args: &[String]) -> ExitCode {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    if verify {
+        if apply {
+            return refused(&"--verify walks the chains and heals nothing; run --heal on its own");
+        }
+        return verify_chains(&world);
+    }
     let found = match mnemorph_server::world::heal::heal(&world, apply) {
         Ok(found) => found,
         Err(e) => return refused(&format!("the heal could not write: {e}")),
@@ -478,6 +493,47 @@ fn housekeep(args: &[String]) -> ExitCode {
     } else {
         ExitCode::from(1)
     }
+}
+
+/// `housekeep --verify`: each chained journal walked, its reading said escaped, and the heads
+/// anchored in `log.md`.
+fn verify_chains(world: &Path) -> ExitCode {
+    use mnemorph_server::world::chains;
+    let safe = mnemorph_server::challenge::safe;
+    let readings = chains::verify(world);
+    let mut out = std::io::stdout().lock();
+    let mut code = ExitCode::SUCCESS;
+    for r in &readings {
+        if r.report.is_err() {
+            code = ExitCode::from(2);
+        } else if !r.holds() && code == ExitCode::SUCCESS {
+            code = ExitCode::from(1);
+        }
+        let _ = writeln!(
+            out,
+            "{} ({}): {}",
+            r.journal.name,
+            safe(&r.journal.path.display().to_string()),
+            safe(&r.text())
+        );
+    }
+    match chains::anchor(world, "housekeep", &readings) {
+        Ok(Some(heading)) => {
+            let _ = writeln!(out, "anchored in log.md: {}", safe(&heading));
+        }
+        Ok(None) => {
+            let _ = writeln!(out, "no log.md in this world: the heads are not anchored");
+        }
+        Err(e) => {
+            let _ = writeln!(
+                out,
+                "the heads could not be anchored: {}",
+                safe(&e.to_string())
+            );
+            code = ExitCode::from(2);
+        }
+    }
+    code
 }
 
 /// What `q` was asked.
@@ -1073,7 +1129,7 @@ fn challenge(args: &[String]) -> ExitCode {
         [verb] if verb == "score" => match mnemorph_server::world::challenge::scores(&world) {
             Ok(folded) => {
                 let roster = mnemorph_server::world::Roster::load(&world);
-                for line in score(&folded, &roster) {
+                for line in score(&folded, &roster, &records.unreadable()) {
                     println!("{line}");
                 }
                 ExitCode::SUCCESS
@@ -1145,19 +1201,30 @@ fn decide(
     }
 }
 
-/// Each speciality's value ledger, as `challenge score` says it, escaped: the counts, precision,
-/// the upheld rate on the race's meter, the last ten, and what is proposed to the human.
+/// Each speciality's value ledger, as `challenge score` says it, escaped: the counts; precision,
+/// the upheld rate on the race's meter, the last ten and the `cannot-verify` rate, each with its
+/// count and 95% interval; the builds its findings were settled under; and what is proposed to
+/// the human — after the records' unreadable rows, when there are any.
 fn score(
     folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
     roster: &mnemorph_server::world::Roster,
+    unreadable: &[u64],
 ) -> Vec<String> {
     use mnemorph_server::world::challenge::Ascension;
     let safe = mnemorph_server::challenge::safe;
-    let pct = |p: Option<f64>| p.map_or_else(|| "—".to_owned(), |p| format!("{p:.0}%"));
-    if folded.is_empty() {
-        return vec!["no Dark Elf finding is on record".to_owned()];
-    }
     let mut lines = Vec::new();
+    if !unreadable.is_empty() {
+        let rows: Vec<String> = unreadable.iter().map(u64::to_string).collect();
+        lines.push(format!(
+            "the records hold unreadable rows ({}): what they held is not counted, and the \
+             challenges they could be stay pending",
+            rows.join(", ")
+        ));
+    }
+    if folded.is_empty() {
+        lines.push("no Dark Elf finding is on record".to_owned());
+        return lines;
+    }
     for (speciality, f) in folded {
         // The form is the living body's that bears the speciality's name, when one is born.
         let form = roster
@@ -1178,17 +1245,25 @@ fn score(
         ));
         let m = f.meter();
         lines.push(format!(
-            "  precision {} · {} {} ({}) · last {} settled: precision {} · last {} filed: \
-             cannot-verify {}",
-            pct(f.precision()),
+            "  precision {} · {} {} ({})",
+            f.precision_rate(),
             m.label.to_lowercase(),
-            pct(f.upheld_rate()),
+            m.rate,
             format!("{:?}", m.band).to_lowercase(),
-            f.recent.len(),
-            pct(f.recent_precision()),
-            f.last_filed,
-            pct(f.cannot_verify_rate())
         ));
+        lines.push(format!(
+            "  last {} settled: precision {} · last {} filed: cannot-verify {}",
+            f.recent.len(),
+            f.recent_rate(),
+            f.last_filed,
+            f.cannot_verify_counts()
+        ));
+        let builds: Vec<String> = f
+            .builds
+            .iter()
+            .map(|(b, n)| format!("{} {n}", safe(&b.to_string())))
+            .collect();
+        lines.push(format!("  settled under: {}", builds.join(" · ")));
         if let Some(a) = form.and_then(|r| f.proposal(r)) {
             let what = match a {
                 Ascension::Rise => "rise to Arch Dark Elf",
