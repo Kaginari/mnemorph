@@ -1,0 +1,19 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: cargo build --release --locked
+      - uses: example-org/upload-release-asset@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: target/release/mnemorph
