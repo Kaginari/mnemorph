@@ -364,6 +364,40 @@ fn only_a_re_run_of_the_witness_confirms() {
         let f = k.filing(AGENT, rerun(Severity::High, command));
         assert!(rederived(k.c.verdict(f, &tree(), &journal)), "{command}");
     }
+    // Written into the records, a `cat` that did not fail counts for nothing on read either.
+    let forged = super::Verification {
+        fingerprint: k.fp.clone(),
+        verifier: AGENT.into(),
+        speciality: AGENT.into(),
+        finder: FINDER.into(),
+        finder_speciality: FINDER.into(),
+        tree: TREE.into(),
+        witness_sha256: sha256_hex(POC_BODY.as_bytes()),
+        output_sha256: String::new(),
+        ruling: Ruling::Confirmed {
+            severity: Severity::High,
+            reason: String::new(),
+            reran: vec![Rerun {
+                run: cat.clone(),
+                sha256: sha256_hex(POC_BODY.as_bytes()),
+                failed: false,
+            }],
+        },
+    };
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(k.dir.join("challenges.jsonl"))
+        .unwrap();
+    let row = Row::Ruled {
+        landing: k.id.clone(),
+        verification: forged,
+    };
+    writeln!(file, "{}", serde_json::to_string(&row).unwrap()).unwrap();
+    drop(file);
+    assert!(
+        k.finding().unverified(),
+        "a re-run that did not fail rederives nothing"
+    );
     // A command witness: `cat` of its output file is no re-run of it.
     let k = Case::new("poc-cat", Severity::Medium);
     let out = ".mnemorph/dark-elf/dark-elf-harness/poc/out.txt";

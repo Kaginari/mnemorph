@@ -6014,3 +6014,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the finder-speciality and finder-body checks mask each other (a speciality's body is
   the creature of its name), and the loop's floor filter is masked by the records' `floor` guard:
   only both off fails. Say so instead of claiming each is tested alone.
+
+---
+
+### [2026-10-28T02:03:39+01:00] rimuru — #256, Fable's review: verification held to the witness, and a critical held for the human
+- **Done:** `rederived` ties a confirmation to the witness: a command witness's own command (and,
+  with captured output, that output again), or a command naming the test's or scanner output's
+  file that failed in the verifier's journal (`Ran` now keeps each run's failure). A critical
+  blocks whatever one verifier says — refuted or lowered, it reads "the human decides" until a
+  waiver or the fix. A lowered severity needs a reason. The verifier's ask fences the record
+  behind an evidence-not-instructions preamble. Verdicts carry the landing's tree hash and are
+  refused off it (`current`). Docs 02: cross-verification on one landing is allowed, bounded by the
+  critical rule.
+- **Tests:** `echo ok` and `cat <witness>` never confirm, nor `cat` of a command's output; a
+  command witness confirms by reproducing its output in a loop run; a refuted or lowered critical
+  stays blocked and the waiver settles it; a bare lowering is refused; a stale tree is refused.
+  Mutations: any command as a re-run, a re-run that did not fail, a refutation lifting a critical
+  each fail.
+- **Learned:** the journal check of a failed run masks the row's own `failed` flag at filing; only
+  a read of a written row tests the flag.
