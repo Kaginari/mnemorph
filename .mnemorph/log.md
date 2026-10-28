@@ -6007,3 +6007,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** the validators hold shape, not truth — a ledger ruling a plant out holds, and a
   finding copied onto the look-alike `.env.example` validates; the tests pin both so no one reads
   more into a green run. #13 stays open: the verifier, seals and the witness's lift remain.
+
+---
+
+### [2026-10-28T01:56:52+01:00] rimuru — #257, Fable's review: the paid evaluation runs guarded
+- **Done:** `seeded_eval`'s session takes a normal session's containment — `Sandbox::detect()`,
+  never unguarded — and its live reviewers inherit it; the scripted tests, which run no command,
+  keep theirs. The end-to-end count is pinned to every plant but `env-unredacted` (two hunters).
+  Docs 02.
+- **Tests:** `the_eval_session_is_guarded` (the context and a reviewer's inherited one).
+- **Learned:** a live hook shares its harness with scripted tests: give it its own containment,
+  and a test that says so.

@@ -937,8 +937,9 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   is the independent verifier's to catch, and the **paid evaluation**'s to measure: `just
   seeded-eval [model]` lands the whole world before a live Dark Elf of each speciality and prints
   each one's recall and precision against the key, findings on controls counted apart. It is an
-  ignored test, never run in CI; its model is a free OpenRouter one unless named, and its key
-  travels only through `OPENROUTER_API_KEY`, never printed.
+  ignored test, never run in CI; its model is a free OpenRouter one unless named, its key
+  travels only through `OPENROUTER_API_KEY`, never printed, and its reviewers' commands run
+  under the machine's sandbox as a normal session's do — with none, no command runs.
 
 ---
 

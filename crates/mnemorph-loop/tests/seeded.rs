@@ -21,7 +21,7 @@ use mnemorph_loop::{
 };
 use mnemorph_provider::{Block, Caller, Event, Request, anthropic_prices};
 use mnemorph_races::{Race, Speciality};
-use mnemorph_tools::{Sandbox, registry};
+use mnemorph_tools::{Context, Sandbox, registry};
 use serde_json::{Value, json};
 
 use seeded::{Plant, finding_line, landing, ledger, looked, manifest, tree};
@@ -129,19 +129,18 @@ impl World {
     }
 
     /// The throne, scripted by `throne`, sending its landings' challenges to `reviewer`; every
-    /// body rides `model_name`.
+    /// body rides `model_name` and inherits the throne's containment, [`contain`]'s for `live`.
     fn throne(
         &self,
         throne: Arc<dyn Model>,
         reviewer: Arc<dyn Model>,
         model_name: &str,
         reviewers: usize,
+        live: bool,
     ) -> Run {
         let world = self.world().canonicalize().unwrap();
         let (body, cx) = solo(&world, model_name);
-        let cx = cx
-            .with_sandbox(Sandbox::None("seeded tests run unguarded".into()))
-            .with_unguarded(true);
+        let cx = contain(cx, live);
         let setup = Setup {
             model: throne,
             tools: registry(),
@@ -161,6 +160,19 @@ impl World {
         Run::new(body, Limits::for_race(Race::Rimuru), setup)
             .with_gate(EndGate::default())
             .with_challenger(Arc::new(self.commissioner(reviewer, reviewers)))
+    }
+}
+
+/// The containment a session's commands run under. A live model's is a normal session's: the
+/// sandbox detected for the machine, and no command at all when there is none (never
+/// unguarded). Scripted models run no command — they only write and file — so theirs runs
+/// unguarded, the guard helper not being beside the test binary.
+fn contain(cx: Context, live: bool) -> Context {
+    if live {
+        cx.with_sandbox(Sandbox::detect()).with_unguarded(false)
+    } else {
+        cx.with_sandbox(Sandbox::None("scripted seeded tests run no command".into()))
+            .with_unguarded(true)
     }
 }
 
@@ -200,7 +212,15 @@ async fn each_plant_blocks_its_landing() {
     let key = manifest();
     let fixture = tree();
     let plants = single_routed();
-    assert!(plants.len() >= 12, "{} plants routed alone", plants.len());
+    // Every plant but one: `env-unredacted`'s `crates/mnemorph-ledger/src/journal.rs` lies on
+    // both the secrets and the law surfaces, so it routes two hunters and the generalist.
+    assert_eq!(
+        plants.len(),
+        key.plant.len() - 1,
+        "{} plants routed alone",
+        plants.len()
+    );
+    assert!(!plants.iter().any(|p| p.id == "env-unredacted"));
     for p in &plants {
         let s = p.speciality();
         let w = World::new(&p.id, &[s.creature()]);
@@ -228,7 +248,7 @@ async fn each_plant_blocks_its_landing() {
             ScriptedModel::text(&report),
         ]));
         let model: Arc<dyn Model> = Arc::new(Reviewing(model));
-        let mut run = w.throne(model.clone(), model, "claude-sonnet-5-5", 3);
+        let mut run = w.throne(model.clone(), model, "claude-sonnet-5-5", 3, false);
         let Ending::Answered(text) = run.ask("land the change", &mut |_| {}).await else {
             panic!("{}: answered", p.id);
         };
@@ -296,13 +316,29 @@ async fn a_control_landing_clears() {
         ),
         ScriptedModel::text("@S DONE\n@E"),
     ]))));
-    let mut run = w.throne(model.clone(), model, "claude-sonnet-5-5", 3);
+    let mut run = w.throne(model.clone(), model, "claude-sonnet-5-5", 3, false);
     let Ending::Answered(text) = run.ask("land the change", &mut |_| {}).await else {
         panic!("answered");
     };
     assert!(text.contains("challenge cleared"), "{text}");
     let all = w.records().records();
     assert_eq!(all.into_values().next().unwrap().status, Status::Cleared);
+}
+
+/// The paid evaluation's session is guarded: its live reviewers inherit the throne's context, so
+/// it runs commands only under the machine's sandbox, never unguarded on the host.
+#[test]
+fn the_eval_session_is_guarded() {
+    let w = World::new("guarded", &[]);
+    let (_, cx) = solo(&w.world().canonicalize().unwrap(), "any:free");
+    let cx = contain(cx, true);
+    assert!(!cx.allows_unguarded());
+    assert_eq!(cx.sandbox(), &Sandbox::detect());
+    // What a commissioned reviewer takes from it.
+    let (_, child) = solo(&w.world().canonicalize().unwrap(), "any:free");
+    let child = child.with_unguarded(true).inherit(&cx);
+    assert!(!child.allows_unguarded());
+    assert_eq!(child.sandbox(), &Sandbox::detect());
 }
 
 /// The paid evaluation: real models hunt the whole seeded world, and each speciality's recall and
@@ -352,7 +388,7 @@ async fn seeded_eval() {
         client,
         name: "openrouter".into(),
     });
-    let mut run = w.throne(throne, reviewer, &model_name, Speciality::ALL.len());
+    let mut run = w.throne(throne, reviewer, &model_name, Speciality::ALL.len(), true);
     let ending = run.ask("land the seeded world", &mut |_| {}).await;
     eprintln!("model: {model_name}\nending: {ending:?}");
 
