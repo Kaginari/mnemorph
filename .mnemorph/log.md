@@ -6219,3 +6219,36 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the gate reads envelopes from the global file alone (`Config::load_global`). A local file's envelopes are ignored and `envelope list` says so. Each envelope names a `world` (canonical) and/or a `repo` (`owner/name`, a push's pinned URLs); one naming neither admits nothing. Optional `post` and `body`. `own_file` also requires this uid and a folder no one else may write. `secret_in` splits at `=:/.` and quotes before testing prefixes. The envelopes and their scope are read before `excluded`, so ls-remote and the forge compare run only when an envelope could apply. `pushed_paths` docstring fixed.
 - **Tests:** `an_envelope_admits_only_where_it_is_signed_for` (8 scopes), `a_local_file_and_a_folder_others_may_write_are_never_read_for_envelopes`, a private local file in the project-file table, and each secret shape.
 - **Learned:** this machine's umask is 002, so a `~/.config/mnemorph` made by hand is 0775 and refused. The refusal names the folder. The uid check cannot be exercised without root.
+---
+
+### [2026-10-28T10:15:36+01:00] rimuru — #97 and #99: falls are explained, and honest bad news never lowers a score
+- **Done:** the race law's bars are one table each (`rise_bars`, `fall_bar`, `event_bars`);
+  `rises`, `falls` and `recovers` read them, and `explain_rise` / `explain_fall` give one typed
+  `Explanation` per bar — meter, reading, operator, threshold, window, recover, re-rise, ledger
+  head and rows. The Dark Elf fold's proposals carry their lines (`SpecialityFold::proposed`, the
+  `cannot-verify` bar its own line), the challenge records number rows by line from 1, and
+  `challenge score` prints the lines escaped with the records' chain head. A budget refusal names
+  the shortfall and the top-up (`Shortfall`: `refused: needs 41k wt, 12k left this session; top up
+  >= 29k wt (budget.session)`), the cap carried from the session's opening. A report fold
+  (`fold_reports`) reads the gate and the harness, never the body's word, holes or prose. Docs 02,
+  04, 06.
+- **Fixed:** `landRate` read "closed done, with no fail word": a body that said `@S FAIL` over a
+  landing the gate passed scored under a silent one. It now reads the gate's word alone.
+- **Tests:** proptests that the lines recompute every decision; that `@S FAIL`, `@S ESCALATE` or
+  an `@?` never scores, ranks, rises or falls worse than silence; that a body's `@?` never moves
+  `holeRate` and a harness hole always does; that a gate verdict never depends on the answer's
+  prose. A proposal recomputed from its window and chain head, on real chained records.
+- **Learned:** a rate defined in words on a struct field is law nobody tests; folding it in code
+  is what let the property find the fail-word penalty. Open (@?): the report fold is not wired to
+  a journal yet (M11 reads it); the gate fails an empty answer, which the docs define.
+
+---
+
+### [2026-10-28T10:32:34+01:00] rimuru — #97/#99, Fable's review: the window recomputes from the records' prefix; fold and head from one read
+- **Done:** an explanation recomputes from the records up to its window's last row, since one root
+  cause's rows can lie on both sides of the window's first; `challenge score` takes the fold and
+  the chain head from one read under the lock (`scored`, `finding_rows_chained`). Docs 02 and the
+  roadmap say the honesty properties are re-asserted against M11's journal fold.
+- **Tests:** a root cause confirmed before the window and refuted inside it recomputes from the
+  prefix, and not from the window alone; the chained-records test reads rows and chain in one go.
+- **Learned:** a window's rows are not its inputs when a fold dedupes across them.

@@ -465,4 +465,17 @@ fn a_rise_is_proposed_to_the_human() {
             && shown.contains("last 10 settled: precision 1.00 (10/10, 95% 0.72–1.00)"),
         "{shown}"
     );
+    // Each bar of the rise, explained, with the records' chain head: what recomputes it.
+    let head = c.chain().unwrap().head.unwrap().digest;
+    for bar in [
+        "rise: findings 20 >= 20 (over 20 findings)",
+        "rise: upheldRate 1.00 >= 0.80 (over 20 findings)",
+        "rise: precision 1.00 >= 0.85 (over 20 findings)",
+    ] {
+        assert!(
+            shown.contains(&format!("    {bar}; ledger head {head}, rows ")),
+            "{shown}"
+        );
+    }
+    assert!(!shown.contains("chain does not hold"), "{shown}");
 }

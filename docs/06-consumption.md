@@ -250,6 +250,13 @@ Currency caps convert through the same table; a model with no known price is sti
   what is left, the loop checkpoints with `@? budget: need ~N wt, have M wt`. The parent can top
   up the child's slice from its own envelope (`@INSTRUCT` with a new budget), split the work, or
   escalate to the human.
+- **A budget refusal is explained** (`BudgetShort::refusal`, `Shortfall`): it names what is
+  needed, what is left, the least top-up that lets it fit, and where the top-up comes from — the
+  human's cap that sets what is left, raised under `budget.session`, `budget.day` or
+  `budget.month`, or the commander that carved the envelope:
+  `refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session)`. From ten thousand up, weighted tokens read in
+  thousands — the need and the top-up rounded up, what is left rounded down — so the top-up named
+  always suffices.
 - **Spend is recorded, never refused after the fact.** Pre-flight is the guard; when a call
   costs more than its estimate, the real cost is booked and the envelope reads *overspent*.
 - Unspent slices return to the parent when the child reports; what the child spent counts as the

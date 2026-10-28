@@ -420,3 +420,53 @@ fn another_writers_change_is_not_the_bodys_under_a_guard() {
         "{unguarded:?}"
     );
 }
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(24))]
+
+    /// A gate verdict never depends on a report's prose: over the same landing and the same verify
+    /// lines, any answer that says something — a claim of a pass, a plea, a status word — gets the
+    /// verdict and the failures the plain one does. Only an empty answer fails *duties done*, as
+    /// the gate's own check says.
+    #[test]
+    fn a_gate_verdict_never_depends_on_the_prose(
+        prose in "[ -~]{0,80}",
+        word in proptest::sample::select(vec!["@S DONE", "@S PASS", "@S FAIL", "@S ESCALATE", "@? hole", ""]),
+        verify in proptest::sample::select(vec![vec![], vec!["true"], vec!["false"], vec!["true", "false"]]),
+        stray in proptest::bool::ANY,
+    ) {
+        let w = World::new("prose");
+        let roster = Roster::load(&w.0);
+        let verify: Vec<String> = verify.into_iter().map(str::to_owned).collect();
+        let judge = |answer: &str| {
+            let before = snapshot(&w.0);
+            fs::write(w.0.join("src/mine.rs"), format!("{answer:?}\n")).unwrap();
+            if stray {
+                fs::write(w.0.join("lib/theirs.rs"), format!("{answer:?}\n")).unwrap();
+            }
+            let gate = EndGate {
+                verify: verify.clone(),
+                author: Some(Author {
+                    name: "slime-a".into(),
+                    roster: roster.clone(),
+                }),
+                ..Default::default()
+            };
+            let mut cx = context_for(&w.0, &roster, "slime-a")
+                .unwrap()
+                .with_sandbox(Sandbox::None("the gate's judgement is under test".into()))
+                .with_unguarded(true);
+            gate.judge(&before, answer, &registry(), &mut cx)
+        };
+        let answer = format!("{word} {prose}");
+        let plain = judge("done");
+        let said = judge(&answer);
+        if answer.trim().is_empty() {
+            proptest::prop_assert_eq!(said.verdict(), Verdict::Fail);
+        } else {
+            proptest::prop_assert_eq!(said.verdict(), plain.verdict());
+            proptest::prop_assert_eq!(said.failures, plain.failures);
+            proptest::prop_assert_eq!(said.unverified, plain.unverified);
+        }
+    }
+}

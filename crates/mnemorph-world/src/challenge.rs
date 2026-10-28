@@ -33,8 +33,10 @@ use crate::roster::Roster;
 
 pub mod verification;
 
+/// The records' hash chain, as a walk reports it.
+pub use mnemorph_ledger::Report as ChainReport;
 pub use mnemorph_ledger::{
-    Ascension, Build, CANNOT_VERIFY_BAR, FindingRow, SpecialityFold, Standing, WINDOW,
+    Ascension, Build, CANNOT_VERIFY_BAR, FindingRow, Proposed, SpecialityFold, Standing, WINDOW,
     fold_findings_by_build,
 };
 pub use verification::{
@@ -104,17 +106,27 @@ pub fn route(roster: &Roster, id: &str, written: &[String]) -> Landing {
 ///
 /// There is no home to keep records under, or the records' path lies inside the world.
 pub fn scores(world: &Path) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
-    let records = records_of(world).ok_or(Refusal::NoState)?;
-    scores_at(world, &records, true)
+    scored(world).map(|(folded, _)| folded)
 }
 
-/// The fold of `records` for `world`; `outside` off skips the source check: how a test shows it
-/// is needed.
-fn scores_at(
-    world: &Path,
-    records: &Path,
-    outside: bool,
-) -> Result<BTreeMap<String, SpecialityFold>, Refusal> {
+/// [`scores`], with the records' hash chain walked over the same bytes the fold read — one read
+/// under the lock, so the head a proposal names is the head of the rows it was folded from;
+/// `None` when the records cannot be read.
+///
+/// # Errors
+///
+/// As [`scores`].
+pub fn scored(world: &Path) -> Result<Scored, Refusal> {
+    let records = records_of(world).ok_or(Refusal::NoState)?;
+    scored_at(world, &records, true)
+}
+
+/// Each speciality's fold, and the records' chain as the same read walked it.
+pub type Scored = (BTreeMap<String, SpecialityFold>, Option<ChainReport>);
+
+/// The fold of `records` for `world`, and the chain the same read walked; `outside` off skips the
+/// source check: how a test shows it is needed.
+fn scored_at(world: &Path, records: &Path, outside: bool) -> Result<Scored, Refusal> {
     let real = |p: &Path| {
         p.canonicalize().unwrap_or_else(|_| {
             // Not there yet: its nearest existing ancestor, resolved, with the rest.
@@ -129,9 +141,8 @@ fn scores_at(
     if outside && real(records).starts_with(real(world)) {
         return Err(Refusal::InWorld(records.to_path_buf()));
     }
-    Ok(mnemorph_ledger::fold_findings(
-        &Challenges::at(records).finding_rows(),
-    ))
+    let (rows, chain) = Challenges::at(records).finding_rows_chained();
+    Ok((mnemorph_ledger::fold_findings(&rows), chain))
 }
 
 /// Who stands over every body: the only author a waiver may have.
@@ -491,8 +502,8 @@ struct Open {
     blockers: Vec<Blocker>,
     findings: Vec<Finding>,
     waived: Option<Waiver>,
-    /// Per fingerprint, the line of the record that last settled it — found, ruled or decided —
-    /// and the build that wrote it.
+    /// Per fingerprint, the line, from 1, of the record that last settled it — found, ruled or
+    /// decided — and the build that wrote it.
     at: BTreeMap<String, (u64, Build)>,
     /// Lines, from 1, that did not parse and could be this landing's.
     unreadable: Vec<u64>,
@@ -613,6 +624,16 @@ impl Challenges {
         Challenges {
             path: file.to_path_buf(),
         }
+    }
+
+    /// The records' hash chain, walked ([`mnemorph_ledger::chain::verify`]): its head is the
+    /// digest a proposal's explanation names, so the decision can be recomputed from these rows.
+    ///
+    /// # Errors
+    ///
+    /// The records cannot be read.
+    pub fn chain(&self) -> std::io::Result<mnemorph_ledger::Report> {
+        mnemorph_ledger::chain::verify(&self.path)
     }
 
     /// Opens the challenge of `landing`, with no tree and no author on record. See
@@ -918,7 +939,7 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                 if let Some(open) = all.get_mut(&landing) {
                     let fp = found.fingerprint().to_owned();
                     if open.fold_found(*found) {
-                        open.at.insert(fp, (n, build));
+                        open.at.insert(fp, (n + 1, build));
                     }
                 }
             }
@@ -939,7 +960,7 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                 if let Some(open) = all.get_mut(&landing) {
                     let fp = verification.fingerprint.clone();
                     if open.fold_ruled(verification) {
-                        open.at.insert(fp, (n, build));
+                        open.at.insert(fp, (n + 1, build));
                     }
                 }
             }
@@ -957,7 +978,7 @@ fn fold(bytes: &[u8]) -> BTreeMap<String, Open> {
                 if let Some(open) = all.get_mut(&landing)
                     && open.fold_decided(&fingerprint, decision)
                 {
-                    open.at.insert(fingerprint, (n, build));
+                    open.at.insert(fingerprint, (n + 1, build));
                 }
             }
             Row::Waived { landing, waiver } => {

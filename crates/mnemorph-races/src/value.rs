@@ -9,6 +9,7 @@
 use std::fmt;
 
 use crate::Race;
+use crate::explain::{Explanation, Kind, Op, Recover, Rerise, Scale};
 
 /// The readings a race is judged on, over a window. Rates are percentages.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -33,7 +34,8 @@ pub struct Signals {
     pub plan_land_rate: f64,
     /// Dispatches re-commissioned after a council warrant (commanders).
     pub reask_rate: f64,
-    /// Runs that closed done, with no fail word and no failed gate.
+    /// Reports whose landing the gate passed: the harness's word, never the body's, so a body
+    /// that says `@S FAIL` over a passing landing is not scored under one that says nothing.
     pub land_rate: f64,
     /// Verdicts held and not overturned (gate holders).
     pub gate_right: f64,
@@ -41,7 +43,8 @@ pub struct Signals {
     pub slime_health: f64,
     /// First-try gate passes (authors).
     pub gate_rate: f64,
-    /// Reports that carried a harness hole.
+    /// Reports in which the harness found a hole — an edited or deleted verify line — never the
+    /// body's own `@?`.
     pub hole_rate: f64,
     /// Outward acts that completed without rollback or human correction (Kijin).
     pub outward_clean_rate: f64,
@@ -230,32 +233,192 @@ pub fn meter(race: Race, s: &Signals) -> Meter {
     }
 }
 
+/// The unit a form's record is counted in: findings for a Dark Elf, outward acts for a Kijin,
+/// reports for every other race.
+fn unit(race: Race) -> &'static str {
+    match race.base() {
+        Race::DarkElf => "findings",
+        Race::Kijin => "outward acts",
+        _ => "reports",
+    }
+}
+
+/// A form's record over `s`, in its [`unit`].
+fn record(race: Race, s: &Signals) -> u32 {
+    match race.base() {
+        Race::DarkElf => s.findings,
+        Race::Kijin => s.outward_acts,
+        _ => s.reports,
+    }
+}
+
+/// One bar: a meter, read off the signals, held against a threshold.
+struct Bar {
+    meter: &'static str,
+    scale: Scale,
+    read: fn(&Signals) -> f64,
+    op: Op,
+    threshold: f64,
+}
+
+impl Bar {
+    fn rate(meter: &'static str, read: fn(&Signals) -> f64, op: Op, threshold: f64) -> Bar {
+        Bar {
+            meter,
+            scale: Scale::Rate,
+            read,
+            op,
+            threshold,
+        }
+    }
+
+    fn count(meter: &'static str, read: fn(&Signals) -> f64, op: Op, threshold: f64) -> Bar {
+        Bar {
+            meter,
+            scale: Scale::Count,
+            read,
+            op,
+            threshold,
+        }
+    }
+
+    /// The bar read over `s`, a record of `window`.
+    fn explain(&self, kind: Kind, risen: Race, s: &Signals, window: u32) -> Explanation {
+        Explanation {
+            kind,
+            meter: self.meter,
+            scale: self.scale,
+            reading: (self.read)(s),
+            op: self.op,
+            threshold: self.threshold,
+            window,
+            unit: unit(risen),
+            recover: None,
+            rerise: None,
+            head: None,
+            from: None,
+            to: None,
+        }
+    }
+}
+
+/// The record a rise needs: outward acts for an Oni, reports or findings for the others.
+fn rise_record(risen: Race) -> u32 {
+    if risen == Race::Oni {
+        RISE_OUTWARD
+    } else {
+        RISE_RECORD
+    }
+}
+
+/// The bars of `risen`'s rise, its record first; none when `risen` is not an ascended form.
+fn rise_bars(risen: Race) -> Vec<Bar> {
+    let at_least = |meter: &'static str, read: fn(&Signals) -> f64| {
+        Bar::count(meter, read, Op::Ge, f64::from(rise_record(risen)))
+    };
+    let reports = || at_least("reports", |s| f64::from(s.reports));
+    match risen {
+        Race::HighElf => vec![
+            reports(),
+            Bar::rate("planLandRate", |s| s.plan_land_rate, Op::Ge, 85.0),
+            Bar::rate("reaskRate", |s| s.reask_rate, Op::Le, 10.0),
+        ],
+        Race::HighOrc => vec![
+            reports(),
+            Bar::rate("gateRight", |s| s.gate_right, Op::Ge, 90.0),
+            Bar::rate("holeRate", |s| s.hole_rate, Op::Le, 10.0),
+        ],
+        Race::NamedSlime => vec![
+            reports(),
+            Bar::rate("landRate", |s| s.land_rate, Op::Ge, 90.0),
+            Bar::rate("gateRate", |s| s.gate_rate, Op::Ge, 90.0),
+            Bar::rate("holeRate", |s| s.hole_rate, Op::Le, 5.0),
+        ],
+        Race::Oni => vec![
+            at_least("outwardActs", |s| f64::from(s.outward_acts)),
+            Bar::rate("outwardCleanRate", |s| s.outward_clean_rate, Op::Ge, 95.0),
+            Bar::count("rollbacks", |s| f64::from(s.rollbacks), Op::Le, 0.0),
+            Bar::count(
+                "envelopeCorrections",
+                |s| f64::from(s.envelope_corrections),
+                Op::Le,
+                0.0,
+            ),
+        ],
+        Race::ArchDarkElf => vec![
+            at_least("findings", |s| f64::from(s.findings)),
+            Bar::rate("upheldRate", |s| s.upheld_rate, Op::Ge, 80.0),
+            Bar::rate("precision", |s| s.precision, Op::Ge, 85.0),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// The rate whose fall bar starts `risen`'s probation; `None` for a form that falls only by event.
+fn fall_bar(risen: Race) -> Option<Bar> {
+    Some(match risen {
+        Race::HighElf => Bar::rate("planLandRate", |s| s.plan_land_rate, Op::Lt, 70.0),
+        Race::HighOrc => Bar::rate("gateRight", |s| s.gate_right, Op::Lt, 75.0),
+        Race::NamedSlime => Bar::rate("landRate", |s| s.land_rate, Op::Lt, 75.0),
+        Race::ArchDarkElf => Bar::rate("precision", |s| s.precision, Op::Lt, 70.0),
+        _ => return None,
+    })
+}
+
+/// The events that end `risen`'s ascension at once.
+fn event_bars(risen: Race) -> Vec<Bar> {
+    let any = |meter: &'static str, read: fn(&Signals) -> f64| Bar::count(meter, read, Op::Gt, 0.0);
+    match risen {
+        Race::HighOrc => vec![any("overturnedOnSealed", |s| {
+            f64::from(s.overturned_on_sealed)
+        })],
+        Race::NamedSlime => vec![any("testsIntactFailures", |s| {
+            f64::from(s.tests_intact_failures)
+        })],
+        Race::Oni => vec![
+            any("rollbacks", |s| f64::from(s.rollbacks)),
+            any("envelopeCorrections", |s| f64::from(s.envelope_corrections)),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// The rise bar a body of `risen` must earn again once it falls on `meter`: that meter's rise bar,
+/// else the form's first rate bar. `None` for a form with no rise.
+#[must_use]
+pub fn rerise(risen: Race, meter: &str) -> Option<Rerise> {
+    let bars = rise_bars(risen);
+    let rates: Vec<&Bar> = bars.iter().filter(|b| b.scale == Scale::Rate).collect();
+    let bar = rates
+        .iter()
+        .find(|b| b.meter == meter)
+        .or_else(|| rates.first())?;
+    Some(Rerise {
+        meter: bar.meter,
+        op: bar.op,
+        threshold: bar.threshold,
+        over: rise_record(risen),
+        unit: unit(risen),
+    })
+}
+
+/// Every bar of `risen`'s rise read over the window, held or not: a rise is proposed when each
+/// holds ([`rises`]). Empty when `risen` is not an ascended form.
+#[must_use]
+pub fn explain_rise(risen: Race, s: &Signals) -> Vec<Explanation> {
+    let window = record(risen, s);
+    rise_bars(risen)
+        .iter()
+        .map(|b| b.explain(Kind::Rise, risen, s, window))
+        .collect()
+}
+
 /// Whether a body of `risen`'s base race has earned `risen` over the window (the 28-day
-/// fold). False when `risen` is not an ascended form.
+/// fold): every bar of [`explain_rise`] holds. False when `risen` is not an ascended form.
 #[must_use]
 pub fn rises(risen: Race, s: &Signals) -> bool {
-    match risen {
-        Race::HighElf => {
-            s.reports >= RISE_RECORD && s.plan_land_rate >= 85.0 && s.reask_rate <= 10.0
-        }
-        Race::HighOrc => s.reports >= RISE_RECORD && s.gate_right >= 90.0 && s.hole_rate <= 10.0,
-        Race::NamedSlime => {
-            s.reports >= RISE_RECORD
-                && s.land_rate >= 90.0
-                && s.gate_rate >= 90.0
-                && s.hole_rate <= 5.0
-        }
-        Race::Oni => {
-            s.outward_acts >= RISE_OUTWARD
-                && s.outward_clean_rate >= 95.0
-                && s.rollbacks == 0
-                && s.envelope_corrections == 0
-        }
-        Race::ArchDarkElf => {
-            s.findings >= RISE_RECORD && s.upheld_rate >= 80.0 && s.precision >= 85.0
-        }
-        _ => false,
-    }
+    let bars = explain_rise(risen, s);
+    !bars.is_empty() && bars.iter().all(Explanation::holds)
 }
 
 /// What the recent record says about an ascended body.
@@ -269,32 +432,52 @@ pub enum FallReading {
     Immediate,
 }
 
+/// The bars an ascended body's recent record fails, one line each: every event that ends the
+/// ascension at once; else its rate under the fall bar on a full recent record, with the bar that
+/// ends probation and the rise bar it would need again. Empty when it holds its form.
+#[must_use]
+pub fn explain_fall(risen: Race, recent: &Recent) -> Vec<Explanation> {
+    let s = &recent.0;
+    let window = record(risen, s);
+    let events: Vec<Explanation> = event_bars(risen)
+        .iter()
+        .map(|b| b.explain(Kind::Fall, risen, s, window))
+        .filter(Explanation::holds)
+        .map(|e| Explanation {
+            rerise: rerise(risen, e.meter),
+            ..e
+        })
+        .collect();
+    if !events.is_empty() {
+        return events;
+    }
+    fall_bar(risen)
+        .map(|b| b.explain(Kind::Probation, risen, s, window))
+        .filter(|e| window >= FALL_RECORD && e.holds())
+        .map(|e| Explanation {
+            recover: Some(Recover {
+                op: Op::Ge,
+                threshold: e.threshold,
+                within: RECOVER_REPORTS,
+                unit: e.unit,
+            }),
+            rerise: rerise(risen, e.meter),
+            ..e
+        })
+        .into_iter()
+        .collect()
+}
+
 /// Reads an ascended body's recent record (its last ten reports, or findings for a Dark Elf).
 /// Events fall at once; rates fall into probation, and only on a full recent record. The fall
-/// bars sit well under the rise bars, so a body does not flap.
+/// bars sit well under the rise bars, so a body does not flap. The reading of
+/// [`explain_fall`]'s lines.
 #[must_use]
 pub fn falls(risen: Race, recent: &Recent) -> FallReading {
-    let recent = &recent.0;
-    let event = match risen {
-        Race::HighOrc => recent.overturned_on_sealed > 0,
-        Race::NamedSlime => recent.tests_intact_failures > 0,
-        Race::Oni => recent.rollbacks > 0 || recent.envelope_corrections > 0,
-        _ => false,
-    };
-    if event {
-        return FallReading::Immediate;
-    }
-    let (record, below) = match risen {
-        Race::HighElf => (recent.reports, recent.plan_land_rate < 70.0),
-        Race::HighOrc => (recent.reports, recent.gate_right < 75.0),
-        Race::NamedSlime => (recent.reports, recent.land_rate < 75.0),
-        Race::ArchDarkElf => (recent.findings, recent.precision < 70.0),
-        _ => (0, false),
-    };
-    if record >= FALL_RECORD && below {
-        FallReading::Probation
-    } else {
-        FallReading::Holds
+    match explain_fall(risen, recent).first() {
+        None => FallReading::Holds,
+        Some(e) if e.kind == Kind::Fall => FallReading::Immediate,
+        Some(_) => FallReading::Probation,
     }
 }
 
@@ -304,13 +487,76 @@ pub fn falls(risen: Race, recent: &Recent) -> FallReading {
 /// with a fall once [`RECOVER_REPORTS`] have passed.
 #[must_use]
 pub fn recovers(risen: Race, since: &Recent) -> bool {
-    let s = &since.0;
-    let (record, back) = match risen {
-        Race::HighElf => (s.reports, s.plan_land_rate >= 70.0),
-        Race::HighOrc => (s.reports, s.gate_right >= 75.0),
-        Race::NamedSlime => (s.reports, s.land_rate >= 75.0),
-        Race::ArchDarkElf => (s.findings, s.precision >= 70.0),
-        _ => return false,
+    let Some(bar) = fall_bar(risen) else {
+        return false;
     };
-    record >= RECOVER_REPORTS && back && falls(risen, since) != FallReading::Immediate
+    let s = &since.0;
+    record(risen, s) >= RECOVER_REPORTS
+        && Op::Ge.holds((bar.read)(s), bar.threshold)
+        && falls(risen, since) != FallReading::Immediate
+}
+
+/// The gate's word on a report's landing, as the fold reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateWord {
+    /// Every check ran and held.
+    Pass,
+    /// A check ran and did not hold.
+    Fail,
+    /// Nothing failed, but a check gave no result.
+    NotVerified,
+}
+
+/// The word a report opened with (`@S <word>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Said {
+    /// `DONE` or `PASS`.
+    Done,
+    /// `FAIL`.
+    Fail,
+    /// `ESCALATE`.
+    Escalate,
+    /// Any other word.
+    Other,
+}
+
+/// What one report came to: the body's own word and honest holes, and the harness's facts. The
+/// fold ([`fold_reports`]) reads the harness's facts alone, so honest bad news — `@S FAIL`,
+/// `@S ESCALATE`, an `@?` hole — never scores worse than silence over the same outcome. A
+/// report's prose is not here at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Outcome {
+    /// The word the report opened with: never read by the fold.
+    pub said: Said,
+    /// `@?` holes the body raised itself: never read by the fold.
+    pub holes_said: u32,
+    /// The gate's word on its landing; `None` when nothing landed.
+    pub gate: Option<GateWord>,
+    /// The gate passed on its first try.
+    pub first_try: bool,
+    /// Holes the harness found in the work: an edited or deleted verify line.
+    pub holes_found: u32,
+}
+
+/// Reports folded into the signals they set: `reports`, `land_rate` (landings the gate passed),
+/// `gate_rate` (landings the gate passed on the first try) and `hole_rate` (reports in which the
+/// harness found a hole), each over every report. Every other signal is left at zero.
+#[must_use]
+pub fn fold_reports(outcomes: &[Outcome]) -> Signals {
+    let n = u32::try_from(outcomes.len()).unwrap_or(u32::MAX);
+    let pct = |pick: fn(&Outcome) -> bool| {
+        let k = u32::try_from(outcomes.iter().filter(|o| pick(o)).count()).unwrap_or(u32::MAX);
+        if n == 0 {
+            0.0
+        } else {
+            f64::from(k) * 100.0 / f64::from(n)
+        }
+    };
+    Signals {
+        reports: n,
+        land_rate: pct(|o| o.gate == Some(GateWord::Pass)),
+        gate_rate: pct(|o| o.gate == Some(GateWord::Pass) && o.first_try),
+        hole_rate: pct(|o| o.holes_found > 0),
+        ..Signals::default()
+    }
 }

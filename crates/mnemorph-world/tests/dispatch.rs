@@ -17,6 +17,7 @@ fn ask(plan: &[String]) -> Ask<'_> {
         plan,
         slice_wt: 60_000,
         left_wt: 200_000,
+        cap: None,
     }
 }
 
@@ -70,6 +71,7 @@ fn every_refusal_names_its_lawful_route() {
             plan: &none,
             slice_wt: 300_000,
             left_wt: 200_000,
+            cap: None,
         },
     );
     assert_eq!(e.why, Some(Refusal::Budget));
@@ -83,7 +85,28 @@ fn every_refusal_names_its_lawful_route() {
         }
     );
     assert_eq!(e.whom.as_deref(), Some("elf-engine"));
-    assert!(e.to_string().starts_with("refused: the slice does not fit"));
+    // The refusal names the shortfall and the top-up that would let the slice fit.
+    assert_eq!(
+        e.to_string(),
+        "refused: needs 300k wt, 200k left in your envelope; top up >= 100k wt (@? budget to your \
+         commander): @? budget: need ~300000 wt, have 200000 wt"
+    );
+    let e = refused(
+        "rimuru",
+        "elf-engine",
+        &Ask {
+            plan: &none,
+            slice_wt: 41_000,
+            left_wt: 12_000,
+            cap: Some("session"),
+        },
+    );
+    assert!(
+        e.to_string().starts_with(
+            "refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session): "
+        ),
+        "{e}"
+    );
     // Sideways, Orc to Orc: lawful without lineage.
     assert_eq!(
         dispatch(&r, "orc-law", "orc-engine", &ask(&none)),
