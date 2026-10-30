@@ -263,6 +263,13 @@ export function WorldView({ w, now }: { w: BoardWorld; now: number }) {
           for it is still shown.
         </p>
       )}
+      {o?.updates.value === 'slowed' && (
+        <p className="hint">
+          <Mark tone="gold" glyph="⚠">
+            <Safe text={o.updates.why ?? 'updates slowed'} />
+          </Mark>
+        </p>
+      )}
       {o?.waiting.value ? (
         <p className="hint">
           <Mark tone="gold" glyph="◆">

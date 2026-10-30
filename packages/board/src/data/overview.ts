@@ -105,6 +105,8 @@ const spend: Check<Spend> = (v) => {
 
 const waiting: Check<number> = (v) => (count(v) ? v : undefined);
 
+const updates: Check<string> = (v) => (v === 'pushed' || v === 'slowed' ? v : undefined);
+
 /** A field with its source; a value that does not read is unknown, and says so. */
 function sourced<T>(v: unknown, check: Check<T>): Sourced<T> {
   const o = obj(v);
@@ -136,6 +138,7 @@ export function parseOverview(body: unknown): BoardOverview | undefined {
     meters: sourced(o.meters, meters),
     spend: sourced(o.spend, spend),
     waiting: sourced(o.waiting, waiting),
+    updates: sourced(o.updates, updates),
   };
 }
 

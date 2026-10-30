@@ -17,6 +17,7 @@ pub mod bridge;
 pub mod guard;
 pub mod instance;
 pub mod overview;
+pub mod snapshot;
 pub mod watch;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -170,6 +171,8 @@ pub struct Board {
     changes: tokio::sync::broadcast::Sender<Change>,
     /// The board sockets open.
     sockets: AtomicUsize,
+    /// The worlds the watcher looks at slowly: past its budget.
+    slowed: Mutex<std::collections::BTreeSet<String>>,
 }
 
 /// A fresh secret: 32 random bytes, in hex.
@@ -357,6 +360,7 @@ impl Board {
             on_key,
             changes: tokio::sync::broadcast::channel(CHANGES).0,
             sockets: AtomicUsize::new(0),
+            slowed: Mutex::new(std::collections::BTreeSet::new()),
         }))
     }
 
@@ -551,7 +555,12 @@ impl Board {
                     .asks
                     .saturating_add(u32::try_from(s.asks).unwrap_or(u32::MAX)),
             });
-        Some(overview::overview(world, chats))
+        let slowed = self
+            .slowed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(id);
+        Some(overview::overview(world, chats, slowed))
     }
 
     /// Tell the board's sockets `change`, as the watcher does: for a test.

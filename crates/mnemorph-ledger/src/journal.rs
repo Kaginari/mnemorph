@@ -2,7 +2,7 @@
 //! ([`crate::chain`]).
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufReader, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -250,32 +250,42 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             }
             Err(e) => return Err(e),
         };
-        let mut back = ReadBack {
-            rows: Vec::new(),
-            skipped: Vec::new(),
-        };
-        let mut chained = false;
-        for (n, line) in BufReader::new(file).split(b'\n').enumerate() {
-            let mut line = line?;
-            if n == 0 && line.starts_with(b"\xEF\xBB\xBF") {
-                line.drain(..3);
-            }
-            if line.iter().all(u8::is_ascii_whitespace) {
-                continue;
-            }
-            let sealed = crate::chain::is_sealed(&line);
-            chained |= sealed;
-            if chained && !sealed {
-                back.skipped.push(n + 1);
-                continue;
-            }
-            match serde_json::from_slice(&crate::chain::body(&line)) {
-                Ok(row) => back.rows.push(row),
-                Err(_) => back.skipped.push(n + 1),
-            }
-        }
-        Ok(back)
+        parse(BufReader::new(file))
     }
+}
+
+/// The rows of a journal read from `reader`, as [`Journal::read`] reads its file: for bytes a
+/// caller read itself (from a file it opened with care, under a cap).
+///
+/// # Errors
+///
+/// The reader fails.
+pub fn parse<T: DeserializeOwned>(reader: impl io::BufRead) -> io::Result<ReadBack<T>> {
+    let mut back = ReadBack {
+        rows: Vec::new(),
+        skipped: Vec::new(),
+    };
+    let mut chained = false;
+    for (n, line) in reader.split(b'\n').enumerate() {
+        let mut line = line?;
+        if n == 0 && line.starts_with(b"\xEF\xBB\xBF") {
+            line.drain(..3);
+        }
+        if line.iter().all(u8::is_ascii_whitespace) {
+            continue;
+        }
+        let sealed = crate::chain::is_sealed(&line);
+        chained |= sealed;
+        if chained && !sealed {
+            back.skipped.push(n + 1);
+            continue;
+        }
+        match serde_json::from_slice(&crate::chain::body(&line)) {
+            Ok(row) => back.rows.push(row),
+            Err(_) => back.skipped.push(n + 1),
+        }
+    }
+    Ok(back)
 }
 
 /// `bytes` appended to `mirror` in one write and synced; a torn last line there is closed first.

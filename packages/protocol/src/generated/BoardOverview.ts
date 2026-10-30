@@ -48,4 +48,9 @@ spend: Sourced<Spend>,
 /**
  * Gate asks waiting for the human in the board's chats.
  */
-waiting: Sourced<number>, };
+waiting: Sourced<number>, 
+/**
+ * How its changes reach the page: `pushed`, or `slowed` when the world holds more entries
+ * than the watcher's budget and is looked at less often.
+ */
+updates: Sourced<string>, };

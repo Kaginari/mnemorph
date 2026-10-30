@@ -2,20 +2,23 @@
 //! tells each tab `world/changed {id}` when one moved — the page then refetches that world's
 //! overview — and `worlds/changed` when the list itself did.
 //!
-//! The watcher polls: every [`TICK`] it takes each world's signature — the size and write time of
-//! `log.md`, the run journals and their locks, the memory tiers and the usage ledger in the world,
-//! and of the challenge records and gate verdicts under the state directory — and a world whose
-//! signature moved is told once it holds still for a tick (the debounce: a burst of writes is one
-//! push), or after [`SETTLE`] at the latest. Polling needs no platform's notification API, costs
-//! a few `stat`s per world a tick, and a world cannot exhaust a watch table by making directories.
-//! A world reads at most [`ENTRIES`] entries per directory.
+//! The watcher polls, and only while a tab listens: every [`FAST`] while a session is live in some
+//! world (a board chat, or a run lock held), else every [`SLOW`]. Each look takes every world's
+//! signature — the size and write time of `log.md`, the run journals and their locks, the memory
+//! tiers and the usage ledger in the world, and of the challenge records and gate verdicts under
+//! the state directory — within a budget of [`BUDGET`] entries a world. A world past it is
+//! *slowed*: looked at every [`SLOWED`], and its overview says so. While looking fast, a world
+//! whose signature moved is told once it holds still for a look (a burst of writes is one push),
+//! or after [`SETTLE`] at the latest; looking slow, it is told at once. The list of worlds is read
+//! again only when the registry or the human's list is written. Polling needs no platform's
+//! notification API, and a world cannot exhaust a watch table by making directories.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -30,14 +33,21 @@ use mnemorph_loop::world::{challenge, verdicts, worth::USAGE};
 
 use super::{Board, guard, refuse};
 
-/// How often the watcher looks.
-pub const TICK: Duration = Duration::from_millis(150);
+/// How often the watcher looks while a session is live somewhere.
+pub const FAST: Duration = Duration::from_millis(250);
+
+/// How often it looks otherwise.
+pub const SLOW: Duration = Duration::from_secs(2);
+
+/// How often a world past its budget is looked at.
+pub const SLOWED: Duration = Duration::from_secs(10);
 
 /// The longest a moving world waits before it is told anyway.
 pub const SETTLE: Duration = Duration::from_millis(600);
 
-/// The most entries read from one directory of a world.
-pub const ENTRIES: usize = 4096;
+/// The most entries — files stat'ed, directory entries read, locks probed — one look spends on
+/// one world.
+pub const BUDGET: usize = 2000;
 
 /// The subprotocol `WS /ws/board` speaks, offered beside the CSRF entry.
 pub const SUBPROTOCOL: &str = "mnemorph.board.v1";
@@ -47,9 +57,6 @@ pub const SOCKETS: usize = 16;
 
 /// The largest message a tab may send (it sends none but a close).
 const INBOUND: usize = 1024;
-
-/// How often a socket checks its session still lives.
-const ALIVE: Duration = Duration::from_secs(15);
 
 /// What the watcher tells the tabs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,24 +81,45 @@ impl Change {
     }
 }
 
-/// A moving world's state between ticks.
+/// A moving world's state between looks.
 struct Moving {
     sig: u64,
     since: Instant,
 }
 
-/// The watcher's memory between ticks: each world's signature, and those still moving.
+/// What one look found.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Look {
+    /// What to tell.
+    pub changes: Vec<Change>,
+    /// Whether a session holds a run in some world.
+    pub live: bool,
+    /// The worlds past their budget.
+    pub slowed: BTreeSet<String>,
+}
+
+/// The watcher's memory between looks.
 #[derive(Default)]
 pub struct Watcher {
     seen: BTreeMap<String, u64>,
     moving: BTreeMap<String, Moving>,
-    list: Option<u64>,
+    /// The list's signature, and the worlds read for it.
+    list: Option<(u64, Vec<(String, PathBuf)>)>,
+    /// The slowed worlds, and when each was last looked at.
+    slowed: BTreeMap<String, Instant>,
+    /// The worlds held live at the last look.
+    live: BTreeSet<String>,
 }
 
-/// One file's size and write time, folded into `h`; its absence too.
-fn file(h: &mut DefaultHasher, path: &Path) {
+/// One file's size and write time, folded into `h`, its absence too — a link not followed —
+/// within `budget`; `false` when the budget is spent.
+fn file(h: &mut DefaultHasher, path: &Path, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    *budget -= 1;
     path.hash(h);
-    match std::fs::metadata(path) {
+    match std::fs::symlink_metadata(path) {
         Ok(m) => {
             m.len().hash(h);
             m.modified()
@@ -102,74 +130,124 @@ fn file(h: &mut DefaultHasher, path: &Path) {
         }
         Err(_) => 0u8.hash(h),
     }
+    true
 }
 
-/// Every entry of `dir`, up to [`ENTRIES`], in name order, folded into `h`; `deep` follows one
-/// level of subdirectories.
-fn dir(h: &mut DefaultHasher, at: &Path, deep: bool) {
+/// Every entry of `at`, in name order, folded into `h` within `budget` (each entry read spends
+/// one); `deep` follows one level of subdirectories, never a link. `false` when the budget ran out.
+fn dir(h: &mut DefaultHasher, at: &Path, deep: bool, budget: &mut usize) -> bool {
     let Ok(rd) = std::fs::read_dir(at) else {
         0u8.hash(h);
-        return;
+        return true;
     };
-    let mut paths: Vec<PathBuf> = rd
-        .take(ENTRIES)
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .collect();
-    paths.sort();
-    for p in paths {
-        let sub = deep && std::fs::symlink_metadata(&p).is_ok_and(|m| m.is_dir());
-        if sub {
-            dir(h, &p, false);
+    let mut entries: Vec<(PathBuf, bool)> = Vec::new();
+    for e in rd {
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+        let Ok(e) = e else { continue };
+        entries.push((e.path(), e.file_type().is_ok_and(|t| t.is_dir())));
+    }
+    entries.sort();
+    for (p, is_dir) in entries {
+        let whole = if deep && is_dir {
+            dir(h, &p, false, budget)
         } else {
-            file(h, &p);
+            file(h, &p, budget)
+        };
+        if !whole {
+            return false;
         }
     }
+    true
 }
 
-/// A world's signature: what moves when anything the overview reads moves.
+/// A world's signature — what moves when anything the overview reads moves — and whether it was
+/// taken whole within `budget`.
 #[must_use]
-pub fn signature(world: &Path) -> u64 {
+pub fn signature(world: &Path, budget: &mut usize) -> (u64, bool) {
     let mut h = DefaultHasher::new();
     world.is_dir().hash(&mut h);
-    file(&mut h, &world.join(LOG));
-    file(&mut h, &world.join(USAGE));
-    dir(&mut h, &mnemorph_loop::resume::journals(world), false);
-    dir(&mut h, &world.join(".mnemorph/memory"), true);
+    let mut whole = file(&mut h, &world.join(LOG), budget)
+        && file(&mut h, &world.join(USAGE), budget)
+        && dir(
+            &mut h,
+            &mnemorph_loop::resume::journals(world),
+            false,
+            budget,
+        )
+        && dir(&mut h, &world.join(".mnemorph/memory"), true, budget);
     for trusted in [verdicts::verdicts_of(world), challenge::records_of(world)]
         .into_iter()
         .flatten()
     {
-        file(&mut h, &trusted);
+        whole = whole && file(&mut h, &trusted, budget);
     }
-    h.finish()
+    (h.finish(), whole)
 }
 
 impl Watcher {
-    /// One look at `worlds` (id and path) and the list's files, `now`: what to tell. A world seen
-    /// for the first time is remembered, not told — its tab fetched it already; a world gone from
-    /// the list is forgotten.
-    pub fn tick(
+    /// One look, `now`: the list's files `list` signed, its worlds read with `load` only when
+    /// they moved; each world signed within [`BUDGET`]. `debounce` holds a moving world until it
+    /// is still for a look. A world seen for the first time is remembered, not told — its tab
+    /// fetched it already; a world gone from the list is forgotten.
+    pub fn look(
         &mut self,
-        worlds: &[(String, PathBuf)],
         list: &[&Path],
+        load: impl FnOnce() -> Vec<(String, PathBuf)>,
         now: Instant,
-    ) -> Vec<Change> {
-        let mut out = Vec::new();
+        debounce: bool,
+    ) -> Look {
+        let mut out = Look::default();
         let mut h = DefaultHasher::new();
+        let mut unlimited = usize::MAX;
         for p in list {
-            file(&mut h, p);
+            file(&mut h, p, &mut unlimited);
         }
         let list_sig = h.finish();
-        if self.list.is_some_and(|s| s != list_sig) {
-            out.push(Change::Worlds);
+        match &self.list {
+            Some((s, _)) if *s == list_sig => {}
+            was => {
+                if was.is_some() {
+                    out.changes.push(Change::Worlds);
+                }
+                self.list = Some((list_sig, load()));
+            }
         }
-        self.list = Some(list_sig);
+        let worlds = self
+            .list
+            .as_ref()
+            .map(|(_, w)| w.clone())
+            .unwrap_or_default();
         let ids: BTreeSet<&str> = worlds.iter().map(|(id, _)| id.as_str()).collect();
         self.seen.retain(|id, _| ids.contains(id.as_str()));
         self.moving.retain(|id, _| ids.contains(id.as_str()));
-        for (id, path) in worlds {
-            let sig = signature(path);
+        self.slowed.retain(|id, _| ids.contains(id.as_str()));
+        self.live.retain(|id| ids.contains(id.as_str()));
+        for (id, path) in &worlds {
+            if self
+                .slowed
+                .get(id)
+                .is_some_and(|at| now.duration_since(*at) < SLOWED)
+            {
+                out.slowed.insert(id.clone());
+                continue;
+            }
+            let mut budget = BUDGET;
+            let (sig, whole) = signature(path, &mut budget);
+            let held = !mnemorph_loop::resume::live_within(path, budget).is_empty();
+            if held {
+                self.live.insert(id.clone());
+            } else {
+                self.live.remove(id);
+            }
+            if whole {
+                self.slowed.remove(id);
+            } else {
+                self.slowed.insert(id.clone(), now);
+                out.slowed.insert(id.clone());
+            }
             let Some(&was) = self.seen.get(id) else {
                 self.seen.insert(id.clone(), sig);
                 continue;
@@ -177,47 +255,61 @@ impl Watcher {
             if sig != was {
                 self.seen.insert(id.clone(), sig);
                 let since = self.moving.get(id).map_or(now, |m| m.since);
-                if now.duration_since(since) >= SETTLE {
+                if !debounce || now.duration_since(since) >= SETTLE {
                     self.moving.remove(id);
-                    out.push(Change::World(id.clone()));
+                    out.changes.push(Change::World(id.clone()));
                 } else {
                     self.moving.insert(id.clone(), Moving { sig, since });
                 }
             } else if self.moving.get(id).is_some_and(|m| m.sig == sig) {
-                // Still for a tick: the burst is over.
+                // Still for a look: the burst is over.
                 self.moving.remove(id);
-                out.push(Change::World(id.clone()));
+                out.changes.push(Change::World(id.clone()));
             }
         }
+        out.live = !self.live.is_empty();
         out
     }
 }
 
-/// Watch `board`'s worlds until the runtime stops, telling each change on its channel.
+/// Watch `board`'s worlds until the runtime stops, telling each change on its channel — looking
+/// only while a tab listens, fast while a session is live, slow otherwise.
 pub async fn watch(board: Arc<Board>) {
-    let mut w = Watcher::default();
-    let mut every = tokio::time::interval(TICK);
-    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut w = Some(Watcher::default());
+    let mut pause = SLOW;
     loop {
-        every.tick().await;
+        tokio::time::sleep(pause).await;
+        if board.sockets.load(Ordering::SeqCst) == 0 {
+            // No one listens: nothing is looked at, and what was seen is forgotten — a tab that
+            // comes reads the overview fresh.
+            w = Some(Watcher::default());
+            pause = SLOW;
+            continue;
+        }
         let b = Arc::clone(&board);
-        let Ok((back, changes)) = tokio::task::spawn_blocking(move || {
-            let worlds: Vec<(String, PathBuf)> = b
-                .worlds()
-                .worlds
-                .into_iter()
-                .map(|w| (w.id, PathBuf::from(w.path)))
-                .collect();
+        let mut watcher = w.take().unwrap_or_default();
+        let debounce = pause == FAST;
+        let Ok((back, look)) = tokio::task::spawn_blocking(move || {
             let list = [b.registry.as_path(), b.hand.as_path()];
-            let changes = w.tick(&worlds, &list, Instant::now());
-            (w, changes)
+            let load = || {
+                b.worlds()
+                    .worlds
+                    .into_iter()
+                    .map(|w| (w.id, PathBuf::from(w.path)))
+                    .collect()
+            };
+            let look = watcher.look(&list, load, Instant::now(), debounce);
+            (watcher, look)
         })
         .await
         else {
             return;
         };
-        w = back;
-        for c in changes {
+        w = Some(back);
+        let chats = !board.bridge().list().sessions.is_empty();
+        pause = if look.live || chats { FAST } else { SLOW };
+        *board.slowed.lock().unwrap_or_else(PoisonError::into_inner) = look.slowed;
+        for c in look.changes {
             // No tab listening is no error.
             let _ = board.changes.send(c);
         }
@@ -272,14 +364,20 @@ pub(crate) async fn socket(
         })
 }
 
-/// Tell one tab every change until it leaves, its session ends or the board stops.
+/// Tell one tab every change until it leaves, its session ends or the board stops. A tab that
+/// stops reading is dropped, never waited on: a send that takes longer than the chats' send limit
+/// ends it, and so do two pings unanswered at the chats' ping pace.
 async fn serve(
     board: &Board,
     cookie: &str,
     mut ws: WebSocket,
     mut changes: broadcast::Receiver<Change>,
 ) {
-    let mut alive = tokio::time::interval(ALIVE);
+    let limits = board.bridge().limits();
+    let (limit, pace) = (limits.send, limits.ping);
+    let mut every = tokio::time::interval(pace);
+    every.tick().await;
+    let mut unanswered = 0u8;
     let why = loop {
         tokio::select! {
             change = changes.recv() => {
@@ -292,29 +390,38 @@ async fn serve(
                 if !board.alive(cookie) {
                     break "the session ended";
                 }
-                if ws.send(Message::Text(line.into())).await.is_err() {
+                let sent = tokio::time::timeout(limit, ws.send(Message::Text(line.into()))).await;
+                if !matches!(sent, Ok(Ok(()))) {
                     return;
                 }
             }
-            _ = alive.tick() => {
+            _ = every.tick() => {
                 if !board.alive(cookie) {
                     break "the session ended";
+                }
+                if unanswered >= 2 {
+                    return;
+                }
+                unanswered += 1;
+                let ping = ws.send(Message::Ping(axum::body::Bytes::new()));
+                if !matches!(tokio::time::timeout(limit, ping).await, Ok(Ok(()))) {
+                    return;
                 }
             }
             inbound = ws.recv() => match inbound {
                 None | Some(Err(_) | Ok(Message::Close(_))) => return,
+                Some(Ok(Message::Pong(_))) => unanswered = 0,
                 // A ping is answered by the socket; a tab has nothing else to say.
-                Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                Some(Ok(Message::Ping(_))) => {}
                 Some(Ok(_)) => break "the board's socket only speaks",
             },
         }
     };
-    let _ = ws
-        .send(Message::Close(Some(CloseFrame {
-            code: 4001,
-            reason: why.into(),
-        })))
-        .await;
+    let close = ws.send(Message::Close(Some(CloseFrame {
+        code: 4001,
+        reason: why.into(),
+    })));
+    let _ = tokio::time::timeout(limit, close).await;
 }
 
 #[cfg(test)]
@@ -323,52 +430,138 @@ mod tests {
 
     const NONE: Vec<Change> = Vec::new();
 
+    /// One look at `worlds`, with `list` the list's file; only the changes.
+    fn changes(
+        w: &mut Watcher,
+        worlds: &[(String, PathBuf)],
+        list: &Path,
+        now: Instant,
+        debounce: bool,
+    ) -> Vec<Change> {
+        w.look(&[list], || worlds.to_vec(), now, debounce).changes
+    }
+
     #[test]
     fn a_burst_is_told_once_when_it_holds_still() {
-        let root = std::env::temp_dir().join(format!("mnemorph-watch-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let world = root.join("w");
+        let root = tempfile::tempdir().unwrap();
+        let world = root.path().join("w");
         std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
-        let list = root.join("worlds.jsonl");
+        let list = root.path().join("worlds.jsonl");
         let worlds = vec![("w-1".to_owned(), world.clone())];
         let mut w = Watcher::default();
         let t0 = Instant::now();
         let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut look =
+            |ms: u64, worlds: &[(String, PathBuf)]| changes(&mut w, worlds, &list, at(ms), true);
         // First sight: remembered, not told.
-        assert_eq!(w.tick(&worlds, &[&list], at(0)), NONE);
-        assert_eq!(w.tick(&worlds, &[&list], at(150)), NONE);
+        assert_eq!(look(0, &worlds), NONE);
+        assert_eq!(look(250, &worlds), NONE);
         std::fs::write(world.join(LOG), "a").unwrap();
-        assert_eq!(w.tick(&worlds, &[&list], at(300)), NONE, "moving");
+        assert_eq!(look(500, &worlds), NONE, "moving");
         std::fs::write(world.join(LOG), "ab").unwrap();
-        assert_eq!(w.tick(&worlds, &[&list], at(450)), NONE, "still moving");
-        assert_eq!(
-            w.tick(&worlds, &[&list], at(600)),
-            vec![Change::World("w-1".into())]
-        );
-        assert_eq!(w.tick(&worlds, &[&list], at(750)), NONE, "told once");
+        assert_eq!(look(750, &worlds), NONE, "still moving");
+        assert_eq!(look(1000, &worlds), vec![Change::World("w-1".into())]);
+        assert_eq!(look(1250, &worlds), NONE, "told once");
 
         // A world that never holds still is told after SETTLE.
         let mut told = Vec::new();
-        for i in 0..8u64 {
+        for i in 0..6u64 {
             std::fs::write(world.join(LOG), "x".repeat(usize::try_from(i).unwrap() + 3)).unwrap();
-            told.extend(w.tick(&worlds, &[&list], at(900 + i * 150)));
+            told.extend(look(1500 + i * 250, &worlds));
         }
         assert!(told.contains(&Change::World("w-1".into())), "{told:?}");
 
         // The list moving is told, and a world gone from it is forgotten.
         std::fs::write(&list, "{}\n").unwrap();
-        let out = w.tick(&[], &[&list], at(3000));
-        assert_eq!(out, vec![Change::Worlds]);
+        assert_eq!(look(4000, &[]), vec![Change::Worlds]);
         assert!(w.seen.is_empty());
-        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn looking_slow_tells_at_once_and_the_list_is_read_only_when_it_moves() {
+        let root = tempfile::tempdir().unwrap();
+        let world = root.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        let list = root.path().join("worlds.jsonl");
+        let worlds = vec![("w-1".to_owned(), world.clone())];
+        let mut w = Watcher::default();
+        let t0 = Instant::now();
+        let mut loads = 0;
+        for ms in [0, 2000] {
+            w.look(
+                &[&list],
+                || {
+                    loads += 1;
+                    worlds.clone()
+                },
+                t0 + Duration::from_millis(ms),
+                false,
+            );
+        }
+        assert_eq!(loads, 1, "the registry is read again only when it moves");
+        std::fs::write(world.join(LOG), "a").unwrap();
+        assert_eq!(
+            changes(&mut w, &worlds, &list, t0 + Duration::from_secs(4), false),
+            vec![Change::World("w-1".into())]
+        );
+    }
+
+    #[test]
+    fn a_world_past_its_budget_is_slowed_and_said() {
+        let root = tempfile::tempdir().unwrap();
+        let world = root.path().join("w");
+        let recalls = world.join(".mnemorph/memory/short");
+        std::fs::create_dir_all(&recalls).unwrap();
+        for i in 0..BUDGET {
+            std::fs::write(recalls.join(format!("{i}")), "").unwrap();
+        }
+        let list = root.path().join("worlds.jsonl");
+        let worlds = vec![("w-1".to_owned(), world.clone())];
+        let mut budget = BUDGET;
+        let (_, whole) = signature(&world, &mut budget);
+        assert!(!whole);
+        assert_eq!(budget, 0, "never past the budget");
+        let mut w = Watcher::default();
+        let t0 = Instant::now();
+        let look = w.look(&[&list], || worlds.clone(), t0, true);
+        assert!(look.slowed.contains("w-1"));
+        // Within SLOWED it is not looked at: a write is not seen yet.
+        std::fs::write(world.join(LOG), "a").unwrap();
+        let look = w.look(
+            &[&list],
+            || worlds.clone(),
+            t0 + Duration::from_secs(1),
+            false,
+        );
+        assert_eq!(look.changes, NONE);
+        assert!(look.slowed.contains("w-1"));
+        let look = w.look(&[&list], || worlds.clone(), t0 + SLOWED, false);
+        assert_eq!(look.changes, vec![Change::World("w-1".into())]);
+    }
+
+    #[test]
+    fn a_held_run_makes_the_look_live() {
+        let root = tempfile::tempdir().unwrap();
+        let world = root.path().join("w");
+        std::fs::create_dir_all(&world).unwrap();
+        let list = root.path().join("worlds.jsonl");
+        let worlds = vec![("w-1".to_owned(), world.clone())];
+        let mut w = Watcher::default();
+        let t0 = Instant::now();
+        assert!(!w.look(&[&list], || worlds.clone(), t0, false).live);
+        let hold = mnemorph_loop::resume::hold(&world, "r1730000000000-5").unwrap();
+        assert!(w.look(&[&list], || worlds.clone(), t0, false).live);
+        drop(hold);
+        assert!(!w.look(&[&list], || worlds.clone(), t0, false).live);
     }
 
     #[test]
     fn each_source_moves_the_signature() {
-        let root = std::env::temp_dir().join(format!("mnemorph-sig-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().join("w");
         std::fs::create_dir_all(&root).unwrap();
-        let mut last = signature(&root);
+        let sig = |w: &Path| signature(w, &mut BUDGET.clone()).0;
+        let mut last = sig(&root);
         for (path, text) in [
             (LOG, "x"),
             (USAGE, "{}"),
@@ -379,12 +572,12 @@ mod tests {
             let at = root.join(path);
             std::fs::create_dir_all(at.parent().unwrap()).unwrap();
             std::fs::write(&at, text).unwrap();
-            let now = signature(&root);
+            let now = sig(&root);
             assert_ne!(now, last, "{path}");
             last = now;
         }
         std::fs::remove_dir_all(&root).unwrap();
-        assert_ne!(signature(&root), last, "gone");
+        assert_ne!(sig(&root), last, "gone");
     }
 
     #[test]

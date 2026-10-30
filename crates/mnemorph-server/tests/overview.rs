@@ -265,10 +265,19 @@ fn a_board_chat_reads_live_and_its_asks_wait() {
         sessions: 1,
         state: mnemorph_server::board::WorldState::Present,
     };
-    let o = overview(world, Chats { open: 1, asks: 2 });
+    let o = overview(world, Chats { open: 1, asks: 2 }, false);
     let v = serde_json::to_value(&o).unwrap();
     assert_eq!(v["status"]["value"], "live");
     assert_eq!(v["waiting"]["value"], 2);
+    assert_eq!(v["updates"]["value"], "pushed");
+    let slowed = serde_json::to_value(overview(o.world.clone(), Chats::default(), true)).unwrap();
+    assert_eq!(slowed["updates"]["value"], "slowed");
+    assert!(
+        slowed["updates"]["why"]
+            .as_str()
+            .unwrap()
+            .starts_with("too many entries: updates slowed")
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -307,4 +316,177 @@ fn urlencode(s: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_link_a_pipe_or_a_huge_file_in_the_world_is_not_read() {
+    let f = Fixture::new("hostile-files");
+    let w = f.world("trap");
+    let instruments = w.join(".mnemorph/instruments");
+    let memory = w.join(".mnemorph/memory/creature");
+    std::fs::create_dir_all(&instruments).unwrap();
+    std::fs::create_dir_all(&memory).unwrap();
+    let (cookie, _) = f.login().await;
+
+    // The ledger a link to an endless device; a creature's notes a pipe no one writes.
+    std::os::unix::fs::symlink("/dev/zero", instruments.join("usage.jsonl")).unwrap();
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(memory.join("slime.jsonl"))
+            .status()
+            .unwrap()
+            .success()
+    );
+    let at = std::time::Instant::now();
+    let o = tokio::time::timeout(std::time::Duration::from_secs(5), f.overview(&cookie, &w))
+        .await
+        .expect("answered, never blocked");
+    assert!(at.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(o["spend"]["value"], Value::Null);
+    assert!(
+        o["spend"]["why"]
+            .as_str()
+            .unwrap()
+            .contains("not a regular file"),
+        "{o}"
+    );
+    assert_eq!(o["memory"]["value"], Value::Null);
+    assert!(
+        o["memory"]["why"]
+            .as_str()
+            .unwrap()
+            .contains("slime.jsonl: not a regular file"),
+        "{o}"
+    );
+    assert_eq!(o["meters"]["value"], Value::Null);
+
+    // Notes over the cap: too large, not read.
+    std::fs::remove_file(memory.join("slime.jsonl")).unwrap();
+    let big = std::fs::File::create(memory.join("slime.jsonl")).unwrap();
+    big.set_len(mnemorph_server::board::snapshot::FILE_CAP + 1)
+        .unwrap();
+    let o = f.overview(&cookie, &w).await;
+    assert!(
+        o["memory"]["why"]
+            .as_str()
+            .unwrap()
+            .contains("slime.jsonl: too large"),
+        "{o}"
+    );
+
+    // A ledger over the cap: its tail is read, and said to be.
+    std::fs::remove_file(instruments.join("usage.jsonl")).unwrap();
+    let row = serde_json::to_string(&mnemorph_server::world::ledger::UsageRow {
+        ts: mnemorph_server::world::ledger::Timestamp(1_792_782_420),
+        session: "s9".into(),
+        run: "r".into(),
+        body: "b".into(),
+        race: "slime".into(),
+        commission: None,
+        model: "m".into(),
+        provider: "p".into(),
+        usage: mnemorph_server::world::ledger::Usage::default(),
+        prefix: 0,
+        wt: 1,
+        usd: None,
+        envelope: None,
+    })
+    .unwrap();
+    let mut text = String::new();
+    while (text.len() as u64) <= mnemorph_server::board::snapshot::FILE_CAP {
+        text.push_str(&row);
+        text.push('\n');
+    }
+    std::fs::write(instruments.join("usage.jsonl"), &text).unwrap();
+    let o = f.overview(&cookie, &w).await;
+    assert_eq!(o["spend"]["value"]["session"], "s9", "{o}");
+    assert!(
+        o["spend"]["why"]
+            .as_str()
+            .unwrap()
+            .contains("read from the ledger's last 8 MiB"),
+        "{o}"
+    );
+    assert_eq!(o["updates"]["value"], "pushed");
+}
+
+#[tokio::test]
+async fn a_tab_that_stops_reading_is_dropped() {
+    use std::io::{Read as _, Write as _};
+    use std::time::Duration;
+    let root = std::env::temp_dir().join(format!("mnemorph-overview-stall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let registry = root.join("state/mnemorph/worlds.jsonl");
+    let listeners = mnemorph_server::board::listen(0, Some("127.0.0.1".parse().unwrap())).unwrap();
+    let addr = listeners[0].local_addr().unwrap();
+    let limits = mnemorph_server::board::bridge::Limits {
+        ping: Duration::from_millis(200),
+        send: Duration::from_millis(500),
+        ..mnemorph_server::board::bridge::Limits::default()
+    };
+    let board = Board::bridged(
+        &[addr],
+        (registry.clone(), hand_file(&registry)),
+        Box::new(|_| {}),
+        mnemorph_server::board::Lifetimes::default(),
+        mnemorph_server::board::bridge::Child::this(),
+        limits,
+    )
+    .unwrap();
+    let l = listeners.into_iter().next().unwrap();
+    l.set_nonblocking(true).unwrap();
+    let l = tokio::net::TcpListener::from_std(l).unwrap();
+    tokio::spawn(axum::serve(l, board.router()).into_future());
+    let key = board.url().split_once("#k=").unwrap().1.to_owned();
+
+    let host = addr.to_string();
+    let stalled = tokio::task::spawn_blocking(move || {
+        let http = |req: &str| {
+            let mut s = std::net::TcpStream::connect(&host).unwrap();
+            s.write_all(req.as_bytes()).unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).unwrap();
+            out
+        };
+        let body = format!("{{\"key\":\"{key}\"}}");
+        let res = http(&format!(
+            "POST /session HTTP/1.1\r\nHost: {host}\r\nOrigin: http://{host}\r\n\
+             Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+        let cookie = res
+            .lines()
+            .find_map(|l| l.strip_prefix("set-cookie: "))
+            .and_then(|c| c.split(';').next())
+            .unwrap()
+            .to_owned();
+        let csrf: Value = serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let csrf = csrf["csrf"].as_str().unwrap().to_owned();
+        let mut s = std::net::TcpStream::connect(&host).unwrap();
+        s.write_all(
+            format!(
+                "GET /ws/board HTTP/1.1\r\nHost: {host}\r\nOrigin: http://{host}\r\nCookie: {cookie}\r\n\
+                 Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n\
+                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                 Sec-WebSocket-Protocol: mnemorph.board.v1, mnemorph.csrf.{csrf}\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        // Read nothing, answer no ping: stalled.
+        std::thread::sleep(Duration::from_millis(1500));
+        s.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        let mut all = Vec::new();
+        let ended = s.read_to_end(&mut all);
+        (all, ended.is_ok())
+    });
+    let (got, closed) = stalled.await.unwrap();
+    let head_end = got.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+    assert!(got.starts_with(b"HTTP/1.1 101"));
+    assert!(closed, "the server closed the stalled tab's connection");
+    // It was pinged first: a ping frame's first byte.
+    assert_eq!(got.get(head_end), Some(&0x89), "pings were sent");
+    let _ = std::fs::remove_dir_all(&root);
 }

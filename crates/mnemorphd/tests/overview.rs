@@ -374,6 +374,11 @@ fn a_log_write_reaches_the_tab_within_a_second() {
     let mut h = Home::new("watch");
     std::fs::create_dir_all(h.world.join(".mnemorph")).unwrap();
     std::fs::write(h.world.join(".mnemorph/log.md"), "# log\n").unwrap();
+    // A session is live in it: a terminal's run lock, held — the watcher then looks fast.
+    let journals = h.world.join(".mnemorph/instruments/loop");
+    std::fs::create_dir_all(&journals).unwrap();
+    let lock = std::fs::File::create(journals.join("r1730000000000-8.lock")).unwrap();
+    lock.lock().unwrap();
     let (host, cookie, csrf) = h.serve();
     let before = h.overview(&host, &cookie);
 
@@ -384,8 +389,9 @@ fn a_log_write_reaches_the_tab_within_a_second() {
             .contains("sec-websocket-protocol: mnemorph.board.v1\r\n"),
         "{head}"
     );
-    // Give the watcher a look at the world as it is, then write.
-    std::thread::sleep(Duration::from_millis(400));
+    // The watcher looks only while a tab listens: give it its first, slow look at the world as it
+    // is (it then finds the session and looks fast), then write.
+    std::thread::sleep(Duration::from_millis(2600));
     s.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     let wrote = Instant::now();
     let mut log = std::fs::OpenOptions::new()

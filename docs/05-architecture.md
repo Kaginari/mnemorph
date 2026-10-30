@@ -333,15 +333,29 @@ it — is shown and grants nothing.
 | `meters` | each living creature's meters with `successes`, `n`, the point estimate and the 95% Wilson interval `lo`–`hi`, or `null`s for no report — as `mnemorphd meters --json` | the roster in the world over the challenge records' folds | no |
 | `spend` | the latest session in the usage ledger: `calls`, `usd` (`null` when none was priced), `unpriced`, weighted tokens | `.mnemorph/instruments/usage.jsonl` | no |
 | `waiting` | the gate asks the board's chats keep for the human; a terminal session's asks wait in its terminal | the board's chats | yes |
+| `updates` | `pushed`, or `slowed` when the world is past the watcher's budget (below) | the board's watcher | yes |
+
+**Reading inside a world.** A path there may be a link to `/dev/zero`, a pipe that never answers,
+a device or a file of any size. Only a regular file is read: opened without following a link
+(`O_NOFOLLOW`) and without blocking (`O_NONBLOCK`), checked again on the handle, and read to a cap
+(`mnemorph_world::regular`). The memory tiers and the creature docs are first copied into a private
+scratch directory — 8 MiB a file, 32 MiB and 2,000 entries in all — and the CLI's functions read
+the copy, so a file swapped after the check reaches nothing; past a cap, or anything but a regular
+file, the field is unknown and says which file and why. The usage ledger's last 8 MiB are read;
+when older bytes are left, `spend` says so. A run lock is probed only as a regular file.
 
 #### The watcher
 
-While the board runs, a watcher looks at every listed world every 150 ms: a signature of the size
-and write time of `log.md`, the usage ledger, each run journal and lock, the memory tiers (one
-level deep), and the challenge records and gate verdicts under the state directory — at most
-4,096 entries a directory. A world whose signature moved is told once it holds still for a look,
-or 600 ms after it began moving at the latest, so a burst of writes is one push; a world first
-seen is remembered, not told. The registry and the human's list are watched too. Each change goes
+The watcher looks only while a board socket is open: every 250 ms while a session is live in some
+world (a board chat, or a run lock held), else every 2 s. Each look takes every world's signature
+— the size and write time of `log.md`, the usage ledger, each run journal and lock, the memory
+tiers (one level deep), and the challenge records and gate verdicts under the state directory —
+within a budget of 2,000 entries a world (files stat'ed, directory entries read, locks probed).
+A world past its budget is *slowed*: looked at every 10 s, and its overview's `updates` says
+"too many entries: updates slowed". Looking fast, a world whose signature moved is told once it
+holds still for a look, or 600 ms after it began moving at the latest, so a burst of writes is
+one push; looking slow, it is told at once. A world first seen is remembered, not told. The list
+of worlds is read again only when the registry or the human's list is written. Each change goes
 to every board socket as JSON-RPC 2.0 without an id: `world/changed {"id"}`, or `worlds/changed`
 when the list moved. Polling needs no platform's notification API and a world cannot exhaust a
 watch table by making directories.
@@ -349,9 +363,11 @@ watch table by making directories.
 `WS /ws/board` passes the guard like any upgrade — the loopback Host, the Origin, the cookie, and
 the CSRF token as the subprotocol entry `mnemorph.csrf.<token>` — and must offer
 `mnemorph.board.v1`, which it answers. At most 16 are open; a tab sends nothing (anything but a
-ping or a close ends it, and a message is capped at 1 KiB); a socket that falls behind is told
-`worlds/changed`; when its session ends it is closed with 4001. The page rereads what it shows
-when its world is named, and everything when `worlds/changed` comes or its socket reopens.
+ping, a pong or a close ends it, and a message is capped at 1 KiB). A tab that stops reading is
+dropped, never waited on: a send that takes over the chats' send limit (30 s) ends it, and it is
+pinged at the chats' pace (5 s), two pings unanswered ending it. A socket that falls behind is
+told `worlds/changed`; when its session ends it is closed with 4001. The page rereads what it
+shows when its world is named, and everything when `worlds/changed` comes or its socket reopens.
 
 #### `mnemorph run`
 

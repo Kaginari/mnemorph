@@ -56,6 +56,7 @@ const USAGE = '.mnemorph/instruments/usage.jsonl';
 const LOCK = '.mnemorph/instruments/loop/<run>.lock';
 const CHATS = "the board's chats";
 const WAITING_WHY = "a terminal session's asks wait in its terminal";
+const PUSHED = { value: 'pushed', source: "the board's watcher", trusted: true, why: null };
 
 function world(name: string) {
   const w = fixtureWorlds.worlds.find((x) => x.name === name);
@@ -145,6 +146,7 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
       why: null,
     },
     waiting: { value: 1, source: CHATS, trusted: true, why: WAITING_WHY },
+    updates: PUSHED,
   },
   [world('sqlglot').id]: {
     world: world('sqlglot'),
@@ -194,6 +196,12 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
       why: null,
     },
     waiting: { value: 0, source: CHATS, trusted: true, why: WAITING_WHY },
+    updates: {
+      value: 'slowed',
+      source: "the board's watcher",
+      trusted: true,
+      why: 'too many entries: updates slowed (over 2000 under the watched files; looked at every 10 s)',
+    },
   },
   [world('notes').id]: {
     world: world('notes'),
@@ -220,6 +228,7 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
     meters: { value: [], source: METERS_SOURCE, trusted: false, why: METERS_WHY },
     spend: { value: null, source: USAGE, trusted: false, why: 'no call is booked yet' },
     waiting: { value: 0, source: CHATS, trusted: true, why: WAITING_WHY },
+    updates: PUSHED,
   },
   [world('old-spike').id]: {
     world: world('old-spike'),
@@ -246,5 +255,6 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
     meters: gone(METERS_SOURCE),
     spend: gone(USAGE),
     waiting: { value: 0, source: CHATS, trusted: true, why: WAITING_WHY },
+    updates: PUSHED,
   },
 };

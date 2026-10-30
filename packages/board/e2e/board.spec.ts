@@ -352,6 +352,9 @@ test('a world overview says each source, and unknown where it is', async ({ page
   await expect(panel('Memory')).toContainText('unknown — the directory is gone');
   await expect(panel('Challenges')).toContainText('pending');
 
+  await page.goto(`/#/w/${SQLGLOT.id}`);
+  await expect(page.getByText('too many entries: updates slowed')).toBeVisible();
+
   await page.goto(`/#/w/${LIVE.id}`);
   await expect(panel('Meters')).toContainText('precision 0.90 (18/20, 95% 0.70–0.97)');
   await expect(panel('Meters')).toContainText('gateRight no reports');

@@ -37,7 +37,7 @@ pub use findings::{
     fold_findings, fold_findings_by_build,
 };
 pub use fold::{Key, Totals, fold};
-pub use journal::{Journal, ReadBack};
+pub use journal::{Journal, ReadBack, parse as parse_rows};
 pub use prices::{DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};
 pub use row::{DecisionRow, EnvelopeReading, OutcomeRow, UsageRow};
 pub use usage::{Usage, estimate, occupancy, spend, wt};

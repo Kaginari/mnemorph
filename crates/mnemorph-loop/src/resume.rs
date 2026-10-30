@@ -149,25 +149,37 @@ pub fn hold(world: &Path, run: &str) -> Result<Hold, String> {
 
 /// Whether a live session holds `run` now: a non-blocking probe, its shared lock let go at once —
 /// a resume that meets it waits it out.
+/// Only a regular lock file is opened: the directory is the world's, and a pipe or a link put in
+/// its place is no session's.
 fn held(world: &Path, run: &str) -> bool {
     let path = journals(world).join(format!("{run}.lock"));
-    File::open(&path).is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
+    mnemorph_world::regular::open(&path).is_ok_and(|f| {
+        f.is_some_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
+    })
 }
 
+/// The most entries [`live`] reads from a world's run journals.
+pub const LIVE_ENTRIES: usize = 4096;
+
 /// The world's session runs a live session holds now, by id, sorted: each lock probed for an
-/// instant, as a listing probes. Only a regular lock file is opened — the directory is the world's,
-/// and a pipe planted in its place would hang the open.
+/// instant, as a listing probes, among the directory's first [`LIVE_ENTRIES`] entries.
 #[must_use]
 pub fn live(world: &Path) -> Vec<String> {
+    live_within(world, LIVE_ENTRIES)
+}
+
+/// [`live`], among the directory's first `entries` entries: for a caller on a budget.
+#[must_use]
+pub fn live_within(world: &Path, entries: usize) -> Vec<String> {
     let Ok(dir) = std::fs::read_dir(journals(world)) else {
         return Vec::new();
     };
     let mut out: Vec<String> = dir
+        .take(entries)
         .filter_map(Result::ok)
         .filter_map(|e| {
             let run = e.file_name().to_str()?.strip_suffix(".lock")?.to_owned();
-            let regular = std::fs::symlink_metadata(e.path()).is_ok_and(|m| m.is_file());
-            (regular && is_session_run(&run) && held(world, &run)).then_some(run)
+            (is_session_run(&run) && held(world, &run)).then_some(run)
         })
         .collect();
     out.sort();

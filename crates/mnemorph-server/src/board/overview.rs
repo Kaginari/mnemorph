@@ -12,14 +12,18 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use std::io::{Read as _, Seek as _, SeekFrom};
+
 use mnemorph_loop::world::challenge::{Challenges, Staff, Status as ChallengeStatus};
-use mnemorph_loop::world::ledger::{Journal, Timestamp, UsageRow};
+use mnemorph_loop::world::ledger::{Timestamp, UsageRow, parse_rows};
 use mnemorph_loop::world::memory::audit::SHARED;
+use mnemorph_loop::world::regular;
 use mnemorph_loop::world::{log::LOG, meters, verdicts, worth::USAGE};
 use serde::Serialize;
 use ts_rs::TS;
 
 use super::BoardWorld;
+use super::snapshot::{self, FILE_CAP, Snapshot};
 
 /// A reading and where it came from. `value` is `null` when the source cannot be read, and `why`
 /// then says so: unknown is said, never guessed.
@@ -214,6 +218,9 @@ pub struct BoardOverview {
     pub spend: Sourced<Spend>,
     /// Gate asks waiting for the human in the board's chats.
     pub waiting: Sourced<u32>,
+    /// How its changes reach the page: `pushed`, or `slowed` when the world holds more entries
+    /// than the watcher's budget and is looked at less often.
+    pub updates: Sourced<String>,
 }
 
 /// The board's chats in one world: how many, and the gate asks they keep waiting.
@@ -232,7 +239,9 @@ fn count(n: usize) -> u32 {
 
 /// When `path` was last written, if it is there.
 fn modified(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+    std::fs::symlink_metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
 }
 
 /// `at` as the ledgers write a time.
@@ -252,6 +261,7 @@ fn runs_dir(world: &Path) -> PathBuf {
 fn newest_journal(world: &Path) -> Option<SystemTime> {
     std::fs::read_dir(runs_dir(world))
         .ok()?
+        .take(snapshot::ENTRIES)
         .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
         .filter_map(|e| e.metadata().ok()?.modified().ok())
@@ -331,12 +341,13 @@ fn activity(world: &BoardWorld, path: &Path, gate: Option<&GateVerdict>) -> Sour
 }
 
 /// The memory standing, counted as `mnemorphd memory status` counts it.
-fn memory(path: &Path) -> Sourced<Memory> {
+fn memory(snap: Result<&Snapshot, &str>) -> Sourced<Memory> {
     use mnemorph_loop::world::memory as m;
     const SOURCE: &str = ".mnemorph/memory/ (as `mnemorphd memory status` reads it)";
-    if !path.is_dir() {
-        return Sourced::unknown(SOURCE, false, "the directory is gone");
-    }
+    let path = match snap {
+        Ok(s) => s.path(),
+        Err(why) => return Sourced::unknown(SOURCE, false, why),
+    };
     let report = match m::status(path) {
         Ok(r) => r,
         Err(e) => return Sourced::unknown(SOURCE, false, format!("memory cannot be read: {e}")),
@@ -429,12 +440,18 @@ fn gate(path: &Path) -> Sourced<Gate> {
 }
 
 /// Every living creature's meters, as `mnemorphd meters --json` shows them.
-fn meters_of(path: &Path) -> Sourced<Vec<CreatureMeters>> {
+fn meters_of(path: &Path, snap: Result<&Snapshot, &str>) -> Sourced<Vec<CreatureMeters>> {
     const SOURCE: &str = "the roster's creatures (in the world) over the challenge records' folds";
-    if !path.is_dir() {
-        return Sourced::unknown(SOURCE, false, "the directory is gone");
-    }
-    let all = meters::read(path)
+    let copy = match snap {
+        Ok(s) => s.path(),
+        Err(why) => return Sourced::unknown(SOURCE, false, why),
+    };
+    // The roster from the copy; the folds from the records kept for the world's own path.
+    let folds = mnemorph_loop::world::challenge::scored(path)
+        .map(|(f, _)| f)
+        .unwrap_or_default();
+    let roster = mnemorph_loop::world::Roster::load(copy);
+    let all = meters::of(&roster, &folds)
         .into_iter()
         .map(|m| CreatureMeters {
             creature: m.name,
@@ -467,8 +484,9 @@ fn spend(path: &Path) -> Sourced<Spend> {
     if !path.is_dir() {
         return Sourced::unknown(USAGE, false, "the directory is gone");
     }
-    let back = match Journal::<UsageRow>::chained(path.join(USAGE)).read() {
-        Ok(b) => b,
+    let (back, cut) = match tail(&path.join(USAGE), FILE_CAP) {
+        Ok(Some(b)) => b,
+        Ok(None) => return Sourced::unknown(USAGE, false, "no call is booked yet"),
         Err(e) => {
             return Sourced::unknown(USAGE, false, format!("the ledger cannot be read: {e}"));
         }
@@ -491,32 +509,89 @@ fn spend(path: &Path) -> Sourced<Spend> {
             None => s.unpriced += 1,
         }
     }
-    let out = Sourced::known(s, USAGE, false);
-    if back.skipped.is_empty() {
-        out
-    } else {
-        out.with(format!(
+    let mut why = Vec::new();
+    if cut {
+        why.push(format!(
+            "read from the ledger's last {} MiB: an older part of this session is not counted",
+            FILE_CAP >> 20
+        ));
+    }
+    if !back.skipped.is_empty() {
+        why.push(format!(
             "{} line(s) of the ledger do not read and are not counted",
             back.skipped.len()
-        ))
+        ));
+    }
+    let out = Sourced::known(s, USAGE, false);
+    if why.is_empty() {
+        out
+    } else {
+        out.with(why.join("; "))
     }
 }
 
-/// `world`'s overview, with `chats` the board's own in it.
+/// The rows of the usage ledger's last `cap` bytes, and whether older bytes were left unread: a
+/// regular file only, opened as [`regular::open`] opens one. `None` when it is absent.
+fn tail(
+    path: &Path,
+    cap: u64,
+) -> Result<Option<(mnemorph_loop::world::ledger::ReadBack<UsageRow>, bool)>, String> {
+    let Some(mut file) = regular::open(path).map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let len = file.metadata().map_err(|e| e.to_string())?.len();
+    let from = len.saturating_sub(cap);
+    file.seek(SeekFrom::Start(from))
+        .map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take(cap)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    // Cut mid-line: the first, partial line is not a row.
+    let start = if from > 0 {
+        bytes
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(bytes.len(), |i| i + 1)
+    } else {
+        0
+    };
+    let back = parse_rows(&bytes[start..]).map_err(|e| e.to_string())?;
+    Ok(Some((back, from > 0)))
+}
+
+/// `world`'s overview, with `chats` the board's own in it; `slowed` when the watcher found it past
+/// its budget.
 #[must_use]
-pub fn overview(world: BoardWorld, chats: Chats) -> BoardOverview {
+pub fn overview(world: BoardWorld, chats: Chats, slowed: bool) -> BoardOverview {
     let path = PathBuf::from(&world.path);
+    let snap = if path.is_dir() {
+        snapshot::take(&path)
+    } else {
+        Err("the directory is gone".to_owned())
+    };
+    let snap = snap.as_ref().map_err(String::as_str);
     let gate = gate(&path);
     let last = gate.value.as_ref().and_then(|g| g.last.as_ref());
     BoardOverview {
         status: status(&path, chats),
         activity: activity(&world, &path, last),
-        memory: memory(&path),
+        memory: memory(snap),
         challenges: challenges(&path),
-        meters: meters_of(&path),
+        meters: meters_of(&path, snap),
         spend: spend(&path),
         waiting: Sourced::known(chats.asks, "the board's chats", true)
             .with("a terminal session's asks wait in its terminal"),
+        updates: if slowed {
+            Sourced::known("slowed".to_owned(), "the board's watcher", true).with(format!(
+                "too many entries: updates slowed (over {} under the watched files; looked at \
+                 every {} s)",
+                super::watch::BUDGET,
+                super::watch::SLOWED.as_secs()
+            ))
+        } else {
+            Sourced::known("pushed".to_owned(), "the board's watcher", true)
+        },
         gate,
         world,
     }
