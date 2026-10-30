@@ -21,6 +21,7 @@ pub mod report;
 pub mod roster;
 pub mod soil;
 pub mod start;
+pub mod verdicts;
 pub mod verify;
 pub mod worth;
 

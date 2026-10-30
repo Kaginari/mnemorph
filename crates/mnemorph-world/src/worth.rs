@@ -65,12 +65,105 @@ pub struct Records {
     spent: Vec<(String, u64)>,
     /// The gate's verdicts in order: the body, the verdict, the paths it changed.
     verdicts: Vec<(String, String, Vec<String>)>,
+    /// Where the verdicts were read from.
+    source: Source,
+}
+
+/// Where a world's gate verdicts were read from.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Source {
+    /// The chained verdict journal under the human's state directory, its chain holding.
+    #[default]
+    Journal,
+    /// `log.md`'s gate entries: the world keeps no verdict journal yet.
+    Log,
+    /// The verdict journal, whose chain does not hold or cannot be read: no record is trusted.
+    Unsound(String),
 }
 
 impl Records {
-    /// Read `world`'s usage ledger and journal. Only the gate's own journal entries count.
+    /// Read `world`'s usage ledger and its gate verdicts: from the chained verdict journal kept
+    /// outside the world, held to its newest anchor, when there is one; else from `log.md`'s
+    /// entries by the gate alone, and [`Records::note`] says so.
     #[must_use]
     pub fn load(world: &Path) -> Records {
+        let journal = crate::verdicts::verdicts_of(world).filter(|p| p.exists());
+        let anchor = journal
+            .is_some()
+            .then(|| crate::chains::anchor_of(world, "gate"))
+            .flatten();
+        Records::load_at(world, journal.as_deref(), anchor.as_ref())
+    }
+
+    /// [`Records::load`], the verdicts read from the journal at `verdicts` held to `anchor`, or
+    /// from `log.md` with no journal.
+    #[must_use]
+    pub fn load_at(
+        world: &Path,
+        verdicts: Option<&Path>,
+        anchor: Option<&mnemorph_ledger::Head>,
+    ) -> Records {
+        let mut records = Records::from_log(world);
+        let Some(path) = verdicts else {
+            records.source = Source::Log;
+            return records;
+        };
+        records.verdicts = Vec::new();
+        let unsound = match mnemorph_ledger::chain::verify_against(path, anchor) {
+            Ok(r) if r.holds() => None,
+            Ok(r) => Some(r.to_string()),
+            Err(e) => Some(format!("unreadable: {e}")),
+        };
+        if let Some(why) = unsound {
+            records.source = Source::Unsound(why);
+            return records;
+        }
+        match crate::verdicts::journal_at(path).read() {
+            Ok(back) => {
+                records.verdicts = back
+                    .rows
+                    .into_iter()
+                    .map(|r| (r.body, r.verdict, r.changed))
+                    .collect();
+                records.source = Source::Journal;
+            }
+            Err(e) => records.source = Source::Unsound(format!("unreadable: {e}")),
+        }
+        records
+    }
+
+    /// Where the verdicts were read from.
+    #[must_use]
+    pub fn source(&self) -> &Source {
+        &self.source
+    }
+
+    /// Why no body's record can be trusted: the verdict journal does not verify.
+    #[must_use]
+    pub fn unsound(&self) -> Option<&str> {
+        match &self.source {
+            Source::Unsound(why) => Some(why),
+            _ => None,
+        }
+    }
+
+    /// A line for whoever reads the cards when the verdicts are not the chained journal's.
+    #[must_use]
+    pub fn note(&self) -> Option<String> {
+        match &self.source {
+            Source::Journal => None,
+            Source::Log => Some(
+                "the gate's verdicts are read from log.md: this world keeps no verdict journal yet"
+                    .to_owned(),
+            ),
+            Source::Unsound(why) => Some(format!(
+                "the gate's verdict journal does not verify ({why}): no card is trusted"
+            )),
+        }
+    }
+
+    /// The usage ledger, and the verdicts of `log.md`'s entries by the gate.
+    fn from_log(world: &Path) -> Records {
         let spent = Journal::<UsageRow>::new(world.join(USAGE))
             .read()
             .map(|r| r.rows)
@@ -103,7 +196,11 @@ impl Records {
                 verdicts.push((body.to_owned(), verdict.trim().to_owned(), changed));
             }
         }
-        Records { spent, verdicts }
+        Records {
+            spent,
+            verdicts,
+            source: Source::Log,
+        }
     }
 
     /// `name`'s card: its own record and every living body's below it.
@@ -145,7 +242,8 @@ impl Records {
 
 impl Records {
     /// The files `name` is stuck on: its last three verdicts all failed, and these paths were in
-    /// every one of them. Empty when it is not stuck.
+    /// every one of them. Empty when it is not stuck — or when the verdicts are unsound: a caller
+    /// asks [`Records::unsound`] first, and trusts no body then.
     #[must_use]
     pub fn stuck(&self, name: &str) -> Vec<String> {
         let last: Vec<&(String, String, Vec<String>)> = self
@@ -215,4 +313,87 @@ pub fn ceiling(left: u64, race: Race, card: &Card) -> u64 {
     let wide = u128::from(left) * 9 * u128::from(share_pct(race)) * u128::from(card.worth_milli())
         / (10 * 100 * 1000);
     u64::try_from(wide).unwrap_or(u64::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::log::{Entry, append_entry};
+    use crate::verdicts::{VerdictRow, journal_at};
+    use mnemorph_ledger::{Build, Timestamp, chain};
+
+    fn logged(world: &Path, verdict: &str, path: &str) {
+        append_entry(
+            world,
+            &Entry {
+                body: "slime-s".into(),
+                title: format!("gate: {verdict}"),
+                lines: vec![
+                    ("Changed".into(), format!("`{path}`")),
+                    ("By".into(), "the end gate".into()),
+                ],
+            },
+        )
+        .unwrap();
+    }
+
+    fn kept(j: &Journal<VerdictRow>, verdict: &str, path: &str) {
+        j.append(&VerdictRow {
+            ts: Timestamp::now(),
+            body: "slime-s".into(),
+            verdict: verdict.into(),
+            changed: vec![path.into()],
+            failures: Vec::new(),
+            unverified: Vec::new(),
+            entry: None,
+            build: Build::this(),
+        })
+        .unwrap();
+    }
+
+    /// The chained verdict journal is the source when the world keeps one; `log.md` only when
+    /// it keeps none, and the note says so; a journal that does not verify trusts no body.
+    #[test]
+    fn the_verdict_journal_is_the_source_and_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        for _ in 0..STUCK_AFTER {
+            logged(&world, "FAIL", "src/a.rs");
+        }
+        let old = Records::load_at(&world, None, None);
+        assert_eq!(old.source(), &Source::Log);
+        assert_eq!(old.stuck("slime-s"), ["src/a.rs"]);
+        assert!(old.note().is_some_and(|n| n.contains("read from log.md")));
+
+        // A body that forges passes into log.md moves nothing once the journal is the source.
+        let path = dir.path().join("state/gate.jsonl");
+        let j = journal_at(&path);
+        for _ in 0..STUCK_AFTER {
+            kept(&j, "FAIL", "src/b.rs");
+            logged(&world, "PASS", "src/b.rs");
+        }
+        let now = Records::load_at(&world, Some(&path), None);
+        assert_eq!(now.source(), &Source::Journal);
+        assert_eq!(now.note(), None);
+        assert_eq!(now.stuck("slime-s"), ["src/b.rs"]);
+        let head = chain::verify(&path).unwrap().head.unwrap();
+
+        // An edit: unsound, reported, no body trusted.
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replacen("FAIL", "PASS", 1)).unwrap();
+        let edited = Records::load_at(&world, Some(&path), Some(&head));
+        assert!(
+            edited
+                .unsound()
+                .is_some_and(|w| w.contains("broken at line 1"))
+        );
+        assert!(edited.note().is_some_and(|n| n.contains("does not verify")));
+
+        // A dropped tail, found against the anchor.
+        let first: String = text.lines().next().unwrap().to_owned() + "\n";
+        std::fs::write(&path, first).unwrap();
+        let dropped = Records::load_at(&world, Some(&path), Some(&head));
+        assert!(dropped.unsound().is_some(), "{:?}", dropped.source());
+    }
 }

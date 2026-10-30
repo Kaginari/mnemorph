@@ -1558,11 +1558,11 @@ fn a_correction_counts_only_while_it_is_the_acts_latest_row() {
         undoes: None,
         by: None,
     };
-    Journal::<Row>::new(&f.witness).append(&later).unwrap();
+    Journal::<Row>::chained(&f.witness).append(&later).unwrap();
     assert_eq!(f.incident(&act).corrected, None);
     later.state = State::Corrected;
     later.by = Some("f0f0f0f0f0f0".into());
-    Journal::<Row>::new(&f.witness).append(&later).unwrap();
+    Journal::<Row>::chained(&f.witness).append(&later).unwrap();
     assert_eq!(
         f.incident(&act).corrected,
         None,

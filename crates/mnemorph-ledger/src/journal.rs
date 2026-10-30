@@ -21,6 +21,9 @@ pub struct Journal<T> {
     /// Where a chained journal's every appended byte is written again, out of every command's
     /// reach, for the tripwire to put the journal back from.
     witness: Option<PathBuf>,
+    /// Where a chained journal's every appended byte is written again after it, under its own
+    /// lock: a copy for readers, the journal itself being the trusted one.
+    mirror: Option<PathBuf>,
     rows: PhantomData<fn() -> T>,
 }
 
@@ -48,6 +51,7 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             path: path.into(),
             chain: None,
             witness: None,
+            mirror: None,
             rows: PhantomData,
         }
     }
@@ -63,6 +67,7 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             path: path.into(),
             chain: Some(Arc::new(Mutex::new(None))),
             witness: None,
+            mirror: None,
             rows: PhantomData,
         }
     }
@@ -75,6 +80,18 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     pub fn witnessed_at(mut self, file: impl Into<PathBuf>) -> Self {
         if self.chain.is_some() {
             self.witness = Some(file.into());
+        }
+        self
+    }
+
+    /// The same chained journal, every byte it appends written after it to `file` too, under the
+    /// journal's lock: the journal is the trusted record its chain is walked over, and `file` a
+    /// copy of it for readers who cannot reach it. A Kijin post's witness keeps the chain and
+    /// mirrors it into the post's journal in the world. An unchained journal keeps no mirror.
+    #[must_use]
+    pub fn mirrored_to(mut self, file: impl Into<PathBuf>) -> Self {
+        if self.chain.is_some() {
+            self.mirror = Some(file.into());
         }
         self
     }
@@ -177,6 +194,9 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
             walk,
             len: walked.len + bytes.len() as u64,
         });
+        if let Some(mirror) = &self.mirror {
+            mirror_bytes(mirror, &bytes)?;
+        }
         Ok(())
     }
 
@@ -256,6 +276,31 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         }
         Ok(back)
     }
+}
+
+/// `bytes` appended to `mirror` in one write and synced; a torn last line there is closed first.
+fn mirror_bytes(mirror: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::io::{Read as _, Seek, SeekFrom};
+    if let Some(d) = mirror.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut f = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .append(true)
+        .open(mirror)?;
+    let mut line = Vec::with_capacity(bytes.len() + 1);
+    if f.metadata()?.len() > 0 {
+        let mut last = [0u8; 1];
+        f.seek(SeekFrom::End(-1))?;
+        f.read_exact(&mut last)?;
+        if last[0] != b'\n' {
+            line.push(b'\n');
+        }
+    }
+    line.extend_from_slice(bytes);
+    f.write_all(&line)?;
+    f.sync_data()
 }
 
 /// `tip` caught up with `file`, read under its lock: what was appended since is walked on; a file
