@@ -13,6 +13,7 @@
 //! `/api/` or `/ws/` is guarded without being named in it.
 
 mod assets;
+pub mod bridge;
 pub mod guard;
 pub mod instance;
 
@@ -23,7 +24,8 @@ use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::ws::WebSocketUpgrade;
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -52,6 +54,9 @@ const SESSIONS: usize = 8;
 
 /// The largest body the key exchange reads.
 const EXCHANGE_BYTES: usize = 1024;
+
+/// The largest body `POST /api/w/<world>/sessions` reads.
+const START_BYTES: usize = 1024;
 
 /// A world, as `GET /api/worlds` shows it to the browser holding the session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -148,8 +153,10 @@ pub struct Board {
     hand: PathBuf,
     keys: Mutex<Keys>,
     lifetimes: Lifetimes,
-    /// Time passed beyond the clock's, only ever moved by [`Board::pass`].
-    skew: Mutex<Duration>,
+    /// The board's clock: the system's, only ever moved on by [`Board::pass`].
+    clock: bridge::Clock,
+    /// The live chats.
+    bridge: Arc<bridge::Bridge>,
     /// Told the URL with each new key, for a second launch to print.
     on_key: Box<dyn Fn(&str) + Send + Sync>,
 }
@@ -286,6 +293,29 @@ impl Board {
         on_key: Box<dyn Fn(&str) + Send + Sync>,
         lifetimes: Lifetimes,
     ) -> Result<Arc<Self>, String> {
+        Self::bridged(
+            addrs,
+            (registry, hand),
+            on_key,
+            lifetimes,
+            bridge::Child::this(),
+            bridge::Limits::default(),
+        )
+    }
+
+    /// As [`Board::living`], its chats' children started as `child` says, within `limits`.
+    ///
+    /// # Errors
+    ///
+    /// No address, one that is not loopback, or the random source fails.
+    pub fn bridged(
+        addrs: &[SocketAddr],
+        (registry, hand): (PathBuf, PathBuf),
+        on_key: Box<dyn Fn(&str) + Send + Sync>,
+        lifetimes: Lifetimes,
+        child: bridge::Child,
+        limits: bridge::Limits,
+    ) -> Result<Arc<Self>, String> {
         let Some(&host) = addrs.first() else {
             return Err("the board has no address".to_owned());
         };
@@ -297,6 +327,7 @@ impl Board {
              font-src 'self'; connect-src 'self' ws://{host}; base-uri 'none'; \
              form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'"
         );
+        let clock = bridge::Clock::default();
         Ok(Arc::new(Self {
             host,
             hosts: addrs.iter().map(ToString::to_string).collect(),
@@ -310,7 +341,8 @@ impl Board {
                 sessions: Vec::new(),
             }),
             lifetimes,
-            skew: Mutex::new(Duration::ZERO),
+            bridge: Arc::new(bridge::Bridge::new(child, limits, clock.clone())),
+            clock,
             on_key,
         }))
     }
@@ -334,6 +366,12 @@ impl Board {
             .route("/api/session", get(session))
             .route("/api/session/end", post(end))
             .route("/api/worlds", get(worlds))
+            .route(
+                "/api/w/{world}/sessions",
+                post(start).layer(DefaultBodyLimit::max(START_BYTES)),
+            )
+            .route("/api/sessions", get(sessions))
+            .route("/ws/session/{id}", get(socket))
             .fallback(asset)
             .layer(axum::middleware::from_fn_with_state(
                 Arc::clone(self),
@@ -344,7 +382,7 @@ impl Board {
 
     /// Now, on the board's clock.
     fn now(&self) -> Instant {
-        Instant::now() + *self.skew.lock().unwrap_or_else(PoisonError::into_inner)
+        self.clock.now()
     }
 
     /// How long ago `at` was, on the board's clock.
@@ -356,7 +394,13 @@ impl Board {
     /// lifetimes that need not sleep through them.
     #[doc(hidden)]
     pub fn pass(&self, by: Duration) {
-        *self.skew.lock().unwrap_or_else(PoisonError::into_inner) += by;
+        self.clock.pass(by);
+    }
+
+    /// The live chats.
+    #[must_use]
+    pub fn bridge(&self) -> &Arc<bridge::Bridge> {
+        &self.bridge
     }
 
     /// A URL for `--open` to hand the browser: a key of its own, valid once and for
@@ -565,6 +609,117 @@ async fn worlds(State(board): State<Arc<Board>>) -> Response {
     }
 }
 
+/// `POST /api/w/<world>/sessions`'s body: `{}` for a new chat, `{"resume": "<run>|last"}` for
+/// a past run.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Start {
+    #[serde(default)]
+    resume: Option<String>,
+}
+
+/// Whether `run` may name a run to resume: `last`, or an id of letters, digits, `.`, `_`, `:`
+/// and `-`, not starting with `-`.
+fn run_name(run: &str) -> bool {
+    !run.is_empty()
+        && run.len() <= 128
+        && !run.starts_with('-')
+        && run
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+}
+
+/// The cookie on `headers` that names a live session.
+fn live_cookie(board: &Board, headers: &axum::http::HeaderMap) -> Option<String> {
+    guard::cookie(headers)
+        .find(|c| board.csrf_of(c).is_some())
+        .map(str::to_owned)
+}
+
+/// `POST /api/w/<world>/sessions`: a chat in a listed world, new or resuming a past run, for
+/// this browser to control. Answers [`bridge::BoardStarted`].
+async fn start(
+    State(board): State<Arc<Board>>,
+    Path(world): Path<String>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<Start>,
+) -> Response {
+    if let Some(run) = &body.resume
+        && !run_name(run)
+    {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "`resume` names a run's id, or `last`",
+        );
+    }
+    let Some(owner) = live_cookie(&board, &headers) else {
+        return refuse(StatusCode::UNAUTHORIZED, "no session");
+    };
+    let listing = Arc::clone(&board);
+    let Ok(worlds) = tokio::task::spawn_blocking(move || listing.worlds()).await else {
+        return refuse(StatusCode::INTERNAL_SERVER_ERROR, "the worlds did not read");
+    };
+    let Some(w) = worlds.worlds.into_iter().find(|w| w.id == world) else {
+        return refuse(StatusCode::NOT_FOUND, "no such world on the board");
+    };
+    if w.state == WorldState::Missing {
+        return refuse(StatusCode::CONFLICT, "the world's directory is gone");
+    }
+    match board
+        .bridge
+        .start(
+            std::path::Path::new(&w.path),
+            &w.id,
+            body.resume.as_deref(),
+            &owner,
+        )
+        .await
+    {
+        Ok(started) => (StatusCode::CREATED, Json(started)).into_response(),
+        Err((status, why)) => refuse(
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            &why,
+        ),
+    }
+}
+
+/// `GET /api/sessions`: [`bridge::BoardSessions`].
+async fn sessions(State(board): State<Arc<Board>>) -> Response {
+    Json(board.bridge.list()).into_response()
+}
+
+/// `WS /ws/session/<id>`: a tab on a live chat. The guard has checked the Host, the Origin, the
+/// cookie and the CSRF subprotocol entry; the socket speaks [`bridge::SUBPROTOCOL`].
+async fn socket(
+    State(board): State<Arc<Board>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    let offered = headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|p| p.trim() == bridge::SUBPROTOCOL);
+    if !offered {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "the chat's socket speaks the subprotocol mnemorph.v1",
+        );
+    }
+    let Some(cookie) = live_cookie(&board, &headers) else {
+        return refuse(StatusCode::UNAUTHORIZED, "no session");
+    };
+    let limits = board.bridge.limits();
+    let bridge = Arc::clone(&board.bridge);
+    upgrade
+        .protocols([bridge::SUBPROTOCOL])
+        .max_message_size(limits.inbound)
+        .max_frame_size(limits.inbound)
+        .on_upgrade(move |ws| bridge.serve(board, id, cookie, ws))
+}
+
 /// Any other path: an embedded asset by its exact name, or 404. `/` is `/index.html`.
 async fn asset(method: Method, uri: Uri) -> Response {
     if method != Method::GET && method != Method::HEAD {
@@ -631,6 +786,8 @@ pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<
         });
         signal().await;
         ticker.abort();
+        // Every chat's child asked to leave, then its group killed: none outlives the board.
+        board.bridge.end_all("the board stopped").await;
         let _ = stop.send(true);
         for t in tasks {
             t.await

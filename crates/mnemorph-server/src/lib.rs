@@ -210,6 +210,7 @@ impl Gate for ClientGate {
                 .map(|p| p.display().to_string())
                 .collect(),
             plan: ask.fingerprint.as_ref().map(GateFingerprint::short),
+            left_ms: None,
         };
         core.send(&json!({"jsonrpc": "2.0", "id": format!("gate-{id}"), "method": "gate/ask", "params": request}));
         let answer = rx
@@ -564,7 +565,7 @@ fn replay(core: &Core, id: Option<&Value>, since: u64) {
     let complete = oldest.is_none_or(|o| o <= since + 1);
     core.reply(
         id,
-        &json!({"events": events, "oldest": oldest, "complete": complete}),
+        &json!({"events": events, "oldest": oldest, "complete": complete, "more": false}),
     );
 }
 

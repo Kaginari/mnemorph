@@ -33,4 +33,9 @@ outside: Array<string>,
  * 5d6e7f8a · target 9a8b7c6d`): the command runs only if the world still matches it at the
  * spawn. Absent for an ask that spawns nothing.
  */
-plan?: string | null, };
+plan?: string | null, 
+/**
+ * The milliseconds it has left before it is denied: set by the board, which sends a waiting
+ * ask again to a tab that connects; absent from the core itself.
+ */
+leftMs?: number, };
