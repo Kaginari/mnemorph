@@ -6273,3 +6273,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   (the verifier's assignment did). A cut before the act still spends an envelope use, since it may
   have run. A command spawned by another thread can carry a lock fd for an instant; the run walk
   rereads the listing rather than reading that as a live session.
+
+### [2026-10-30T16:20:00+01:00] rimuru — #107, Fable's review: the config sibling is born private; the walk catches a loose rewrite
+- **Done:** `write::save` makes its sibling `create_new` at the file's own mode (`0600` for a file not there yet), sets it on the open file, writes and syncs it before the rename: the envelopes never exist at the umask's mode. The config walk runs under umask 002 and asserts the global file stays `0600` in every state. A duplicate sentence in docs/02 removed.
+- **Tests:** the sibling's mode at creation and a new file's, under umasks 002 and 022; the walk fails, under a 022 shell, when the old rewrite is put back.
+- **Learned:** a fix that sets the mode after writing still leaves a window; a check that reads only under the CI's umask misses the bug it was written for.

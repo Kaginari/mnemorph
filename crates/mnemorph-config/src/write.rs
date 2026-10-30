@@ -112,9 +112,12 @@ fn open(path: &Path) -> Result<DocumentMut, String> {
 }
 
 /// Parse the edit again, then put it in place of the file through a sibling and a rename. The
-/// sibling takes the file's own mode before it replaces it: a rename would otherwise swap the
-/// human's private file for one the umask made, which the gate then refuses to read envelopes from.
+/// sibling is made with the file's own mode — `0600` when there is no file yet — and never exists
+/// at a looser one: a rename would otherwise swap the human's private file for one the umask made,
+/// which the gate then refuses to read envelopes from.
 fn save(path: &Path, doc: &DocumentMut) -> Result<(), String> {
+    use std::io::Write as _;
+    use std::os::unix::fs::PermissionsExt as _;
     let out = doc.to_string();
     out.parse::<toml::Table>().map_err(|e| {
         format!(
@@ -125,13 +128,70 @@ fn save(path: &Path, doc: &DocumentMut) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
+    let mode = fs::metadata(path).map_or(0o600, |m| m.permissions().mode() & 0o7777);
     let tmp = path.with_extension("toml.mnemorph-tmp");
-    fs::write(&tmp, out).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    if let Ok(was) = fs::metadata(path) {
-        fs::set_permissions(&tmp, was.permissions()).map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            format!("{}: {e}", tmp.display())
-        })?;
+    let io = |e: std::io::Error| format!("{}: {e}", tmp.display());
+    let written = sibling(&tmp, mode).and_then(|mut f| {
+        f.write_all(out.as_bytes())?;
+        f.sync_all()
+    });
+    if let Err(e) = written {
+        let _ = fs::remove_file(&tmp);
+        return Err(io(e));
     }
     fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// A new, empty file at `tmp` with exactly `mode`: created with it, so the umask never widens it,
+/// and set to it on the open file, so the umask never narrows it either. A sibling a crash left is
+/// removed first.
+fn sibling(tmp: &Path, mode: u32) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+    match fs::remove_file(tmp) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode & 0o777)
+        .open(tmp)?;
+    f.set_permissions(fs::Permissions::from_mode(mode))?;
+    Ok(f)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    use rustix::fs::Mode;
+
+    use super::sibling;
+
+    fn mode(p: &std::path::Path) -> u32 {
+        std::fs::metadata(p).unwrap().permissions().mode() & 0o777
+    }
+
+    /// The sibling is never looser than the file it replaces, from the moment it exists, whatever
+    /// the umask; a file `set` makes is the human's alone.
+    #[test]
+    fn the_sibling_is_born_with_the_files_mode_and_a_new_file_is_private() {
+        let tmp = std::env::temp_dir().join(format!("mnemorph-write-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        for umask in [0o002, 0o022] {
+            rustix::process::umask(Mode::from_raw_mode(umask));
+            let side = tmp.join("config.toml.mnemorph-tmp");
+            drop(sibling(&side, 0o600).unwrap());
+            assert_eq!(mode(&side), 0o600, "umask {umask:o}");
+            // A sibling left by a crash is replaced, never reused at its old mode.
+            std::fs::set_permissions(&side, std::fs::Permissions::from_mode(0o666)).unwrap();
+            drop(sibling(&side, 0o640).unwrap());
+            assert_eq!(mode(&side), 0o640, "umask {umask:o}");
+            let new = tmp.join(format!("new-{umask:o}.toml"));
+            let _ = std::fs::remove_file(&new);
+            super::set(&new, "budget.day_usd", 4.0).unwrap();
+            assert_eq!(mode(&new), 0o600, "umask {umask:o}");
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

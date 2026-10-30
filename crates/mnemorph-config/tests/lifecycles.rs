@@ -12,6 +12,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::os::unix::fs::PermissionsExt as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -789,6 +790,11 @@ impl Node {
             );
             assert!(inc.lesson.is_some() && self.world().join("tests/lesson.rs").exists());
         }
+        // The human's file stays theirs alone, whatever wrote it last: under the walk's umask a
+        // rewrite at the umask's mode would leave it group-writable, and no envelope honoured.
+        let global = self.root().join("config/mnemorph/config.toml");
+        let mode = fs::metadata(&global).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "{path:?}: the global file is {mode:o}");
         // The envelope: never past its cap; every use an act it admitted, before any revocation.
         let uses = self.uses();
         assert!(uses.len() <= CAP, "{path:?}: {} uses", uses.len());
@@ -844,14 +850,12 @@ fn edge(from: State, to: State) -> bool {
 }
 
 fn set_private(file: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
     fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
     fs::set_permissions(file.parent().unwrap(), fs::Permissions::from_mode(0o700)).unwrap();
 }
 
 /// Copy `from` into `to`, files with their permissions.
 fn copy_tree(from: &Path, to: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
     for entry in fs::read_dir(from).unwrap() {
         let entry = entry.unwrap();
         let (src, dst) = (entry.path(), to.join(entry.file_name()));
@@ -894,6 +898,8 @@ fn advance(node: &Node, abs: &Abs, path: &[Ev], e: Ev, suspended: bool, open: bo
 /// moves of one layer run on as many threads as there are cores, each on its own fork; the layer
 /// is merged in order, so the paths are the same however the threads ran.
 fn explore() -> BTreeMap<Abs, Vec<Ev>> {
+    // A permissive umask, so a file rewritten at the umask's mode instead of its own is caught.
+    rustix::process::umask(rustix::fs::Mode::from_raw_mode(0o002));
     let start = Node::fresh();
     start.check(&[]);
     let mut seen = BTreeMap::from([(start.abs(), Vec::new())]);

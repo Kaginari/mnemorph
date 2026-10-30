@@ -1168,8 +1168,7 @@ How a fall is read (`mnemorph-races`, `falls`):
 
 - **An event ends the ascension at once**: a High Orc's pass overturned on a sealed territory, a
   Named Slime's *tests intact* failure, an Oni's rolled-back or corrected envelope act.
-- **An event in the window bars the rise**, as it would end the form at once: a body that just
-  rose never reads as falling, by its rates or by an event.
+- **An event in the window bars the rise**, as it would end the form at once.
 - **A rate below its fall bar starts probation**, and only on a full recent record — ten reports,
   or ten findings for an Arch Dark Elf. The fall bars sit well under the rise bars, so a body
   that just rose never reads as falling.

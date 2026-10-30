@@ -19,6 +19,7 @@ toml = "1"
 toml_edit = "0.25"
 
 [dev-dependencies]
+rustix = { version = "1", features = ["fs", "process"] }
 tempfile = "3"
 
 [lints]
