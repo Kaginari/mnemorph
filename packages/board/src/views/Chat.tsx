@@ -158,23 +158,18 @@ function AskBanner({ asks }: { asks: Waiting[] }) {
   );
 }
 
-/** The end gate's verdicts as toasts, as they arrive. */
-function Toasts({ entries, armed }: { entries: readonly Entry[]; armed: boolean }) {
-  const seen = useRef<Set<string> | undefined>(undefined);
+/** The end gate's verdicts as toasts, as they arrive live — a replayed one is only a line. */
+function Toasts({ entries }: { entries: readonly Entry[] }) {
+  const seen = useRef(new Set<string>());
   const [toasts, setToasts] = useState<Extract<Entry, { kind: 'verdict' }>[]>([]);
   useEffect(() => {
-    const verdicts = entries.filter(
-      (e): e is Extract<Entry, { kind: 'verdict' }> => e.kind === 'verdict',
+    const fresh = entries.filter(
+      (e): e is Extract<Entry, { kind: 'verdict' }> =>
+        e.kind === 'verdict' && e.at !== undefined && !seen.current.has(e.key),
     );
-    if (!armed) return;
-    if (!seen.current) {
-      seen.current = new Set(verdicts.map((v) => v.key));
-      return;
-    }
-    const fresh = verdicts.filter((v) => !seen.current?.has(v.key));
     for (const v of fresh) seen.current.add(v.key);
     if (fresh.length > 0) setToasts((t) => [...t, ...fresh].slice(-3));
-  }, [entries, armed]);
+  }, [entries]);
   useEffect(() => {
     if (toasts.length === 0) return;
     const t = window.setTimeout(() => setToasts((x) => x.slice(1)), 6000);
@@ -322,13 +317,21 @@ function chip(live: Live): [string, 'holo' | 'muted' | 'gold' | 'alarm', string]
 export function LiveChat({
   w,
   id,
+  chats,
   onSide,
 }: {
   w: BoardWorld;
   id: string;
+  chats: Chats;
   onSide: (s: Side | undefined) => void;
 }) {
   const live = useLive(id);
+  // A chat that ends moves from the live list to the past runs.
+  const refresh = chats.refresh;
+  const closed = live.link === 'closed';
+  useEffect(() => {
+    if (closed) refresh();
+  }, [closed, refresh]);
   const { view, hello } = live;
   useEffect(() => {
     onSide({ world: w.id, view, hello, live: true });
@@ -399,7 +402,7 @@ export function LiveChat({
             </Empty>
           </div>
         )}
-        <Toasts entries={view?.entries ?? []} armed={live.replayed} />
+        <Toasts entries={view?.entries ?? []} />
       </div>
       <div className="chat-foot">
         <AskBanner asks={live.asks} />

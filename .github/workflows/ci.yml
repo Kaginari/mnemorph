@@ -49,6 +49,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+      # The chat end to end runs on the real server and bridge: the example embeds the built board.
+      - name: The board, then the server it is embedded in
+        run: |
+          pnpm --filter @mnemorph/board build
+          cargo build -p mnemorph-server --example board_e2e
       - name: The pinned Playwright version
         id: pw
         run: echo "version=$(pnpm --filter @mnemorph/board exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -63,7 +71,7 @@ jobs:
       - name: Chromium's system libraries (the browser is cached)
         if: steps.browsers.outputs.cache-hit == 'true'
         run: pnpm --filter @mnemorph/board exec playwright install-deps chromium
-      - name: Screenshots, contrast, labels, router, drawers, hostile text
+      - name: Screenshots, contrast, labels, router, drawers, hostile text, chats
         run: pnpm --filter @mnemorph/board e2e
       - uses: actions/upload-artifact@v4
         if: always()

@@ -49,6 +49,8 @@ export type Entry =
       changed: string[];
       failures: string[];
       unverified: string[];
+      /** When it arrived, if seen live: a toast says it then. */
+      at?: number | undefined;
     }
   | { kind: 'ending'; key: string; ending: string }
   | { kind: 'below'; key: string; body: string; text: string; alarm: boolean };
@@ -368,6 +370,7 @@ export class Chat {
           changed: event.changed,
           failures: event.failures,
           unverified: event.unverified,
+          at: now,
         });
         return;
       case 'turnEnded':

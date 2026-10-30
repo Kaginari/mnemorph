@@ -245,6 +245,8 @@ embeds a placeholder page saying so, and serves the API all the same.
 | `POST /api/w/<world>/sessions` | a chat in a listed, present world: `{}` opens a new session, `{"resume": "<run>"}` (a session's run id, `r<ms>-<pid>`) or `{"resume": "last"}` resumes a stopped run through `mnemorph resume`'s opening; `201` with `BoardStarted`: `{"session": BoardSession, "hello": Hello}`. `429` past the cap of live chats, `502` with the child's reason when it does not open. The browser that posts it owns the chat |
 | `GET /api/sessions` | `BoardSessions`: `{"sessions": [{"id", "world", "session", "run", "controlled", "tabs", "asks"}]}`, the live chats |
 | `WS /ws/session/<id>` | a tab on a live chat (below), subprotocol `mnemorph.v1` |
+| `GET /api/w/<id>/runs` | `BoardRuns`: `{"runs": [{"id", "when", "state", "why", "ask", "turns"}], "more"}` — a listed, present world's session runs from its journals, newest first, at most 100 (`more` counts the rest); `state` is `live` (a session holds its lock now), `stopped` (a checkpoint, an interrupt, a turn cut short: it may be resumed), `ended` (answered or failed) or `unknown` with `why` (too large, a line that does not read, not a regular file). See *The board's chat* below |
+| `GET /api/w/<id>/runs/<run>` | `BoardTranscript`: `{"run", "state", "events", "dropped", "skipped"}` — a run's journal as the protocol's events (`{jsonrpc, method, params}`, `seq` from 1), the newest 10,000; `400` for a name that is no session run's id, `404` for no such run, `422` for a journal past 32 MiB or not a regular file |
 
 #### The chat bridge
 
@@ -368,6 +370,82 @@ dropped, never waited on: a send that takes over the chats' send limit (30 s) en
 pinged at the chats' pace (5 s), two pings unanswered ending it. A socket that falls behind is
 told `worlds/changed`; when its session ends it is closed with 4001. The page rereads what it
 shows when its world is named, and everything when `worlds/changed` comes or its socket reopens.
+
+#### The board's chat
+
+Inside a world, the rail lists its chats: the live ones the bridge runs (`GET /api/sessions`), then
+the past ones from its run journals (`GET /api/w/<id>/runs`), each titled by its last ask. *New
+chat* posts `/api/w/<id>/sessions`; a stopped past run offers *Resume*, which posts `{"resume":
+"<run>"}`. A live chat is `#/w/<world>/s/<chat>`, a past one `#/w/<world>/r/<run>`. The list is read
+on opening, when the push channel says the world changed (at most every 2 s), every 10 s, and when
+a chat ends.
+
+**Past runs** are read through the world's shared reader (`mnemorph_world::regular`: a link never
+followed, a pipe never waited on, the handle checked), by a session run's id only, from a journals
+directory none of whose parts under the world is a link. A listing reads at most the newest 100
+journals, 4 MiB each and 64 MiB in all; a transcript at most 32 MiB. The journal's beats become the
+events a live chat sends — an ask `turnStarted`, the model's text `assistant` and its calls
+`toolCall`, a result `toolResult` (cut at the protocol's 16,000 bytes), notes, warnings, the gate's
+verdict and the ending — so a past chat draws as a live one; what the journal keeps for the record
+alone (recall, the guts, the prefix, the model ridden, a compaction, the reasoning) is left out.
+A line that does not read is counted, never guessed. Nothing read there grants anything: the text
+is shown inert, like the model's.
+
+**The transcript** follows the terminal's grammar (`crates/mnemorph-tui`): the human's line on a
+gold spine; the answer on a holo spine under `✦ <body>`, a paragraph at a time as it streams; each
+tool call a card coloured by its class — a look in Rimuru's blue, a write in the Dark Elf's violet,
+a destructive act in the alarm, a command uncoloured, as the protocol carries no classifier's word —
+with the class named beside the colour, its dot (running, ok, failed, stopped), its one-line
+summary, `⎿ ok · 1.2s · +1 −1`, its output folded to 3 lines and its diff to 12, numbered from the
+hunk (an `edit` numbers the string's own lines); consecutive reads, greps and globs one *explore*
+card (`read 4 files · grep 2 patterns`); a wait of a second or more before the model's first
+output one quiet line, `✓ thought for 3s` (protocol 1 carries no reasoning text, so the line holds
+the wait only); a commissioned body's acts as `↳ orc-sql …` lines; the end gate one line with its
+counts, and a toast when it arrives live; a turn that ended other than by answering, one line. Above
+the composer, the activity strip says what runs now: `⣾ Running bash… · 12s · 61k tok · esc to
+stop` — thinking, writing, calling, running, compacting or waiting for approval, the turn's time and
+tokens.
+
+**Safe rendering.** Every word a model, a tool or a journal wrote is a React text node through
+`<Safe>`, control, bidi and zero-width characters shown as their escapes. The answer's Markdown is a
+small subset parsed by the board itself (`src/safe/Markdown.tsx`: paragraphs, headings, lists,
+quotes, rules, fences, code spans, strong, emphasis, strikethrough, links, images) into elements:
+raw HTML is never parsed and reads as text; a link is followed only to http, https or mailto, with
+`noopener noreferrer`; an image is never loaded, its words shown. Code is highlighted by a small
+tokenizer (strings, comments, numbers, keywords) into spans of text. No dependency, nothing from a
+string becomes markup, and nothing runs, so the page holds under `require-trusted-types-for
+'script'`. A hostile depth or length costs bounded work: nesting stops at 8 and a closer is looked
+for within 4,096 characters; past 100,000 characters an answer is shown as plain text.
+
+**The composer.** Enter sends; while a turn runs it queues (the line waits its turn, listed above
+the composer), *Steer* (or `/send …`) reaches the running turn after its next tool step, and Esc
+interrupts — the turn stops and what waits at the gate is denied. A tab that observes cannot send:
+its composer is disabled and offers *Take over*, which a tab of the browser that opened the chat may
+use. *End chat* ends it for every tab.
+
+**A waiting ask** is shown, never approved here: a banner names the body, the class and the act,
+and how long until the core denies it; the approval card and its protections arrive with the
+board's approvals. Until then nothing on the board answers an ask, and Esc denies it with the turn.
+
+**Reconnecting.** A tab opening on a chat replays what it said (`Client.catchUp`): live events that
+overtake the replay wait for it, and the SDK drops an event whose `seq` it has seen, so a reconnect
+— which replays from the last `seq` — or a reload never shows a message twice.
+
+**The side pane** beside a chat: the vitals (the context against its stress line, the tokens, the
+spend — `unpriced` never reads `$0` — and the weighted tokens), the world's memory counted (from its
+overview), the files the session's acts changed as a tree marked added, modified or deleted, and
+the bodies it commissioned with their state.
+
+**Long chats.** The transcript is drawn in a window: only the rows near the viewport are in the DOM,
+between two spacers whose heights are set through the CSSOM (never a style written as markup);
+each row is measured once drawn. Scrolled to its end it follows what arrives; scrolled up it stays,
+with a *Latest* button back. A 2,000-message transcript keeps under 120 rows in the DOM and scrolls
+without a stalled frame (the board's Playwright suite measures it).
+
+**Tested end to end** on the real server and bridge: `mnemorph-server`'s `board_e2e` example serves
+the built board over a fresh world whose chats' children are real cores — the loop, the tools, the
+end gate — answering from a scripted model; the suite opens a chat, sends two turns, reloads, ends
+it and reads it back as a past run.
 
 #### `mnemorph run`
 
