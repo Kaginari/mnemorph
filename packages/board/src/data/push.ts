@@ -54,9 +54,11 @@ function tell(c: Change) {
 }
 
 function open() {
+  if (typeof window === 'undefined') return;
   set('connecting');
   csrf()
     .then((token) => {
+      if (typeof window === 'undefined') return;
       const url = `ws://${window.location.host}/ws/board`;
       const ws = make(url, [SUBPROTOCOL, `mnemorph.csrf.${token}`]);
       ws.addEventListener('open', () => {
@@ -77,6 +79,8 @@ function open() {
 
 function retry() {
   set('down');
+  // No page (a test's environment torn down): nothing to open again.
+  if (typeof window === 'undefined') return;
   const wait = backoff;
   backoff = Math.min(backoff * 2, 30_000);
   window.setTimeout(open, wait);

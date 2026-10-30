@@ -8,6 +8,7 @@ import { fixtureWorlds } from './data/fixtures.ts';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;
+let mounted: ReturnType<typeof createRoot> | undefined;
 
 beforeEach(() => {
   window.matchMedia = vi.fn().mockReturnValue({
@@ -19,7 +20,10 @@ beforeEach(() => {
   document.body.append(host);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Unmounted before the environment goes: no fetch or retry renders into a torn-down window.
+  await act(async () => mounted?.unmount());
+  mounted = undefined;
   host.remove();
   vi.unstubAllGlobals();
   window.location.hash = '';
@@ -32,6 +36,7 @@ async function mount(hash: string, body: unknown = fixtureWorlds, status = 200) 
     vi.fn().mockResolvedValue({ ok: status === 200, status, json: async () => body }),
   );
   const root = createRoot(host);
+  mounted = root;
   await act(async () => root.render(<App />));
   await act(async () => {});
   return root;
