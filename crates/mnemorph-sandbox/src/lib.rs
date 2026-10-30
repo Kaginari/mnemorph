@@ -16,10 +16,13 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod env;
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+
+pub use env::{git, scrubbed_env};
 
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
 /// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
@@ -365,7 +368,7 @@ impl Sandbox {
         match self {
             Self::Guard(guard) => {
                 let mut probe = Command::new(guard);
-                probe.arg("--probe");
+                probe.arg("--probe").env_clear().envs(scrubbed_env());
                 if network {
                     probe.arg("--network");
                 }
@@ -389,7 +392,10 @@ impl Sandbox {
 }
 
 /// Make this process unreadable to the commands it starts: on Linux it becomes non-dumpable,
-/// so `/proc/<pid>/environ` and its memory are closed to every non-root process.
+/// so `/proc/<pid>/environ` and its memory are closed to every non-root process — an unguarded
+/// command's included, where landlock is not there to close them. `mnemorph` and `mnemorphd`
+/// call it first. It writes no core dump and refuses a debugger's attach to anyone but root;
+/// the process still reads its own `/proc/self`, and the programs it starts are dumpable again.
 ///
 /// # Errors
 ///

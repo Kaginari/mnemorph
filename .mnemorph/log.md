@@ -6442,3 +6442,26 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a key allowlist (`tests/support/keys.rs`) beside the scrubber's denylist: the recorder refuses to write a body with a key, or a line, it does not know, and the replay tests check every cassette against it; the live file's header says `--run-ignored only`, as the docs do.
 - **Tests:** every cassette holds only known keys, named by cassette and key; a new field, an unknown error key and a non-data line are refused.
 - **Learned:** a denylist scrubber can only blank what it has seen; an allowlist makes a field the server adds stop the recording instead of reaching git.
+
+### [2026-10-30T20:46:12+01:00] rimuru — a body cannot read the harness's environment; the harness made non-dumpable
+- **Task:** Veldora: can a sandboxed body read `/proc/<harness>/environ` (the provider key) or other
+  processes' `environ`/`cmdline`? Prove it with a fake secret; fix if readable.
+- **Files:** crates/mnemorph-sandbox/tests/escape.rs (`a_body_cannot_read_the_harness_environment`),
+  sandbox lib.rs (`harden_self`'s doc), re-exports in tools, loop and server, the `main`s of
+  `mnemorph` and `mnemorphd`, docs/05-architecture.md.
+- **Gate:** n/a here. Instruments: the new test, run before wiring: under the guard, landlock alone
+  opened no other process's `environ` (yama ptrace_scope 1, `/proc` without hidepid); an unguarded
+  command read the fake secret from the un-hardened harness; with `harden_self` it could not.
+- **Result:** not a hole under the guard; `harden_self` existed but no binary called it, while the
+  book said the harness was non-dumpable — now both binaries call it first.
+- **Learned:**
+  - Landlock's ptrace hook covers PTRACE_MODE_READ: a landlocked process cannot open `environ`,
+    `mem` or `maps` of a process outside its domain, whatever yama says.
+  - `cmdline` stays world-readable: secrets never on a command line.
+  - Open (@?): macOS `sysctl-read` is allowed, and `kern.procargs2` returns another process's
+    environment to the same user on older systems; unverified here (no Mac).
+
+### [2026-10-30T21:02:30+01:00] rimuru — #288, Fable's review: the harness's git calls and probe carry no key; macOS sysctl shut
+- **Done:** `mnemorph_sandbox::git()` (scrubbed env) at every key-bearing git spawn, the guard's probe scrubbed, `scrubbed_env` moved to the sandbox (memory and world gain the edge); `mnemorphd` refuses to serve unhardened, the TUI warns in the session; Seatbelt denies `kern.procargs*`/`kern.proc.*` after its sysctl allow.
+- **Tests:** a stand-in harness's fake secret is absent from a `git()` child's env; on macOS `ps -E` from a body finds it nowhere.
+- **Learned:** a scrubbed command is not enough while the harness's own helpers spawn with the full env: every child is a reader's window. Open (@?): the macOS rule is proven only by CI.

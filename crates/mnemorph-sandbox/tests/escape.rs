@@ -370,3 +370,171 @@ fn no_application_is_launched_from_inside() {
     let (ok, out) = g.run(&g.policy(false), "open -g -a TextEdit");
     assert!(!ok, "open -a succeeded from inside the sandbox: {out}");
 }
+
+/// The variable a stand-in harness carries its fake secret in.
+const FAKE_SECRET: &str = "MNEMORPH_TEST_FAKE_SECRET";
+
+/// What a command finds of `secret` in `/proc`: it opens `/proc/$PPID/environ`,
+/// `/proc/<harness>/environ` and `/proc/<harness>/cmdline`, then every `/proc/*/environ`, and
+/// prints `open F` for each environment that opens and `LEAK F` for each file holding the secret
+/// — never a file's contents. Its own environment is scrubbed, as the shell tool scrubs it.
+#[cfg(target_os = "linux")]
+fn probe_proc(g: &Ground, sandbox: &Sandbox, secret: &str) -> String {
+    let me = std::process::id();
+    let script = format!(
+        "for f in /proc/$PPID/environ /proc/{me}/environ /proc/{me}/cmdline; do \
+           if grep -qaF \"$1\" \"$f\" 2>/dev/null; then echo \"LEAK $f\"; fi; \
+         done; \
+         for f in /proc/[0-9]*/environ; do \
+           [ \"$f\" = /proc/$$/environ ] && continue; \
+           (: < \"$f\") 2>/dev/null && echo \"open $f\"; \
+           if grep -qaF \"$1\" \"$f\" 2>/dev/null; then echo \"LEAK $f\"; fi; \
+         done; \
+         echo done"
+    );
+    let out = sandbox
+        .command(
+            &g.policy(false),
+            "/bin/bash",
+            &["--noprofile", "--norc", "-c", &script, "probe", secret],
+        )
+        .current_dir(g.path("world"))
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", g.path("home"))
+        .env("TMPDIR", g.path("tmp"))
+        .output()
+        .expect("the command starts");
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A body cannot read the harness's environment, where a provider key lives. The test re-runs
+/// itself as a stand-in harness whose environment carries a fake secret. Under the guard,
+/// landlock alone keeps every other process's environment shut; once the harness is hardened
+/// as `mnemorph` and `mnemorphd` harden themselves, even an unguarded command cannot read it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_body_cannot_read_the_harness_environment() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let secret = format!("fake-{}-not-a-key", std::process::id());
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "a_body_cannot_read_the_harness_environment",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(FAKE_SECRET, &secret)
+            .output()
+            .unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let g = Ground::new("environ");
+    let guarded = probe_proc(&g, &sandbox(), &secret);
+    assert!(guarded.ends_with("done\n"), "{guarded}");
+    assert!(
+        !guarded.contains("open ") && !guarded.contains("LEAK"),
+        "a guarded command read a process's environment: {guarded}"
+    );
+    mnemorph_sandbox::harden_self().unwrap();
+    let unguarded = probe_proc(&g, &Sandbox::None("the test".into()), &secret);
+    assert!(unguarded.ends_with("done\n"), "{unguarded}");
+    assert!(
+        !unguarded.contains("LEAK"),
+        "an unguarded command read the hardened harness's environment: {unguarded}"
+    );
+}
+
+/// The harness's own git calls start without its secrets: a stand-in harness carrying a fake
+/// secret runs `env` through a git alias started by [`mnemorph_sandbox::git`].
+#[test]
+fn the_harness_git_carries_no_key() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "the_harness_git_carries_no_key",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(
+                FAKE_SECRET,
+                format!("fake-{}-not-a-key", std::process::id()),
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let out = mnemorph_sandbox::git()
+        .args(["-c", "alias.showenv=!env", "showenv"])
+        .output()
+        .expect("git runs");
+    let env = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success() && env.contains("PATH="), "{env}");
+    assert!(!env.contains(&secret), "git's child got the secret");
+    assert!(
+        !env.contains(FAKE_SECRET),
+        "git's child got the secret's variable"
+    );
+}
+
+/// On macOS a body cannot read the harness's environment through sysctl: `ps -E`, which reads
+/// `kern.procargs2`, finds no fake secret in a stand-in harness.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_body_cannot_read_the_harness_environment_through_sysctl() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "a_body_cannot_read_the_harness_environment_through_sysctl",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(
+                FAKE_SECRET,
+                format!("fake-{}-not-a-key", std::process::id()),
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let g = Ground::new("sysctl");
+    let me = std::process::id();
+    let (_, out) = g.run(
+        &g.policy(false),
+        &format!("ps -wwwE -o command= -p {me} | grep -cF '{secret}'; echo done"),
+    );
+    assert!(out.contains("done"), "{out}");
+    assert!(
+        out.starts_with("0\n"),
+        "ps read the harness's environment: {out}"
+    );
+}

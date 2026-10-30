@@ -245,7 +245,7 @@ pub fn union_merge(world: &Path) -> std::io::Result<()> {
 /// Add `line` to one of git's local files (`info/attributes`, `info/exclude`), once.
 fn local_line(world: &Path, git_path: &str, line: &str) -> std::io::Result<()> {
     // Git says where its local files live: a worktree's or a submodule's `.git` is a file.
-    let Ok(out) = std::process::Command::new("git")
+    let Ok(out) = mnemorph_sandbox::git()
         .args(["rev-parse", "--git-path", git_path])
         .current_dir(world)
         .env("GIT_CONFIG_NOSYSTEM", "1")

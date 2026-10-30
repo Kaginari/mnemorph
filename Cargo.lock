@@ -1621,6 +1621,7 @@ name = "mnemorph-memory"
 version = "0.0.0"
 dependencies = [
  "mnemorph-ledger",
+ "mnemorph-sandbox",
  "serde",
  "serde_json",
  "sha2",
@@ -1752,6 +1753,7 @@ dependencies = [
  "mnemorph-memory",
  "mnemorph-proving",
  "mnemorph-races",
+ "mnemorph-sandbox",
  "mnemorph-wire",
  "serde",
  "serde_json",
