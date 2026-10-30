@@ -480,7 +480,8 @@ fails when the two differ.
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
-| relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references seen, the ledger relations are learned from | yes |
+| relation sightings | `.mnemorph/ontology/sightings.jsonl` — cross-world references the harness saw a body read, the ledger relations are learned from | yes |
+| world registry | `$XDG_STATE_HOME/mnemorph/worlds.jsonl` (else `~/.local/state/…`), one for every world — a row each time a session opens: the world's canonical path, its id `<world>-<fnv64a>`, its `origin` remote normalised (`host/owner/repo`, never a credential) and when; the board finds worlds there, and a world's row count is the session clock a learned relation's expiry reads | no — machine-local |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its every byte witnessed under `$XDG_STATE_HOME/mnemorph/usage/` for the tripwire, its head anchored in `log.md` and kept under `$XDG_STATE_HOME/mnemorph/anchors/` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |

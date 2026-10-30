@@ -10,8 +10,10 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd runs [--world <dir>] [--json]
        mnemorphd onto owner <path>... [--world <dir>]
-       mnemorphd onto check [--world <dir>]
+       mnemorphd onto check [--dimension] [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
+       mnemorphd onto relations [--world <dir>]
+       mnemorphd onto relate|unrelate <other-world> <type> [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd housekeep --verify [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
@@ -44,7 +46,15 @@ commands below are the world's, for the human.
 from the creature docs; it needs no key and opens no session. A path is relative to the
 current directory, or absolute. `onto check` prints `@S PASS|FAIL <n> findings`, then each
 finding's severity, code, place and message; it fails on a critical or high finding, or a doc
-that does not read.
+that does not read. `--dimension` also glues this world's dimension manifest with each
+neighbour's — read, never written — and prints, after the findings, one `dimension` line per
+neighbour: what both state, and what each states alone.
+
+`onto relations` prints the relations the dimension manifest (`.mnemorph/dimension.toml`) states,
+then each proposal as a diff of it: a relation the harness sighted twice, by different bodies from
+different anchors, and a learned one unseen for 30 sessions. It writes nothing. `onto relate`
+is the human's yes: it writes the relation to the manifest; `onto unrelate` revokes it. A body
+never runs either.
 
 `--resume` opens the session on a run that stopped — at a checkpoint, an interrupt, or a turn
 the process died in — rebuilt from its journal under `.mnemorph/instruments/loop/`; `last` is
@@ -274,12 +284,19 @@ fn onto(args: &[String]) -> ExitCode {
     let mut paths = Vec::new();
     let mut words = args.iter();
     let command = match words.next().map(String::as_str) {
-        Some(c @ ("owner" | "check" | "settle")) => c,
+        Some(c @ ("owner" | "check" | "settle" | "relations" | "relate" | "unrelate")) => c,
         Some(other) => return fail(&format!("onto has no `{other}`; see --help")),
-        None => return fail("onto needs a command: owner, check or settle; see --help"),
+        None => {
+            return fail(
+                "onto needs a command: owner, check, settle, relations, relate or unrelate; see --help",
+            );
+        }
     };
+    let mut dimension = false;
     while let Some(w) = words.next() {
-        if w == "--world" {
+        if w == "--dimension" && command == "check" {
+            dimension = true;
+        } else if w == "--world" {
             match words.next() {
                 Some(dir) => world = Some(PathBuf::from(dir)),
                 None => return fail("--world needs a directory"),
@@ -299,6 +316,9 @@ fn onto(args: &[String]) -> ExitCode {
     if command == "settle" {
         return settle(world.as_deref(), &paths);
     }
+    if matches!(command, "relations" | "relate" | "unrelate") {
+        return relations(command, world.as_deref(), &paths);
+    }
     let Ok(cwd) = std::env::current_dir() else {
         return fail("the current directory cannot be read");
     };
@@ -311,7 +331,7 @@ fn onto(args: &[String]) -> ExitCode {
         let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
     }
     if command == "check" {
-        return check(&world, &roster);
+        return check(&world, &roster, dimension);
     }
     let mut out = std::io::stdout().lock();
     for path in &paths {
@@ -351,9 +371,43 @@ fn onto(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The relations' findings: each learned relation unseen too long, and with `dimension` each
+/// obstruction against a neighbour's manifest, with the glues.
+fn relation_findings(
+    world: &Path,
+    dimension: bool,
+) -> Result<
+    (
+        Vec<mnemorph_server::world::Finding>,
+        Vec<mnemorph_server::world::dimension::Glue>,
+    ),
+    String,
+> {
+    use mnemorph_server::world::dimension;
+    let known = dimension::registry()
+        .map(|r| dimension::known(&r))
+        .unwrap_or_default();
+    let now = known
+        .iter()
+        .find(|k| k.world == world)
+        .map_or(0, |k| k.sessions);
+    let manifest = dimension::Manifest::load(world)?;
+    let mut findings = dimension::stale_findings(&dimension::proposals(
+        &dimension::load_sightings(world),
+        &manifest,
+        now,
+    ));
+    if !dimension {
+        return Ok((findings, Vec::new()));
+    }
+    let (glues, f) = dimension::glue(world, &known)?;
+    findings.extend(f);
+    Ok((findings, glues))
+}
+
 /// `onto check`: every finding about the world's shape, most severe first. It fails on a
 /// critical or high finding, or a doc that does not read.
-fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
+fn check(world: &Path, roster: &mnemorph_server::world::Roster, dimension: bool) -> ExitCode {
     let tracked = std::process::Command::new("git")
         .arg("-C")
         .arg(world)
@@ -381,6 +435,16 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
     findings.extend(mnemorph_server::world::prose_claims(roster, world));
     findings.extend(mnemorph_server::world::mind_findings(roster, world));
     findings.extend(mnemorph_server::world::provenance(roster, world));
+    let glues = match relation_findings(world, dimension) {
+        Ok((f, g)) => {
+            findings.extend(f);
+            g
+        }
+        Err(e) => {
+            let _ = writeln!(std::io::stderr(), "mnemorphd: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     if let Some(message) = mnemorph_server::world::verify::missing_session_verify(world, roster) {
         findings.push(mnemorph_server::world::Finding {
             code: "no-session-verify",
@@ -408,6 +472,23 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster) -> ExitCode {
             f.code,
             mnemorph_server::wire::one_line(&f.at),
             mnemorph_server::wire::one_line(&f.message)
+        );
+    }
+    for g in &glues {
+        let list = |v: &[String]| {
+            if v.is_empty() {
+                "-".to_owned()
+            } else {
+                v.join(",")
+            }
+        };
+        let _ = writeln!(
+            out,
+            "dimension\t{}\tglued {}\tours {}\ttheirs {}",
+            mnemorph_server::wire::one_line(&g.neighbour),
+            list(&g.shared),
+            list(&g.ours),
+            list(&g.theirs)
         );
     }
     if failed {
@@ -629,6 +710,79 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
             )
         };
     }
+}
+
+/// `onto relations`, `onto relate <other> <type>`, `onto unrelate <other> <type>`: the
+/// relations stated and those proposed, which writes nothing; the human's yes; its revocation.
+fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode {
+    use mnemorph_server::world::dimension;
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, w));
+    let world = world.canonicalize().unwrap_or(world);
+    if command == "relations" {
+        if !words.is_empty() {
+            return refused(&"onto relations takes no arguments");
+        }
+        let manifest = match dimension::Manifest::load(&world) {
+            Ok(m) => m,
+            Err(e) => return refused(&e),
+        };
+        let now = dimension::registry()
+            .map(|r| dimension::known(&r))
+            .unwrap_or_default()
+            .into_iter()
+            .find(|k| k.world == world)
+            .map_or(0, |k| k.sessions);
+        let mut out = std::io::stdout().lock();
+        for r in &manifest.relations {
+            let _ = writeln!(out, "stated\t{}\t{}", r.kind, r.world);
+        }
+        let proposals = dimension::proposals(&dimension::load_sightings(&world), &manifest, now);
+        if manifest.relations.is_empty() && proposals.is_empty() {
+            let _ = writeln!(out, "no relation stated, none proposed");
+        }
+        for p in &proposals {
+            let _ = writeln!(out, "\nproposed: {}\n{}", p.why(), p.diff());
+        }
+        return ExitCode::SUCCESS;
+    }
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: a relation between worlds is written by the human's yes alone"
+        ));
+    }
+    let [other, kind] = words else {
+        return refused(&format!("onto {command} takes the other world and a type"));
+    };
+    if kind.is_empty() || !kind.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+        return refused(&format!(
+            "`{kind}` is no relation type: lowercase words joined by `-`"
+        ));
+    }
+    let other = absolute(&cwd, Path::new(other));
+    if other.canonicalize().ok() == Some(world.clone()) {
+        return refused(&"a world has no relation to itself");
+    }
+    let done = if command == "relate" {
+        dimension::relate(&world, &other, kind)
+    } else {
+        dimension::unrelate(&world, &other, kind)
+    };
+    match done {
+        Ok(true) if command == "relate" => println!("stated {kind} towards {}", other.display()),
+        Ok(true) => println!("revoked {kind} towards {}", other.display()),
+        Ok(false) if command == "relate" => println!("already stated"),
+        Ok(false) => {
+            return refused(&format!(
+                "no `{kind}` towards {} is stated",
+                other.display()
+            ));
+        }
+        Err(e) => return refused(&e),
+    }
+    ExitCode::SUCCESS
 }
 
 /// `onto settle <id>`: the human settles a contested fact — besides an Orc's verdict, the one act

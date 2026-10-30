@@ -117,6 +117,9 @@ pub struct Commissioner {
     /// How many reviewers one landing's challenge commissions at one sweep
     /// ([`crate::challenge::REVIEWERS`] unless the configuration says).
     pub reviewers: usize,
+    /// The registry of worlds a commissioned body's manifest reads are sighted against; `None`
+    /// sights nothing.
+    pub registry: Option<PathBuf>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -1354,7 +1357,8 @@ fn child_run(
     let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup)
         .with_gate(gate)
-        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name));
+        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
+        .with_registry(c.registry.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();

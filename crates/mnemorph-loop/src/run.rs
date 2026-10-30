@@ -299,6 +299,9 @@ pub struct Run {
     acceptable: std::collections::BTreeSet<(String, String)>,
     /// The toolbox's manifest — the Minds the body may wear, priced — said with its first ask.
     manifest: Option<String>,
+    /// The registry of worlds a manifest this body reads is sighted against; `None` sights
+    /// nothing.
+    registry: Option<std::path::PathBuf>,
     /// How often the run has drained: a full context drains once, and checkpoints plainly after.
     drains: u32,
     /// How often this ask has compacted: at most [`COMPACTIONS`], then a full context drains.
@@ -431,6 +434,7 @@ impl Run {
             opening: None,
             acceptable: std::collections::BTreeSet::new(),
             manifest: None,
+            registry: None,
             drains: 0,
             compactions: 0,
             ask_said: String::new(),
@@ -795,6 +799,14 @@ impl Run {
     #[must_use]
     pub fn with_manifest(mut self, manifest: Option<String>) -> Self {
         self.manifest = manifest;
+        self
+    }
+
+    /// The registry of worlds this body's reads are sighted against: a manifest it reads that
+    /// names another known world is a sighting, recorded by the harness, never by the body.
+    #[must_use]
+    pub fn with_registry(mut self, registry: Option<std::path::PathBuf>) -> Self {
+        self.registry = registry;
         self
     }
 
@@ -2425,6 +2437,26 @@ impl Run {
         (Some("replay-escalated".into()), None, true)
     }
 
+    /// The sightings a successful read makes: each manifest it read, looked through by the
+    /// harness for other known worlds.
+    fn sight(&self, name: &str, input: &str) {
+        let Some(registry) = &self.registry else {
+            return;
+        };
+        let Ok(input) = serde_json::from_str::<serde_json::Value>(input) else {
+            return;
+        };
+        for path in read_paths(name, &input) {
+            if let Err(e) =
+                mnemorph_world::dimension::sight(self.cx.world(), registry, &self.body.name, &path)
+            {
+                self.record(&Beat::Warning {
+                    text: format!("a sighting could not be recorded: {e}"),
+                });
+            }
+        }
+    }
+
     /// An outward act the shelf refused is an escalation signal, read by code: the first is kept,
     /// tool and input, to hand to the race that holds it.
     fn note_unheld(&mut self, o: &mnemorph_tools::Outcome, name: &str, input: &str) {
@@ -2842,6 +2874,9 @@ impl Run {
                 .set_deadline(Some(self.started + self.limits.deadline));
             let o = self.call_one(&name, &input).await;
             self.note_unheld(&o, &name, &input);
+            if !o.is_error {
+                self.sight(&name, &input);
+            }
             // An Esc that stopped this call stops the calls after it too.
             interrupted |= self.interrupt.take();
             self.record(&Beat::Result {

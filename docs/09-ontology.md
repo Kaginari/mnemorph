@@ -365,6 +365,26 @@ relation to the human, as a manifest diff, only when:
 
 Only the human's yes writes it, through Rimuru, whose soil the manifest is.
 
+**Where sightings come from.** The harness records them, never the model: each time a body's
+`read` or `index` succeeds on a manifest inside its world — `Cargo.toml`, `package.json`,
+`go.mod`, `.gitmodules` — the harness reads that same file and looks for the worlds the
+[registry](05-architecture.md#storage-files-are-the-truth) knows. A dependency by path names the
+deepest known world whose root holds the path (`depends-on`); one by git URL or Go module, the
+known world with that remote (`depends-on`); a submodule's URL, `vendors`. The anchor is the
+manifest's `file:line`, the body the one that read it, and the session this world's count of
+openings in the registry. One body's read of one anchor is one sighting per session. A file
+outside the world, or a link from inside it to one outside, is never opened for a sighting, and a
+known neighbour is no wider sandbox: its files stay outside every tool's reach.
+
+**The manifest.** `.mnemorph/dimension.toml` holds `[[relation]]` entries — `world`, the other
+world's canonical path on this machine; `type`, read from this world's side; `remote`, its
+normalised remote, how it is known elsewhere — and an optional `[inverse]` table declaring a
+type's inverse. `mnemorphd onto relations` prints what it states and each proposal as a diff of
+it, and writes nothing; `onto relate <world> <type>` is the human's yes and `onto unrelate` its
+revocation, both refused inside a body's command. A relation the human stated with no sighting
+was never learned, so it carries no expiry. `onto check` reports `stale-relation`; with
+`--dimension` it also prints, per neighbour, what both state and what each states alone.
+
 ### Findings
 
 Every check returns findings, each with a code and a severity. The end gate's *right author*

@@ -192,6 +192,51 @@ async fn a_tool_round_trip_reaches_the_answer() {
 }
 
 #[tokio::test]
+async fn a_manifest_read_is_sighted_by_the_harness_and_the_sandbox_stays_as_it_was() {
+    use mnemorph_world::dimension::{SIGHTINGS, load_sightings, register_at};
+    let w = World::new("sighting");
+    let neighbour = w.root.join("neighbour");
+    fs::create_dir_all(&neighbour).unwrap();
+    fs::write(neighbour.join("secret.txt"), "theirs\n").unwrap();
+    let registry = w.root.join("state/worlds.jsonl");
+    register_at(&registry, &w.world(), None).unwrap();
+    register_at(&registry, &neighbour, None).unwrap();
+    fs::write(
+        w.world().join("Cargo.toml"),
+        "[dependencies]\nn = { path = \"../neighbour\" }\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "read", json!({"path": "Cargo.toml"})),
+        tool("t2", "read", json!({"path": "../neighbour/secret.txt"})),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits()).with_registry(Some(registry));
+    assert_eq!(ask(&mut run, "look").await, Ending::Answered("done".into()));
+    let seen = load_sightings(&w.world());
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert_eq!(seen[0].body, "slime-test");
+    assert_eq!(seen[0].anchor, "Cargo.toml:2");
+    assert_eq!(
+        seen[0].to,
+        neighbour.canonicalize().unwrap().display().to_string()
+    );
+    // A known neighbour is still outside the world: its files are not the body's to read.
+    let r = results(&model, 2);
+    assert!(r[1].1 && r[1].0.contains("outside the world"), "{r:?}");
+    assert!(!r[1].0.contains("theirs"));
+    // A run with no registry sights nothing.
+    fs::remove_file(w.world().join(SIGHTINGS)).unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "read", json!({"path": "Cargo.toml"})),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "look").await;
+    assert_eq!(load_sightings(&w.world()), vec![]);
+}
+
+#[tokio::test]
 async fn the_steps_meter_checkpoints() {
     let w = World::new("steps");
     let model =

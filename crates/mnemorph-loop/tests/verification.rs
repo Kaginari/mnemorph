@@ -150,6 +150,7 @@ impl World {
             },
         };
         let commissioner = mnemorph_loop::Commissioner {
+            registry: None,
             world: world.clone(),
             model,
             prices: anthropic_prices().unwrap(),
