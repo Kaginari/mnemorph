@@ -74,30 +74,3 @@ export function SectionView({ w, section }: { w: BoardWorld; section: WorldSecti
     </div>
   );
 }
-
-export function SessionView({ w, session }: { w: BoardWorld; session: string }) {
-  return (
-    <div className="page page-chat">
-      <header className="page-head">
-        <h1 className="page-title">
-          <span className="mono">
-            <Safe text={session} />
-          </span>
-          <span className="page-crumb">
-            <Safe text={w.name} />
-          </span>
-        </h1>
-      </header>
-      <div className="chat-scroll">
-        <Empty glyph="✦" title="No transcript to show">
-          Sessions arrive on the board with the session bridge; until then, run them with{' '}
-          <code className="mono">mnemorph</code> in a terminal.
-        </Empty>
-      </div>
-      <div className="composer" aria-disabled="true">
-        <span className="composer-label">ask</span>
-        <span className="composer-hint">Chat opens with the session bridge</span>
-      </div>
-    </div>
-  );
-}

@@ -3,15 +3,17 @@
  * phone width the rail and the pane as drawers over the centre.
  */
 import type { BoardWorld } from '@mnemorph/protocol';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Chats, useChats } from './data/chats.ts';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
 import { type Choice, useTheme } from './theme.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
+import { LiveChat, PastChat, type Side } from './views/Chat.tsx';
 import { IntegrationsView, MetricsView, SettingsView, UnknownView } from './views/Pages.tsx';
-import { NoWorld, SectionView, SessionView, WorldView } from './views/World.tsx';
+import { NoWorld, SectionView, WorldView } from './views/World.tsx';
 import { WorldsView } from './views/Worlds.tsx';
 
 const PANE_KEY = 'mnemorph.pane';
@@ -77,6 +79,8 @@ function Centre({
   now,
   theme,
   onTheme,
+  chats,
+  onSide,
 }: {
   route: Route;
   load: Load;
@@ -84,6 +88,8 @@ function Centre({
   now: number;
   theme: Choice;
   onTheme: (c: Choice) => void;
+  chats: Chats;
+  onSide: (s: Side | undefined) => void;
 }) {
   switch (route.name) {
     case 'worlds':
@@ -100,7 +106,12 @@ function Centre({
   if (load.state !== 'ready') return <WorldsView load={load} now={now} />;
   if (!world) return <NoWorld id={route.world} />;
   if (route.name === 'section') return <SectionView w={world} section={route.section} />;
-  if (route.name === 'session') return <SessionView w={world} session={route.session} />;
+  if (route.name === 'session') {
+    return <LiveChat key={route.session} w={world} id={route.session} onSide={onSide} />;
+  }
+  if (route.name === 'run') {
+    return <PastChat key={route.run} w={world} run={route.run} chats={chats} onSide={onSide} />;
+  }
   return <WorldView w={world} />;
 }
 
@@ -143,6 +154,9 @@ export function App() {
       ? load.data.worlds.find((w) => w.id === here)
       : undefined;
   const name = title(route, world);
+  const chats = useChats(here);
+  const [side, setSide] = useState<Side | undefined>(undefined);
+  const onSide = useCallback((s: Side | undefined) => setSide(s), []);
 
   // A drawer closes when the page moves; Esc closes either.
   // biome-ignore lint/correctness/useExhaustiveDependencies: closes on every route change
@@ -185,6 +199,7 @@ export function App() {
         now={now}
         theme={theme}
         onTheme={setTheme}
+        chats={chats}
       />
       <button
         type="button"
@@ -224,7 +239,13 @@ export function App() {
             ◨
           </button>
         </header>
-        <main className="centre-main">
+        <main
+          className={
+            route.name === 'session' || route.name === 'run'
+              ? 'centre-main centre-chat'
+              : 'centre-main'
+          }
+        >
           <Centre
             route={route}
             load={load}
@@ -232,6 +253,8 @@ export function App() {
             now={now}
             theme={theme}
             onTheme={setTheme}
+            chats={chats}
+            onSide={onSide}
           />
         </main>
       </div>
@@ -243,7 +266,7 @@ export function App() {
         aria-label="Side pane"
         hidden={!pane}
       >
-        <Pane route={route} load={load} world={world} now={now} />
+        <Pane route={route} load={load} world={world} now={now} side={side} />
       </aside>
     </div>
   );

@@ -1,5 +1,6 @@
 import '@mnemorph/theme/tokens.css';
 import './board.css';
+import './chat.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';

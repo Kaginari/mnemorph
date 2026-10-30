@@ -16,6 +16,7 @@ mod assets;
 pub mod bridge;
 pub mod guard;
 pub mod instance;
+pub mod runs;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
@@ -371,6 +372,8 @@ impl Board {
                 post(start).layer(DefaultBodyLimit::max(START_BYTES)),
             )
             .route("/api/sessions", get(sessions))
+            .route("/api/w/{world}/runs", get(runs_of))
+            .route("/api/w/{world}/runs/{run}", get(run_of))
             .route("/ws/session/{id}", get(socket))
             .fallback(asset)
             .layer(axum::middleware::from_fn_with_state(
@@ -675,6 +678,46 @@ async fn start(
             StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
             &why,
         ),
+    }
+}
+
+/// The path of the listed world `id`, if it is listed and present.
+fn present(board: &Board, id: &str) -> Result<std::path::PathBuf, Response> {
+    let Some(w) = board.worlds().worlds.into_iter().find(|w| w.id == id) else {
+        return Err(refuse(StatusCode::NOT_FOUND, "no such world on the board"));
+    };
+    if w.state == WorldState::Missing {
+        return Err(refuse(StatusCode::CONFLICT, "the world's directory is gone"));
+    }
+    Ok(std::path::PathBuf::from(w.path))
+}
+
+/// `GET /api/w/<world>/runs`: [`runs::BoardRuns`], the world's past chats from its journals.
+async fn runs_of(State(board): State<Arc<Board>>, Path(world): Path<String>) -> Response {
+    let read = tokio::task::spawn_blocking(move || present(&board, &world).map(|p| runs::list(&p)));
+    match read.await {
+        Ok(Ok(r)) => Json(r).into_response(),
+        Ok(Err(refused)) => refused,
+        Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+/// `GET /api/w/<world>/runs/<run>`: [`runs::BoardTranscript`], a past chat read-only.
+async fn run_of(
+    State(board): State<Arc<Board>>,
+    Path((world, run)): Path<(String, String)>,
+) -> Response {
+    let read = tokio::task::spawn_blocking(move || {
+        present(&board, &world).map(|p| runs::transcript(&p, &run))
+    });
+    match read.await {
+        Ok(Ok(Ok(t))) => Json(t).into_response(),
+        Ok(Ok(Err((status, why)))) => refuse(
+            StatusCode::from_u16(status).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
+            &why,
+        ),
+        Ok(Err(refused)) => refused,
+        Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
 

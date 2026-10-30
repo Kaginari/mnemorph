@@ -4,9 +4,12 @@
  * in; the check fails when they drift.
  */
 export type { BoardRole } from './generated/BoardRole.js';
+export type { BoardRun } from './generated/BoardRun.js';
+export type { BoardRuns } from './generated/BoardRuns.js';
 export type { BoardSession } from './generated/BoardSession.js';
 export type { BoardSessions } from './generated/BoardSessions.js';
 export type { BoardStarted } from './generated/BoardStarted.js';
+export type { BoardTranscript } from './generated/BoardTranscript.js';
 export type { BoardWorld } from './generated/BoardWorld.js';
 export type { BoardWorlds } from './generated/BoardWorlds.js';
 export type { Budget } from './generated/Budget.js';
@@ -20,6 +23,7 @@ export type { Hello } from './generated/Hello.js';
 export type { PromptParams } from './generated/PromptParams.js';
 export type { PromptResult } from './generated/PromptResult.js';
 export type { Role } from './generated/Role.js';
+export type { RunState } from './generated/RunState.js';
 export type { JsonValue } from './generated/serde_json/JsonValue.js';
 export type { WorldState } from './generated/WorldState.js';
 
