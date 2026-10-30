@@ -6,11 +6,7 @@
 //! tool result or a report says can answer: only a [`Gate`] implementation holds that power,
 //! and the harness builds those from channels the human controls.
 
-use std::fmt::Write as _;
-use std::fs::OpenOptions;
-use std::io::{BufRead as _, BufReader, Write as _};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use mnemorph_races::{Race, ToolClass};
@@ -153,75 +149,6 @@ impl Gate for NoHuman {
 #[must_use]
 pub fn indented(text: &str) -> String {
     text.lines().collect::<Vec<_>>().join("\n    │ ")
-}
-
-/// Asks on the controlling terminal and waits until the deadline; silence denies.
-#[derive(Debug, Clone, Copy)]
-pub struct Terminal {
-    /// How long the human has to answer.
-    pub deadline: Duration,
-}
-
-impl Default for Terminal {
-    fn default() -> Self {
-        Self {
-            deadline: Duration::from_secs(300),
-        }
-    }
-}
-
-impl Gate for Terminal {
-    fn ask(&self, ask: &Ask) -> Answer {
-        let Ok(mut tty) = OpenOptions::new().read(true).write(true).open("/dev/tty") else {
-            return Answer::Deny("no terminal to ask on".into());
-        };
-        let mut card = format!(
-            "\n── {} wants to run a {} act ──\n  {}\n",
-            ask.race,
-            ask.class,
-            indented(&ask.act)
-        );
-        for why in &ask.why {
-            let _ = writeln!(card, "  · {}", indented(why));
-        }
-        for path in &ask.outside {
-            let _ = writeln!(card, "  ⚠ approving lets it write {}", path.display());
-        }
-        if let Some(plan) = &ask.fingerprint {
-            let _ = writeln!(card, "  bound to {}", plan.short());
-        }
-        let _ = write!(
-            card,
-            "Approve? [y/N] (denied in {}s) ",
-            self.deadline.as_secs()
-        );
-        if tty.write_all(card.as_bytes()).is_err() {
-            return Answer::Deny("the terminal could not be written".into());
-        }
-        let pending = Pending::new();
-        let answering = Arc::clone(&pending);
-        // A reader still waiting after the deadline answers into a taken slot, and is ignored.
-        thread::spawn(move || {
-            let mut line = String::new();
-            let answer = match BufReader::new(tty).read_line(&mut line) {
-                Ok(_) if matches!(line.trim(), "y" | "Y" | "yes") => Answer::Approve,
-                _ => Answer::Deny("the human said no".into()),
-            };
-            let _ = answering.answer(answer);
-        });
-        pending.wait(self.deadline)
-    }
-
-    fn admitted(&self, ask: &Ask, by: &str) {
-        let line = format!("\n── {} ──\n", admitted_line(ask, by));
-        let shown = OpenOptions::new()
-            .write(true)
-            .open("/dev/tty")
-            .and_then(|mut tty| tty.write_all(line.as_bytes()));
-        if shown.is_err() {
-            eprint!("{line}");
-        }
-    }
 }
 
 /// A scripted gate for tests: answers in order, records every question.

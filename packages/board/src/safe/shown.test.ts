@@ -1,15 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { HIDDEN, hidden, keptInProse, runs, shown } from './shown.ts';
+import {
+  HIDDEN,
+  hidden,
+  keptInProse,
+  MARKS,
+  MARKS_KEPT,
+  mark,
+  runs,
+  SPACES,
+  shown,
+} from './shown.ts';
 
-/** The vectors the Rust tests read too (crates/mnemorph-loop/tests/shown_vectors.rs). */
+/** The vectors the Rust tests read too (crates/mnemorph-wire/tests/shown_vectors.rs). */
 const vectors = JSON.parse(
   readFileSync(
-    new URL('../../../../crates/mnemorph-loop/tests/shown-vectors.json', import.meta.url),
+    new URL('../../../../crates/mnemorph-wire/tests/shown-vectors.json', import.meta.url),
     'utf8',
   ),
 ) as {
   escaped: { from: string; to: string; why: string }[];
+  spaces: { from: string; to: string; why: string }[];
+  marks: [string, string][];
+  marks_kept: number;
   prose: string[];
   hidden: { cp: string; hidden: boolean }[];
   shown: { in: string; out: string }[];
@@ -52,6 +65,30 @@ describe('the shared rule', () => {
         expect(`U+${cp.toString(16)}`).toBe('hidden');
       }
     }
+  });
+  it('escapes the spaces and caps the marks the vectors list', () => {
+    const pairs = (t: readonly (readonly [number, number])[]) => t.map(([a, b]) => [a, b]);
+    expect(pairs(SPACES)).toEqual(vectors.spaces.map((r) => [hex(r.from), hex(r.to)]));
+    expect(pairs(MARKS)).toEqual(vectors.marks.map(([a, b]) => [hex(a), hex(b)]));
+    expect(MARKS_KEPT).toBe(vectors.marks_kept);
+    const marks = vectors.marks.map(([a, b]) => [hex(a), hex(b)] as const);
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      const want = marks.some(([a, b]) => cp >= a && cp <= b);
+      if (mark(cp) !== want) expect(`U+${cp.toString(16)}`).toBe(`mark ${want}`);
+    }
+  });
+  it("lists every combining mark of this engine's Unicode", () => {
+    const combining = /^[\p{Mn}\p{Me}]$/u;
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (!surrogate(cp) && combining.test(String.fromCodePoint(cp)) && !mark(cp)) {
+        expect(`U+${cp.toString(16)}`).toBe('a mark');
+      }
+    }
+  });
+  it('keeps spaces and every mark in prose', () => {
+    expect(runs('a\u00a0e\u0301\u0302\u0303', true).map((r) => r.text)).toEqual([
+      'a\u00a0e\u0301\u0302\u0303',
+    ]);
   });
   it('keeps in prose only what the vectors name', () => {
     const kept = vectors.prose.map(hex);
