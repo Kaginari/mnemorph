@@ -370,3 +370,89 @@ fn no_application_is_launched_from_inside() {
     let (ok, out) = g.run(&g.policy(false), "open -g -a TextEdit");
     assert!(!ok, "open -a succeeded from inside the sandbox: {out}");
 }
+
+/// The variable a stand-in harness carries its fake secret in.
+#[cfg(target_os = "linux")]
+const FAKE_SECRET: &str = "MNEMORPH_TEST_FAKE_SECRET";
+
+/// What a command finds of `secret` in `/proc`: it opens `/proc/$PPID/environ`,
+/// `/proc/<harness>/environ` and `/proc/<harness>/cmdline`, then every `/proc/*/environ`, and
+/// prints `open F` for each environment that opens and `LEAK F` for each file holding the secret
+/// — never a file's contents. Its own environment is scrubbed, as the shell tool scrubs it.
+#[cfg(target_os = "linux")]
+fn probe_proc(g: &Ground, sandbox: &Sandbox, secret: &str) -> String {
+    let me = std::process::id();
+    let script = format!(
+        "for f in /proc/$PPID/environ /proc/{me}/environ /proc/{me}/cmdline; do \
+           if grep -qaF \"$1\" \"$f\" 2>/dev/null; then echo \"LEAK $f\"; fi; \
+         done; \
+         for f in /proc/[0-9]*/environ; do \
+           [ \"$f\" = /proc/$$/environ ] && continue; \
+           (: < \"$f\") 2>/dev/null && echo \"open $f\"; \
+           if grep -qaF \"$1\" \"$f\" 2>/dev/null; then echo \"LEAK $f\"; fi; \
+         done; \
+         echo done"
+    );
+    let out = sandbox
+        .command(
+            &g.policy(false),
+            "/bin/bash",
+            &["--noprofile", "--norc", "-c", &script, "probe", secret],
+        )
+        .current_dir(g.path("world"))
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", g.path("home"))
+        .env("TMPDIR", g.path("tmp"))
+        .output()
+        .expect("the command starts");
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A body cannot read the harness's environment, where a provider key lives. The test re-runs
+/// itself as a stand-in harness whose environment carries a fake secret. Under the guard,
+/// landlock alone keeps every other process's environment shut; once the harness is hardened
+/// as `mnemorph` and `mnemorphd` harden themselves, even an unguarded command cannot read it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_body_cannot_read_the_harness_environment() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let secret = format!("fake-{}-not-a-key", std::process::id());
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "a_body_cannot_read_the_harness_environment",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(FAKE_SECRET, &secret)
+            .output()
+            .unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let g = Ground::new("environ");
+    let guarded = probe_proc(&g, &sandbox(), &secret);
+    assert!(guarded.ends_with("done\n"), "{guarded}");
+    assert!(
+        !guarded.contains("open ") && !guarded.contains("LEAK"),
+        "a guarded command read a process's environment: {guarded}"
+    );
+    mnemorph_sandbox::harden_self().unwrap();
+    let unguarded = probe_proc(&g, &Sandbox::None("the test".into()), &secret);
+    assert!(unguarded.ends_with("done\n"), "{unguarded}");
+    assert!(
+        !unguarded.contains("LEAK"),
+        "an unguarded command read the hardened harness's environment: {unguarded}"
+    );
+}

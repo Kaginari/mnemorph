@@ -16,6 +16,11 @@ use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
 
 fn main() -> ExitCode {
+    // First, before any key is read: the harness's environment and memory close to every
+    // non-root process, sandboxed or not.
+    if let Err(e) = mnemorph_server::harden_self() {
+        eprintln!("mnemorph: the process could not be made non-dumpable: {e}");
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = match parse(&args) {
         Ok(c) => c,

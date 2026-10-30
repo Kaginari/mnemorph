@@ -6421,3 +6421,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** only an adopted Mind whose doc matches the witnessed digest loads; an unadopted one (a planted doc, another path, a world from before the witness) is listed "unadopted: adopt to use" in `status`, `mnemorphd mind list` and the session's opening holes, with one hint. `mind adopt` reads the doc once, shows its text escaped through `safe` (60 lines of 200 bytes, then "… N more lines") and records the digest of exactly those bytes. Docs 02, 08, the help, the ledger-integrity playbook.
 - **Tests:** an unadopted Mind does not load, then loads once adopted; the proposal's text is the doc's and its digest the row's; at a pty, a long doc with escapes is shown capped and escaped, and the witness holds the digest of the bytes shown. With unadopted Minds loading again, or the digest check off, a test fails.
 - **Learned:** "load with a warning" for compatibility gives Mind authority to anything of unknown provenance; one adoption per old world is the price of none.
+
+---
+
+### [2026-10-30T20:46:12+01:00] rimuru — a body cannot read the harness's environment; the harness made non-dumpable
+- **Task:** Veldora: can a sandboxed body read `/proc/<harness>/environ` (the provider key) or other
+  processes' `environ`/`cmdline`? Prove it with a fake secret; fix if readable.
+- **Files:** crates/mnemorph-sandbox/tests/escape.rs (`a_body_cannot_read_the_harness_environment`),
+  sandbox lib.rs (`harden_self`'s doc), re-exports in tools, loop and server, the `main`s of
+  `mnemorph` and `mnemorphd`, docs/05-architecture.md.
+- **Gate:** n/a here. Instruments: the new test, run before wiring: under the guard, landlock alone
+  opened no other process's `environ` (yama ptrace_scope 1, `/proc` without hidepid); an unguarded
+  command read the fake secret from the un-hardened harness; with `harden_self` it could not.
+- **Result:** not a hole under the guard; `harden_self` existed but no binary called it, while the
+  book said the harness was non-dumpable — now both binaries call it first.
+- **Learned:**
+  - Landlock's ptrace hook covers PTRACE_MODE_READ: a landlocked process cannot open `environ`,
+    `mem` or `maps` of a process outside its domain, whatever yama says.
+  - `cmdline` stays world-readable: secrets never on a command line.
+  - Open (@?): macOS `sysctl-read` is allowed, and `kern.procargs2` returns another process's
+    environment to the same user on older systems; unverified here (no Mac).

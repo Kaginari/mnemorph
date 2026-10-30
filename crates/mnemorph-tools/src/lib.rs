@@ -26,6 +26,8 @@ pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
 pub use mnemorph_sandbox::Policy;
 /// The sandbox a context runs commands in, as the context takes it.
 pub use mnemorph_sandbox::Sandbox;
+/// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.
+pub use mnemorph_sandbox::harden_self;
 pub use pinned::remove_created;
 pub use tool::{Context, Grant, Meta, Outcome, OwnerOf, Tool, call, ignored, registry};
 pub use tripwire::{kijin_witness, queue_witness, usage_witness};

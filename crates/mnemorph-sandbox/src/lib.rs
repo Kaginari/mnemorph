@@ -389,7 +389,10 @@ impl Sandbox {
 }
 
 /// Make this process unreadable to the commands it starts: on Linux it becomes non-dumpable,
-/// so `/proc/<pid>/environ` and its memory are closed to every non-root process.
+/// so `/proc/<pid>/environ` and its memory are closed to every non-root process — an unguarded
+/// command's included, where landlock is not there to close them. `mnemorph` and `mnemorphd`
+/// call it first. It writes no core dump and refuses a debugger's attach to anyone but root;
+/// the process still reads its own `/proc/self`, and the programs it starts are dumpable again.
 ///
 /// # Errors
 ///

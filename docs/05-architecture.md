@@ -640,9 +640,15 @@ flowchart LR
     exits 0 and changes nothing.
     Layered, landlock refuses what it can, the tools refuse by name, and the end gate's *right
     author* judges every changed file the snapshot sees; what git ignores is build output and is
-    not judged. Landlock also keeps a sandboxed process out of `/proc` of processes outside its
-    domain, so the harness's environment is closed to its commands; the harness additionally
-    makes itself non-dumpable.
+    not judged. **What a body reads of other processes:** `/proc` is readable, but landlock
+    keeps a sandboxed process out of the `environ`, `mem` and `maps` of every process outside
+    its domain, so the harness's environment — where the provider keys live — is closed to its
+    commands. `mnemorph` and `mnemorphd` also make themselves non-dumpable as they start, so
+    their `/proc` files are root's and closed to every other process of the user, an unguarded
+    command's included (no core dump is written, and a debugger attaches only as root). What
+    stays open is what any process of the user may see: the list of processes and each one's
+    `cmdline` and `status` — so a secret never travels on a command line. On macOS the
+    Seatbelt profile allows `process-info*` only for processes in the command's own sandbox.
   - **seccomp** — without network, `socket()` fails for every family, Unix sockets included (a
     host daemon's socket is a way out); `socketpair` stays. Always denied: `ptrace`,
     `process_vm_*`, `mount`, `unshare`, `setns`, `pivot_root`, `chroot`, `bpf`,

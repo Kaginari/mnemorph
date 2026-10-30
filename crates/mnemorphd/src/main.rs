@@ -154,6 +154,11 @@ fn version() -> String {
 }
 
 fn main() -> ExitCode {
+    // First, before any key is read: the harness's environment and memory close to every
+    // non-root process, sandboxed or not.
+    if let Err(e) = mnemorph_server::harden_self() {
+        eprintln!("mnemorphd: the process could not be made non-dumpable: {e}");
+    }
     let mut world = None;
     let all: Vec<String> = std::env::args().skip(1).collect();
     if all.iter().any(|a| a == "-h" || a == "--help") {
