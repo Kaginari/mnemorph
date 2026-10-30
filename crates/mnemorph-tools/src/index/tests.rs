@@ -204,3 +204,77 @@ fn a_symbol_is_found_bare_or_by_its_parent() {
     assert_eq!(find(&go, "Stack.Push").len(), 1);
     assert_eq!(find(&go, "Push").len(), 1);
 }
+
+#[test]
+fn a_deeply_nested_file_has_a_skeleton_and_no_stack_overflow() {
+    let depth = 100_000;
+    let rust = format!(
+        "fn f() {{\n    let x = {}{};\n}}\n",
+        "[".repeat(depth),
+        "]".repeat(depth)
+    );
+    let out = outline("deep.rs", &rust);
+    assert!(
+        out.contains("1–3 fn f") || out.contains("took too long"),
+        "{out}"
+    );
+    let python = format!(
+        "def f():\n    return {}{}\n",
+        "(".repeat(depth),
+        ")".repeat(depth)
+    );
+    let out = outline("deep.py", &python);
+    assert!(
+        out.contains("1–2 fn f") || out.contains("took too long"),
+        "{out}"
+    );
+    let json = format!("{}{}", "{\"a\": ".repeat(depth), "}".repeat(depth));
+    assert!(outline("deep.json", &json).contains("1–1 key a (+"));
+}
+
+#[test]
+fn a_large_garbage_file_stops_at_the_parse_budget() {
+    // Four megabytes of brackets, quotes and operators: error recovery's worst case.
+    let alphabet = b"{}()[]<>'\"`/*;=+-!?:.,\\ \nfnclassdef";
+    let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+    let text: String = (0..(4 << 20) - 64)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            char::from(alphabet[usize::try_from(x % alphabet.len() as u64).unwrap()])
+        })
+        .collect();
+    let started = std::time::Instant::now();
+    let out = outline("garbage.ts", &text);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(out.starts_with("garbage.ts — "), "{out}");
+}
+
+#[test]
+fn control_characters_in_names_never_reach_the_skeleton() {
+    let out = outline(
+        "forged.json",
+        "{\"a\n2–2 key admin\": 1, \"b\u{1b}[31m\": 2}\n",
+    );
+    assert!(!out.contains('\u{1b}'), "{out:?}");
+    assert_eq!(out.lines().count(), 3, "{out:?}");
+    assert!(out.contains("–2 key a 2–2 key admin\n"), "{out:?}");
+}
+
+#[test]
+fn a_trait_impl_with_generics_is_found_by_its_type() {
+    let s = skeleton(
+        Path::new("it.rs"),
+        "struct Foo;\nimpl Iterator<Item = u8> for Foo {\n    fn next(&mut self) -> Option<u8> { None }\n}\n",
+    );
+    let found: Vec<(usize, usize)> = find(&s, "Foo::next")
+        .iter()
+        .map(|x| (x.start, x.end))
+        .collect();
+    assert_eq!(found, vec![(3, 3)]);
+}

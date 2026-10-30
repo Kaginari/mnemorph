@@ -619,7 +619,9 @@ flowchart LR
 
     Rust, TypeScript, Python and Go are parsed with tree-sitter (JavaScript with the TSX grammar);
     Markdown headings, TOML tables and JSON keys by small scanners; any other file shows its line
-    count and no skeleton. A symbol's range takes the doc comments, attributes and decorators
+    count and no skeleton, and so does a file over 4 MB or one whose parse runs past half a
+    second. The walk keeps its own stack and stops 256 levels down, so no nesting exhausts the
+    thread's; control characters are dropped from every name. A symbol's range takes the doc comments, attributes and decorators
     right above it. At most 200 symbols are shown, the rest counted from the line they start at;
     a symbol nested three deep is counted on its parent (`(+2 nested)`). Paths resolve as
     `read`'s do, so no link leads out, and a skeleton is made once per content in a session.

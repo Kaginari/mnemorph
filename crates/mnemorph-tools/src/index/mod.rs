@@ -50,6 +50,8 @@ pub(crate) type Made = (Vec<(usize, String)>, Vec<Symbol>);
 pub(crate) struct Skeleton {
     /// The language it was read as; `None` when no skeleton could be made.
     pub(crate) lang: Option<&'static str>,
+    /// Why there is no skeleton, when there is none: `for this file type`, `(over 4 MB)`, ….
+    pub(crate) why: &'static str,
     pub(crate) lines: usize,
     /// Each import: its first line and its text, whitespace collapsed.
     pub(crate) imports: Vec<(usize, String)>,
@@ -108,26 +110,49 @@ pub(crate) fn skeleton(path: &Path, text: &str) -> Skeleton {
     let lines = text.lines().count();
     let mut s = Skeleton {
         lines,
+        why: "for this file type",
         ..Skeleton::default()
     };
     let Some(lang) = Lang::of(path) else {
         return s;
     };
     if text.len() > MAX_BYTES {
+        s.why = "(over 4 MB)";
         return s;
     }
     let made = match lang {
-        Lang::Markdown => Some(plain::markdown(text)),
-        Lang::Toml => Some(plain::toml(text)),
-        Lang::Json => Some(plain::json(text)),
+        Lang::Markdown => Ok(plain::markdown(text)),
+        Lang::Toml => Ok(plain::toml(text)),
+        Lang::Json => Ok(plain::json(text)),
         _ => syntax::parse(lang, text),
     };
-    if let Some((imports, symbols)) = made {
-        s.lang = Some(lang.name());
-        s.imports = imports;
-        s.symbols = symbols;
+    match made {
+        Ok((imports, symbols)) => {
+            s.lang = Some(lang.name());
+            // Names come from the file: a control character in one (a JSON key's `\n`, an
+            // escape sequence) could forge a line of the skeleton or drive the terminal.
+            s.imports = imports.into_iter().map(|(l, t)| (l, clean(&t))).collect();
+            s.symbols = symbols
+                .into_iter()
+                .map(|sym| Symbol {
+                    name: clean(&sym.name),
+                    ..sym
+                })
+                .collect();
+        }
+        Err(why) => s.why = why,
     }
     s
+}
+
+/// `text` with every control character dropped and white space collapsed.
+fn clean(text: &str) -> String {
+    let kept: String = text
+        .chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| !c.is_control())
+        .collect();
+    squash(&kept)
 }
 
 /// The skeleton of a file's content, from the context's cache when the same content was indexed
@@ -170,8 +195,8 @@ pub(crate) fn render(shown: &str, s: &Skeleton, cap: usize) -> String {
     let Some(lang) = s.lang else {
         let _ = writeln!(
             out,
-            "{shown} — {} lines; no skeleton for this file type: read it by range, or grep.",
-            s.lines
+            "{shown} — {} lines; no skeleton {}: read it by range, or grep.",
+            s.lines, s.why
         );
         return out;
     };
@@ -281,8 +306,9 @@ pub(crate) fn find<'a>(s: &'a Skeleton, name: &str) -> Vec<&'a Symbol> {
 }
 
 /// The last word of a symbol's name, generics dropped: `Tool for Read` reads as `Read`,
-/// `Stack<T>` as `Stack`, `Stack.push` as `push`.
+/// `Iterator<Item = u8> for Foo<T>` as `Foo`, `Stack<T>` as `Stack`, `Stack.push` as `push`.
 fn short(name: &str) -> &str {
+    let name = name.rsplit_once(" for ").map_or(name, |(_, ty)| ty);
     let bare = name.split('<').next().unwrap_or(name).trim_end();
     let tail = bare.rsplit(' ').next().unwrap_or(bare);
     tail.rsplit('.').next().unwrap_or(tail)

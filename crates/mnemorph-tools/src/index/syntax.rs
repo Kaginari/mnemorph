@@ -1,7 +1,10 @@
 //! Skeletons from a tree-sitter parse: Rust, TypeScript, TSX, JavaScript (read with the TSX
 //! grammar), Python and Go.
 
-use tree_sitter::{Language, Node, Parser};
+use std::ops::ControlFlow;
+use std::time::{Duration, Instant};
+
+use tree_sitter::{Language, Node, ParseOptions, Parser};
 
 use super::{Lang, Made, Symbol, squash};
 
@@ -19,34 +22,82 @@ enum Item {
     Through,
 }
 
-/// The imports and symbols of `text`, or `None` when the parser could not run.
-pub(super) fn parse(lang: Lang, text: &str) -> Option<Made> {
+/// How long one parse may take: error recovery on a large file of garbage can take seconds.
+const PARSE_BUDGET: Duration = Duration::from_millis(500);
+/// Tree levels walked: deeper nodes (nesting no code has) are not looked at, so the walk's work
+/// stays bounded by the file's size.
+const TREE_DEPTH: usize = 256;
+
+/// The imports and symbols of `text`, or why there are none.
+pub(super) fn parse(lang: Lang, text: &str) -> Result<Made, &'static str> {
     let language: Language = match lang {
         Lang::Rust => tree_sitter_rust::LANGUAGE.into(),
         Lang::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         Lang::Tsx | Lang::JavaScript => tree_sitter_typescript::LANGUAGE_TSX.into(),
         Lang::Python => tree_sitter_python::LANGUAGE.into(),
         Lang::Go => tree_sitter_go::LANGUAGE.into(),
-        Lang::Markdown | Lang::Toml | Lang::Json => return None,
+        Lang::Markdown | Lang::Toml | Lang::Json => return Err("for this file type"),
     };
     let mut parser = Parser::new();
-    parser.set_language(&language).ok()?;
-    let tree = parser.parse(text, None)?;
+    parser
+        .set_language(&language)
+        .map_err(|_| "(the grammar did not load)")?;
+    let started = Instant::now();
+    let mut budget = |_: &tree_sitter::ParseState| {
+        if started.elapsed() > PARSE_BUDGET {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    };
+    let bytes = text.as_bytes();
+    let tree = parser
+        .parse_with_options(
+            &mut |at, _| bytes.get(at..).unwrap_or_default(),
+            None,
+            Some(ParseOptions::new().progress_callback(&mut budget)),
+        )
+        .ok_or("(parsing it took too long)")?;
     let mut w = Walk {
         lang,
-        src: text.as_bytes(),
+        src: bytes,
         imports: Vec::new(),
         symbols: Vec::new(),
+        up: (None, None),
     };
-    w.children(tree.root_node(), 0);
-    Some((w.imports, w.symbols))
+    w.walk(tree.root_node());
+    Ok((w.imports, w.symbols))
 }
 
-struct Walk<'a> {
+struct Walk<'a, 't> {
     lang: Lang,
     src: &'a [u8],
     imports: Vec<(usize, String)>,
     symbols: Vec<Symbol>,
+    /// The parent and grandparent of the node being looked at: kept by the walk, since asking a
+    /// node for its parent costs a descent from the root.
+    up: (Option<Node<'t>>, Option<Node<'t>>),
+}
+
+/// One node to look at: the node, its symbol depth, its tree depth, its parent and grandparent.
+type Visit<'t> = (Node<'t>, usize, usize, Option<Node<'t>>, Option<Node<'t>>);
+
+/// Push `node`'s named children, in reverse so that they pop in the file's order.
+fn push<'t>(
+    stack: &mut Vec<Visit<'t>>,
+    node: Node<'t>,
+    depth: usize,
+    level: usize,
+    grand: Option<Node<'t>>,
+) {
+    if level >= TREE_DEPTH {
+        return;
+    }
+    let mut cursor = node.walk();
+    let kids: Vec<Node<'t>> = node.named_children(&mut cursor).collect();
+    for n in kids.into_iter().rev() {
+        stack.push((n, depth, level + 1, Some(node), grand));
+    }
 }
 
 /// A node's first line, 1-based.
@@ -64,7 +115,7 @@ fn last(n: Node<'_>) -> usize {
     }
 }
 
-impl Walk<'_> {
+impl<'t> Walk<'_, 't> {
     fn text(&self, n: Node<'_>) -> &str {
         n.utf8_text(self.src).unwrap_or("")
     }
@@ -73,47 +124,55 @@ impl Walk<'_> {
         n.child_by_field_name(name).map(|c| squash(self.text(c)))
     }
 
-    fn children(&mut self, node: Node<'_>, depth: usize) {
-        let mut cursor = node.walk();
-        let kids: Vec<Node<'_>> = node.named_children(&mut cursor).collect();
-        for n in kids {
-            self.visit(n, depth);
-        }
-    }
-
-    fn visit(&mut self, n: Node<'_>, depth: usize) {
-        match self.item(n) {
-            Item::Symbol(kind, name) => {
-                let start = Self::lead(n);
-                self.symbols.push(Symbol {
-                    kind,
-                    name,
-                    start,
-                    end: last(n),
-                    depth,
-                });
-                // A decorated definition's body is its definition's.
-                let inner = if n.kind() == "decorated_definition" {
-                    n.child_by_field_name("definition").unwrap_or(n)
-                } else {
-                    n
-                };
-                self.children(inner, depth + 1);
-            }
-            Item::Many(list) => {
-                for (kind, name, start, end) in list {
+    /// Every node down from the root, in the file's order, with a stack of its own: a deeply
+    /// nested file never exhausts the thread's.
+    fn walk(&mut self, root: Node<'t>) {
+        let mut stack: Vec<Visit<'t>> = Vec::new();
+        push(&mut stack, root, 0, 0, None);
+        while let Some((n, depth, level, parent, grand)) = stack.pop() {
+            self.up = (parent, grand);
+            match self.item(n) {
+                Item::Symbol(kind, name) => {
+                    let start = Self::lead(n);
                     self.symbols.push(Symbol {
                         kind,
                         name,
                         start,
-                        end,
+                        end: last(n),
                         depth,
                     });
+                    // A decorated definition's body is its definition's.
+                    match n
+                        .child_by_field_name("definition")
+                        .filter(|_| n.kind() == "decorated_definition")
+                    {
+                        Some(d) => push(&mut stack, d, depth + 1, level + 1, Some(n)),
+                        None => push(&mut stack, n, depth + 1, level, parent),
+                    }
                 }
+                Item::Many(list) => {
+                    for (kind, name, start, end) in list {
+                        self.symbols.push(Symbol {
+                            kind,
+                            name,
+                            start,
+                            end,
+                            depth,
+                        });
+                    }
+                }
+                Item::Import(text) => self.imports.push((first(n), text)),
+                Item::Through => push(&mut stack, n, depth, level, parent),
             }
-            Item::Import(text) => self.imports.push((first(n), text)),
-            Item::Through => self.children(n, depth),
         }
+    }
+
+    /// The parent's kind, and the grandparent's.
+    fn up_kinds(&self) -> (&str, &str) {
+        (
+            self.up.0.map_or("", |p| p.kind()),
+            self.up.1.map_or("", |p| p.kind()),
+        )
     }
 
     /// Where a symbol starts once the comments, attributes and decorators right above it are
@@ -189,13 +248,12 @@ impl Walk<'_> {
         }
     }
 
-    /// Whether `n` sits at a module's top level, an `export` in between allowed.
-    fn top(n: Node<'_>) -> bool {
-        let mut p = n.parent();
-        if p.is_some_and(|p| p.kind() == "export_statement") {
-            p = p.and_then(|p| p.parent());
-        }
-        p.is_some_and(|p| p.kind() == "program")
+    /// Whether the node looked at sits at a module's top level, an `export` in between allowed.
+    fn top(&self) -> bool {
+        matches!(
+            self.up_kinds(),
+            ("program", _) | ("export_statement", "program")
+        )
     }
 
     fn script(&self, n: Node<'_>) -> Item {
@@ -210,7 +268,7 @@ impl Walk<'_> {
             "enum_declaration" => self.named(n, "enum"),
             "internal_module" | "module" => self.named(n, "namespace"),
             "import_statement" => self.import(n),
-            "lexical_declaration" | "variable_declaration" if Self::top(n) => {
+            "lexical_declaration" | "variable_declaration" if self.top() => {
                 let word = self
                     .text(n)
                     .split_whitespace()
@@ -261,7 +319,7 @@ impl Walk<'_> {
             "import_statement" | "import_from_statement" | "future_import_statement" => {
                 self.import(n)
             }
-            "expression_statement" if n.parent().is_some_and(|p| p.kind() == "module") => {
+            "expression_statement" if self.up_kinds().0 == "module" => {
                 // A module-level constant: `NAME = …` in capitals.
                 let Some(a) = n.named_child(0).filter(|a| a.kind() == "assignment") else {
                     return Item::Many(Vec::new());
@@ -287,7 +345,7 @@ impl Walk<'_> {
     fn python_def(&self, d: Node<'_>, outer: Node<'_>) -> Item {
         let kind = if d.kind() == "class_definition" {
             "class"
-        } else if Self::in_class(outer) {
+        } else if self.up_kinds() == ("block", "class_definition") {
             "method"
         } else {
             "fn"
@@ -303,15 +361,8 @@ impl Walk<'_> {
         )
     }
 
-    fn in_class(n: Node<'_>) -> bool {
-        n.parent()
-            .filter(|b| b.kind() == "block")
-            .and_then(|b| b.parent())
-            .is_some_and(|c| c.kind() == "class_definition")
-    }
-
     fn go(&self, n: Node<'_>) -> Item {
-        let top = n.parent().is_some_and(|p| p.kind() == "source_file");
+        let top = self.up_kinds().0 == "source_file";
         match n.kind() {
             "function_declaration" => self.named(n, "fn"),
             "method_declaration" => {
