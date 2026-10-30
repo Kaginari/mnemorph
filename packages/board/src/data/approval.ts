@@ -46,7 +46,9 @@ const NEWLINE = '\\u{a}';
  */
 export function actRows(act: string, width = ROW_CHARS): string[] {
   const rows: string[] = [];
-  for (const line of act.split(NEWLINE).map((l, i, all) => (i < all.length - 1 ? l + NEWLINE : l))) {
+  for (const line of act
+    .split(NEWLINE)
+    .map((l, i, all) => (i < all.length - 1 ? l + NEWLINE : l))) {
     // The line as atoms: an escape, or one character.
     const atoms: string[] = [];
     let at = 0;

@@ -491,42 +491,98 @@
   font-weight: 600;
 }
 
-.ask-banner {
-  padding: 10px 14px;
+.approval-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--mn-bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+.approval {
+  display: grid;
+  gap: 10px;
+  width: min(92ch, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 16px 18px;
   border: 1px solid var(--mn-gold);
   border-left-width: 4px;
   border-radius: var(--mn-radius);
-  background: color-mix(in srgb, var(--mn-gold) 8%, var(--mn-panel));
+  background: var(--mn-panel-raised);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--mn-bg) 60%, transparent);
 }
-.ask-title {
+.approval-title {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
-  margin: 0 0 6px;
+  margin: 0;
   font-family: var(--mn-font-ui);
-  font-size: 15px;
+  font-size: 16px;
 }
-.ask-who {
-  font-weight: 500;
-  color: var(--mn-text-muted);
-}
-.ask-more {
+.approval-more,
+.approval-read,
+.approval-left,
+.approval-status {
+  margin: 0;
   font-size: 13px;
   color: var(--mn-text-muted);
 }
-.ask-act {
-  margin: 0 0 6px;
-  padding: 6px 10px;
-  max-height: 7.5em;
+.approval-status {
+  color: var(--mn-text);
+}
+.approval-act {
+  max-height: min(40dvh, 16em);
+  min-height: 3em;
   overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-line);
   border-radius: 4px;
   background: var(--mn-panel);
+}
+.approval-act:focus-visible {
+  outline: 2px solid var(--mn-holo);
+  outline-offset: 1px;
+}
+.approval-row {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
 }
-.ask-note {
+.approval-row[data-seen="true"] {
+  border-left-color: var(--mn-line);
+}
+.approval-why,
+.approval-outside {
   margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.approval-plan {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mn-text-muted);
+}
+.approval-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.approval-answers .button[aria-pressed="true"] {
+  border-color: var(--mn-holo);
+  box-shadow: 0 0 0 1px var(--mn-holo);
+}
+.approval-reason {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.approval-note {
   font-size: 13px;
   color: var(--mn-text-muted);
 }

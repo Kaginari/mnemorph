@@ -291,10 +291,41 @@ seen, so every event arrives once, in order.
 
 **Asks.** `gate/ask` is a request, not an event, so the bridge keeps each waiting ask and sends it
 to every tab — again to each tab that connects — with `leftMs`, the time it has before the core's
-10-minute wait denies it. An ask leaves the list, and the tabs are sent `board/askGone {id}`, when
-it is answered, when the controller interrupts, when the asking body's turn ends (any, for the
-session's own body), or when its time is up. Only the controller's answer is taken, once per ask;
-any other is refused with `board/refused {id, why}`.
+10-minute wait denies it. Every field the child sent (body, race, class, act, reasons, paths
+outside, plan) reaches the tabs already passed through `mnemorph_loop::shown`, with `digest`: the
+SHA-256 of that text in a fixed framing — a version line `mnemorph.ask.v1`, then the ask's id and
+each field as its UTF-8 length, a colon, the text and a newline, each list first its count, the
+plan `-` when absent or `+` before it (`Shown::digest`, mirrored by the page). An ask leaves the
+list, and the tabs are sent `board/askGone {id, why}`, when it is answered (`answered`), when the
+controller interrupts, when the asking body's turn ends (any, for the session's own body), or when
+its time is up.
+
+**Answers, held by the board.** The page is not trusted to have kept its card's rules; the board
+holds every one it can see. A tab's card sends `board/seen {id, digest}` when it is first visible —
+the render acknowledgement, taken from the controller only and for the digest the board sent
+(`-32011`, `-32014` for no such ask, `-32015` for another digest). An answer is a response to the
+ask's id (`gate-<n>`), `{allow, reason?, digest?}`, and the board takes it only from the
+controller, once per ask; an allow only when it names the digest of the act as shown, comes from
+the tab that acknowledged the card, and comes at least 300 ms after that acknowledgement. Control
+moving (`board/takeOver`, a controller leaving) clears every acknowledgement: the new controller's
+card acknowledges again, and its 300 ms start then. A denial needs no digest — it is always safe.
+Anything else is refused with `board/refused {id, why}`, and the ask still waits; a second answer
+hears the ask was answered elsewhere. The answer reaches the core only once the board holds a place
+in the child's input and has journaled it; an allow that cannot be journaled is refused.
+
+**The answers journal.** Each answer, taken or refused (the first eight refusals of an ask), is a
+row of `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl`, beside the gate's verdicts: the
+chat, the ask, the tab's connection (a number the bridge gives each tab), the body, the class, the
+act as shown (its first 4 KiB), `shown_digest` and the `named_digest` the answer carried, `allow`,
+`outcome` (`answered` or `refused: <why>`), `asked_ms` and `seen_ms` (since the ask, and since this
+tab's acknowledgement) and the build. It is hash-chained and anchored as `answers` with the world's
+other chained journals.
+
+**The terminal and the board.** A terminal session's asks wait in its terminal, a board chat's on
+its card: each front end hosts its own session, and the TUI's card is unchanged. Where two answers
+meet one ask — the controller's allow and Esc, a takeover and the tab it took from, the grace, the
+deadline — the first to reach the bridge wins, under the chat's one lock, and the other hears the
+ask was answered elsewhere; the core itself takes one answer per ask and ignores a second.
 
 **Roles.** One tab controls a chat; every other observes. Control belongs to the browser that
 started the chat — its board cookie: its first tab controls, and another of its tabs takes control
@@ -486,9 +517,41 @@ interrupts — the turn stops and what waits at the gate is denied. A tab that o
 its composer is disabled and offers *Take over*, which a tab of the browser that opened the chat may
 use. *End chat* ends it for every tab.
 
-**A waiting ask** is shown, never approved here: a banner names the body, the class and the act,
-and how long until the core denies it. Approving is the approval card's, a component of its own
-with its protections (#278); the chat itself answers no ask, and Esc denies it with the turn.
+<img src="../assets/board/desktop-dark-approval.png" width="640" alt="The approval card at desktop width, dark: a hostile act shown whole, every hidden character escaped, its reasons, the path outside the world, the plan, the three answers and the time left"> <img src="../assets/board/phone-light-approval.png" width="180" alt="The approval card at phone width, light">
+
+**The approval card.** A waiting ask is put to the human on the approval card, the TUI's card on
+the web, with the TUI's protections; nothing else on the page answers an ask. It is a modal over
+the dimmed chat — the page behind it `inert`, the focus kept on the card — showing the act whole as
+the board's `shown` wrote it (text nodes, every `\u{…}` escape set apart; a hidden character the
+page meets is escaped again), the body and its race, the class, why it asks, each path outside the
+world it opens, the plan it binds to, the time left and how many asks wait behind it. Later asks
+queue: one card at a time, answered one at a time.
+
+- **Arming.** The card arms 300 ms after it is first *visible* — the tab visible
+  (`document.visibilityState`), the window focused, the card intersecting the viewport (an
+  `IntersectionObserver`) — and after the board took its render acknowledgement. Input before
+  that is ignored; a card that stops being visible disarms, and arms again 300 ms after it is
+  visible again.
+- **Disarming.** Any key that is not a pick (`1`/`y`, `2`/`n`, `3`), Enter, Esc, a scroll or a
+  focus move — and any paste — clears the choice and arms the card again 300 ms later, so a word
+  typed into it (`yes`, `okay`) never ends in an answer. Enter confirms only 150 ms after its
+  pick and never in the same task: a `y` and an Enter that come together are typing, and disarm
+  it. A key a script dispatched (`isTrusted` false) is ignored, and a button answers a pointer's
+  click only, never a key's.
+- **Reading.** *Yes* stays disabled until every row of the act has been on screen, in order: an
+  observer per row, a row counting once it is wholly in view and every row before it has been —
+  a jump to the end counts nothing past the rows read. *Yes* is never the default focus: the act
+  is.
+- **Denials.** Esc denies at once (and only the ask: the turn goes on); so does the 10-minute
+  deadline, and the bridge's grace with no controller. *No, and tell the model why* takes a
+  reason first.
+- **None of these exist:** "always allow", approving from a notification, approving several asks
+  at once, or a key that approves a card that is not armed.
+
+The card computes the SHA-256 of what it renders and checks it against the board's; a card whose
+act does not match cannot approve. An allow names that digest. An observer's card offers only
+*Take over*, which re-arms it under the new controller. An ask that leaves without this tab's
+answer says so ("answered elsewhere", or why it was withdrawn).
 
 **Reconnecting.** A tab opening on a chat replays what it said (`Client.catchUp`): live events that
 overtake the replay wait for it, and the SDK drops an event whose `seq` it has seen, so a reconnect
@@ -930,6 +993,7 @@ screenshots are kept as CI's `board-e2e` artifact.
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
 | evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after and the soil diff the harness saw, each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
 | gate verdicts | `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each verdict the end gate journals in `log.md`, again: the body, the verdict, the paths changed, the failures and unverified checks, the `log.md` heading, and `build: { version, commit }` (a row from before reading `unknown`; `mnemorph_world::verdicts::by_build` keeps one build's); written by the harness alone, append-only and hash-chained, anchored as `gate`; outside the world | no — machine-local |
+| board answers | `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each answer to the gate given on the board, taken or refused: the chat, the ask, the tab's connection, the act as shown, the digest shown and the one named, the timing since the ask and the render acknowledgement; written by the board alone, append-only and hash-chained, anchored as `answers` with the other chained journals | no — machine-local |
 | Minds' witness | `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each Mind the human adopted, retired or unretired: its doc, the SHA-256 of its bytes then, its owner (on adoption) and `build`; written only by `mnemorphd mind` at the terminal, append-only and hash-chained, anchored as `minds`; a Mind loads only while its doc holds the adopted bytes | no — machine-local |
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
@@ -957,6 +1021,7 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `value` | the Dark Elf's challenge records: findings, verdicts, seal proposals, waivers | the harness, under the records' lock |
 | `evolution` | the evolution ledger | the harness |
 | `gate` | the end gate's verdicts | every session and commission that lands |
+| `answers` | the human's answers to the gate given on the board, with their connection, digests and timing | the board's bridge |
 | `minds` | the Minds' witness: adoptions, owners, retirements | the human's `mnemorphd mind` (adopt, retire, unretire) |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |

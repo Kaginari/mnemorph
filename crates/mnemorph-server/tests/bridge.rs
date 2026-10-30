@@ -86,6 +86,15 @@ impl Fake {
                 // The turn ends once the answer comes.
                 return;
             }
+            ["ask-held"] => {
+                // An ask whose answer does not end the turn: the gate's only guard is the board's.
+                self.say(
+                    &json!({"jsonrpc": "2.0", "id": "gate-9", "method": "gate/ask", "params": {
+                    "body": "rimuru", "race": "rimuru", "class": "write", "act": "rm -rf build",
+                    "why": ["writes"], "outside": []}}),
+                );
+                return;
+            }
             ["hostile-ask"] => {
                 self.say(
                     &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
@@ -165,7 +174,9 @@ fn fake_child() {
                     "note",
                     &json!({"text": format!("answer {} allow={} reason={}", id, r["allow"], r["reason"])}),
                 );
-                fake.event("turnEnded", &json!({"ending": "answered"}));
+                if id != "gate-9" {
+                    fake.event("turnEnded", &json!({"ending": "answered"}));
+                }
             }
         }
     }
@@ -1178,11 +1189,11 @@ async fn an_allow_before_the_render_ack_or_too_soon_after_it_is_refused() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_denial_needs_no_digest_and_a_second_answer_is_refused() {
-    let (_r, _b, _sid, mut tab, ask) = asked("second", "ask").await;
+    let (_r, _b, _sid, mut tab, ask) = asked("second", "ask-held").await;
     tab.answer(&ask, false, &Value::Null).await;
     assert_eq!(
         heard(&mut tab).await,
-        "answer \"gate-1\" allow=false reason=null"
+        "answer \"gate-9\" allow=false reason=null"
     );
     // One answer per ask: neither acknowledged nor answered again.
     let err = tab.ack(2, &ask, &ask["params"]["digest"]).await;
@@ -1213,6 +1224,13 @@ async fn an_observer_neither_acknowledges_nor_answers_and_a_take_over_re_arms() 
     first.until(|m| m["params"]["role"] == "observer").await;
     first.answer(&ask, true, digest).await;
     assert!(first.refused().await.contains("observes"));
+    // Control back at once: the first tab's acknowledgement went with it.
+    first.request(5, "board/takeOver", &json!({})).await;
+    first.until(|m| m["params"]["role"] == "controller").await;
+    first.answer(&ask, true, digest).await;
+    assert!(first.refused().await.contains("not seen in this tab"));
+    second.request(6, "board/takeOver", &json!({})).await;
+    second.until(|m| m["params"]["role"] == "controller").await;
     second.answer(&ask, true, digest).await;
     assert!(second.refused().await.contains("not seen in this tab"));
     second.seen(2, &ask).await;
