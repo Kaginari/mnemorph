@@ -1,4 +1,4 @@
-//! The tools: read, write, edit, glob, grep, bash, git; the shell classifier; secret injection.
+//! The tools: read, index, write, edit, glob, grep, bash, git; the shell classifier; secret injection.
 
 pub mod attic;
 mod beneath;
@@ -7,6 +7,7 @@ pub mod files;
 pub mod fingerprint;
 mod forgive;
 pub mod gate;
+mod index;
 pub mod patch;
 mod pinned;
 pub mod shell;

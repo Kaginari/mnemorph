@@ -1119,3 +1119,26 @@ fn an_evolution_keeps_on_two_net_wins_unless_the_human_says() {
     g.tracked("[evolution]\nmin_net_wins = 1\n");
     assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
 }
+
+#[test]
+fn the_read_range_rule_defaults_to_400_lines_and_0_turns_it_off() {
+    let g = Ground::new("range-over");
+    let c = g.load().unwrap();
+    assert_eq!(c.read_range_over(), 400);
+    assert_eq!(
+        c.get("tools.read.range_over").unwrap().origin.layer,
+        Layer::Default
+    );
+    g.tracked("[tools.read]\nrange_over = 800\n");
+    assert_eq!(g.load().unwrap().read_range_over(), 800);
+    g.local("[tools.read]\nrange_over = 0\n");
+    assert_eq!(g.load().unwrap().read_range_over(), 0);
+    g.local("[tools.read]\nrange_over = -1\n");
+    assert!(g.load().is_err());
+    g.local("[tools.read]\nrange_over = 2000000\n");
+    let e = g.load().unwrap_err();
+    assert!(
+        e.contains("tools.read.range_over is a count of lines from 0"),
+        "{e}"
+    );
+}

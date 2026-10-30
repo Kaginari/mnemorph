@@ -108,7 +108,7 @@ impl Group {
 }
 
 /// The tools a group gathers: they look, and change nothing.
-pub const EXPLORE: [&str; 3] = ["read", "grep", "glob"];
+pub const EXPLORE: [&str; 4] = ["read", "index", "grep", "glob"];
 
 /// One thing in the transcript.
 #[derive(Debug, Clone, PartialEq)]

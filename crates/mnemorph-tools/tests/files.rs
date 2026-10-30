@@ -166,6 +166,198 @@ fn read_refuses_binary_files_and_offsets_past_the_end() {
     assert!(run(&mut cx, "read", r#"{"path": "src/short.txt", "offset": 9}"#).is_error);
 }
 
+/// A Rust file of `n` functions, each three lines and documented: `n * 4` lines.
+fn many_fns(n: usize) -> String {
+    use std::fmt::Write as _;
+    let mut text = String::new();
+    for i in 0..n {
+        let _ = write!(text, "/// f{i}.\nfn f{i}() {{\n    let x = {i};\n}}\n");
+    }
+    text
+}
+
+#[test]
+fn index_outlines_files_with_line_ranges() {
+    let w = World::new("index");
+    w.put(
+        "src/a.rs",
+        "use std::fmt;\n\nstruct A;\n\nimpl A {\n    fn go(&self) {}\n}\n",
+    );
+    w.put("notes.md", "# Notes\n\n## One\ntext\n");
+    let mut cx = w.cx();
+    let o = run(
+        &mut cx,
+        "index",
+        r#"{"path": "src/a.rs", "paths": ["notes.md"]}"#,
+    );
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(o.meta.class, Some(ToolClass::Read));
+    assert_eq!(
+        o.content,
+        "src/a.rs — rust, 7 lines\nimports 1–1 (1): use std::fmt\n3–3 struct A\n5–7 impl A\n  6–6 fn go\nnotes.md — markdown, 4 lines\n1–4 # Notes\n  3–4 ## One"
+    );
+    // One file of several missing is said in place; all missing is an error.
+    let o = run(
+        &mut cx,
+        "index",
+        r#"{"path": "src/a.rs", "paths": ["src/gone.rs"]}"#,
+    );
+    assert!(
+        !o.is_error && o.content.contains("cannot index `src/gone.rs`"),
+        "{o:?}"
+    );
+    let o = run(&mut cx, "index", r#"{"path": "src/gone.rs"}"#);
+    assert!(o.is_error, "{o:?}");
+    let o = run(&mut cx, "index", r"{}");
+    assert!(o.is_error && o.content.contains("`path`"), "{o:?}");
+}
+
+#[test]
+fn a_large_file_read_without_a_range_answers_with_its_skeleton() {
+    let w = World::new("large");
+    w.put("src/big.rs", &many_fns(150));
+    let mut cx = w.cx();
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs"}"#);
+    assert!(!o.is_error, "{o:?}");
+    assert!(
+        o.content.starts_with(
+            "`src/big.rs` is large (600 lines, over 400): read it by range — `offset` and `end`, or `src/big.rs#symbol`."
+        ),
+        "{}",
+        o.content
+    );
+    assert!(o.content.contains("\n1–4 fn f0\n"), "{}", o.content);
+    assert!(
+        o.content.contains("… 125 more symbols from line 101"),
+        "{}",
+        o.content
+    );
+    assert!(!o.content.contains("let x"), "no line of the file is shown");
+
+    // By range, the lines asked for.
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/big.rs", "offset": 5, "end": 8}"#,
+    );
+    assert_eq!(
+        o.content,
+        "     5\t/// f1.\n     6\tfn f1() {\n     7\t    let x = 1;\n     8\t}\n… 592 more lines (offset 9 continues)"
+    );
+    // Only a start: the range rule's length from there.
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs", "offset": 101}"#);
+    assert!(
+        o.content.contains("   500\t") && !o.content.contains("   501\t"),
+        "{}",
+        o.content
+    );
+
+    // By symbol: the symbol's lines, its doc included.
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs#f2"}"#);
+    assert_eq!(
+        o.content,
+        "fn f2, lines 9–12:\n     9\t/// f2.\n    10\tfn f2() {\n    11\t    let x = 2;\n    12\t}\n… 588 more lines (offset 13 continues)"
+    );
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs#nope"}"#);
+    assert!(
+        o.is_error && o.content.contains("no symbol `nope`") && o.content.contains("1–4 fn f0"),
+        "{o:?}"
+    );
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs#f2", "offset": 3}"#);
+    assert!(o.is_error, "{o:?}");
+
+    // Many short lines over the byte line count as large too.
+    w.put("src/wide.txt", &format!("{}\n", "x".repeat(30_000)));
+    let o = run(&mut cx, "read", r#"{"path": "src/wide.txt"}"#);
+    assert!(
+        o.content.contains("is large (30 KB, over 24 KB)"),
+        "{}",
+        o.content
+    );
+}
+
+#[test]
+fn a_symbol_named_twice_is_refused_with_its_candidates() {
+    let w = World::new("twice");
+    w.put(
+        "src/a.rs",
+        "struct A;\nimpl A {\n    fn new() {}\n}\nstruct B;\nimpl B {\n    fn new() {}\n}\n",
+    );
+    let mut cx = w.cx();
+    let o = run(&mut cx, "read", r#"{"path": "src/a.rs#new"}"#);
+    assert!(o.is_error, "{o:?}");
+    assert!(
+        o.content.contains("3–3 fn new (in impl A)")
+            && o.content.contains("7–7 fn new (in impl B)"),
+        "{}",
+        o.content
+    );
+    let o = run(&mut cx, "read", r#"{"path": "src/a.rs#B::new"}"#);
+    assert_eq!(
+        o.content,
+        "fn new (in impl B), lines 7–7:\n     7\t    fn new() {}\n… 1 more lines (offset 8 continues)"
+    );
+}
+
+#[test]
+fn a_small_file_reads_whole_and_a_range_is_clamped() {
+    let w = World::new("small");
+    w.put("src/a.txt", "one\ntwo\nthree\n");
+    w.put("src/b#c.txt", "hash\n");
+    let mut cx = w.cx();
+    let o = run(&mut cx, "read", r#"{"path": "src/a.txt"}"#);
+    assert_eq!(o.content, "     1\tone\n     2\ttwo\n     3\tthree\n");
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/a.txt", "offset": 2, "end": 99}"#,
+    );
+    assert_eq!(
+        o.content,
+        "     2\ttwo\n     3\tthree\n(end 99 is past the file's 3 lines: read to 3)"
+    );
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/a.txt", "offset": 3, "end": 2}"#,
+    );
+    assert!(o.is_error && o.content.contains("before `offset`"), "{o:?}");
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/a.txt", "end": 2, "limit": 2}"#,
+    );
+    assert!(o.is_error, "{o:?}");
+    // A file whose name holds `#` is that file.
+    let o = run(&mut cx, "read", r#"{"path": "src/b#c.txt"}"#);
+    assert_eq!(o.content, "     1\thash\n");
+    // A symbol in a file with no skeleton: by range instead.
+    let o = run(&mut cx, "read", r#"{"path": "src/a.txt#one"}"#);
+    assert!(o.is_error && o.content.contains("no skeleton"), "{o:?}");
+}
+
+#[test]
+fn with_the_range_rule_off_a_large_file_reads_whole() {
+    let w = World::new("rule-off");
+    w.put("src/big.rs", &many_fns(150));
+    let mut cx = w.cx().with_range_over(0);
+    let o = run(&mut cx, "read", r#"{"path": "src/big.rs"}"#);
+    assert!(
+        o.content.starts_with("     1\t/// f0.\n") && o.content.contains("   600\t}"),
+        "{}",
+        o.content
+    );
+    // A lower line: the rule asks sooner.
+    let mut cx = w.cx().with_range_over(10);
+    w.put("src/mid.rs", &many_fns(3));
+    let o = run(&mut cx, "read", r#"{"path": "src/mid.rs"}"#);
+    assert!(
+        o.content.contains("is large (12 lines, over 10)"),
+        "{}",
+        o.content
+    );
+}
+
 #[test]
 fn nothing_leaves_the_world() {
     let w = World::new("border");
@@ -174,11 +366,13 @@ fn nothing_leaves_the_world() {
         r#"{"path": "../outside/secret.txt"}"#,
         r#"{"path": "/etc/hosts"}"#,
     ] {
-        let o = run(&mut cx, "read", args);
-        assert!(
-            o.is_error && o.content.contains("outside the world"),
-            "{args}: {o:?}"
-        );
+        for tool in ["read", "index"] {
+            let o = run(&mut cx, tool, args);
+            assert!(
+                o.is_error && o.content.contains("outside the world"),
+                "{tool} {args}: {o:?}"
+            );
+        }
     }
 }
 
@@ -193,6 +387,9 @@ fn a_symlink_out_of_the_world_is_refused_by_every_file_tool() {
     let attempts = [
         ("read", r#"{"path": "src/secret.txt"}"#),
         ("read", r#"{"path": "src/out/secret.txt"}"#),
+        ("read", r#"{"path": "src/secret.txt#secret"}"#),
+        ("index", r#"{"path": "src/secret.txt"}"#),
+        ("index", r#"{"path": "src/out/secret.txt"}"#),
         ("write", r#"{"path": "src/out/new.txt", "content": "x"}"#),
         ("write", r#"{"path": "src/secret.txt", "content": "x"}"#),
         (

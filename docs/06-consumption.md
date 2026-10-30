@@ -329,6 +329,18 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 - Caches are per model: "identical for every body" pays off among bodies on the same model.
 - `cacheHitRate` is a signal in the value ledger, per tier; the board shows it per race.
 
+### Reads by range
+
+File reads are the largest class of tokens a body spends: a file read whole is paid for when it
+is read, then again at the cache-read price on every later turn until a fold takes it out. So a
+body reads a skeleton first and then only the lines it needs ([the tools](05-architecture.md)):
+`index` gives each symbol's line range, and `read` takes a range or `path#symbol`. A file over
+`tools.read.range_over` lines (400) read without a range answers with its skeleton, not its
+text. On this repository's `crates/mnemorph-tools/src/files.rs` (1,293 lines), a whole read is
+about 56 KB of numbered lines; its skeleton is under 3 KB, and the one function then read is
+a few more. An `index` call is journaled and priced as any read: its result is input like a
+read's, and the files it outlines count as what the ask read.
+
 ### Meters
 
 | Meter | Reads | Where |

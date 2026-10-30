@@ -248,7 +248,7 @@ background as `COLORFGBG` reports it, else dark.
 | header | Mnemorph's mark (the name drawn across the water races' blues), the session's body and its model on the left; the session's id and its state on the right — `○ idle`, `● running bash 3s`, `◆ waiting for you` |
 | panes | labelled in small capitals on their edges: ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ, ꜱᴇꜱꜱɪᴏɴ (the sidebar), ᴀꜱᴋ (the input) |
 | welcome | the card the conversation opens on: on first run it sits at the top of the conversation, like a header, and scrolls away with the transcript as messages come — a short transcript fills from the top, the room it leaves below it, above the input. The MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
-| transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
+| transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, indexes, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
 | sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorphd memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
@@ -603,6 +603,32 @@ flowchart LR
     a tool's; a refusal leaves the tree as it was, the directories a failed move made unmade; a
     write of what a file already holds writes nothing; and `edit` and `multiedit` refuse a file
     that is not UTF-8 text rather than replace its bytes.
+    Reads go skeleton first. `index` outlines a file (or up to ten): its symbols — `fn`,
+    `struct`, `enum`, `impl`, `trait`, `mod`, `class`, `method`, `interface`, `const`, … — each
+    with its line range, indented by nesting, then its imports and its line count:
+
+    ```
+    crates/mnemorph-tools/src/files.rs — rust, 1293 lines
+    imports 4–17 (12): use std::collections::hash_map::DefaultHasher · use std::fmt::Write as _ · …
+    26–30 fn hash
+    51–52 struct Read
+    54–64 struct ReadArgs
+    66–180 impl Tool for Read
+      67–69 fn name
+    ```
+
+    Rust, TypeScript, Python and Go are parsed with tree-sitter (JavaScript with the TSX grammar);
+    Markdown headings, TOML tables and JSON keys by small scanners; any other file shows its line
+    count and no skeleton. A symbol's range takes the doc comments, attributes and decorators
+    right above it. At most 200 symbols are shown, the rest counted from the line they start at;
+    a symbol nested three deep is counted on its parent (`(+2 nested)`). Paths resolve as
+    `read`'s do, so no link leads out, and a skeleton is made once per content in a session.
+    `read` takes `offset` and `end` (or `limit`), or `path#symbol` (`src/lib.rs#parse`,
+    `src/lib.rs#Parser::new`; a name shared by several symbols is refused with each one's range);
+    a range past the end is read to the end and says so. A file over `tools.read.range_over`
+    lines (400; or over 60 bytes a line of it, 24 KB) read with no range answers with its
+    skeleton's first entries instead of its text; `0` reads every file whole. A file whose name
+    holds `#` is read as that file.
     `sed -i` and `perl -i` are refused, pointing to `edit` and `multiedit`: an anchor that misses
     exits 0 and changes nothing.
     Layered, landlock refuses what it can, the tools refuse by name, and the end gate's *right
