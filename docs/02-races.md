@@ -798,15 +798,18 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
        body edited is *changed since adoption* and stays unloaded until the human re-adopts it.
        Retirement is the witness's: a `- **Retired:** yes` written into an adopted Mind's doc is a
        change like any other, never a retirement. A witness that does not walk whole loads no
-       Mind, so a dropped retirement is never read as none. A world from before the witness keeps
-       its Minds loading, each shown *unadopted* in `status` and `mnemorphd mind list` with one
-       hint to adopt it; such a Mind marked retired in its doc stays unloaded, since that only
-       withholds. The file tools refuse `.mnemorph/minds/` with a message that says whose it is,
+       Mind, so a dropped retirement is never read as none. A Mind the witness never adopted does
+       not load, whatever its doc says: its provenance is unknown — a doc planted in a cloned
+       repository, a world opened by another path, a write the tripwire could not undo. It is
+       shown *unadopted: adopt to use* in `status`, `mnemorphd mind list` and the session's
+       opening, with one hint; a world from before the witness adopts its Minds once. Adoption
+       shows the doc's text, escaped and capped, and records the digest of exactly the bytes
+       shown. The file tools refuse `.mnemorph/minds/` with a message that says whose it is,
        and the shell classifier refuses a command that writes or removes there (`mind`, a floor
        rule). What wearing a Mind injects names its doc and the digest of the bytes worn
        ([the toolbox](08-memory.md#the-toolbox)). Witnessed by
        `a_mind_edited_since_adoption_does_not_load`, `retirement_comes_from_the_witness`,
-       `an_adopted_mind_names_its_owner`, `an_unadopted_mind_loads_with_a_warning`,
+       `an_adopted_mind_names_its_owner`, `an_unadopted_mind_does_not_load_until_adopted`,
        `the_witness_is_chained_and_an_edit_is_found`,
        `a_body_never_adopts_retires_or_unretires_a_mind`, `a_retired_mind_never_loads` and
        `a_worn_mind_names_its_source`.

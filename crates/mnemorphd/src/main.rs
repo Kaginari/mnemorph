@@ -122,8 +122,9 @@ proposes keep or rollback; applying either is the human's. A body never runs it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
-unadopted (it loads, with a warning), changed since adoption (it does not load until
-re-adopted), or retired. `adopt <name>` records its doc, the SHA-256 of its bytes now and its
+unadopted (it does not load until adopted), changed since adoption (it does not load until
+re-adopted), or retired. `adopt <name>` shows the doc's text, escaped and capped, and records
+its doc, the SHA-256 of exactly the bytes shown and its
 owner — the human unless `--owner` names the creature that proposed it (on adoption only); `retire <name>` stops it
 loading, `unretire <name>` takes that back. Each shows the Mind and asks for `y` at the terminal
 (`/dev/tty`; piped input is refused). A body never runs them.
@@ -1897,16 +1898,21 @@ fn mind(args: &[String]) -> ExitCode {
     let Some(at) = witness::path_of(&world) else {
         return refused(&"no home: the Minds' witness is kept under the human's state directory");
     };
-    let row = match minds::propose_at(&world, &at, act, name, owner.as_deref()) {
-        Ok(row) => row,
-        Err(e) => return refused(&e),
-    };
+    // The doc is read once: the text shown is exactly the bytes whose digest is recorded.
+    let minds::Proposal { row, text } =
+        match minds::propose_at(&world, &at, act, name, owner.as_deref()) {
+            Ok(p) => p,
+            Err(e) => return refused(&e),
+        };
     let safe = mnemorph_server::challenge::safe;
     println!("{} the Mind `{}`:", act.word(), safe(&row.mind));
     println!("  doc     {}", safe(&row.doc));
     println!("  sha256  {}", row.sha256);
     if let Some(o) = &row.owner {
         println!("  owner   {}", safe(o));
+    }
+    for line in shown_doc(&text) {
+        println!("  │ {line}");
     }
     match at_terminal(&format!("{} `{}`?", act.word(), safe(&row.mind))) {
         Ok(true) => {}
@@ -1925,6 +1931,33 @@ fn mind(args: &[String]) -> ExitCode {
         }
         Err(e) => refused(&e),
     }
+}
+
+/// How many of a Mind's lines, and bytes of each, the adopt prompt shows.
+const SHOWN_LINES: usize = 60;
+const SHOWN_LINE_BYTES: usize = 200;
+
+/// A Mind's text as the prompt shows it: each line escaped, the first [`SHOWN_LINES`] cut to
+/// [`SHOWN_LINE_BYTES`], then how many more lines there are.
+fn shown_doc(text: &str) -> Vec<String> {
+    let safe = mnemorph_server::challenge::safe;
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<String> = lines
+        .iter()
+        .take(SHOWN_LINES)
+        .map(|l| {
+            let mut cut = l.len().min(SHOWN_LINE_BYTES);
+            while !l.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            let more = if cut < l.len() { " …" } else { "" };
+            format!("{}{more}", safe(&l[..cut]))
+        })
+        .collect();
+    if lines.len() > SHOWN_LINES {
+        out.push(format!("… {} more lines", lines.len() - SHOWN_LINES));
+    }
+    out
 }
 
 /// `evolution swap`: the plan shown, asked at the terminal, then swapped in and its row written.

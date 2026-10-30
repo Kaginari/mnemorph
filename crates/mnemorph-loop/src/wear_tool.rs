@@ -116,6 +116,14 @@ mod tests {
             "# Light\n\n- **Shared:** yes\n\nShort.\n",
         )
         .unwrap();
+        let at = mnemorph_world::minds::witness::path_of(&w).expect("a home");
+        for name in ["heavy", "light"] {
+            let act = mnemorph_world::minds::witness::Act::Adopt;
+            let row = mnemorph_world::minds::propose_at(&w, &at, act, name, None)
+                .unwrap()
+                .row;
+            mnemorph_world::minds::witness::record_at(&at, row).unwrap();
+        }
         let worn = |mind: &str, dispatches: bool| {
             run(
                 &w,

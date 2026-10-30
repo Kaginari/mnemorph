@@ -135,7 +135,7 @@ fn a_body_never_adopts_retires_or_unretires_a_mind() {
     let out = f.run(&["list"], Some("slime-a"));
     assert!(
         out.status.success()
-            && text(&out).contains("release — unadopted: loads, with this warning"),
+            && text(&out).contains("release — unadopted: adopt to use (not loaded)"),
         "{}",
         text(&out)
     );
@@ -158,6 +158,8 @@ fn the_human_adopts_and_retires_a_mind_at_the_terminal() {
     let shown = text(&out);
     assert!(
         shown.contains("doc     .mnemorph/minds/release.md")
+            && shown.contains("│ # Release")
+            && shown.contains("│ Cutting a release by hand.")
             && shown.contains("owner   human")
             && shown.contains("release adopted"),
         "{shown}"
@@ -185,5 +187,47 @@ fn the_human_adopts_and_retires_a_mind_at_the_terminal() {
     assert!(
         listed.contains("release — retired (not loaded), owner human"),
         "{listed}"
+    );
+}
+
+/// The adopt prompt shows the doc's text, escaped and capped, and the digest recorded is of
+/// exactly the bytes shown.
+#[cfg(target_os = "linux")]
+#[test]
+fn adoption_records_the_digest_of_the_text_shown() {
+    use sha2::Digest as _;
+    use std::fmt::Write as _;
+    let f = Fixture::new("shown");
+    let mut doc = String::from("# Long\n\nA \u{1b}[31mred\u{1b}[0m line.\n");
+    for n in 0..100 {
+        let _ = writeln!(doc, "step {n}");
+    }
+    fs::write(f.world.join(".mnemorph/minds/long.md"), &doc).unwrap();
+    let out = f.at_tty(&["adopt", "long"], "y\n");
+    let shown = text(&out);
+    assert!(
+        shown.contains("│ # Long") && shown.contains("│ step 56"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("step 57") && shown.contains("… 43 more lines"),
+        "{shown}"
+    );
+    assert!(!shown.contains('\u{1b}'), "escaped: {shown}");
+    let digest = sha2::Sha256::digest(doc.as_bytes())
+        .iter()
+        .fold(String::new(), |mut hex, b| {
+            let _ = write!(hex, "{b:02x}");
+            hex
+        });
+    assert!(shown.contains(&format!("sha256  {digest}")), "{shown}");
+    let witness: String = fs::read_dir(f.state.join("mnemorph/minds"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| fs::read_to_string(e.path()).unwrap())
+        .collect();
+    assert!(
+        witness.contains(&format!("\"sha256\":\"{digest}\"")),
+        "{witness}"
     );
 }

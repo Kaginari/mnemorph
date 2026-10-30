@@ -215,8 +215,8 @@ fn status_shows_each_creatures_meters() {
     let _ = std::fs::remove_dir_all(&w);
 }
 
-/// `status` shows each Mind against its witness: a world from before the witness has its Minds
-/// load, each said unadopted, with the one hint to adopt them.
+/// `status` shows each Mind against its witness: a Mind never adopted does not load, and is said
+/// unadopted, with the one hint to adopt it.
 #[test]
 fn status_shows_each_mind_and_its_standing() {
     let w = empty_world("minds");
@@ -238,7 +238,7 @@ fn status_shows_each_mind_and_its_standing() {
         .unwrap();
     let shown = String::from_utf8_lossy(&out.stdout);
     assert!(
-        shown.contains("mind     release — unadopted: loads, with this warning\n")
+        shown.contains("mind     release — unadopted: adopt to use (not loaded)\n")
             && shown.contains("mind     adopt each unadopted Mind once, at a terminal"),
         "{shown}"
     );
