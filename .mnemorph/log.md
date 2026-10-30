@@ -6286,6 +6286,37 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   and one chained again from its start (anchored) refused. Each new guard disabled in turn fails a test.
 - **Learned:** an anchored walk reports the anchor unmet until it reaches it: a row's own digest is read from
   the head at its line, never from the walk's verdict mid-file.
+
+---
+
+### [2026-10-30T16:00:49+01:00] rimuru — #95: a claim graph for memory — fixed ids, versions, depends_on, review-on-invalidate, strength
+- **Done:** `mnemorph_memory::graph`. A note's id stays through every correction: `amend` appends a `version`
+  event (the chain kept, the claim proposed again in every tier). `depends_on` names claims, ontology facts,
+  creatures and files with their SHA-256 (evidence files hashed at proposal and again at grounding). A claim superseded, struck
+  or retired, a fact newly contested (`Facts::record`) and a file a passing landing changed (`landed`, from the
+  end gate) mark their dependents `review`, transitively, each once; a route grounding again clears it. Recall
+  adds `w_σ·σ` (`recall.strength`, 0.10): route, corroborations, age, health, capped by the weakest claim
+  rested on; `@M … review:`; `memory status` lists them. A creation without an id gets `h<sha256>` on reading.
+  Docs 08, 09.
+- **Tests:** ids stable, versions chain, append-only; a file change marks transitively through a cycle, once;
+  a retired dependency marks; a contested fact marks; grounded outranks unproven over 500 draws; the weakest
+  source caps; recall shows review; old lines upgrade. Propagation off fails the transitive test.
+- **Learned:** an amend's own propagation marks what rests on the amended claim before any landing does: a test
+  of the landing must ground those first, or it asserts the wrong cause.
+  Open (@?): nothing rebirths or retires a creature yet — M11's lifecycle calls `invalidate(Moved::Creature)`.
+
+---
+
+### [2026-10-30T16:16:17+01:00] rimuru — #95, Fable's review: direct-only doubts and facts, live file hashes, collision-safe ids
+- **Done:** a doubt (`Moved::Doubted`) and a newly contested fact mark direct dependents only; retire, supersede,
+  creature and landed files stay transitive. Recall (`gather`) and `memory status` re-hash File dependencies
+  live and read a mismatch as needing review, no event; `confirm` marks a credited claim whose file moved.
+  Derived ids hash the event id too; a second creation of an id in other words or by another owner is an
+  unproven write (reported). `memory status` folds newlines. Docs 08, 09.
+- **Tests:** a doubt stops at the direct dependent, the retirement reaches the far one; a fact marks direct
+  only, a creature downstream; a file edited outside a landing reads as review live and credit marks it;
+  same-millisecond id-less lines stay two notes, a collision is reported; the fixed worst-case ordering draw.
+- **Learned:** a cascade's reach belongs to its trigger: what one body can cause alone marks one hop.
 ### [2026-10-30T15:27:38+01:00] rimuru — #107: the lifecycles explored whole, with witnesses; two bugs found and fixed
 - **Done:** a breadth-first walk over the real code of each lifecycle, in each crate's
   `tests/lifecycles.rs`: ascension (5 forms, 36–162 states, fixpoint), the receipt (7 states,

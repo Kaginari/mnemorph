@@ -7,10 +7,11 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 /// What a note says of what it points at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Polarity {
     /// It holds.
+    #[default]
     Support,
     /// It does not hold.
     Counter,
@@ -28,10 +29,11 @@ impl Polarity {
 
 /// How far a note is trusted, or where it went. Ordered by strength, the order only events the
 /// time cannot separate fall back on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     /// Said, not proved: personal only.
+    #[default]
     Proposed,
     /// Proved by a route: it may be shared.
     Grounded,
@@ -69,6 +71,50 @@ pub struct Link {
     pub weight: f64,
 }
 
+/// What a claim rests on: when it moves, the claim is marked for review.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "on", rename_all = "lowercase")]
+pub enum Dependency {
+    /// Another claim, by its fixed id: superseded by a new version, struck by an attributable
+    /// failure or retired, it moves.
+    Claim {
+        /// The claim's id.
+        id: String,
+    },
+    /// A fact of the ontology, by its id: contested, it moves.
+    Fact {
+        /// The fact's id.
+        id: String,
+    },
+    /// A creature, by name — the one whose word or doc the claim rests on: rebirthed, rewritten or
+    /// retired, it moves.
+    Creature {
+        /// The creature's name.
+        name: String,
+    },
+    /// A file of the world, with the SHA-256 of its bytes when the claim was proposed or grounded:
+    /// a landing that changes them moves it.
+    File {
+        /// The path, relative to the world.
+        path: String,
+        /// The content hash it had.
+        hash: String,
+    },
+}
+
+/// One version of a claim: its text as it was said, never rewritten.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version {
+    /// Its number, from 1.
+    pub n: u32,
+    /// What it said.
+    pub text: String,
+    /// When, in milliseconds since the epoch.
+    pub time: u64,
+    /// The event that said it.
+    pub event: String,
+}
+
 /// What one event does.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -99,6 +145,29 @@ pub enum Change {
         /// must not share to corroborate it.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         evidence: Vec<String>,
+        /// What it rests on: claims, facts, files with their hashes.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        depends_on: Vec<Dependency>,
+    },
+    /// A correction of its text: the next version, under the same id. The earlier versions stay;
+    /// the new one is proposed until a route grounds it.
+    Version {
+        /// What it says now.
+        text: String,
+        /// What this version rests on: it replaces the earlier version's.
+        #[serde(default)]
+        depends_on: Vec<Dependency>,
+    },
+    /// More it rests on, recorded when it is grounded: a file named again takes its new hash.
+    Depends {
+        /// The dependencies.
+        on: Vec<Dependency>,
+    },
+    /// Something it rests on moved: it needs review until a route grounds it again. Never a
+    /// deletion, never a retirement.
+    Review {
+        /// What moved.
+        cause: String,
     },
     /// Its standing changes: a promotion, a demotion, a tombstone.
     Status {
@@ -119,7 +188,9 @@ pub struct Event {
     pub id: String,
     /// When, in milliseconds since the epoch.
     pub time: u64,
-    /// The note it is about.
+    /// The note it is about: its fixed id, whatever its text becomes. A line written without one
+    /// — an import, a hand-written note — is given one on reading ([`crate::store::read`]).
+    #[serde(default)]
     pub note: String,
     /// Who wrote it.
     pub by: By,
@@ -132,7 +203,7 @@ pub struct Event {
 }
 
 /// A note as its events leave it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Note {
     /// Its id.
     pub id: String,
@@ -163,6 +234,35 @@ pub struct Note {
     pub lent: Vec<String>,
     /// What the claim rests on: the files its run read or changed.
     pub evidence: Vec<String>,
+    /// Its version now, from 1: its id stays, each correction a new version.
+    pub version: u32,
+    /// Every version, oldest first: the chain, never rewritten.
+    pub versions: Vec<Version>,
+    /// What its current version rests on.
+    pub depends_on: Vec<Dependency>,
+    /// Why it needs review, while it does: something it rests on moved, and no route has grounded
+    /// it since.
+    pub review: Option<String>,
+    /// The distinct proofs that grounded its current version, oldest first: more than one is a
+    /// claim stood behind more than once.
+    pub groundings: Vec<String>,
+    /// When it was last grounded, in milliseconds since the epoch.
+    pub grounded_at: Option<u64>,
+}
+
+impl Note {
+    /// Add `deps`: a file already named takes its new hash; anything else is added once.
+    fn rest_on(&mut self, deps: &[Dependency]) {
+        for d in deps {
+            if let Dependency::File { path, .. } = d {
+                self.depends_on
+                    .retain(|o| !matches!(o, Dependency::File { path: p, .. } if p == path));
+            }
+            if !self.depends_on.contains(d) {
+                self.depends_on.push(d.clone());
+            }
+        }
+    }
 }
 
 /// Fold events into notes. Events are taken in `(time, id)` order and the latest sets a note's
@@ -170,6 +270,7 @@ pub struct Note {
 /// separate — the same time and id, a merge's duplicate — take the stronger status. An event about
 /// a note never created is set aside, never guessed at; a second creation of one is ignored.
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "one arm per kind of event")]
 pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
     // A total order, whatever the line order: two machines whose union merges listed the same
     // events differently fold them the same.
@@ -190,6 +291,7 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                 source,
                 links,
                 evidence,
+                depends_on,
             } => {
                 notes.entry(e.note.clone()).or_insert_with(|| Note {
                     id: e.note.clone(),
@@ -206,7 +308,53 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                     links: links.clone(),
                     lent: Vec::new(),
                     evidence: evidence.clone(),
+                    version: 1,
+                    versions: vec![Version {
+                        n: 1,
+                        text: text.clone(),
+                        time: e.time,
+                        event: e.id.clone(),
+                    }],
+                    depends_on: depends_on.clone(),
+                    review: None,
+                    groundings: Vec::new(),
+                    grounded_at: None,
                 });
+            }
+            Change::Version { text, depends_on } => {
+                let Some(n) = notes.get_mut(&e.note) else {
+                    continue;
+                };
+                // A new version is a new claim under the old id: what grounded the last one
+                // grounded other words, so it waits for a route of its own.
+                n.version += 1;
+                n.versions.push(Version {
+                    n: n.version,
+                    text: text.clone(),
+                    time: e.time,
+                    event: e.id.clone(),
+                });
+                n.text.clone_from(text);
+                n.depends_on.clone_from(depends_on);
+                if n.status == Status::Grounded {
+                    n.status = Status::Proposed;
+                    n.proof = None;
+                }
+                n.groundings.clear();
+                n.grounded_at = None;
+                n.review = None;
+            }
+            Change::Depends { on } => {
+                if let Some(n) = notes.get_mut(&e.note) {
+                    n.rest_on(on);
+                }
+            }
+            Change::Review { cause } => {
+                if let Some(n) = notes.get_mut(&e.note)
+                    && matches!(n.status, Status::Proposed | Status::Grounded)
+                {
+                    n.review = Some(cause.clone());
+                }
             }
             Change::Status { status } => {
                 let Some(n) = notes.get_mut(&e.note) else {
@@ -218,6 +366,16 @@ pub fn fold(events: &[Event]) -> BTreeMap<String, Note> {
                 if !tie || *status > n.status {
                     n.status = *status;
                     n.proof.clone_from(&e.proof);
+                    // A route that grounds it again answers the review: the claim stands anew.
+                    if *status == Status::Grounded {
+                        n.review = None;
+                        n.grounded_at = Some(e.time);
+                        if let Some(p) = &e.proof
+                            && !n.groundings.contains(p)
+                        {
+                            n.groundings.push(p.clone());
+                        }
+                    }
                 }
                 last.insert(e.note.clone(), key);
             }

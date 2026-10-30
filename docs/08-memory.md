@@ -57,7 +57,7 @@ Memory also has two scopes. **Personal** memory belongs to one creature: it writ
 freely, and only it recalls from there, so its mistakes cannot spread. **Shared** memory is what
 every creature reads, and only confirmed notes enter it.
 
-Five rules follow:
+Six rules follow:
 
 1. **Proposals stay personal.** What a model says, including the unsaid it surfaces, lands in
    its creature's personal memory as *proposed*. It reaches shared memory only once it is
@@ -72,6 +72,10 @@ Five rules follow:
    disagreeing and correcting notes stay as they are.
 5. **Loops are seen, not felt.** The same recall coming back again and again with nothing new
    learned is detected by its fingerprint, and broken.
+6. **When the ground moves, what stood on it is looked at again.** A note keeps its id through
+   every correction, each a new version, and remembers what it rests on: other notes, facts, files.
+   When one of those is corrected, struck or changed, everything resting on it is marked for
+   review — never deleted — and recalled lower until it is grounded again.
 
 ## Technical detail
 
@@ -94,12 +98,16 @@ A trace is
 - **salience** $s$ and **confidence** $\kappa$, both in $[0,1]$;
 - **status** $\in \lbrace \text{proposed},\ \text{grounded},\ \text{dormant},\ \text{tombstoned}\rbrace $;
 - **source**: the evidence it points at, such as a journal entry, a gate verdict, a commit or a
-  `file:line`.
+  `file:line`;
+- an **id** that never changes, whatever the text becomes: a correction is the next **version**
+  under it, and what the note rests on is its **depends_on** ([the claim graph](#the-claim-graph)).
 
 Every note file stays append-only (`merge=union`, set through git's local `.git/info/attributes`
 when a session opens, so the world's own files stay the human's): a note is born by a `create`
 event, and a status change, a demotion or a tombstone is a `status` event, a confidence moved a
-`confidence` event, each naming the note it changes; the current state is a fold over the events.
+`confidence` event, a correction a `version` event, what it rests on a `depends` event and a moved
+dependency a `review` event, each naming the note it changes; the current state is a fold over the
+events.
 On a split, each heir's file receives the events of the notes whose source lies in its ground —
 a note with no path to read goes to every heir — and the old creature's file is kept whole. Two
 machines that both append never conflict, because the fold does not trust line order:
@@ -146,8 +154,12 @@ log. On top of BM25 it adds priors and dissent, over a budget of $k = 6$ anchors
 + \underbrace{w_r\,\mathrm{rel}(\tau)}_{\text{owner, race, log}}
 + w_s\,s + w_\kappa\,\kappa
 + w_t\,2^{-\Delta/H}
++ w_\sigma\,\sigma(\tau)
 + \beta\,\mathbf{1}[\tau \in C]
 ```
+
+$\sigma(\tau)$ is the claim's strength ([the claim graph](#the-claim-graph)), with
+$w_\sigma = 0.10$.
 
 $\widehat{\mathrm{bm25}} = \mathrm{bm25} / (\mathrm{bm25} + c)$ saturates into $[0,1)$ without
 looking at the other hits, so a poor best match stays a poor score. $c$ is a config constant
@@ -166,7 +178,7 @@ $w_q\,\widehat{\mathrm{bm25}}(q,\tau) \ge \theta$: the priors rank notes that ma
 make a note match (with them in the sum, a body's own note would clear the floor with no match
 at all). All of them live in config, never in a prompt, and are tuned against the recall
 fixtures: `recall.meaning`, `recall.relation`, `recall.salience`, `recall.confidence`,
-`recall.freshness`, `recall.dissent`, `recall.half_life_days`, `recall.floor`, and BM25's
+`recall.freshness`, `recall.dissent`, `recall.strength`, `recall.half_life_days`, `recall.floor`, and BM25's
 saturations by query length, `recall.saturation_short` (one content word), `recall.saturation_mid`
 (two or three) and `recall.saturation_long` (four and more); a key left unset keeps the value
 above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
@@ -250,7 +262,7 @@ When no dissenting note was selected, recall says *none selected*, never *none e
 **On the wire.** Recall reaches the body as `@M` lines in the recall-anchors tier
 ([communication](04-communication.md#the-wire-envelope)):
 
-    @M <anchor> personal|shared proposed|grounded support|counter|revise: <text>
+    @M <anchor> personal|shared proposed|grounded support|counter|revise[ review]: <text>
     @M -<n> <anchor> <anchor> <anchor>        # n cut above θ; at most three named
     @M -0 dissent: none selected               # never "none exist"
 
@@ -368,7 +380,8 @@ With equal recency and the default weights, its prior over an ordinary grounded 
 ```
 
 which is worth $0.154 / 0.42 \approx 0.37$ of normalised meaning: a correction outranks an ordinary
-note that matches the query 0.37 better. That holds at equal relation and equal match, and recall makes it
+note that matches the query 0.37 better. That holds at equal relation, equal match and equal
+strength — a revision the gate grounded weighs as a checked note — and recall makes it
 so: a revise note is weighed with the closest relation among the notes it cites (all it links,
 when it cites none — a note merely recalled into the failed run is never blamed by company), and
 matched with their words beside its own, though how common a word is stays the notes' own count — a correction written by another creature's failed run, in its
@@ -390,6 +403,83 @@ never grounded, keeps its standing and its route.
 It also lists each creature's proposed claims, newest first, ten at most, each with its vouch:
 `mnemorphd memory confirm <claim>` — the human's alone, refused to a body — grounds the claim by
 the **confirmed** route, in its creature's tier and in shared memory, citing the human's word.
+
+### The claim graph
+
+Every note is a claim with a fixed id, and claims rest on one another. The graph keeps what a claim
+was said on, so that when the ground moves, what stood on it is looked at again.
+
+**Ids and versions.** A note's id is given once, at its creation, and never derived from its text.
+A correction is a `version` event under the same id — the next version, numbered from 1 — never a
+rewrite: every earlier version stays in the fold's chain, and the line that said the first is
+never touched. A new version is a new claim in old words' place, so it waits for a route of its
+own: it is proposed again, in every tier that holds it, until one grounds it. A note written before
+versions existed reads as version 1 resting on nothing, and a creation written with no id at all —
+an import, a hand-written line — is given one on reading, `h` and sixteen hex digits of the SHA-256
+of its event id, time, owner and text: the same on every machine and every read, nothing rewritten,
+and two lines saying the same words in the same millisecond are two notes. A second creation of an
+id in other words or by another owner — a collision, not a merge's duplicate nor a route
+restating a corrected claim — is an unproven write: reported by `memory status`, never silently
+dropped.
+
+**What a claim rests on.** `depends_on` lists, each by kind:
+
+| Kind | Key | Moves when |
+|---|---|---|
+| `claim` | the claim's id | it is superseded by a new version or retired; doubted by a first attributable failure (direct only) |
+| `fact` | the fact's id in [the ontology](09-ontology.md#facts-who-said-what) | an event leaves it contested (direct only) |
+| `file` | the path, and the SHA-256 of its bytes (16 hex digits) | a landing the gate passed changes or deletes it |
+| `creature` | its name | it is rebirthed, rewritten or retired — the lifecycle's call, `invalidate(Moved::Creature)` |
+
+A claim's evidence files are recorded with their hashes when it is proposed, and again when a route
+grounds it — what the grounding saw replaces what the proposal did; a claim may name further claims
+and facts when it is proposed or corrected.
+
+**Review on invalidate.** When something a claim rests on moves, the claim *needs review*: a
+`review` event naming the cause, never a deletion and never a retirement. For a claim superseded or
+retired, a creature, or a file a landing changed, every claim resting on a marked claim is marked
+too, transitively, each claim visited once, so a cycle ends. A doubt and a newly contested fact —
+which one body's failure or counter can cause — mark only the claims resting on them directly, so
+one body never flags a whole subgraph; a claim already
+under review gets no second event, and the walk goes on past it. The claim that moved is not
+marked by its own move. A review claims no standing, so it resolves as a plain record. A route that
+grounds the claim again — the same four routes, and `mnemorphd memory confirm <claim>` among them —
+answers it. Only a landing the gate passed writes a file's review; a file moved by any other hand —
+the human's edit, a failed run — is read live: recall and `memory status` hash each file a claim
+rests on and read a mismatch as needing review, computed, with no event. A passing ask that cites
+and credits a claim whose file no longer reads as recorded marks it, as an event: a pass over other
+bytes vouches for nothing the claim said. Until a route grounds it again, recall lowers it and marks it `review` on the wire, and `memory status` lists
+it with its cause.
+
+**Strength.** Recall weighs each claim's strength $\sigma \in [0, 1]$, computed at recall and never
+stored. A proposed claim is a *hypothesis*, $\sigma = 0$. For a grounded one:
+
+```math
+q = 0.6\,r + 0.2\,\frac{\min(c,3)}{3} + 0.1\cdot 2^{-d/365} + 0.1\,h,
+\qquad
+\sigma = \begin{cases} 0.5 + 0.5\,q & \text{in good health} \\ 0.25\,q & \text{under review} \end{cases}
+```
+
+- $r$, the route: **confirmed** 1.0, **checked** 0.9, **corroborated** 0.75, **accepted** 0.6 — the
+  human's word and a check observe independently of the model, a second creature's evidence and a
+  commissioner's verdict rest on other model bodies; a revision the gate grounded is an observed
+  failure (0.9), a schema rests on what it distilled (0.6);
+- $c$, how many more times its current version was grounded, by distinct proofs;
+- $d$, the days since it was last grounded, halving over a year: age barely matters;
+- $h$, the share of the claims it rests on that stand grounded and need no review (1 when it rests
+  on none).
+
+A weaker source never yields a stronger claim: a claim's strength is capped by the weakest claim it
+rests on, so a grounded claim resting on a hypothesis is one. A claim resting on no other is
+*observed*; one resting on grounded claims, *derived*. A claim out of sight — another creature's
+personal note — caps nothing and counts as unhealthy; a cycle is cut where it closes. The breakdown
+reads in one line, such as `observed 0.93 = 0.5 + 0.5·(0.6·r0.90 + 0.2·c0.00 + 0.1·a0.99 + 0.1·h1.00)`.
+
+The term is bounded. A grounded claim in good health has $\sigma \ge 0.5$, worth at least
+$w_\sigma \cdot 0.5 = 0.05$ over an unproven claim, more than the most confidence can separate
+them ($w_\kappa \cdot (0.95 - 0.3) \approx 0.046$): with equal meaning, relation, salience and age,
+a grounded claim always outranks an unproven one. A claim under review stays below every claim in
+good health and is still recalled.
 
 ### Consolidation and forgetting
 
