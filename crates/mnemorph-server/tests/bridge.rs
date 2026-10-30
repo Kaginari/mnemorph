@@ -98,6 +98,10 @@ impl Fake {
                 );
                 std::mem::forget(sleeper);
             }
+            ["crash"] => {
+                eprintln!("panicked: \u{1b}[31mthe model's reply did not parse\u{1b}[0m");
+                std::process::exit(3);
+            }
             ["hostile"] => {
                 self.event("note", &json!({"text": HOSTILE}));
                 self.event("note", &json!({"text": "x".repeat(200_000)}));
@@ -198,6 +202,8 @@ fn rig(name: &str, limits: Limits) -> Rig {
         ("FAKE_PROVIDER_KEY", "sk-fake-provider".to_owned()),
         ("OTHER_API_TOKEN", "hunter2".to_owned()),
         ("DEPLOY_URL", "https://deploy:pw@example.com/x".to_owned()),
+        ("AWS_PROFILE", "prod".to_owned()),
+        ("SSH_AUTH_SOCK", "/tmp/ssh-x/agent".to_owned()),
         ("LANG", "C".to_owned()),
     ]
     .into_iter()
@@ -287,6 +293,10 @@ impl Rig {
     }
 
     async fn post_start(&self, b: &Browser) -> (StatusCode, Value) {
+        self.post_body(b, "{}").await
+    }
+
+    async fn post_body(&self, b: &Browser, body: &'static str) -> (StatusCode, Value) {
         self.call(
             Request::post(format!("/api/w/{}/sessions", self.world))
                 .header(header::HOST, self.addr.to_string())
@@ -294,7 +304,7 @@ impl Rig {
                 .header(header::COOKIE, &b.cookie)
                 .header("x-mnemorph-csrf", &b.csrf)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -784,6 +794,12 @@ async fn the_child_gets_a_scrubbed_env_and_dies_with_the_chat_and_the_board() {
     assert!(names.contains("PATH") && names.contains("LANG") && names.contains(FAKE));
     assert!(!names.contains("OTHER_API_TOKEN"), "{names:?}");
     assert!(!names.contains("DEPLOY_URL"), "{names:?}");
+    // Allowed by name only: what a body could use to reach the human's accounts stays out.
+    assert!(
+        !names.contains("AWS_PROFILE") && !names.contains("SSH_AUTH_SOCK"),
+        "{names:?}"
+    );
+    assert!(names.contains("MNEMORPH_BOARD_PID"), "{names:?}");
 
     tab.request(2, "session/prompt", &json!({"text": "spawn"}))
         .await;
@@ -898,4 +914,81 @@ async fn a_slow_tab_is_dropped_and_chats_are_capped() {
     // It reconnects, and the chat is still there.
     let mut tab = r.tab(&b, &sid).await;
     assert_eq!(tab.role().await, "controller");
+}
+
+async fn tabs(r: &Rig, b: &Browser) -> u64 {
+    r.live(b).await[0]["tabs"].as_u64().unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stalled_tab_is_dropped_by_ping_and_by_send_timeout() {
+    let r = rig(
+        "stalled",
+        Limits {
+            send: Duration::from_millis(500),
+            ping: Duration::from_millis(200),
+            queue_bytes: 64 << 20,
+            ..Limits::default()
+        },
+    );
+    let b = r.login().await;
+    let sid = r.start(&b).await;
+    // An idle tab that reads nothing answers no ping: it is dropped.
+    let idle = r.tab(&b, &sid).await;
+    assert_eq!(tabs(&r, &b).await, 1);
+    let mut gone = false;
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if tabs(&r, &b).await == 0 {
+            gone = true;
+            break;
+        }
+    }
+    assert!(gone, "the idle tab that answers no ping is dropped");
+    drop(idle);
+
+    // A tab that stops reading under a flood is dropped once a send stalls.
+    let mut flood = r.tab(&b, &sid).await;
+    flood.role().await;
+    flood
+        .request(1, "session/prompt", &json!({"text": "big 300"}))
+        .await;
+    let mut gone = false;
+    for _ in 0..100 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if tabs(&r, &b).await == 0 {
+            gone = true;
+            break;
+        }
+    }
+    assert!(gone, "a stalled send drops the tab");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_crash_says_why_and_a_resume_names_only_a_run() {
+    let r = rig("crash", Limits::default());
+    let b = r.login().await;
+    for bad in [
+        r#"{"resume": ".."}"#,
+        r#"{"resume": "."}"#,
+        r#"{"resume": "../r1-2"}"#,
+        r#"{"resume": "--world"}"#,
+    ] {
+        let (status, _) = r.post_body(&b, bad).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let sid = r.start(&b).await;
+    let mut tab = r.tab(&b, &sid).await;
+    tab.role().await;
+    tab.request(1, "session/prompt", &json!({"text": "crash"}))
+        .await;
+    let ended = tab
+        .until(|m| method(m) == "board/ended")
+        .await
+        .pop()
+        .unwrap();
+    let why = ended["params"]["why"].as_str().unwrap();
+    assert!(why.starts_with("the chat's process ended"), "{why}");
+    assert!(why.contains("the model's reply did not parse"), "{why}");
+    assert!(!why.contains('\u{1b}'), "escaped: {why}");
 }

@@ -97,6 +97,10 @@ pub struct Limits {
     pub open: Duration,
     /// How long a child may take to leave once asked, before its group is killed.
     pub leave: Duration,
+    /// How long one message may take to reach a tab before the tab is dropped.
+    pub send: Duration,
+    /// How often a tab is pinged; two pings unanswered drop it.
+    pub ping: Duration,
 }
 
 impl Default for Limits {
@@ -114,6 +118,8 @@ impl Default for Limits {
             grace: Duration::from_secs(60),
             open: Duration::from_secs(60),
             leave: Duration::from_secs(10),
+            send: Duration::from_secs(30),
+            ping: Duration::from_secs(5),
         }
     }
 }
@@ -155,16 +161,75 @@ impl Child {
     }
 }
 
-/// The child's environment: `base` without its secrets, and without `MNEMORPH_BODY`, but for the
-/// variables in `keys`, which it needs.
+/// The variables a child may have from the board's environment, by name.
+const ALLOWED: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "LANG",
+    "TERM",
+    "TMPDIR",
+    "TZ",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+];
+
+/// Whether a child may have variable `name`: one of [`ALLOWED`], `LC_*`, `XDG_*`, or `MNEMORPH_*`
+/// but `MNEMORPH_BODY`.
+fn allowed(name: &str) -> bool {
+    ALLOWED.contains(&name)
+        || name.starts_with("LC_")
+        || name.starts_with("XDG_")
+        || (name.starts_with("MNEMORPH_") && name != "MNEMORPH_BODY")
+}
+
+/// The variable a child reads the board's process id from, to die with it.
+pub const BOARD_PID: &str = "MNEMORPH_BOARD_PID";
+
+/// The child's environment: from `base`, only what [`allowed`] names — and of it nothing secret
+/// (`is_secret`: a credential in a proxy's URL is dropped too) — and the variables in `keys`,
+/// the provider keys it needs.
 #[must_use]
 pub fn child_env(base: &[(String, String)], keys: &[String]) -> Vec<(String, String)> {
     base.iter()
-        .filter(|(k, v)| {
-            k != "MNEMORPH_BODY" && (keys.contains(k) || !mnemorph_loop::is_secret(k, v))
-        })
+        .filter(|(k, v)| keys.contains(k) || (allowed(k) && !mnemorph_loop::is_secret(k, v)))
         .cloned()
         .collect()
+}
+
+/// For a child of the board (`MNEMORPH_BOARD_PID` set): die when the board does. On Linux the
+/// parent-death signal is set, then the parent checked, so a board gone in between is caught.
+///
+/// # Errors
+///
+/// The board is already gone, or the signal cannot be set.
+pub fn die_with_board() -> Result<(), String> {
+    let Some(pid) = std::env::var(BOARD_PID)
+        .ok()
+        .and_then(|p| p.parse::<i32>().ok())
+    else {
+        return Ok(());
+    };
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::process::{Pid, Signal, getppid, set_parent_process_death_signal};
+        set_parent_process_death_signal(Some(Signal::TERM))
+            .map_err(|e| format!("the parent-death signal: {e}"))?;
+        if Pid::as_raw(getppid()) != pid {
+            return Err("the board that started this chat is gone".into());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = pid;
+    Ok(())
 }
 
 /// The variables the human's global file (and the built-in defaults) name as provider keys: a
@@ -500,6 +565,10 @@ struct Live {
     ending: AtomicBool,
     /// Set once the chat has ended whole.
     gone: watch::Sender<bool>,
+    /// The last bytes the child wrote on stderr.
+    last_words: Mutex<VecDeque<u8>>,
+    /// Set once its stderr closed.
+    spoke: watch::Sender<bool>,
 }
 
 impl Live {
@@ -1023,6 +1092,40 @@ async fn gone_unreaped(pid: Option<u32>) {
     }
 }
 
+/// The most bytes of the child's stderr kept, for why it ended.
+const LAST_WORDS: usize = 8 << 10;
+
+/// The child's stderr, its last [`LAST_WORDS`] kept.
+async fn read_stderr(live: Arc<Live>, mut stderr: tokio::process::ChildStderr) {
+    use tokio::io::AsyncReadExt as _;
+    let mut buf = [0u8; 4096];
+    while let Ok(n) = stderr.read(&mut buf).await {
+        if n == 0 {
+            break;
+        }
+        let mut words = lock(&live.last_words);
+        words.extend(&buf[..n]);
+        let over = words.len().saturating_sub(LAST_WORDS);
+        words.drain(..over);
+    }
+    let _ = live.spoke.send(true);
+}
+
+/// `why`, and the child's last words on stderr if it said any, escaped.
+fn with_last_words(why: &str, live: &Live) -> String {
+    let words = lock(&live.last_words);
+    let (a, b) = words.as_slices();
+    let text = String::from_utf8_lossy(&[a, b].concat()).trim().to_owned();
+    if text.is_empty() {
+        why.to_owned()
+    } else {
+        format!(
+            "{why} — its stderr ended: {}",
+            mnemorph_loop::run::shown(&text)
+        )
+    }
+}
+
 /// Kill a process group, what is left of it.
 fn kill_group(group: Option<u32>) {
     #[cfg(unix)]
@@ -1107,14 +1210,9 @@ impl Bridge {
         out
     }
 
-    async fn open(
-        self: &Arc<Self>,
-        world: &Path,
-        world_id: &str,
-        resume: Option<&str>,
-        owner: &str,
-    ) -> Result<BoardStarted, Refused> {
-        let limits = self.limits;
+    /// The child's command: its program and arguments, in the world, with its scrubbed
+    /// environment and the board's pid to die with, in a group of its own.
+    fn command(&self, world: &Path, resume: Option<&str>) -> tokio::process::Command {
         let keys = provider_keys(&self.child.global, world);
         let mut cmd = tokio::process::Command::new(&self.child.program);
         cmd.args((self.child.args)(world, resume))
@@ -1123,15 +1221,30 @@ impl Bridge {
             .envs(child_env(&self.child.env, &keys))
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .env(BOARD_PID, std::process::id().to_string())
             .kill_on_drop(true);
         #[cfg(unix)]
         cmd.process_group(0);
+        cmd
+    }
+
+    async fn open(
+        self: &Arc<Self>,
+        world: &Path,
+        world_id: &str,
+        resume: Option<&str>,
+        owner: &str,
+    ) -> Result<BoardStarted, Refused> {
+        let limits = self.limits;
+        let mut cmd = self.command(world, resume);
         let mut child = cmd
             .spawn()
             .map_err(|e| (502, format!("the chat's process did not start: {e}")))?;
         let group = child.id();
-        let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
+        let (Some(stdin), Some(stdout), Some(stderr)) =
+            (child.stdin.take(), child.stdout.take(), child.stderr.take())
+        else {
             kill_group(group);
             return Err((502, "the chat's process has no pipes".into()));
         };
@@ -1159,7 +1272,6 @@ impl Bridge {
             input: Mutex::new(Some(input.clone())),
             state: Mutex::new(State {
                 init: Some(init),
-                orphaned: Some(self.clock.now()),
                 ..State::default()
             }),
             limits,
@@ -1169,7 +1281,10 @@ impl Bridge {
             group,
             ending: AtomicBool::new(false),
             gone: watch::channel(false).0,
+            last_words: Mutex::new(VecDeque::new()),
+            spoke: watch::channel(false).0,
         });
+        tokio::spawn(read_stderr(Arc::clone(&live), stderr));
         tokio::spawn(read_child(
             Arc::clone(&live),
             stdout,
@@ -1199,10 +1314,12 @@ impl Bridge {
             Ok(h) => h,
             Err(e) => {
                 self.end(&live, "the chat did not open").await;
-                return Err((502, e));
+                return Err((502, with_last_words(&e, &live)));
             }
         };
         let _ = live.hello.set(hello.clone());
+        // The grace counts from the opening: a slow one eats none of it.
+        lock(&live.state).orphaned = Some(self.clock.now());
         lock(&self.sessions).0.insert(id, Arc::clone(&live));
         tokio::spawn(Arc::clone(self).watch(Arc::clone(&live), ends_rx));
         Ok(BoardStarted {
@@ -1266,6 +1383,9 @@ impl Bridge {
             let _ = child.start_kill();
             let _ = tokio::time::timeout(leave, child.wait()).await;
         }
+        let mut spoke = live.spoke.subscribe();
+        let _ = tokio::time::timeout(Duration::from_millis(500), spoke.wait_for(|s| *s)).await;
+        let why = &with_last_words(why, live);
         {
             let now = self.clock.now();
             let mut st = lock(&live.state);
@@ -1279,6 +1399,9 @@ impl Bridge {
                 let _ = c.close.set((close::ENDED, "the chat ended"));
             }
             st.calls.clear();
+            // No tab can reach an ended chat: what it kept goes now.
+            st.replay = VecDeque::new();
+            st.kept = 0;
         }
         lock(&self.sessions).0.remove(&live.id);
         let _ = live.gone.send(true);
@@ -1309,6 +1432,7 @@ impl Bridge {
                 &mut socket,
                 close::UNKNOWN,
                 "no such chat: it ended, or never began",
+                self.limits.send,
             )
             .await;
         };
@@ -1317,40 +1441,54 @@ impl Bridge {
         let (conn, why) =
             match live.attach(cookie.clone(), tx, Arc::clone(&bytes), self.clock.now()) {
                 Ok(c) => c,
-                Err((code, why)) => return shut(&mut socket, code, why).await,
+                Err((code, why)) => return shut(&mut socket, code, why, self.limits.send).await,
             };
-        let mut every = tokio::time::interval(Duration::from_secs(5));
+        let limit = self.limits.send;
+        let mut every = tokio::time::interval(self.limits.ping);
+        every.tick().await;
+        // Pings sent and not answered: two, and the tab is gone.
+        let mut unanswered = 0u8;
         loop {
             tokio::select! {
                 out = rx.recv() => {
                     let Some(msg) = out else {
                         let (code, reason) = why.get().copied().unwrap_or((close::ENDED, "the chat ended"));
-                        shut(&mut socket, code, reason).await;
+                        shut(&mut socket, code, reason, limit).await;
                         break;
                     };
                     bytes.fetch_sub(msg.len(), Ordering::SeqCst);
-                    if socket.send(Message::Text(msg)).await.is_err() {
+                    // A tab that stops reading is dropped, never waited on.
+                    if !matches!(tokio::time::timeout(limit, socket.send(Message::Text(msg))).await, Ok(Ok(()))) {
                         break;
                     }
                 }
                 inbound = socket.recv() => match inbound {
+                    Some(Ok(Message::Pong(_))) => unanswered = 0,
                     Some(Ok(Message::Text(text))) => {
                         if board.csrf_of(&cookie).is_none() {
-                            shut(&mut socket, close::SIGNED_OUT, "the board session ended").await;
+                            shut(&mut socket, close::SIGNED_OUT, "the board session ended", limit).await;
                             break;
                         }
                         live.client_line(conn, &text, self.clock.now());
                     }
                     Some(Ok(Message::Binary(_))) => {
-                        shut(&mut socket, 1003, "text messages only").await;
+                        shut(&mut socket, 1003, "text messages only", limit).await;
                         break;
                     }
-                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                    Some(Ok(Message::Ping(_))) => {}
                     Some(Ok(Message::Close(_)) | Err(_)) | None => break,
                 },
                 _ = every.tick() => {
                     if board.csrf_of(&cookie).is_none() {
-                        shut(&mut socket, close::SIGNED_OUT, "the board session ended").await;
+                        shut(&mut socket, close::SIGNED_OUT, "the board session ended", limit).await;
+                        break;
+                    }
+                    if unanswered >= 2 {
+                        break;
+                    }
+                    unanswered += 1;
+                    let ping = socket.send(Message::Ping(axum::body::Bytes::new()));
+                    if !matches!(tokio::time::timeout(limit, ping).await, Ok(Ok(()))) {
                         break;
                     }
                 }
@@ -1360,14 +1498,13 @@ impl Bridge {
     }
 }
 
-/// Close a socket with `code` and `reason`.
-async fn shut(socket: &mut WebSocket, code: u16, reason: &str) {
-    let _ = socket
-        .send(Message::Close(Some(CloseFrame {
-            code,
-            reason: reason.into(),
-        })))
-        .await;
+/// Close a socket with `code` and `reason`, waiting at most `limit` for a tab that reads nothing.
+async fn shut(socket: &mut WebSocket, code: u16, reason: &str, limit: Duration) {
+    let close = socket.send(Message::Close(Some(CloseFrame {
+        code,
+        reason: reason.into(),
+    })));
+    let _ = tokio::time::timeout(limit, close).await;
 }
 
 #[cfg(test)]
@@ -1386,6 +1523,15 @@ mod tests {
             ("DATABASE_URL", "postgres://me:pw@db/app"),
             ("MNEMORPH_BODY", "orc-x"),
             ("GIT_AUTHOR_NAME", "me"),
+            ("AWS_PROFILE", "prod"),
+            ("SSH_AUTH_SOCK", "/tmp/ssh-x/agent"),
+            ("KUBECONFIG", "/h/.kube/config"),
+            ("DOCKER_HOST", "unix:///var/run/docker.sock"),
+            ("LC_ALL", "C.UTF-8"),
+            ("XDG_STATE_HOME", "/h/.local/state"),
+            ("MNEMORPH_BOARD_PID", "1"),
+            ("https_proxy", "http://proxy:3128"),
+            ("HTTPS_PROXY", "http://me:pw@proxy:3128"),
         ]
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
@@ -1394,7 +1540,15 @@ mod tests {
         let names: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(
             names,
-            ["PATH", "HOME", "OPENROUTER_API_KEY", "GIT_AUTHOR_NAME"]
+            [
+                "PATH",
+                "HOME",
+                "OPENROUTER_API_KEY",
+                "LC_ALL",
+                "XDG_STATE_HOME",
+                "MNEMORPH_BOARD_PID",
+                "https_proxy"
+            ]
         );
     }
 

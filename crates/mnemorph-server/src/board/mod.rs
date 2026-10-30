@@ -618,15 +618,10 @@ struct Start {
     resume: Option<String>,
 }
 
-/// Whether `run` may name a run to resume: `last`, or an id of letters, digits, `.`, `_`, `:`
-/// and `-`, not starting with `-`.
+/// Whether `run` may name a run to resume: `last`, or a session's run id (`r<ms>-<pid>`) — never
+/// a path, `.` or `..`.
 fn run_name(run: &str) -> bool {
-    !run.is_empty()
-        && run.len() <= 128
-        && !run.starts_with('-')
-        && run
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+    run == "last" || mnemorph_loop::resume::is_session_run(run)
 }
 
 /// The cookie on `headers` that names a live session.
