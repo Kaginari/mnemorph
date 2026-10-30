@@ -1,5 +1,5 @@
 /** Inside a world: its overview, a section, or a session. */
-import type { WorldSummary } from '@mnemorph/protocol';
+import type { BoardWorld } from '@mnemorph/protocol';
 import type { WorldSection } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
 import { Empty } from '../ui/Empty.tsx';
@@ -26,8 +26,8 @@ export function NoWorld({ id }: { id: string }) {
   );
 }
 
-export function WorldView({ w }: { w: WorldSummary }) {
-  const s = STATUS[w.status];
+export function WorldView({ w }: { w: BoardWorld }) {
+  const s = STATUS[w.state];
   return (
     <div className="page">
       <header className="page-head">
@@ -39,11 +39,12 @@ export function WorldView({ w }: { w: WorldSummary }) {
         </Mark>
       </header>
       <p className="mono page-sub">
-        <Safe text={w.world} />
+        <Safe text={w.path} />
       </p>
-      {w.status === 'missing' ? (
+      {w.state === 'missing' ? (
         <Empty glyph="✕" title="This world's directory is gone">
-          It stays listed, never silently dropped, so a moved or deleted world is noticed.
+          It stays listed, never silently dropped, until{' '}
+          <code className="mono">mnemorphd board forget &lt;dir&gt;</code>.
         </Empty>
       ) : (
         <Empty glyph="◈" title="The world overview is not drawn yet">
@@ -55,7 +56,7 @@ export function WorldView({ w }: { w: WorldSummary }) {
   );
 }
 
-export function SectionView({ w, section }: { w: WorldSummary; section: WorldSection }) {
+export function SectionView({ w, section }: { w: BoardWorld; section: WorldSection }) {
   const [, glyph, label] = SECTIONS.find(([s]) => s === section) ?? ['', '◇', section];
   return (
     <div className="page">
@@ -74,7 +75,7 @@ export function SectionView({ w, section }: { w: WorldSummary; section: WorldSec
   );
 }
 
-export function SessionView({ w, session }: { w: WorldSummary; session: string }) {
+export function SessionView({ w, session }: { w: BoardWorld; session: string }) {
   return (
     <div className="page page-chat">
       <header className="page-head">

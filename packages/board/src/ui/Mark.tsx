@@ -3,7 +3,7 @@
  * (colour-vision deficiency, a monochrome screenshot). Every coloured node on the board is one of
  * these, and the end-to-end tests check each has a label.
  */
-import type { WorldStatus } from '@mnemorph/protocol';
+import type { WorldState } from '@mnemorph/protocol';
 import type { ReactNode } from 'react';
 
 export type Tone = 'holo' | 'muted' | 'alarm' | 'gold';
@@ -28,11 +28,9 @@ export function Mark({
   );
 }
 
-/** How each world status is drawn: a glyph, a tone and its words. */
-export const STATUS: Record<WorldStatus, { glyph: string; tone: Tone; label: string }> = {
-  live: { glyph: '●', tone: 'holo', label: 'live' },
-  'tui-live': { glyph: '◉', tone: 'holo', label: 'live in a terminal' },
-  idle: { glyph: '○', tone: 'muted', label: 'idle' },
+/** How each world state is drawn: a glyph, a tone and its words. */
+export const STATUS: Record<WorldState, { glyph: string; tone: Tone; label: string }> = {
+  present: { glyph: '◆', tone: 'holo', label: 'present' },
   missing: { glyph: '✕', tone: 'alarm', label: 'missing' },
 };
 

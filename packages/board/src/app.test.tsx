@@ -37,12 +37,12 @@ async function mount(hash: string, body: unknown = fixtureWorlds, status = 200) 
   return root;
 }
 
-test('the home lists every world, each status in words', async () => {
+test('the home lists every world, each state in words', async () => {
   await mount('#/');
   const text = host.textContent ?? '';
   expect(text).toContain('MNEMORPH');
   for (const n of ['tempest-try', 'sqlglot', 'notes', 'old-spike']) expect(text).toContain(n);
-  expect(text).toContain('live in a terminal');
+  expect(text).toContain('never opened');
   expect(text).toContain('missing');
 });
 

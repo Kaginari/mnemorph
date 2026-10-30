@@ -11,16 +11,32 @@ import { FIXTURE_NOW, fixtureWorlds } from '../src/data/fixtures.ts';
 const screen = (file: string) =>
   fileURLToPath(new URL(`../test-results/screens/${file}.png`, import.meta.url));
 
-const LIVE = fixtureWorlds.worlds.find((w) => w.status === 'live');
-if (!LIVE) throw new Error('the fixtures hold a live world');
+const LIVE = fixtureWorlds.worlds.find((w) => w.name === 'tempest-try');
+if (!LIVE) throw new Error('the fixtures hold tempest-try');
 
+/**
+ * Opens the board at `hash`, with the API answering `body`. Every CSP violation the page reports
+ * is collected, and `violations` reads them: the page runs under the board server's own CSP.
+ */
 async function open(page: Page, hash: string, body: unknown = fixtureWorlds) {
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as { __csp?: string[] }).__csp = seen;
+    document.addEventListener('securitypolicyviolation', (e) =>
+      seen.push(`${e.violatedDirective} ${e.blockedURI}`),
+    );
+  });
   await page.clock.setFixedTime(FIXTURE_NOW);
   await page.route('**/api/worlds', (r) =>
     r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }),
   );
   await page.goto(`/${hash}`);
   await expect(page.locator('.shell')).toBeVisible();
+}
+
+/** The CSP violations the page has reported. */
+function violations(page: Page) {
+  return page.evaluate(() => (window as { __csp?: string[] }).__csp ?? ['no CSP listener']);
 }
 
 /**
@@ -121,6 +137,7 @@ for (const theme of ['dark', 'light'] as const) {
         });
         expect(await lowContrast(page)).toEqual([]);
         expect(await unlabelled(page)).toEqual([]);
+        expect(await violations(page)).toEqual([]);
       });
     }
 
@@ -139,12 +156,23 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
-test('every world reads in words, live first', async ({ page }, info) => {
+test("the page runs under the board server's CSP", async ({ page }) => {
+  const res = await page.request.get('/');
+  expect(res.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
+  await open(page, '#/settings');
+  await page.getByRole('radio', { name: 'light' }).check();
+  await page.goto(`/#/w/${LIVE.id}/s/r-17`);
+  await expect(page.locator('.page-title')).toContainText('r-17');
+  expect(await violations(page)).toEqual([]);
+});
+
+test('every world reads in words, the latest first', async ({ page }, info) => {
   await open(page, '#/');
   const cards = page.locator('.world-card');
   await expect(cards).toHaveCount(4);
   await expect(cards.first()).toContainText('tempest-try');
-  await expect(cards.first()).toContainText('live');
+  await expect(cards.first()).toContainText('present');
+  await expect(cards.last()).toContainText('never opened');
   await expect(page.locator('.world-card', { hasText: 'old-spike' })).toContainText('missing');
   if (info.project.name === 'desktop') {
     await expect(page.locator('.rail-world')).toHaveCount(4);
@@ -183,14 +211,31 @@ test('the rail is a drawer at phone width', async ({ page }, info) => {
   test.skip(info.project.name !== 'phone', 'phone only');
   await open(page, '#/');
   await expect(page.locator('#rail')).toBeHidden();
-  await page.getByRole('button', { name: 'Menu' }).click();
+  expect(await page.locator('#rail').evaluate((e) => (e as HTMLElement).inert)).toBe(true);
+  const menu = page.getByRole('button', { name: 'Menu' });
+  await menu.click();
   await expect(page.locator('#rail')).toBeVisible();
+  expect(await page.locator('#rail').evaluate((e) => (e as HTMLElement).inert)).toBe(false);
+  await expect(page.locator('#rail :focus')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#rail')).toBeHidden();
+  await expect(menu).toBeFocused();
+  await menu.click();
   await page.locator('.rail-world', { hasText: 'sqlglot' }).click();
   await expect(page.locator('#rail')).toBeHidden();
   await expect(page.locator('.page-title')).toContainText('sqlglot');
-  await page.getByRole('button', { name: 'Menu' }).click();
+});
+
+test('the side pane is a drawer at phone width, focus in and back', async ({ page }, info) => {
+  test.skip(info.project.name !== 'phone', 'phone only');
+  await open(page, `#/w/${LIVE.id}`);
+  await expect(page.locator('#pane')).toBeHidden();
+  const toggle = page.getByRole('button', { name: 'Show the side pane' });
+  await toggle.click();
+  await expect(page.locator('#pane')).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#rail')).toBeHidden();
+  await expect(page.locator('#pane')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Show the side pane' })).toBeFocused();
 });
 
 test('the side pane folds, and stays folded', async ({ page }, info) => {
@@ -211,8 +256,8 @@ test('hostile text from the server stays text', async ({ page }) => {
   const evil = {
     ...LIVE,
     id: 'evil-1',
-    name: '<img src=x onerror="window.__pwned=1">‮gnp.exe',
-    world: '/tmp/<script>window.__pwned=2</script>',
+    name: '<img src=x onerror="window.__pwned=1">\u202egnp.exe',
+    path: '/tmp/<script>window.__pwned=2</script>',
     remote: 'javascript:window.__pwned=3',
   };
   await open(page, '#/w/evil-1', { worlds: [evil] });

@@ -1,61 +1,53 @@
 /**
- * The worlds, from `GET /api/worlds`. The answer is checked field by field before the page uses
- * it: a row that does not hold together is left out and counted, never guessed at.
+ * The worlds, from `GET /api/worlds` (the board server's `BoardWorlds`, generated from Rust). The
+ * answer is checked field by field before the page uses it: a row that does not hold together is
+ * left out and counted, never guessed at.
  */
-import { WORLD_STATUSES, type WorldStatus, type WorldSummary } from '@mnemorph/protocol';
+import type { BoardWorld, WorldState } from '@mnemorph/protocol';
 import { useEffect, useState } from 'react';
+import { establish } from './session.ts';
 
 export interface Worlds {
-  worlds: WorldSummary[];
+  worlds: BoardWorld[];
   /** Rows the answer held that were not a world. */
   unreadable: number;
 }
 
-const str = (v: unknown): v is string => typeof v === 'string';
+/** Every state a world can be in. */
+export const WORLD_STATES: readonly WorldState[] = ['present', 'missing'];
 
-function row(v: unknown): WorldSummary | undefined {
+const str = (v: unknown): v is string => typeof v === 'string';
+const strOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string';
+
+function row(v: unknown): BoardWorld | undefined {
   if (typeof v !== 'object' || v === null) return undefined;
-  const r = v as Record<string, unknown>;
-  const { id, name, world, remote, first, last, sessions, status } = r;
-  if (!str(id) || id === '' || !str(name) || !str(world) || !str(first) || !str(last)) {
-    return undefined;
-  }
+  const { id, name, path, remote, last, sessions, state } = v as Record<string, unknown>;
+  if (!str(id) || id === '' || !str(name) || !str(path)) return undefined;
+  if (!strOrNull(remote) || !strOrNull(last)) return undefined;
+  if (last !== null && Number.isNaN(Date.parse(last))) return undefined;
   if (typeof sessions !== 'number' || !Number.isInteger(sessions) || sessions < 0) {
     return undefined;
   }
-  if (!WORLD_STATUSES.includes(status as WorldStatus)) return undefined;
-  if (remote !== undefined && !str(remote)) return undefined;
-  const out: WorldSummary = {
-    id,
-    name,
-    world,
-    first,
-    last,
-    sessions,
-    status: status as WorldStatus,
-  };
-  if (remote !== undefined) out.remote = remote;
-  return out;
+  if (!WORLD_STATES.includes(state as WorldState)) return undefined;
+  return { id, name, path, remote, last, sessions, state: state as WorldState };
 }
 
-/** The worlds an answer holds, sorted live first, then by latest activity. */
+/** When a world was last opened, for sorting: a world never opened sorts last. */
+const when = (w: BoardWorld) => (w.last === null ? Number.NEGATIVE_INFINITY : Date.parse(w.last));
+
+/** The worlds an answer holds, the latest session first, a world never opened last. */
 export function parseWorlds(body: unknown): Worlds {
   const list =
     typeof body === 'object' && body !== null ? (body as { worlds?: unknown }).worlds : undefined;
   if (!Array.isArray(list)) throw new Error('the answer holds no list of worlds');
-  const worlds: WorldSummary[] = [];
+  const worlds: BoardWorld[] = [];
   let unreadable = 0;
   for (const v of list) {
     const w = row(v);
     if (w) worlds.push(w);
     else unreadable += 1;
   }
-  worlds.sort(
-    (a, b) =>
-      WORLD_STATUSES.indexOf(a.status) - WORLD_STATUSES.indexOf(b.status) ||
-      Date.parse(b.last) - Date.parse(a.last) ||
-      a.name.localeCompare(b.name),
-  );
+  worlds.sort((a, b) => when(b) - when(a) || a.name.localeCompare(b.name));
   return { worlds, unreadable };
 }
 
@@ -64,13 +56,23 @@ export type Load =
   | { state: 'ready'; data: Worlds }
   | { state: 'failed'; reason: string };
 
-/** The worlds, read once on mount. */
+/** The worlds, read once on mount, after the session is established. */
 export function useWorlds(): Load {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
   useEffect(() => {
     const ctl = new AbortController();
-    fetch('/api/worlds', { signal: ctl.signal, headers: { accept: 'application/json' } })
+    establish()
+      .then(() =>
+        fetch('/api/worlds', {
+          signal: ctl.signal,
+          credentials: 'same-origin',
+          headers: { accept: 'application/json' },
+        }),
+      )
       .then(async (res) => {
+        if (res.status === 401) {
+          throw new Error('this browser holds no board session: open the URL mnemorphd printed');
+        }
         if (!res.ok) throw new Error(`the board server answered ${res.status}`);
         setLoad({ state: 'ready', data: parseWorlds(await res.json()) });
       })

@@ -1,5 +1,5 @@
 /** The right pane: what the centre's subject holds at a glance. Folds away; its state is kept. */
-import type { WorldSummary } from '@mnemorph/protocol';
+import type { BoardWorld } from '@mnemorph/protocol';
 import type { ReactNode } from 'react';
 import type { Load } from '../data/worlds.ts';
 import type { Route } from '../router.ts';
@@ -27,10 +27,10 @@ function Row({ k, children }: { k: string; children: ReactNode }) {
 
 function Counts({ load }: { load: Load }) {
   if (load.state !== 'ready') return <p className="pane-note">—</p>;
-  const n = (s: WorldSummary['status']) => load.data.worlds.filter((w) => w.status === s).length;
+  const n = (s: BoardWorld['state']) => load.data.worlds.filter((w) => w.state === s).length;
   return (
     <dl className="pane-rows">
-      {(['live', 'tui-live', 'idle', 'missing'] as const).map((s) => (
+      {(['present', 'missing'] as const).map((s) => (
         <Row key={s} k={STATUS[s].label}>
           <Mark tone={STATUS[s].tone} glyph={STATUS[s].glyph}>
             {n(s)}
@@ -41,7 +41,7 @@ function Counts({ load }: { load: Load }) {
   );
 }
 
-function World({ w, now }: { w: WorldSummary; now: number }) {
+function World({ w, now }: { w: BoardWorld; now: number }) {
   return (
     <Block title="World">
       <dl className="pane-rows">
@@ -52,8 +52,7 @@ function World({ w, now }: { w: WorldSummary; now: number }) {
         </Row>
         <Row k="remote">{w.remote ? <Safe text={w.remote} /> : '—'}</Row>
         <Row k="sessions">{w.sessions}</Row>
-        <Row k="first">{w.first.slice(0, 10)}</Row>
-        <Row k="latest">{ago(w.last, now)}</Row>
+        <Row k="latest">{w.last === null ? 'never opened' : ago(w.last, now)}</Row>
       </dl>
     </Block>
   );
@@ -67,7 +66,7 @@ export function Pane({
 }: {
   route: Route;
   load: Load;
-  world: WorldSummary | undefined;
+  world: BoardWorld | undefined;
   now: number;
 }) {
   if (route.name === 'session') {

@@ -2,7 +2,7 @@
  * The left rail: the wordmark, search, the worlds, then the board-wide pages. Inside a world it
  * becomes that world's: back to all worlds, its chats and its sections.
  */
-import type { WorldSummary } from '@mnemorph/protocol';
+import type { BoardWorld } from '@mnemorph/protocol';
 import type { Load } from '../data/worlds.ts';
 import { format, type Route, type WorldSection, worldOf } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
@@ -47,9 +47,10 @@ function Item({
   );
 }
 
-function WorldRow({ w, current, now }: { w: WorldSummary; current: boolean; now: number }) {
-  const s = STATUS[w.status];
-  const when = w.status === 'idle' ? ago(w.last, now) : s.label;
+function WorldRow({ w, current, now }: { w: BoardWorld; current: boolean; now: number }) {
+  const s = STATUS[w.state];
+  const when =
+    w.state === 'missing' ? s.label : w.last === null ? 'never opened' : ago(w.last, now);
   return (
     <a
       className="rail-item rail-world"
@@ -108,12 +109,16 @@ function Theme({ choice, onChoice }: { choice: Choice; onChoice: (c: Choice) => 
 }
 
 export function Rail({
+  ref,
+  inert,
   route,
   load,
   now,
   theme,
   onTheme,
 }: {
+  ref: React.Ref<HTMLElement>;
+  inert: boolean;
   route: Route;
   load: Load;
   now: number;
@@ -126,7 +131,7 @@ export function Rail({
       ? load.data.worlds.find((w) => w.id === here)
       : undefined;
   return (
-    <nav className="rail" id="rail" aria-label="Board">
+    <nav ref={ref} inert={inert} className="rail" id="rail" aria-label="Board">
       <div className="rail-head">
         <Wordmark />
       </div>
@@ -152,7 +157,7 @@ export function Rail({
             </a>
             <div className="rail-world-head">
               {world ? (
-                <Mark tone={STATUS[world.status].tone} glyph={STATUS[world.status].glyph}>
+                <Mark tone={STATUS[world.state].tone} glyph={STATUS[world.state].glyph}>
                   <Safe text={world.name} />
                 </Mark>
               ) : (

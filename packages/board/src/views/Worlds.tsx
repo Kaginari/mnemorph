@@ -1,5 +1,5 @@
 /** Home: every world on this machine, live first. */
-import type { WorldSummary } from '@mnemorph/protocol';
+import type { BoardWorld } from '@mnemorph/protocol';
 import { useState } from 'react';
 import type { Load } from '../data/worlds.ts';
 import { format } from '../router.ts';
@@ -8,8 +8,8 @@ import { ago } from '../time.ts';
 import { Empty } from '../ui/Empty.tsx';
 import { Mark, STATUS } from '../ui/Mark.tsx';
 
-function Card({ w, now }: { w: WorldSummary; now: number }) {
-  const s = STATUS[w.status];
+function Card({ w, now }: { w: BoardWorld; now: number }) {
+  const s = STATUS[w.state];
   return (
     <li>
       <a className="world-card" href={format({ name: 'world', world: w.id })}>
@@ -20,18 +20,17 @@ function Card({ w, now }: { w: WorldSummary; now: number }) {
             </span>
           </Mark>
           <span className="world-card-path mono">
-            <Safe text={w.world} />
+            <Safe text={w.path} />
           </span>
           <span className="world-card-when">
             {s.label}
-            {w.status !== 'missing' && ` · ${ago(w.last, now)}`}
+            {w.state !== 'missing' && ` · ${w.last === null ? 'never opened' : ago(w.last, now)}`}
           </span>
         </div>
         <div className="world-card-facts mono">
           <span>
             {w.sessions} {w.sessions === 1 ? 'session' : 'sessions'}
           </span>
-          <span>since {w.first.slice(0, 10)}</span>
           {w.remote && (
             <span>
               <Safe text={w.remote} />
@@ -63,8 +62,8 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
       </header>
       {adding && (
         <p className="hint">
-          A world joins the board when a session opens in it: run{' '}
-          <code className="mono">mnemorph</code> in its directory.
+          A world joins the board when a session opens in it. To add one by hand, run{' '}
+          <code className="mono">mnemorphd board add &lt;dir&gt;</code> in a terminal.
         </p>
       )}
       {load.state === 'loading' && (

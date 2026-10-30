@@ -1,6 +1,7 @@
 // The board's own lint, beside Biome: colours come from @mnemorph/theme's tokens only (no raw
 // hex, rgb(), hsl() or other colour literal in packages/board), and no HTML is ever written as a
-// string (dangerouslySetInnerHTML, innerHTML, outerHTML, insertAdjacentHTML, document.write).
+// string (dangerouslySetInnerHTML, innerHTML, outerHTML, insertAdjacentHTML, setHTMLUnsafe,
+// srcdoc, document.write), nor code (eval, new Function). Scans .ts, .tsx, .js, .mjs, .css, .html.
 // Fails with every offence, file:line.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -18,7 +19,11 @@ const RULES = [
   [/dangerouslySetInnerHTML/, 'HTML from a string: render text nodes'],
   [/\b(?:inner|outer)HTML\b/, 'HTML from a string: render text nodes'],
   [/\binsertAdjacentHTML\b/, 'HTML from a string: render text nodes'],
+  [/\bsetHTMLUnsafe\b/, 'HTML from a string: render text nodes'],
+  [/\bsrcdoc\b/i, 'HTML from a string: render text nodes'],
   [/\bdocument\.write(?:ln)?\b/, 'HTML from a string: render text nodes'],
+  [/\bnew\s+Function\b/, 'code from a string: never'],
+  [/(?<![\w$])eval\s*\(/, 'code from a string: never'],
 ];
 
 /** Comments out, line numbers kept: a rule's own explanation is not an offence. */
@@ -46,7 +51,7 @@ function* files(dir) {
     if (e.name === 'node_modules' || e.name === 'dist' || e.name === 'test-results') continue;
     const p = join(dir, e.name);
     if (e.isDirectory()) yield* files(p);
-    else if (/\.(tsx?|css|html)$/.test(e.name)) yield p;
+    else if (/\.(tsx?|m?js|css|html)$/.test(e.name)) yield p;
   }
 }
 

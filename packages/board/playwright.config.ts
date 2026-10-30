@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4317;
+import { PREVIEW_PORT as PORT } from './vite.config.ts';
 
 /**
  * The board end to end, on the built page (`vite build` + `vite preview`): Chromium at the
@@ -31,7 +31,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm exec vite build && pnpm exec vite preview --host 127.0.0.1 --port ${PORT} --strictPort`,
+    command: 'pnpm exec vite build && pnpm exec vite preview',
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -2,8 +2,8 @@
  * The board's shell: the rail on the left, the centre, the foldable pane on the right — and at
  * phone width the rail and the pane as drawers over the centre.
  */
-import type { WorldSummary } from '@mnemorph/protocol';
-import { useEffect, useState } from 'react';
+import type { BoardWorld } from '@mnemorph/protocol';
+import { useEffect, useRef, useState } from 'react';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
@@ -27,6 +27,40 @@ function initialPane(): boolean {
   return !window.matchMedia(PHONE).matches;
 }
 
+/** Whether the page is at phone width, following it. */
+function usePhone(): boolean {
+  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+/**
+ * A drawer's focus: into the drawer when it opens, back to the button that opened it when it
+ * closes. Only while it is a drawer (phone width).
+ */
+function useDrawerFocus(
+  open: boolean,
+  active: boolean,
+  drawer: React.RefObject<HTMLElement | null>,
+  trigger: React.RefObject<HTMLElement | null>,
+) {
+  const was = useRef(open);
+  useEffect(() => {
+    if (active && open && !was.current) {
+      const el = drawer.current;
+      (el?.querySelector<HTMLElement>('a[href], button:not([disabled])') ?? el)?.focus();
+    } else if (active && !open && was.current) {
+      trigger.current?.focus();
+    }
+    was.current = open;
+  }, [open, active, drawer, trigger]);
+}
+
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -46,7 +80,7 @@ function Centre({
 }: {
   route: Route;
   load: Load;
-  world: WorldSummary | undefined;
+  world: BoardWorld | undefined;
   now: number;
   theme: Choice;
   onTheme: (c: Choice) => void;
@@ -71,7 +105,7 @@ function Centre({
 }
 
 /** The centre's title, for the top bar and the tab. */
-function title(route: Route, world: WorldSummary | undefined): string {
+function title(route: Route, world: BoardWorld | undefined): string {
   switch (route.name) {
     case 'worlds':
       return 'Worlds';
@@ -95,6 +129,13 @@ export function App() {
   const [theme, setTheme] = useTheme();
   const [rail, setRail] = useState(false);
   const [pane, setPane] = useState(initialPane);
+  const phone = usePhone();
+  const railRef = useRef<HTMLElement>(null);
+  const paneRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const paneButtonRef = useRef<HTMLButtonElement>(null);
+  useDrawerFocus(rail, phone, railRef, menuRef);
+  useDrawerFocus(pane, phone, paneRef, paneButtonRef);
 
   const here = worldOf(route);
   const world =
@@ -136,7 +177,15 @@ export function App() {
       data-rail={rail ? 'open' : 'closed'}
       data-pane={pane ? 'open' : 'closed'}
     >
-      <Rail route={route} load={load} now={now} theme={theme} onTheme={setTheme} />
+      <Rail
+        ref={railRef}
+        inert={phone && !rail}
+        route={route}
+        load={load}
+        now={now}
+        theme={theme}
+        onTheme={setTheme}
+      />
       <button
         type="button"
         className="scrim"
@@ -151,6 +200,7 @@ export function App() {
         <header className="topbar">
           <button
             type="button"
+            ref={menuRef}
             className="icon-button rail-toggle"
             aria-label="Menu"
             aria-controls="rail"
@@ -164,6 +214,7 @@ export function App() {
           </span>
           <button
             type="button"
+            ref={paneButtonRef}
             className="icon-button"
             aria-label={pane ? 'Hide the side pane' : 'Show the side pane'}
             aria-controls="pane"
@@ -184,7 +235,14 @@ export function App() {
           />
         </main>
       </div>
-      <aside className="pane" id="pane" aria-label="Side pane" hidden={!pane}>
+      <aside
+        ref={paneRef}
+        tabIndex={-1}
+        className="pane"
+        id="pane"
+        aria-label="Side pane"
+        hidden={!pane}
+      >
         <Pane route={route} load={load} world={world} now={now} />
       </aside>
     </div>

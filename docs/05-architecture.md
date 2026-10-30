@@ -535,13 +535,15 @@ right.
 <img src="../assets/board/desktop-dark.png" width="640" alt="The board at desktop width, dark: the rail with the worlds, the worlds in the centre, the pane at a glance"> <img src="../assets/board/phone-light.png" width="180" alt="The board at phone width, light: the worlds, the rail folded behind the menu">
 
 **The rail.** At its head the `◈ MNEMORPH` wordmark, its letters running the races' colours as
-the terminal's welcome does, then search, the **worlds** (each with its status in words: *live*,
-*live in a terminal*, *idle* with its age, or *missing*, never dropped) and the board's own pages:
+the terminal's welcome does, then search, the **worlds** (each with its state in words: *present*
+with the age of its latest session or *never opened*, or *missing*, never dropped) and the board's
+own pages:
 Metrics, Integrations, Settings. Inside a world the rail becomes that world's: back to every
 world, *New chat*, its chats, and its sections (Bodies & queue, Memory, Ontology, Journal). At the
 foot, the theme. Below 760 px the rail is a drawer behind the menu button, and the pane a drawer
-too; a link followed, the scrim or Esc closes them. The pane's open or folded state is kept per
-browser.
+too; a link followed, the scrim or Esc closes them. An opening drawer takes the focus and a
+closing one gives it back to its button, and the folded rail is `inert`. The pane's open or folded
+state is kept per browser.
 
 **Addresses.** A small hash router of the board's own (`src/router.ts`) gives every view an
 address, so a link, a reload or the back button lands where it was:
@@ -558,12 +560,16 @@ Segments are URI-encoded, and `parse(format(r))` gives every route back. Any oth
 world the board does not know, and a view whose data is not served yet each say so in an empty
 state, never a blank pane.
 
-**Data.** The worlds come from `GET /api/worlds`, whose shape (`WorldSummary`, `WorldsResponse`)
-is written by hand in `packages/protocol/src/board.ts`, beside the generated protocol: the board
-server owns it, and its tests and the board's fixtures keep the two equal. The page checks every
-row field by field; a row that does not hold together is left out and counted on the page, never
-guessed at. `vite dev` answers the API with the fixtures (`src/data/fixtures.ts`), and the
-end-to-end tests route it to them.
+**Data.** The page first trades the key in its address (`#k=<key>`, see the board server above):
+before anything renders, the key leaves the address bar and the history, and is posted once to
+`POST /session`; a malformed one is dropped unsent. The worlds then come from `GET /api/worlds`,
+the server's `BoardWorlds` of `BoardWorld` rows (`packages/protocol`, generated from
+`mnemorph-server`): id, name, path, remote or `null`, the latest session or `null`, the session
+count, and `present` or `missing`. The page checks every row field by field; a row that does not
+hold together is left out and counted on the page, never guessed at. Worlds sort by their latest
+session, a world never opened last. `vite dev` answers the API with the fixtures
+(`src/data/fixtures.ts`), and the end-to-end tests route it to them; a unit test parses an answer
+byte for byte as the server's handler writes it.
 
 **Text a model or a tool wrote is inert.** It is rendered by `<Safe text=…/>` as React text nodes,
 never as HTML; no file in the board writes HTML from a string. `src/safe/shown.ts` is the
@@ -587,18 +593,22 @@ it.
 
 **Checks.** Besides Biome (whose recommended rules already refuse `dangerouslySetInnerHTML`),
 `tools/check-board.mjs` fails on a raw colour in the board (a hex literal or a colour function
-such as `rgb()`) and on HTML written from a string (`dangerouslySetInnerHTML`, `innerHTML`,
-`outerHTML`, `insertAdjacentHTML`, `document.write`); it runs with `pnpm lint`. Vitest covers the
+such as `rgb()`), on HTML written from a string (`dangerouslySetInnerHTML`, `innerHTML`,
+`outerHTML`, `insertAdjacentHTML`, `setHTMLUnsafe`, `srcdoc`, `document.write`) and on code from a
+string (`eval`, `new Function`), in every `.ts`, `.tsx`, `.js`, `.mjs`, `.css` and `.html` file;
+it runs with `pnpm lint`. Vitest covers the
 router, the worlds' parsing, the theme, the safe text against the shared vectors and hostile
 links, the lint itself, and a colour-vision audit (`src/palette.ts`: the Machado 2009 simulation
 of protanopia, deuteranopia and tritanopia, OKLab distance): each status keeps its own glyph and
-words, live and failure stay apart under every deficiency, and every race chip names its race,
+words, the accent and the alarm stay apart under every deficiency, and every race chip names its race,
 since three races' ambers collide for everyone. Playwright, pinned to one version with its
 Chromium, runs the built page at phone (390×844) and desktop (1440×900) in both themes
-(`just board-e2e`; on Linux in CI, the browser cached by version): screenshots of the worlds, a
+(`just board-e2e`; on Linux in CI, the browser cached by version), served by `vite preview` with
+the board server's own CSP and headers, and any `securitypolicyviolation` fails the test:
+screenshots of the worlds, a
 session, the settings and the open drawer; every visible text node at WCAG AA (4.5:1, 3:1 for
 large text) against its composited background; a label on every coloured node; deep links and
-the back button; the drawers; the theme across a reload; hostile names that stay text. The
+the back button; the drawers, their focus and the inert folded rail; the theme across a reload; hostile names that stay text. The
 screenshots are kept as CI's `board-e2e` artifact.
 
 ### Storage: files are the truth

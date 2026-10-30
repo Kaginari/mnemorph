@@ -39,6 +39,3 @@ export function eventMethod(type: EventType): string {
 export function eventType(method: string): EventType | undefined {
   return method.startsWith('event/') ? (method.slice(6) as EventType) : undefined;
 }
-
-export type { WorldStatus, WorldSummary, WorldsResponse } from './board.js';
-export { WORLD_STATUSES } from './board.js';

@@ -26,6 +26,11 @@ it('passes tokens, mixes of tokens, routes and ids', () => {
 
 it('fails on HTML written as a string', () => {
   for (const s of [
+    'el.setHTML' + 'Unsafe(x)',
+    '<iframe src' + 'doc={x} />',
+    'new ' + 'Function(x)',
+    'ev' + 'al(x)',
+    'window.ev' + 'al(x)',
     'dangerously' + 'SetInnerHTML',
     'el.inner' + 'HTML = x',
     'el.outer' + 'HTML',
@@ -34,4 +39,9 @@ it('fails on HTML written as a string', () => {
   ]) {
     expect(check(s), s).toHaveLength(1);
   }
+});
+
+it('passes evaluate and other words that only contain the names', () => {
+  expect(check('await page.evaluate(() => 1);')).toEqual([]);
+  expect(check('const retrieval = 1;')).toEqual([]);
 });

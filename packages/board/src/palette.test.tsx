@@ -1,8 +1,8 @@
 /**
- * The colour-vision audit. Colour never carries meaning alone on the board: a world's status is a
+ * The colour-vision audit. Colour never carries meaning alone on the board: a world's state is a
  * glyph and a word as well as a tone, and a race always has its name beside its colour. These
- * tests hold that, and hold the one pairing the board does lean on by colour — live against
- * failure — apart under every deficiency.
+ * tests hold that, and hold the one pairing the board does lean on by colour — present against
+ * missing — apart under every deficiency.
  */
 import { dark, light, races } from '@mnemorph/theme';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { apart, VISIONS } from './palette.ts';
 import { RACES, RaceChip, STATUS } from './ui/Mark.tsx';
 
-describe('a world status is more than its colour', () => {
+describe('a world state is more than its colour', () => {
   const all = Object.values(STATUS);
   it('each has its own glyph', () =>
     expect(new Set(all.map((s) => s.glyph)).size).toBe(all.length));
@@ -18,7 +18,7 @@ describe('a world status is more than its colour', () => {
     expect(new Set(all.map((s) => s.label)).size).toBe(all.length));
 });
 
-describe('live and failure stay apart under every colour-vision deficiency', () => {
+describe('present and missing (holo and alarm) stay apart under every colour-vision deficiency', () => {
   for (const [name, p] of [
     ['dark', dark],
     ['light', light],
