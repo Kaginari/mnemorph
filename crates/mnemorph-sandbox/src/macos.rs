@@ -48,6 +48,13 @@ pub(crate) fn profile(policy: &Policy) -> String {
          (allow pseudo-tty)\n\
          (allow file-read-metadata)\n",
     );
+    // Another process's arguments and environment (`kern.procargs2`, `kern.proc.*`) stay shut,
+    // so the harness's key is not read through sysctl. Seatbelt applies the last rule that
+    // matches, so this deny follows the allow above. Not yet verified on a Mac beyond CI.
+    p.push_str(
+        "(deny sysctl-read (sysctl-name \"kern.procargs2\") (sysctl-name \"kern.procargs\") \
+         (sysctl-name-prefix \"kern.proc.\"))\n",
+    );
     let readable: Vec<PathBuf> = Policy::existing(&policy.read)
         .into_iter()
         .chain(Policy::existing(&policy.write))

@@ -71,7 +71,9 @@ export function useWorlds(): Load {
       )
       .then(async (res) => {
         if (res.status === 401) {
-          throw new Error('this browser holds no board session: open the URL mnemorphd printed');
+          throw new Error(
+            'this browser holds no board session: open the URL `mnemorphd board` prints',
+          );
         }
         if (!res.ok) throw new Error(`the board server answered ${res.status}`);
         setLoad({ state: 'ready', data: parseWorlds(await res.json()) });

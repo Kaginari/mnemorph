@@ -6449,6 +6449,29 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** Playwright 1.64 refuses an Ubuntu 20.04 host; `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu22.04-x64` fetches and runs its Chromium there. A contrast walk over rendered text nodes caught a colour mix the token tests never see.
   Open (@?): the Rust `hidden` rule, ported as it is, leaves U+061C (Arabic letter mark), U+180E and the tag block U+E0000–E007F unescaped; widening it changes the gate's shown digests, so it is its own change. B1's server must serve the `WorldSummary` shape or change it with the board.
 
+### [2026-10-30T20:46:12+01:00] rimuru — a body cannot read the harness's environment; the harness made non-dumpable
+- **Task:** Veldora: can a sandboxed body read `/proc/<harness>/environ` (the provider key) or other
+  processes' `environ`/`cmdline`? Prove it with a fake secret; fix if readable.
+- **Files:** crates/mnemorph-sandbox/tests/escape.rs (`a_body_cannot_read_the_harness_environment`),
+  sandbox lib.rs (`harden_self`'s doc), re-exports in tools, loop and server, the `main`s of
+  `mnemorph` and `mnemorphd`, docs/05-architecture.md.
+- **Gate:** n/a here. Instruments: the new test, run before wiring: under the guard, landlock alone
+  opened no other process's `environ` (yama ptrace_scope 1, `/proc` without hidepid); an unguarded
+  command read the fake secret from the un-hardened harness; with `harden_self` it could not.
+- **Result:** not a hole under the guard; `harden_self` existed but no binary called it, while the
+  book said the harness was non-dumpable — now both binaries call it first.
+- **Learned:**
+  - Landlock's ptrace hook covers PTRACE_MODE_READ: a landlocked process cannot open `environ`,
+    `mem` or `maps` of a process outside its domain, whatever yama says.
+  - `cmdline` stays world-readable: secrets never on a command line.
+  - Open (@?): macOS `sysctl-read` is allowed, and `kern.procargs2` returns another process's
+    environment to the same user on older systems; unverified here (no Mac).
+
+### [2026-10-30T21:02:30+01:00] rimuru — #288, Fable's review: the harness's git calls and probe carry no key; macOS sysctl shut
+- **Done:** `mnemorph_sandbox::git()` (scrubbed env) at every key-bearing git spawn, the guard's probe scrubbed, `scrubbed_env` moved to the sandbox (memory and world gain the edge); `mnemorphd` refuses to serve unhardened, the TUI warns in the session; Seatbelt denies `kern.procargs*`/`kern.proc.*` after its sysctl allow.
+- **Tests:** a stand-in harness's fake secret is absent from a `git()` child's env; on macOS `ps -E` from a body finds it nowhere.
+- **Learned:** a scrubbed command is not enough while the harness's own helpers spawn with the full env: every child is a reader's window. Open (@?): the macOS rule is proven only by CI.
+
 ### [2026-10-30T21:12:25+01:00] rimuru — #275, Fable's review: the board reads the server's worlds, under its CSP
 - **Done:** the hand-written world type is gone; the page reads the generated `BoardWorld` (`path`, `remote` and `last` nullable, `present|missing`), sorts a world never opened last, and trades the `#k=` key for the session (dropped from the address and history before render). `vite preview` sends the board server's CSP and headers, and a `securitypolicyviolation` fails the e2e. The lint also refuses `setHTMLUnsafe`, `srcdoc`, `eval`, `new Function`, and reads `.js`/`.mjs`. Drawers take and return focus; the folded rail is `inert`. Doc 05.
 - **Tests:** an answer parsed byte for byte as the handler writes it; null and malformed rows; the key trade; CSP clean on every page; focus in and back, inert rail.

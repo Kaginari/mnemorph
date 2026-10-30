@@ -28,7 +28,10 @@ export function takeKey() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ key }),
   }).then((res) => {
-    if (!res.ok) throw new Error(`the board refused the key (${res.status}): it may be spent`);
+    if (!res.ok)
+      throw new Error(
+        `the board refused the key (${res.status}): it may be spent; open the URL “mnemorphd board” prints again`,
+      );
   });
 }
 
