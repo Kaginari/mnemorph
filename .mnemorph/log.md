@@ -6421,3 +6421,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** only an adopted Mind whose doc matches the witnessed digest loads; an unadopted one (a planted doc, another path, a world from before the witness) is listed "unadopted: adopt to use" in `status`, `mnemorphd mind list` and the session's opening holes, with one hint. `mind adopt` reads the doc once, shows its text escaped through `safe` (60 lines of 200 bytes, then "… N more lines") and records the digest of exactly those bytes. Docs 02, 08, the help, the ledger-integrity playbook.
 - **Tests:** an unadopted Mind does not load, then loads once adopted; the proposal's text is the doc's and its digest the row's; at a pty, a long doc with escapes is shown capped and escaped, and the witness holds the digest of the bytes shown. With unadopted Minds loading again, or the digest check off, a test fails.
 - **Learned:** "load with a warning" for compatibility gives Mind authority to anything of unknown provenance; one adoption per old world is the price of none.
+
+### [2026-10-30T20:08:14+01:00] rimuru — #52: OpenRouter cassettes, scrubbed, replayed every run
+- **Done:** the recorder scrubs generation ids, tool call ids, `user_id` and `created` to stable placeholders and refuses to write a body holding `sk-or-` or `Bearer`; recorded from free models a reasoning turn with `reasoning_details` (`dots-studio/dots-3-note-preview:free`) and a refusal with a numeric `code` (an unknown model id); the earlier text and tool cassettes rescrubbed; re-recording documented in docs/05 (*Provider cassettes*).
+- **Tests:** the reasoning turn replays its thinking, keeps every detail in order and sends them back; the refusal is `Api { 400, "400", … }`, not retried; every cassette holds no credential and no unscrubbed id. The hand-written numeric-code fixture is confirmed in shape; none was contradicted.
+- **Learned:** OpenRouter's error body names the account (`user_id`): a scrubber of ids alone would have committed it. `max_tokens: 0` is accepted as unset, not refused.
+  Open (@?): a mid-stream error cannot be provoked legitimately and no Gemini model is free, so those stay hand-written; Anthropic, vLLM and Ollama cassettes need a key or a local server.
+
+### [2026-10-30T20:37:41+01:00] rimuru — #52, Fable's review: cassettes hold only known keys
+- **Done:** a key allowlist (`tests/support/keys.rs`) beside the scrubber's denylist: the recorder refuses to write a body with a key, or a line, it does not know, and the replay tests check every cassette against it; the live file's header says `--run-ignored only`, as the docs do.
+- **Tests:** every cassette holds only known keys, named by cassette and key; a new field, an unknown error key and a non-data line are refused.
+- **Learned:** a denylist scrubber can only blank what it has seen; an allowlist makes a field the server adds stop the recording instead of reaching git.
