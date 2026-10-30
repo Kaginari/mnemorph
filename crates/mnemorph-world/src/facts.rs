@@ -266,7 +266,7 @@ pub fn digest(world: &Path, at: &str) -> Option<String> {
     if let Some((file, lines)) = at.rsplit_once(':') {
         let (from, to) = lines.split_once('-').unwrap_or((lines, lines));
         let (from, to) = (from.parse::<usize>().ok()?, to.parse::<usize>().ok()?);
-        let text = std::fs::read_to_string(world.join(file)).ok()?;
+        let text = crate::regular::text(&world.join(file))?;
         let cited: Vec<&str> = text
             .lines()
             .skip(from.saturating_sub(1))
@@ -276,9 +276,7 @@ pub fn digest(world: &Path, at: &str) -> Option<String> {
     }
     // A file is anchored by its whole text: what it says now is what the fact was said about.
     if world.join(at).is_file() {
-        return std::fs::read_to_string(world.join(at))
-            .ok()
-            .map(|t| hash(&t));
+        return crate::regular::text(&world.join(at)).map(|t| hash(&t));
     }
     let mut names: Vec<String> = std::fs::read_dir(world.join(at))
         .ok()?
@@ -431,6 +429,29 @@ impl Facts {
             }
         }
         Ok(())
+    }
+
+    /// Settle the fact `id` — `#<id>` or `<id>` — by `by`, citing `proof`: the human's act
+    /// (`mnemorphd onto settle`, the board's settle), the one besides an Orc's verdict that
+    /// settles; recency never does. Refused when the world's ontology holds no such fact. Returns
+    /// the id settled.
+    ///
+    /// # Errors
+    ///
+    /// No fact has the id, or the journal cannot be written.
+    pub fn settle(world: &Path, id: &str, by: &str, proof: &str) -> Result<String, String> {
+        let id = id.trim_start_matches('#');
+        if !Facts::load(world).facts.contains_key(id) {
+            return Err(format!("no fact `#{id}` in this world's ontology"));
+        }
+        let event = Event::Settle {
+            id: id.to_owned(),
+            by: by.to_owned(),
+            proof: proof.to_owned(),
+        };
+        Facts::record(world, &event)
+            .map(|()| id.to_owned())
+            .map_err(|e| format!("the settle could not be filed: {e}"))
     }
 
     /// Fold events, in the order written, into facts; then the collisions among keyed facts

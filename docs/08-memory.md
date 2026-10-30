@@ -403,6 +403,9 @@ never grounded, keeps its standing and its route.
 It also lists each creature's proposed claims, newest first, ten at most, each with its vouch:
 `mnemorphd memory confirm <claim>` — the human's alone, refused to a body — grounds the claim by
 the **confirmed** route, in its creature's tier and in shared memory, citing the human's word.
+The board's memory page lists every note with its route, proof and claim-graph state, and offers
+the same two acts — confirm and wake — through the same functions, behind a dialog that names the
+note, cited as the human's from the board ([the board](05-architecture.md#the-memory-and-ontology-pages)).
 
 ### The claim graph
 

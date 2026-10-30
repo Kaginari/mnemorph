@@ -800,6 +800,16 @@ pub fn retire(
 ///
 /// No tier holds the note as one the gate retired, or a note file cannot be read or written.
 pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
+    wake_by(world, id, "woken by the human")
+}
+
+/// As [`wake`], the event citing `said`: `woken by the human` from the CLI, `woken by the human
+/// (board)` from the board.
+///
+/// # Errors
+///
+/// As [`wake`].
+pub fn wake_by(world: &Path, id: &str, said: &str) -> std::io::Result<Vec<String>> {
     let mut tiers = vec![Tier::Shared];
     if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
         for entry in rd.filter_map(Result::ok) {
@@ -820,7 +830,7 @@ pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
                 &tier,
                 id,
                 By::Human,
-                Some("woken by the human".into()),
+                Some(said.to_owned()),
                 Change::Status {
                     status: Status::Grounded,
                 },
@@ -875,6 +885,64 @@ pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String
         }
     }
     Ok(out)
+}
+
+/// The human vouches for the claim `id`, whichever creature holds it proposed — the
+/// **confirmed** route, citing `answer` — and it is grounded and shared. Returns its owner. What
+/// `mnemorphd memory confirm` and the board's confirm both do; a body never runs either.
+///
+/// # Errors
+///
+/// No creature holds `id` as a proposed claim (or one waiting under review), a creature's memory
+/// cannot be read, or the claim cannot be grounded.
+pub fn vouch(world: &Path, id: &str, answer: &str) -> Result<String, String> {
+    let mut owners: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .collect()
+        })
+        .unwrap_or_default();
+    owners.sort();
+    for owner in owners {
+        match proposed(world, &owner, id) {
+            Ok(Some(claim)) => {
+                return ground(world, claim, &Proof::confirmed(answer))
+                    .map(|_| owner)
+                    .map_err(|e| format!("{id} could not be grounded: {e}"));
+            }
+            Ok(None) => {}
+            Err(e) => return Err(format!("{owner}'s memory cannot be read: {e}")),
+        }
+    }
+    Err(format!(
+        "no creature holds `{id}` as a proposed claim: `mnemorphd memory status` lists them"
+    ))
+}
+
+/// The claims `owner` holds proposed in its personal tier, newest first: what waits for a route,
+/// and what the human may vouch for.
+///
+/// # Errors
+///
+/// The personal tier cannot be read.
+pub fn proposals(world: &Path, owner: &str) -> std::io::Result<Vec<Note>> {
+    let rows = crate::store::read(world, &Tier::Personal(owner.to_owned()))?.rows;
+    let mut open: Vec<Note> = crate::note::fold(&rows)
+        .into_values()
+        .filter(|n| n.status == Status::Proposed && n.owner.as_deref() == Some(owner))
+        .collect();
+    open.sort_by_key(|n| std::cmp::Reverse(n.born));
+    Ok(open)
+}
+
+/// Whether `rows`, one tier's events, hold the note `id` retired by the gate — dormant, its last
+/// status the gate's: what [`retired`] lists and [`wake`] undoes.
+#[must_use]
+pub fn retired_in(rows: &[crate::note::Event], id: &str) -> bool {
+    gate_retired(rows, id)
 }
 
 /// The claim `id` of `owner`, still proposed in its personal tier — or grounded and waiting under

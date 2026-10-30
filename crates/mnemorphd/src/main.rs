@@ -582,90 +582,25 @@ fn onto(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// The relations' findings: each learned relation unseen too long, and with `dimension` each
-/// obstruction against a neighbour's manifest, with the glues.
-fn relation_findings(
-    world: &Path,
-    dimension: bool,
-) -> Result<
-    (
-        Vec<mnemorph_server::world::Finding>,
-        Vec<mnemorph_server::world::dimension::Glue>,
-    ),
-    String,
-> {
-    use mnemorph_server::world::dimension;
-    let known = dimension::registry()
-        .map(|r| dimension::known(&r))
-        .unwrap_or_default();
-    let now = known
-        .iter()
-        .find(|k| k.world == world)
-        .map_or(0, |k| k.sessions);
-    let manifest = dimension::Manifest::load(world)?;
-    let sightings = dimension::registry()
-        .map(|r| dimension::load_sightings(&r, world))
-        .unwrap_or_default();
-    let mut findings = dimension::stale_findings(&dimension::proposals(&sightings, &manifest, now));
-    if !dimension {
-        return Ok((findings, Vec::new()));
-    }
-    let (glues, f) = dimension::glue(world, &known)?;
-    findings.extend(f);
-    Ok((findings, glues))
-}
-
 /// `onto check`: every finding about the world's shape, most severe first. It fails on a
 /// critical or high finding, or a doc that does not read.
 fn check(world: &Path, roster: &mnemorph_server::world::Roster, dimension: bool) -> ExitCode {
-    let tracked = mnemorph_server::git()
-        .arg("-C")
-        .arg(world)
-        // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).
-        .args(["ls-files", "-z"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success());
-    let tracked: Vec<String> = if let Some(o) = tracked {
-        String::from_utf8_lossy(&o.stdout)
-            .split('\0')
-            .filter(|p| !p.is_empty())
-            .map(str::to_owned)
-            .collect()
-    } else {
+    let tracked = mnemorph_server::tracked(world).unwrap_or_else(|| {
         let _ = writeln!(
             std::io::stderr(),
             "mnemorphd: the world is no git repository; unowned soil is not checked"
         );
         Vec::new()
-    };
-    let mut findings = mnemorph_server::world::check(roster, &tracked);
+    });
     let facts = mnemorph_server::world::Facts::load(world);
-    findings.extend(mnemorph_server::world::fact_findings(&facts, world));
-    findings.extend(mnemorph_server::world::prose_claims(roster, world));
-    findings.extend(mnemorph_server::world::mind_findings(roster, world));
-    findings.extend(mnemorph_server::world::provenance(roster, world));
-    let glues = match relation_findings(world, dimension) {
-        Ok((f, g)) => {
-            findings.extend(f);
-            g
-        }
-        Err(e) => {
-            let _ = writeln!(std::io::stderr(), "mnemorphd: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Some(message) = mnemorph_server::world::verify::missing_session_verify(world, roster) {
-        findings.push(mnemorph_server::world::Finding {
-            code: "no-session-verify",
-            severity: mnemorph_server::world::Severity::Low,
-            at: ".mnemorph/rimuru/rimuru/README.md".into(),
-            paths: Vec::new(),
-            creatures: vec!["rimuru".into()],
-            message,
-        });
-    }
-    findings.sort_by(|a, b| b.severity.cmp(&a.severity).then_with(|| a.at.cmp(&b.at)));
+    let (findings, glues) =
+        match mnemorph_server::world::onto_check(world, roster, &facts, &tracked, dimension) {
+            Ok(found) => found,
+            Err(e) => {
+                let _ = writeln!(std::io::stderr(), "mnemorphd: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
     let failed = !roster.problems.is_empty() || findings.iter().any(|f| f.severity.blocks());
     let mut out = std::io::stdout().lock();
     let _ = writeln!(
@@ -1013,7 +948,6 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
 /// that does; recency never settles. A body never runs it.
 fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
     use mnemorph_server::world::Facts;
-    use mnemorph_server::world::facts::Event;
     if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
             "{body} runs this: settling a fact is the human's or an Orc's"
@@ -1022,25 +956,16 @@ fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
     let [id] = ids else {
         return refused(&"onto settle takes one fact id: `#<id>` or `<id>`");
     };
-    let id = id.trim_start_matches('#');
     let Ok(cwd) = std::env::current_dir() else {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, w));
-    if !Facts::load(&world).facts.contains_key(id) {
-        return refused(&format!("no fact `#{id}` in this world's ontology"));
-    }
-    let event = Event::Settle {
-        id: id.to_owned(),
-        by: "human".into(),
-        proof: "the human's word".into(),
-    };
-    match Facts::record(&world, &event) {
-        Ok(()) => {
+    match Facts::settle(&world, id, "human", "the human's word") {
+        Ok(id) => {
             println!("settled #{id}");
             ExitCode::SUCCESS
         }
-        Err(e) => refused(&format!("the settle could not be filed: {e}")),
+        Err(e) => refused(&e),
     }
 }
 
@@ -1217,15 +1142,9 @@ const PROPOSED_SHOWN: usize = 10;
 
 /// A creature's proposed claims, newest first: id and text.
 fn proposed_of(world: &Path, name: &str) -> Vec<(String, String)> {
-    use mnemorph_server::world::memory::{Status, Tier, fold, read};
-    let mut open: Vec<_> = read(world, &Tier::Personal(name.to_owned()))
-        .map(|r| fold(&r.rows))
+    mnemorph_server::world::memory::proposals(world, name)
         .unwrap_or_default()
-        .into_values()
-        .filter(|n| n.status == Status::Proposed && n.owner.as_deref() == Some(name))
-        .collect();
-    open.sort_by_key(|n| std::cmp::Reverse(n.born));
-    open.into_iter()
+        .into_iter()
         .map(|n| (n.id, n.text.chars().take(100).collect()))
         .collect()
 }
@@ -1233,39 +1152,18 @@ fn proposed_of(world: &Path, name: &str) -> Vec<(String, String)> {
 /// `memory confirm <claim>`: the human vouches for a proposed claim — the **confirmed** route —
 /// and it is grounded and shared, citing their word. A body never confirms one.
 fn confirm(world: &Path, id: &str) -> ExitCode {
-    use mnemorph_server::world::memory::{Proof, ground, proposed};
     if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
             "{body} runs this: confirming a claim is the human's act, never a body's"
         ));
     }
-    let owners: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
-                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                .collect()
-        })
-        .unwrap_or_default();
-    for owner in owners {
-        match proposed(world, &owner, id) {
-            Ok(Some(claim)) => {
-                return match ground(world, claim, &Proof::confirmed("the human's word")) {
-                    Ok(_) => {
-                        println!("confirmed {id}: {owner}'s claim, grounded and shared");
-                        ExitCode::SUCCESS
-                    }
-                    Err(e) => refused(&format!("{id} could not be grounded: {e}")),
-                };
-            }
-            Ok(None) => {}
-            Err(e) => return refused(&format!("{owner}'s memory cannot be read: {e}")),
+    match mnemorph_server::world::memory::vouch(world, id, "the human's word") {
+        Ok(owner) => {
+            println!("confirmed {id}: {owner}'s claim, grounded and shared");
+            ExitCode::SUCCESS
         }
+        Err(e) => refused(&e),
     }
-    refused(&format!(
-        "no creature holds `{id}` as a proposed claim: `mnemorphd memory status` lists them"
-    ))
 }
 
 /// `memory wake <note>`: the human restores a note the gate retired. A body never wakes one.
