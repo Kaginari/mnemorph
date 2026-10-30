@@ -233,6 +233,12 @@ destructive rm -rf .git/objects
 destructive rm .mnemorph/log.md
 write     rm -rf .mnemorph/tmp/scratch
 write     rm -rf .mnemorph/intel/osv
+# A Mind is the human's: written, retired or removed by no body.
+refuse    echo '- **Retired:** yes' >> .mnemorph/minds/release.md
+refuse    rm -rf .mnemorph/minds/dialects
+refuse    cp /tmp/x.md .mnemorph/minds/new.md
+refuse    sh -c 'cd .mnemorph && mv minds/a.md minds/b.md'
+read      cat .mnemorph/minds/release.md
 destructive chmod u+w .git/objects/ab/cdef
 destructive dd if=/dev/zero of=.git/objects/pack/p.pack
 destructive echo x >> .git/HEAD

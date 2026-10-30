@@ -475,6 +475,7 @@ fails when the two differ.
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
 | evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after and the soil diff the harness saw, each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
 | gate verdicts | `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each verdict the end gate journals in `log.md`, again: the body, the verdict, the paths changed, the failures and unverified checks, the `log.md` heading, and `build: { version, commit }` (a row from before reading `unknown`; `mnemorph_world::verdicts::by_build` keeps one build's); written by the harness alone, append-only and hash-chained, anchored as `gate`; outside the world | no — machine-local |
+| Minds' witness | `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each Mind the human adopted, retired or unretired: its doc, the SHA-256 of its bytes then, its owner (on adoption) and `build`; written only by `mnemorphd mind` at the terminal, append-only and hash-chained, anchored as `minds`; a Mind loads only while its doc holds the adopted bytes | no — machine-local |
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
@@ -500,6 +501,7 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `value` | the Dark Elf's challenge records: findings, verdicts, seal proposals, waivers | the harness, under the records' lock |
 | `evolution` | the evolution ledger | the harness |
 | `gate` | the end gate's verdicts | every session and commission that lands |
+| `minds` | the Minds' witness: adoptions, owners, retirements | the human's `mnemorphd mind` (adopt, retire, unretire) |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 
@@ -821,7 +823,7 @@ flowchart LR
   `not-literal`, `remote-code`, `unreadable`, …). The human's configuration may turn a rule into
   a question — the command then waits on the gate with the class it would have had — except
   the floor, which stays a refusal whatever any file says: `root-path`, `device`,
-  `machine-tool`, `fork-bomb`. A floor refusal displaces any askable one found earlier in the
+  `machine-tool`, `fork-bomb`, `mind` (writing or removing a Mind under `.mnemorph/minds/`). A floor refusal displaces any askable one found earlier in the
   same command, so no co-occurring rule can turn it into a question. The sandbox still holds under an approved rule: approving
   `credential` does not open a credential path.
 - Landlock's power depends on the kernel's ABI: v1 (5.13–5.18, this machine's 5.15) refuses

@@ -1798,6 +1798,7 @@ async fn a_commissioned_body_is_offered_the_minds() {
         "# Dialects\n\n- **Shared:** yes\n\nHow a dialect overrides the generator.\n",
     )
     .unwrap();
+    adopt(&w.0, &["dialects"]);
     let model = Arc::new(ScriptedModel::new([
         order("c1", "elf-e"),
         ScriptedModel::text("@S DONE\n@E"),
@@ -2043,4 +2044,17 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         !Facts::load(&w.0).facts[&far].settled,
         "never off its own line's ground"
     );
+}
+
+/// The Minds `names` of `world` adopted in the witness kept for it, as the human's `mnemorphd mind
+/// adopt` would record them.
+fn adopt(world: &std::path::Path, names: &[&str]) {
+    use mnemorph_world::minds::{propose_at, witness};
+    let at = witness::path_of(world).expect("a home");
+    for name in names {
+        let row = propose_at(world, &at, witness::Act::Adopt, name, None)
+            .unwrap()
+            .row;
+        witness::record_at(&at, row).unwrap();
+    }
 }

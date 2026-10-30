@@ -37,6 +37,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--body <name>]... [--remove <path>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
+       mnemorphd mind list [--world <dir>]
+       mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
 SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
@@ -118,6 +120,15 @@ do-nothing control of every window run still without one — the same ask, by th
 scratch copy of the world with the named files as they were before — then judges the swap and
 proposes keep or rollback; applying either is the human's. A body never runs it.
 
+`mind` is the human's door to the world's Minds, whose provenance is kept under the human's
+state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
+unadopted (it does not load until adopted), changed since adoption (it does not load until
+re-adopted), or retired. `adopt <name>` shows the doc's text, escaped and capped, and records
+its doc, the SHA-256 of exactly the bytes shown and its
+owner — the human unless `--owner` names the creature that proposed it (on adoption only); `retire <name>` stops it
+loading, `unretire <name>` takes that back. Each shows the Mind and asks for `y` at the terminal
+(`/dev/tty`; piped input is refused). A body never runs them.
+
 `housekeep --verify` walks each chained journal — the usage ledger, the Dark Elf's value ledger
 and the evolution ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
 torn tail (a truncation, not tampering) with the head it holds to, or the first broken link with
@@ -185,6 +196,9 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("evolution") {
         return evolution(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("mind") {
+        return mind(&all[1..]);
     }
     let mut resume = None;
     let mut args = all.into_iter();
@@ -1826,6 +1840,126 @@ fn evolution(args: &[String]) -> ExitCode {
     }
 }
 
+/// `mind list | adopt <name> [--owner <creature>] | retire <name> | unretire <name>`: the
+/// world's Minds against their witness, and the human's acts on one. Listing is anyone's; an act
+/// is the human's, asked at the terminal, and refused inside a body's command.
+fn mind(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::minds::{self, witness};
+    let (mut world, mut owner, mut words) = (None, None, Vec::new());
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--world" | "--owner" => {
+                let Some(v) = it.next() else {
+                    return refused(&format!("{w} needs a value"));
+                };
+                if w == "--world" {
+                    world = Some(PathBuf::from(v));
+                } else {
+                    owner = Some(v.clone());
+                }
+            }
+            other if other.starts_with("--") => {
+                return refused(&format!("unknown argument `{other}`; see --help"));
+            }
+            _ => words.push(w.as_str()),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let (act, name) = match words.as_slice() {
+        ["list"] | [] => {
+            if owner.is_some() {
+                return refused(&"--owner is named on adoption only");
+            }
+            let lines = minds::survey(&world).lines();
+            if lines.is_empty() {
+                println!("no Mind under .mnemorph/minds/");
+            }
+            for line in lines {
+                println!("{line}");
+            }
+            return ExitCode::SUCCESS;
+        }
+        [verb, name] => match witness::Act::from_word(verb) {
+            Some(act) => (act, *name),
+            None => return refused(&format!("mind has no `{verb}`; see --help")),
+        },
+        _ => return refused(&"mind needs list, or adopt|retire|unretire <name>; see --help"),
+    };
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: a Mind is adopted, retired and unretired by the human alone"
+        ));
+    }
+    let Some(at) = witness::path_of(&world) else {
+        return refused(&"no home: the Minds' witness is kept under the human's state directory");
+    };
+    // The doc is read once: the text shown is exactly the bytes whose digest is recorded.
+    let minds::Proposal { row, text } =
+        match minds::propose_at(&world, &at, act, name, owner.as_deref()) {
+            Ok(p) => p,
+            Err(e) => return refused(&e),
+        };
+    let safe = mnemorph_server::challenge::safe;
+    println!("{} the Mind `{}`:", act.word(), safe(&row.mind));
+    println!("  doc     {}", safe(&row.doc));
+    println!("  sha256  {}", row.sha256);
+    if let Some(o) = &row.owner {
+        println!("  owner   {}", safe(o));
+    }
+    for line in shown_doc(&text) {
+        println!("  │ {line}");
+    }
+    match at_terminal(&format!("{} `{}`?", act.word(), safe(&row.mind))) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was recorded"),
+        Err(e) => return refused(&e),
+    }
+    let done = match act {
+        witness::Act::Adopt => "adopted: it loads while its doc holds these bytes",
+        witness::Act::Retire => "retired: it no longer loads",
+        witness::Act::Unretire => "unretired: it loads while its doc holds the adopted bytes",
+    };
+    match witness::record_at(&at, row) {
+        Ok(()) => {
+            println!("{} {done}", safe(name));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// How many of a Mind's lines, and bytes of each, the adopt prompt shows.
+const SHOWN_LINES: usize = 60;
+const SHOWN_LINE_BYTES: usize = 200;
+
+/// A Mind's text as the prompt shows it: each line escaped, the first [`SHOWN_LINES`] cut to
+/// [`SHOWN_LINE_BYTES`], then how many more lines there are.
+fn shown_doc(text: &str) -> Vec<String> {
+    let safe = mnemorph_server::challenge::safe;
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<String> = lines
+        .iter()
+        .take(SHOWN_LINES)
+        .map(|l| {
+            let mut cut = l.len().min(SHOWN_LINE_BYTES);
+            while !l.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            let more = if cut < l.len() { " …" } else { "" };
+            format!("{}{more}", safe(&l[..cut]))
+        })
+        .collect();
+    if lines.len() > SHOWN_LINES {
+        out.push(format!("… {} more lines", lines.len() - SHOWN_LINES));
+    }
+    out
+}
+
 /// `evolution swap`: the plan shown, asked at the terminal, then swapped in and its row written.
 fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> ExitCode {
     let safe = mnemorph_server::challenge::safe;
@@ -1851,6 +1985,15 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
     match mnemorph_server::world::evolution::swap(world, plan) {
         Ok(s) => {
             println!("swapped {} under build {}", safe(&s.id), s.build);
+            if s.files
+                .iter()
+                .any(|f| f.path.starts_with(".mnemorph/minds/"))
+            {
+                println!(
+                    "  a Mind it changed loads again once re-adopted: `mnemorphd mind list`, then \
+                     `mnemorphd mind adopt <name>`"
+                );
+            }
             for f in &s.files {
                 let short =
                     |d: &Option<String>| d.as_deref().map_or("absent", |d| &d[..12]).to_owned();

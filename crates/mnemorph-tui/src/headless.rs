@@ -473,6 +473,17 @@ pub fn status(opened: &Opened) -> Vec<String> {
         .collect()
 }
 
+/// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
+/// an unadopted Mind needs; nothing when the world holds none.
+#[must_use]
+pub fn minds(world: &std::path::Path) -> Vec<String> {
+    mnemorph_server::world::minds::survey(world)
+        .lines()
+        .iter()
+        .map(|l| format!("{:<9}{}", "mind", one_line(l)))
+        .collect()
+}
+
 /// `status`'s meters: one compact line per living creature, each meter with its count and its 95%
 /// interval, or `no reports` where no fold reads it yet.
 #[must_use]
