@@ -80,6 +80,61 @@ const ANSWERED: usize = 64;
 /// The most bytes of the act an answer's journal row keeps.
 const ACT_KEPT: usize = 4096;
 
+/// The most bytes of an act, as shown, the web may approve: past it, only the terminal can.
+pub const ACT_BYTES: usize = 32 << 10;
+
+/// The most rows of an act, as shown, the web may approve: a row of the card is
+/// [`ROW_CHARS`] characters, or ends at an escaped newline.
+pub const ACT_ROWS: usize = 400;
+
+/// The characters of the act a row of the card holds (the page's `ROW_CHARS`).
+const ROW_CHARS: usize = 64;
+
+/// A run of plain spaces at least this long is shown as a marker naming its length.
+const SPACE_RUN: usize = 16;
+
+/// `n` with its thousands apart: `9,800`.
+fn thousands(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// A field as the card shows it: [`shown`]'s escapes, `⟨` escaped too, then each run of
+/// [`SPACE_RUN`] plain spaces or more as `⟨… <n> spaces⟩` — a marker no text can forge, since
+/// every `⟨` the text wrote is escaped.
+#[must_use]
+pub fn on_card(text: &str) -> String {
+    use std::fmt::Write as _;
+    let escaped = shown(text).replace('\u{27e8}', "\\u{27e8}");
+    let mut out = String::with_capacity(escaped.len());
+    let mut run = 0usize;
+    let flush = |out: &mut String, run: usize| {
+        if run >= SPACE_RUN {
+            let _ = write!(out, "⟨… {} spaces⟩", thousands(run));
+        } else {
+            out.extend(std::iter::repeat_n(' ', run));
+        }
+    };
+    for c in escaped.chars() {
+        if c == ' ' {
+            run += 1;
+            continue;
+        }
+        flush(&mut out, run);
+        run = 0;
+        out.push(c);
+    }
+    flush(&mut out, run);
+    out
+}
+
 /// Close codes a tab reads: past these, it does not reconnect.
 pub mod close {
     /// The chat ended (or the board stopped).
@@ -384,26 +439,43 @@ impl Shown {
     /// reads empty.
     #[must_use]
     pub fn of(params: &Value) -> Self {
-        let text = |k: &str| shown(params[k].as_str().unwrap_or_default());
+        let text = |k: &str| on_card(params[k].as_str().unwrap_or_default());
         let list = |k: &str| {
             params[k]
                 .as_array()
                 .map(|a| {
                     a.iter()
-                        .map(|v| shown(v.as_str().unwrap_or_default()))
+                        .map(|v| on_card(v.as_str().unwrap_or_default()))
                         .collect()
                 })
                 .unwrap_or_default()
         };
         Self {
-            body: shown(params["body"].as_str().unwrap_or(SESSION_BODY)),
+            body: on_card(params["body"].as_str().unwrap_or(SESSION_BODY)),
             race: text("race"),
             class: text("class"),
             act: text("act"),
             why: list("why"),
             outside: list("outside"),
-            plan: params["plan"].as_str().map(shown),
+            plan: params["plan"].as_str().map(on_card),
         }
+    }
+
+    /// The rows the card draws the act in: each escaped newline ends one, and a longer run is cut
+    /// every [`ROW_CHARS`] characters.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.act
+            .split("\\u{a}")
+            .map(|line| line.chars().count().div_ceil(ROW_CHARS).max(1))
+            .sum()
+    }
+
+    /// Whether the act is too large to approve from the web: over [`ACT_BYTES`] or [`ACT_ROWS`]
+    /// as shown. Such an ask is answered in the terminal; the web may only deny it.
+    #[must_use]
+    pub fn too_large(&self) -> bool {
+        self.act.len() > ACT_BYTES || self.rows() > ACT_ROWS
     }
 
     /// The SHA-256 of ask `id` as shown, in lowercase hex: each field as its length in UTF-8
@@ -453,6 +525,8 @@ struct Ask {
     seen: Option<(u64, Instant)>,
     /// The refused answers journaled.
     refusals: u8,
+    /// An answer to it is being journaled, outside the chat's lock: no other is taken meanwhile.
+    taking: bool,
 }
 
 /// Why a tab was closed, for its socket to say.
@@ -530,6 +604,7 @@ fn ask_line(id: &str, ask: &Ask, now: Instant) -> Utf8Bytes {
     let params = json!({
         "body": s.body, "race": s.race, "class": s.class, "act": s.act, "why": s.why,
         "outside": s.outside, "plan": s.plan, "leftMs": ms(left), "digest": ask.digest,
+        "tooLarge": s.too_large(),
     });
     json!({"jsonrpc": "2.0", "id": id, "method": "gate/ask", "params": params})
         .to_string()
@@ -685,6 +760,25 @@ impl State {
     }
 }
 
+/// An answer being taken: its ask, its journal row, and its line with the place held for it in
+/// the child's input.
+struct Take {
+    id: String,
+    row: AnswerRow,
+    allow: bool,
+    line: String,
+    permit: mpsc::OwnedPermit<String>,
+}
+
+/// What a tab's answer leaves to do once the chat's lock is let go.
+#[derive(Default)]
+struct After {
+    /// Refused answers, to journal.
+    rows: Vec<AnswerRow>,
+    /// The answer taken.
+    take: Option<Take>,
+}
+
 /// One live chat.
 struct Live {
     id: String,
@@ -784,6 +878,7 @@ impl Live {
                     at: now,
                     seen: None,
                     refusals: 0,
+                    taking: false,
                 };
                 let msg = ask_line(id, &ask, now);
                 st.asks.insert(id.to_owned(), ask);
@@ -920,7 +1015,9 @@ impl Live {
         }
         let controller = st.controller == Some(conn);
         let Some(method) = obj.get("method").and_then(Value::as_str) else {
-            return self.gate_reply(&mut st, conn, controller, &value, now);
+            let after = self.gate_reply(&mut st, conn, controller, &value, now);
+            drop(st);
+            return self.finish(after, conn, now);
         };
         let reply_to = id.clone().unwrap_or(Value::Null);
         match method {
@@ -1128,6 +1225,11 @@ impl Live {
     /// digest of the act as shown, and come from the tab that acknowledged the card, at least
     /// [`ARM`] after it did.
     fn unready(ask: &Ask, conn: u64, named: Option<&str>, now: Instant) -> Option<&'static str> {
+        if ask.shown.too_large() {
+            return Some(
+                "too large to approve from the web: answer in the terminal (`mnemorph`), or deny it here",
+            );
+        }
         if named != Some(ask.digest.as_str()) {
             return Some(
                 "the answer names another act than the one the board showed (its digest differs)",
@@ -1174,7 +1276,7 @@ impl Live {
     }
 
     /// Journal `row`: `Err` when it could not be written. No home to keep it under writes
-    /// nothing, and is no error.
+    /// nothing, and is no error: an allow is refused before it gets here.
     fn journal(&self, row: AnswerRow) -> Result<(), String> {
         match &self.answers {
             Some(j) => answers::record(j, row).map_err(|e| e.to_string()),
@@ -1183,10 +1285,18 @@ impl Live {
     }
 
     /// A tab's answer to an ask: the controller's alone, once; an allow only as [`Self::unready`]
-    /// says. Each is journaled — a refused one too, the first few of each ask — and an allow that
-    /// cannot be journaled is refused.
-    fn gate_reply(&self, st: &mut State, conn: u64, controller: bool, value: &Value, now: Instant) {
+    /// says. What it leaves to do outside the chat's lock — the journal's rows, and the answer
+    /// itself — is [`Self::finish`]'s.
+    fn gate_reply(
+        &self,
+        st: &mut State,
+        conn: u64,
+        controller: bool,
+        value: &Value,
+        now: Instant,
+    ) -> After {
         let limits = &self.limits;
+        let mut after = After::default();
         let id = value["id"].as_str().filter(|i| i.starts_with("gate-"));
         let refuse = |st: &mut State, why: &str| {
             st.push(
@@ -1197,7 +1307,8 @@ impl Live {
             );
         };
         let Some(id) = id else {
-            return refuse(st, "not an answer to an ask");
+            refuse(st, "not an answer to an ask");
+            return after;
         };
         let reply = match (value.get("result"), value.get("error")) {
             (Some(r), _) => serde_json::from_value::<GateReply>(r.clone()).unwrap_or(GateReply {
@@ -1217,49 +1328,87 @@ impl Live {
             } else {
                 "no such ask waits: answered, withdrawn or past its time"
             };
-            return refuse(st, why);
+            refuse(st, why);
+            return after;
         };
-        let refusal = if controller {
-            reply
-                .allow
-                .then(|| Self::unready(ask, conn, reply.digest.as_deref(), now))
-                .flatten()
-        } else {
+        if ask.taking {
+            refuse(st, "answered elsewhere: another answer is being taken");
+            return after;
+        }
+        let refusal = if !controller {
             Some("this tab observes: only the controller answers the gate")
+        } else if !reply.allow {
+            None
+        } else if self.answers.is_none() {
+            Some(
+                "no home to journal the answer in, so no allow is taken: deny, or answer in the terminal",
+            )
+        } else {
+            Self::unready(ask, conn, reply.digest.as_deref(), now)
         };
         if let Some(why) = refusal {
             if ask.refusals < REFUSALS_KEPT {
                 ask.refusals += 1;
-                let row = self.row(id, ask, conn, &reply, &format!("refused: {why}"), now);
-                let _ = self.journal(row);
+                after
+                    .rows
+                    .push(self.row(id, ask, conn, &reply, &format!("refused: {why}"), now));
             }
-            return refuse(st, why);
+            refuse(st, why);
+            return after;
         }
         // A place in the child's input first, then the journal, then the answer: an answer is
         // journaled before the core hears it, and only once it surely will.
         let input = lock(&self.input).clone();
-        let Some(permit) = input.as_ref().and_then(|i| i.try_reserve().ok()) else {
-            return refuse(st, "the chat is busy or ended: answer again");
+        let Some(permit) = input.and_then(|i| i.try_reserve_owned().ok()) else {
+            refuse(st, "the chat is busy or ended: answer again");
+            return after;
         };
-        let row = self.row(id, ask, conn, &reply, "answered", now);
-        if let Err(e) = self.journal(row)
-            && reply.allow
-        {
-            drop(permit);
-            return refuse(
-                st,
-                &format!("the answer could not be journaled, so it is not taken: {e}"),
-            );
-        }
-        permit.send(
-            json!({"jsonrpc": "2.0", "id": id, "result": {
+        ask.taking = true;
+        after.take = Some(Take {
+            id: id.to_owned(),
+            row: self.row(id, ask, conn, &reply, "answered", now),
+            allow: reply.allow,
+            line: json!({"jsonrpc": "2.0", "id": id, "result": {
                 "allow": reply.allow,
                 "reason": reply.reason.as_deref().map(|r| cut(r, REASON_BYTES)),
             }})
             .to_string(),
-        );
-        st.asks.remove(id);
-        st.gone(id.to_owned(), "answered", limits, now);
+            permit,
+        });
+        after
+    }
+
+    /// What an answer left to do, outside the chat's lock: the refused rows journaled, then the
+    /// answer taken — journaled, and only then sent to the core. An allow whose row cannot be
+    /// written is refused, and the ask waits again.
+    fn finish(&self, after: After, conn: u64, now: Instant) {
+        for row in after.rows {
+            let _ = self.journal(row);
+        }
+        let Some(take) = after.take else { return };
+        let limits = &self.limits;
+        if let Err(e) = self.journal(take.row)
+            && take.allow
+        {
+            drop(take.permit);
+            let mut st = lock(&self.state);
+            if let Some(ask) = st.asks.get_mut(&take.id) {
+                ask.taking = false;
+            }
+            let why = format!("the answer could not be journaled, so it is not taken: {e}");
+            st.push(
+                conn,
+                &notice("board/refused", &json!({"id": take.id, "why": why})),
+                limits,
+                now,
+            );
+            return;
+        }
+        take.permit.send(take.line);
+        let mut st = lock(&self.state);
+        if st.asks.remove(&take.id).is_some() {
+            st.gone(take.id, "answered", limits, now);
+        }
     }
 
     /// The clock's tick: asks past the gate's wait are dropped; past the grace with no

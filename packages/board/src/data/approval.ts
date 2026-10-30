@@ -25,6 +25,10 @@ export const ARM_MS = 300;
 export const CONFIRM_MS = 150;
 /** The most characters of the act one row holds. */
 export const ROW_CHARS = 64;
+/** The most bytes of an act, as shown, the web may approve (the board's `ACT_BYTES`). */
+export const ACT_BYTES = 32 * 1024;
+/** The most rows of an act the web may approve (the board's `ACT_ROWS`). */
+export const ACT_ROWS = 400;
 
 /** The answers, in their order on the card. */
 export const ANSWERS = ['Yes, run it once', 'No', 'No, and tell the model why'] as const;
@@ -44,34 +48,43 @@ const NEWLINE = '\\u{a}';
  * every {@link ROW_CHARS} characters — never inside an escape. Every character is in exactly one
  * row, in order.
  */
-export function actRows(act: string, width = ROW_CHARS): string[] {
+export function actRows(act: string, width = ROW_CHARS, max = Number.POSITIVE_INFINITY): string[] {
   const rows: string[] = [];
-  for (const line of act
-    .split(NEWLINE)
-    .map((l, i, all) => (i < all.length - 1 ? l + NEWLINE : l))) {
-    // The line as atoms: an escape, or one character.
-    const atoms: string[] = [];
-    let at = 0;
-    for (const m of line.matchAll(ESCAPE)) {
-      atoms.push(...Array.from(line.slice(at, m.index)));
-      atoms.push(m[0]);
-      at = m.index + m[0].length;
+  let row = '';
+  let n = 0;
+  const end = () => {
+    rows.push(row);
+    row = '';
+    n = 0;
+  };
+  let at = 0;
+  while (at < act.length && rows.length <= max) {
+    // The next atom: an escape `shown` wrote, or one character.
+    let atom: string;
+    if (act.startsWith('\\u{', at)) {
+      const close = act.indexOf('}', at);
+      atom = close > at && close - at <= 9 ? act.slice(at, close + 1) : '\\';
+    } else {
+      const cp = act.codePointAt(at) ?? 0;
+      atom = String.fromCodePoint(cp);
     }
-    atoms.push(...Array.from(line.slice(at)));
-    let row = '';
-    let n = 0;
-    for (const a of atoms) {
-      if (n > 0 && n + a.length > width) {
-        rows.push(row);
-        row = '';
-        n = 0;
-      }
-      row += a;
-      n += a.length;
-    }
-    if (row !== '' || rows.length === 0) rows.push(row);
+    if (n > 0 && n + atom.length > width) end();
+    row += atom;
+    n += atom.length;
+    at += atom.length;
+    if (atom === NEWLINE) end();
   }
-  return rows.filter((r, i) => r !== '' || i === 0);
+  if ((row !== '' && rows.length <= max) || rows.length === 0) rows.push(row);
+  return rows;
+}
+
+/** Whether ask `a` is too large to approve from the web, its act drawn in `rows` rows: the board
+ * says so, or the act is over {@link ACT_BYTES} or {@link ACT_ROWS} as shown. Only No answers it
+ * here; the terminal may approve it. */
+export function tooLarge(a: GateRequest, rows: number): boolean {
+  return (
+    a.tooLarge === true || new TextEncoder().encode(a.act).length > ACT_BYTES || rows > ACT_ROWS
+  );
 }
 
 /** The text in runs: plain, or an escape `shown` wrote. */
@@ -170,7 +183,11 @@ export class Card {
   private visibleNow = false;
   private ackedNow = false;
 
-  constructor(readonly rows: number) {}
+  /** `approvable` false: the act is too large for the web, and Yes is never picked. */
+  constructor(
+    readonly rows: number,
+    readonly approvable = true,
+  ) {}
 
   /** Whether every row of the act has been on screen. */
   get viewed(): boolean {
@@ -220,6 +237,7 @@ export class Card {
   /** Pick answer `p` at `at`, in task `task`: yes only once the act is read. */
   pick(p: Pick, at: number, task: number): void {
     if (!this.armed(at)) return;
+    if (p === 0 && !this.approvable) return;
     if (p === 0 && !this.viewed) {
       this.unread = true;
       this.choice = undefined;
@@ -238,7 +256,9 @@ export class Card {
       this.disarm(at);
       return { kind: 'none' };
     }
-    if (this.choice === 0) return this.viewed ? { kind: 'allow' } : { kind: 'none' };
+    if (this.choice === 0) {
+      return this.viewed && this.approvable ? { kind: 'allow' } : { kind: 'none' };
+    }
     return this.choice === 1 ? { kind: 'deny' } : { kind: 'reason' };
   }
 
@@ -259,7 +279,7 @@ export class Card {
   /** A pointer's click on answer `p` at `at`: armed, and yes only once the act is read. */
   click(p: Pick, at: number): Decision {
     if (!this.armed(at)) return { kind: 'none' };
-    if (p === 0) return this.viewed ? { kind: 'allow' } : { kind: 'none' };
+    if (p === 0) return this.viewed && this.approvable ? { kind: 'allow' } : { kind: 'none' };
     return p === 1 ? { kind: 'deny' } : { kind: 'reason' };
   }
 }

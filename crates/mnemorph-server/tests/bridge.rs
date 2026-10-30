@@ -95,6 +95,16 @@ impl Fake {
                 );
                 return;
             }
+            ["huge-ask"] => {
+                // 40 KiB of act, and a run of spaces hiding its tail.
+                let act = format!("echo {}{}rm -rf ~", "x".repeat(40 << 10), " ".repeat(9800));
+                self.say(
+                    &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
+                    "body": "rimuru", "race": "rimuru", "class": "destructive", "act": act,
+                    "why": ["deletes"], "outside": []}}),
+                );
+                return;
+            }
             ["hostile-ask"] => {
                 self.say(
                     &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
@@ -252,7 +262,9 @@ fn rig(name: &str, limits: Limits) -> Rig {
         global,
         answers: {
             let state = root.join("state");
-            Arc::new(move |w| Some(answers_in(&state, w)))
+            // A rig named `nohome-…` has no home to journal in.
+            let home = !name.starts_with("nohome");
+            Arc::new(move |w| home.then(|| answers_in(&state, w)))
         },
     };
     let listeners = listen(0, Some("127.0.0.1".parse().unwrap())).unwrap();
@@ -1361,4 +1373,58 @@ async fn two_answers_racing_one_wins_and_the_other_hears_answered_elsewhere() {
             );
         }
     }
+}
+
+#[test]
+fn a_run_of_spaces_is_marked_and_no_text_forges_the_marker() {
+    use mnemorph_server::board::bridge::on_card;
+    let act = format!("rm -rf build{}/; echo ok", " ".repeat(9800));
+    assert_eq!(on_card(&act), "rm -rf build⟨… 9,800 spaces⟩/; echo ok");
+    assert_eq!(on_card("a     b"), "a     b");
+    // A marker the text wrote is escaped, so it never reads as one.
+    let forged = on_card("rm -rf ⟨… 9,800 spaces⟩/");
+    assert!(!forged.contains('⟨'), "{forged}");
+    assert!(forged.contains("\\u{27e8}"), "{forged}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_act_too_large_for_the_web_is_never_approved_there() {
+    let (r, _b, _sid, mut tab, ask) = asked("huge", "huge-ask").await;
+    let p = &ask["params"];
+    assert_eq!(p["tooLarge"], true);
+    assert!(
+        p["act"]
+            .as_str()
+            .unwrap()
+            .contains("⟨… 9,800 spaces⟩rm -rf ~")
+    );
+    tab.seen(2, &ask).await;
+    r.board.pass(Duration::from_secs(5));
+    tab.answer(&ask, true, &p["digest"]).await;
+    assert!(
+        tab.refused()
+            .await
+            .contains("too large to approve from the web")
+    );
+    // Denied from the web, as ever.
+    tab.answer(&ask, false, &Value::Null).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=false reason=null"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn with_no_home_to_journal_in_no_allow_is_taken() {
+    let (r, _b, _sid, mut tab, ask) = asked("nohome", "ask").await;
+    assert_eq!(ask["params"]["tooLarge"], false);
+    tab.seen(2, &ask).await;
+    r.board.pass(Duration::from_millis(300));
+    tab.answer(&ask, true, &ask["params"]["digest"]).await;
+    assert!(tab.refused().await.contains("no home to journal"));
+    tab.answer(&ask, false, &Value::Null).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=false reason=null"
+    );
 }

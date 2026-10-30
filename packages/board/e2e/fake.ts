@@ -312,6 +312,8 @@ export interface AskFields {
   why: string[];
   outside: string[];
   plan?: string | null;
+  /** The board's verdict on its size: too large to approve from the web. */
+  tooLarge?: boolean;
 }
 
 /** The board's digest of ask `id` as shown (`Shown::digest`). */

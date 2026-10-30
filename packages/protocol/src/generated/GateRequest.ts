@@ -44,4 +44,9 @@ leftMs?: number,
  * already passed through `shown`; an allow must name it, so it approves exactly what the
  * card showed. Absent from the core itself.
  */
-digest?: string, };
+digest?: string, 
+/**
+ * Set by the board when the act, as shown, is over 32 KiB or 400 rows: too large to
+ * approve from the web, so the card offers only No and the board refuses any allow.
+ */
+tooLarge?: boolean, };

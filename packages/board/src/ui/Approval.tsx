@@ -19,6 +19,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ACT_ROWS,
   ANSWERS,
   actRows,
   askDigest,
@@ -26,6 +27,7 @@ import {
   type Decision,
   escapes,
   type Pick,
+  tooLarge,
 } from '../data/approval.ts';
 import type { Live, Waiting } from '../data/live.ts';
 import { Safe } from '../safe/Safe.tsx';
@@ -134,8 +136,11 @@ export function Approval({ live }: { live: Live }) {
 
 function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; more: number }) {
   const { id, ask: a } = waiting;
-  const rows = useMemo(() => actRows(a.act), [a.act]);
-  const card = useRef(new Card(rows.length)).current;
+  // A huge act is never cut into all its rows: past the cap, only the head is drawn.
+  const rows = useMemo(() => actRows(a.act, undefined, ACT_ROWS), [a.act]);
+  const large = tooLarge(a, rows.length);
+  const shownRows = large ? rows.slice(0, ACT_ROWS) : rows;
+  const card = useRef(new Card(rows.length, !large)).current;
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const controller = live.role === 'controller' && live.link !== 'closed';
   const [digest, setDigest] = useState<'checking' | 'ok' | 'bad'>('checking');
@@ -191,26 +196,42 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
 
   // The render acknowledgement: once the card is first visible to the controller, and again after
   // control comes back. Arming waits for the board to take it.
-  const acking = useRef(false);
+  // A new connection (a reconnect) is a new tab to the board, with no acknowledgement: the card
+  // sends it again, and arms afresh.
+  const [ack, setAck] = useState<'none' | 'sending' | 'done'>('none');
+  const linked = live.link === 'open';
   useEffect(() => {
-    if (!controller) {
-      acking.current = false;
-      card.acked(false, performance.now());
-      redraw();
+    if (controller && linked) return;
+    setAck('none');
+    card.acked(false, performance.now());
+    redraw();
+  }, [controller, linked, card]);
+  const { seen } = live;
+  // Each reset starts a new epoch: an acknowledgement answered for an older one counts for nothing.
+  const epoch = useRef(0);
+  useEffect(() => {
+    if (ack === 'none') epoch.current += 1;
+  }, [ack]);
+  useEffect(() => {
+    if (!controller || !linked || !visible || digest !== 'ok' || ack !== 'none' || !a.digest) {
       return;
     }
-    if (!visible || digest !== 'ok' || acking.current || !a.digest) return;
-    acking.current = true;
-    live
-      .seen(id, a.digest)
+    const mine = epoch.current;
+    setAck('sending');
+    seen(id, a.digest)
       .then(() => {
+        if (epoch.current !== mine) return;
+        setAck('done');
         card.acked(true, performance.now());
         redraw();
       })
       .catch(() => {
-        acking.current = false;
+        // Control still moving, say: asked again in a second.
+        window.setTimeout(() => {
+          if (epoch.current === mine) setAck('none');
+        }, 1000);
       });
-  }, [controller, visible, digest, id, a.digest, live, card]);
+  }, [controller, linked, visible, digest, ack, id, a.digest, seen, card]);
 
   // Redraw when the card arms, and every second for the time left.
   useEffect(() => {
@@ -281,11 +302,14 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
   // A refused answer: the ask still waits, and the card asks again.
   const refused = live.askRefused?.id === id ? live.askRefused.why : undefined;
   useEffect(() => {
-    if (refused) {
-      setSent(false);
-      card.disarm(performance.now());
-      redraw();
-    }
+    if (!refused) return;
+    setSent(false);
+    if (refused.includes('not seen in this tab')) {
+      // The board holds no acknowledgement from this connection: send it again.
+      setAck('none');
+      card.acked(false, performance.now());
+    } else card.disarm(performance.now());
+    redraw();
   }, [refused, card]);
 
   const decide = (d: Decision) => {
@@ -354,6 +378,8 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
     status =
       'The act on this card does not match the one the board sent: it cannot be approved here.';
   else if (sent) status = 'Answer sent: waiting for the board…';
+  else if (large && !card.armed(at)) status = 'Arming…';
+  else if (large) status = 'Pick 2 (n) or 3, then Enter. Esc denies.';
   else if (!visible) status = 'Disarmed: the card is not in view.';
   else if (!card.armed(at)) status = 'Arming…';
   else if (!card.viewed) status = 'Read the whole act to enable Yes.';
@@ -387,7 +413,7 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
           tabIndex={0}
           aria-label="The act, whole"
         >
-          {rows.map((r, i) => (
+          {shownRows.map((r, i) => (
             <div
               // biome-ignore lint/suspicious/noArrayIndexKey: the rows never reorder
               key={i}
@@ -399,9 +425,17 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
             </div>
           ))}
         </section>
+        {large && (
+          <p className="approval-large" role="note">
+            <Mark tone="alarm" glyph="✕">
+              Too large to approve from the web; answer in the terminal (mnemorph), or deny it here.
+            </Mark>
+          </p>
+        )}
         <p className="approval-read">
-          read {Math.min(card.seenTo, rows.length)} of {rows.length} row
-          {rows.length === 1 ? '' : 's'}
+          {large
+            ? `the first ${shownRows.length} rows shown`
+            : `read ${Math.min(card.seenTo, rows.length)} of ${rows.length} row${rows.length === 1 ? '' : 's'}`}
         </p>
         {a.why.length > 0 && (
           <ul className="approval-why" aria-label="Why it asks">
@@ -443,18 +477,20 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
           </label>
         ) : controller ? (
           <div className="approval-answers">
-            {ANSWERS.map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                className="button"
-                aria-pressed={card.choice === i}
-                disabled={i === 0 ? !yesReady : !armed}
-                onClick={clicked(i as Pick)}
-              >
-                <span className="mono">{i + 1}</span> {label}
-              </button>
-            ))}
+            {ANSWERS.map((label, i) =>
+              i === 0 && large ? null : (
+                <button
+                  key={label}
+                  type="button"
+                  className="button"
+                  aria-pressed={card.choice === i}
+                  disabled={i === 0 ? !yesReady : !armed}
+                  onClick={clicked(i as Pick)}
+                >
+                  <span className="mono">{i + 1}</span> {label}
+                </button>
+              ),
+            )}
           </div>
         ) : (
           <div className="approval-answers">

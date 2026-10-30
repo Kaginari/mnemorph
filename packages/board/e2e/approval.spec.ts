@@ -307,3 +307,35 @@ test('the focus stays on the card, and the page behind is inert', async ({ page 
   // Tab moved the focus, and answered nothing.
   expect(answers(b)).toEqual([]);
 });
+
+test('an act too large for the web offers only No', async ({ page }) => {
+  const b = await open(page);
+  b.say(askLine('gate-1', { ...short, act: `echo ${'x'.repeat(40 * 1024)}`, tooLarge: true }));
+  await armedCard(page);
+  await expect(card(page)).toContainText('Too large to approve from the web');
+  await expect(card(page).getByRole('button', { name: /Yes/ })).toHaveCount(0);
+  await page.keyboard.press('y');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
+  expect(allows(b)).toEqual([]);
+  await page.keyboard.press('2');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => answers(b).length).toBe(1);
+  expect(answers(b)[0]?.result).toEqual({ allow: false, reason: 'the human said no' });
+});
+
+test('a reconnect sends the render acknowledgement again, and re-arms', async ({ page }) => {
+  const b = await open(page);
+  b.say(askLine('gate-1', short));
+  await armedCard(page);
+  expect(acks(b).length).toBe(1);
+  // The socket drops: the new connection holds no acknowledgement at the board.
+  for (const s of b.sockets) await s.close({ code: 1011, reason: 'dropped' });
+  await expect.poll(() => acks(b).length, { timeout: 10_000 }).toBe(2);
+  await armedCard(page);
+  await page.keyboard.press('y');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => allows(b).length).toBe(1);
+});

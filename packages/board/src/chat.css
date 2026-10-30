@@ -563,6 +563,10 @@
   list-style: none;
   font-size: 14px;
 }
+.approval-large {
+  margin: 0;
+  font-size: 14px;
+}
 .approval-plan {
   margin: 0;
   font-size: 13px;

@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ARM_MS, actRows, askDigest, Card, CONFIRM_MS, escapes } from './approval.ts';
+import {
+  ACT_BYTES,
+  ACT_ROWS,
+  ARM_MS,
+  actRows,
+  askDigest,
+  Card,
+  CONFIRM_MS,
+  escapes,
+  tooLarge,
+} from './approval.ts';
 
 /** A card of `rows` rows, visible and acknowledged at 0: armed at 300. */
 function armed(rows = 1): Card {
@@ -131,5 +141,39 @@ describe('the card', () => {
     expect(c.armed(5000)).toBe(false);
     c.acked(true, 5000);
     expect(c.armed(5000 + ARM_MS - 1)).toBe(false);
+  });
+});
+
+describe('an act too large for the web', () => {
+  const ask = (act: string, tooLarge?: boolean) => ({
+    body: 'b',
+    race: 'r',
+    class: 'write',
+    act,
+    why: [],
+    outside: [],
+    ...(tooLarge === undefined ? {} : { tooLarge }),
+  });
+
+  it('is said by the board, by its bytes or by its rows', () => {
+    expect(tooLarge(ask('ls'), 1)).toBe(false);
+    expect(tooLarge(ask('ls', true), 1)).toBe(true);
+    expect(tooLarge(ask('x'.repeat(ACT_BYTES + 1)), 1)).toBe(true);
+    expect(tooLarge(ask('ls'), ACT_ROWS + 1)).toBe(true);
+    // A huge act is cut into no more rows than the cap needs.
+    expect(actRows('x'.repeat(4 << 20), undefined, ACT_ROWS).length).toBe(ACT_ROWS + 1);
+  });
+
+  it('never picks or clicks Yes', () => {
+    const c = new Card(1, false);
+    c.visible(true, 0);
+    c.acked(true, 0);
+    c.rowSeen(0);
+    c.key('y', 400, 1);
+    expect(c.choice).toBeUndefined();
+    expect(c.key('Enter', 700, 2)).toEqual({ kind: 'none' });
+    expect(c.click(0, 800)).toEqual({ kind: 'none' });
+    c.key('2', 900, 3);
+    expect(c.key('Enter', 1100, 4)).toEqual({ kind: 'deny' });
   });
 });

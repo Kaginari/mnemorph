@@ -292,7 +292,9 @@ seen, so every event arrives once, in order.
 **Asks.** `gate/ask` is a request, not an event, so the bridge keeps each waiting ask and sends it
 to every tab — again to each tab that connects — with `leftMs`, the time it has before the core's
 10-minute wait denies it. Every field the child sent (body, race, class, act, reasons, paths
-outside, plan) reaches the tabs already passed through `mnemorph_loop::shown`, with `digest`: the
+outside, plan) reaches the tabs already passed through `mnemorph_loop::shown`, `⟨` escaped too, and
+each run of 16 plain spaces or more shown as `⟨… 9,800 spaces⟩` — a marker no text can forge —
+with `digest`: the
 SHA-256 of that text in a fixed framing — a version line `mnemorph.ask.v1`, then the ask's id and
 each field as its UTF-8 length, a colon, the text and a newline, each list first its count, the
 plan `-` when absent or `+` before it (`Shown::digest`, mirrored by the page). An ask leaves the
@@ -309,9 +311,19 @@ controller, once per ask; an allow only when it names the digest of the act as s
 the tab that acknowledged the card, and comes at least 300 ms after that acknowledgement. Control
 moving (`board/takeOver`, a controller leaving) clears every acknowledgement: the new controller's
 card acknowledges again, and its 300 ms start then. A denial needs no digest — it is always safe.
-Anything else is refused with `board/refused {id, why}`, and the ask still waits; a second answer
-hears the ask was answered elsewhere. The answer reaches the core only once the board holds a place
-in the child's input and has journaled it; an allow that cannot be journaled is refused.
+An act too large to read on a card — over 32 KiB or 400 rows as shown (`tooLarge` on the ask) —
+is never approved from the web: the board refuses any allow for it, and it is answered in the
+terminal or denied here. With no home to journal answers in, no allow is taken. Anything else is
+refused with `board/refused {id, why}`, and the ask still waits; a second answer hears the ask was
+answered elsewhere. The answer reaches the core only once the board holds a place in the child's
+input and has journaled it — the row written outside the chat's lock, the ask held meanwhile so no
+other answer is taken; an allow that cannot be journaled is refused, and the ask waits again.
+
+The threat these guard against is a page that is wrong, stale or hurried, and a model's text that
+tries to pass for something else: they cannot stand against the browser itself. A browser
+extension that can read and script the board's page, or a compromised browser profile holding its
+cookie, acts as the human there and is outside this model, as malware on the machine is for the
+terminal.
 
 **The answers journal.** Each answer, taken or refused (the first eight refusals of an ask), is a
 row of `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl`, beside the gate's verdicts: the
@@ -549,7 +561,10 @@ queue: one card at a time, answered one at a time.
   at once, or a key that approves a card that is not armed.
 
 The card computes the SHA-256 of what it renders and checks it against the board's; a card whose
-act does not match cannot approve. An allow names that digest. An observer's card offers only
+act does not match cannot approve. An act too large for the web (over 32 KiB or 400 rows) shows its
+first 400 rows and offers only *No*: "too large to approve from the web; answer in the terminal
+(`mnemorph`)". A reconnect is a new connection to the board, holding no acknowledgement: the card
+sends it again and arms afresh, as it does when the board says the card was not seen. An allow names that digest. An observer's card offers only
 *Take over*, which re-arms it under the new controller. An ask that leaves without this tab's
 answer says so ("answered elsewhere", or why it was withdrawn).
 

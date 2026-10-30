@@ -263,6 +263,11 @@ pub struct GateRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub digest: Option<String>,
+    /// Set by the board when the act, as shown, is over 32 KiB or 400 rows: too large to
+    /// approve from the web, so the card offers only No and the board refuses any allow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub too_large: Option<bool>,
 }
 
 /// The human's answer to `gate/ask`.
