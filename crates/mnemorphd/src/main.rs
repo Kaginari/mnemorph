@@ -316,6 +316,14 @@ fn onto(args: &[String]) -> ExitCode {
     if command == "settle" {
         return settle(world.as_deref(), &paths);
     }
+    // Where other worlds live is the human's to see: a body never reads the dimension.
+    if (dimension || matches!(command, "relations" | "relate" | "unrelate"))
+        && let Ok(body) = std::env::var("MNEMORPH_BODY")
+    {
+        return refused(&format!(
+            "{body} runs this: relations between worlds are the human's to read and write"
+        ));
+    }
     if matches!(command, "relations" | "relate" | "unrelate") {
         return relations(command, world.as_deref(), &paths);
     }
@@ -392,11 +400,10 @@ fn relation_findings(
         .find(|k| k.world == world)
         .map_or(0, |k| k.sessions);
     let manifest = dimension::Manifest::load(world)?;
-    let mut findings = dimension::stale_findings(&dimension::proposals(
-        &dimension::load_sightings(world),
-        &manifest,
-        now,
-    ));
+    let sightings = dimension::registry()
+        .map(|r| dimension::load_sightings(&r, world))
+        .unwrap_or_default();
+    let mut findings = dimension::stale_findings(&dimension::proposals(&sightings, &manifest, now));
     if !dimension {
         return Ok((findings, Vec::new()));
     }
@@ -729,17 +736,36 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
             Ok(m) => m,
             Err(e) => return refused(&e),
         };
-        let now = dimension::registry()
-            .map(|r| dimension::known(&r))
-            .unwrap_or_default()
-            .into_iter()
+        let registry = dimension::registry();
+        let known = registry
+            .as_deref()
+            .map(dimension::known)
+            .unwrap_or_default();
+        let now = known
+            .iter()
             .find(|k| k.world == world)
             .map_or(0, |k| k.sessions);
+        let sightings = registry
+            .as_deref()
+            .map(|r| dimension::load_sightings(r, &world))
+            .unwrap_or_default();
         let mut out = std::io::stdout().lock();
         for r in &manifest.relations {
             let _ = writeln!(out, "stated\t{}\t{}", r.kind, r.world);
         }
-        let proposals = dimension::proposals(&dimension::load_sightings(&world), &manifest, now);
+        // Sightings name worlds by id; here, for the human, each id becomes its path.
+        let proposals: Vec<dimension::Proposal> = dimension::proposals(&sightings, &manifest, now)
+            .into_iter()
+            .map(|mut p| {
+                if let dimension::Proposal::Add { world: w, .. } = &mut p {
+                    *w = dimension::resolve(&known, w).map_or_else(
+                        || format!("{w} (not on this machine)"),
+                        |k| k.world.display().to_string(),
+                    );
+                }
+                p
+            })
+            .collect();
         if manifest.relations.is_empty() && proposals.is_empty() {
             let _ = writeln!(out, "no relation stated, none proposed");
         }
@@ -748,15 +774,10 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
         }
         return ExitCode::SUCCESS;
     }
-    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
-        return refused(&format!(
-            "{body} runs this: a relation between worlds is written by the human's yes alone"
-        ));
-    }
     let [other, kind] = words else {
         return refused(&format!("onto {command} takes the other world and a type"));
     };
-    if kind.is_empty() || !kind.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+    if !dimension::valid_kind(kind) {
         return refused(&format!(
             "`{kind}` is no relation type: lowercase words joined by `-`"
         ));

@@ -11,8 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mnemorph_world::dimension::{
-    MANIFEST, Manifest, Proposal, Relation, SIGHTINGS, STALE_AFTER, Sighting, glue, known,
-    load_sightings, proposals, register_at, relate, sight, sightings_of, stale_findings, unrelate,
+    MANIFEST, Manifest, Proposal, Relation, STALE_AFTER, Sighting, glue, known, load_sightings,
+    proposals, register_at, relate, sight, sightings_file, sightings_of, stale_findings, unrelate,
     world_id,
 };
 
@@ -39,6 +39,35 @@ impl Dim {
     fn registry(&self) -> PathBuf {
         self.root.join("state/mnemorph/worlds.jsonl")
     }
+}
+
+/// Commit everything in `world`, a git repository from its first commit: only a committed,
+/// unchanged manifest is evidence.
+fn commit(world: &Path) {
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(world)
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    if !world.join(".git").exists() {
+        git(&["init", "-q"]);
+    }
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "--allow-empty", "-m", "w"]);
 }
 
 fn write(at: &Path, text: &str) {
@@ -77,18 +106,21 @@ fn a_manifest_dependency_is_sighted_once_per_session() {
         &a.join("Cargo.toml"),
         "[package]\nname = \"a\"\n\n[dependencies]\nb = { path = \"../b/crates/b\" }\nserde = \"1\"\n",
     );
+    // Written but not committed, it is no evidence.
+    assert_eq!(sight(&a, &d.registry(), "elf-a", "Cargo.toml").unwrap(), 0);
+    commit(&a);
     assert_eq!(sight(&a, &d.registry(), "elf-a", "Cargo.toml").unwrap(), 1);
     // The same read again in the same session adds nothing.
     assert_eq!(
         sight(&a, &d.registry(), "elf-a", "./Cargo.toml").unwrap(),
         0
     );
-    let seen = load_sightings(&a);
+    let seen = load_sightings(&d.registry(), &a);
     assert_eq!(
         seen,
         vec![Sighting {
             from: world_id(&a),
-            to: b.display().to_string(),
+            to: world_id(&b),
             kind: "depends-on".into(),
             anchor: "Cargo.toml:5".into(),
             body: "elf-a".into(),
@@ -97,11 +129,13 @@ fn a_manifest_dependency_is_sighted_once_per_session() {
     );
     // A file that is no manifest, and a world's own paths, are no sighting.
     write(&a.join("notes.md"), "see ../b\n");
+    commit(&a);
     assert_eq!(sight(&a, &d.registry(), "elf-a", "notes.md").unwrap(), 0);
     write(
         &a.join("sub/Cargo.toml"),
         "[dependencies]\nc = { path = \"../c\" }\n",
     );
+    commit(&a);
     assert_eq!(
         sight(&a, &d.registry(), "elf-a", "sub/Cargo.toml").unwrap(),
         0
@@ -119,10 +153,20 @@ fn a_remote_and_a_submodule_are_sighted() {
         &a.join(".gitmodules"),
         "[submodule \"v\"]\n\tpath = third/v\n\turl = https://github.com/O/v.git\n",
     );
+    commit(&a);
     let seen = sightings_of(&a, &known(&d.registry()), "rimuru", ".gitmodules");
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].kind, "vendors");
-    assert_eq!(seen[0].to, v.display().to_string());
+    assert_eq!(seen[0].to, world_id(&v));
+    // A committed manifest changed in the working tree is no evidence until committed again.
+    write(
+        &a.join(".gitmodules"),
+        "[submodule \"w\"]\n\turl = https://github.com/o/v\n",
+    );
+    assert_eq!(
+        sightings_of(&a, &known(&d.registry()), "rimuru", ".gitmodules"),
+        vec![]
+    );
 }
 
 #[test]
@@ -146,7 +190,7 @@ fn nothing_outside_the_world_is_read_for_a_sighting() {
         std::os::unix::fs::symlink(b.join("Cargo.toml"), a.join("Cargo.toml")).unwrap();
         assert_eq!(sightings_of(&a, &k, "elf", "Cargo.toml"), vec![]);
     }
-    assert!(!a.join(SIGHTINGS).exists());
+    assert!(!sightings_file(&d.registry(), &a).exists());
 }
 
 fn seen(to: &str, kind: &str, anchor: &str, body: &str, session: u64) -> Sighting {
@@ -165,7 +209,7 @@ fn a_relation_is_proposed_only_when_named_twice_and_written_only_by_the_human() 
     let d = Dim::new();
     let a = d.world("a");
     let b = d.world("b");
-    let bp = b.display().to_string();
+    let bid = world_id(&b);
     write(
         &a.join("Cargo.toml"),
         "[dependencies]\nb = { path = \"../b\" }\n",
@@ -174,25 +218,43 @@ fn a_relation_is_proposed_only_when_named_twice_and_written_only_by_the_human() 
         &a.join("web/package.json"),
         "{\n  \"dependencies\": {\n    \"b\": \"file:../../b\"\n  }\n}\n",
     );
+    commit(&a);
     let m = Manifest::load(&a).unwrap();
+    let r = d.registry();
+    let next_session = || register_at(&r, &a, None).unwrap();
 
     sight(&a, &d.registry(), "elf-a", "Cargo.toml").unwrap();
     assert!(
-        proposals(&load_sightings(&a), &m, 1).is_empty(),
+        proposals(&load_sightings(&r, &a), &m, 1).is_empty(),
         "one sighting"
     );
     // The same body from another anchor is not a second voice.
     sight(&a, &d.registry(), "elf-a", "web/package.json").unwrap();
-    assert_eq!(proposals(&load_sightings(&a), &m, 1), vec![], "one body");
-    // Another body from the same anchor is not a second piece of evidence.
+    assert_eq!(
+        proposals(&load_sightings(&r, &a), &m, 1),
+        vec![],
+        "one body"
+    );
+    // Another body in the same session — a child the first commissioned — is not a second voice.
     sight(&a, &d.registry(), "elf-b", "Cargo.toml").unwrap();
-    // …but with the first body's other anchor, it is named twice.
-    let p = proposals(&load_sightings(&a), &m, 1);
+    assert_eq!(
+        proposals(&load_sightings(&r, &a), &m, 1),
+        vec![],
+        "one session"
+    );
+    // In its own session, from the other anchor, it is named twice.
+    next_session();
+    sight(&a, &d.registry(), "elf-b", "Cargo.toml").unwrap();
+    let p = proposals(&load_sightings(&r, &a), &m, 2);
     assert_eq!(p.len(), 1, "{p:?}");
     let Proposal::Add { world, kind, .. } = &p[0] else {
         panic!("{p:?}")
     };
-    assert_eq!((world.as_str(), kind.as_str()), (bp.as_str(), "depends-on"));
+    assert_eq!(
+        (world.as_str(), kind.as_str()),
+        (bid.as_str(), "depends-on")
+    );
+    assert!(p[0].why().contains("in sessions 1, 2"), "{}", p[0].why());
     assert!(p[0].diff().contains("+type = \"depends-on\""));
     // Proposing wrote nothing.
     assert!(!a.join(MANIFEST).exists());
@@ -201,15 +263,15 @@ fn a_relation_is_proposed_only_when_named_twice_and_written_only_by_the_human() 
     assert!(relate(&a, &b, "depends-on").unwrap());
     assert!(!relate(&a, &b, "depends-on").unwrap());
     let m = Manifest::load(&a).unwrap();
-    assert!(m.states(&bp, "depends-on"));
-    assert_eq!(proposals(&load_sightings(&a), &m, 1), vec![]);
+    assert!(m.states_id(&bid, "depends-on"));
+    assert_eq!(proposals(&load_sightings(&r, &a), &m, 1), vec![]);
 
     // Revoked, it is gone, and named twice it is proposed again, never rewritten by itself.
     assert!(unrelate(&a, &b, "depends-on").unwrap());
     assert!(!unrelate(&a, &b, "depends-on").unwrap());
     let m = Manifest::load(&a).unwrap();
     assert_eq!(m.relations, vec![]);
-    assert_eq!(proposals(&load_sightings(&a), &m, 2).len(), 1);
+    assert_eq!(proposals(&load_sightings(&r, &a), &m, 2).len(), 1);
     assert_eq!(Manifest::load(&a).unwrap().relations, vec![]);
 }
 
@@ -225,8 +287,9 @@ fn a_new_type_most_pairs_already_carry_is_offered_as_the_old_one() {
     }
     let mut s = Vec::new();
     for w in ["/w1", "/w2", "/w3"] {
-        s.push(seen(w, "ships", "k8s/a.yaml:1", "elf-a", 1));
-        s.push(seen(w, "ships", "k8s/b.yaml:1", "elf-b", 1));
+        let id = world_id(Path::new(w));
+        s.push(seen(&id, "ships", "k8s/a.yaml:1", "elf-a", 1));
+        s.push(seen(&id, "ships", "k8s/b.yaml:1", "elf-b", 2));
     }
     let p = proposals(&s, &m, 1);
     assert_eq!(p.len(), 3);
@@ -266,11 +329,18 @@ fn a_learned_relation_unseen_for_thirty_sessions_is_proposed_for_removal() {
         kind: "deploys".into(),
         remote: None,
     });
+    let b = world_id(Path::new("/b"));
     let s = vec![
-        seen("/b", "depends-on", "Cargo.toml:3", "elf-a", 4),
-        seen("/b", "depends-on", "go.mod:3", "elf-b", 5),
+        seen(&b, "depends-on", "Cargo.toml:3", "elf-a", 4),
+        seen(&b, "depends-on", "go.mod:3", "elf-b", 5),
     ];
     assert_eq!(proposals(&s, &m, 5 + STALE_AFTER - 1), vec![]);
+    // One anchor, however many bodies and sessions, is one piece of evidence.
+    let one = vec![
+        seen(&b, "vendors", "Cargo.toml:3", "elf-a", 1),
+        seen(&b, "vendors", "Cargo.toml:3", "elf-b", 2),
+    ];
+    assert_eq!(proposals(&one, &Manifest::default(), 2), vec![]);
     let p = proposals(&s, &m, 5 + STALE_AFTER);
     // The relation the human stated with no sighting carries no clock: only the learned one.
     assert_eq!(p.len(), 1);
@@ -334,4 +404,45 @@ fn two_manifests_glue_on_what_they_share_and_obstruct_on_nothing() {
         .map(|w| fs::read_to_string(w.join(MANIFEST)).unwrap())
         .collect();
     assert_eq!(before, after);
+}
+
+#[test]
+fn a_neighbours_bad_manifest_is_reported_and_never_fails_this_worlds_check() {
+    let d = Dim::new();
+    let a = d.world("a");
+    let b = d.world("b");
+    let f = d.world("f");
+    let h = d.world("h");
+    state(&a, &b, "deploys");
+    // A kind no CLI would write, a FIFO no read should wait on, a file past the cap.
+    write(
+        &b.join(MANIFEST),
+        &format!(
+            "[[relation]]\nworld = \"{}\"\ntype = \"x\\u001b[2J\"\n",
+            a.display()
+        ),
+    );
+    let fifo = f.join(MANIFEST);
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success()
+    );
+    write(&h.join(MANIFEST), &"#".repeat(70 * 1024));
+    let (glues, findings) = glue(&a, &known(&d.registry())).unwrap();
+    let codes: Vec<&str> = findings.iter().map(|f| f.code).collect();
+    assert_eq!(codes, vec!["unreadable-neighbour"; 3], "{findings:?}");
+    assert!(findings.iter().all(|f| !f.severity.blocks()));
+    assert!(findings.iter().all(|f| !f.message.contains('\u{1b}')));
+    // b's relation is read as one-sided from a's own manifest; nothing obstructs.
+    assert_eq!(glues.len(), 1);
+    assert_eq!(glues[0].ours, vec!["deploys".to_owned()]);
+    // This world's own bad kind is refused on load.
+    write(
+        &a.join(MANIFEST),
+        "[[relation]]\nworld = \"/b\"\ntype = \"Deploys Everything\"\n",
+    );
+    assert!(Manifest::load(&a).is_err());
 }

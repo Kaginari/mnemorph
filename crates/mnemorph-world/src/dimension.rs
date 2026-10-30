@@ -15,8 +15,11 @@ use crate::findings::{Finding, Severity};
 /// The dimension manifest: the relations this world states, the throne's soil.
 pub const MANIFEST: &str = ".mnemorph/dimension.toml";
 
-/// The sightings: harness soil, appended by the harness alone.
-pub const SIGHTINGS: &str = ".mnemorph/ontology/sightings.jsonl";
+/// The largest manifest read, this world's or a neighbour's.
+const DIMENSION_CAP: u64 = 64 * 1024;
+
+/// The longest remote kept: a longer one is no remote.
+const REMOTE_CAP: usize = 512;
 
 /// Sessions of this world a learned relation may go unseen before its removal is proposed.
 pub const STALE_AFTER: u64 = 30;
@@ -132,7 +135,52 @@ pub fn remote_of(world: &Path) -> Option<String> {
         .output()
         .ok()
         .filter(|o| o.status.success())?;
-    remote(String::from_utf8_lossy(&out.stdout).trim())
+    // A world's git config is its own to write: bounded, and only ever a hint for matching.
+    let text = String::from_utf8_lossy(&out.stdout);
+    let text = text.trim();
+    if text.len() > REMOTE_CAP || text.chars().any(char::is_control) {
+        return None;
+    }
+    remote(text)
+}
+
+/// The world `id` names among `known`, matched on the whole id: for the human's commands, which
+/// alone turn an id back into a path.
+#[must_use]
+pub fn resolve<'a>(known: &'a [Known], id: &str) -> Option<&'a Known> {
+    known.iter().find(|k| k.id == id)
+}
+
+/// Where the sightings of `world` live, beside the registry at `registry`:
+/// `<state>/mnemorph/dimension/<world-id>/sightings.jsonl` — the harness's, outside every world.
+#[must_use]
+pub fn sightings_file(registry: &Path, world: &Path) -> PathBuf {
+    let world = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    registry
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("dimension")
+        .join(world_id(&world))
+        .join("sightings.jsonl")
+}
+
+/// Whether `rel` is tracked by git in `root` and unchanged from HEAD: a manifest a body only
+/// wrote is no evidence.
+fn committed(root: &Path, rel: &str) -> bool {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .stderr(std::process::Stdio::null())
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    let head = git(&["rev-parse", "--verify", "--quiet", &format!("HEAD:{rel}")]);
+    let now = git(&["hash-object", "--no-filters", "--", rel]);
+    matches!((head, now), (Some(h), Some(n)) if !h.is_empty() && h == n)
 }
 
 /// The worlds the registry at `file` knows, in the order first seen.
@@ -211,7 +259,7 @@ pub fn remote(url: &str) -> Option<String> {
 pub struct Sighting {
     /// The world it was seen from, by id.
     pub from: String,
-    /// The world it names: its canonical path.
+    /// The world it names, by id: never its path, which only the human's commands resolve.
     pub to: String,
     /// The relation's type.
     #[serde(rename = "type")]
@@ -351,7 +399,8 @@ fn lexical(path: &Path) -> PathBuf {
 /// The sightings a body's read of `read` in `world` makes, against the worlds `known` names: none
 /// unless it is a manifest inside the world, read by the harness from where the body read it.
 /// A path is matched on the deepest known world whose root holds it — never `world` itself — and
-/// a remote on a known world's remote. Nothing outside `world` is opened.
+/// a remote on a known world's remote. Only a manifest git tracks, unchanged from HEAD, counts.
+/// Nothing outside `world` is opened.
 #[must_use]
 pub fn sightings_of(world: &Path, known: &[Known], body: &str, read: &str) -> Vec<Sighting> {
     let Ok(root) = world.canonicalize() else {
@@ -373,6 +422,9 @@ pub fn sightings_of(world: &Path, known: &[Known], body: &str, read: &str) -> Ve
     if !file.starts_with(&root)
         || std::fs::metadata(&file).map_or(true, |m| !m.is_file() || m.len() > MANIFEST_CAP)
     {
+        return Vec::new();
+    }
+    if !committed(&root, &rel) {
         return Vec::new();
     }
     let Ok(text) = std::fs::read_to_string(&file) else {
@@ -406,7 +458,7 @@ pub fn sightings_of(world: &Path, known: &[Known], body: &str, read: &str) -> Ve
         let Some(to) = to else { continue };
         let s = Sighting {
             from: from.clone(),
-            to: to.world.display().to_string(),
+            to: to.id.clone(),
             kind: kind.to_owned(),
             anchor: format!("{rel}:{line}"),
             body: body.to_owned(),
@@ -430,7 +482,7 @@ pub fn sight(world: &Path, registry: &Path, body: &str, read: &str) -> std::io::
     if seen.is_empty() {
         return Ok(0);
     }
-    let journal = Journal::<Sighting>::new(world.join(SIGHTINGS));
+    let journal = Journal::<Sighting>::new(sightings_file(registry, world));
     let had = journal.read().map(|r| r.rows).unwrap_or_default();
     let mut n = 0;
     for s in seen.into_iter().filter(|s| !had.contains(s)) {
@@ -440,10 +492,10 @@ pub fn sight(world: &Path, registry: &Path, body: &str, read: &str) -> std::io::
     Ok(n)
 }
 
-/// The world's sightings, as written.
+/// The sightings of `world` kept beside the registry at `registry`, as written.
 #[must_use]
-pub fn load_sightings(world: &Path) -> Vec<Sighting> {
-    Journal::<Sighting>::new(world.join(SIGHTINGS))
+pub fn load_sightings(registry: &Path, world: &Path) -> Vec<Sighting> {
+    Journal::<Sighting>::new(sightings_file(registry, world))
         .read()
         .map(|r| r.rows)
         .unwrap_or_default()
@@ -451,6 +503,16 @@ pub fn load_sightings(world: &Path) -> Vec<Sighting> {
 
 // ---------------------------------------------------------------------------------------------
 // The manifest
+
+/// Whether `kind` is a relation type: lowercase ASCII words joined by `-`, at most 64 bytes.
+#[must_use]
+pub fn valid_kind(kind: &str) -> bool {
+    !kind.is_empty()
+        && kind.len() <= 64
+        && !kind.starts_with('-')
+        && !kind.ends_with('-')
+        && kind.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+}
 
 /// One relation this world states.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -483,11 +545,36 @@ impl Manifest {
     ///
     /// It exists and does not read.
     pub fn load(world: &Path) -> Result<Manifest, String> {
-        match std::fs::read_to_string(world.join(MANIFEST)) {
-            Ok(text) => toml::from_str(&text).map_err(|e| format!("{MANIFEST}: {e}")),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Manifest::default()),
-            Err(e) => Err(format!("{MANIFEST}: {e}")),
+        let path = world.join(MANIFEST);
+        let meta = match std::fs::metadata(&path) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Manifest::default()),
+            Err(e) => return Err(format!("{MANIFEST}: {e}")),
+        };
+        // A FIFO, a device or a huge file is no manifest: never waited on, never read whole.
+        if !meta.is_file() {
+            return Err(format!("{MANIFEST}: not a regular file"));
         }
+        if meta.len() > DIMENSION_CAP {
+            return Err(format!("{MANIFEST}: over {DIMENSION_CAP} bytes"));
+        }
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("{MANIFEST}: {e}"))?;
+        let m: Manifest = toml::from_str(&text).map_err(|e| format!("{MANIFEST}: {e}"))?;
+        let kinds = m
+            .relations
+            .iter()
+            .map(|r| &r.kind)
+            .chain(m.inverse.keys())
+            .chain(m.inverse.values());
+        for k in kinds {
+            if !valid_kind(k) {
+                return Err(format!(
+                    "{MANIFEST}: `{}` is no relation type: lowercase words joined by `-`",
+                    k.escape_debug()
+                ));
+            }
+        }
+        Ok(m)
     }
 
     /// Write it to the world at `world`.
@@ -510,6 +597,14 @@ impl Manifest {
         self.relations
             .iter()
             .any(|r| r.world == world && r.kind == kind)
+    }
+
+    /// Whether it states `kind` towards the world whose id is `id`.
+    #[must_use]
+    pub fn states_id(&self, id: &str, kind: &str) -> bool {
+        self.relations
+            .iter()
+            .any(|r| r.kind == kind && world_id(Path::new(&r.world)) == id)
     }
 
     /// The inverse of a type: declared here, else compiled, else `<type>-by` (and back).
@@ -546,7 +641,7 @@ impl Manifest {
 pub enum Proposal {
     /// A relation named twice, not yet stated.
     Add {
-        /// The other world.
+        /// The other world, by id; the human's command shows its path.
         world: String,
         /// The type sighted.
         kind: String,
@@ -556,6 +651,8 @@ pub enum Proposal {
         carries: Vec<String>,
         /// The bodies that sighted it.
         bodies: Vec<String>,
+        /// The sessions it was sighted in.
+        sessions: Vec<u64>,
         /// The anchors it was sighted at.
         anchors: Vec<String>,
     },
@@ -594,11 +691,17 @@ impl Proposal {
                 carries,
                 bodies,
                 anchors,
+                sessions,
                 ..
             } => {
                 use std::fmt::Write as _;
                 let mut s = format!(
-                    "named twice: by {} from {}",
+                    "named twice: in sessions {}, by {}, from {}",
+                    sessions
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     bodies.join(", "),
                     anchors.join(", ")
                 );
@@ -622,12 +725,14 @@ impl Proposal {
     }
 }
 
-/// Whether two sightings name a relation twice: different bodies, different anchors.
+/// Whether two sightings name a relation twice: different bodies from different anchors, in
+/// different sessions — a body and the child it commissions share a session, so one session is
+/// never two voices.
 fn named_twice(seen: &[&Sighting]) -> bool {
     seen.iter().enumerate().any(|(i, a)| {
         seen[i + 1..]
             .iter()
-            .any(|b| a.body != b.body && a.anchor != b.anchor)
+            .any(|b| a.body != b.body && a.anchor != b.anchor && a.session != b.session)
     })
 }
 
@@ -646,7 +751,7 @@ pub fn proposals(sightings: &[Sighting], manifest: &Manifest, now: u64) -> Vec<P
     let stated_types: BTreeSet<&str> = manifest.relations.iter().map(|r| r.kind.as_str()).collect();
     let mut out = Vec::new();
     for (&(to, kind), seen) in &by_pair {
-        if manifest.states(to, kind) || !named_twice(seen) {
+        if manifest.states_id(to, kind) || !named_twice(seen) {
             continue;
         }
         let mut offered = None;
@@ -660,7 +765,7 @@ pub fn proposals(sightings: &[Sighting], manifest: &Manifest, now: u64) -> Vec<P
                 offered = stated_types
                     .iter()
                     .map(|t| {
-                        let carried = pairs.iter().filter(|p| manifest.states(p, t)).count();
+                        let carried = pairs.iter().filter(|p| manifest.states_id(p, t)).count();
                         #[allow(clippy::cast_precision_loss, reason = "counts of worlds are small")]
                         (carried as f64 / pairs.len() as f64, *t)
                     })
@@ -679,16 +784,30 @@ pub fn proposals(sightings: &[Sighting], manifest: &Manifest, now: u64) -> Vec<P
         out.push(Proposal::Add {
             world: to.to_owned(),
             kind: kind.to_owned(),
-            carries: manifest.types_towards(to).into_iter().collect(),
+            carries: manifest
+                .relations
+                .iter()
+                .filter(|r| world_id(Path::new(&r.world)) == to)
+                .map(|r| r.kind.clone())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             offered,
             bodies: unique(|s| s.body.as_str()),
+            sessions: seen
+                .iter()
+                .map(|s| s.session)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             anchors: unique(|s| s.anchor.as_str()),
         });
     }
     for r in &manifest.relations {
         // Only a learned relation carries its way back: one never sighted was the human's alone.
+        let id = world_id(Path::new(&r.world));
         let Some(last) = by_pair
-            .get(&(r.world.as_str(), r.kind.as_str()))
+            .get(&(id.as_str(), r.kind.as_str()))
             .and_then(|seen| seen.iter().map(|s| s.session).max())
         else {
             continue;
@@ -817,8 +936,22 @@ pub fn glue(world: &Path, known: &[Known]) -> Result<(Vec<Glue>, Vec<Finding>), 
     let mut findings = Vec::new();
     for n in neighbours {
         let path = PathBuf::from(&n);
-        // A neighbour's manifest that does not read states nothing it can be held to.
-        let theirs = Manifest::load(&path).unwrap_or_default();
+        // A neighbour's manifest is untrusted: one that does not read is reported and read as
+        // stating nothing, and never fails this world's own check.
+        let theirs = match Manifest::load(&path) {
+            Ok(m) => m,
+            Err(e) => {
+                findings.push(Finding {
+                    code: "unreadable-neighbour",
+                    severity: Severity::Low,
+                    at: MANIFEST.into(),
+                    paths: Vec::new(),
+                    creatures: vec![crate::queue::THRONE.into()],
+                    message: format!("{n}: {}", e.escape_debug()),
+                });
+                Manifest::default()
+            }
+        };
         let names_me = |r: &Relation| {
             lexical(&path.join(&r.world)) == root
                 || (my_remote.is_some() && r.remote == my_remote)

@@ -8,7 +8,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use mnemorph_server::world::dimension::{MANIFEST, register_at, sight};
+use mnemorph_server::world::dimension::{MANIFEST, register_at, sight, sightings_file, world_id};
 
 struct Dim {
     root: PathBuf,
@@ -115,6 +115,10 @@ fn a_session_opening_writes_a_registry_row() {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one relation's whole life, sighted to revoked, through the binary"
+)]
 fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     let d = Dim::new("relate");
     let a = d.world("a");
@@ -127,6 +131,32 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     )
     .unwrap();
     fs::write(a.join("go.mod"), "module a\n\nreplace b => ../b\n").unwrap();
+    for args in [
+        &["init", "-q"][..],
+        &["add", "-A"],
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    ] {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&a)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
     sight(&a, &d.registry(), "elf-a", "Cargo.toml").unwrap();
     let (code, out, _) = d.run(&["onto", "relations", "--world", s(&a)], None);
     assert_eq!(code, Some(0));
@@ -134,7 +164,16 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
         out.contains("none proposed"),
         "one sighting proposes nothing: {out}"
     );
+    // A second session: one session's bodies are never two voices.
+    register_at(&d.registry(), &a, None).unwrap();
     sight(&a, &d.registry(), "elf-b", "go.mod").unwrap();
+    // The sightings are the harness's, outside the world, and name the other world by id only.
+    assert!(!a.join(".mnemorph/ontology").exists());
+    let kept = fs::read_to_string(sightings_file(&d.registry(), &a)).unwrap();
+    assert!(
+        kept.contains(&world_id(&b)) && !kept.contains(s(&b)),
+        "{kept}"
+    );
     let (code, out, _) = d.run(&["onto", "relations", "--world", s(&a)], None);
     assert_eq!(code, Some(0));
     assert_eq!(out.matches("proposed:").count(), 1, "{out}");
@@ -142,13 +181,17 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     assert!(out.contains("+type = \"depends-on\""), "{out}");
     assert!(!a.join(MANIFEST).exists(), "a proposal writes nothing");
 
-    // A body never says yes.
-    let (code, _, err) = d.run(
-        &["onto", "relate", s(&b), "depends-on", "--world", s(&a)],
-        Some("elf-a"),
-    );
-    assert_eq!(code, Some(2));
-    assert!(err.contains("elf-a runs this"), "{err}");
+    // A body never says yes, nor reads where other worlds live.
+    for args in [
+        &["onto", "relate", s(&b), "depends-on", "--world", s(&a)][..],
+        &["onto", "relations", "--world", s(&a)],
+        &["onto", "check", "--dimension", "--world", s(&a)],
+    ] {
+        let (code, out, err) = d.run(args, Some("elf-a"));
+        assert_eq!(code, Some(2), "{args:?}");
+        assert!(err.contains("elf-a runs this"), "{err}");
+        assert!(!out.contains(s(&b)) && !err.contains(s(&b)), "{out}{err}");
+    }
     assert!(!a.join(MANIFEST).exists());
 
     let (code, out, err) = d.run(
