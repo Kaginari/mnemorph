@@ -88,18 +88,28 @@ for (const theme of ['dark', 'light'] as const) {
   test.describe(`${theme} theme`, () => {
     test.use({ colorScheme: theme });
 
-    test('a chat reads in the TUI grammar: screenshot, contrast, labels', async ({ page }, info) => {
+    test('a chat reads in the TUI grammar: screenshot, contrast, labels', async ({
+      page,
+    }, info) => {
       const b = new Bridge();
       richTurn(b);
       b.emit('turnStarted', { text: 'and the docs?' });
-      b.emit('toolCall', { id: 't9', name: 'bash', input: { command: 'pnpm --filter site build' } });
+      b.emit('toolCall', {
+        id: 't9',
+        name: 'bash',
+        input: { command: 'pnpm --filter site build' },
+      });
       await openChat(page, b);
       await expect(page.locator('.tool-name', { hasText: 'edit' })).toBeVisible();
       await expect(page.locator('.verdict')).toContainText('end gate · pass');
       await expect(page.locator('.group .tool-sum')).toContainText('read 1 file · grep 1 pattern');
-      await expect(page.locator('.diff-add .diff-text')).toHaveText('    return self._parse_collate(this)');
+      await expect(page.locator('.diff-add .diff-text')).toHaveText(
+        '    return self._parse_collate(this)',
+      );
       await expect(page.locator('.diff-add .diff-n')).toHaveText('2');
-      await expect(page.locator('.line-below').first()).toContainText('orc-sql is working on: judge');
+      await expect(page.locator('.line-below').first()).toContainText(
+        'orc-sql is working on: judge',
+      );
       await expect(page.locator('.activity')).toContainText('Running bash…');
       await expect(page.locator('.activity')).toContainText('esc to stop');
       // A replayed verdict is a line, never a toast.
@@ -166,7 +176,12 @@ test('hostile text from a model or a tool stays text', async ({ page }) => {
     stop: 'end_turn',
   });
   b.emit('toolCall', { id: 't1', name: 'bash', input: { command: '<b onmouseover=x>ls</b>' } });
-  b.emit('toolResult', { id: 't1', content: `${evil}\nline2\nline3\nline4`, isError: false, cut: 0 });
+  b.emit('toolResult', {
+    id: 't1',
+    content: `${evil}\nline2\nline3\nline4`,
+    isError: false,
+    cut: 0,
+  });
   b.emit('note', { text: evil });
   b.emit('turnEnded', { ending: 'answered' });
   await openChat(page, b);
@@ -250,7 +265,13 @@ test('while a turn runs, enter queues, Steer steers and Esc interrupts', async (
   b.emit('turnEnded', { ending: 'interrupted' });
   await expect(page.locator('.line-end')).toContainText('interrupted');
   // A verdict arriving live is a toast too.
-  b.emit('gateVerdict', { passed: false, verdict: 'FAIL', changed: ['a.rs'], failures: ['cargo test'], unverified: [] });
+  b.emit('gateVerdict', {
+    passed: false,
+    verdict: 'FAIL',
+    changed: ['a.rs'],
+    failures: ['cargo test'],
+    unverified: [],
+  });
   await expect(page.locator('.toast')).toContainText('end gate FAIL · 1 changed · 1 failed');
 });
 
@@ -262,9 +283,21 @@ test('a past run reads from its journal, read-only, and resumes', async ({ page 
     dropped: 0,
     skipped: [],
     events: [
-      { jsonrpc: '2.0', method: 'event/turnStarted', params: { session: '', run: PAST, body: '', seq: 1, text: 'wire refactor' } },
-      { jsonrpc: '2.0', method: 'event/assistant', params: { session: '', run: PAST, body: '', seq: 2, text: 'Half done.', stop: 'end_turn' } },
-      { jsonrpc: '2.0', method: 'event/turnEnded', params: { session: '', run: PAST, body: '', seq: 3, ending: 'interrupted' } },
+      {
+        jsonrpc: '2.0',
+        method: 'event/turnStarted',
+        params: { session: '', run: PAST, body: '', seq: 1, text: 'wire refactor' },
+      },
+      {
+        jsonrpc: '2.0',
+        method: 'event/assistant',
+        params: { session: '', run: PAST, body: '', seq: 2, text: 'Half done.', stop: 'end_turn' },
+      },
+      {
+        jsonrpc: '2.0',
+        method: 'event/turnEnded',
+        params: { session: '', run: PAST, body: '', seq: 3, ending: 'interrupted' },
+      },
     ],
   };
   let resumed: unknown;
@@ -279,7 +312,15 @@ test('a past run reads from its journal, read-only, and resumes', async ({ page 
         status: 201,
         contentType: 'application/json',
         body: JSON.stringify({
-          session: { id: CHAT, world: LIVE.id, session: 's-1', run: PAST, controlled: true, tabs: 0, asks: 0 },
+          session: {
+            id: CHAT,
+            world: LIVE.id,
+            session: 's-1',
+            run: PAST,
+            controlled: true,
+            tabs: 0,
+            asks: 0,
+          },
           hello: { ...hello, run: PAST },
         }),
       });

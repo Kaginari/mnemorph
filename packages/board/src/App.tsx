@@ -107,7 +107,9 @@ function Centre({
   if (!world) return <NoWorld id={route.world} />;
   if (route.name === 'section') return <SectionView w={world} section={route.section} />;
   if (route.name === 'session') {
-    return <LiveChat key={route.session} w={world} id={route.session} chats={chats} onSide={onSide} />;
+    return (
+      <LiveChat key={route.session} w={world} id={route.session} chats={chats} onSide={onSide} />
+    );
   }
   if (route.name === 'run') {
     return <PastChat key={route.run} w={world} run={route.run} chats={chats} onSide={onSide} />;

@@ -7,15 +7,22 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
 import { FIXTURE_NOW, fixtureWorlds } from '../src/data/fixtures.ts';
 
-export const LIVE = fixtureWorlds.worlds.find((w) => w.name === 'tempest-try') ?? (() => {
-  throw new Error('the fixtures hold tempest-try');
-})();
+export const LIVE =
+  fixtureWorlds.worlds.find((w) => w.name === 'tempest-try') ??
+  (() => {
+    throw new Error('the fixtures hold tempest-try');
+  })();
 
 export const CHAT = 'c-7f3a';
 export const RUN = 'r1793361000000-41';
 export const PAST = 'r1793300000000-12';
 
-type Msg = { id?: number | string; method?: string; params?: Record<string, unknown>; result?: unknown };
+type Msg = {
+  id?: number | string;
+  method?: string;
+  params?: Record<string, unknown>;
+  result?: unknown;
+};
 
 export const hello = {
   protocol: 1,
@@ -81,7 +88,8 @@ export class Bridge {
     ws.onMessage((raw) => {
       const m = JSON.parse(String(raw)) as Msg;
       this.sent.push(m);
-      const answer = (result: unknown) => ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }));
+      const answer = (result: unknown) =>
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }));
       const refuse = (message: string) =>
         ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32011, message } }));
       switch (m.method) {
@@ -100,7 +108,11 @@ export class Bridge {
           this.role = 'controller';
           answer({});
           return ws.send(
-            JSON.stringify({ jsonrpc: '2.0', method: 'board/role', params: { role: 'controller', controlled: true } }),
+            JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'board/role',
+              params: { role: 'controller', controlled: true },
+            }),
           );
         case 'session/prompt':
           if (this.role !== 'controller') return refuse('this tab observes: take over to act');
@@ -120,9 +132,30 @@ export class Bridge {
 /** The runs a world lists. */
 export const runs = {
   runs: [
-    { id: RUN, when: '2026-10-30T11:58:30Z', state: 'live', why: 'cut mid-turn', ask: 'fix the collate parse', turns: 1 },
-    { id: PAST, when: '2026-10-29T16:20:00Z', state: 'stopped', why: 'interrupted', ask: 'wire refactor', turns: 3 },
-    { id: 'r1793200000000-3', when: '2026-10-28T09:00:00Z', state: 'ended', why: 'answered', ask: 'what does notes.txt say?', turns: 1 },
+    {
+      id: RUN,
+      when: '2026-10-30T11:58:30Z',
+      state: 'live',
+      why: 'cut mid-turn',
+      ask: 'fix the collate parse',
+      turns: 1,
+    },
+    {
+      id: PAST,
+      when: '2026-10-29T16:20:00Z',
+      state: 'stopped',
+      why: 'interrupted',
+      ask: 'wire refactor',
+      turns: 3,
+    },
+    {
+      id: 'r1793200000000-3',
+      when: '2026-10-28T09:00:00Z',
+      state: 'ended',
+      why: 'answered',
+      ask: 'what does notes.txt say?',
+      turns: 1,
+    },
   ],
   more: 0,
 };
@@ -131,11 +164,18 @@ export const runs = {
  * Opens the board at `hash` with the API routed and `bridge` answering the chat's socket. CSP
  * violations are collected, as the shell's suite does.
  */
-export async function openChat(page: Page, bridge: Bridge, hash = `#/w/${LIVE.id}/s/${CHAT}`, extra?: (p: Page) => Promise<void>) {
+export async function openChat(
+  page: Page,
+  bridge: Bridge,
+  hash = `#/w/${LIVE.id}/s/${CHAT}`,
+  extra?: (p: Page) => Promise<void>,
+) {
   await page.addInitScript(() => {
     const seen: string[] = [];
     (window as { __csp?: string[] }).__csp = seen;
-    document.addEventListener('securitypolicyviolation', (e) => seen.push(`${e.violatedDirective} ${e.blockedURI}`));
+    document.addEventListener('securitypolicyviolation', (e) =>
+      seen.push(`${e.violatedDirective} ${e.blockedURI}`),
+    );
   });
   await page.clock.setFixedTime(FIXTURE_NOW);
   const json = (body: unknown) => ({ contentType: 'application/json', body: JSON.stringify(body) });
@@ -144,7 +184,17 @@ export async function openChat(page: Page, bridge: Bridge, hash = `#/w/${LIVE.id
   await page.route('**/api/sessions', (r) =>
     r.fulfill(
       json({
-        sessions: [{ id: CHAT, world: LIVE.id, session: 's-1', run: RUN, controlled: true, tabs: 1, asks: 0 }],
+        sessions: [
+          {
+            id: CHAT,
+            world: LIVE.id,
+            session: 's-1',
+            run: RUN,
+            controlled: true,
+            tabs: 1,
+            asks: 0,
+          },
+        ],
       }),
     ),
   );
@@ -175,13 +225,29 @@ export function violations(page: Page) {
  * the gate. */
 export function richTurn(b: Bridge) {
   b.emit('turnStarted', { text: 'fix the collate parse' });
-  b.emit('assistant', { text: "I'll ask **orc-sql** to judge, then read the parser.", stop: 'tool_use' });
-  b.emit('toolCall', { id: 't1', name: 'read', input: { path: 'sqlglot/parser.py', offset: 120, limit: 40 } });
-  b.emit('toolResult', { id: 't1', content: '120\tdef _parse_types(self):', isError: false, cut: 0 });
+  b.emit('assistant', {
+    text: "I'll ask **orc-sql** to judge, then read the parser.",
+    stop: 'tool_use',
+  });
+  b.emit('toolCall', {
+    id: 't1',
+    name: 'read',
+    input: { path: 'sqlglot/parser.py', offset: 120, limit: 40 },
+  });
+  b.emit('toolResult', {
+    id: 't1',
+    content: '120\tdef _parse_types(self):',
+    isError: false,
+    cut: 0,
+  });
   b.emit('toolCall', { id: 't2', name: 'grep', input: { pattern: 'COLLATE' } });
   b.emit('toolResult', { id: 't2', content: 'parser.py:131', isError: false, cut: 0 });
   b.emit('turnStarted', { text: 'judge the collate fix' }, 'orc-sql');
-  b.emit('toolCall', { id: 'o1', name: 'bash', input: { command: 'pytest -q tests/test_parser.py' } }, 'orc-sql');
+  b.emit(
+    'toolCall',
+    { id: 'o1', name: 'bash', input: { command: 'pytest -q tests/test_parser.py' } },
+    'orc-sql',
+  );
   b.emit('turnEnded', { ending: 'answered' }, 'orc-sql');
   b.emit('toolCall', {
     id: 't3',
@@ -215,6 +281,12 @@ export function richTurn(b: Bridge) {
     text: 'Collations now survive `_parse_types`:\n\n```python\nreturn self._parse_collate(this)  # keep it\n```\n\n- 412 tests pass\n- one file changed',
     stop: 'end_turn',
   });
-  b.emit('gateVerdict', { passed: true, verdict: 'PASS', changed: ['sqlglot/parser.py'], failures: [], unverified: [] });
+  b.emit('gateVerdict', {
+    passed: true,
+    verdict: 'PASS',
+    changed: ['sqlglot/parser.py'],
+    failures: [],
+    unverified: [],
+  });
   b.emit('turnEnded', { ending: 'answered' });
 }

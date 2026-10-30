@@ -28,8 +28,8 @@ test.describe('the real bridge', () => {
   let server: ChildProcess;
   let url: string;
 
-  test.beforeEach(async ({}, info) => {
-    test.skip(info.project.name !== 'desktop', 'one browser is enough');
+  test.beforeEach(async () => {
+    test.skip(test.info().project.name !== 'desktop', 'one browser is enough');
     root = mkdtempSync(join(tmpdir(), 'mnemorph-board-e2e-'));
     server = spawn(BIN, [root], { stdio: ['ignore', 'pipe', 'inherit'] });
     url = await new Promise<string>((resolve, reject) => {
@@ -84,13 +84,17 @@ test.describe('the real bridge', () => {
 
     await box.fill('and again');
     await box.press('Enter');
-    await expect(page.locator('.msg-body', { hasText: 'The second turn, answered.' })).toBeVisible();
+    await expect(
+      page.locator('.msg-body', { hasText: 'The second turn, answered.' }),
+    ).toBeVisible();
     await expect(page.locator('.msg-user')).toHaveCount(2);
     await expect(page.locator('#pane .file')).toContainText('notes.txt');
 
     // A reload replays the chat from the bridge: each message once.
     await page.reload();
-    await expect(page.locator('.msg-body', { hasText: 'The second turn, answered.' })).toBeVisible();
+    await expect(
+      page.locator('.msg-body', { hasText: 'The second turn, answered.' }),
+    ).toBeVisible();
     await expect(page.locator('.msg-user')).toHaveCount(2);
     await expect(page.locator('.tool-name', { hasText: 'edit' })).toHaveCount(1);
 
@@ -102,7 +106,9 @@ test.describe('the real bridge', () => {
     await past.click();
     await expect(page).toHaveURL(/#\/w\/[^/]+\/r\/r\d+-\d+$/);
     await expect(page.locator('.msg-user')).toHaveCount(2);
-    await expect(page.locator('.msg-body', { hasText: 'The second turn, answered.' })).toBeVisible();
+    await expect(
+      page.locator('.msg-body', { hasText: 'The second turn, answered.' }),
+    ).toBeVisible();
     await expect(page.locator('.composer-closed')).toContainText('read-only');
 
     expect(errors).toEqual([]);
