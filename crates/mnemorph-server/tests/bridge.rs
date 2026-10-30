@@ -424,12 +424,16 @@ fn note(m: &Value) -> Option<&str> {
         .flatten()
 }
 
-/// Whether process `pid` is gone (or a zombie, waiting to be reaped by whoever adopted it).
+/// Whether process `pid` is gone (or a zombie, waiting to be reaped by whoever adopted it): asked
+/// of `ps`, which reads it on Linux and macOS alike.
 fn dead(pid: u32) -> bool {
-    std::fs::read_to_string(format!("/proc/{pid}/stat")).map_or(true, |s| {
-        s.rsplit_once(") ")
-            .is_some_and(|(_, rest)| rest.starts_with('Z'))
-    })
+    let out = std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .unwrap();
+    let stat = String::from_utf8_lossy(&out.stdout);
+    let stat = stat.trim();
+    stat.is_empty() || stat.starts_with('Z')
 }
 
 async fn all_dead(pids: &[u32]) -> bool {
