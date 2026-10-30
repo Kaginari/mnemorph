@@ -1,4 +1,4 @@
-//! The live chats. Each is a child `mnemorphd --world <dir>` on the unchanged protocol over its
+//! The live chats. Each is a child `mnemorphd` on its world, speaking the unchanged protocol on its
 //! stdio, bridged line for line to the tabs on `WS /ws/session/<sid>`:
 //!
 //! - **The child** starts in its own process group with the board's environment scrubbed of
