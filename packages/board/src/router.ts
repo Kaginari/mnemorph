@@ -32,7 +32,12 @@ function decode(segment: string): string | undefined {
 /** The route a location hash names; anything else is `unknown`, carrying the path as written. */
 export function parse(hash: string): Route {
   const path = hash.replace(/^#/, '');
-  const trimmed = path.replace(/^\/+/, '').replace(/\/+$/, '');
+  // Slashes trimmed by a scan: a regex anchored at the end backtracks over a long run of them.
+  let from = 0;
+  let to = path.length;
+  while (from < to && path[from] === '/') from++;
+  while (to > from && path[to - 1] === '/') to--;
+  const trimmed = path.slice(from, to);
   if (trimmed === '') return { name: 'worlds' };
   const parts = trimmed.split('/');
   const unknown: Route = { name: 'unknown', path };

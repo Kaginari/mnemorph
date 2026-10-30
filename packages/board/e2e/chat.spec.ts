@@ -150,7 +150,7 @@ for (const theme of ['dark', 'light'] as const) {
       const banner = page.locator('.ask-banner');
       await expect(banner).toContainText('Waiting for your approval');
       await expect(banner).toContainText("sed -i 's/a/b/' crates/wire/src/lib.rs");
-      await expect(banner).toContainText('B6');
+      await expect(banner).toContainText('approval card');
       await expect(banner).toContainText('9:41');
       await expect(banner.getByRole('button')).toHaveCount(0);
       await expect(page.getByRole('button', { name: /approve|allow|^yes/i })).toHaveCount(0);

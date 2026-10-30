@@ -128,7 +128,8 @@ function left(ms: number): string {
 /** The core denies an ask after this long when the board says nothing of its time. */
 const GATE_WAIT_MS = 10 * 60 * 1000;
 
-/** The asks waiting, shown — never approved here: the card is the approvals issue's (B6). */
+/** The asks waiting, shown — never approved here: approving is the approval card's, a component
+ * of its own (#278). */
 function AskBanner({ asks }: { asks: Waiting[] }) {
   const now = useTicker(asks.length > 0);
   const first = asks[0];
@@ -150,8 +151,8 @@ function AskBanner({ asks }: { asks: Waiting[] }) {
         <Safe text={a.act} lines />
       </pre>
       <p className="ask-note">
-        The approval card arrives with the board's approvals (B6): until then nothing here approves
-        an act. Esc stops the turn and denies it; left alone, it is denied in{' '}
+        This banner approves nothing: approving is the approval card's (issue 278). Esc stops the
+        turn and denies it; left alone, it is denied in{' '}
         <span className="mono">{left(remaining)}</span>.
       </p>
     </section>

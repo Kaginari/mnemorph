@@ -269,6 +269,8 @@ export class Chat {
   private entries: Entry[] = [];
   private next = 0;
   private streaming = '';
+  /** The last character streamed, kept apart: indexing the growing text would flatten it. */
+  private tail = '';
   private flushed = '';
   private headed = false;
   private readonly running = new Map<string, number>();
@@ -457,7 +459,12 @@ export class Chat {
   /** A piece of streaming text: a finished paragraph, outside any open fence, becomes an entry
    * at once, so the live part stays short. */
   private delta(text: string): void {
+    // Only a piece that brings a blank line can finish a paragraph: a long answer streamed in many
+    // pieces is not searched whole at each one.
+    const joint = this.tail + text;
+    this.tail = text.at(-1) ?? this.tail;
     this.streaming += text;
+    if (!joint.includes('\n\n')) return;
     const cut = this.streaming.lastIndexOf('\n\n');
     if (cut < 0) return;
     const done = this.streaming.slice(0, cut + 2);

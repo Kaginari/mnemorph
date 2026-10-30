@@ -31,8 +31,15 @@ export function elapsed(ms: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`;
 }
 
+/** `s` without its trailing newlines: a scan from the end, never a regex anchored there. */
+export function trimNewlines(s: string): string {
+  let end = s.length;
+  while (end > 0 && s[end - 1] === '\n') end--;
+  return s.slice(0, end);
+}
+
 const lineCount = (s: string) => {
-  const t = s.replace(/\n+$/, '');
+  const t = trimNewlines(s);
   return t === '' ? 0 : t.split('\n').length;
 };
 
@@ -68,7 +75,7 @@ function Folded({
   alarm?: boolean;
   onToggle: () => void;
 }) {
-  const text = content.replace(/\n+$/, '');
+  const text = trimNewlines(content);
   if (text.trim() === '') return null;
   const all = text.split('\n');
   const shown = open ? all : all.slice(0, OUTPUT_LINES);

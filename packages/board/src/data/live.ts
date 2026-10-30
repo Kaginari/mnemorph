@@ -8,9 +8,9 @@
  * the replay wait for it, and the SDK drops any event already seen by its `seq`, so a reconnect
  * after a drop — which replays from the last `seq` — never shows a message twice.
  *
- * The gate's card is the approvals issue's (B6): until it lands, this tab answers no ask. An ask
- * stays waiting — shown, never approved here — until Esc denies it with the turn, or its time
- * runs out and the core denies it.
+ * The chat answers no ask: approving is the approval card's, a component of its own (#278). An
+ * ask stays waiting — shown, never approved here — until it is answered there, Esc denies it with
+ * the turn, or its time runs out and the core denies it.
  */
 import type { GateRequest, Hello, Role } from '@mnemorph/protocol';
 import { type Arrived, Client, ws } from '@mnemorph/sdk/browser';
@@ -102,7 +102,7 @@ export function useLive(id: string): Live {
         }
       });
     };
-    // Until B6's card: an ask is shown, never answered by this tab.
+    // An ask is shown, never answered by the chat: the approval card (#278) answers it.
     c.onGate(() => new Promise(() => {}));
     c.on((e) => {
       if (!chat) early.push(e);

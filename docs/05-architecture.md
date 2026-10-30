@@ -414,8 +414,12 @@ raw HTML is never parsed and reads as text; a link is followed only to http, htt
 `noopener noreferrer`; an image is never loaded, its words shown. Code is highlighted by a small
 tokenizer (strings, comments, numbers, keywords) into spans of text. No dependency, nothing from a
 string becomes markup, and nothing runs, so the page holds under `require-trusted-types-for
-'script'`. A hostile depth or length costs bounded work: nesting stops at 8 and a closer is looked
-for within 4,096 characters; past 100,000 characters an answer is shown as plain text.
+'script'`. A hostile depth or length costs linear work: each line is read by a scan or a regex with
+no overlapping quantifiers (a backtracking pattern on one long line would freeze every tab showing
+it), brackets are paired in one pass, a closer's search resumes where the last one stopped, nesting
+stops at 8, and past 100,000 characters an answer is shown as plain text. A test times every parser
+the board runs on such text — the Markdown subset, the highlighter, the safe-text runs, the router —
+on adversarial 100 KB inputs, each under 50 ms.
 
 **The composer.** Enter sends; while a turn runs it queues (the line waits its turn, listed above
 the composer), *Steer* (or `/send …`) reaches the running turn after its next tool step, and Esc
@@ -424,8 +428,8 @@ its composer is disabled and offers *Take over*, which a tab of the browser that
 use. *End chat* ends it for every tab.
 
 **A waiting ask** is shown, never approved here: a banner names the body, the class and the act,
-and how long until the core denies it; the approval card and its protections arrive with the
-board's approvals. Until then nothing on the board answers an ask, and Esc denies it with the turn.
+and how long until the core denies it. Approving is the approval card's, a component of its own
+with its protections (#278); the chat itself answers no ask, and Esc denies it with the turn.
 
 **Reconnecting.** A tab opening on a chat replays what it said (`Client.catchUp`): live events that
 overtake the replay wait for it, and the SDK drops an event whose `seq` it has seen, so a reconnect

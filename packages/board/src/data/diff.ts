@@ -20,7 +20,7 @@ const CONTEXT = 2;
 export const HEAD = 4;
 /** Past this many lines on a side, an edit is shown removed and added whole: the diff would cost
  * more than it shows. */
-const DIFF_CAP = 2000;
+const DIFF_CAP = 1000;
 
 const s = (v: unknown, k: string): string | undefined => {
   const x = (v as Record<string, unknown> | null)?.[k];
@@ -33,8 +33,21 @@ const lines = (t: string): string[] => {
   return l;
 };
 
+/** Changes already worked out, by the call's input: a card draws again without diffing again. */
+const memo = new WeakMap<object, Map<string, Change | undefined>>();
+
 /** The change a call makes, when it is a file tool's. */
 export function changeOf(name: string, input: unknown): Change | undefined {
+  if (typeof input !== 'object' || input === null) return undefined;
+  const byName = memo.get(input) ?? new Map<string, Change | undefined>();
+  memo.set(input, byName);
+  if (byName.has(name)) return byName.get(name);
+  const c = compute(name, input);
+  byName.set(name, c);
+  return c;
+}
+
+function compute(name: string, input: unknown): Change | undefined {
   switch (name) {
     case 'edit': {
       const o = s(input, 'old_string');
