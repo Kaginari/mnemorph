@@ -4,7 +4,8 @@
  * left out and counted, never guessed at.
  */
 import type { BoardWorld, WorldState } from '@mnemorph/protocol';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { type Change, usePush } from './push.ts';
 import { establish } from './session.ts';
 
 export interface Worlds {
@@ -56,9 +57,18 @@ export type Load =
   | { state: 'ready'; data: Worlds }
   | { state: 'failed'; reason: string };
 
-/** The worlds, read once on mount, after the session is established. */
+/**
+ * The worlds, read on mount after the session is established, and again when the push channel
+ * says the list moved. A reread that fails keeps the list shown.
+ */
 export function useWorlds(): Load {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
+  const [tick, setTick] = useState(0);
+  const on = useCallback((c: Change) => {
+    if (c.kind === 'worlds') setTick((t) => t + 1);
+  }, []);
+  usePush(on);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` asks for a reread
   useEffect(() => {
     const ctl = new AbortController();
     establish()
@@ -80,9 +90,10 @@ export function useWorlds(): Load {
       })
       .catch((e: unknown) => {
         if (ctl.signal.aborted) return;
-        setLoad({ state: 'failed', reason: e instanceof Error ? e.message : String(e) });
+        const reason = e instanceof Error ? e.message : String(e);
+        setLoad((was) => (was.state === 'ready' ? was : { state: 'failed', reason }));
       });
     return () => ctl.abort();
-  }, []);
+  }, [tick]);
   return load;
 }

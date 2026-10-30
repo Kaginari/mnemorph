@@ -2,6 +2,11 @@
  * The key `mnemorphd board` prints in the URL's fragment (`#k=<key>`) is traded once for the
  * session cookie: read, dropped from the address bar and history before anything renders, then
  * posted to `POST /session`. A page opened without a key relies on the cookie it already holds.
+ *
+ * The trade answers the CSRF token bound to the session. It lives in this module's memory only —
+ * never storage, the DOM or a log — and a reloaded page asks for it again at `GET /api/session`
+ * while the cookie lives. The board's push socket offers it as the subprotocol entry
+ * `mnemorph.csrf.<token>`.
  */
 
 /** The key a fragment carries: 64 hex characters, or nothing. */
@@ -11,6 +16,7 @@ export function keyOf(hash: string): string | undefined {
 }
 
 let pending: Promise<void> | undefined;
+let token: string | undefined;
 
 /**
  * Takes the key from the address bar at once (so it is never rendered, routed or kept in history)
@@ -27,12 +33,36 @@ export function takeKey() {
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ key }),
-  }).then((res) => {
+  }).then(async (res) => {
     if (!res.ok)
       throw new Error(
         `the board refused the key (${res.status}): it may be spent; open the URL “mnemorphd board” prints again`,
       );
+    token = readToken(await res.json().catch(() => undefined));
   });
+}
+
+/** The token in a `{csrf}` answer, if it is one. */
+function readToken(body: unknown): string | undefined {
+  const t = (body as { csrf?: unknown } | undefined)?.csrf;
+  return typeof t === 'string' && /^[0-9a-f]{64}$/.test(t) ? t : undefined;
+}
+
+/** The session's CSRF token: the one the trade answered, else asked of `GET /api/session`. */
+export async function csrf(): Promise<string> {
+  await establish().catch(() => {});
+  if (token) return token;
+  const res = await fetch('/api/session', { credentials: 'same-origin' });
+  if (!res.ok)
+    throw new Error(`no board session (${res.status}): open the URL “mnemorphd board” prints`);
+  token = readToken(await res.json());
+  if (!token) throw new Error('the board answered no CSRF token');
+  return token;
+}
+
+/** Forget the token: the session ended. */
+export function forget(): void {
+  token = undefined;
 }
 
 /** Settles once the key, if the page had one, has been traded. */

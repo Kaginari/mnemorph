@@ -240,6 +240,47 @@ embeds a placeholder page saying so, and serves the API all the same.
 | `GET /api/health` | `{"ok": true}`, with no session |
 | `GET /api/session` | `{"csrf": "<token>"}` |
 | `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}]}` — `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present` or `missing`; the latest session first. Paths and names are the world's own text: the page renders them as text, never markup |
+| `GET /api/w/<id>` | `BoardOverview` of a listed world, 404 for an id no listed world has — see *The world overview* below |
+| `WS /ws/board` | the push channel, subprotocol `mnemorph.board.v1` beside the CSRF entry; the server alone speaks — see *The watcher* below |
+
+#### The world overview
+
+`GET /api/w/<id>` reads one world in-process through the crates the CLI uses, so its numbers are
+the CLI's. Every field is a `Sourced<T>`: `{value, source, trusted, why}` — `value` is `null`
+when its source cannot be read and `why` then says so (unknown is said, never guessed, and no
+spend reads `$0` that was not priced); `trusted` is `true` only for what the harness keeps under
+the state directory, chained, or knows itself. What is read inside the world — a body can write
+it — is shown and grants nothing.
+
+| Field | Value | Source | Trusted |
+|---|---|---|---|
+| `status` | `live` (a chat the board runs is open in it), `tui-live` (a session's run lock under `.mnemorph/instruments/loop/` is held by a live process now — a terminal's), `idle`, or `missing` (its directory is gone: shown, never dropped) | the board's chats; the run locks, probed as `mnemorphd runs` probes them (only a regular file is opened); the directory | the chats and the directory yes, the locks no |
+| `activity` | `{at, what}`: the latest of a session opening, the gate's last verdict, `log.md` written, a run journal written, a call booked | the registry, the gate's journal, the files' write times | per source |
+| `memory` | `shared`, `grounded`, `proposed`, `retired`, `unproven`, counted as `mnemorphd memory status` counts them | `.mnemorph/memory/` | no |
+| `challenges` | the open challenges `pending`, `blocked`, `verifying`; those with an `unstaffed` speciality; their `findings`; `unreadable` record lines — as `mnemorphd challenge list` reads them | the challenge records under the state directory | yes |
+| `gate` | how many verdicts, and the last: `{at, body, verdict, changed}` or `null` before the first | the gate's verdict journal under the state directory | yes |
+| `meters` | each living creature's meters with `successes`, `n`, the point estimate and the 95% Wilson interval `lo`–`hi`, or `null`s for no report — as `mnemorphd meters --json` | the roster in the world over the challenge records' folds | no |
+| `spend` | the latest session in the usage ledger: `calls`, `usd` (`null` when none was priced), `unpriced`, weighted tokens | `.mnemorph/instruments/usage.jsonl` | no |
+| `waiting` | the gate asks the board's chats keep for the human; a terminal session's asks wait in its terminal | the board's chats | yes |
+
+#### The watcher
+
+While the board runs, a watcher looks at every listed world every 150 ms: a signature of the size
+and write time of `log.md`, the usage ledger, each run journal and lock, the memory tiers (one
+level deep), and the challenge records and gate verdicts under the state directory — at most
+4,096 entries a directory. A world whose signature moved is told once it holds still for a look,
+or 600 ms after it began moving at the latest, so a burst of writes is one push; a world first
+seen is remembered, not told. The registry and the human's list are watched too. Each change goes
+to every board socket as JSON-RPC 2.0 without an id: `world/changed {"id"}`, or `worlds/changed`
+when the list moved. Polling needs no platform's notification API and a world cannot exhaust a
+watch table by making directories.
+
+`WS /ws/board` passes the guard like any upgrade — the loopback Host, the Origin, the cookie, and
+the CSRF token as the subprotocol entry `mnemorph.csrf.<token>` — and must offer
+`mnemorph.board.v1`, which it answers. At most 16 are open; a tab sends nothing (anything but a
+ping or a close ends it, and a message is capped at 1 KiB); a socket that falls behind is told
+`worlds/changed`; when its session ends it is closed with 4001. The page rereads what it shows
+when its world is named, and everything when `worlds/changed` comes or its socket reopens.
 
 #### `mnemorph run`
 
@@ -537,6 +578,8 @@ right.
 
 <img src="../assets/board/desktop-dark.png" width="640" alt="The board at desktop width, dark: the rail with the worlds, the worlds in the centre, the pane at a glance"> <img src="../assets/board/phone-light.png" width="180" alt="The board at phone width, light: the worlds, the rail folded behind the menu">
 
+<img src="../assets/board/desktop-dark-world.png" width="640" alt="A world's page, dark: its status, last activity, memory, challenges, end gate, spend and meters, each with its source">
+
 **The rail.** At its head the `◈ MNEMORPH` wordmark, its letters running the races' colours as
 the terminal's welcome does, then search, the **worlds** (each with its state in words: *present*
 with the age of its latest session or *never opened*, or *missing*, never dropped) and the board's
@@ -570,7 +613,20 @@ the server's `BoardWorlds` of `BoardWorld` rows (`packages/protocol`, generated 
 `mnemorph-server`): id, name, path, remote or `null`, the latest session or `null`, the session
 count, and `present` or `missing`. The page checks every row field by field; a row that does not
 hold together is left out and counted on the page, never guessed at. Worlds sort by their latest
-session, a world never opened last. `vite dev` answers the API with the fixtures
+session, a world never opened last.
+
+**The worlds home** gives each world a row: its status (*live*, *live in a terminal*, *idle*,
+*missing*) with its name and path, the latest session's age, then from its overview the memory
+standing (grounded, shared, unproven), the open challenges, the gate's last verdict, the latest
+session's spend (`unpriced` rather than `$0`) and the last activity — and *waiting for you* when
+the board's chats keep a gate ask. **A world's page** (`#/w/<world>`) lays its overview out in
+panels — status, last activity, memory, challenges, end gate, latest spend, meters — each footed
+with its source and whether it is the harness's (*harness*) or read in the world (*in-world,
+shown only*); an unknown field reads *unknown* with its reason. A missing world keeps its page and
+what the harness kept for it. Each overview is read from `GET /api/w/<id>` and checked field by
+field: a field that does not hold together reads as unknown, saying so. The page keeps one socket
+on `WS /ws/board`, reopened with a growing pause after a drop, and says whether updates flow;
+a reread that fails keeps what was shown, said to be stale. `vite dev` answers the API with the fixtures
 (`src/data/fixtures.ts`), and the end-to-end tests route it to them; a unit test parses an answer
 byte for byte as the server's handler writes it.
 
