@@ -91,6 +91,9 @@ pub struct Meta {
     pub denied: bool,
     /// The shelf refused the act: the class the body's race does not hold.
     pub unheld: Option<ToolClass>,
+    /// The MCP tool the call reached, by the name a body calls it: what the world's usage record
+    /// learns from.
+    pub mcp: Option<String>,
 }
 
 impl Outcome {

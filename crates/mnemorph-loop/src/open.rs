@@ -86,6 +86,9 @@ pub struct Opened {
     pub key: Option<String>,
     /// The sandbox actually in force for the session's commands, or `none — <reason>`.
     pub sandbox: String,
+    /// The MCP tools the session's body is offered, one priced line each, then the frame's
+    /// total: what `status` shows. Empty when no server serves its race.
+    pub mcp: Vec<String>,
 }
 
 /// Which run a session opens on.
@@ -298,6 +301,8 @@ pub fn resume_with(
 }
 
 /// The one opening every session goes through, fresh or resumed.
+// One straight sequence, each step reading the last: split, it would pass the same state around.
+#[allow(clippy::too_many_lines)]
 fn build(
     world: &Path,
     config: &Config,
@@ -342,6 +347,8 @@ fn build(
         tools.push(Box::new(crate::commission::CommissionTool));
         tools.push(Box::new(crate::queue_tool::QueueTool));
     }
+    // The MCP servers the human declared: the body's share decided once, before the run is made.
+    let (mcp, mcp_lines, mcp_holes) = mcp_share(config, body.race, &cx, &mut tools)?;
     let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
     // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
     if !lanes.is_empty() {
@@ -369,6 +376,7 @@ fn build(
         council: council_keys(config),
         challenges: None,
         reviewers: config.challenge_reviewers(),
+        mcp,
     });
     let setup = Setup {
         model: model.clone(),
@@ -409,12 +417,72 @@ fn build(
         provider: model.provider().to_owned(),
         session_id,
         run_id,
-        holes: holes(config, unread, world),
+        holes: holes(config, unread, world)
+            .into_iter()
+            .chain(mcp_holes)
+            .collect(),
         budget,
         key: None,
         // The network is opened only for an approved outward act, so the standing state is off.
         sandbox: mnemorph_tools::Sandbox::detect().status(false),
+        mcp: mcp_lines,
     })
+}
+
+/// The session's MCP servers, when the human declared any, and the body's share of them put on
+/// its shelf: the priced lines for `status`, and what was refused.
+#[allow(clippy::type_complexity)]
+fn mcp_share(
+    config: &Config,
+    race: mnemorph_races::Race,
+    cx: &mnemorph_tools::Context,
+    tools: &mut Vec<Box<dyn mnemorph_tools::Tool>>,
+) -> Result<
+    (
+        Option<Arc<mnemorph_tools::mcp::Mcp>>,
+        Vec<String>,
+        Vec<String>,
+    ),
+    String,
+> {
+    let settings = config.mcp()?;
+    if settings.servers.is_empty() {
+        return Ok((None, Vec::new(), Vec::new()));
+    }
+    let mcp = mnemorph_tools::mcp::Mcp::new(settings);
+    let offer = mcp.offer(race, "", cx, &reserved(tools));
+    let lines = offer.lines();
+    let holes = offer.holes.clone();
+    tools.extend(offer.tools);
+    Ok((Some(mcp), lines, holes))
+}
+
+/// Every name an MCP tool may not take: the tools already on the shelf, and every tool the loop
+/// or the act runner hands any body.
+pub(crate) fn reserved(
+    tools: &[Box<dyn mnemorph_tools::Tool>],
+) -> std::collections::BTreeSet<String> {
+    tools
+        .iter()
+        .map(|t| t.name().to_owned())
+        .chain(
+            [
+                crate::commission::COMMISSION,
+                crate::queue_tool::QUEUE,
+                crate::wear_tool::WEAR,
+                crate::verify_tool::VERIFY,
+                crate::coverage_tool::COVERAGE,
+                crate::verdict_tool::VERDICT,
+                mnemorph_config::OUTWARD,
+            ]
+            .map(str::to_owned),
+        )
+        .chain(
+            mnemorph_tools::registry()
+                .iter()
+                .map(|t| t.name().to_owned()),
+        )
+        .collect()
 }
 
 /// The session's attic at `dir`, kept within the configuration's limits.

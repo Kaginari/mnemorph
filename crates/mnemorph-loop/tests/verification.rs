@@ -168,6 +168,7 @@ impl World {
             queue: None,
             challenges: Some(self.records()),
             reviewers: 3,
+            mcp: None,
         };
         Run::new(body, Limits::for_race(Race::Rimuru), setup)
             .with_gate(EndGate::default())

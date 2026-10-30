@@ -231,6 +231,16 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
     ("oni.envelope_days", Kind::Int),
+    ("mcp.defer_above", Kind::Int),
+    ("mcp.top_k", Kind::Int),
+    ("mcp.schema_tokens", Kind::Int),
+    ("mcp.servers.*.command", Kind::Str),
+    ("mcp.servers.*.args", Kind::StrList),
+    ("mcp.servers.*.env", Kind::StrList),
+    ("mcp.servers.*.races", Kind::StrList),
+    ("mcp.servers.*.read_only", Kind::Bool),
+    ("mcp.servers.*.network", Kind::Bool),
+    ("mcp.servers.*.timeout_secs", Kind::Int),
 ];
 
 /// A configuration layer, lowest first.
@@ -580,6 +590,14 @@ impl Config {
                 continue;
             };
             check_kind(&key, &value, kind, origin)?;
+            if origin.layer == Layer::Tracked && key.starts_with("mcp.") {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "an MCP server is a program started with its own reach, so it is honoured only from the local or global file".into(),
+                });
+                continue;
+            }
             if origin.layer == Layer::Tracked && key.starts_with("providers.") {
                 self.holes.push(Hole {
                     key,
@@ -1159,6 +1177,84 @@ impl Config {
             );
         }
         out
+    }
+
+    /// The MCP servers the human's own files declare, and how a large catalog is offered.
+    ///
+    /// # Errors
+    ///
+    /// A server with no command, an unlawful name, an unknown race, or a zero timeout.
+    pub fn mcp(&self) -> Result<mnemorph_tools::mcp::Settings, String> {
+        use mnemorph_tools::mcp::{self, Server, Settings};
+        let mut names: Vec<&str> = self
+            .leaves
+            .keys()
+            .filter_map(|k| k.strip_prefix("mcp.servers."))
+            .filter_map(|k| k.split_once('.').map(|(n, _)| n))
+            .collect();
+        names.dedup();
+        let list = |key: &str| -> Vec<String> {
+            self.get(key)
+                .and_then(|l| l.value.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let flag = |key: &str| self.get(key).and_then(|l| l.value.as_bool()) == Some(true);
+        let mut servers = Vec::new();
+        for name in names {
+            let at = |f: &str| format!("mcp.servers.{name}.{f}");
+            if !mcp::lawful_server_name(name) {
+                return Err(format!(
+                    "mcp.servers.{name}: a server's name is lower-case letters, digits and dashes, at most 24"
+                ));
+            }
+            let Some(command) = self
+                .get(&at("command"))
+                .and_then(|l| l.value.as_str())
+                .filter(|c| !c.is_empty())
+            else {
+                return Err(format!("mcp.servers.{name}: no command"));
+            };
+            let races = list(&at("races"))
+                .iter()
+                .map(|r| {
+                    Race::from_name(r)
+                        .ok_or_else(|| format!("mcp.servers.{name}.races: `{r}` is no race"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let timeout = match self.int(&at("timeout_secs")) {
+                Some(0) => return Err(format!("mcp.servers.{name}.timeout_secs: at least 1")),
+                Some(s) => std::time::Duration::from_secs(s),
+                None => mcp::TIMEOUT,
+            };
+            servers.push(Server {
+                name: name.to_owned(),
+                command: command.to_owned(),
+                args: list(&at("args")),
+                env: list(&at("env")),
+                races,
+                read_only: flag(&at("read_only")),
+                network: flag(&at("network")),
+                timeout,
+            });
+        }
+        let d = Settings::default();
+        Ok(Settings {
+            servers,
+            defer_above: self
+                .int("mcp.defer_above")
+                .and_then(|n| usize::try_from(n).ok())
+                .unwrap_or(d.defer_above),
+            top_k: self
+                .int("mcp.top_k")
+                .and_then(|n| usize::try_from(n).ok())
+                .unwrap_or(d.top_k),
+            schema_tokens: self.int("mcp.schema_tokens").unwrap_or(d.schema_tokens),
+        })
     }
 
     /// The Oni envelopes the human signed (local or global file; the gate reads only the global), revoked and expired ones

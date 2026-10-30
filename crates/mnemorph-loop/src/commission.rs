@@ -117,6 +117,8 @@ pub struct Commissioner {
     /// How many reviewers one landing's challenge commissions at one sweep
     /// ([`crate::challenge::REVIEWERS`] unless the configuration says).
     pub reviewers: usize,
+    /// The session's MCP servers: each child is offered its race's share, ranked for its ask.
+    pub mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -518,6 +520,7 @@ pub(crate) async fn order(
         slice,
         child_cx.with_body(&a.to),
         model,
+        &a.ask,
     )
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
@@ -1277,6 +1280,8 @@ impl Drop for Seat {
 
 /// The child body for `to`: its prompt, its tools over its own soil, its slice as its budget,
 /// the human's caps and stress line, its gate, and the commission tool when its race dispatches.
+// The order's parts, each read once here: bundling them would only move the list.
+#[allow(clippy::too_many_arguments)]
 fn child_run(
     c: &Arc<Commissioner>,
     roster: &Roster,
@@ -1285,6 +1290,7 @@ fn child_run(
     slice: u64,
     cx: Context,
     model: String,
+    ask: &str,
 ) -> Run {
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
@@ -1326,6 +1332,11 @@ fn child_run(
     // A Kijin's typed outward acts take the act runner's one path; untyped ones stay with bash.
     if creature.race.base() == mnemorph_races::Race::Kijin {
         tools.push(Box::new(mnemorph_config::OutwardTool));
+    }
+    // The race's MCP share, ranked for this ask: decided now, never changed mid-run.
+    if let Some(m) = &c.mcp {
+        let offer = m.offer(creature.race, ask, &cx, &crate::open::reserved(&tools));
+        tools.extend(offer.tools);
     }
     let setup = Setup {
         model: Arc::clone(&c.model),

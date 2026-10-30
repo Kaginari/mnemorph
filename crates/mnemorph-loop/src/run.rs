@@ -286,6 +286,8 @@ pub struct Run {
     recall_trace: Option<(String, bool, Option<String>, Option<String>)>,
     /// What this ask landed: the gate's journal heading for a change it judged.
     landed_in_ask: Option<String>,
+    /// The MCP tools this ask called: what the world's usage record learns at its end.
+    mcp_used: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// The evolution ledger this run's asks are stamped on: the world's own under the state
     /// directory (`None`), or the one given.
     evolution_ledger: Option<PathBuf>,
@@ -426,6 +428,7 @@ impl Run {
             office: "ask".into(),
             recall_trace: None,
             landed_in_ask: None,
+            mcp_used: std::sync::Mutex::default(),
             evolution_ledger: None,
             evolving: std::sync::Mutex::new(None),
             opening: None,
@@ -894,10 +897,28 @@ impl Run {
         }
     }
 
+    /// The MCP tools this ask called, counted in the world's usage record: each helped when the
+    /// ask ended answered with no failure at its gate. The harness counts; no model writes it.
+    fn learn_mcp(&self, ending: &Ending) {
+        let used = std::mem::take(
+            &mut *self
+                .mcp_used
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        let helped = matches!(ending, Ending::Answered(_)) && self.failed_in_ask.is_none();
+        if let Err(e) = mnemorph_tools::mcp::learn(self.cx.world(), &used, helped) {
+            self.record(&Beat::Warning {
+                text: format!("the MCP usage record could not be kept: {e}"),
+            });
+        }
+    }
+
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
         self.record_evolving(&ending);
+        self.learn_mcp(&ending);
         if let Ending::Answered(text) = &ending {
             self.accept(text);
             // A commissioned body's claims are its dispatcher's to keep; a body answering the
@@ -2803,6 +2824,12 @@ impl Run {
     /// Journal what the guts read from one act, with the act's instruments: the record a learned
     /// value model will train on.
     fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
+        if let Some(tool) = &o.meta.mcp {
+            self.mcp_used
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(tool.clone());
+        }
         let reading = self.stress.last().clone();
         self.record(&Beat::Guts {
             tool_use_id: id.to_owned(),

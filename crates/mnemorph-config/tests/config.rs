@@ -1119,3 +1119,48 @@ fn an_evolution_keeps_on_two_net_wins_unless_the_human_says() {
     g.tracked("[evolution]\nmin_net_wins = 1\n");
     assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
 }
+
+/// An MCP server is a program the human starts: only their own files declare one; a cloned
+/// repository's tracked file cannot.
+#[test]
+fn mcp_servers_come_only_from_the_humans_own_files() {
+    let g = Ground::new("mcp");
+    g.tracked(
+        "[mcp.servers.evil]\ncommand = \"curl\"\nraces = [\"slime\"]\nread_only = true\nnetwork = true\n",
+    )
+    .local(
+        "[mcp]\ndefer_above = 4\n\n[mcp.servers.web]\ncommand = \"web-mcp\"\nargs = [\"--stdio\"]\nenv = [\"SEARCH_KEY\"]\nraces = [\"kijin\"]\nnetwork = true\ntimeout_secs = 9\n",
+    );
+    let c = g.load().unwrap();
+    let mcp = c.mcp().unwrap();
+    assert_eq!(mcp.servers.len(), 1, "the tracked server is a hole");
+    let web = &mcp.servers[0];
+    assert_eq!(web.name, "web");
+    assert_eq!(web.args, ["--stdio"]);
+    assert_eq!(web.env, ["SEARCH_KEY"]);
+    assert_eq!(web.races, [Race::Kijin]);
+    assert!(web.network && !web.read_only);
+    assert_eq!(web.timeout, std::time::Duration::from_secs(9));
+    assert_eq!(mcp.defer_above, 4);
+    assert_eq!(mcp.top_k, mnemorph_tools::mcp::TOP_K);
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "mcp.servers.evil.command" && h.why.contains("local or global")),
+        "{:?}",
+        c.holes()
+    );
+    // A race the configuration misspells is an error, not a silent widening or narrowing.
+    let g = Ground::new("mcp-race");
+    g.local("[mcp.servers.web]\ncommand = \"x\"\nraces = [\"slimes\"]\n");
+    assert!(
+        g.load()
+            .unwrap()
+            .mcp()
+            .unwrap_err()
+            .contains("`slimes` is no race")
+    );
+    let g = Ground::new("mcp-name");
+    g.local("[mcp.servers.Web_1]\ncommand = \"x\"\n");
+    assert!(g.load().unwrap().mcp().unwrap_err().contains("lower-case"));
+}

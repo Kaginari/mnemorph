@@ -119,6 +119,7 @@ impl World {
                 &self.0.with_extension("challenges.jsonl"),
             )),
             reviewers: mnemorph_loop::challenge::REVIEWERS,
+            mcp: None,
         };
         let setup = Setup {
             model,

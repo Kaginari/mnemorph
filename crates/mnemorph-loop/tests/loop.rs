@@ -2111,3 +2111,106 @@ async fn a_session_of_changes_only_appends_except_at_its_fold() {
         mnemorph_loop::compact::fingerprints(run.messages())
     );
 }
+
+/// #48 under #231: a run's MCP tools are decided when it is made. Past the threshold the frame
+/// holds the ranked few and the two doors; a deferred tool found and called mid-run rides the
+/// conversation as tool results, so every request sends the same tools block and only appends —
+/// the prefix guard records no move. What the ask called is learned at its end.
+#[tokio::test]
+async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
+    use mnemorph_tools::mcp::{CALL, Mcp, SEARCH, Server, Settings};
+    let w = World::new("mcp-append");
+    let tools: Vec<Value> = (0..10)
+        .map(|i| json!({"name": format!("filler_{i}"), "description": format!("Chore {i}")}))
+        .chain([
+            json!({"name": "web_search", "description": "Search the web"}),
+            json!({"name": "issue_find", "description": "Find an issue in a tracker"}),
+        ])
+        .collect();
+    let list = w.world().join("../mcp-tools.json");
+    fs::write(&list, Value::Array(tools).to_string()).unwrap();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../mnemorph-tools/tests/fixtures/fake-mcp.sh");
+    let mcp = Mcp::new(Settings {
+        top_k: 2,
+        servers: vec![Server {
+            name: "hub".into(),
+            command: "bash".into(),
+            args: vec![
+                fixture.display().to_string(),
+                list.display().to_string(),
+                w.world().join("../mcp-log").display().to_string(),
+            ],
+            env: Vec::new(),
+            races: vec![Race::Slime],
+            read_only: true,
+            network: false,
+            timeout: std::time::Duration::from_secs(10),
+        }],
+        ..Settings::default()
+    });
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "hub__web_search", json!({"q": "release"})),
+        tool("t2", SEARCH, json!({"query": "find an issue"})),
+        tool(
+            "t3",
+            CALL,
+            json!({"name": "hub__issue_find", "arguments": {}}),
+        ),
+        answer("first"),
+        tool("t4", CALL, json!({"name": "hub__filler_3"})),
+        answer("second"),
+    ]));
+    let mut setup = w.setup(model.clone());
+    let reserved = setup.tools.iter().map(|t| t.name().to_owned()).collect();
+    let offer = mcp.offer(Race::Slime, "search the web", &setup.cx, &reserved);
+    assert_eq!(offer.offered[0].name, "hub__web_search");
+    setup.tools.extend(offer.tools);
+    let mut run = Run::new(body(), limits(), setup);
+    assert_eq!(
+        ask(&mut run, "search the web, then find the issue").await,
+        Ending::Answered("first".into())
+    );
+    assert_eq!(
+        ask(&mut run, "a chore").await,
+        Ending::Answered("second".into())
+    );
+
+    let requests = model.requests();
+    assert_eq!(requests.len(), 6);
+    for (i, r) in requests.iter().enumerate() {
+        assert_eq!(
+            r.tools, requests[0].tools,
+            "request {i} rewrote the tools block"
+        );
+        assert_eq!(r.system, requests[0].system);
+    }
+    let names: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&SEARCH) && names.contains(&CALL),
+        "{names:?}"
+    );
+    assert!(
+        !names.contains(&"hub__issue_find"),
+        "a deferred tool never joins the frame"
+    );
+    assert!(
+        moves_between(&requests).is_empty(),
+        "the requests only append"
+    );
+    let beats = w.journal().read().unwrap().rows;
+    assert!(
+        !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
+        "the guard recorded no prefix move"
+    );
+    let said = format!("{:?}", requests[3].messages);
+    assert!(
+        said.contains("hub__issue_find — read"),
+        "the search showed the schema"
+    );
+    assert!(said.contains("called issue_find"), "the door called it");
+    let usage = mnemorph_tools::mcp::Usage::load(&w.world());
+    assert_eq!(usage.tools["hub__web_search"].helped, 1);
+    assert_eq!(usage.tools["hub__issue_find"].helped, 1);
+    assert_eq!(usage.tools["hub__filler_3"].called, 1);
+}
