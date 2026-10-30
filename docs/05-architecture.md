@@ -52,6 +52,8 @@ flowchart TB
       WORLD --> LEDGER
       WORLD --> MEM
       MEM --> LEDGER
+      MEM --> SANDBOX
+      WORLD --> SANDBOX
       WORLD --> PROVING
       PROVING --> WIRE
       PROVING --> RACES
@@ -643,12 +645,21 @@ flowchart LR
     not judged. **What a body reads of other processes:** `/proc` is readable, but landlock
     keeps a sandboxed process out of the `environ`, `mem` and `maps` of every process outside
     its domain, so the harness's environment — where the provider keys live — is closed to its
-    commands. `mnemorph` and `mnemorphd` also make themselves non-dumpable as they start, so
-    their `/proc` files are root's and closed to every other process of the user, an unguarded
-    command's included (no core dump is written, and a debugger attaches only as root). What
+    commands. On Linux `mnemorph` and `mnemorphd` also make themselves non-dumpable as they
+    start, so their `/proc` files are root's and closed to every other process of the user, an
+    unguarded command's included (no core dump is written, and a debugger attaches only as
+    root); `mnemorphd` refuses to serve if the kernel refuses this, and `mnemorph` warns in the
+    session. Every process the harness starts — commands, its own `git` calls, the guard's probe
+    — gets the harness's environment without its secrets, since a running child's `environ` is
+    open to the user's other processes. The exception is an MCP server given a key by name in
+    its configuration: while it runs, that key is readable by the user's other processes. What
     stays open is what any process of the user may see: the list of processes and each one's
-    `cmdline` and `status` — so a secret never travels on a command line. On macOS the
-    Seatbelt profile allows `process-info*` only for processes in the command's own sandbox.
+    `cmdline` and `status` — so a secret never travels on a command line. On macOS there is no
+    `/proc` and nothing is made non-dumpable: the Seatbelt profile allows `process-info*` only
+    within the command's own sandbox and denies the sysctls that hand out another process's
+    arguments and environment (`kern.procargs`, `kern.procargs2`, `kern.proc.*`) — so `ps`
+    inside a command sees little; this rule is checked by CI's macOS run and not yet on a Mac
+    by hand.
   - **seccomp** — without network, `socket()` fails for every family, Unix sockets included (a
     host daemon's socket is a way out); `socketpair` stays. Always denied: `ptrace`,
     `process_vm_*`, `mount`, `unshare`, `setns`, `pivot_root`, `chroot`, `bpf`,

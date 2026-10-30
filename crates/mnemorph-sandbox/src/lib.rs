@@ -16,10 +16,13 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod env;
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+
+pub use env::{git, scrubbed_env};
 
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
 /// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
@@ -365,7 +368,7 @@ impl Sandbox {
         match self {
             Self::Guard(guard) => {
                 let mut probe = Command::new(guard);
-                probe.arg("--probe");
+                probe.arg("--probe").env_clear().envs(scrubbed_env());
                 if network {
                     probe.arg("--network");
                 }

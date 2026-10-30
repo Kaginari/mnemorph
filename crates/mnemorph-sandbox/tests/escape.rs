@@ -372,7 +372,6 @@ fn no_application_is_launched_from_inside() {
 }
 
 /// The variable a stand-in harness carries its fake secret in.
-#[cfg(target_os = "linux")]
 const FAKE_SECRET: &str = "MNEMORPH_TEST_FAKE_SECRET";
 
 /// What a command finds of `secret` in `/proc`: it opens `/proc/$PPID/environ`,
@@ -454,5 +453,88 @@ fn a_body_cannot_read_the_harness_environment() {
     assert!(
         !unguarded.contains("LEAK"),
         "an unguarded command read the hardened harness's environment: {unguarded}"
+    );
+}
+
+/// The harness's own git calls start without its secrets: a stand-in harness carrying a fake
+/// secret runs `env` through a git alias started by [`mnemorph_sandbox::git`].
+#[test]
+fn the_harness_git_carries_no_key() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "the_harness_git_carries_no_key",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(
+                FAKE_SECRET,
+                format!("fake-{}-not-a-key", std::process::id()),
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let out = mnemorph_sandbox::git()
+        .args(["-c", "alias.showenv=!env", "showenv"])
+        .output()
+        .expect("git runs");
+    let env = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success() && env.contains("PATH="), "{env}");
+    assert!(!env.contains(&secret), "git's child got the secret");
+    assert!(
+        !env.contains(FAKE_SECRET),
+        "git's child got the secret's variable"
+    );
+}
+
+/// On macOS a body cannot read the harness's environment through sysctl: `ps -E`, which reads
+/// `kern.procargs2`, finds no fake secret in a stand-in harness.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_body_cannot_read_the_harness_environment_through_sysctl() {
+    let Some(secret) = std::env::var_os(FAKE_SECRET) else {
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "a_body_cannot_read_the_harness_environment_through_sysctl",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(
+                FAKE_SECRET,
+                format!("fake-{}-not-a-key", std::process::id()),
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{text}");
+        assert!(
+            text.contains("1 passed"),
+            "the stand-in did not run: {text}"
+        );
+        return;
+    };
+    let secret = secret.into_string().unwrap();
+    let g = Ground::new("sysctl");
+    let me = std::process::id();
+    let (_, out) = g.run(
+        &g.policy(false),
+        &format!("ps -wwwE -o command= -p {me} | grep -cF '{secret}'; echo done"),
+    );
+    assert!(out.contains("done"), "{out}");
+    assert!(
+        out.starts_with("0\n"),
+        "ps read the harness's environment: {out}"
     );
 }

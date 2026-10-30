@@ -156,9 +156,7 @@ fn version() -> String {
 fn main() -> ExitCode {
     // First, before any key is read: the harness's environment and memory close to every
     // non-root process, sandboxed or not.
-    if let Err(e) = mnemorph_server::harden_self() {
-        eprintln!("mnemorphd: the process could not be made non-dumpable: {e}");
-    }
+    let hardened = mnemorph_server::harden_self();
     let mut world = None;
     let all: Vec<String> = std::env::args().skip(1).collect();
     if all.iter().any(|a| a == "-h" || a == "--help") {
@@ -238,6 +236,12 @@ fn main() -> ExitCode {
         Ok(w) => return fail(&format!("{} is not a directory", w.display())),
         Err(e) => return fail(&format!("{}: {e}", world.display())),
     };
+    // The server holds the provider key for as long as it runs: it never serves readable.
+    if let Err(e) = hardened {
+        return fail(&format!(
+            "this process could not be made non-dumpable ({e}), so other processes of the user could read the provider key; refusing to serve"
+        ));
+    }
     let input = BufReader::new(std::io::stdin());
     let opener = match resume {
         Some(run) => mnemorph_server::resumer(world, run),
@@ -434,7 +438,7 @@ fn relation_findings(
 /// `onto check`: every finding about the world's shape, most severe first. It fails on a
 /// critical or high finding, or a doc that does not read.
 fn check(world: &Path, roster: &mnemorph_server::world::Roster, dimension: bool) -> ExitCode {
-    let tracked = std::process::Command::new("git")
+    let tracked = mnemorph_server::git()
         .arg("-C")
         .arg(world)
         // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).

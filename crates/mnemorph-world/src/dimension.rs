@@ -127,7 +127,7 @@ pub fn register(world: &Path) -> std::io::Result<()> {
 /// A world's `origin` remote, normalised, as git reads it; `None` without one.
 #[must_use]
 pub fn remote_of(world: &Path) -> Option<String> {
-    let out = std::process::Command::new("git")
+    let out = mnemorph_sandbox::git()
         .arg("-C")
         .arg(world)
         .args(["config", "--get", "remote.origin.url"])
@@ -168,7 +168,7 @@ pub fn sightings_file(registry: &Path, world: &Path) -> PathBuf {
 /// wrote is no evidence.
 fn committed(root: &Path, rel: &str) -> bool {
     let git = |args: &[&str]| {
-        std::process::Command::new("git")
+        mnemorph_sandbox::git()
             .arg("-C")
             .arg(root)
             .args(args)

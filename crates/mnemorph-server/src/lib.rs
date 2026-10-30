@@ -15,6 +15,8 @@ pub use mnemorph_loop::challenge;
 pub use mnemorph_loop::envelope;
 /// An evolution's controls run on demand, and its judgement.
 pub use mnemorph_loop::evolution;
+/// A `git` command started without the harness's secrets.
+pub use mnemorph_loop::git;
 /// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.
 pub use mnemorph_loop::harden_self;
 /// The human's door to the Kijin's incidents.

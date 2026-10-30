@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mnemorph-sandbox = { path = "../mnemorph-sandbox" }
 mnemorph-wire = { path = "../mnemorph-wire" }
 mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-ledger = { path = "../mnemorph-ledger" }

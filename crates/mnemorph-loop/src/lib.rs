@@ -44,6 +44,8 @@ pub use mnemorph_tools::Fingerprint as GateFingerprint;
 pub use mnemorph_tools::gate::{
     Answer as GateAnswer, Ask as GateAsk, Gate, admitted_line as gate_admitted_line,
 };
+/// A `git` command started without the harness's secrets.
+pub use mnemorph_tools::git;
 /// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.
 pub use mnemorph_tools::harden_self;
 pub use mnemorph_wire as wire;
