@@ -33,6 +33,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd challenge decide <landing> <fingerprint> upheld|false-positive
                  --why <reason> [--world <dir>]
        mnemorphd meters [--world <dir>] [--json]
+       mnemorphd usage [--window 7d|28d|all] [--world <dir>] [--json]
        mnemorphd evolution swap <id> --creature <name> [--arm mutate|split|rebirth]
                  [--body <name>]... [--remove <path>]... [--proven-on <task>]...
                  [--world <dir>]
@@ -110,6 +111,12 @@ yet. Only the Dark Elf's meters are live, folded from the challenge records per 
 other races' fold from their reports, and the general report fold is M11's. Shown, never judged
 on: every rise and fall reads the point estimate.
 
+`usage` folds the world's usage ledger over the window (7 days unless `--window` says): calls,
+weighted tokens and dollars, in total and by race, model, body, day and session, the cache hit
+rate and the unpriced calls. Dollars cover the priced calls only: a group with no priced call
+reads `unpriced`, never $0, and every total says how many calls its dollars leave out. `--json`
+prints the same fold as one object. The board's metrics are this fold.
+
 `evolution` is the human's door to a creature's evolution. `swap <id>` swaps in the plan staged
 under `.mnemorph/tmp/evolution/<id>/` — each file there at the world path it replaces (a Mind,
 a creature doc), and `--remove` for each file it removes — after showing it and asking for `y`
@@ -167,6 +174,27 @@ fn version() -> String {
     mnemorph_server::world::challenge::Build::this().to_string()
 }
 
+/// The admin command `word` names, if it names one.
+fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
+    Some(match word {
+        "onto" => onto,
+        "q" => queue,
+        "housekeep" => housekeep,
+        "relief" => relief,
+        "memory" => memory,
+        "runs" => runs,
+        "incident" => incident,
+        "envelope" => envelope,
+        "challenge" => challenge,
+        "meters" => meters,
+        "usage" => usage,
+        "evolution" => evolution,
+        "mind" => mind,
+        "board" => board,
+        _ => return None,
+    })
+}
+
 fn main() -> ExitCode {
     // First, before any key is read: the harness's environment and memory close to every
     // non-root process, sandboxed or not.
@@ -181,44 +209,8 @@ fn main() -> ExitCode {
         println!("mnemorphd {}", version());
         return ExitCode::SUCCESS;
     }
-    if all.first().map(String::as_str) == Some("onto") {
-        return onto(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("q") {
-        return queue(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("housekeep") {
-        return housekeep(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("relief") {
-        return relief(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("memory") {
-        return memory(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("runs") {
-        return runs(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("incident") {
-        return incident(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("envelope") {
-        return envelope(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("challenge") {
-        return challenge(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("meters") {
-        return meters(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("evolution") {
-        return evolution(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("mind") {
-        return mind(&all[1..]);
-    }
-    if all.first().map(String::as_str) == Some("board") {
-        return board(&all[1..]);
+    if let Some(command) = all.first().and_then(|w| admin(w)) {
+        return command(&all[1..]);
     }
     let mut resume = None;
     let mut args = all.into_iter();
@@ -1887,6 +1879,161 @@ fn meters(args: &[String]) -> ExitCode {
         "\nshown with their count and 95% interval, never judged on; only the Dark Elf's meters \
          fold yet — the other races' report fold is M11's"
     );
+    ExitCode::SUCCESS
+}
+
+/// Dollars as `usage` says them: `$0.4200`, `$0.4200 (2 unpriced)`, or `unpriced (2 calls)` when
+/// none was priced — never $0.
+fn dollars(t: &mnemorph_server::world::ledger::Totals) -> String {
+    match mnemorph_server::world::spend::usd(t) {
+        None => format!("unpriced ({} calls)", t.unpriced),
+        Some(usd) if t.unpriced > 0 => format!("${usd:.4} ({} unpriced)", t.unpriced),
+        Some(usd) => format!("${usd:.4}"),
+    }
+}
+
+/// A fold's totals as JSON: what the board's metrics carry for the same group.
+fn totals_json(t: &mnemorph_server::world::ledger::Totals) -> serde_json::Value {
+    use mnemorph_server::world::spend;
+    serde_json::json!({
+        "calls": t.calls,
+        "wt": t.wt,
+        "input": t.usage.input,
+        "output": t.usage.output,
+        "cacheRead": t.usage.cache_read,
+        "cacheWrite": t.usage.cache_write,
+        "usd": spend::usd(t),
+        "unpriced": t.unpriced,
+        "cacheHit": spend::cache_hit(t),
+    })
+}
+
+/// `usage`'s text, escaped: the totals line, then by race, model, day and the latest sessions.
+fn usage_lines(
+    r: &mnemorph_server::world::spend::Reading,
+    ledger: &mnemorph_server::world::spend::Ledger,
+) -> Vec<String> {
+    use mnemorph_server::world::spend;
+    let safe = mnemorph_server::challenge::safe;
+    let window = r.window;
+    let mut lines = Vec::new();
+    let hit = |t: &mnemorph_server::world::ledger::Totals| {
+        spend::cache_hit(t).map_or_else(|| "no input".to_owned(), |h| format!("{:.0}%", h * 100.0))
+    };
+    let t = &r.total;
+    lines.push(format!(
+        "usage {}: {} · {} wt · {} calls · cache hit {}",
+        window.word(),
+        dollars(t),
+        t.wt,
+        t.calls,
+        hit(t)
+    ));
+    for (title, m) in [("race", &r.races), ("model", &r.models), ("day", &r.days)] {
+        if m.is_empty() {
+            continue;
+        }
+        lines.push(format!("by {title}"));
+        for (k, t) in m {
+            lines.push(format!(
+                "  {}: {} · {} wt · {} calls",
+                safe(k),
+                dollars(t),
+                t.wt,
+                t.calls
+            ));
+        }
+    }
+    if !r.sessions.is_empty() {
+        lines.push("by session, the latest first".to_owned());
+        for s in r.sessions.iter().take(20) {
+            lines.push(format!(
+                "  {} ({}): {} · {} wt · {} calls",
+                safe(&s.id),
+                s.last,
+                dollars(&s.totals),
+                s.totals.wt,
+                s.totals.calls
+            ));
+        }
+    }
+    if ledger.skipped > 0 {
+        lines.push(format!(
+            "{} line(s) of the ledger do not read and are not counted",
+            ledger.skipped
+        ));
+    }
+    if ledger.cut {
+        lines.push(format!(
+            "read from the ledger's last {} MiB: older calls are not counted",
+            spend::READ_CAP >> 20
+        ));
+    }
+    lines
+}
+
+/// `usage [--window 7d|28d|all] [--world <dir>] [--json]`: the usage ledger's fold.
+fn usage(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::spend::{self, Window};
+    let (mut world, mut json, mut window) = (None, false, Window::Week);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--json" => json = true,
+            "--world" => match it.next() {
+                Some(dir) => world = Some(PathBuf::from(dir)),
+                None => return refused(&"--world needs a value"),
+            },
+            "--window" => match it.next().and_then(|w| Window::parse(w)) {
+                Some(w) => window = w,
+                None => return refused(&"--window is 7d, 28d or all"),
+            },
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let ledger = match spend::read(&world) {
+        Ok(l) => l,
+        Err(e) => return fail(&format!("the usage ledger cannot be read: {e}")),
+    };
+    let now = mnemorph_server::world::ledger::Timestamp::now();
+    let r = spend::fold(&ledger.rows, window, now);
+    let groups =
+        |m: &std::collections::BTreeMap<String, mnemorph_server::world::ledger::Totals>| {
+            m.iter()
+                .map(|(k, t)| (k.clone(), totals_json(t)))
+                .collect::<serde_json::Map<String, serde_json::Value>>()
+        };
+    if json {
+        let sessions: serde_json::Map<String, serde_json::Value> = r
+            .sessions
+            .iter()
+            .map(|s| (s.id.clone(), totals_json(&s.totals)))
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "window": window.word(),
+                "total": totals_json(&r.total),
+                "races": groups(&r.races),
+                "models": groups(&r.models),
+                "bodies": groups(&r.bodies),
+                "days": groups(&r.days),
+                "sessions": sessions,
+                "burnPerMinute": r.burn_per_minute(),
+                "skipped": ledger.skipped,
+                "cut": ledger.cut,
+            })
+        );
+        return ExitCode::SUCCESS;
+    }
+    for line in usage_lines(&r, &ledger) {
+        println!("{line}");
+    }
     ExitCode::SUCCESS
 }
 

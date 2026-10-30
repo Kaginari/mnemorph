@@ -166,11 +166,12 @@ pub const MIN_NET_WINS: u32 = 2;
 const RANGE_OVER_CEILING: i64 = 1_000_000;
 
 /// Whether only the human's global file may set `key`: everything that loosens the gate, an MCP
-/// server, a provider (where a key is sent) and every spending cap. The local file lives inside
-/// the world, where whatever runs there may write it.
-fn global_only(key: &str) -> bool {
+/// server, a provider (where a key is sent), every spending cap and what the board reads. The
+/// local file lives inside the world, where whatever runs there may write it.
+#[must_use]
+pub fn global_only(key: &str) -> bool {
     LOOSENING.contains(&key)
-        || ["mcp.", "providers.", "budget."]
+        || ["mcp.", "providers.", "budget.", "board."]
             .iter()
             .any(|p| key.starts_with(p))
 }
@@ -275,6 +276,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("mcp.servers.*.read_only", Kind::Bool),
     ("mcp.servers.*.network", Kind::Bool),
     ("mcp.servers.*.timeout_secs", Kind::Int),
+    ("board.bench_results", Kind::Str),
 ];
 
 /// A configuration layer, lowest first.
@@ -637,6 +639,14 @@ impl Config {
                     key,
                     origin: origin.clone(),
                     why: "an MCP server is a program started with its own reach, so it is honoured only from your global file".into(),
+                });
+                continue;
+            }
+            if origin.layer == Layer::Tracked && key.starts_with("board.") {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "the board reads the files this names, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -1230,6 +1240,17 @@ impl Config {
             );
         }
         out
+    }
+
+    /// The directory of bench result rows the board shows (`board.bench_results`), from the
+    /// human's global file alone; `None` when none is configured.
+    #[must_use]
+    pub fn bench_results(&self) -> Option<PathBuf> {
+        self.get("board.bench_results")
+            .filter(|l| l.origin.layer == Layer::Global)
+            .and_then(|l| l.value.as_str())
+            .filter(|p| !p.is_empty())
+            .map(PathBuf::from)
     }
 
     /// The MCP servers the human's own files declare, and how a large catalog is offered.

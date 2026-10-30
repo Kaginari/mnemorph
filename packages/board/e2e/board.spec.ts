@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { BoardOverview } from '@mnemorph/protocol';
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 import { FIXTURE_NOW, fixtureOverviews, fixtureWorlds } from '../src/data/fixtures.ts';
+import { fixtureIntegrations, fixtureMetrics } from '../src/data/metricsFixtures.ts';
 
 /** Where the screenshots go: test-results/screens/<project>-<theme>-<page>.png. */
 const screen = (file: string) =>
@@ -49,6 +50,12 @@ async function open(
       ? r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) })
       : r.fulfill({ status: 404, contentType: 'text/plain', body: 'no listed world has this id' });
   });
+  await page.route('**/api/metrics?*', (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify(fixtureMetrics) }),
+  );
+  await page.route('**/api/integrations', (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify(fixtureIntegrations) }),
+  );
   await page.routeWebSocket('**/ws/board', (ws) => {
     sockets.push(ws);
   });
@@ -156,6 +163,8 @@ const PAGES: [string, string][] = [
   ['world-missing', `#/w/${GONE.id}`],
   ['session', `#/w/${LIVE.id}/s/r-17`],
   ['settings', '#/settings'],
+  ['metrics', '#/metrics'],
+  ['integrations', '#/integrations'],
 ];
 
 for (const theme of ['dark', 'light'] as const) {
@@ -169,6 +178,7 @@ for (const theme of ['dark', 'light'] as const) {
         await expect(page.locator('.shell[data-load="ready"]')).toBeAttached();
         await page.screenshot({
           path: screen(`${info.project.name}-${theme}-${name}`),
+          fullPage: name === 'metrics' || name === 'integrations',
         });
         expect(await lowContrast(page)).toEqual([]);
         expect(await unlabelled(page)).toEqual([]);
@@ -426,4 +436,29 @@ test('hostile names, paths and notes in an overview stay text', async ({ page })
   ).toBe(0);
   expect(await page.evaluate(() => (window as { __pwned?: number }).__pwned)).toBeUndefined();
   expect(errors).toEqual([]);
+});
+
+test('the metrics page says its totals, draws each chart with a legend, and keeps hostile words text', async ({
+  page,
+}) => {
+  await open(page, '#/metrics');
+  await expect(page.locator('.metrics-total')).toContainText('$3.12 (2 unpriced) · 1.9M wt');
+  await expect(page.locator('svg[aria-label*="log axis"]')).toBeVisible();
+  await expect(page.locator('.chart-log')).toHaveText('log axis');
+  await expect(page.getByText('silent since 2026-10-20')).toBeVisible();
+  expect(await page.locator('main').textContent()).not.toContain('$0.00');
+  expect(await page.locator('main img').count()).toBe(0);
+  await expect(page.locator('main .safe-esc').first()).toHaveText('\\u{202e}');
+  await page.getByRole('button', { name: '28d' }).click();
+  await expect(page.getByRole('button', { name: '28d' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the integrations page is read-only and shows key sources, never values', async ({ page }) => {
+  await open(page, '#/integrations');
+  await expect(page.getByText('env OPENROUTER_API_KEY: set')).toBeVisible();
+  expect(await page.locator('main input, main textarea, main select').count()).toBe(0);
+  await page.getByText('How to add an MCP server').click();
+  await expect(
+    page.locator('details', { hasText: 'How to add an MCP server' }).locator('.howto-text'),
+  ).toBeVisible();
 });

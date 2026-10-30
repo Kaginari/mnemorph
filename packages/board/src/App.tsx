@@ -12,9 +12,11 @@ import { type Choice, useTheme } from './theme.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
 import { LiveChat, PastChat, type Side } from './views/Chat.tsx';
+import { IntegrationsView } from './views/Integrations.tsx';
 import { MemoryView } from './views/Memory.tsx';
+import { MetricsView } from './views/Metrics.tsx';
 import { OntologyView } from './views/Ontology.tsx';
-import { IntegrationsView, MetricsView, SettingsView, UnknownView } from './views/Pages.tsx';
+import { SettingsView, UnknownView } from './views/Pages.tsx';
 import { NoWorld, SectionView, WorldView } from './views/World.tsx';
 import { WorldsView } from './views/Worlds.tsx';
 
@@ -97,9 +99,9 @@ function Centre({
     case 'worlds':
       return <WorldsView load={load} now={now} />;
     case 'metrics':
-      return <MetricsView />;
+      return <MetricsView load={load} />;
     case 'integrations':
-      return <IntegrationsView />;
+      return <IntegrationsView theme={theme} />;
     case 'settings':
       return <SettingsView theme={theme} onTheme={onTheme} />;
     case 'unknown':
