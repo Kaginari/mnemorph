@@ -42,11 +42,17 @@ fn has_userinfo(value: &str) -> bool {
 }
 
 /// A `git` command, not yet run, started with [`scrubbed_env`]: the harness's own git calls
-/// carry no key, whatever their caller adds.
+/// carry no key, whatever their caller adds. Nor do they run what a repository's config names:
+/// a world's `.git/config` is a body's to write, so its filesystem monitor is off (`core.fsmonitor`
+/// empty — an older git reads `false` as a hook's path), its hooks point at `/dev/null`, and the
+/// system config is not read (`GIT_CONFIG_NOSYSTEM`).
 #[must_use]
 pub fn git() -> Command {
     let mut cmd = Command::new("git");
-    cmd.env_clear().envs(scrubbed_env());
+    cmd.env_clear()
+        .envs(scrubbed_env())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .args(["-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null"]);
     cmd
 }
 
@@ -62,6 +68,56 @@ mod tests {
             set.iter()
                 .all(|(k, _)| !is_secret(&k.to_string_lossy(), ""))
         );
+    }
+
+    /// A repository's own config runs nothing through the harness's git: neither the filesystem
+    /// monitor it names nor its hooks.
+    #[cfg(unix)]
+    #[test]
+    fn a_repositorys_config_runs_nothing() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!("mnemorph-git-hostile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let run = |args: &[&str]| {
+            git()
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .unwrap()
+        };
+        assert!(run(&["init", "-q"]).status.success());
+        let marker = dir.join("ran");
+        let script = dir.join("hook.sh");
+        std::fs::write(&script, format!("#!/bin/sh\ntouch {}\n", marker.display())).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hooks = dir.join(".git/hooks");
+        std::fs::create_dir_all(&hooks).unwrap();
+        std::fs::copy(&script, hooks.join("pre-commit")).unwrap();
+        let config = dir.join(".git/config");
+        let mut text = std::fs::read_to_string(&config).unwrap();
+        {
+            use std::fmt::Write as _;
+            let _ = write!(text, "[core]\n\tfsmonitor = {}\n", script.display());
+        }
+        std::fs::write(&config, text).unwrap();
+        std::fs::write(dir.join("a"), "a").unwrap();
+        assert!(run(&["add", "a"]).status.success());
+        assert!(run(&["status", "--porcelain"]).status.success());
+        assert!(run(&["ls-files", "-z"]).status.success());
+        let out = run(&["commit", "-q", "-m", "a"]);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!marker.exists(), "a hook or the monitor ran");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

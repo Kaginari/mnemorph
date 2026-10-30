@@ -301,8 +301,10 @@ fixture grows with each miss found in a real world.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
 proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground,
-or the human (`mnemorphd onto settle <id>`); a landing by the path's owner that passed its gate and
-cites the fact is the third route, not yet built. A
+or the human (`mnemorphd onto settle <id>`, or **Settle** on the board's ontology page, which asks
+for a proof: a passing end-gate verdict that landed on the fact's path, or the human's own
+statement — see [the board](05-architecture.md#the-memory-and-ontology-pages)); a landing by the
+path's owner that passed its gate and cites the fact is the third route, not yet built. A
 creature's projection (`@ONTO`, [communication](04-communication.md#the-wire-envelope)) shows a
 contested fact with both sides, the way recall always seats one dissenting note: each ask carries
 it, beside the recalled notes, for the paths it concerns — a commissioned body's soil and every

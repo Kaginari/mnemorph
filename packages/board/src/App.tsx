@@ -12,6 +12,8 @@ import { type Choice, useTheme } from './theme.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
 import { LiveChat, PastChat, type Side } from './views/Chat.tsx';
+import { MemoryView } from './views/Memory.tsx';
+import { OntologyView } from './views/Ontology.tsx';
 import { IntegrationsView, MetricsView, SettingsView, UnknownView } from './views/Pages.tsx';
 import { NoWorld, SectionView, WorldView } from './views/World.tsx';
 import { WorldsView } from './views/Worlds.tsx';
@@ -105,6 +107,12 @@ function Centre({
   }
   if (load.state !== 'ready') return <WorldsView load={load} now={now} />;
   if (!world) return <NoWorld id={route.world} />;
+  if (route.name === 'section' && route.section === 'memory') {
+    return <MemoryView key={world.id} w={world} />;
+  }
+  if (route.name === 'section' && route.section === 'ontology') {
+    return <OntologyView key={world.id} w={world} />;
+  }
   if (route.name === 'section') return <SectionView w={world} section={route.section} />;
   if (route.name === 'session') {
     return (

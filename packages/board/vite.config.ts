@@ -2,8 +2,9 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 import { fixtureOverviews, fixtureWorlds } from './src/data/fixtures.ts';
+import { factsOf, fixtureMemory } from './src/data/knowledgeFixtures.ts';
 
-/** In `vite dev` only, `/api/worlds` and `/api/w/<id>` answer with the fixtures. */
+/** In `vite dev` only, `/api/worlds`, `/api/w/<id>` and its memory and facts answer with the fixtures. */
 function fixtures(): Plugin {
   return {
     name: 'mnemorph-board-fixtures',
@@ -13,7 +14,19 @@ function fixtures(): Plugin {
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify(fixtureWorlds));
       });
-      server.middlewares.use('/api/w/', (req, res) => {
+      server.middlewares.use('/api/w/', (req, res, next) => {
+        const url = new URL(req.url ?? '/', 'http://board');
+        const [, , page] = url.pathname.split('/');
+        if (page === 'memory' || page === 'facts') {
+          res.setHeader('content-type', 'application/json');
+          res.end(
+            JSON.stringify(
+              page === 'memory' ? fixtureMemory : factsOf(url.searchParams.get('status')),
+            ),
+          );
+          return;
+        }
+        if (page !== undefined) return next();
         const id = decodeURIComponent((req.url ?? '').replace(/^\//, ''));
         const o = fixtureOverviews[id];
         res.statusCode = o ? 200 : 404;

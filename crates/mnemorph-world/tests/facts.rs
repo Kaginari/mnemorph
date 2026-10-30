@@ -591,3 +591,35 @@ fn a_fact_newly_contested_marks_the_claims_resting_on_it() {
     assert_eq!(reviews(), marked, "still contested: marked once");
     let _ = fs::remove_dir_all(&w);
 }
+
+/// A settle names the digest of the fact the human read: a fact that reads otherwise now is
+/// refused and nothing is filed; as it reads, it is settled.
+#[test]
+fn a_settle_of_a_fact_that_reads_otherwise_is_refused() {
+    use mnemorph_world::memory::{changed, seen};
+    let w = std::env::temp_dir().join(format!("mnemorph-settle-seen-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(&w).unwrap();
+    let (about, text) = ("src/", "src holds the code");
+    Facts::record(&w, &say(about, text, "slime-a")).unwrap();
+    let id = fact_id(about, text);
+    let file = w.join(".mnemorph/ontology/facts.jsonl");
+    let before = fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        Facts::settle(
+            &w,
+            &id,
+            "human",
+            "the human's word",
+            &seen(&id, "src is empty")
+        ),
+        Err(changed(&format!("#{id}")))
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), before, "nothing filed");
+    assert_eq!(
+        Facts::settle(&w, &id, "human", "the human's word", &seen(&id, text)),
+        Ok(id.clone())
+    );
+    assert_eq!(Facts::load(&w).facts[&id].status(), Status::Settled);
+    let _ = fs::remove_dir_all(&w);
+}

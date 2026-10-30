@@ -660,6 +660,34 @@ pub fn load_sightings(registry: &Path, world: &Path) -> Vec<Sighting> {
 // ---------------------------------------------------------------------------------------------
 // The manifest
 
+/// The relations' findings `onto check` reports: each learned relation unseen too long, and with
+/// `dimension` each obstruction against a neighbour's manifest, with the glues.
+///
+/// # Errors
+///
+/// The world's manifest does not read, or a neighbour's cannot be glued.
+pub fn relation_findings(
+    world: &Path,
+    dimension: bool,
+) -> Result<(Vec<Finding>, Vec<Glue>), String> {
+    let known = registry().map(|r| known(&r)).unwrap_or_default();
+    let now = known
+        .iter()
+        .find(|k| k.world == world)
+        .map_or(0, |k| k.sessions);
+    let manifest = Manifest::load(world)?;
+    let sightings = registry()
+        .map(|r| load_sightings(&r, world))
+        .unwrap_or_default();
+    let mut findings = stale_findings(&proposals(&sightings, &manifest, now));
+    if !dimension {
+        return Ok((findings, Vec::new()));
+    }
+    let (glues, f) = glue(world, &known)?;
+    findings.extend(f);
+    Ok((findings, glues))
+}
+
 /// Whether `kind` is a relation type: lowercase ASCII words joined by `-`, at most 64 bytes.
 #[must_use]
 pub fn valid_kind(kind: &str) -> bool {

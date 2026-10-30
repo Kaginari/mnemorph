@@ -335,6 +335,43 @@ pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Ve
     out
 }
 
+/// What `onto check` reports of a world: every finding about its shape — its creatures from
+/// `roster`, its tracked files `tracked`, its `facts`, its Slimes' prose, its Minds, the
+/// provenance in its living docs, the session's verify line, and the relations it learned unseen
+/// too long — most severe first. `dimension` adds each obstruction against a neighbour's manifest,
+/// with the glues. The board's ontology page reads the same list.
+///
+/// # Errors
+///
+/// The world's manifest of relations does not read.
+pub fn onto_check(
+    world: &std::path::Path,
+    roster: &Roster,
+    facts: &crate::facts::Facts,
+    tracked: &[String],
+    dimension: bool,
+) -> Result<(Vec<Finding>, Vec<crate::dimension::Glue>), String> {
+    let mut findings = check(roster, tracked);
+    findings.extend(fact_findings(facts, world));
+    findings.extend(prose_claims(roster, world));
+    findings.extend(mind_findings(roster, world));
+    findings.extend(provenance(roster, world));
+    let (relations, glues) = crate::dimension::relation_findings(world, dimension)?;
+    findings.extend(relations);
+    if let Some(message) = crate::verify::missing_session_verify(world, roster) {
+        findings.push(Finding {
+            code: "no-session-verify",
+            severity: Severity::Low,
+            at: ".mnemorph/rimuru/rimuru/README.md".into(),
+            paths: Vec::new(),
+            creatures: vec!["rimuru".into()],
+            message,
+        });
+    }
+    findings.sort_by(|a, b| b.severity.cmp(&a.severity).then_with(|| a.at.cmp(&b.at)));
+    Ok((findings, glues))
+}
+
 /// `prose-claim`: a Slime's doc names, in its prose, a path of the world its Territory does not
 /// claim. Prose is never a claim, so the field and the prose disagree: one low finding per path, at
 /// the line that names it. A mention is a backticked word read as a claim would be — with a `/`,
@@ -344,7 +381,7 @@ pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Ve
 pub fn prose_claims(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
     let mut out = Vec::new();
     for c in roster.living().filter(|c| c.race.base() == Race::Slime) {
-        let Ok(text) = std::fs::read_to_string(world.join(c.doc())) else {
+        let Some(text) = crate::regular::text(&world.join(c.doc())) else {
             continue;
         };
         let fields: BTreeSet<usize> = c.lines.values().copied().collect();
@@ -426,7 +463,7 @@ pub fn mind_findings(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
                 return None;
             }
             // A shared Mind is worn by any body; a retired one by none, and that is its end.
-            let kept = std::fs::read_to_string(&doc).is_ok_and(|t| {
+            let kept = crate::regular::text(&doc).is_some_and(|t| {
                 crate::minds::marked(&t, "Shared") || crate::minds::marked(&t, "Retired")
             });
             (!kept).then(|| Finding {
@@ -470,7 +507,7 @@ pub fn provenance(roster: &Roster, world: &std::path::Path) -> Vec<Finding> {
     );
     let mut out = Vec::new();
     for (rel, creatures) in docs {
-        let Ok(text) = std::fs::read_to_string(world.join(&rel)) else {
+        let Some(text) = crate::regular::text(&world.join(&rel)) else {
             continue;
         };
         let mut fenced = false;

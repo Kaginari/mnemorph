@@ -634,3 +634,52 @@ fn kin_and_short_claims_never_corroborate() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+/// The human's act names the digest of what they read: a claim rewritten between the reading and
+/// the act is refused and nothing is written; the claim as it now reads is vouched for once read.
+#[test]
+fn an_act_on_a_note_rewritten_since_it_was_read_is_refused() {
+    use mnemorph_memory::{amend, changed, seen, vouch, wake_by};
+    let w = world_of("rewritten");
+    let claim = propose(&w, "slime-s", "the lexer owns quoting", vec![], None).unwrap();
+    let read_as = seen(&claim.note, "the lexer owns quoting");
+    amend(
+        &w,
+        "slime-s",
+        &claim.note,
+        "the parser owns quoting",
+        vec![],
+    )
+    .unwrap();
+    let file = w.join(".mnemorph/memory/creature/slime-s.jsonl");
+    let before = fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        vouch(&w, &claim.note, "the human's word", &read_as),
+        Err(changed(&claim.note))
+    );
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        before,
+        "nothing written"
+    );
+    assert!(!w.join(".mnemorph/memory/shared/notes.jsonl").exists());
+    let now = seen(&claim.note, "the parser owns quoting");
+    assert_eq!(
+        vouch(&w, &claim.note, "the human's word", &now),
+        Ok("slime-s".to_owned())
+    );
+
+    // A retired note: woken only as it was read.
+    let rows = [
+        r#"{"id":"e1","time":1,"note":"n1","by":"record","kind":"create","text":"retry twice","tags":[],"owner":"slime-r","polarity":"support","salience":0.5,"confidence":0.5,"source":null,"links":[]}"#,
+        r#"{"id":"e2","time":2,"note":"n1","by":"human","kind":"status","status":"grounded"}"#,
+        r#"{"id":"e3","time":3,"note":"n1","by":"gate","proof":"log.md","kind":"status","status":"dormant"}"#,
+    ];
+    let tier = w.join(".mnemorph/memory/creature/slime-r.jsonl");
+    fs::write(&tier, rows.join("\n") + "\n").unwrap();
+    let e = wake_by(&w, "n1", "woken", &seen("n1", "retry once")).unwrap_err();
+    assert_eq!(e.to_string(), changed("n1"));
+    assert_eq!(fs::read_to_string(&tier).unwrap(), rows.join("\n") + "\n");
+    assert!(wake_by(&w, "n1", "woken", &seen("n1", "retry twice")).is_ok());
+    let _ = fs::remove_dir_all(&w);
+}

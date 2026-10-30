@@ -159,7 +159,7 @@ fn detected(world: &Path) -> Option<Detected> {
     }
     if has("package.json") {
         // A suggestion only: a `"test"` script named in the manifest is enough to read.
-        let text = fs::read_to_string(world.join("package.json")).ok()?;
+        let text = crate::regular::text(&world.join("package.json"))?;
         // npm's placeholder script always fails: no test to suggest.
         if !(text.contains("\"scripts\"") && text.contains("\"test\""))
             || text.contains("no test specified")
@@ -184,7 +184,7 @@ fn detected(world: &Path) -> Option<Detected> {
             compiled: true,
         });
     }
-    let make = fs::read_to_string(world.join("Makefile")).ok()?;
+    let make = crate::regular::text(&world.join("Makefile"))?;
     make.lines()
         .any(|l| l.starts_with("test:"))
         .then(|| plain("make test"))

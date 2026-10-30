@@ -29,6 +29,28 @@ pub use mnemorph_loop::world;
 /// The runs that stopped and may be resumed.
 pub use mnemorph_loop::{Stopped, stopped};
 
+/// The files git tracks in `world`, relative to it, as `onto check` reads them; `None` when the
+/// world is no git repository. The world's own git config runs nothing ([`git`]).
+#[must_use]
+pub fn tracked(world: &std::path::Path) -> Option<Vec<String>> {
+    let out = git()
+        .arg("-C")
+        .arg(world)
+        // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).
+        .args(["ls-files", "-z"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};

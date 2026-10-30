@@ -1677,6 +1677,7 @@ name = "mnemorph-server"
 version = "0.0.0"
 dependencies = [
  "axum",
+ "form_urlencoded",
  "futures-util",
  "getrandom 0.4.3",
  "http-body-util",
