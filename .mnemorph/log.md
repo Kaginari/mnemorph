@@ -6374,3 +6374,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   body repeats an ask: the writer must skip a task the ledger already holds, not stamp it.
   Open (@?): controls run only on demand; M11's trigger, staged plans and `evolve apply | reject`
   are still to build, and the board shows no meter yet.
+
+### [2026-10-30T18:20:00+01:00] rimuru — #98/#100, Fable's review: the controls spend under the caps; no stamp the window cannot use
+- **Done:** controls write every call to the live world's usage ledger under the judge's session and run under the human's caps: the judge says how many will run and what the tightest cap leaves before spending, a spent cap runs none, and a control a cap stops is not recorded. `stamp_for` skips an ask the plan was proven on and any ask under another build than the swap's; `status` and `judge` say `re-swap to judge`, and a stale window holds no body. Control attics go with their scratch; `meters --json` gives `n: null` for a meter with no report. Docs 02.
+- **Tests:** the controls' usage rows; a spent day cap runs none; a proven-on ask and another build's swap are not stamped, and the plan swaps in again; a Dark Elf with no fold reads null.
+- **Learned:** anything the harness runs on the human's model is a session: it writes the usage ledger and meets the caps, however it is started.

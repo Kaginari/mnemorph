@@ -479,7 +479,14 @@ pub fn meters(world: &std::path::Path) -> Vec<String> {
     if all.is_empty() {
         return vec![format!("{:<9}no living creature", "meters")];
     }
-    all.iter()
+    let mut lines: Vec<String> = all
+        .iter()
         .map(|m| format!("{:<9}{}", "meters", one_line(&m.to_string())))
-        .collect()
+        .collect();
+    lines.extend(
+        mnemorph_server::world::evolution::stale(world)
+            .iter()
+            .map(|s| format!("{:<9}{}", "evolving", one_line(s))),
+    );
+    lines
 }

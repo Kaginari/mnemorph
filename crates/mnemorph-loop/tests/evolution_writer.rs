@@ -130,6 +130,10 @@ impl World {
         Journal::chained(self.root.join("state/evolution.jsonl"))
     }
 
+    fn usage(&self) -> Journal<mnemorph_ledger::UsageRow> {
+        Journal::chained(self.world().join(".mnemorph/instruments/usage.jsonl"))
+    }
+
     fn config(&self) -> Config {
         Config::load(&Paths::with_global(
             self.root.join("global.toml"),
@@ -255,16 +259,30 @@ async fn a_swapped_mind_is_stamped_controlled_and_judged() {
         .flat_map(|i| script(i, true))
         .collect();
     let config = w.config();
+    let said = std::cell::RefCell::new(Vec::<String>::new());
+    let say = |l: &str| said.borrow_mut().push(l.to_owned());
     let c = Controller {
         model: Arc::new(ScriptedModel::new(replies)),
         model_id: "claude-sonnet-5-5".into(),
         config: &config,
         ready,
+        usage: w.usage(),
+        session: "judge-1".into(),
+        say: &say,
     };
     let lines = run_controls(&w.world(), w.ledger().path(), "careful-1", &c)
         .await
         .unwrap();
     assert_eq!(lines.len(), EVOLUTION_WINDOW, "{lines:?}");
+    assert!(
+        said.borrow()[0].starts_with("10 control(s) to run through claude-sonnet-5-5"),
+        "said before any is spent: {:?}",
+        said.borrow()
+    );
+    // Every control's call is on the live world's usage ledger, under the judge's session.
+    let spent = w.usage().read().unwrap().rows;
+    assert_ne!(spent.len(), 0, "the controls spent on the live ledger");
+    assert!(spent.iter().all(|r| r.session == "judge-1"));
     assert_eq!(
         fs::read_to_string(w.world().join(MIND)).unwrap(),
         NEW,
@@ -382,4 +400,47 @@ async fn the_do_nothing_fixtures_are_deterministic() {
             .any(|b| matches!(b, Beat::Recall { anchors, .. } if !anchors.is_empty())),
         "the note is recalled by its own words"
     );
+}
+
+/// A spent budget cap runs no control: the judge says so, and nothing is written.
+#[tokio::test]
+async fn a_spent_cap_runs_no_control() {
+    let w = World::new("capped");
+    swap(&w);
+    for i in 0..EVOLUTION_WINDOW {
+        ask_once(&w, i, script(i, false)).await;
+    }
+    fs::write(w.root.join("global.toml"), "[budget]\nday = 10\n").unwrap();
+    w.usage()
+        .append(&mnemorph_ledger::UsageRow {
+            ts: mnemorph_ledger::Timestamp::now(),
+            session: "earlier".into(),
+            run: "r".into(),
+            body: "rimuru".into(),
+            race: "rimuru".into(),
+            commission: None,
+            model: "m".into(),
+            provider: "p".into(),
+            usage: mnemorph_ledger::Usage::default(),
+            prefix: 0,
+            wt: 50,
+            usd: None,
+            envelope: None,
+        })
+        .unwrap();
+    let config = w.config();
+    let c = Controller {
+        model: Arc::new(ScriptedModel::new([])),
+        model_id: "claude-sonnet-5-5".into(),
+        config: &config,
+        ready,
+        usage: w.usage(),
+        session: "judge-2".into(),
+        say: &|_| {},
+    };
+    let e = run_controls(&w.world(), w.ledger().path(), "careful-1", &c)
+        .await
+        .unwrap_err();
+    assert!(e.contains("cap is spent"), "{e}");
+    assert!(runs(&w).iter().all(|r| !r.control), "no control written");
 }

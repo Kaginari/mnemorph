@@ -41,6 +41,38 @@ pub fn journal(world: &Path) -> Option<Journal<EvolutionRow>> {
     ledger_of(world).map(Journal::chained)
 }
 
+/// What `status` says of the world's evolutions: each swap whose window is still open but was made
+/// by another build — its asks are no longer stamped, so it cannot be judged until it is swapped
+/// in again.
+#[must_use]
+pub fn stale(world: &Path) -> Vec<String> {
+    ledger_of(world).map_or_else(Vec::new, |p| stale_at(&p))
+}
+
+/// [`stale`], over the ledger at `ledger`.
+#[must_use]
+pub fn stale_at(ledger: &Path) -> Vec<String> {
+    let Ok(read) = read_ledger(ledger) else {
+        return Vec::new();
+    };
+    let this = Build::this();
+    let mut out = Vec::new();
+    for e in &read.entries {
+        if let EvolutionRow::Swap(s) = &e.row
+            && s.build != this
+            && s.bodies
+                .iter()
+                .any(|b| evolution::open_for(&read, b).is_some_and(|open| open.id == s.id))
+        {
+            out.push(format!(
+                "swap `{}` built by {}; this build {this}: re-swap to judge",
+                s.id, s.build
+            ));
+        }
+    }
+    out
+}
+
 /// The chained evolution ledger at `path`: what [`swap_at`] writes to when the ledger is not the
 /// world's own.
 #[must_use]
@@ -250,11 +282,12 @@ pub fn swap_at(world: &Path, ledger: &Journal<EvolutionRow>, plan: &Plan) -> Res
     {
         return Err(format!("the ledger already holds a swap `{}`", plan.id));
     }
-    if let Some((b, s)) = plan
-        .bodies
-        .iter()
-        .find_map(|b| evolution::open_for(&read, b).map(|s| (b, s)))
-    {
+    // A window opened by another build never fills under this one: it does not hold a body.
+    if let Some((b, s)) = plan.bodies.iter().find_map(|b| {
+        evolution::open_for(&read, b)
+            .filter(|s| s.build == Build::this())
+            .map(|s| (b, s))
+    }) {
         return Err(format!(
             "{b} is still judged on swap `{}`: one evolution at a time",
             s.id
@@ -401,13 +434,18 @@ pub struct Facts {
 }
 
 /// The stamp for an ask of `body` in `world`, over the ledger at `ledger`: `None` when no swap's
-/// window is open for the body, the ask's task is already on the ledger, or the ledger cannot be
-/// read — then the run is no evolution's to judge.
+/// window is open for the body, the swap was made by another build (its window could never fill
+/// under this one), the ask's task is already on the ledger or is one the plan was proven on (it
+/// could not be held out), or the ledger cannot be read — then the run is no evolution's to judge.
 #[must_use]
 pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<Stamp> {
     let read = read_ledger(ledger).ok()?;
     let swap = evolution::open_for(&read, body)?;
-    if evolution::seen(&read, &fingerprint(ask)) {
+    if swap.build != Build::this() {
+        return None;
+    }
+    let fp = fingerprint(ask);
+    if evolution::seen(&read, &fp) || swap.proven_on.contains(&fp) {
         return None;
     }
     let state = evolution::state_now(world, swap).ok()?;

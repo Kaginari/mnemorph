@@ -1452,16 +1452,23 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    named files' state as the run found them. When the ask ends, a `run` row adds the state the
    run left them in and the harness's facts: the gate's last word, a first-try pass, and the holes
    it found (a *tests intact* failure). An ask the human stops writes no row; a task the ledger
-   already holds is never stamped again, since it could no longer be held out. After 10 rows the
-   window is full and asks run unstamped.
+   already holds, or one the plan was proven on, is never stamped, since it could no longer be
+   held out. Neither is an ask under another build than the swap's: that window could never fill,
+   so `mnemorph status` and `judge` say `swap <id> built by <x>; this build <y>: re-swap to judge`,
+   and such a swap holds no body against a new one. After 10 rows the window is full and asks run
+   unstamped.
 4. **Controlled**, on demand: no scheduler runs the controls beside the window.
    `mnemorphd evolution judge <id>` runs the do-nothing control of every window run still without
    one — the same ask, by the same body (Rimuru solo, or the creature with its own prompt, soil
    and verify lines), through the configured model, under the swap's own build — in a scratch
    copy of the world (build output, instruments and scratch left out) whose named files are put
-   back to the bytes kept before; the scratch's state must read the swap's before state. No
-   human is asked there: every gated act is denied. Each is appended as a control row. With
-   nothing waiting, no model is reached.
+   back to the bytes kept before; the scratch's state must read the swap's before state, and its
+   attic goes with it. No human is asked there: every gated act is denied. **The controls spend
+   like any session:** each call is written to the live world's usage ledger under the judge's
+   own session and counted against the human's caps; before any is spent the judge says how many
+   controls will run and what the tightest cap leaves (or that none is set), a spent cap runs
+   none, and a control a cap stops is not recorded. Each finished control is appended as a
+   control row. With nothing waiting, no model is reached.
 5. **Judged and proposed.** The swap is judged by the rule above, from the ledger held to its
    anchored head, and the keep or the rollback is printed with its lines and `proposed to the
    human`; pending says how many runs and controls are in. Applying either is the human's.

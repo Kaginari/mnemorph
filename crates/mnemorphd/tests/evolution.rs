@@ -214,6 +214,15 @@ fn meters_show_by_race_and_say_no_reports_where_no_fold_reads() {
         sly["meters"][0]["n"].is_null(),
         "no fold: no count, never a zero"
     );
+    let glim = stdout
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .find(|v| v["creature"] == "glim")
+        .unwrap();
+    assert!(
+        glim["meters"][0]["n"].is_null(),
+        "a live meter with no report: no count"
+    );
 }
 
 #[test]

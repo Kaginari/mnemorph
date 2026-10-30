@@ -1531,12 +1531,14 @@ fn meters(args: &[String]) -> ExitCode {
                 .readings
                 .iter()
                 .map(|r| {
-                    let (lo, hi) = r.rate.and_then(|x| x.interval()).unzip();
+                    // No report — no fold, or a fold of none — is no count, never a zero.
+                    let rate = r.rate.filter(|x| x.n > 0);
+                    let (lo, hi) = rate.and_then(|x| x.interval()).unzip();
                     serde_json::json!({
                         "meter": r.meter,
-                        "successes": r.rate.map(|x| x.successes),
-                        "n": r.rate.map(|x| x.n),
-                        "value": r.rate.and_then(|x| x.value()),
+                        "successes": rate.map(|x| x.successes),
+                        "n": rate.map(|x| x.n),
+                        "value": rate.and_then(|x| x.value()),
                         "lo": lo,
                         "hi": hi,
                     })
@@ -1693,7 +1695,9 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
 /// `evolution judge`: the controls that wait run, then the judgement and what it proposes.
 fn judge_swap(world: &Path, id: &str) -> ExitCode {
     let safe = mnemorph_server::challenge::safe;
-    match mnemorph_server::evolution::judge(world, id, &|v| std::env::var(v).ok()) {
+    match mnemorph_server::evolution::judge(world, id, &|v| std::env::var(v).ok(), &|line| {
+        println!("{}", mnemorph_server::challenge::safe(line));
+    }) {
         Ok(j) => {
             for line in &j.controls {
                 println!("{}", safe(line));

@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use mnemorph_ledger::evolution::{self, EVOLUTION_WINDOW, EvolutionRow, Gate};
 use mnemorph_ledger::{Build, Journal};
 use mnemorph_world::evolution::{
-    Arm, Facts, Plan, Staged, fingerprint, kept_before, restore_before, stamp_for, swap_at,
+    Arm, Facts, Plan, Staged, fingerprint, kept_before, restore_before, stale_at, stamp_for,
+    swap_at,
 };
 
 const MIND: &str = ".mnemorph/minds/careful/README.md";
@@ -259,4 +260,66 @@ fn runs_after_the_swap_write_stamped_run_rows_until_the_window_is_full() {
     };
     assert_eq!(r.state, s2.after_state());
     assert_ne!(r.state_after, s2.after_state());
+}
+
+/// An ask the plan was proven on is never stamped: it would leak into the window and refuse it.
+#[test]
+fn a_task_the_plan_was_proven_on_is_not_stamped() {
+    let w = World::new("proven");
+    let mut p = plan("p1", vec![staged(MIND, Some("new\n"))]);
+    p.proven_on = vec![fingerprint("the staged task")];
+    swap_at(&w.world(), &w.ledger(), &p).unwrap();
+    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "the staged task").is_none());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a fresh task").is_some());
+}
+
+/// A swap made by another build: its window could never fill under this one, so this build stamps
+/// nothing for it, says so, and lets the plan be swapped in again.
+#[test]
+fn a_swap_from_another_build_is_not_stamped_and_asks_for_a_reswap() {
+    let w = World::new("rebuilt");
+    let s = swap_at(
+        &w.world(),
+        &w.ledger(),
+        &plan("old", vec![staged(MIND, Some("new\n"))]),
+    )
+    .unwrap();
+    // The same swap, as an older build wrote it.
+    let other = World::new("rebuilt-ledger");
+    let old = Build {
+        version: "0.0.1".into(),
+        commit: "0000000000".into(),
+    };
+    other
+        .ledger()
+        .append(&EvolutionRow::Swap(evolution::Swap {
+            build: old.clone(),
+            ..s.clone()
+        }))
+        .unwrap();
+    let at = other.ledger().path().to_path_buf();
+    assert!(stamp_for(&w.world(), &at, "rimuru", "after the upgrade").is_none());
+    assert_eq!(other.rows().len(), 1, "nothing written");
+    let said = stale_at(&at);
+    assert_eq!(
+        said,
+        vec![format!(
+            "swap `old` built by {old}; this build {}: re-swap to judge",
+            Build::this()
+        )]
+    );
+    // It holds no body: the plan swaps in again under this build.
+    fs::write(w.world().join(MIND), "# Careful\n\nRead before writing.\n").unwrap();
+    swap_at(
+        &w.world(),
+        &Journal::chained(&at),
+        &plan("again", vec![staged(MIND, Some("new\n"))]),
+    )
+    .unwrap();
+    assert!(stamp_for(&w.world(), &at, "rimuru", "after the reswap").is_some());
+    assert_eq!(
+        stale_at(&at),
+        Vec::<String>::new(),
+        "the new swap is the open one"
+    );
 }

@@ -28,9 +28,17 @@ use crate::model::Model;
 use crate::run::{Ending, Limits, Run, Setup};
 use crate::solo::{configure, solo};
 
-/// What runs the controls: the model, its id, the configuration, and how a control's tools'
-/// context is made ready over its scratch world (the sandbox, the attic).
+/// What runs the controls: the model, its id, the configuration, the live world's usage ledger
+/// and the session the controls' spend is counted under, how a control's tools' context is made
+/// ready over its scratch world (the sandbox), and where a line is said before anything is spent.
 pub struct Controller<'a> {
+    /// The live world's usage ledger: every control's call is written there and counted against
+    /// the human's caps.
+    pub usage: Journal<mnemorph_ledger::UsageRow>,
+    /// The session the controls' spend is counted under.
+    pub session: String,
+    /// Says a line to the human as soon as it is known.
+    pub say: &'a dyn Fn(&str),
     /// The model.
     pub model: Arc<dyn Model>,
     /// The id it answers to.
@@ -158,12 +166,21 @@ fn body_run(
         (body, cx, gate)
     };
     let race = body.race;
-    let (cx, limits) = configure(
+    let (cx, mut limits) = configure(
         c.config,
         cx.with_gate(Arc::new(NoHuman)),
         Limits::for_race(race),
     );
+    // The attic lives in the scratch root, removed with it: never left under the state directory.
+    let cx = match mnemorph_tools::Attic::at(&root.join("attic"), world) {
+        Some(a) => cx.with_attic(a),
+        None => cx,
+    };
     let cx = (c.ready)(cx, root);
+    // What the human's caps leave, read afresh: the control stops at it.
+    let (caps, capped, _, left) = crate::open::read_caps(c.config, &c.usage, &c.session)?;
+    limits.budget_wt = left.map(|b| b.wt);
+    limits.budget_cap = left.map(|b| b.cap);
     let mut tools = registry();
     tools.push(Box::new(crate::wear_tool::WearTool));
     let setup = Setup {
@@ -171,10 +188,10 @@ fn body_run(
         tools,
         cx,
         journal,
-        ledger: None,
+        ledger: Some(c.usage.clone()),
         prices: anthropic_prices().map_err(|e| format!("prices: {e}"))?,
         caller: Caller {
-            session: "evolution-control".into(),
+            session: c.session.clone(),
             run: format!("control-{name}"),
             body: name.to_owned(),
             race: if race == Race::Rimuru {
@@ -186,10 +203,11 @@ fn body_run(
             prefix: 0,
         },
     };
-    Ok(Run::new(body, limits, setup)
+    let run = Run::new(body, limits, setup)
         .with_gate(gate)
         // A control is stamped by its runner, never by the scratch world's own ledger.
-        .with_evolution_ledger(root.join("no-ledger.jsonl")))
+        .with_evolution_ledger(root.join("no-ledger.jsonl"));
+    Ok(if capped { run.with_caps(caps) } else { run })
 }
 
 /// Runs, for swap `id` on the ledger at `at`, every control its window still waits on, and
@@ -211,11 +229,32 @@ pub async fn run_controls(
         return Ok(Vec::new());
     }
     if swap.build != Build::this() {
-        return Err(format!(
-            "swap `{id}` was made by build {}; this one is {}: its controls run under its own build",
-            swap.build,
-            Build::this()
-        ));
+        return Err(rebuilt(swap));
+    }
+    // What the controls may spend, said before any is spent; a spent cap runs none.
+    let (_, _, _, left) = crate::open::read_caps(c.config, &c.usage, &c.session)?;
+    match left {
+        Some(l) if l.wt == 0 => {
+            return Err(format!(
+                "budget: the {} cap is spent, so no control runs; raise budget.{} to judge",
+                l.cap, l.cap
+            ));
+        }
+        Some(l) => (c.say)(&format!(
+            "{} control(s) to run through {}: at most {} wt, what the {} cap leaves; each call is \
+             written to the usage ledger, and a control the cap stops is not recorded",
+            waiting.len(),
+            c.model_id,
+            l.wt,
+            l.cap
+        )),
+        None => (c.say)(&format!(
+            "{} control(s) to run through {}, as long as the window's asks each; no budget cap is \
+             set, so the spend is bounded only by each body's steps — set budget.session to bound \
+             it; each call is written to the usage ledger",
+            waiting.len(),
+            c.model_id
+        )),
     }
     let mut lines = Vec::new();
     for (n, w) in waiting.iter().enumerate() {
@@ -235,6 +274,10 @@ pub async fn run_controls(
         let scratch = root.join(world.file_name().unwrap_or_else(|| "world".as_ref()));
         let ran = control(world, at, swap, w.body.as_str(), ask, &root, &scratch, c).await;
         let _ = fs::remove_dir_all(&root);
+        // The attic `solo` would have kept for the scratch world, should one have been made.
+        if let Some(a) = mnemorph_tools::Attic::for_world(&scratch) {
+            let _ = fs::remove_dir_all(a.dir());
+        }
         let short: String = w.task.chars().take(12).collect();
         match ran? {
             Some(f) => lines.push(format!(
@@ -247,7 +290,8 @@ pub async fn run_controls(
                 })
             )),
             None => lines.push(format!(
-                "control of task {short} by {}: interrupted, not recorded",
+                "control of task {short} by {}: stopped — interrupted or at a budget cap — and \
+                 not recorded",
                 w.body
             )),
         }
@@ -285,7 +329,11 @@ async fn control(
         control: true,
     };
     let mut quiet = |_| {};
-    if matches!(run.ask(ask, &mut quiet).await, Ending::Interrupted) {
+    // A control the human or a cap stopped says nothing of doing nothing: no row.
+    if matches!(
+        run.ask(ask, &mut quiet).await,
+        Ending::Interrupted | Ending::Checkpoint { .. }
+    ) {
         return Ok(None);
     }
     let facts = facts_of(&journal);
@@ -293,6 +341,16 @@ async fn control(
         .record(scratch, facts)
         .map_err(|e| format!("the control row: {e}"))?;
     Ok(Some(facts))
+}
+
+/// Why a swap from another build is not judged by this one.
+fn rebuilt(swap: &ledger::Swap) -> String {
+    format!(
+        "swap `{}` built by {}; this build {}: re-swap to judge",
+        swap.id,
+        swap.build,
+        Build::this()
+    )
 }
 
 /// What judging on demand came to: the controls run, then the judgement.
@@ -315,12 +373,17 @@ pub fn judge(
     world: &Path,
     id: &str,
     env: &dyn Fn(&str) -> Option<String>,
+    say: &dyn Fn(&str),
 ) -> Result<Judged, String> {
     let config = Config::load(&Paths::resolve(world))?;
     let at: PathBuf = mnemorph_world::evolution::ledger_of(world)
         .ok_or("no home to keep the evolution ledger under")?;
     let read = ledger::read(&at, None).map_err(|e| format!("the ledger cannot be read: {e}"))?;
-    let waits = ledger::awaiting(&read, id).is_ok_and(|(_, w)| !w.is_empty());
+    let awaiting = ledger::awaiting(&read, id).ok();
+    if let Some((swap, _)) = awaiting.as_ref().filter(|(s, _)| s.build != Build::this()) {
+        return Err(rebuilt(swap));
+    }
+    let waits = awaiting.is_some_and(|(_, w)| !w.is_empty());
     let controls = if waits {
         let (model, backend, _) = crate::open::model_of(&config, env)?;
         let c = Controller {
@@ -328,6 +391,14 @@ pub fn judge(
             model_id: backend.model,
             config: &config,
             ready: |cx, _| cx,
+            usage: crate::open::usage_ledger(world),
+            session: format!(
+                "evolution-judge-{id}-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_millis())
+            ),
+            say,
         };
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

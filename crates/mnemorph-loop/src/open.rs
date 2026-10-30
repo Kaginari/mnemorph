@@ -561,7 +561,7 @@ fn router(
 /// The world's usage ledger, chained — every row names the digest of the one before, so an edit
 /// of the spend is found — and witnessed under the human's state directory, so the tripwire puts
 /// it back with a parallel run's rows kept.
-fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
+pub(crate) fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
     let usage = Journal::chained(world.join(".mnemorph/instruments/usage.jsonl"));
     match mnemorph_tools::usage_witness(world) {
         Some(witness) => usage.witnessed_at(witness),
@@ -572,7 +572,7 @@ fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
 /// The human's caps, and what this world already spent against them: whether any is set, the
 /// ledger lines that could not be read, and what the session may spend. A ledger that cannot be
 /// read opens no capped session.
-fn read_caps(
+pub(crate) fn read_caps(
     config: &Config,
     usage: &Journal<mnemorph_ledger::UsageRow>,
     session_id: &str,
