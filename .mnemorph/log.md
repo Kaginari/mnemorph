@@ -6432,7 +6432,6 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a key allowlist (`tests/support/keys.rs`) beside the scrubber's denylist: the recorder refuses to write a body with a key, or a line, it does not know, and the replay tests check every cassette against it; the live file's header says `--run-ignored only`, as the docs do.
 - **Tests:** every cassette holds only known keys, named by cassette and key; a new field, an unknown error key and a non-data line are refused.
 - **Learned:** a denylist scrubber can only blank what it has seen; an allowlist makes a field the server adds stop the recording instead of reaching git.
----
 
 ### [2026-10-30T20:46:12+01:00] rimuru — a body cannot read the harness's environment; the harness made non-dumpable
 - **Task:** Veldora: can a sandboxed body read `/proc/<harness>/environ` (the provider key) or other
