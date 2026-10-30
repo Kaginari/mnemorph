@@ -14,8 +14,11 @@
 
 mod assets;
 pub mod bridge;
+pub mod facts;
 pub mod guard;
 pub mod instance;
+pub mod knowledge;
+pub mod memory;
 pub mod overview;
 pub mod runs;
 pub mod snapshot;
@@ -385,6 +388,20 @@ impl Board {
             .route("/api/session/end", post(end))
             .route("/api/worlds", get(worlds))
             .route("/api/w/{world}", get(world_overview))
+            .route("/api/w/{world}/memory", get(knowledge::get_memory))
+            .route(
+                "/api/w/{world}/memory/{note}/confirm",
+                post(knowledge::confirm).layer(DefaultBodyLimit::max(knowledge::ACT_BYTES)),
+            )
+            .route(
+                "/api/w/{world}/memory/{note}/wake",
+                post(knowledge::wake).layer(DefaultBodyLimit::max(knowledge::ACT_BYTES)),
+            )
+            .route("/api/w/{world}/facts", get(knowledge::get_facts))
+            .route(
+                "/api/w/{world}/facts/{fact}/settle",
+                post(knowledge::settle).layer(DefaultBodyLimit::max(knowledge::ACT_BYTES)),
+            )
             .route("/ws/board", get(watch::socket))
             .route(
                 "/api/w/{world}/sessions",

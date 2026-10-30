@@ -1,0 +1,310 @@
+/*
+ * The memory and ontology pages, and the confirm dialog of a human act. Colours from
+ * @mnemorph/theme's tokens only.
+ */
+
+.page-wide {
+  max-width: 1180px;
+}
+
+.knowledge-strip {
+  margin: -8px 0 14px;
+  font-size: 13px;
+  color: var(--mn-text-muted);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.filter-label {
+  color: var(--mn-text-muted);
+}
+.filter select,
+.proof select {
+  padding: 4px 8px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-panel);
+  color: var(--mn-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.notes {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.note,
+.fact {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-line);
+  border-radius: calc(var(--mn-radius) + 2px);
+  background: var(--mn-panel);
+}
+.note[data-standing="retired"],
+.note[data-standing="dormant"],
+.note[data-standing="tombstoned"] {
+  border-style: dashed;
+}
+.fact[data-status="contested"] {
+  border-color: color-mix(in srgb, var(--mn-alarm) 45%, var(--mn-line));
+}
+.note-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+.note-scope,
+.note-version {
+  color: var(--mn-text-muted);
+}
+.note-who {
+  font-weight: 600;
+}
+.note-id,
+.fact-about {
+  color: var(--mn-text-muted);
+  overflow-wrap: anywhere;
+}
+.note-acts {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.note-text {
+  margin: 8px 0 4px;
+  overflow-wrap: anywhere;
+}
+.note-proof,
+.note-review {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--mn-text-muted);
+  overflow-wrap: anywhere;
+}
+.note-label {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.note-graph {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.note-graph summary {
+  cursor: pointer;
+  color: var(--mn-text-muted);
+}
+.note-deps,
+.note-versions {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.button-small {
+  padding: 3px 10px;
+  font-size: 13px;
+}
+.button-act {
+  border-color: var(--mn-holo);
+}
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.knowledge-block {
+  margin: 0 0 14px;
+}
+.knowledge-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.tab {
+  padding: 6px 12px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-panel);
+  cursor: pointer;
+  font-size: 14px;
+}
+.tab[aria-selected="true"] {
+  border-color: var(--mn-holo);
+  background: var(--mn-panel-raised);
+  box-shadow: inset 0 -2px 0 var(--mn-holo);
+}
+.tab-means {
+  margin: 0 0 14px;
+}
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .knowledge-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fact-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 560px) {
+  .fact-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.fact-side {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-bg);
+}
+.fact-side-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-text-muted);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+/* ── the confirm dialog ─────────────────────────────────────────────────── */
+
+.confirm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--mn-bg) 72%, transparent);
+}
+.confirm {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 18px 20px;
+  border: 1px solid var(--mn-holo);
+  border-radius: calc(var(--mn-radius) + 4px);
+  background: var(--mn-panel-raised);
+  color: var(--mn-text);
+}
+.confirm-title {
+  margin: 0 0 10px;
+  font-family: var(--mn-font-ui);
+  font-size: 18px;
+}
+.confirm-body p {
+  margin: 0 0 10px;
+}
+.confirm-what {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-bg);
+  font-size: 14px;
+}
+.confirm-what dt {
+  color: var(--mn-text-muted);
+}
+.confirm-what dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.confirm-quote {
+  max-height: 12em;
+  overflow: auto;
+}
+.confirm-refused {
+  margin: 0 0 10px;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.proof {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+}
+.proof .radio {
+  min-width: 0;
+}
+.proof select {
+  width: 100%;
+  min-width: 0;
+}
+.proof legend {
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.proof-text {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-bg);
+  color: var(--mn-text);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}

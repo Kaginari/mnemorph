@@ -80,6 +80,20 @@ pub fn read(path: &Path, cap: u64) -> Result<Option<Vec<u8>>, Unread> {
     Ok(Some(bytes))
 }
 
+/// The most bytes [`text`] reads of one file: a doc, a manifest, a fact's anchor.
+pub const TEXT_CAP: u64 = 8 << 20;
+
+/// The text of `path`, a regular file of at most [`TEXT_CAP`] bytes in UTF-8; `None` when it is
+/// absent, is anything but a regular file, is larger, or is not UTF-8. What a check reads inside a
+/// world: a link to `/dev/zero` or a pipe there is never followed or waited on.
+#[must_use]
+pub fn text(path: &Path) -> Option<String> {
+    read(path, TEXT_CAP)
+        .ok()
+        .flatten()
+        .and_then(|b| String::from_utf8(b).ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

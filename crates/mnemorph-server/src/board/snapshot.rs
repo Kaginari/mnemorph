@@ -4,8 +4,9 @@
 //! directory entries looked at. The CLI's functions then read the copy, so a body that swaps a
 //! file for a link or a pipe between a check and a read reaches nothing.
 //!
-//! Copied: `.mnemorph/memory/` (four levels deep) and each creature doc,
-//! `.mnemorph/<race>/<seat>/README.md`.
+//! Copied: `.mnemorph/memory/` (four levels deep), `.mnemorph/ontology/` (the facts journal) and
+//! each creature doc, `.mnemorph/<race>/<seat>/README.md`; then, on demand ([`Snapshot::also`]),
+//! the files a claim rests on, so a claim's review is read against what the world holds.
 
 use std::path::{Path, PathBuf};
 
@@ -21,12 +22,14 @@ pub const TOTAL_CAP: u64 = 32 << 20;
 pub const ENTRIES: usize = 2000;
 
 /// The directories under `.mnemorph/` that hold no creature doc.
-const NOT_RACES: [&str; 4] = ["memory", "instruments", "tmp", "report"];
+const NOT_RACES: [&str; 5] = ["memory", "ontology", "instruments", "tmp", "report"];
 
 /// A copy of a world's memory and creature docs, removed when dropped.
 #[derive(Debug)]
 pub struct Snapshot {
     root: PathBuf,
+    /// What is left of the budget, for [`Snapshot::also`].
+    left: Budget,
 }
 
 impl Snapshot {
@@ -34,6 +37,21 @@ impl Snapshot {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.root
+    }
+
+    /// Copy the file `rel` of `world` too, within what is left of the budget: a relative path of
+    /// plain names only (no `..`, no root), a regular file, not yet copied. Anything else is left
+    /// out, and reads as absent in the copy — a claim resting on it then reads as moved.
+    pub fn also(&mut self, world: &Path, rel: &str) {
+        let p = Path::new(rel);
+        let plain = !rel.is_empty()
+            && p.components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+        if !plain || self.root.join(p).exists() {
+            return;
+        }
+        let root = self.root.clone();
+        let _ = copy(world, &root, p, &mut self.left);
     }
 }
 
@@ -44,6 +62,7 @@ impl Drop for Snapshot {
 }
 
 /// The walk's budget, spent as it goes.
+#[derive(Debug)]
 struct Budget {
     entries: usize,
     bytes: u64,
@@ -144,7 +163,27 @@ fn tree(
 /// Why it was not taken: a file that is no regular file, one too large, too many entries, or no
 /// scratch directory — said with the path, relative to the world.
 pub fn take(world: &Path) -> Result<Snapshot, String> {
-    let snap = Snapshot { root: scratch()? };
+    take_with(world, true)
+}
+
+/// A snapshot of `world`'s ontology and creature docs, its memory left out: what the ontology page
+/// reads, so a file the memory page refuses does not hide the facts.
+///
+/// # Errors
+///
+/// As [`take`].
+pub fn ontology(world: &Path) -> Result<Snapshot, String> {
+    take_with(world, false)
+}
+
+fn take_with(world: &Path, memory: bool) -> Result<Snapshot, String> {
+    let mut snap = Snapshot {
+        root: scratch()?,
+        left: Budget {
+            entries: 0,
+            bytes: 0,
+        },
+    };
     let mut budget = Budget {
         entries: ENTRIES,
         bytes: TOTAL_CAP,
@@ -156,7 +195,11 @@ pub fn take(world: &Path) -> Result<Snapshot, String> {
             continue;
         }
         if name == "memory" {
-            tree(world, snap.path(), &p, 3, &mut budget)?;
+            if memory {
+                tree(world, snap.path(), &p, 3, &mut budget)?;
+            }
+        } else if name == "ontology" {
+            tree(world, snap.path(), &p, 0, &mut budget)?;
         } else if !NOT_RACES.contains(&name) {
             for (seat, is_dir) in entries(world, &p, &mut budget)? {
                 if is_dir {
@@ -165,6 +208,7 @@ pub fn take(world: &Path) -> Result<Snapshot, String> {
             }
         }
     }
+    snap.left = budget;
     Ok(snap)
 }
 

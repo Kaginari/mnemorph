@@ -241,6 +241,11 @@ embeds a placeholder page saying so, and serves the API all the same.
 | `GET /api/session` | `{"csrf": "<token>"}`: a reloaded page's way back to its token while the cookie lives; the page keeps it in memory only |
 | `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}]}` — `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present` or `missing`; the latest session first. Paths and names are the world's own text: the page renders them as text, never markup |
 | `GET /api/w/<id>` | `BoardOverview` of a listed world, 404 for an id no listed world has — see *The world overview* below |
+| `GET /api/w/<id>/memory` | `BoardMemory`: the standing, each creature's row and a page of notes — `?creature=`, `?scope=personal\|shared`, `?standing=proposed\|grounded\|retired\|dormant\|tombstoned`, `?review=yes\|no`, `?offset=`, `?limit=` (100, at most 500) — see *The memory and ontology pages* below |
+| `POST /api/w/<id>/memory/<note>/confirm` | `{"seen"}`: the **confirmed** route, as `mnemorphd memory confirm`; `BoardDone {done}` |
+| `POST /api/w/<id>/memory/<note>/wake` | `{"seen"}`: a note the gate retired, woken as `mnemorphd memory wake`; `BoardDone {done}` |
+| `GET /api/w/<id>/facts` | `BoardFacts`: the counts of each status, a page of facts — `?status=settled\|agreed\|single\|contested\|countered`, `?offset=`, `?limit=` — `onto check`'s findings, the paths' owners and the verdicts a settle may cite |
+| `POST /api/w/<id>/facts/<fact>/settle` | `{"seen", "verdict": <n>}` or `{"seen", "statement": "…"}`: the fact settled on that proof, `by: human (board)`; no proof, or both, is refused (400); `BoardDone {done}` |
 | `WS /ws/board` | the push channel, subprotocol `mnemorph.board.v1` beside the CSRF entry; the server alone speaks — see *The watcher* below |
 | `POST /api/w/<world>/sessions` | a chat in a listed, present world: `{}` opens a new session, `{"resume": "<run>"}` (a session's run id, `r<ms>-<pid>`) or `{"resume": "last"}` resumes a stopped run through `mnemorph resume`'s opening; `201` with `BoardStarted`: `{"session": BoardSession, "hello": Hello}`. `429` past the cap of live chats, `502` with the child's reason when it does not open. The browser that posts it owns the chat |
 | `GET /api/sessions` | `BoardSessions`: `{"sessions": [{"id", "world", "session", "run", "controlled", "tabs", "asks"}]}`, the live chats |
@@ -345,6 +350,60 @@ scratch directory — 8 MiB a file, 32 MiB and 2,000 entries in all — and the 
 the copy, so a file swapped after the check reaches nothing; past a cap, or anything but a regular
 file, the field is unknown and says which file and why. The usage ledger's last 8 MiB are read;
 when older bytes are left, `spend` says so. A run lock is probed only as a regular file.
+
+#### The memory and ontology pages
+
+Both read a world's knowledge in-process with the CLI's own functions, over a copy taken as the
+overview takes one (regular files only, capped): memory and facts live inside the world, so they
+are shown and grant nothing. Their counts are the CLI's: `GET /api/w/<id>/memory` equals
+`mnemorphd memory status --json` row for row, and `GET /api/w/<id>/facts` lists what `mnemorphd
+onto check` reports, finding for finding (`mnemorph_world::onto_check` is the one list both read).
+
+**Memory.** Each note is listed once per tier that holds it (`personal` or `shared`) with its
+creature, its standing (`proposed`, `grounded`, `retired` — dormant by the gate's hand —,
+`dormant`, `tombstoned`), the route its proof names (`checked`, `accepted`, `corroborated`,
+`confirmed`) and the proof as written, and its place in the claim graph: its version and earlier
+versions, what it rests on (claims, facts, creatures, files), and why it needs review while
+something it rests on moved — the files a claim rests on are copied too, so its review is read
+against what the world holds. Each creature's row carries its unproven events (its writes frozen),
+the pathologies its recall traces show, and how many of its claims are proposed, retired and under
+review. A note's text is cut at 2,000 characters and says so. The page filters by creature, scope,
+standing and review.
+
+**Ontology.** Every live fact stands in exactly one status of the facts table — `settled`, `agreed`,
+`single`, `contested`, `countered` — and the page tabs them. A fact carries its supporters, each with
+the anchor it gave and whether what it points at moved since, and its counters, each with its
+reason; a settled fact says who settled it and on what proof. Beside them, `onto check`'s findings
+(at most 500 listed, all counted) with its PASS or FAIL, the roster's problems, and the owner of each
+path a fact is about, as `mnemorphd onto owner` says it. Running `onto check` reads the world's
+tracked files with the harness's git (`mnemorph_sandbox::git`, every harness call's): its
+environment scrubbed of secrets, the system config unread (`GIT_CONFIG_NOSYSTEM`), no filesystem
+monitor (`core.fsmonitor` empty) and no hooks (`core.hooksPath=/dev/null`), since a world's
+`.git/config` is a body's to write; the check's other reads inside the
+world — creature docs, the law, the Minds, the anchors a fact cites, the files the verify line is
+guessed from — open only regular files under 8 MiB (`regular::text`), for the CLI as for the board.
+
+**The human's acts.** Confirm (the confirmed route: a proposed claim, or one grounded and waiting
+under review, grounded and shared), wake (a note the gate retired, grounded again) and settle (a
+fact settled on a proof) are the CLI's own functions — `memory::vouch`, `memory::wake_by`,
+`Facts::settle` — behind the guard and the CSRF token, each confirmed in the page by a dialog that
+names the exact note or fact, its id and its text, focus on Cancel. The server then checks again:
+a board started inside a body's command (`MNEMORPH_BODY`) refuses every act; the id is plain
+(letters, digits, `.`, `_`, `:`, `-`); the world is listed and present; a fresh copy still holds the
+note or fact, the act still applies (409 if not), and its text is the one the human read — the
+request names the SHA-256 of its id and text (`seen`), and a note or fact rewritten since is
+refused (409); no step from the world down to the file the act appends to is a link (422). The
+writing function checks `seen` once more on what it reads right before its write — `vouch`,
+`wake_by` and `Facts::settle` all take it, and the CLI passes the digest of the text it prints —
+so a body that rewrites the claim between the copy's check and the write is refused too. The
+journal says it was the human, from the board: a confirm cites `confirmed: the human's word
+(board)`, a wake `woken by the human (board)`, a settle is filed `by: human (board)`. A settle
+needs one proof: a passing end-gate verdict, by its number in the harness's chained journal, that
+changed the fact's path or a path under it at a `/` boundary (both normalised; a fact about the
+root, `.`, an absolute path or one with `..` is proved by no verdict) — the page offers those — or
+the human's own statement (1 to
+1,000 characters), filed as `the human's word (board): <statement>`. A verdict that failed, landed
+elsewhere, or does not exist is refused (422).
 
 #### The watcher
 

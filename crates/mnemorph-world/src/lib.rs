@@ -35,7 +35,7 @@ pub use dispatch::{Ask, Hop, Refused, dispatch};
 pub use doc::{Creature, parse};
 pub use facts::{Facts, Status as FactStatus};
 pub use findings::{
-    Finding, Severity, check, fact_findings, mind_findings, prose_claims, provenance,
+    Finding, Severity, check, fact_findings, mind_findings, onto_check, prose_claims, provenance,
 };
 pub use graph::{Bond, Graph};
 pub use own::{Owner, Ownership, Rule, WORKSPACE, explain, own};

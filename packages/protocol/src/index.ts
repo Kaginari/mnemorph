@@ -4,6 +4,11 @@
  * in; the check fails when they drift.
  */
 export type { Activity } from './generated/Activity.js';
+export type { BoardDone } from './generated/BoardDone.js';
+export type { BoardFact } from './generated/BoardFact.js';
+export type { BoardFactStatus } from './generated/BoardFactStatus.js';
+export type { BoardFacts } from './generated/BoardFacts.js';
+export type { BoardMemory } from './generated/BoardMemory.js';
 export type { BoardOverview } from './generated/BoardOverview.js';
 export type { BoardRole } from './generated/BoardRole.js';
 export type { BoardRun } from './generated/BoardRun.js';
@@ -21,20 +26,33 @@ export type { Envelope } from './generated/Envelope.js';
 export type { Event } from './generated/Event.js';
 export type { EventsParams } from './generated/EventsParams.js';
 export type { EventsResult } from './generated/EventsResult.js';
+export type { FactAnchor } from './generated/FactAnchor.js';
+export type { FactCounts } from './generated/FactCounts.js';
+export type { FactFinding } from './generated/FactFinding.js';
+export type { FactSide } from './generated/FactSide.js';
 export type { Gate } from './generated/Gate.js';
 export type { GateReply } from './generated/GateReply.js';
 export type { GateRequest } from './generated/GateRequest.js';
 export type { GateVerdict } from './generated/GateVerdict.js';
 export type { Hello } from './generated/Hello.js';
 export type { Memory } from './generated/Memory.js';
+export type { MemoryCreature } from './generated/MemoryCreature.js';
+export type { MemoryNote } from './generated/MemoryNote.js';
 export type { Meter } from './generated/Meter.js';
+export type { NoteDependency } from './generated/NoteDependency.js';
+export type { NoteScope } from './generated/NoteScope.js';
+export type { NoteStanding } from './generated/NoteStanding.js';
+export type { NoteVersion } from './generated/NoteVersion.js';
+export type { PathOwner } from './generated/PathOwner.js';
 export type { PromptParams } from './generated/PromptParams.js';
 export type { PromptResult } from './generated/PromptResult.js';
+export type { ProofVerdict } from './generated/ProofVerdict.js';
 export type { Role } from './generated/Role.js';
 export type { RunState } from './generated/RunState.js';
 export type { Sourced } from './generated/Sourced.js';
 export type { Spend } from './generated/Spend.js';
 export type { JsonValue } from './generated/serde_json/JsonValue.js';
+export type { UnprovenEvent } from './generated/UnprovenEvent.js';
 export type { WorldState } from './generated/WorldState.js';
 export type { WorldStatus } from './generated/WorldStatus.js';
 
