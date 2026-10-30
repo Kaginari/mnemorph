@@ -5,8 +5,9 @@
 //! interval (`mnemorphd meters`), the Dark Elf's scores (`mnemorphd challenge score`) and the
 //! bench's result rows, when the human's global file names where they are.
 //!
-//! The usage ledger and the roster live inside the world, so what they say is shown and marked
-//! untrusted; the challenge records are the harness's, under the state directory. Dollars cover
+//! The usage ledger is read from its witness under the state directory, trusted while its chain
+//! holds; a world with no witness yet is read from its own copy, untrusted, as the roster is. The
+//! challenge records are the harness's, under the state directory. Dollars cover
 //! priced calls only: no priced call reads no dollars, never $0. The bench is read from the
 //! directory the human named, never from a world, and a held-out suite's rows are never opened.
 
@@ -269,9 +270,17 @@ fn usage(worlds: &[(BoardWorld, PathBuf)], window: Window, now: Timestamp) -> So
     let mut rows = Vec::new();
     let mut of = Vec::new();
     let mut why = Vec::new();
+    // Trusted only while every ledger read is a witness whose chain holds.
+    let mut trusted = true;
+    let mut witnessed = false;
     for (w, path) in worlds {
         match spend::read(path) {
             Ok(l) => {
+                trusted &= l.trusted;
+                witnessed |= l.trusted;
+                if let Some(y) = &l.why {
+                    why.push(format!("{}: {y}", w.name));
+                }
                 if l.cut {
                     why.push(format!(
                         "{}: read from the ledger's last {} MiB; older calls are not counted",
@@ -288,7 +297,10 @@ fn usage(worlds: &[(BoardWorld, PathBuf)], window: Window, now: Timestamp) -> So
                 of.extend(std::iter::repeat_n(w.id.clone(), l.rows.len()));
                 rows.extend(l.rows);
             }
-            Err(e) => why.push(format!("{}: the ledger cannot be read: {e}", w.name)),
+            Err(e) => {
+                trusted = false;
+                why.push(format!("{}: the ledger cannot be read: {e}", w.name));
+            }
         }
     }
     let r = spend::fold(&rows, window, now);
@@ -329,11 +341,12 @@ fn usage(worlds: &[(BoardWorld, PathBuf)], window: Window, now: Timestamp) -> So
         burn_slot_secs: u32::try_from(BURN_SLOT).unwrap_or(u32::MAX),
         burn_per_minute: r.burn_per_minute(),
     };
-    let out = Sourced::known(
-        value,
-        format!("{USAGE} (as `mnemorphd usage` folds it)"),
-        false,
-    );
+    let source = if witnessed {
+        "the usage witness under the state directory (as `mnemorphd usage` folds it)".to_owned()
+    } else {
+        format!("{USAGE} (as `mnemorphd usage` folds it)")
+    };
+    let out = Sourced::known(value, source, trusted && !worlds.is_empty());
     if why.is_empty() {
         out
     } else {

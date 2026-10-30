@@ -409,8 +409,11 @@ elsewhere, or does not exist is refused (422).
 
 #### Metrics and integrations
 
-**Metrics** are the CLI's folds, in-process. The usage ledgers (`.mnemorph/instruments/usage.jsonl`
-of each world asked for, its newest 64 MiB at most, a regular file only) go through
+**Metrics** are the CLI's folds, in-process. The usage ledgers — each world's witness under the
+state directory (`$XDG_STATE_HOME/mnemorph/usage/<world>-<fnv64a>.jsonl`, every byte the harness
+appended), its chain walked and trusted while it holds; for a world with no witness yet, its own
+`.mnemorph/instruments/usage.jsonl`, marked untrusted; the newest 64 MiB at most, a regular file
+only — go through
 `mnemorph_world::spend::fold` — the fold `mnemorphd usage [--window 7d|28d|all] [--json]` prints, so
 the board's totals are the CLI's on the same ledger. A window holds its last 7 or 28 days, or
 everything; it folds calls, weighted tokens, the four token classes and dollars in total and by
@@ -418,8 +421,7 @@ session (the latest first, with the world that booked it), UTC day (and each day
 race and model, with the cache hit rate (`cacheRead` over all input; none with no input). The burn
 is weighted tokens per five minutes over the last twelve hours, the last slot ending now, whatever
 the window. Dollars cover the priced calls only: a group with no priced call carries `usd: null`
-and its count of unpriced calls, and the page says `unpriced (n)`, never $0. The ledger lives in
-the world and is marked untrusted. The meters are `mnemorphd meters --json`'s, each with its count
+and its count of unpriced calls, and the page says `unpriced (n)`, never $0. The meters are `mnemorphd meters --json`'s, each with its count
 and 95% Wilson interval; a meter with no report has no count, and the page says it is *silent
 since* the creature's first call the ledger holds (or that it has booked none). The Dark Elf's
 scores are `mnemorphd challenge score`'s fold of the challenge records under the state directory:
@@ -448,9 +450,11 @@ layer (`board::integrations::redact`): a key whose name names a secret, a URL wi
 a key (a long run mixing letters and digits) is dropped and shown as hidden; an argument after a
 flag that names a secret is hidden too; a key source that is not a variable's name (a key written
 in its place) is hidden; a configuration error shows its first line only, redacted, since a parse
-error quotes the line it stopped at. Last, every metrics and integrations answer is searched for
-the value of every secret variable in the board's environment (`is_secret`, eight bytes or more),
-and one that holds any is withheld whole (500). The page has no edit control: each section carries
+error quotes the line it stopped at — the metrics' bench says a global file that does not read
+the same way. Last, every metrics and integrations answer is searched for the value of every secret
+variable in the board's environment (`is_secret`, eight bytes or more, a value that is not UTF-8
+read lossily) — as written, escaped as a JSON string writes it, and percent-encoded — and one that
+holds any is withheld whole (500). The page has no edit control: each section carries
 a "how to add" snippet for the global file, to copy. The board's port and bound addresses close it;
 the theme is the browser's own choice, in Settings.
 

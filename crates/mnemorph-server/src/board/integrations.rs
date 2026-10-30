@@ -250,7 +250,9 @@ pub fn redact(key: &str, value: &str) -> Option<String> {
     if is_secret(leaf, value) || is_secret(key, value) && !key.ends_with(".key_env") {
         return None;
     }
-    for word in value.split(|c: char| c.is_whitespace() || c == ',' || c == '"' || c == '\'') {
+    // Words are runs of what a key, a URL or an assignment is made of: quotes, backticks and
+    // brackets around one never hide it.
+    for word in value.split(|c: char| !(c.is_ascii_alphanumeric() || "-_+=/.:@%~".contains(c))) {
         if word.is_empty() {
             continue;
         }
@@ -309,7 +311,7 @@ fn origin(o: &Origin) -> String {
 
 /// The first line of a configuration error, redacted: a parse error quotes the line it stopped
 /// at, which may hold a key.
-fn first_line(e: &str) -> String {
+pub(super) fn first_line(e: &str) -> String {
     let line = e.lines().next().unwrap_or_default();
     redact("", line).unwrap_or_else(|| "the configuration does not read".to_owned())
 }
@@ -544,20 +546,56 @@ pub fn integrations(
 }
 
 /// The values of the secret variables in `env` worth searching for: long enough that finding one
-/// is not chance.
+/// is not chance. A name or value that is not UTF-8 is read lossily: never a panic, and a value
+/// still searched for as it would be shown.
 #[must_use]
-pub fn secret_values(env: impl Iterator<Item = (String, String)>) -> BTreeSet<String> {
-    env.filter(|(k, v)| is_secret(k, v) && v.len() >= 8)
-        .map(|(_, v)| v)
-        .collect()
+pub fn secret_values(
+    env: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> BTreeSet<String> {
+    env.map(|(k, v)| {
+        (
+            k.to_string_lossy().into_owned(),
+            v.to_string_lossy().into_owned(),
+        )
+    })
+    .filter(|(k, v)| is_secret(k, v) && v.len() >= 8)
+    .map(|(_, v)| v)
+    .collect()
 }
 
-/// Whether `bytes` hold any of `secrets`.
+/// `s` percent-encoded as a URL's query or path would carry it: every byte but the unreserved.
+fn url_encoded(s: &str) -> String {
+    use std::fmt::Write as _;
+    s.bytes()
+        .fold(String::with_capacity(s.len()), |mut out, b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                out.push(char::from(b));
+            } else {
+                let _ = write!(out, "%{b:02X}");
+            }
+            out
+        })
+}
+
+/// Every form a secret may take in an answer: as it is, escaped as a JSON string writes it (a `"`
+/// or a `\` in it changes its bytes), and percent-encoded.
+fn forms(secret: &str) -> Vec<String> {
+    let mut out = vec![secret.to_owned()];
+    if let Ok(json) = serde_json::to_string(secret) {
+        out.push(json[1..json.len() - 1].to_owned());
+    }
+    out.push(url_encoded(secret));
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Whether `bytes` hold any of `secrets`, in any of the forms an answer may carry it.
 #[must_use]
 pub fn leaks(bytes: &[u8], secrets: &BTreeSet<String>) -> bool {
-    secrets.iter().any(|s| {
-        let s = s.as_bytes();
-        bytes.windows(s.len()).any(|w| w == s)
+    secrets.iter().flat_map(|s| forms(s)).any(|f| {
+        let f = f.as_bytes();
+        !f.is_empty() && bytes.windows(f.len()).any(|w| w == f)
     })
 }
 
@@ -586,6 +624,10 @@ mod tests {
                 "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
             ),
             ("mcp.servers.x.args", "--key=sk-or-v1-0123456789abcdef"),
+            (
+                "",
+                "gate.ask_rules: no guard rule `ghp_16C7e42F292c6912E7710c838347Ae178B4a`;",
+            ),
             (
                 "models.default",
                 "sk-or-v1-0123456789abcdef0123456789abcdef",
@@ -629,19 +671,43 @@ mod tests {
 
     #[test]
     fn an_answer_holding_a_secret_is_found() {
+        let os = |k: &str, v: &str| (std::ffi::OsString::from(k), std::ffi::OsString::from(v));
         let secrets = secret_values(
             [
-                (
-                    "OPENROUTER_API_KEY".to_owned(),
-                    "sk-or-fake-0123".to_owned(),
-                ),
-                ("HOME".to_owned(), "/home/h".to_owned()),
-                ("SHORT_TOKEN".to_owned(), "abc".to_owned()),
+                os("OPENROUTER_API_KEY", "sk-or-fake-0123"),
+                os("HOME", "/home/h"),
+                os("SHORT_TOKEN", "abc"),
             ]
             .into_iter(),
         );
         assert_eq!(secrets.len(), 1);
         assert!(leaks(br#"{"x":"sk-or-fake-0123"}"#, &secrets));
         assert!(!leaks(br#"{"x":"/home/h"}"#, &secrets));
+    }
+
+    #[test]
+    fn a_secret_is_found_escaped_as_json_or_url_encoded() {
+        let secret = r#"pa"ss\word-FAKE/+= 99"#;
+        let secrets: BTreeSet<String> = [secret.to_owned()].into();
+        let body =
+            serde_json::to_vec(&serde_json::json!({ "why": format!("x {secret} y") })).unwrap();
+        assert!(
+            !body.windows(secret.len()).any(|w| w == secret.as_bytes()),
+            "escaped in JSON"
+        );
+        assert!(leaks(&body, &secrets));
+        let url = format!("{{\"source\":\"https://h/?k={}\"}}", url_encoded(secret));
+        assert!(leaks(url.as_bytes(), &secrets));
+        assert!(!leaks(br#"{"why":"nothing"}"#, &secrets));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_value_that_is_not_utf8_is_read_lossily_never_a_panic() {
+        use std::os::unix::ffi::OsStringExt as _;
+        let bad = std::ffi::OsString::from_vec(b"tok\xffen-FAKE-0123".to_vec());
+        let secrets = secret_values([(std::ffi::OsString::from("API_TOKEN"), bad)].into_iter());
+        assert_eq!(secrets.len(), 1);
+        assert!(secrets.iter().next().unwrap().contains("en-FAKE-0123"));
     }
 }

@@ -628,7 +628,7 @@ impl Board {
             .map_err(|e| {
                 format!(
                     "your global file does not read: {}",
-                    e.lines().next().unwrap_or_default()
+                    integrations::first_line(&e)
                 )
             });
         Some(metrics::metrics(world, &of, window, now, bench))
@@ -816,7 +816,7 @@ fn withheld<T: Serialize>(value: &T) -> Response {
             "the answer did not serialise",
         );
     };
-    if integrations::leaks(&bytes, &integrations::secret_values(std::env::vars())) {
+    if integrations::leaks(&bytes, &integrations::secret_values(std::env::vars_os())) {
         return refuse(
             StatusCode::INTERNAL_SERVER_ERROR,
             "withheld: the answer held the value of a secret variable",

@@ -3,13 +3,16 @@
 //! as `mnemorphd usage` prints it and the board's metrics draw it, from this one fold.
 //!
 //! Dollars cover the priced calls only: a window with no priced call reads no dollars at all,
-//! never a zero, and every total says how many calls its dollars do not cover. The ledger lives
-//! inside the world, where a body can write it; it is read as [`crate::regular`] reads a file
-//! there, its last [`READ_CAP`] bytes at most, and what it says grants nothing.
+//! never a zero, and every total says how many calls its dollars do not cover. The ledger read is
+//! its witness under the human's state directory (`$XDG_STATE_HOME/mnemorph/usage/<world>-<fnv64a>.jsonl`,
+//! every byte the harness appended, written there first), its chain walked: trusted while the
+//! chain holds. A world with no witness yet is read from its own copy inside the world, where a
+//! body can write it, and marked untrusted. Either is read as [`crate::regular`] reads a file, its
+//! last [`READ_CAP`] bytes at most.
 
 use std::collections::BTreeMap;
 use std::io::{Read as _, Seek as _, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use mnemorph_ledger::{Key, Timestamp, Totals, UsageRow, fold as fold_by, parse_rows};
 
@@ -244,6 +247,20 @@ pub struct Ledger {
     pub skipped: usize,
     /// Whether the ledger is longer than [`READ_CAP`] and its oldest part was left unread.
     pub cut: bool,
+    /// The file read.
+    pub path: PathBuf,
+    /// Whether it is the harness's witness under the state directory, its chain holding.
+    pub trusted: bool,
+    /// Why it is not trusted: no witness (the world's own copy was read), or the witness's chain
+    /// does not hold.
+    pub why: Option<String>,
+}
+
+/// Where `world`'s usage witness lives, when there is a state directory: the file the harness
+/// writes every ledger byte to first.
+#[must_use]
+pub fn witness_of(world: &Path) -> Option<PathBuf> {
+    crate::queue::state_dir().map(|s| crate::queue::state_file_in(&s, world, "usage"))
 }
 
 /// `world`'s usage ledger, its last [`READ_CAP`] bytes at most; an empty one when it is absent.
@@ -252,7 +269,32 @@ pub struct Ledger {
 ///
 /// It is not a regular file (a link, a pipe, a device), or it cannot be read.
 pub fn read(world: &Path) -> Result<Ledger, String> {
-    read_at(&world.join(USAGE), READ_CAP)
+    read_from(world, witness_of(world).as_deref())
+}
+
+/// [`read`], the witness at `witness`: it, its chain walked, when it is there; else the world's
+/// own copy, untrusted.
+///
+/// # Errors
+///
+/// As [`read`].
+pub fn read_from(world: &Path, witness: Option<&Path>) -> Result<Ledger, String> {
+    if let Some(w) = witness.filter(|w| std::fs::symlink_metadata(w).is_ok()) {
+        let mut l = read_at(w, READ_CAP)?;
+        match mnemorph_ledger::chain::verify(w) {
+            Ok(r) if r.holds() => l.trusted = true,
+            Ok(r) => l.why = Some(format!("the witness's chain does not hold: {r}")),
+            Err(e) => l.why = Some(format!("the witness's chain cannot be walked: {e}")),
+        }
+        return Ok(l);
+    }
+    let mut l = read_at(&world.join(USAGE), READ_CAP)?;
+    l.why = Some(
+        "no witness under the state directory: read from the world's own copy, which a body can \
+         write"
+            .to_owned(),
+    );
+    Ok(l)
 }
 
 /// [`read`] of the file at `path`, its last `cap` bytes at most.
@@ -262,7 +304,10 @@ pub fn read(world: &Path) -> Result<Ledger, String> {
 /// As [`read`].
 pub fn read_at(path: &Path, cap: u64) -> Result<Ledger, String> {
     let Some(mut file) = regular::open(path).map_err(|e| e.to_string())? else {
-        return Ok(Ledger::default());
+        return Ok(Ledger {
+            path: path.to_path_buf(),
+            ..Ledger::default()
+        });
     };
     let len = file.metadata().map_err(|e| e.to_string())?.len();
     let from = len.saturating_sub(cap);
@@ -286,6 +331,9 @@ pub fn read_at(path: &Path, cap: u64) -> Result<Ledger, String> {
         rows: back.rows,
         skipped: back.skipped.len(),
         cut: from > 0,
+        path: path.to_path_buf(),
+        trusted: false,
+        why: None,
     })
 }
 
@@ -397,9 +445,47 @@ mod tests {
         assert!(tail.cut);
         assert!(tail.rows.len() < 20 && !tail.rows.is_empty());
         assert_eq!(tail.skipped, 0, "the partial first line is not a row");
-        assert_eq!(
-            read_at(&dir.path().join("none"), 10).unwrap(),
-            Ledger::default()
-        );
+        let none = read_at(&dir.path().join("none"), 10).unwrap();
+        assert!(none.rows.is_empty() && !none.cut && !none.trusted);
+    }
+
+    #[test]
+    fn the_witness_is_read_and_trusted_while_its_chain_holds() {
+        use mnemorph_ledger::Journal;
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph/instruments")).unwrap();
+        let witness = dir.path().join("state/usage.jsonl");
+        std::fs::create_dir_all(witness.parent().unwrap()).unwrap();
+        let journal = Journal::<UsageRow>::chained(world.join(USAGE)).witnessed_at(&witness);
+        for wt in [10, 20] {
+            journal.append(&row(NOW, "s", "orc", wt, None)).unwrap();
+        }
+        // A body inflates the world's copy: the witness is what is read.
+        let mut copy = std::fs::read_to_string(world.join(USAGE)).unwrap();
+        copy.push_str(&serde_json::to_string(&row(NOW, "s", "orc", 9_999, None)).unwrap());
+        copy.push('\n');
+        std::fs::write(world.join(USAGE), copy).unwrap();
+        let l = read_from(&world, Some(&witness)).unwrap();
+        assert!(l.trusted, "{:?}", l.why);
+        assert_eq!(l.path, witness);
+        assert_eq!(l.rows.iter().map(|r| r.wt).sum::<u64>(), 30);
+
+        // An edited witness breaks its chain: read, but not trusted.
+        let text = std::fs::read_to_string(&witness)
+            .unwrap()
+            .replace("\"wt\":10", "\"wt\":11");
+        std::fs::write(&witness, text).unwrap();
+        let broken = read_from(&world, Some(&witness)).unwrap();
+        assert!(!broken.trusted);
+        assert!(broken.why.unwrap().contains("does not hold"));
+
+        // No witness: the world's copy, untrusted, and why.
+        let old = read_from(&world, Some(&dir.path().join("absent.jsonl"))).unwrap();
+        assert!(!old.trusted);
+        assert_eq!(old.path, world.join(USAGE));
+        // The body's unchained row after the genesis is skipped there too, and said.
+        assert_eq!((old.rows.len(), old.skipped), (2, 1));
+        assert!(old.why.unwrap().contains("no witness"));
     }
 }

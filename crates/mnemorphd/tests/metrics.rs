@@ -480,3 +480,48 @@ fn no_secret_value_reaches_the_integrations_and_held_out_is_never_read() {
     assert!(!seen[2].contains(HELDOUT));
     assert!(!seen[2].contains("heldout"));
 }
+
+/// Where the harness keeps the world's usage witness.
+fn witness(state: &Path, world: &Path) -> PathBuf {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in world.as_os_str().as_encoded_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    let name = world.file_name().unwrap().to_string_lossy();
+    state.join(format!("mnemorph/usage/{name}-{h:016x}.jsonl"))
+}
+
+#[test]
+fn the_usage_witness_is_read_and_trusted_over_the_worlds_copy() {
+    let mut h = Home::new("witness");
+    let at = witness(&h.root.join("state"), &h.world);
+    let ledger = Journal::<UsageRow>::chained(h.world.join(".mnemorph/instruments/usage.jsonl"))
+        .witnessed_at(&at);
+    let now = Timestamp::now().0;
+    for wt in [100, 200] {
+        ledger
+            .append(&usage(now - 60, "s1", "orc", wt, None))
+            .unwrap();
+    }
+    // A body appends to the world's copy: not in the witness, never counted.
+    let copy = h.world.join(".mnemorph/instruments/usage.jsonl");
+    let mut text = std::fs::read_to_string(&copy).unwrap();
+    text.push_str(&serde_json::to_string(&usage(now - 30, "s1", "orc", 9_999, None)).unwrap());
+    text.push('\n');
+    std::fs::write(&copy, text).unwrap();
+
+    let world = h.world.to_str().unwrap().to_owned();
+    let cli: Value = serde_json::from_str(&h.run(&["usage", "--world", &world, "--json"])).unwrap();
+    assert_eq!(cli["trusted"], true, "{cli}");
+    assert_eq!(cli["total"]["wt"], 300);
+    let (host, cookie) = h.serve();
+    let id = h.id();
+    let m = json(&get(
+        &host,
+        &cookie,
+        &format!("/api/metrics?world={id}&window=all"),
+    ));
+    assert_eq!(m["usage"]["trusted"], true, "{}", m["usage"]);
+    same(&cli["total"], &m["usage"]["value"]["total"], "witness");
+}

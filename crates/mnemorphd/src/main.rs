@@ -111,7 +111,9 @@ yet. Only the Dark Elf's meters are live, folded from the challenge records per 
 other races' fold from their reports, and the general report fold is M11's. Shown, never judged
 on: every rise and fall reads the point estimate.
 
-`usage` folds the world's usage ledger over the window (7 days unless `--window` says): calls,
+`usage` folds the world's usage ledger over the window (7 days unless `--window` says) — read
+from its witness under the state directory, trusted while its chain holds, else from the world's
+own copy and said to be untrusted: calls,
 weighted tokens and dollars, in total and by race, model, body, day and session, the cache hit
 rate and the unpriced calls. Dollars cover the priced calls only: a group with no priced call
 reads `unpriced`, never $0, and every total says how many calls its dollars leave out. `--json`
@@ -1957,6 +1959,13 @@ fn usage_lines(
             ));
         }
     }
+    lines.push(match &ledger.why {
+        None => format!(
+            "read from the usage witness under the state directory, its chain holding: {}",
+            safe(&ledger.path.display().to_string())
+        ),
+        Some(why) => format!("not trusted: {}", safe(why)),
+    });
     if ledger.skipped > 0 {
         lines.push(format!(
             "{} line(s) of the ledger do not read and are not counted",
@@ -2027,6 +2036,9 @@ fn usage(args: &[String]) -> ExitCode {
                 "burnPerMinute": r.burn_per_minute(),
                 "skipped": ledger.skipped,
                 "cut": ledger.cut,
+                "source": ledger.path.display().to_string(),
+                "trusted": ledger.trusted,
+                "why": ledger.why,
             })
         );
         return ExitCode::SUCCESS;
