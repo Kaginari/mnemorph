@@ -119,6 +119,9 @@ pub struct Commissioner {
     pub reviewers: usize,
     /// The session's MCP servers: each child is offered its race's share, ranked for its ask.
     pub mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>,
+    /// The registry of worlds a commissioned body's manifest reads are sighted against; `None`
+    /// sights nothing.
+    pub registry: Option<PathBuf>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -1366,7 +1369,8 @@ fn child_run(
     let mut child = Run::new(body, limits, setup)
         .with_gate(gate)
         .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
-        .with_mcp_record(c.mcp.as_ref().map(|m| m.state().to_path_buf()));
+        .with_mcp_record(c.mcp.as_ref().map(|m| m.state().to_path_buf()))
+        .with_registry(c.registry.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();

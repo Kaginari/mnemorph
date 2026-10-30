@@ -99,6 +99,7 @@ impl World {
         tools.push(Box::new(mnemorph_loop::QueueTool) as Box<dyn Tool>);
         let journals = self.0.join(".mnemorph/instruments/loop");
         let commissioner = Commissioner {
+            registry: None,
             world: self.0.canonicalize().unwrap(),
             model: model.clone(),
             prices: anthropic_prices().unwrap(),

@@ -41,6 +41,8 @@ fn equip(
     }
     let roster = mnemorph_world::Roster::load(world);
     run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
+    // A manifest the throne reads that names another known world is a sighting.
+    run = run.with_registry(mnemorph_world::dimension::registry());
     // The throne sends the Dark Elves a landing's challenge routes, lanes or none.
     run = run.with_challenger(Arc::clone(&commissioner));
     if dispatches {
@@ -167,6 +169,11 @@ fn open_from(
         observer,
         env,
     )?;
+    // The world, opened, joins the registry of worlds on this machine: the board finds it there,
+    // and its session count is the clock a learned relation's expiry reads.
+    if let Err(e) = mnemorph_world::dimension::register(world) {
+        eprintln!("mnemorph: the world registry could not be written: {e}");
+    }
     opened.key = backend.provider.key_env.as_ref().map(|var| {
         let field = format!("providers.{}.key_env", backend.provider_name);
         match config.get(&field) {
@@ -301,8 +308,10 @@ pub fn resume_with(
 }
 
 /// The one opening every session goes through, fresh or resumed.
-// One straight sequence, each step reading the last: split, it would pass the same state around.
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one opening, read top to bottom: every piece a session holds is built here"
+)]
 fn build(
     world: &Path,
     config: &Config,
@@ -377,6 +386,7 @@ fn build(
         challenges: None,
         reviewers: config.challenge_reviewers(),
         mcp,
+        registry: mnemorph_world::dimension::registry(),
     });
     let mcp_record = commissioner.mcp.as_ref().map(|m| m.state().to_path_buf());
     let setup = Setup {

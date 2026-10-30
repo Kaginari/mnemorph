@@ -349,12 +349,13 @@ states and $R_B$ the set B states, each read from A's side through inverses:
 `mnemorphd onto check --dimension` reads the neighbours' manifests (on this machine, inward) and
 never edits them; a fix goes to the other world through its own throne, one hop at a time.
 
-**Learning a relation.** A body that sees a cross-world reference — an image another world
-deploys, a secret path another world provisions — records a sighting
-$(\text{from}, \text{to}, \text{type}, \text{anchor}, \text{body})$. The ledger proposes a
+**Learning a relation.** The harness records a sighting
+$(\text{from}, \text{to}, \text{type}, \text{anchor}, \text{body}, \text{session})$ when a body
+reads a cross-world reference — a dependency on another world, a submodule of it. The ledger proposes a
 relation to the human, as a manifest diff, only when:
 
-1. **named twice** — two sightings, by different bodies, from different anchors;
+1. **named twice** — two sightings, by different bodies in different sessions, from different
+   anchors: a body and the child it commissions share a session, so one session is one voice;
 2. **not a synonym** — once a new type $t$ names at least three pairs, and most of them already
    carry an existing type $t'$, by containment
    $\frac{|\text{pairs}(t) \cap \text{pairs}(t')|}{|\text{pairs}(t)|} \ge 0.8$, the proposal
@@ -364,6 +365,36 @@ relation to the human, as a manifest diff, only when:
    in; unseen for 30 sessions of this world, its removal is proposed the same way.
 
 Only the human's yes writes it, through Rimuru, whose soil the manifest is.
+
+**Where sightings come from.** The harness records them, never the model: each time a body's
+`read` or `index` succeeds on a manifest inside its world — `Cargo.toml`, `package.json`,
+`go.mod`, `.gitmodules` — that git tracks and that is unchanged from `HEAD` (a manifest a body
+only wrote is no evidence), the harness reads that same file and looks for the worlds the
+[registry](05-architecture.md#storage-files-are-the-truth) knows. A dependency by path names the
+deepest known world whose root holds the path (`depends-on`); one by git URL or Go module, the
+known world with that remote (`depends-on`); a submodule's URL, `vendors`. The anchor is the
+manifest's `file:line`, the body the one that read it, and the session this world's count of
+openings in the registry. The other world is named by its id, never its path. One body's read of
+one anchor is one sighting per session. Sightings live beside the registry, under
+`$XDG_STATE_HOME/mnemorph/dimension/<world-id>/sightings.jsonl`, the harness's alone: no body
+reads or writes them, and a cloned world brings none. A remote is a world's own to write in its
+git config, so it is only a hint for matching, bounded and stripped of credentials. A file
+outside the world, or a link from inside it to one outside, is never opened for a sighting, and a
+known neighbour is no wider sandbox: its files stay outside every tool's reach.
+
+**The manifest.** `.mnemorph/dimension.toml` holds `[[relation]]` entries — `world`, the other
+world's canonical path on this machine; `type`, read from this world's side; `remote`, its
+normalised remote, how it is known elsewhere — and an optional `[inverse]` table declaring a
+type's inverse; a type is lowercase words joined by `-`, and a manifest with any other, or one
+that is no regular file or is over 64 KiB, does not read. `mnemorphd onto relations` prints what
+it states and each proposal as a diff of it, each world id turned back into its path, and writes
+nothing; `onto relate <world> <type>` is the human's yes and `onto unrelate` its revocation.
+Where other worlds live is the human's to see: `relations`, `relate`, `unrelate` and
+`check --dimension` are refused inside a body's command. A relation the human stated with no sighting
+was never learned, so it carries no expiry. `onto check` reports `stale-relation`; with
+`--dimension` it also prints, per neighbour, what both state and what each states alone; a
+neighbour's manifest that does not read is an `unreadable-neighbour` finding and is read as
+stating nothing — it never fails this world's check.
 
 ### Findings
 
@@ -388,6 +419,7 @@ blocking. Findings are never summed into a score.
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `doc-provenance` | medium | a date (`YYYY-MM-DD`) or a change note (`added on`, `updated on`, `edited on`, `as of`, `at the request of`, `per the human`, each as words of its own) in the law or a creature's doc, code in fences or backticks aside — provenance lives only in `log.md` |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
+| `unreadable-neighbour` | low | a neighbour's dimension manifest that does not read, in `onto check --dimension` |
 | `prose-claim` | low | a Slime's doc names, in prose, a path of the world its Territory field does not claim: a backticked word read as a claim would be, that exists, on soil a Slime could claim (a zone, a domain, or no one's) — one per path, at its line, in `onto check` |
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |
 | `untriaged-fact` | low | a free fact landed beside similar ones without the parent's label |

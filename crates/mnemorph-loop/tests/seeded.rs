@@ -107,6 +107,7 @@ impl World {
 
     fn commissioner(&self, model: Arc<dyn Model>, reviewers: usize) -> Commissioner {
         Commissioner {
+            registry: None,
             world: self.world().canonicalize().unwrap(),
             model,
             prices: anthropic_prices().unwrap(),

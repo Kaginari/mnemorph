@@ -5,6 +5,7 @@ pub use mnemorph_memory as memory;
 
 pub mod chains;
 pub mod challenge;
+pub mod dimension;
 pub mod dispatch;
 pub mod doc;
 pub mod evolution;
