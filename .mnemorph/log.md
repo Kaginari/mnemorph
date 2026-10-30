@@ -6351,3 +6351,31 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-10-30T17:13:30+01:00] rimuru — #91/#105, Fable's review: verdicts read from their chain; an unstamped swap refused
 - **Done:** `Records::load` reads the gate verdicts from the chained journal, held to its anchor, falling back to log.md only where none is kept (the cards say so); a journal that does not verify trusts no body and dispatch refuses. `Refusal::Unstamped`: a swap row with no build is refused, never pending forever. Doc 03.
 - **Tests:** the journal outranks forged log.md passes; an edit and a dropped tail fail closed; an unstamped swap is refused.
+### [2026-10-30T17:03:30+01:00] rimuru — #98 and #100: meters with intervals in status; the evolution writer, controls on demand, the do-nothing fixtures
+- **Done:** `mnemorph_world::meters`: every living creature's meters with their count and 95% Wilson
+  interval, in `mnemorph status` (one compact line per creature, printed even when no session
+  opens) and `mnemorphd meters [--json]` (by race). Only the Dark Elf's fold is live
+  (precision, upheldRate, cannotVerifyRate from the challenge records); every other race reads
+  `no reports` until M11's report fold. The writer: `mnemorphd evolution swap <id>` swaps the plan
+  staged under `.mnemorph/tmp/evolution/<id>/` in after `y` at the terminal, hashes the soil under
+  `.mnemorph/` before and after, keeps the bytes before beside the ledger and appends one stamped
+  swap row, or puts the world back and writes none. Each ask of a swapped body then appends a run
+  row (task fingerprint, ask, states before and after, the gate's facts) until the window of 10 is
+  full. `mnemorphd evolution judge <id>` runs the missing do-nothing controls in scratch copies on
+  the before state, appends them, judges and proposes keep or rollback. Docs 02, 04, 05, 06,
+  roadmap.
+- **Tests:** status and `meters` show intervals and `no reports`; a swap writes its stamped row and
+  keeps the bytes before, a refused plan writes nothing; runs write rows until the window closes, a
+  repeated task is not stamped, a mid-run edit shows; end to end, a Mind swap, ten stamped runs,
+  controls on demand and a replayed keep; the no-finding and no-recall fixtures give the same gate
+  word every time and only the right output lands. With the swap row's append or the run row's
+  record turned off, the end-to-end test fails.
+- **Learned:** a held-out rule over "any earlier row of the task" refuses a window forever once a
+  body repeats an ask: the writer must skip a task the ledger already holds, not stamp it.
+  Open (@?): controls run only on demand; M11's trigger, staged plans and `evolve apply | reject`
+  are still to build, and the board shows no meter yet.
+
+### [2026-10-30T18:20:00+01:00] rimuru — #98/#100, Fable's review: the controls spend under the caps; no stamp the window cannot use
+- **Done:** controls write every call to the live world's usage ledger under the judge's session and run under the human's caps: the judge says how many will run and what the tightest cap leaves before spending, a spent cap runs none, and a control a cap stops is not recorded. `stamp_for` skips an ask the plan was proven on and any ask under another build than the swap's; `status` and `judge` say `re-swap to judge`, and a stale window holds no body. Control attics go with their scratch; `meters --json` gives `n: null` for a meter with no report. Docs 02.
+- **Tests:** the controls' usage rows; a spent day cap runs none; a proven-on ask and another build's swap are not stamped, and the plan swaps in again; a Dark Elf with no fold reads null.
+- **Learned:** anything the harness runs on the human's model is a session: it writes the usage ledger and meets the caps, however it is started.

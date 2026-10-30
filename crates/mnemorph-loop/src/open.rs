@@ -150,6 +150,42 @@ fn open_from(
         other => other,
     };
     let config = Config::load(&Paths::resolve(world))?;
+    let (model, backend, named) = model_of(&config, &env)?;
+    let mut opened = build(
+        world,
+        &config,
+        Bound {
+            model,
+            model_id: &backend.model,
+            attic: None,
+        },
+        start,
+        gate,
+        observer,
+        env,
+    )?;
+    opened.key = backend.provider.key_env.as_ref().map(|var| {
+        let field = format!("providers.{}.key_env", backend.provider_name);
+        match config.get(&field) {
+            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
+            None => var.clone(),
+        }
+    });
+    opened.model = named;
+    opened.provider = backend.provider_name;
+    Ok(opened)
+}
+
+/// The session's model, reached through the backend the human chose, its key read from the
+/// variable the provider names: the model, its backend and the name the configuration gives it.
+///
+/// # Errors
+///
+/// The model's backend is unknown, its key variable is not set, or the HTTP stack cannot start.
+pub fn model_of(
+    config: &Config,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<(Arc<dyn Model>, mnemorph_config::Backend, String), String> {
     let named = config.model_for("rimuru", Race::Rimuru, None);
     let backend = config.backend(&named)?;
     let key = match &backend.provider.key_env {
@@ -191,29 +227,7 @@ fn open_from(
             ));
         }
     };
-    let mut opened = build(
-        world,
-        &config,
-        Bound {
-            model,
-            model_id: &backend.model,
-            attic: None,
-        },
-        start,
-        gate,
-        observer,
-        env,
-    )?;
-    opened.key = backend.provider.key_env.as_ref().map(|var| {
-        let field = format!("providers.{}.key_env", backend.provider_name);
-        match config.get(&field) {
-            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
-            None => var.clone(),
-        }
-    });
-    opened.model = named;
-    opened.provider = backend.provider_name;
-    Ok(opened)
+    Ok((model, backend, named))
 }
 
 /// What [`open_with`] is given rather than built: the model, and where the attic lives.
@@ -547,7 +561,7 @@ fn router(
 /// The world's usage ledger, chained — every row names the digest of the one before, so an edit
 /// of the spend is found — and witnessed under the human's state directory, so the tripwire puts
 /// it back with a parallel run's rows kept.
-fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
+pub(crate) fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
     let usage = Journal::chained(world.join(".mnemorph/instruments/usage.jsonl"));
     match mnemorph_tools::usage_witness(world) {
         Some(witness) => usage.witnessed_at(witness),
@@ -558,7 +572,7 @@ fn usage_ledger(world: &Path) -> Journal<mnemorph_ledger::UsageRow> {
 /// The human's caps, and what this world already spent against them: whether any is set, the
 /// ledger lines that could not be read, and what the session may spend. A ledger that cannot be
 /// read opens no capped session.
-fn read_caps(
+pub(crate) fn read_caps(
     config: &Config,
     usage: &Journal<mnemorph_ledger::UsageRow>,
     session_id: &str,

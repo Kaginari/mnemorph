@@ -13,6 +13,8 @@ pub mod protocol;
 pub use mnemorph_loop::challenge;
 /// The human's door to the Oni's envelopes.
 pub use mnemorph_loop::envelope;
+/// An evolution's controls run on demand, and its judgement.
+pub use mnemorph_loop::evolution;
 /// The human's door to the Kijin's incidents.
 pub use mnemorph_loop::incident;
 /// The wire, for the commands that speak it without a session (`check`).

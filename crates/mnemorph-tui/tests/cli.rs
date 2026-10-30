@@ -188,3 +188,29 @@ fn run_reads_stdin() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// `status` shows each living creature's meters, compact, with their count and interval — or
+/// `no reports` where no fold reads them yet — whether or not a session opens.
+#[test]
+fn status_shows_each_creatures_meters() {
+    let w = empty_world("meters");
+    let doc = w.join(".mnemorph/slime/sly/README.md");
+    std::fs::create_dir_all(doc.parent().unwrap()).unwrap();
+    std::fs::write(&doc, "# sly\n\n- **Race:** slime\n").unwrap();
+    let out = bin()
+        .args(["status", "--world", w.to_str().unwrap()])
+        .env("XDG_CONFIG_HOME", w.join("config"))
+        .env("XDG_STATE_HOME", w.join("state"))
+        .env("HOME", &w)
+        .env_remove("OPENROUTER_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    let shown = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        shown.contains("meters   sly (slime): no reports — landRate, gateRate, holeRate\n"),
+        "{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}
