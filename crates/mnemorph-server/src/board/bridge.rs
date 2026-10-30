@@ -645,12 +645,12 @@ impl Live {
                     if let Some(tx) = st.init.take() {
                         let _ = tx.send(match (obj.get("result"), obj.get("error")) {
                             (Some(r), _) => Ok(r.clone()),
-                            (None, e) => Err(cut(
+                            // The child's words reach the page escaped, as its last words do.
+                            (None, e) => Err(mnemorph_loop::wire::shown(cut(
                                 e.and_then(|e| e["message"].as_str())
                                     .unwrap_or("the chat did not open"),
                                 REFUSAL_BYTES,
-                            )
-                            .to_owned()),
+                            ))),
                         });
                     }
                     return;
@@ -1121,7 +1121,7 @@ fn with_last_words(why: &str, live: &Live) -> String {
     } else {
         format!(
             "{why} — its stderr ended: {}",
-            mnemorph_loop::run::shown(&text)
+            mnemorph_loop::wire::shown(&text)
         )
     }
 }
