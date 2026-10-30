@@ -1,5 +1,7 @@
 //! The world: creatures, territory, dispatch, the end gate, the log writer, evolution.
 
+/// The ledgers' rows, journals and clock, for the readers of the world's spend (the board).
+pub use mnemorph_ledger as ledger;
 /// The world's memory: notes, recall, the write rule and the audit, for the human's commands.
 pub use mnemorph_memory as memory;
 

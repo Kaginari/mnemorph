@@ -153,6 +153,26 @@ fn held(world: &Path, run: &str) -> bool {
     File::open(&path).is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
 }
 
+/// The world's session runs a live session holds now, by id, sorted: each lock probed for an
+/// instant, as a listing probes. Only a regular lock file is opened — the directory is the world's,
+/// and a pipe planted in its place would hang the open.
+#[must_use]
+pub fn live(world: &Path) -> Vec<String> {
+    let Ok(dir) = std::fs::read_dir(journals(world)) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = dir
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let run = e.file_name().to_str()?.strip_suffix(".lock")?.to_owned();
+            let regular = std::fs::symlink_metadata(e.path()).is_ok_and(|m| m.is_file());
+            (regular && is_session_run(&run) && held(world, &run)).then_some(run)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 /// The world's session runs that stopped and may be resumed, newest first: a checkpoint, an
 /// interrupted turn, or a turn the process died in. A run a live session holds, one that answered
 /// or failed, and a journal with a line that does not read are left out.
@@ -275,5 +295,28 @@ mod tests {
         );
         assert!(stop_of(&[ask.clone(), end("answered")]).is_err());
         assert!(stop_of(&[ask, end("failed: the provider")]).is_err());
+    }
+
+    #[test]
+    fn a_held_run_reads_live_and_a_planted_pipe_is_never_opened() {
+        let world = std::env::temp_dir().join(format!("mnemorph-live-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&world);
+        assert_eq!(live(&world), Vec::<String>::new());
+        let run = "r1730000000000-7";
+        let hold = hold(&world, run).unwrap();
+        // A body's run, and a lock no one holds, are not live.
+        drop(super::hold(&world, "slime-x").unwrap());
+        std::fs::write(journals(&world).join("r1-2.lock"), "").unwrap();
+        #[cfg(unix)]
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(journals(&world).join("r3-4.lock"))
+                .status()
+                .is_ok_and(|s| s.success())
+        );
+        assert_eq!(live(&world), vec![run.to_owned()]);
+        drop(hold);
+        assert_eq!(live(&world), Vec::<String>::new());
+        let _ = std::fs::remove_dir_all(&world);
     }
 }
