@@ -1,0 +1,13 @@
+name = "x"
+
+[package]
+version = "1"
+
+[dependencies]
+serde = "1"
+text = """
+[not.a.table]
+"""
+
+[[bin]]
+name = "a"

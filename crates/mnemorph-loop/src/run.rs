@@ -1727,15 +1727,10 @@ impl Run {
     pub(crate) fn evidence(&self) -> Vec<String> {
         let mut paths = std::collections::BTreeSet::new();
         for (name, input) in self.acts_since_ask() {
-            let read = (name == "read")
-                .then(|| {
-                    input
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_owned)
-                })
-                .flatten();
-            for p in changed_paths(name, input).into_iter().chain(read) {
+            for p in changed_paths(name, input)
+                .into_iter()
+                .chain(read_paths(name, input))
+            {
                 let p = p.trim_start_matches("./").to_owned();
                 if !p.is_empty() {
                     paths.insert(p);
@@ -3268,6 +3263,31 @@ fn text_of(content: &[Block]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// The files a look reads: a `read`'s path (its `#symbol` dropped) and every file an `index`
+/// outlines.
+fn read_paths(tool: &str, input: &serde_json::Value) -> Vec<String> {
+    let path = input.get("path").and_then(|v| v.as_str());
+    match tool {
+        "read" => path
+            .map(|p| p.split_once('#').map_or(p, |(f, _)| f).to_owned())
+            .into_iter()
+            .collect(),
+        "index" => path
+            .into_iter()
+            .chain(
+                input
+                    .get("paths")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|v| v.as_str()),
+            )
+            .map(str::to_owned)
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// The paths an act changes: written, edited, moved, deleted or patched. A read, a search or a

@@ -1,0 +1,10 @@
+{
+  "name": "x",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "list": [
+    {"inner": 1}
+  ]
+}
