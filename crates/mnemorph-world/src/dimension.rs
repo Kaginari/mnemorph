@@ -252,6 +252,162 @@ pub fn remote(url: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The board's list
+
+/// What the human did to the board's list by hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Hand {
+    /// `mnemorphd board add <dir>`: the world is listed though no session opened in it.
+    Add,
+    /// `mnemorphd board forget <dir>`: the world is no longer listed.
+    Forget,
+}
+
+/// One row of the board's list: the human's hand on it. The registry stays the sessions' alone,
+/// so a world added by hand never moves a relation's session clock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Handled {
+    /// Added or forgotten.
+    pub act: Hand,
+    /// The world's canonical path.
+    pub world: String,
+    /// Its id.
+    pub id: String,
+    /// When, RFC 3339 in UTC.
+    pub at: String,
+}
+
+/// A world the board lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listed {
+    /// Its canonical path.
+    pub world: PathBuf,
+    /// Its id.
+    pub id: String,
+    /// Its latest remote, normalised.
+    pub remote: Option<String>,
+    /// When the latest session opened in it; `None` for a world only added by hand.
+    pub last: Option<String>,
+    /// How many sessions opened in it.
+    pub sessions: u64,
+}
+
+/// Where the board's list lives, beside the registry at `registry`:
+/// `<state>/mnemorph/board/worlds.jsonl` — the human's hand, outside every world.
+#[must_use]
+pub fn hand_file(registry: &Path) -> PathBuf {
+    registry
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("board/worlds.jsonl")
+}
+
+/// The worlds the board lists: every world of the registry at `registry` and every world added
+/// at `hand`, but a world forgotten and neither added again nor opened in a session since. A
+/// world whose directory vanished stays listed: it is the board's to show it missing, never to
+/// drop it.
+#[must_use]
+pub fn listed(registry: &Path, hand: &Path) -> Vec<Listed> {
+    // Each world, and when it was forgotten if its latest hand was a forget.
+    let mut out: Vec<(Listed, Option<Timestamp>)> = known(registry)
+        .into_iter()
+        .map(|k| {
+            let listed = Listed {
+                world: k.world,
+                id: k.id,
+                remote: k.remote,
+                last: Some(k.last),
+                sessions: k.sessions,
+            };
+            (listed, None)
+        })
+        .collect();
+    let rows = Journal::<Handled>::new(hand)
+        .read()
+        .map(|r| r.rows)
+        .unwrap_or_default();
+    for row in rows {
+        let path = PathBuf::from(&row.world);
+        let at = Timestamp::parse(&row.at).unwrap_or(Timestamp(i64::MAX));
+        match (out.iter_mut().find(|(l, _)| l.world == path), row.act) {
+            (Some((_, forgot)), Hand::Add) => *forgot = None,
+            (Some((_, forgot)), Hand::Forget) => *forgot = Some(at),
+            (None, Hand::Add) => out.push((
+                Listed {
+                    world: path,
+                    id: row.id,
+                    remote: None,
+                    last: None,
+                    sessions: 0,
+                },
+                None,
+            )),
+            (None, Hand::Forget) => {}
+        }
+    }
+    out.into_iter()
+        .filter(|(l, forgot)| {
+            forgot.is_none_or(|f| {
+                l.last
+                    .as_deref()
+                    .and_then(Timestamp::parse)
+                    .is_some_and(|last| last > f)
+            })
+        })
+        .map(|(l, _)| l)
+        .collect()
+}
+
+/// Write the human's `act` on `world` into the board's list at `hand`, and return the world as
+/// listed. Refused inside a body's command (`MNEMORPH_BODY` is set there): what the board shows
+/// is the human's to choose. `add` needs a directory; `forget` needs a world the board lists
+/// (the registry at `registry` is read for it), a vanished one included.
+///
+/// # Errors
+///
+/// A body asks, the world is not one the act applies to, or the list cannot be written.
+pub fn hand(hand: &Path, registry: &Path, act: Hand, world: &Path) -> Result<Listed, String> {
+    if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+        return Err(format!(
+            "{} runs this: the board's worlds are added and forgotten by the human alone",
+            body.to_string_lossy()
+        ));
+    }
+    let world = match act {
+        Hand::Add => match world.canonicalize() {
+            Ok(w) if w.is_dir() => w,
+            Ok(w) => return Err(format!("{} is not a directory", w.display())),
+            Err(e) => return Err(format!("{}: {e}", world.display())),
+        },
+        Hand::Forget => world.canonicalize().unwrap_or_else(|_| world.to_path_buf()),
+    };
+    let found = listed(registry, hand)
+        .into_iter()
+        .find(|l| l.world == world);
+    let out = match (act, found) {
+        (Hand::Forget, None) => return Err(format!("{} is not on the board", world.display())),
+        (_, Some(l)) => l,
+        (Hand::Add, None) => Listed {
+            id: world_id(&world),
+            world: world.clone(),
+            remote: None,
+            last: None,
+            sessions: 0,
+        },
+    };
+    Journal::<Handled>::new(hand)
+        .append(&Handled {
+            act,
+            world: world.display().to_string(),
+            id: world_id(&world),
+            at: Timestamp::now().to_string(),
+        })
+        .map_err(|e| format!("the board's list cannot be written: {e}"))?;
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sightings
 
 /// One cross-world reference the harness saw a body read.
