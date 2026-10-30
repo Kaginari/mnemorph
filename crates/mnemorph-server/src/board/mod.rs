@@ -13,15 +13,19 @@
 //! `/api/` or `/ws/` is guarded without being named in it.
 
 mod assets;
+pub mod bodies;
 pub mod bridge;
 pub mod facts;
 pub mod guard;
 pub mod instance;
+pub mod journal;
 pub mod knowledge;
 pub mod memory;
+pub mod orders;
 pub mod overview;
 pub mod runs;
 pub mod snapshot;
+pub mod timeline;
 pub mod watch;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -402,6 +406,10 @@ impl Board {
                 "/api/w/{world}/facts/{fact}/settle",
                 post(knowledge::settle).layer(DefaultBodyLimit::max(knowledge::ACT_BYTES)),
             )
+            .route("/api/w/{world}/bodies", get(knowledge::get_bodies))
+            .route("/api/w/{world}/queue", get(knowledge::get_queue))
+            .route("/api/w/{world}/timeline", get(knowledge::get_timeline))
+            .route("/api/w/{world}/journal", get(knowledge::get_journal))
             .route("/ws/board", get(watch::socket))
             .route(
                 "/api/w/{world}/sessions",

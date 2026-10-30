@@ -75,6 +75,10 @@ fn main() {
         println!("cargo:rerun-if-changed={}", dist.display());
     } else {
         println!("cargo:rerun-if-changed={}", board.display());
+        println!(
+            "cargo:rerun-if-changed={}",
+            board.join("public/art").display()
+        );
     }
 
     let mut files = Vec::new();
@@ -115,6 +119,23 @@ fn main() {
             page.display()
         )
         .expect("a string");
+        // The race art is served by its exact name with or without a built page: the API's
+        // race cards name it.
+        let mut art = Vec::new();
+        walk(&board.join("public/art"), "/art", &mut art);
+        art.sort();
+        for (name, path) in &art {
+            let Some(ty) = content_type(name) else {
+                continue;
+            };
+            let path = path.canonicalize().expect("a file just listed");
+            writeln!(
+                code,
+                "    ({name:?}, {ty:?}, include_bytes!({:?})),",
+                path.display()
+            )
+            .expect("a string");
+        }
     }
     code.push_str("];\n");
     writeln!(

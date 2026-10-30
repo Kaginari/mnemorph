@@ -176,7 +176,58 @@ pub fn ontology(world: &Path) -> Result<Snapshot, String> {
     take_with(world, false)
 }
 
+/// A snapshot of `world`'s creature docs and its Minds (`.mnemorph/minds/`, a level deep): what
+/// the bodies page reads.
+///
+/// # Errors
+///
+/// As [`take`].
+pub fn bodies(world: &Path) -> Result<Snapshot, String> {
+    take_parts(world, Parts::Bodies)
+}
+
+/// A snapshot of the one regular file `rel` of `world` (absent in the copy when it is absent in
+/// the world), within the caps.
+///
+/// # Errors
+///
+/// Not a regular file, too large, or no scratch directory.
+pub fn file(world: &Path, rel: &str) -> Result<Snapshot, String> {
+    let mut snap = Snapshot {
+        root: scratch()?,
+        left: Budget {
+            entries: ENTRIES,
+            bytes: TOTAL_CAP,
+        },
+    };
+    let root = snap.root.clone();
+    copy(world, &root, Path::new(rel), &mut snap.left)?;
+    Ok(snap)
+}
+
+/// What a snapshot copies beside the creature docs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Parts {
+    /// The memory and the ontology.
+    Knowledge,
+    /// The ontology alone.
+    Ontology,
+    /// The Minds.
+    Bodies,
+}
+
 fn take_with(world: &Path, memory: bool) -> Result<Snapshot, String> {
+    take_parts(
+        world,
+        if memory {
+            Parts::Knowledge
+        } else {
+            Parts::Ontology
+        },
+    )
+}
+
+fn take_parts(world: &Path, parts: Parts) -> Result<Snapshot, String> {
     let mut snap = Snapshot {
         root: scratch()?,
         left: Budget {
@@ -195,11 +246,15 @@ fn take_with(world: &Path, memory: bool) -> Result<Snapshot, String> {
             continue;
         }
         if name == "memory" {
-            if memory {
+            if parts == Parts::Knowledge {
                 tree(world, snap.path(), &p, 3, &mut budget)?;
             }
         } else if name == "ontology" {
-            tree(world, snap.path(), &p, 0, &mut budget)?;
+            if parts != Parts::Bodies {
+                tree(world, snap.path(), &p, 0, &mut budget)?;
+            }
+        } else if name == "minds" && parts == Parts::Bodies {
+            tree(world, snap.path(), &p, 1, &mut budget)?;
         } else if !NOT_RACES.contains(&name) {
             for (seat, is_dir) in entries(world, &p, &mut budget)? {
                 if is_dir {

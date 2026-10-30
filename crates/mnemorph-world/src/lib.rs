@@ -4,6 +4,8 @@
 pub use mnemorph_ledger as ledger;
 /// The world's memory: notes, recall, the write rule and the audit, for the human's commands.
 pub use mnemorph_memory as memory;
+/// The race law, for the readers that show it (the board's race cards).
+pub use mnemorph_races as races;
 
 pub mod chains;
 pub mod challenge;
