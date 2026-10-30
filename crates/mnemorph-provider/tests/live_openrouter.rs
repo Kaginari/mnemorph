@@ -1,5 +1,5 @@
 //! Real calls to OpenRouter, only when asked for:
-//! `MNEMORPH_LIVE=1 OPENROUTER_API_KEY=… cargo nextest run -p mnemorph-provider --run-ignored all
+//! `MNEMORPH_LIVE=1 OPENROUTER_API_KEY=… cargo nextest run -p mnemorph-provider --run-ignored only
 //! live_openrouter`. The default model is a free one; `MNEMORPH_LIVE_OR_MODEL` picks another.
 //! `MNEMORPH_RECORD=tests/cassettes` saves each run's bodies, scrubbed, as the cassettes
 //! `tests/cassettes.rs` replays.
@@ -16,6 +16,9 @@ use mnemorph_provider::{
     Request, Role, StopReason, Tool, Transport,
 };
 use serde_json::json;
+
+#[path = "support/keys.rs"]
+mod keys;
 
 /// Wraps the real transport and keeps each response body, so a run can be saved as a cassette
 /// (`MNEMORPH_RECORD=<dir>`). Only bodies are kept, never headers: the key travels in a request
@@ -55,6 +58,11 @@ impl Recorder {
         };
         for (n, body) in self.bodies.lock().expect("lock").iter().enumerate() {
             let scrubbed = scrub(&String::from_utf8_lossy(body));
+            let unknown = keys::unknown(&scrubbed);
+            assert!(
+                unknown.is_empty(),
+                "{name}-{n}: not written, outside the allowlist in tests/support/keys.rs: {unknown:?}"
+            );
             let ext = if scrubbed.trim_start().starts_with('{') {
                 "json"
             } else {

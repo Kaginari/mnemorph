@@ -6427,3 +6427,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** the reasoning turn replays its thinking, keeps every detail in order and sends them back; the refusal is `Api { 400, "400", … }`, not retried; every cassette holds no credential and no unscrubbed id. The hand-written numeric-code fixture is confirmed in shape; none was contradicted.
 - **Learned:** OpenRouter's error body names the account (`user_id`): a scrubber of ids alone would have committed it. `max_tokens: 0` is accepted as unset, not refused.
   Open (@?): a mid-stream error cannot be provoked legitimately and no Gemini model is free, so those stay hand-written; Anthropic, vLLM and Ollama cassettes need a key or a local server.
+
+### [2026-10-30T20:37:41+01:00] rimuru — #52, Fable's review: cassettes hold only known keys
+- **Done:** a key allowlist (`tests/support/keys.rs`) beside the scrubber's denylist: the recorder refuses to write a body with a key, or a line, it does not know, and the replay tests check every cassette against it; the live file's header says `--run-ignored only`, as the docs do.
+- **Tests:** every cassette holds only known keys, named by cassette and key; a new field, an unknown error key and a non-data line are refused.
+- **Learned:** a denylist scrubber can only blank what it has seen; an allowlist makes a field the server adds stop the recording instead of reaching git.

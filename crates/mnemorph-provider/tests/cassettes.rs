@@ -10,6 +10,9 @@ use mnemorph_provider::{
 };
 use serde_json::{Value, json};
 
+#[path = "support/keys.rs"]
+mod keys;
+
 // The recordings predate the rename: the tool result the server read, and so its answer, say
 // "Tempest". They stay as recorded.
 const TEXT: &str = include_str!("cassettes/openrouter-text-0.sse");
@@ -18,6 +21,13 @@ const TOOL_ANSWER: &str = include_str!("cassettes/openrouter-tool-1.sse");
 const REASONING: &str = include_str!("cassettes/openrouter-reasoning-0.sse");
 const ERROR: &str = include_str!("cassettes/openrouter-error-0.json");
 const ALL: [&str; 5] = [TEXT, TOOL_CALL, TOOL_ANSWER, REASONING, ERROR];
+const NAMED: [(&str, &str); 5] = [
+    ("openrouter-text-0.sse", TEXT),
+    ("openrouter-tool-0.sse", TOOL_CALL),
+    ("openrouter-tool-1.sse", TOOL_ANSWER),
+    ("openrouter-reasoning-0.sse", REASONING),
+    ("openrouter-error-0.json", ERROR),
+];
 
 fn request() -> Request {
     Request {
@@ -297,4 +307,29 @@ fn the_recordings_are_scrubbed() {
             }
         }
     }
+}
+
+/// Every key in every cassette is one the allowlist knows: a field a server adds cannot land unseen.
+#[test]
+fn the_recordings_hold_only_known_keys() {
+    for (name, cassette) in NAMED {
+        let unknown = keys::unknown(cassette);
+        assert!(unknown.is_empty(), "{name}: {unknown:?}");
+    }
+}
+
+#[test]
+fn the_allowlist_refuses_a_new_field() {
+    let chunk =
+        "data: {\"id\":\"gen-recorded\",\"choices\":[{\"delta\":{\"session_token\":\"x\"}}]}\n\n";
+    assert_eq!(keys::unknown(chunk), ["key `session_token`"]);
+    assert_eq!(
+        keys::unknown(r#"{"error":{"code":400,"account":"a"}}"#),
+        ["key `account`"]
+    );
+    assert_eq!(
+        keys::unknown("event: x\n").len(),
+        1,
+        "a line that is not data"
+    );
 }
