@@ -155,36 +155,14 @@ impl Child {
     }
 }
 
-/// Words that mark an environment variable as a secret, anywhere in its name.
-const SECRET_WORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"];
-
-/// Words that mark a secret only as a whole `_`-separated part of the name (`NPM_AUTH`, not
-/// `AUTHOR`).
-const SECRET_PARTS: &[&str] = &["AUTH", "PAT"];
-
-/// Whether `name=value` is a secret: a secret word in its name, or a URL with credentials.
-fn secret(name: &str, value: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    SECRET_WORDS.iter().any(|w| upper.contains(w))
-        || upper.split('_').any(|part| SECRET_PARTS.contains(&part))
-        || value.split_once("://").is_some_and(|(scheme, rest)| {
-            !scheme.is_empty()
-                && scheme
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
-                && rest
-                    .split(['/', '?', '#'])
-                    .next()
-                    .is_some_and(|authority| authority.contains('@'))
-        })
-}
-
 /// The child's environment: `base` without its secrets, and without `MNEMORPH_BODY`, but for the
 /// variables in `keys`, which it needs.
 #[must_use]
 pub fn child_env(base: &[(String, String)], keys: &[String]) -> Vec<(String, String)> {
     base.iter()
-        .filter(|(k, v)| k != "MNEMORPH_BODY" && (keys.contains(k) || !secret(k, v)))
+        .filter(|(k, v)| {
+            k != "MNEMORPH_BODY" && (keys.contains(k) || !mnemorph_loop::is_secret(k, v))
+        })
         .cloned()
         .collect()
 }

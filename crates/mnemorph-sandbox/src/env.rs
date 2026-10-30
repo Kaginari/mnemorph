@@ -17,7 +17,10 @@ pub fn scrubbed_env() -> Vec<(String, String)> {
     std::env::vars().filter(|(k, v)| !is_secret(k, v)).collect()
 }
 
-fn is_secret(name: &str, value: &str) -> bool {
+/// Whether `name=value` is a secret: a secret word in its name, or a URL with credentials in
+/// its value.
+#[must_use]
+pub fn is_secret(name: &str, value: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     SECRET_WORDS.iter().any(|w| upper.contains(w))
         || upper.split('_').any(|part| SECRET_PARTS.contains(&part))

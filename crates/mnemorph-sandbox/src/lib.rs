@@ -22,7 +22,7 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
-pub use env::{git, scrubbed_env};
+pub use env::{git, is_secret, scrubbed_env};
 
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
 /// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
