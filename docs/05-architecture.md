@@ -478,9 +478,10 @@ finishes, each reading numbered so a late one never overwrites a newer one. The 
 indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
 
 **Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
-sequences a program prints and escapes every other control, bidi and zero-width character as
-`\u{…}` (`mnemorph_loop::hidden`); so does the sidebar, for every claim, path and body name it
-shows. The approval card shows each field through `mnemorph_loop::shown`, the core's own rule
+sequences a program prints and escapes every other control, format, separator and
+default-ignorable character as `\u{…}` (`mnemorph_loop::hidden`, the rule the board's section
+below spells out), but keeps U+FE0F in prose so an emoji draws as one; code spans and blocks, and
+the sidebar's every claim, path and body name, keep nothing hidden. The approval card shows each field through `mnemorph_loop::shown`, the core's own rule
 for what a human approves, and takes an answer only from a key: a pick (`1` or `y`, `2` or `n`,
 `3`, or ↑ ↓ while the whole act shows), then a pause, then Enter. Every pick passes the same
 rules. Keys are ignored for 300 ms after the card is first drawn — a key that came before
@@ -575,13 +576,30 @@ byte for byte as the server's handler writes it.
 
 **Text a model or a tool wrote is inert.** It is rendered by `<Safe text=…/>` as React text nodes,
 never as HTML; no file in the board writes HTML from a string. `src/safe/shown.ts` is the
-TypeScript port of the core's `hidden` and `shown` (`mnemorph_loop::run`): a control character
-(Unicode Cc), a bidi control (U+200E–200F, U+202A–202E, U+2066–2069), a zero-width or
-line-separator character (U+200B–200D, U+2028–2029, U+2060–2065, U+FEFF) is shown as its
-`\u{…}` escape, and a backslash as `\u{5c}`, so a written escape cannot pass for one; in a
+TypeScript port of the core's `hidden` and `shown` (`mnemorph_wire`, re-exported by
+`mnemorph_loop`), the one rule for what a human could not see for what it is: the card, the
+terminal app, `mnemorphd`'s printouts, the wire's prose trimming and the proving records' refusals
+all read it. It escapes as `\u{…}` every control character (Unicode Cc),
+every format character (Cf: the bidi marks, embeddings, overrides and isolates, U+061C ARABIC
+LETTER MARK, U+180E MONGOLIAN VOWEL SEPARATOR, the zero-width characters, the soft hyphen, the
+interlinear annotations), the line and paragraph separators (Zl, Zp) and every default-ignorable
+code point (the Hangul fillers, the combining grapheme joiner, the variation selectors and the
+whole plane-14 block of tag characters, U+E0000–E0FFF, which spell ASCII invisibly). The zero-width
+joiner is escaped too, so an emoji family shows its joiners, and so is U+FE0F: after a letter it
+draws nothing, and what a human approves is exact. On the card and in every one-line field (a
+name, a path, an act — never prose) `shown` also escapes each space separator but U+0020 and
+U+1680 (U+00A0, U+2000–200A, U+202F, U+205F, U+3000), which would pass for a plain space, and
+every combining mark (Mn, Me) past the second on one base, so a stack of marks cannot draw over
+its neighbours. Look-alike letters (confusables, such as a Cyrillic `а` for a Latin `a`) are out
+of the rule's reach: it escapes what cannot be seen, not what looks like something else. A backslash shows as `\u{5c}`, so a written escape cannot pass for one; in a
 JavaScript string a lone surrogate is escaped too. The page sets each escape apart in the alarm
-colour, and prose may keep its newlines. The Rust tests and the TypeScript tests read the same
-vectors, `crates/mnemorph-loop/tests/shown-vectors.json`, so the two rules cannot drift. A link is
+colour; prose may keep its newlines, its spaces, its marks and U+FE0F (`kept_in_prose`), never
+a name, a path or an act.
+The rule has one source: `crates/mnemorph-wire/tests/shown-vectors.json` lists its ranges, each
+with its reason, the spaces and the marks, with the vectors; the Rust and the TypeScript tests check every code point
+against those ranges and read the same vectors, so the two rules cannot drift. The TypeScript
+tests also check that every Cf, Zl, Zp and default-ignorable character of the engine's own
+Unicode is hidden, and every Mn and Me a mark, so a newer Unicode names what to add. A link is
 followed only to an absolute `http`, `https` or `mailto` URL without credentials, in a new tab
 with `rel="noopener noreferrer"`; any other is shown as text. An image from model text never
 loads (a load is a request the model chose); its description is shown instead.

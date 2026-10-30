@@ -3393,31 +3393,7 @@ fn card_list(failures: &[String]) -> String {
     shown.join("; ")
 }
 
-/// Whether `c` is a character a human could not see for what it is: a control character, a bidi
-/// control, a zero-width or line-separator character.
-#[must_use]
-pub fn hidden(c: char) -> bool {
-    c.is_control()
-        || matches!(
-            c,
-            '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}'
-        )
-}
-
-/// A text a model's choice reaches, as a human is shown it: every [`hidden`] character escaped,
-/// and a backslash doubled so an escape can never be mistaken for one written in a name.
-#[must_use]
-pub fn shown(text: &str) -> String {
-    text.chars()
-        .flat_map(|c| {
-            if hidden(c) || c == '\\' {
-                c.escape_unicode().collect::<Vec<_>>()
-            } else {
-                vec![c]
-            }
-        })
-        .collect()
-}
+pub use mnemorph_wire::{HIDDEN, hidden, kept_in_prose, shown};
 
 /// See [`card_list`].
 const CARD_ITEMS: usize = 5;

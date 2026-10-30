@@ -954,7 +954,7 @@ fn is_sha256(hash: &str) -> bool {
 
 /// A control character (line breaks included) or one no reader can see.
 fn unreadable(c: char) -> bool {
-    c.is_control() || mnemorph_wire::invisible(c)
+    mnemorph_wire::hidden(c)
 }
 
 /// Every text field of an entry, named.
