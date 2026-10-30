@@ -148,6 +148,8 @@ pub struct Board {
     hand: PathBuf,
     keys: Mutex<Keys>,
     lifetimes: Lifetimes,
+    /// Time passed beyond the clock's, only ever moved by [`Board::pass`].
+    skew: Mutex<Duration>,
     /// Told the URL with each new key, for a second launch to print.
     on_key: Box<dyn Fn(&str) + Send + Sync>,
 }
@@ -308,6 +310,7 @@ impl Board {
                 sessions: Vec::new(),
             }),
             lifetimes,
+            skew: Mutex::new(Duration::ZERO),
             on_key,
         }))
     }
@@ -339,6 +342,23 @@ impl Board {
             .with_state(Arc::clone(self))
     }
 
+    /// Now, on the board's clock.
+    fn now(&self) -> Instant {
+        Instant::now() + *self.skew.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// How long ago `at` was, on the board's clock.
+    fn since(&self, at: Instant) -> Duration {
+        self.now().saturating_duration_since(at)
+    }
+
+    /// Move the board's clock on by `by`, as if that much time had passed: for a test of the
+    /// lifetimes that need not sleep through them.
+    #[doc(hidden)]
+    pub fn pass(&self, by: Duration) {
+        *self.skew.lock().unwrap_or_else(PoisonError::into_inner) += by;
+    }
+
     /// A URL for `--open` to hand the browser: a key of its own, valid once and for
     /// [`Lifetimes::open`] — a command line is readable by every local user while it runs, so
     /// this key is spent by the browser it opens or dies within the minute. It replaces any
@@ -350,7 +370,7 @@ impl Board {
     pub fn open_url(&self) -> Result<String, String> {
         let key = secret()?;
         let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
-        keys.open = Some((key.clone(), Instant::now()));
+        keys.open = Some((key.clone(), self.now()));
         Ok(format!("http://{}/#k={key}", self.host))
     }
 
@@ -365,11 +385,11 @@ impl Board {
         let url = {
             let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
             self.expire(&mut keys);
-            if keys.minted.elapsed() < self.lifetimes.key {
+            if self.since(keys.minted) < self.lifetimes.key {
                 return Ok(());
             }
             keys.pending = fresh;
-            keys.minted = Instant::now();
+            keys.minted = self.now();
             format!("http://{}/#k={}", self.host, keys.pending)
         };
         (self.on_key)(&url);
@@ -382,12 +402,12 @@ impl Board {
         if keys
             .open
             .as_ref()
-            .is_some_and(|(_, at)| at.elapsed() >= l.open)
+            .is_some_and(|(_, at)| self.since(*at) >= l.open)
         {
             keys.open = None;
         }
         keys.sessions
-            .retain(|s| s.began.elapsed() < l.absolute && s.used.elapsed() < l.idle);
+            .retain(|s| self.since(s.began) < l.absolute && self.since(s.used) < l.idle);
     }
 
     /// Trade `key` for a session: the printed key, or the open one, dies and a printed one
@@ -407,11 +427,11 @@ impl Board {
                 keys.open = None;
             }
             keys.pending = fresh;
-            keys.minted = Instant::now();
+            keys.minted = self.now();
             if keys.sessions.len() >= SESSIONS {
                 keys.sessions.remove(0);
             }
-            let now = Instant::now();
+            let now = self.now();
             keys.sessions.push(Session {
                 cookie: cookie.clone(),
                 csrf: csrf.clone(),
@@ -421,7 +441,7 @@ impl Board {
             format!("http://{}/#k={}", self.host, keys.pending)
         };
         (self.on_key)(&url);
-        let now = Instant::now();
+        let now = self.now();
         Ok(Some(Session {
             cookie,
             csrf,
@@ -439,7 +459,7 @@ impl Board {
         let mut found = None;
         for s in &mut keys.sessions {
             if same(&s.cookie, cookie) {
-                s.used = Instant::now();
+                s.used = self.now();
                 found = Some(s.csrf.clone());
             }
         }
