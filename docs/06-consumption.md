@@ -126,8 +126,8 @@ fixed order:
 
 Every trust journal is chained, walked and anchored (`mnemorph_world::chains::journals`): the
 usage ledger, the Dark Elf's value ledger (its challenge records, seal proposals among them), the
-evolution ledger, the end gate's verdicts, the Oni envelopes' uses and revocations, and each Kijin
-post's witness. Where each lives is in the [storage table](05-architecture.md#storage-files-are-the-truth).
+evolution ledger, the end gate's verdicts, the Minds' witness, the Oni envelopes' uses and
+revocations, and each Kijin post's witness. Where each lives is in the [storage table](05-architecture.md#storage-files-are-the-truth).
 
 Two meters, one implementation each, never confused:
 

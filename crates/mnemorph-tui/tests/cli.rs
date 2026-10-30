@@ -214,3 +214,33 @@ fn status_shows_each_creatures_meters() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// `status` shows each Mind against its witness: a world from before the witness has its Minds
+/// load, each said unadopted, with the one hint to adopt them.
+#[test]
+fn status_shows_each_mind_and_its_standing() {
+    let w = empty_world("minds");
+    std::fs::create_dir_all(w.join(".mnemorph/minds")).unwrap();
+    std::fs::write(
+        w.join(".mnemorph/minds/release.md"),
+        "# Release\n\nCutting a release by hand.\n",
+    )
+    .unwrap();
+    let out = bin()
+        .args(["status", "--world", w.to_str().unwrap()])
+        .env("XDG_CONFIG_HOME", w.join("config"))
+        .env("XDG_STATE_HOME", w.join("state"))
+        .env("HOME", &w)
+        .env_remove("OPENROUTER_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    let shown = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        shown.contains("mind     release — unadopted: loads, with this warning\n")
+            && shown.contains("mind     adopt each unadopted Mind once, at a terminal"),
+        "{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}

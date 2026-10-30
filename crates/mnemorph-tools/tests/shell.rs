@@ -287,7 +287,7 @@ fn bash_runs_inside_the_guard() {
 }
 
 #[test]
-fn every_rule_has_a_name_and_the_floor_is_four() {
+fn every_rule_has_a_name_and_the_floor_is_five() {
     for rule in Rule::ALL {
         assert_eq!(Rule::from_name(rule.name()), Some(rule));
     }
@@ -296,7 +296,10 @@ fn every_rule_has_a_name_and_the_floor_is_four() {
         .filter(|r| r.floor())
         .map(|r| r.name())
         .collect();
-    assert_eq!(floor, ["device", "machine-tool", "root-path", "fork-bomb"]);
+    assert_eq!(
+        floor,
+        ["device", "machine-tool", "root-path", "fork-bomb", "mind"]
+    );
 }
 
 /// A rule the human configured asks instead of refusing; the answer decides.
