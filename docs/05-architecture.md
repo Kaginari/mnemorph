@@ -460,6 +460,82 @@ ecosystem:
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
 fails when the two differ.
 
+### The board
+
+The board is the web cockpit `mnemorphd` serves on loopback: `packages/board`, React 19 built by
+Vite into static files, with no router, state or chart library. It looks like the terminal app
+and reads like claude.ai: a **rail** on the left, the **centre**, and a foldable **pane** on the
+right.
+
+<img src="../assets/board/desktop-dark.png" width="640" alt="The board at desktop width, dark: the rail with the worlds, the worlds in the centre, the pane at a glance"> <img src="../assets/board/phone-light.png" width="180" alt="The board at phone width, light: the worlds, the rail folded behind the menu">
+
+**The rail.** At its head the `◈ MNEMORPH` wordmark, its letters running the races' colours as
+the terminal's welcome does, then search, the **worlds** (each with its status in words: *live*,
+*live in a terminal*, *idle* with its age, or *missing*, never dropped) and the board's own pages:
+Metrics, Integrations, Settings. Inside a world the rail becomes that world's: back to every
+world, *New chat*, its chats, and its sections (Bodies & queue, Memory, Ontology, Journal). At the
+foot, the theme. Below 760 px the rail is a drawer behind the menu button, and the pane a drawer
+too; a link followed, the scrim or Esc closes them. The pane's open or folded state is kept per
+browser.
+
+**Addresses.** A small hash router of the board's own (`src/router.ts`) gives every view an
+address, so a link, a reload or the back button lands where it was:
+
+| Address | View |
+|---|---|
+| `#/` | every world, live first, then by latest activity |
+| `#/w/<world>` | a world |
+| `#/w/<world>/<bodies\|memory\|ontology\|journal>` | a section of it |
+| `#/w/<world>/s/<session>` | a session |
+| `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
+
+Segments are URI-encoded, and `parse(format(r))` gives every route back. Any other address, a
+world the board does not know, and a view whose data is not served yet each say so in an empty
+state, never a blank pane.
+
+**Data.** The worlds come from `GET /api/worlds`, whose shape (`WorldSummary`, `WorldsResponse`)
+is written by hand in `packages/protocol/src/board.ts`, beside the generated protocol: the board
+server owns it, and its tests and the board's fixtures keep the two equal. The page checks every
+row field by field; a row that does not hold together is left out and counted on the page, never
+guessed at. `vite dev` answers the API with the fixtures (`src/data/fixtures.ts`), and the
+end-to-end tests route it to them.
+
+**Text a model or a tool wrote is inert.** It is rendered by `<Safe text=…/>` as React text nodes,
+never as HTML; no file in the board writes HTML from a string. `src/safe/shown.ts` is the
+TypeScript port of the core's `hidden` and `shown` (`mnemorph_loop::run`): a control character
+(Unicode Cc), a bidi control (U+200E–200F, U+202A–202E, U+2066–2069), a zero-width or
+line-separator character (U+200B–200D, U+2028–2029, U+2060–2065, U+FEFF) is shown as its
+`\u{…}` escape, and a backslash as `\u{5c}`, so a written escape cannot pass for one; in a
+JavaScript string a lone surrogate is escaped too. The page sets each escape apart in the alarm
+colour, and prose may keep its newlines. The Rust tests and the TypeScript tests read the same
+vectors, `crates/mnemorph-loop/tests/shown-vectors.json`, so the two rules cannot drift. A link is
+followed only to an absolute `http`, `https` or `mailto` URL without credentials, in a new tab
+with `rel="noopener noreferrer"`; any other is shown as text. An image from model text never
+loads (a load is a request the model chose); its description is shown instead.
+
+**Theme.** Colours are `@mnemorph/theme`'s tokens (`tokens.css`, the `--mn-*` variables, the
+races' among them) and nothing else: dark by default, light under `data-theme="light"` on
+`<html>`. The choice is auto, light or dark; auto follows the system preference and moves when it
+does, and the resolved theme is set before the first paint. Every coloured mark carries its
+words: a world's status is a glyph, a tone and a label, and a race's swatch has its name beside
+it.
+
+**Checks.** Besides Biome (whose recommended rules already refuse `dangerouslySetInnerHTML`),
+`tools/check-board.mjs` fails on a raw colour in the board (a hex literal or a colour function
+such as `rgb()`) and on HTML written from a string (`dangerouslySetInnerHTML`, `innerHTML`,
+`outerHTML`, `insertAdjacentHTML`, `document.write`); it runs with `pnpm lint`. Vitest covers the
+router, the worlds' parsing, the theme, the safe text against the shared vectors and hostile
+links, the lint itself, and a colour-vision audit (`src/palette.ts`: the Machado 2009 simulation
+of protanopia, deuteranopia and tritanopia, OKLab distance): each status keeps its own glyph and
+words, live and failure stay apart under every deficiency, and every race chip names its race,
+since three races' ambers collide for everyone. Playwright, pinned to one version with its
+Chromium, runs the built page at phone (390×844) and desktop (1440×900) in both themes
+(`just board-e2e`; on Linux in CI, the browser cached by version): screenshots of the worlds, a
+session, the settings and the open drawer; every visible text node at WCAG AA (4.5:1, 3:1 for
+large text) against its composited background; a label on every coloured node; deep links and
+the back button; the drawers; the theme across a reload; hostile names that stay text. The
+screenshots are kept as CI's `board-e2e` artifact.
+
 ### Storage: files are the truth
 
 | What | Where | Tracked in git |

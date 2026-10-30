@@ -1,0 +1,103 @@
+/** Inside a world: its overview, a section, or a session. */
+import type { WorldSummary } from '@mnemorph/protocol';
+import type { WorldSection } from '../router.ts';
+import { Safe } from '../safe/Safe.tsx';
+import { Empty } from '../ui/Empty.tsx';
+import { Mark, STATUS } from '../ui/Mark.tsx';
+import { SECTIONS } from '../ui/Rail.tsx';
+
+/** The world a route names, or why there is none. */
+export function NoWorld({ id }: { id: string }) {
+  return (
+    <div className="page">
+      <Empty glyph="✕" title="No such world">
+        <p>
+          No world with the id{' '}
+          <code className="mono">
+            <Safe text={id} />
+          </code>{' '}
+          is known to this board.
+        </p>
+        <p>
+          <a href="#/">See every world</a>
+        </p>
+      </Empty>
+    </div>
+  );
+}
+
+export function WorldView({ w }: { w: WorldSummary }) {
+  const s = STATUS[w.status];
+  return (
+    <div className="page">
+      <header className="page-head">
+        <h1 className="page-title">
+          <Safe text={w.name} />
+        </h1>
+        <Mark tone={s.tone} glyph={s.glyph}>
+          {s.label}
+        </Mark>
+      </header>
+      <p className="mono page-sub">
+        <Safe text={w.world} />
+      </p>
+      {w.status === 'missing' ? (
+        <Empty glyph="✕" title="This world's directory is gone">
+          It stays listed until it is forgotten with{' '}
+          <code className="mono">mnemorphd board forget</code>.
+        </Empty>
+      ) : (
+        <Empty glyph="◈" title="The world overview is not drawn yet">
+          Its standing, findings and last verdict appear here once the board server reads them. The
+          sections in the rail open their own pages.
+        </Empty>
+      )}
+    </div>
+  );
+}
+
+export function SectionView({ w, section }: { w: WorldSummary; section: WorldSection }) {
+  const [, glyph, label] = SECTIONS.find(([s]) => s === section) ?? ['', '◇', section];
+  return (
+    <div className="page">
+      <header className="page-head">
+        <h1 className="page-title">
+          {label}
+          <span className="page-crumb">
+            <Safe text={w.name} />
+          </span>
+        </h1>
+      </header>
+      <Empty glyph={glyph} title={`${label} is not drawn yet`}>
+        This page reads the world's {label.toLowerCase()} once the board server serves it.
+      </Empty>
+    </div>
+  );
+}
+
+export function SessionView({ w, session }: { w: WorldSummary; session: string }) {
+  return (
+    <div className="page page-chat">
+      <header className="page-head">
+        <h1 className="page-title">
+          <span className="mono">
+            <Safe text={session} />
+          </span>
+          <span className="page-crumb">
+            <Safe text={w.name} />
+          </span>
+        </h1>
+      </header>
+      <div className="chat-scroll">
+        <Empty glyph="✦" title="No transcript to show">
+          Sessions arrive on the board with the session bridge; until then, run them with{' '}
+          <code className="mono">mnemorph</code> in a terminal.
+        </Empty>
+      </div>
+      <div className="composer" aria-disabled="true">
+        <span className="composer-label">ask</span>
+        <span className="composer-hint">Chat opens with the session bridge</span>
+      </div>
+    </div>
+  );
+}

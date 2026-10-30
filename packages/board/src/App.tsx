@@ -1,3 +1,192 @@
+/**
+ * The board's shell: the rail on the left, the centre, the foldable pane on the right — and at
+ * phone width the rail and the pane as drawers over the centre.
+ */
+import type { WorldSummary } from '@mnemorph/protocol';
+import { useEffect, useState } from 'react';
+import { type Load, useWorlds } from './data/worlds.ts';
+import { type Route, useRoute, worldOf } from './router.ts';
+import { Safe } from './safe/Safe.tsx';
+import { type Choice, useTheme } from './theme.ts';
+import { Pane } from './ui/Pane.tsx';
+import { Rail } from './ui/Rail.tsx';
+import { IntegrationsView, MetricsView, SettingsView, UnknownView } from './views/Pages.tsx';
+import { NoWorld, SectionView, SessionView, WorldView } from './views/World.tsx';
+import { WorldsView } from './views/Worlds.tsx';
+
+const PANE_KEY = 'mnemorph.pane';
+const PHONE = '(max-width: 760px)';
+
+function initialPane(): boolean {
+  try {
+    const v = window.localStorage.getItem(PANE_KEY);
+    if (v === 'open' || v === 'closed') return v === 'open';
+  } catch {
+    // no storage: fall through to the width's default
+  }
+  return !window.matchMedia(PHONE).matches;
+}
+
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+  return now;
+}
+
+function Centre({
+  route,
+  load,
+  world,
+  now,
+  theme,
+  onTheme,
+}: {
+  route: Route;
+  load: Load;
+  world: WorldSummary | undefined;
+  now: number;
+  theme: Choice;
+  onTheme: (c: Choice) => void;
+}) {
+  switch (route.name) {
+    case 'worlds':
+      return <WorldsView load={load} now={now} />;
+    case 'metrics':
+      return <MetricsView />;
+    case 'integrations':
+      return <IntegrationsView />;
+    case 'settings':
+      return <SettingsView theme={theme} onTheme={onTheme} />;
+    case 'unknown':
+      return <UnknownView path={route.path} />;
+  }
+  if (load.state !== 'ready') return <WorldsView load={load} now={now} />;
+  if (!world) return <NoWorld id={route.world} />;
+  if (route.name === 'section') return <SectionView w={world} section={route.section} />;
+  if (route.name === 'session') return <SessionView w={world} session={route.session} />;
+  return <WorldView w={world} />;
+}
+
+/** The centre's title, for the top bar and the tab. */
+function title(route: Route, world: WorldSummary | undefined): string {
+  switch (route.name) {
+    case 'worlds':
+      return 'Worlds';
+    case 'metrics':
+      return 'Metrics';
+    case 'integrations':
+      return 'Integrations';
+    case 'settings':
+      return 'Settings';
+    case 'unknown':
+      return 'Not found';
+    default:
+      return world?.name ?? route.world;
+  }
+}
+
 export function App() {
-  return <main>Mnemorph</main>;
+  const route = useRoute();
+  const load = useWorlds();
+  const now = useNow();
+  const [theme, setTheme] = useTheme();
+  const [rail, setRail] = useState(false);
+  const [pane, setPane] = useState(initialPane);
+
+  const here = worldOf(route);
+  const world =
+    here !== undefined && load.state === 'ready'
+      ? load.data.worlds.find((w) => w.id === here)
+      : undefined;
+  const name = title(route, world);
+
+  // A drawer closes when the page moves; Esc closes either.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: closes on every route change
+  useEffect(() => setRail(false), [route]);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setRail(false);
+      if (window.matchMedia(PHONE).matches) setPane(false);
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
+  useEffect(() => {
+    document.title = `${name} · Mnemorph`;
+  }, [name]);
+
+  const togglePane = () =>
+    setPane((p) => {
+      try {
+        window.localStorage.setItem(PANE_KEY, p ? 'closed' : 'open');
+      } catch {
+        // kept for this page only
+      }
+      return !p;
+    });
+
+  return (
+    <div
+      className="shell"
+      data-load={load.state}
+      data-rail={rail ? 'open' : 'closed'}
+      data-pane={pane ? 'open' : 'closed'}
+    >
+      <Rail route={route} load={load} now={now} theme={theme} onTheme={setTheme} />
+      <button
+        type="button"
+        className="scrim"
+        aria-label="Close the menu"
+        tabIndex={-1}
+        onClick={() => {
+          setRail(false);
+          if (window.matchMedia(PHONE).matches) setPane(false);
+        }}
+      />
+      <div className="centre">
+        <header className="topbar">
+          <button
+            type="button"
+            className="icon-button rail-toggle"
+            aria-label="Menu"
+            aria-controls="rail"
+            aria-expanded={rail}
+            onClick={() => setRail((r) => !r)}
+          >
+            ☰
+          </button>
+          <span className="topbar-title">
+            <Safe text={name} />
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={pane ? 'Hide the side pane' : 'Show the side pane'}
+            aria-controls="pane"
+            aria-expanded={pane}
+            onClick={togglePane}
+          >
+            ◨
+          </button>
+        </header>
+        <main className="centre-main">
+          <Centre
+            route={route}
+            load={load}
+            world={world}
+            now={now}
+            theme={theme}
+            onTheme={setTheme}
+          />
+        </main>
+      </div>
+      <aside className="pane" id="pane" aria-label="Side pane" hidden={!pane}>
+        <Pane route={route} load={load} world={world} now={now} />
+      </aside>
+    </div>
+  );
 }
