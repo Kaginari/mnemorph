@@ -14,7 +14,8 @@ fn content_type(name: &str) -> Option<&'static str> {
         "html" => "text/html; charset=utf-8",
         "js" | "mjs" => "text/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
-        "json" | "map" => "application/json",
+        // Source maps stay out: they would ship the board's source.
+        "json" => "application/json",
         "svg" => "image/svg+xml",
         "png" => "image/png",
         "webp" => "image/webp",
@@ -85,6 +86,12 @@ fn main() {
     code.push_str("pub(crate) static ASSETS: &[(&str, &str, &[u8])] = &[\n");
     if built {
         for (name, path) in &files {
+            if name
+                .rsplit_once('.')
+                .is_some_and(|(_, e)| e.eq_ignore_ascii_case("map"))
+            {
+                continue;
+            }
             let Some(ty) = content_type(name) else {
                 println!("cargo:warning=board asset `{name}` is not embedded: an unknown type");
                 continue;

@@ -570,3 +570,127 @@ fn only_loopback_is_bound() {
     assert_eq!(l.len(), 1);
     assert!(l[0].local_addr().unwrap().ip().is_loopback());
 }
+
+/// A board whose secrets live `lifetimes`, and the URLs told to its keeper.
+fn living(lifetimes: mnemorph_server::board::Lifetimes) -> (Arc<Board>, Arc<Mutex<Vec<String>>>) {
+    let told = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&told);
+    let board = Board::living(
+        &[HOST.parse().unwrap()],
+        PathBuf::from("/nonexistent/worlds.jsonl"),
+        PathBuf::from("/nonexistent/board/worlds.jsonl"),
+        Box::new(move |url| seen.lock().unwrap().push(url.to_owned())),
+        lifetimes,
+    )
+    .unwrap();
+    (board, told)
+}
+
+fn key_of(url: &str) -> String {
+    url.split_once("#k=").unwrap().1.to_owned()
+}
+
+async fn trade(board: &Arc<Board>, key: &str) -> StatusCode {
+    board
+        .router()
+        .oneshot(exchange(key))
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn an_untraded_key_dies_and_a_fresh_one_is_kept() {
+    let (board, told) = living(mnemorph_server::board::Lifetimes {
+        key: std::time::Duration::from_millis(100),
+        ..Default::default()
+    });
+    let first = key_of(&board.url());
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    board.refresh().unwrap();
+    let now = key_of(&board.url());
+    assert_ne!(now, first);
+    assert_eq!(told.lock().unwrap().as_slice(), [board.url()]);
+    assert_eq!(trade(&board, &first).await, StatusCode::UNAUTHORIZED);
+    // Expired between ticks, it is refused all the same.
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    assert_eq!(trade(&board, &now).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(trade(&board, &key_of(&board.url())).await, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_opened_key_works_once_and_briefly() {
+    let (board, _) = living(mnemorph_server::board::Lifetimes {
+        open: std::time::Duration::from_millis(100),
+        ..Default::default()
+    });
+    let printed = key_of(&board.url());
+    let opened = key_of(&board.open_url().unwrap());
+    assert_ne!(opened, printed);
+    assert_eq!(trade(&board, &opened).await, StatusCode::OK);
+    assert_eq!(trade(&board, &opened).await, StatusCode::UNAUTHORIZED);
+    let late = key_of(&board.open_url().unwrap());
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    assert_eq!(trade(&board, &late).await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_session_ends_idle_or_old() {
+    let worlds = |board: &Arc<Board>, cookie: &str| {
+        board.router().oneshot(
+            get("/api/worlds")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    let login = |board: Arc<Board>| async move {
+        let res = board
+            .router()
+            .oneshot(exchange(&key_of(&board.url())))
+            .await
+            .unwrap();
+        let set = res.headers()[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        set.split(';').next().unwrap().to_owned()
+    };
+    let ms = std::time::Duration::from_millis;
+    // Idle: used within the window, it lives; left past it, it ends.
+    let (board, _) = living(mnemorph_server::board::Lifetimes {
+        idle: ms(200),
+        ..Default::default()
+    });
+    let cookie = login(Arc::clone(&board)).await;
+    for _ in 0..3 {
+        std::thread::sleep(ms(100));
+        assert_eq!(
+            worlds(&board, &cookie).await.unwrap().status(),
+            StatusCode::OK
+        );
+    }
+    std::thread::sleep(ms(250));
+    assert_eq!(
+        worlds(&board, &cookie).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    // Old: used all along, it still ends.
+    let (board, _) = living(mnemorph_server::board::Lifetimes {
+        absolute: ms(250),
+        ..Default::default()
+    });
+    let cookie = login(Arc::clone(&board)).await;
+    for _ in 0..2 {
+        std::thread::sleep(ms(100));
+        assert_eq!(
+            worlds(&board, &cookie).await.unwrap().status(),
+            StatusCode::OK
+        );
+    }
+    std::thread::sleep(ms(100));
+    assert_eq!(
+        worlds(&board, &cookie).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+}

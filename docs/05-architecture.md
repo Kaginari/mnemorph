@@ -198,7 +198,14 @@ sets the cookie `mnemorph_board` (`HttpOnly; SameSite=Strict; Path=/`) and carri
 `{"csrf": "<token>"}`, the token bound to that session; a reloaded page gets it again from
 `GET /api/session`. Every mutation sends the token in `x-mnemorph-csrf`; a WebSocket handshake,
 which cannot set a header, sends it as a `Sec-WebSocket-Protocol` entry `mnemorph.csrf.<token>`.
-`POST /api/session/end` ends the session.
+`POST /api/session/end` ends the session and clears its cookie.
+
+Every secret is short-lived. A printed key not traded within 10 minutes is replaced, and the new
+URL kept in `board.url` for a second launch to print. `--open` hands the browser a key of its own,
+valid once and for 60 seconds, because the opener's command line is readable by every local user
+— and by a body's sandbox, which reads `/proc` — while it runs; it is refused when no board is built
+in, since no page would spend the key. A session ends after 12 idle hours, or 7 days after it
+began.
 
 **The guard** runs before every route, so a route added later is held to it without naming it:
 
@@ -220,6 +227,7 @@ same-origin` and `Cache-Control: no-store`.
 **The assets** are `packages/board/dist`, embedded when `mnemorphd` is compiled by a fixed name
 map: each file's path under `dist/` (`/index.html`, `/assets/index-<hash>.js`) is one entry, `/` is
 `/index.html`, and any other path is 404 — a request path is never joined, decoded or normalised.
+Source maps are left out.
 Build the board first (`pnpm --filter @mnemorph/board build`); compiled without it, `mnemorphd`
 embeds a placeholder page saying so, and serves the API all the same.
 

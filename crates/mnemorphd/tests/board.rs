@@ -150,6 +150,19 @@ fn a_non_loopback_bind_is_refused() {
 }
 
 #[test]
+fn open_is_refused_without_a_built_board() {
+    if mnemorph_server::board::built() {
+        return;
+    }
+    let h = Home::new("open");
+    let (code, out, err) = h.run(&["board", "--port", "0", "--open"], None);
+    assert_eq!(code, Some(2), "{err}");
+    assert_eq!(out, "");
+    assert!(err.contains("no board built in"), "{err}");
+    assert!(!h.root.join("state/mnemorph/board.lock").exists());
+}
+
+#[test]
 fn a_body_never_runs_the_board() {
     let h = Home::new("body");
     for args in [

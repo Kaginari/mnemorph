@@ -19,6 +19,7 @@ pub mod instance;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::Router;
@@ -93,15 +94,45 @@ pub struct BoardWorlds {
     pub worlds: Vec<BoardWorld>,
 }
 
-/// One browser's session: its cookie and the CSRF token bound to it.
+/// How long each secret lives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Lifetimes {
+    /// The printed key, untraded: past it, a fresh one waits in its place.
+    pub key: Duration,
+    /// The key `--open` hands the browser: it never waits for a second.
+    pub open: Duration,
+    /// A session unused this long ends.
+    pub idle: Duration,
+    /// A session ends this long after it began, used or not.
+    pub absolute: Duration,
+}
+
+impl Default for Lifetimes {
+    fn default() -> Self {
+        Self {
+            key: Duration::from_mins(10),
+            open: Duration::from_secs(60),
+            idle: Duration::from_hours(12),
+            absolute: Duration::from_hours(7 * 24),
+        }
+    }
+}
+
+/// One browser's session: its cookie, the CSRF token bound to it, when it began and was last
+/// used.
 struct Session {
     cookie: String,
     csrf: String,
+    began: Instant,
+    used: Instant,
 }
 
-/// The secrets: the one-time key waiting to be traded, and the sessions traded for.
+/// The secrets: the one-time key waiting to be traded and when it was minted, the key handed to
+/// an opened browser if one waits, and the sessions traded for.
 struct Keys {
     pending: String,
+    minted: Instant,
+    open: Option<(String, Instant)>,
     sessions: Vec<Session>,
 }
 
@@ -116,6 +147,7 @@ pub struct Board {
     registry: PathBuf,
     hand: PathBuf,
     keys: Mutex<Keys>,
+    lifetimes: Lifetimes,
     /// Told the URL with each new key, for a second launch to print.
     on_key: Box<dyn Fn(&str) + Send + Sync>,
 }
@@ -237,6 +269,21 @@ impl Board {
         hand: PathBuf,
         on_key: Box<dyn Fn(&str) + Send + Sync>,
     ) -> Result<Arc<Self>, String> {
+        Self::living(addrs, registry, hand, on_key, Lifetimes::default())
+    }
+
+    /// As [`Board::at`], with its secrets living `lifetimes`.
+    ///
+    /// # Errors
+    ///
+    /// No address, one that is not loopback, or the random source fails.
+    pub fn living(
+        addrs: &[SocketAddr],
+        registry: PathBuf,
+        hand: PathBuf,
+        on_key: Box<dyn Fn(&str) + Send + Sync>,
+        lifetimes: Lifetimes,
+    ) -> Result<Arc<Self>, String> {
         let Some(&host) = addrs.first() else {
             return Err("the board has no address".to_owned());
         };
@@ -256,8 +303,11 @@ impl Board {
             hand,
             keys: Mutex::new(Keys {
                 pending: secret()?,
+                minted: Instant::now(),
+                open: None,
                 sessions: Vec::new(),
             }),
+            lifetimes,
             on_key,
         }))
     }
@@ -289,36 +339,107 @@ impl Board {
             .with_state(Arc::clone(self))
     }
 
-    /// Trade `key` for a session: the key dies and a new one waits, whatever comes next.
-    /// `None` for a key that is not the waiting one.
+    /// A URL for `--open` to hand the browser: a key of its own, valid once and for
+    /// [`Lifetimes::open`] — a command line is readable by every local user while it runs, so
+    /// this key is spent by the browser it opens or dies within the minute. It replaces any
+    /// earlier one.
+    ///
+    /// # Errors
+    ///
+    /// The random source fails.
+    pub fn open_url(&self) -> Result<String, String> {
+        let key = secret()?;
+        let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+        keys.open = Some((key.clone(), Instant::now()));
+        Ok(format!("http://{}/#k={key}", self.host))
+    }
+
+    /// Put a fresh key in place of a printed one past [`Lifetimes::key`], and tell `on_key`;
+    /// end the sessions past their lifetimes and drop an open key past its own.
+    ///
+    /// # Errors
+    ///
+    /// The random source fails.
+    pub fn refresh(&self) -> Result<(), String> {
+        let fresh = secret()?;
+        let url = {
+            let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+            self.expire(&mut keys);
+            if keys.minted.elapsed() < self.lifetimes.key {
+                return Ok(());
+            }
+            keys.pending = fresh;
+            keys.minted = Instant::now();
+            format!("http://{}/#k={}", self.host, keys.pending)
+        };
+        (self.on_key)(&url);
+        Ok(())
+    }
+
+    /// Drop the open key and the sessions past their lifetimes.
+    fn expire(&self, keys: &mut Keys) {
+        let l = self.lifetimes;
+        if keys
+            .open
+            .as_ref()
+            .is_some_and(|(_, at)| at.elapsed() >= l.open)
+        {
+            keys.open = None;
+        }
+        keys.sessions
+            .retain(|s| s.began.elapsed() < l.absolute && s.used.elapsed() < l.idle);
+    }
+
+    /// Trade `key` for a session: the printed key, or the open one, dies and a printed one
+    /// waits fresh, whatever comes next. `None` for a key that is neither, or is past its life.
     fn trade(&self, key: &str) -> Result<Option<Session>, String> {
+        self.refresh()?;
         let (fresh, cookie, csrf) = (secret()?, secret()?, secret()?);
         let url = {
             let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
-            if !same(&keys.pending, key) {
+            // Both compared always, so the time taken says nothing of which matched.
+            let printed = same(&keys.pending, key);
+            let opened = keys.open.as_ref().is_some_and(|(k, _)| same(k, key));
+            if !printed && !opened {
                 return Ok(None);
             }
+            if opened {
+                keys.open = None;
+            }
             keys.pending = fresh;
+            keys.minted = Instant::now();
             if keys.sessions.len() >= SESSIONS {
                 keys.sessions.remove(0);
             }
+            let now = Instant::now();
             keys.sessions.push(Session {
                 cookie: cookie.clone(),
                 csrf: csrf.clone(),
+                began: now,
+                used: now,
             });
             format!("http://{}/#k={}", self.host, keys.pending)
         };
         (self.on_key)(&url);
-        Ok(Some(Session { cookie, csrf }))
+        let now = Instant::now();
+        Ok(Some(Session {
+            cookie,
+            csrf,
+            began: now,
+            used: now,
+        }))
     }
 
-    /// The CSRF token of the session `cookie` names, if it names one.
+    /// The CSRF token of the session `cookie` names, if it names one still alive; its use is
+    /// recorded.
     fn csrf_of(&self, cookie: &str) -> Option<String> {
-        let keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+        self.expire(&mut keys);
         // Every session is compared, so the time taken says nothing of which matched.
         let mut found = None;
-        for s in &keys.sessions {
+        for s in &mut keys.sessions {
             if same(&s.cookie, cookie) {
+                s.used = Instant::now();
                 found = Some(s.csrf.clone());
             }
         }
@@ -479,7 +600,17 @@ pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<
             });
             tasks.push(tokio::spawn(async move { serve.await }));
         }
+        // A printed key past its life is replaced, and the new URL kept, on the minute.
+        let refresher = Arc::clone(board);
+        let ticker = tokio::spawn(async move {
+            let mut every = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                every.tick().await;
+                let _ = refresher.refresh();
+            }
+        });
         signal().await;
+        ticker.abort();
         let _ = stop.send(true);
         for t in tasks {
             t.await
