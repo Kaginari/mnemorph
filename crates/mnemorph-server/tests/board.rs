@@ -689,3 +689,22 @@ async fn a_session_ends_idle_or_old() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[test]
+fn a_global_file_that_does_not_read_is_said_without_its_secret() {
+    let f = Fixture::new("metrics-config");
+    let global = f.root.join("config.toml");
+    let token = "ghp_FAKETOKEN16C7e42F292c6912E7710c838347Ae1";
+    std::fs::write(&global, format!("[gate]\nask_rules = [\"{token}\"]\n")).unwrap();
+    f.board.configure(global);
+    let now = mnemorph_server::world::ledger::Timestamp::now();
+    let m = f
+        .board
+        .metrics("all", mnemorph_server::world::spend::Window::All, now)
+        .unwrap();
+    let why = m.bench.why.clone().unwrap_or_default();
+    assert!(m.bench.value.is_none());
+    assert!(why.starts_with("your global file does not read"), "{why}");
+    let all = serde_json::to_string(&m).unwrap();
+    assert!(!all.contains(token), "{all}");
+}

@@ -4,35 +4,6 @@ import { CHOICES, type Choice } from '../theme.ts';
 import { Empty } from '../ui/Empty.tsx';
 import { RACES, RaceChip } from '../ui/Mark.tsx';
 
-export function MetricsView() {
-  return (
-    <div className="page">
-      <header className="page-head">
-        <h1 className="page-title">Metrics</h1>
-      </header>
-      <Empty glyph="▤" title="No metrics drawn yet">
-        Spend, tokens, cache and the races' value meters appear here once the board server reads the
-        ledgers. Until then, <code className="mono">mnemorph status</code> and{' '}
-        <code className="mono">mnemorphd meters</code> print them.
-      </Empty>
-    </div>
-  );
-}
-
-export function IntegrationsView() {
-  return (
-    <div className="page">
-      <header className="page-head">
-        <h1 className="page-title">Integrations</h1>
-      </header>
-      <Empty glyph="⚇" title="No integrations shown yet">
-        Providers, models, prices, key sources and MCP servers appear here, read-only. Until then,{' '}
-        <code className="mono">mnemorph status</code> lists them.
-      </Empty>
-    </div>
-  );
-}
-
 export function SettingsView({ theme, onTheme }: { theme: Choice; onTheme: (c: Choice) => void }) {
   return (
     <div className="page">
@@ -58,6 +29,14 @@ export function SettingsView({ theme, onTheme }: { theme: Choice; onTheme: (c: C
             </label>
           ))}
         </div>
+      </section>
+      <section className="setting">
+        <h2 className="setting-title">Configuration</h2>
+        <p className="setting-sub">
+          The providers, keys' sources, MCP servers, the board's port and the effective
+          configuration with each key's origin are on <a href="#/integrations">Integrations</a>,
+          read-only.
+        </p>
       </section>
       <section className="setting">
         <h2 className="setting-title">The races</h2>
