@@ -259,6 +259,10 @@ fn main() -> ExitCode {
             "this process could not be made non-dumpable ({e}), so other processes of the user could read the provider key; refusing to serve"
         ));
     }
+    // A chat the board started dies with the board, even one killed outright.
+    if let Err(e) = mnemorph_server::board::bridge::die_with_board() {
+        return fail(&e);
+    }
     let input = BufReader::new(std::io::stdin());
     let opener = match resume {
         Some(run) => mnemorph_server::resumer(world, run),

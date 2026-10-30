@@ -48,6 +48,8 @@ pub use mnemorph_tools::gate::{
 pub use mnemorph_tools::git;
 /// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.
 pub use mnemorph_tools::harden_self;
+/// Whether an environment variable is a secret the harness keeps from its children.
+pub use mnemorph_tools::is_secret;
 pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};

@@ -30,6 +30,8 @@ pub use mnemorph_sandbox::Sandbox;
 pub use mnemorph_sandbox::git;
 /// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.
 pub use mnemorph_sandbox::harden_self;
+/// Whether an environment variable is a secret the harness keeps from its children.
+pub use mnemorph_sandbox::is_secret;
 pub use pinned::remove_created;
 pub use tool::{Context, Grant, Meta, Outcome, OwnerOf, Tool, call, ignored, registry};
 pub use tripwire::{kijin_witness, queue_witness, usage_witness};

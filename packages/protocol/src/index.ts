@@ -5,6 +5,10 @@
  */
 export type { Activity } from './generated/Activity.js';
 export type { BoardOverview } from './generated/BoardOverview.js';
+export type { BoardRole } from './generated/BoardRole.js';
+export type { BoardSession } from './generated/BoardSession.js';
+export type { BoardSessions } from './generated/BoardSessions.js';
+export type { BoardStarted } from './generated/BoardStarted.js';
 export type { BoardWorld } from './generated/BoardWorld.js';
 export type { BoardWorlds } from './generated/BoardWorlds.js';
 export type { Budget } from './generated/Budget.js';
@@ -23,6 +27,7 @@ export type { Memory } from './generated/Memory.js';
 export type { Meter } from './generated/Meter.js';
 export type { PromptParams } from './generated/PromptParams.js';
 export type { PromptResult } from './generated/PromptResult.js';
+export type { Role } from './generated/Role.js';
 export type { Sourced } from './generated/Sourced.js';
 export type { Spend } from './generated/Spend.js';
 export type { JsonValue } from './generated/serde_json/JsonValue.js';

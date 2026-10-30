@@ -1677,13 +1677,16 @@ name = "mnemorph-server"
 version = "0.0.0"
 dependencies = [
  "axum",
+ "futures-util",
  "getrandom 0.4.3",
  "http-body-util",
  "mnemorph-loop",
+ "rustix",
  "serde",
  "serde_json",
  "subtle",
  "tokio",
+ "tokio-tungstenite",
  "tower",
  "ts-rs",
 ]

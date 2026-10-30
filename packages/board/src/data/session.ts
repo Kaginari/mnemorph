@@ -5,8 +5,9 @@
  *
  * The trade answers the CSRF token bound to the session. It lives in this module's memory only —
  * never storage, the DOM or a log — and a reloaded page asks for it again at `GET /api/session`
- * while the cookie lives. The board's push socket offers it as the subprotocol entry
- * `mnemorph.csrf.<token>`.
+ * while the cookie lives. Every mutation sends it in `x-mnemorph-csrf`; a chat's WebSocket offers
+ * it as the subprotocol entry `mnemorph.csrf.<token>` (the SDK's `ws({csrf})`), and so does the
+ * board's push socket.
  */
 
 /** The key a fragment carries: 64 hex characters, or nothing. */
@@ -58,6 +59,17 @@ export async function csrf(): Promise<string> {
   token = readToken(await res.json());
   if (!token) throw new Error('the board answered no CSRF token');
   return token;
+}
+
+/** A mutation: `POST path` with a JSON body and the CSRF token. */
+export async function post(path: string, body: unknown): Promise<Response> {
+  const t = await csrf();
+  return fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', 'x-mnemorph-csrf': t },
+    body: JSON.stringify(body),
+  });
 }
 
 /** Forget the token: the session ended. */

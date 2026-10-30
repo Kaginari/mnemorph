@@ -16,4 +16,9 @@ oldest: number | null,
 /**
  * False when the client asked from further back than is kept.
  */
-complete: boolean, };
+complete: boolean, 
+/**
+ * True when another page follows: the board answers in pages, and the client asks again
+ * from the last `seq` it got. The core answers all it keeps at once.
+ */
+more: boolean, };

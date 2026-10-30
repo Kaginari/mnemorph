@@ -238,10 +238,81 @@ embeds a placeholder page saying so, and serves the API all the same.
 | Route | Answers |
 |---|---|
 | `GET /api/health` | `{"ok": true}`, with no session |
-| `GET /api/session` | `{"csrf": "<token>"}` |
+| `GET /api/session` | `{"csrf": "<token>"}`: a reloaded page's way back to its token while the cookie lives; the page keeps it in memory only |
 | `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}]}` — `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present` or `missing`; the latest session first. Paths and names are the world's own text: the page renders them as text, never markup |
 | `GET /api/w/<id>` | `BoardOverview` of a listed world, 404 for an id no listed world has — see *The world overview* below |
 | `WS /ws/board` | the push channel, subprotocol `mnemorph.board.v1` beside the CSRF entry; the server alone speaks — see *The watcher* below |
+| `POST /api/w/<world>/sessions` | a chat in a listed, present world: `{}` opens a new session, `{"resume": "<run>"}` (a session's run id, `r<ms>-<pid>`) or `{"resume": "last"}` resumes a stopped run through `mnemorph resume`'s opening; `201` with `BoardStarted`: `{"session": BoardSession, "hello": Hello}`. `429` past the cap of live chats, `502` with the child's reason when it does not open. The browser that posts it owns the chat |
+| `GET /api/sessions` | `BoardSessions`: `{"sessions": [{"id", "world", "session", "run", "controlled", "tabs", "asks"}]}`, the live chats |
+| `WS /ws/session/<id>` | a tab on a live chat (below), subprotocol `mnemorph.v1` |
+
+#### The chat bridge
+
+**A child per chat.** Each live chat is a child `mnemorphd --world <dir>` (with `--resume <run>`
+for a past run) speaking the unchanged protocol on its stdio; the board bridges it line for line
+to the tabs on `WS /ws/session/<id>`. It runs in the world's directory, in its own process group,
+its stderr's last 8 KiB kept: a child that leaves on its own says why, escaped, in
+`board/ended`. Its environment is an allowlist of the board's: `PATH`, `HOME`, `USER`, `LOGNAME`,
+`SHELL`, `LANG`, `LC_*`, `TERM`, `TMPDIR`, `TZ`, `XDG_*`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, the
+proxies (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, either case) and `MNEMORPH_*` but
+`MNEMORPH_BODY` — each dropped still if the sandbox's test reads it as a secret (a proxy URL with
+credentials) — so `AWS_PROFILE`, `SSH_AUTH_SOCK`, `KUBECONFIG` or `DOCKER_HOST` never reach it;
+the only secrets put in are the provider keys named by `key_env` in the built-in defaults and the
+human's global file. `MNEMORPH_BOARD_PID` names the board: on Linux the child sets its
+parent-death signal (SIGTERM), then checks its parent is still the board, so a board killed
+outright takes its chats with it. A provider defined only inside a world gets no key from the board: as
+anywhere, nothing read from inside a world grants trust. The child makes itself non-dumpable
+before it reads a key, as every `mnemorphd` does. The bridge opens the session itself
+(`initialize`) and keeps the hello; a tab's `initialize` is answered with it.
+
+**Ending.** A chat ends when its controller sends `shutdown`, when the child leaves, when the grace
+runs out, or when the board stops (Ctrl-C or SIGTERM ends every chat before the server does). Each
+waiting ask is denied with the reason, the child is sent `shutdown` and its input closed — it
+denies what waits, stops the turn, journals the run and exits — and once it has exited, or after
+10 seconds, its process group is killed while the child is still unreaped, so the group's id
+cannot have been reused; then it is reaped. Each tab is sent `board/ended {why}` and closed with
+code 4001. A command the child started in a group of its own (the `bash` tool's) is stopped by the
+child as it leaves; a board killed outright closes every child's input and, on Linux, sends it
+SIGTERM.
+
+**Events and replay.** Every event line goes to every tab as the child wrote it — hostile text
+included: rendering it inert is the page's job — and is kept: the last 10,000, within 64 MiB. A
+tab that reconnects asks `session/events {since}`; the bridge answers from what it keeps, in pages
+of about 1 MiB, `more: true` while another page follows, `complete: false` when the tab asks from
+further back than is kept. The SDK holds live events while it replays and drops any `seq` it has
+seen, so every event arrives once, in order.
+
+**Asks.** `gate/ask` is a request, not an event, so the bridge keeps each waiting ask and sends it
+to every tab — again to each tab that connects — with `leftMs`, the time it has before the core's
+10-minute wait denies it. An ask leaves the list, and the tabs are sent `board/askGone {id}`, when
+it is answered, when the controller interrupts, when the asking body's turn ends (any, for the
+session's own body), or when its time is up. Only the controller's answer is taken, once per ask;
+any other is refused with `board/refused {id, why}`.
+
+**Roles.** One tab controls a chat; every other observes. Control belongs to the browser that
+started the chat — its board cookie: its first tab controls, and another of its tabs takes control
+with `board/takeOver` ("waiting in another tab — take over"); a tab of another browser observes
+only. An observer's `session/prompt`, `session/send`, `session/interrupt` and `shutdown` are
+refused (`-32011`), and its gate answers too. Each tab is sent `board/role {role, controlled}` on
+connect and whenever control moves. With no controller for 60 seconds after the chat opened — a tab closed and not
+reopened — the waiting asks are denied ("no tab held the chat for 60 s") and the chat ends; the
+denial reaches the body as any denial does and is journaled with the run. A tab whose board
+session ends is closed with 4401.
+
+**Limits.** At most 8 live chats and 8 tabs per chat (4429); a tab's message at most 1 MiB (a
+larger one closes it), its request ids numbers or strings of at most 128 bytes, at most 64 of its
+requests waiting on the child. A line from the child over 4 MiB is dropped and said
+(`board/oversize {bytes}`): the tabs see a gap in `seq`. Each tab has a bounded queue (4,096
+messages, 16 MiB); a tab that falls behind is dropped with code 4008, not buffered, and catches up
+by reconnecting. A message that takes over 30 seconds to reach a tab drops it, and each tab is
+pinged every 5 seconds: two pings unanswered drop it. An ended chat frees what it kept at once.
+Closes 4001, 4401, 4404 (no such chat) and 4429 are final for the SDK; others are
+retried, the pause doubling from 250 ms to 5 s, 20 times.
+
+**The browser's transport.** `@mnemorph/sdk/browser` is the client without Node: `ws({url, csrf})`
+offers `mnemorph.v1` and `mnemorph.csrf.<token>`, the token asked for at each connection and kept
+in memory only. On each reconnection the `Client` takes control back if it had it, then replays;
+a request in flight when the socket drops fails rather than hangs.
 
 #### The world overview
 

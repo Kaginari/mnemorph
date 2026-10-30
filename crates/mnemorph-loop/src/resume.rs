@@ -33,7 +33,8 @@ pub struct Stopped {
 
 /// A session's run id is `r<milliseconds>-<process>`; a commissioned body's run is named for the
 /// body, and is its dispatcher's to resume.
-fn is_session_run(id: &str) -> bool {
+#[must_use]
+pub fn is_session_run(id: &str) -> bool {
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
     id.strip_prefix('r')
         .and_then(|rest| rest.split_once('-'))

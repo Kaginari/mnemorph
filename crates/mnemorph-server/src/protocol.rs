@@ -252,6 +252,11 @@ pub struct GateRequest {
     /// spawn. Absent for an ask that spawns nothing.
     #[ts(optional = nullable)]
     pub plan: Option<String>,
+    /// The milliseconds it has left before it is denied: set by the board, which sends a waiting
+    /// ask again to a tab that connects; absent from the core itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub left_ms: Option<u64>,
 }
 
 /// The human's answer to `gate/ask`.
@@ -319,6 +324,9 @@ pub struct EventsResult {
     pub oldest: Option<u64>,
     /// False when the client asked from further back than is kept.
     pub complete: bool,
+    /// True when another page follows: the board answers in pages, and the client asks again
+    /// from the last `seq` it got. The core answers all it keeps at once.
+    pub more: bool,
 }
 
 #[cfg(test)]
