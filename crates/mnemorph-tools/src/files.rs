@@ -39,6 +39,15 @@ pub(crate) fn keep(cx: &Context) {
 
 // ── read ────────────────────────────────────────────────────────────────────
 
+/// Lines over which a read must name its range, unless the configuration says
+/// (`tools.read.range_over`).
+pub const RANGE_OVER: usize = 400;
+/// Bytes a line a file may average before its size, not its line count, asks for a range: at
+/// [`RANGE_OVER`] lines, 24 KB.
+pub const BYTES_PER_LINE: usize = 60;
+/// Skeleton entries a read that must name its range shows.
+const HINT_SYMBOLS: usize = 25;
+
 /// Read a file's lines, numbered.
 pub struct Read;
 
@@ -50,6 +59,8 @@ struct ReadArgs {
     offset: Option<usize>,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    end: Option<usize>,
 }
 
 impl Tool for Read {
@@ -58,15 +69,16 @@ impl Tool for Read {
     }
 
     fn description(&self) -> &'static str {
-        "Read a text file inside the world, as numbered lines. `offset` is the first line (1-based), `limit` how many lines. Reading the same unchanged window again returns a short pointer instead of the text."
+        "Read a text file inside the world, as numbered lines. `offset` is the first line (1-based); `end` the last (inclusive), or `limit` how many lines. `path#symbol` (`src/lib.rs#parse`, `src/lib.rs#Parser::new`) reads one symbol's lines, found by index. A large file (by default over 400 lines or 24 KB) must be read by range: index it first, then read the lines you need; read without a range, it answers with its skeleton. Reading the same unchanged window again returns a short pointer instead of the text."
     }
 
     fn schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "The file, relative to the world's root."},
+                "path": {"type": "string", "description": "The file, relative to the world's root; `file#symbol` reads one symbol."},
                 "offset": {"type": "integer", "minimum": 1, "description": "The first line to read (1-based)."},
+                "end": {"type": "integer", "minimum": 1, "description": "The last line to read (inclusive), instead of limit."},
                 "limit": {"type": "integer", "minimum": 1, "description": "How many lines to read."}
             },
             "required": ["path"],
@@ -79,7 +91,7 @@ impl Tool for Read {
     }
 
     fn example(&self) -> Value {
-        json!({"path": "src/main.rs", "offset": 1, "limit": 40})
+        json!({"path": "src/main.rs", "offset": 1, "end": 40})
     }
 
     fn run(&self, raw: Value, cx: &mut Context) -> Outcome {
@@ -87,10 +99,18 @@ impl Tool for Read {
             Ok(a) => a,
             Err(o) => return o,
         };
-        let path = match cx.inside(&a.path) {
-            Ok(p) => p,
+        if a.end.is_some() && a.limit.is_some() {
+            return Outcome::error("give `end` or `limit`, not both");
+        }
+        let (path, symbol) = match target(cx, &a.path) {
+            Ok(t) => t,
             Err(e) => return Outcome::error(e),
         };
+        if symbol.is_some() && (a.offset.is_some() || a.end.is_some() || a.limit.is_some()) {
+            return Outcome::error(
+                "`path#symbol` reads the symbol's lines: give it no `offset`, `end` or `limit`",
+            );
+        }
         let bytes = match crate::beneath::read(cx.world(), &path) {
             Ok(b) => b,
             Err(e) => return Outcome::error(format!("cannot read `{}`: {e}", cx.shown(&path))),
@@ -103,15 +123,17 @@ impl Tool for Read {
         }
         let text = String::from_utf8_lossy(&bytes);
         let total = text.lines().count();
-        let first = a.offset.unwrap_or(1).max(1);
-        let count = a.limit.unwrap_or(DEFAULT_LINES).max(1);
-        let last = (first + count - 1).min(total);
+        let shown = cx.shown(&path);
+        let (first, last, asked_end, head) =
+            match window(cx, &a, &path, symbol.as_deref(), (&bytes, &text, total)) {
+                Ok(w) => w,
+                Err(o) => return o,
+            };
         let seen = Seen {
             window: (first, last),
             hash: hash(&bytes),
             pointed: false,
         };
-        let shown = cx.shown(&path);
         let earlier = cx.seen.get(&path);
         let same = earlier.is_some_and(|e| e.window == seen.window && e.hash == seen.hash);
         // Once, the earlier result is pointed at — with where the file goes on. Asked again, the
@@ -142,7 +164,7 @@ impl Tool for Read {
             );
             return o;
         }
-        let mut out = String::new();
+        let mut out = head;
         if total == 0 {
             let _ = write!(out, "`{shown}` is empty.");
         } else if first > total {
@@ -150,28 +172,184 @@ impl Tool for Read {
                 "`{shown}` has {total} lines; offset {first} is past the end"
             ));
         } else {
-            for (i, line) in text
-                .lines()
-                .enumerate()
-                .skip(first - 1)
-                .take(last + 1 - first)
-            {
-                let cut: String = line.chars().take(LINE_CHARS).collect();
-                let more = if cut.len() < line.len() { " …" } else { "" };
-                let _ = writeln!(out, "{:>6}\t{cut}{more}", i + 1);
-            }
-            if last < total {
-                let _ = write!(
-                    out,
-                    "… {} more lines (offset {} continues)",
-                    total - last,
-                    last + 1
-                );
-            }
+            numbered(&mut out, &text, (first, last, total), asked_end);
         }
         cx.seen.insert(path, seen);
         Outcome::ok(out, ToolClass::Read)
     }
+}
+
+/// Lines `first` to `last` of `text`, numbered, then where the file goes on — or, when the read
+/// asked for an `end` past the file's last line, that it was read to the end.
+fn numbered(
+    out: &mut String,
+    text: &str,
+    (first, last, total): (usize, usize, usize),
+    asked_end: Option<usize>,
+) {
+    for (i, line) in text
+        .lines()
+        .enumerate()
+        .skip(first - 1)
+        .take(last + 1 - first)
+    {
+        let cut: String = line.chars().take(LINE_CHARS).collect();
+        let more = if cut.len() < line.len() { " …" } else { "" };
+        let _ = writeln!(out, "{:>6}\t{cut}{more}", i + 1);
+    }
+    if let Some(end) = asked_end {
+        let _ = write!(
+            out,
+            "(end {end} is past the file's {total} lines: read to {total})"
+        );
+    } else if last < total {
+        let _ = write!(
+            out,
+            "… {} more lines (offset {} continues)",
+            total - last,
+            last + 1
+        );
+    }
+}
+
+/// The window a read shows — first and last line, the `end` asked past the file's last line, and
+/// a header for a symbol — or what it answers instead: the skeleton of a large file read without
+/// a range, a refusal.
+fn window(
+    cx: &mut Context,
+    a: &ReadArgs,
+    path: &Path,
+    symbol: Option<&str>,
+    (bytes, text, total): (&[u8], &str, usize),
+) -> Result<(usize, usize, Option<usize>, String), Outcome> {
+    let shown = cx.shown(path);
+    let over = cx.range_over();
+    let large = over > 0 && (total > over || bytes.len() > over.saturating_mul(BYTES_PER_LINE));
+    if let Some(name) = symbol {
+        let s = crate::index::cached(cx, path, bytes, text);
+        let (sym, inside) = pick(&s, name, &shown).map_err(Outcome::error)?;
+        let head = format!(
+            "{} {}{inside}, lines {}–{}:\n",
+            sym.kind, sym.name, sym.start, sym.end
+        );
+        return Ok((sym.start, sym.end.min(total), None, head));
+    }
+    let ranged = a.offset.is_some() || a.limit.is_some() || a.end.is_some();
+    if large && !ranged {
+        let s = crate::index::cached(cx, path, bytes, text);
+        return Err(Outcome::ok(
+            must_range(&shown, total, bytes.len(), over, &s),
+            ToolClass::Read,
+        ));
+    }
+    let first = a.offset.unwrap_or(1).max(1);
+    // A large file's window, when only its start is named, is the range rule's length.
+    let count = if large { over } else { DEFAULT_LINES };
+    let want = match (a.end, a.limit) {
+        (Some(end), _) => end,
+        (None, Some(limit)) => first.saturating_add(limit.max(1) - 1),
+        (None, None) => first.saturating_add(count - 1),
+    };
+    if want < first {
+        return Err(Outcome::error(format!(
+            "`end` {want} is before `offset` {first}; end is the last line read"
+        )));
+    }
+    Ok((
+        first,
+        want.min(total),
+        a.end.filter(|e| *e > total),
+        String::new(),
+    ))
+}
+
+/// The file a read names, and the symbol after its `#` when it names one. A path that exists as
+/// written is a file, `#` and all.
+fn target(cx: &Context, text: &str) -> Result<(PathBuf, Option<String>), String> {
+    let whole = cx.inside(text)?;
+    if whole.exists() {
+        return Ok((whole, None));
+    }
+    match text.rsplit_once('#') {
+        Some((file, symbol)) if !file.is_empty() && !symbol.trim().is_empty() => {
+            Ok((cx.inside(file)?, Some(symbol.trim().to_owned())))
+        }
+        _ => Ok((whole, None)),
+    }
+}
+
+/// The one symbol `name` picks in a skeleton, and the parent it sits in (for the header); or a
+/// refusal that lists the candidates.
+fn pick<'a>(
+    s: &'a crate::index::Skeleton,
+    name: &str,
+    shown: &str,
+) -> Result<(&'a crate::index::Symbol, String), String> {
+    let parent_of = |sym: &crate::index::Symbol| {
+        s.symbols
+            .iter()
+            .rev()
+            .find(|a| a.depth + 1 == sym.depth && a.start <= sym.start && a.end >= sym.end)
+            .map_or_else(String::new, |p| format!(" (in {} {})", p.kind, p.name))
+    };
+    if s.lang.is_none() {
+        return Err(format!(
+            "`{shown}` has no skeleton to find `{name}` in: read it by range (offset and end), or grep"
+        ));
+    }
+    let found = crate::index::find(s, name);
+    match found.as_slice() {
+        [one] => Ok((one, parent_of(one))),
+        [] => Err(format!(
+            "no symbol `{name}` in `{shown}`. Its skeleton:\n{}",
+            crate::index::render(shown, s, HINT_SYMBOLS).trim_end()
+        )),
+        many => {
+            let list: Vec<String> = many
+                .iter()
+                .map(|m| {
+                    format!(
+                        "{}–{} {} {}{}",
+                        m.start,
+                        m.end,
+                        m.kind,
+                        m.name,
+                        parent_of(m)
+                    )
+                })
+                .collect();
+            Err(format!(
+                "`{name}` names {} symbols in `{shown}`: {}. Name its parent (`{shown}#Parent::{name}`) or read by range.",
+                many.len(),
+                list.join("; ")
+            ))
+        }
+    }
+}
+
+/// What a read of a large file without a range answers: the rule, and the skeleton's first
+/// entries to pick a range from.
+fn must_range(
+    shown: &str,
+    total: usize,
+    bytes: usize,
+    over: usize,
+    s: &crate::index::Skeleton,
+) -> String {
+    let size = if total > over {
+        format!("{total} lines, over {over}")
+    } else {
+        format!(
+            "{} KB, over {} KB",
+            bytes / 1000,
+            over * BYTES_PER_LINE / 1000
+        )
+    };
+    format!(
+        "`{shown}` is large ({size}): read it by range — `offset` and `end`, or `{shown}#symbol`. \
+         Its skeleton (index shows all of it):\n{}",
+        crate::index::render(shown, s, HINT_SYMBOLS).trim_end()
+    )
 }
 
 // ── write ───────────────────────────────────────────────────────────────────

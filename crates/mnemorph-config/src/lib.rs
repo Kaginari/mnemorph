@@ -69,6 +69,9 @@ enabled = true
 timeout_secs = 300
 verify_secs = 120
 
+[tools.read]
+range_over = 400
+
 [stress]
 escalate_at = 5
 relieve_at = 7
@@ -126,6 +129,20 @@ fn net_wins(value: &Value, at: &Origin) -> Result<(), String> {
     }
 }
 
+/// `tools.read.range_over`: a count of lines, 0 to read every file whole.
+fn range_over(value: &Value, at: &Origin) -> Result<(), String> {
+    if value
+        .as_integer()
+        .is_some_and(|n| (0..=RANGE_OVER_CEILING).contains(&n))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{at}: tools.read.range_over is a count of lines from 0 (every file read whole) to {RANGE_OVER_CEILING}"
+        ))
+    }
+}
+
 fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
     if value
         .as_integer()
@@ -142,6 +159,9 @@ fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
 /// How many more paired tasks an evolution must win than lose to be kept, unless the human sets
 /// `evolution.min_net_wins`.
 pub const MIN_NET_WINS: u32 = 2;
+
+/// The most `tools.read.range_over` may be: past it, the rule never asks.
+const RANGE_OVER_CEILING: i64 = 1_000_000;
 
 /// Keys only the local or global file may set: each one loosens the human gate.
 const LOOSENING: &[&str] = &[
@@ -196,6 +216,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.relieve_at", Kind::Int),
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
+    ("tools.read.range_over", Kind::Int),
     ("steps.solo", Kind::Int),
     ("recall.meaning", Kind::Number),
     ("recall.relation", Kind::Number),
@@ -748,6 +769,7 @@ impl Config {
                     ));
                 }
                 "gate.challenge_reviewers" => reviewers(&leaf.value, at)?,
+                "tools.read.range_over" => range_over(&leaf.value, at)?,
                 "evolution.min_net_wins" => net_wins(&leaf.value, at)?,
                 "oni.envelope_days"
                     if !leaf
@@ -918,6 +940,15 @@ impl Config {
     #[must_use]
     pub fn context_stress_tokens(&self) -> u64 {
         self.int("stress.context_tokens").unwrap_or(150_000)
+    }
+
+    /// The lines over which a read must name its range (a skeleton answers one that does not);
+    /// 0 reads every file whole.
+    #[must_use]
+    pub fn read_range_over(&self) -> usize {
+        self.int("tools.read.range_over")
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(mnemorph_tools::files::RANGE_OVER)
     }
 
     /// The steps of the session's own body, working solo: it does the work of the shortest chain

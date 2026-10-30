@@ -319,10 +319,13 @@ async fn an_unchanged_re_read_is_pointed_at_once_then_shown() {
         s
     });
     fs::write(w.world().join("a.txt"), lines).unwrap();
-    let model =
-        Arc::new(ScriptedModel::new((0..6).map(|i| {
-            tool(&format!("t{i}"), "read", json!({"path": "a.txt"}))
-        })));
+    let model = Arc::new(ScriptedModel::new((0..6).map(|i| {
+        tool(
+            &format!("t{i}"),
+            "read",
+            json!({"path": "a.txt", "offset": 1, "end": 2000}),
+        )
+    })));
     let mut run = w.run(model.clone(), limits());
     let e = ask(&mut run, "stare").await;
     assert!(
@@ -662,7 +665,11 @@ async fn stress_starts_again_with_each_ask() {
     fs::write(w.world().join("a.txt"), "a\n").unwrap();
     let script = (0..5).flat_map(|i| {
         [
-            tool(&format!("t{i}"), "read", json!({"path": "a.txt"})),
+            tool(
+                &format!("t{i}"),
+                "read",
+                json!({"path": "a.txt", "offset": 1, "end": 2000}),
+            ),
             answer("a"),
         ]
     });

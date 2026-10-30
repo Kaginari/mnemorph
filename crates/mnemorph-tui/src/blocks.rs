@@ -206,14 +206,15 @@ pub fn summary(name: &str, input: &Value) -> String {
     }
     if let Some(path) = get("path") {
         let path = one_line(path);
-        if name == "read"
-            && let Some(off) = input.get("offset").and_then(Value::as_u64)
-        {
+        let off = input.get("offset").and_then(Value::as_u64);
+        let end = input.get("end").and_then(Value::as_u64);
+        if name == "read" && (off.is_some() || end.is_some()) {
+            let off = off.unwrap_or(1);
             let lim = input.get("limit").and_then(Value::as_u64).unwrap_or(0);
-            return if lim > 0 {
-                format!("{path}:{off}-{}", off + lim - 1)
-            } else {
-                format!("{path}:{off}")
+            return match end {
+                Some(end) => format!("{path}:{off}-{end}"),
+                None if lim > 0 => format!("{path}:{off}-{}", off + lim - 1),
+                None => format!("{path}:{off}"),
             };
         }
         return path;
@@ -427,6 +428,7 @@ pub fn group_counts(g: &Group) -> String {
     let mut parts = Vec::new();
     for (tool, one, many) in [
         ("read", "file", "files"),
+        ("index", "file", "files"),
         ("grep", "pattern", "patterns"),
         ("glob", "pattern", "patterns"),
     ] {
@@ -440,7 +442,9 @@ pub fn group_counts(g: &Group) -> String {
             .map(|c| {
                 let s = summary(&c.name, &c.input);
                 if tool == "read" {
-                    s.split(':').next().unwrap_or("").to_owned()
+                    // A range or a symbol of one file is that file.
+                    let file = s.split(':').next().unwrap_or("");
+                    file.split('#').next().unwrap_or(file).to_owned()
                 } else {
                     s
                 }

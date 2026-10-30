@@ -41,6 +41,7 @@ pub trait Tool: Send + Sync {
 pub fn registry() -> Vec<Box<dyn Tool>> {
     vec![
         Box::new(files::Read),
+        Box::new(crate::index::Index),
         Box::new(files::Write),
         Box::new(files::Edit),
         Box::new(files::MultiEdit),
@@ -168,6 +169,10 @@ pub struct Context {
     cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     deadline: Option<std::time::Instant>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
+    /// Skeletons made this session, by content and language.
+    pub(crate) skeletons: HashMap<u64, crate::index::Skeleton>,
+    /// Lines over which a read must name its range (`tools.read.range_over`); 0 never asks.
+    range_over: usize,
 }
 
 impl std::fmt::Debug for Context {
@@ -229,7 +234,23 @@ impl Context {
             cancel: None,
             deadline: None,
             seen: HashMap::new(),
+            skeletons: HashMap::new(),
+            range_over: files::RANGE_OVER,
         }
+    }
+
+    /// Ask for a range when a read names none on a file over `lines` lines (or over
+    /// [`files::BYTES_PER_LINE`] bytes a line of it); 0 reads every file whole.
+    #[must_use]
+    pub fn with_range_over(mut self, lines: usize) -> Self {
+        self.range_over = lines;
+        self
+    }
+
+    /// Lines over which a read must name its range; 0 never asks.
+    #[must_use]
+    pub fn range_over(&self) -> usize {
+        self.range_over
     }
 
     /// The body's soil as the world hands it: claims it writes, claims inside them it does not,
@@ -438,8 +459,8 @@ impl Context {
     }
 
     /// What a commissioned body takes from the one that commissioned it: the human's gate, the
-    /// sandbox, the home, the guard rules that ask, whether commands may run unguarded, and the
-    /// attic. Its soil is its own.
+    /// sandbox, the home, the guard rules that ask, whether commands may run unguarded, the
+    /// attic and the read's range rule. Its soil is its own.
     #[must_use]
     pub fn inherit(mut self, from: &Context) -> Self {
         self.home.clone_from(&from.home);
@@ -449,6 +470,7 @@ impl Context {
         self.asked_rules.clone_from(&from.asked_rules);
         self.unguarded = from.unguarded;
         self.attic.clone_from(&from.attic);
+        self.range_over = from.range_over;
         self
     }
 
