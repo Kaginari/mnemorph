@@ -166,7 +166,7 @@ pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
 }
 
 /// A commissioned body's system prompt: who it is, its doc, its soil, and how it answers.
-fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) -> String {
+pub(crate) fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) -> String {
     let c = &roster.creatures[name];
     let doc = std::fs::read_to_string(world.join(c.doc())).unwrap_or_default();
     let ground = soil(roster, name)

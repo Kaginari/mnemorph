@@ -286,6 +286,12 @@ pub struct Run {
     recall_trace: Option<(String, bool, Option<String>, Option<String>)>,
     /// What this ask landed: the gate's journal heading for a change it judged.
     landed_in_ask: Option<String>,
+    /// The evolution ledger this run's asks are stamped on: the world's own under the state
+    /// directory (`None`), or the one given.
+    evolution_ledger: Option<PathBuf>,
+    /// This ask's stamp, when a swap's window is open for the body, with the gate's words so far
+    /// and the holes the harness found: written as a run row when the ask ends.
+    evolving: std::sync::Mutex<Option<Evolving>>,
     /// What a fresh session's first ask opens with — the journal's last entries — said once.
     opening: Option<String>,
     /// The claims this ask's orders offered, `(owner, id)`: the only ones its answer may accept —
@@ -420,6 +426,8 @@ impl Run {
             office: "ask".into(),
             recall_trace: None,
             landed_in_ask: None,
+            evolution_ledger: None,
+            evolving: std::sync::Mutex::new(None),
             opening: None,
             acceptable: std::collections::BTreeSet::new(),
             manifest: None,
@@ -711,6 +719,69 @@ impl Run {
         self
     }
 
+    /// The evolution ledger its asks are stamped on, instead of the world's own under the state
+    /// directory.
+    #[must_use]
+    pub fn with_evolution_ledger(mut self, ledger: PathBuf) -> Self {
+        self.evolution_ledger = Some(ledger);
+        self
+    }
+
+    /// This ask stamped, when a swap's window is open for this body; none else.
+    fn begin_evolving(&mut self, ask: &str) {
+        let stamp = self.stamp(ask);
+        *self
+            .evolving
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = stamp;
+    }
+
+    /// The gate's verdict, kept for this ask's run row when it is stamped.
+    fn saw_verdict(&self, verdict: &crate::gate::GateVerdict) {
+        if let Some(e) = self
+            .evolving
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            e.saw(verdict);
+        }
+    }
+
+    /// The stamp for `ask` when a swap's window is open for this body.
+    fn stamp(&self, ask: &str) -> Option<Evolving> {
+        let world = self.cx.world();
+        let ledger = self
+            .evolution_ledger
+            .clone()
+            .or_else(|| mnemorph_world::evolution::ledger_of(world))?;
+        mnemorph_world::evolution::stamp_for(world, &ledger, &self.body.name, ask).map(|stamp| {
+            Evolving {
+                stamp,
+                verdicts: Vec::new(),
+                holes: 0,
+            }
+        })
+    }
+
+    /// The ask's run row, written when it ends: none for an ask the human stopped.
+    fn record_evolving(&self, ending: &Ending) {
+        let taken = self
+            .evolving
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let Some(e) = taken else { return };
+        if matches!(ending, Ending::Interrupted) {
+            return;
+        }
+        if let Err(err) = e.stamp.record(self.cx.world(), e.facts()) {
+            self.record(&Beat::Warning {
+                text: format!("the evolution ledger could not be written: {err}"),
+            });
+        }
+    }
+
     /// A fresh session's opening: the journal's last entries, said with its first ask — in the
     /// changing tail, so the system prompt stays the cached prefix.
     #[must_use]
@@ -826,6 +897,7 @@ impl Run {
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
+        self.record_evolving(&ending);
         if let Ending::Answered(text) = &ending {
             self.accept(text);
             // A commissioned body's claims are its dispatcher's to keep; a body answering the
@@ -1127,6 +1199,7 @@ impl Run {
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
         });
+        self.saw_verdict(&verdict);
         let solo = gate.author.is_none();
         // A pass on a Dark Elf surface opens the landing's challenge: it waits on it.
         let held = if verdict.passed() {
@@ -2094,6 +2167,8 @@ impl Run {
 
     /// Open an ask: its preface, its journal row, then the recall row that follows it.
     fn open_ask(&mut self, text: &str) -> String {
+        // Stamped on the ask as the human or the dispatcher sent it, before any preface.
+        self.begin_evolving(text);
         self.challenged.clear();
         self.ask_from = self.messages.len();
         self.failed_in_ask = None;
@@ -3285,6 +3360,44 @@ fn sole_post(tool: &str, input: &str, world: &std::path::Path) -> Option<mnemorp
     let mut posts = acts.iter().map(|a| a.sole_post());
     let first = posts.next()??;
     posts.all(|p| p == Some(first)).then_some(first)
+}
+
+/// An ask stamped for a swap's window: the stamp, the gate's verdicts in order, and the holes the
+/// harness found — a test deleted, skipped or thinned (*tests intact*).
+struct Evolving {
+    stamp: mnemorph_world::evolution::Stamp,
+    verdicts: Vec<crate::gate::Verdict>,
+    holes: u32,
+}
+
+impl Evolving {
+    fn saw(&mut self, verdict: &crate::gate::GateVerdict) {
+        self.verdicts.push(verdict.verdict());
+        let holes = verdict
+            .failures
+            .iter()
+            .filter(|f| f.starts_with("tests intact:"))
+            .count();
+        self.holes = self
+            .holes
+            .saturating_add(u32::try_from(holes).unwrap_or(u32::MAX));
+    }
+
+    /// The harness's facts: the gate's last word, a pass on its first try, the holes found.
+    fn facts(&self) -> mnemorph_world::evolution::Facts {
+        use crate::gate::Verdict;
+        use mnemorph_ledger::evolution::Gate;
+        let gate = self.verdicts.last().map(|v| match v {
+            Verdict::Pass => Gate::Pass,
+            Verdict::Fail => Gate::Fail,
+            Verdict::NotVerified => Gate::NotVerified,
+        });
+        mnemorph_world::evolution::Facts {
+            gate,
+            first_try: self.verdicts.len() == 1 && gate == Some(Gate::Pass),
+            holes_found: self.holes,
+        }
+    }
 }
 
 #[cfg(test)]

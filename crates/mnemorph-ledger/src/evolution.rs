@@ -134,6 +134,9 @@ pub struct Run {
     /// Holes the harness found: an edited or deleted verify line.
     #[serde(default)]
     pub holes_found: u32,
+    /// The ask itself, kept so its control can be run on demand; its digest is the fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask: Option<String>,
 }
 
 impl Run {
@@ -573,13 +576,21 @@ pub fn replay(
     Ok(judge(&read_to(path, to, anchor)?, id, min_net_wins))
 }
 
-fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Refusal> {
-    if let Some((line, _)) = ledger.chain.broken {
-        return Err(Refusal::ChainBroken(line));
-    }
-    if ledger.chain.head.is_none() {
-        return Err(Refusal::Unchained(None));
-    }
+/// A swap's post-swap window as the ledger holds it, its held-out rule checked.
+struct Window<'a> {
+    swapped_at: u64,
+    swap: &'a Swap,
+    runs: Vec<(&'a Entry, &'a Run)>,
+}
+
+fn runs_of(ledger: &Ledger) -> impl Iterator<Item = (&Entry, &Run)> {
+    ledger.entries.iter().filter_map(|e| match &e.row {
+        EvolutionRow::Run(r) => Some((e, r)),
+        EvolutionRow::Swap(_) => None,
+    })
+}
+
+fn window_of<'a>(ledger: &'a Ledger, id: &str) -> Result<Window<'a>, Refusal> {
     let mut swaps = ledger.entries.iter().filter_map(|e| match &e.row {
         EvolutionRow::Swap(s) if s.id == id => Some((e.at, s)),
         _ => None,
@@ -594,14 +605,7 @@ fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Ref
         return Err(Refusal::Unstamped(id.to_owned()));
     }
     let after = swap.after_state();
-    let before = swap.before_state();
-    let runs = || {
-        ledger.entries.iter().filter_map(|e| match &e.row {
-            EvolutionRow::Run(r) => Some((e, r)),
-            EvolutionRow::Swap(_) => None,
-        })
-    };
-    let window: Vec<(&Entry, &Run)> = runs()
+    let window: Vec<(&Entry, &Run)> = runs_of(ledger)
         .filter(|(e, r)| {
             !r.control
                 && e.at > swapped_at
@@ -621,7 +625,7 @@ fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Ref
             return Err(Refusal::Leaked(r.task.clone()));
         }
         // Any earlier run of the task, stamped or not, but this swap's own controls.
-        let elsewhere = runs().any(|(o, other)| {
+        let elsewhere = runs_of(ledger).any(|(o, other)| {
             o.at < e.at
                 && other.task == r.task
                 && !(other.control && other.swap.as_deref() == Some(id))
@@ -630,22 +634,85 @@ fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Ref
             return Err(Refusal::Reused(r.task.clone()));
         }
     }
-    let controls: Vec<(&Entry, &Run)> = window
+    Ok(Window {
+        swapped_at,
+        swap,
+        runs: window,
+    })
+}
+
+/// The control of window run `w`, when the ledger holds one.
+fn control_of<'a>(ledger: &'a Ledger, w: &Window<'_>, run: &Run) -> Option<(&'a Entry, &'a Run)> {
+    runs_of(ledger).find(|(e, c)| {
+        c.control
+            && e.at > w.swapped_at
+            && c.swap.as_deref() == Some(w.swap.id.as_str())
+            && c.build == w.swap.build
+            && c.body == run.body
+            && c.task == run.task
+    })
+}
+
+/// The swap `id` and the runs of its window that still wait on their do-nothing control: what a
+/// harness runs again, on the named files' before state, before the swap can be judged.
+///
+/// # Errors
+///
+/// The swap cannot be judged at all: what [`judge`] would refuse on before its controls.
+pub fn awaiting<'a>(ledger: &'a Ledger, id: &str) -> Result<(&'a Swap, Vec<&'a Run>), Refusal> {
+    let w = window_of(ledger, id)?;
+    let waiting = w
+        .runs
         .iter()
-        .filter_map(|(_, w)| {
-            runs().find(|(e, c)| {
-                c.control
-                    && e.at > swapped_at
-                    && c.swap.as_deref() == Some(id)
-                    && c.build == swap.build
-                    && c.body == w.body
-                    && c.task == w.task
-            })
-        })
+        .filter(|(_, r)| control_of(ledger, &w, r).is_none())
+        .map(|(_, r)| *r)
         .collect();
-    if window.len() < EVOLUTION_WINDOW || controls.len() < window.len() {
+    Ok((w.swap, waiting))
+}
+
+/// The swap whose window a run by `body` belongs to now: the newest swap naming `body` among its
+/// bodies whose window is not yet full; `None` when no window is open for it.
+#[must_use]
+pub fn open_for<'a>(ledger: &'a Ledger, body: &str) -> Option<&'a Swap> {
+    let (at, swap) = ledger.entries.iter().rev().find_map(|e| match &e.row {
+        EvolutionRow::Swap(s) if s.bodies.iter().any(|b| b == body) => Some((e.at, s)),
+        _ => None,
+    })?;
+    let stamped = runs_of(ledger)
+        .filter(|(e, r)| {
+            !r.control
+                && e.at > at
+                && r.swap.as_deref() == Some(swap.id.as_str())
+                && r.build == swap.build
+        })
+        .count();
+    (stamped < EVOLUTION_WINDOW).then_some(swap)
+}
+
+/// Whether any run row of the ledger already carries the task `fingerprint`: a task run once is
+/// never held out again.
+#[must_use]
+pub fn seen(ledger: &Ledger, fingerprint: &str) -> bool {
+    runs_of(ledger).any(|(_, r)| r.task == fingerprint)
+}
+
+fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Refusal> {
+    if let Some((line, _)) = ledger.chain.broken {
+        return Err(Refusal::ChainBroken(line));
+    }
+    if ledger.chain.head.is_none() {
+        return Err(Refusal::Unchained(None));
+    }
+    let w = window_of(ledger, id)?;
+    let before = w.swap.before_state();
+    let controls: Vec<(&Entry, &Run)> = w
+        .runs
+        .iter()
+        .filter_map(|(_, r)| control_of(ledger, &w, r))
+        .collect();
+    if w.runs.len() < EVOLUTION_WINDOW || controls.len() < w.runs.len() {
         return Ok(Judgement::Pending {
-            runs: window.len(),
+            runs: w.runs.len(),
             controls: controls.len(),
         });
     }
@@ -655,7 +722,7 @@ fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Ref
     {
         return Err(Refusal::ControlState(e.at));
     }
-    verdict(ledger, &window, &controls, min_net_wins)
+    verdict(ledger, &w.runs, &controls, min_net_wins)
 }
 
 /// A full window against its controls, paired by task: kept when its net paired wins — tasks it

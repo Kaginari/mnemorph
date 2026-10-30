@@ -143,13 +143,14 @@ mnemorph --world <dir>            # a session in that world
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
-mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes
+mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters
 mnemorph run "<ask>"              # one ask without the app
 ```
 
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
-`housekeep` (`--verify` walks the chained journals) and `relief` (`mnemorphd --help`).
+`envelope`, `challenge`, `meters`, `evolution`, `housekeep` (`--verify` walks the chained
+journals) and `relief` (`mnemorphd --help`).
 
 **Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
 a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
@@ -165,6 +166,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
+| read every creature's meters, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board (M12) | the board is served by `mnemorphd` |
 

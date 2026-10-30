@@ -470,3 +470,23 @@ pub fn status(opened: &Opened) -> Vec<String> {
         .map(|(k, v)| format!("{k:<9}{}", one_line(&v)))
         .collect()
 }
+
+/// `status`'s meters: one compact line per living creature, each meter with its count and its 95%
+/// interval, or `no reports` where no fold reads it yet.
+#[must_use]
+pub fn meters(world: &std::path::Path) -> Vec<String> {
+    let all = mnemorph_server::world::meters::read(world);
+    if all.is_empty() {
+        return vec![format!("{:<9}no living creature", "meters")];
+    }
+    let mut lines: Vec<String> = all
+        .iter()
+        .map(|m| format!("{:<9}{}", "meters", one_line(&m.to_string())))
+        .collect();
+    lines.extend(
+        mnemorph_server::world::evolution::stale(world)
+            .iter()
+            .map(|s| format!("{:<9}{}", "evolving", one_line(s))),
+    );
+    lines
+}

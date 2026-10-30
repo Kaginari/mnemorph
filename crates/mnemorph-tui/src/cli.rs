@@ -13,7 +13,8 @@ Usage:
   mnemorph run \"<ask>\" [options]     ask once without the app: the answer on stdout, exit
   mnemorph run [-]                   ask once, the ask read from stdin
   mnemorph status [--world <dir>]    the build, the world, the model, the key's origin, the
-                                     sandbox, the budget and the configuration's holes
+                                     sandbox, the budget, the configuration's holes and
+                                     each creature's meters with their count and 95% interval
   mnemorph version | help
 
 The world's admin commands are the core's: `mnemorphd runs`, `mnemorphd memory status`,
