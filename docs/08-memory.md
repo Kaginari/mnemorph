@@ -416,14 +416,18 @@ never touched. A new version is a new claim in old words' place, so it waits for
 own: it is proposed again, in every tier that holds it, until one grounds it. A note written before
 versions existed reads as version 1 resting on nothing, and a creation written with no id at all —
 an import, a hand-written line — is given one on reading, `h` and sixteen hex digits of the SHA-256
-of its time, owner and text: the same on every machine and every read, nothing rewritten.
+of its event id, time, owner and text: the same on every machine and every read, nothing rewritten,
+and two lines saying the same words in the same millisecond are two notes. A second creation of an
+id in other words or by another owner — a collision, not a merge's duplicate nor a route
+restating a corrected claim — is an unproven write: reported by `memory status`, never silently
+dropped.
 
 **What a claim rests on.** `depends_on` lists, each by kind:
 
 | Kind | Key | Moves when |
 |---|---|---|
-| `claim` | the claim's id | it is superseded by a new version, struck by an attributable failure (doubted) or retired |
-| `fact` | the fact's id in [the ontology](09-ontology.md#facts-who-said-what) | an event leaves it contested |
+| `claim` | the claim's id | it is superseded by a new version or retired; doubted by a first attributable failure (direct only) |
+| `fact` | the fact's id in [the ontology](09-ontology.md#facts-who-said-what) | an event leaves it contested (direct only) |
 | `file` | the path, and the SHA-256 of its bytes (16 hex digits) | a landing the gate passed changes or deletes it |
 | `creature` | its name | it is rebirthed, rewritten or retired — the lifecycle's call, `invalidate(Moved::Creature)` |
 
@@ -432,12 +436,19 @@ grounds it — what the grounding saw replaces what the proposal did; a claim ma
 and facts when it is proposed or corrected.
 
 **Review on invalidate.** When something a claim rests on moves, the claim *needs review*: a
-`review` event naming the cause, never a deletion and never a retirement. Every claim resting on a
-marked claim is marked too, transitively, each claim visited once, so a cycle ends; a claim already
+`review` event naming the cause, never a deletion and never a retirement. For a claim superseded or
+retired, a creature, or a file a landing changed, every claim resting on a marked claim is marked
+too, transitively, each claim visited once, so a cycle ends. A doubt and a newly contested fact —
+which one body's failure or counter can cause — mark only the claims resting on them directly, so
+one body never flags a whole subgraph; a claim already
 under review gets no second event, and the walk goes on past it. The claim that moved is not
 marked by its own move. A review claims no standing, so it resolves as a plain record. A route that
 grounds the claim again — the same four routes, and `mnemorphd memory confirm <claim>` among them —
-answers it; until then recall lowers it and marks it `review` on the wire, and `memory status` lists
+answers it. Only a landing the gate passed writes a file's review; a file moved by any other hand —
+the human's edit, a failed run — is read live: recall and `memory status` hash each file a claim
+rests on and read a mismatch as needing review, computed, with no event. A passing ask that cites
+and credits a claim whose file no longer reads as recorded marks it, as an event: a pass over other
+bytes vouches for nothing the claim said. Until a route grounds it again, recall lowers it and marks it `review` on the wire, and `memory status` lists
 it with its cause.
 
 **Strength.** Recall weighs each claim's strength $\sigma \in [0, 1]$, computed at recall and never

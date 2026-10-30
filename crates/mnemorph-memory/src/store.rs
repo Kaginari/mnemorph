@@ -107,7 +107,7 @@ pub fn read(world: &Path, tier: &Tier) -> std::io::Result<ReadBack<Event>> {
 }
 
 /// A creation written without a note id — an import, a hand-written line — is given one derived
-/// from what it is: the same line reads as the same id on every machine, every time, and nothing
+/// from what it is, its event id included: the same line reads as the same id on every machine, every time, and nothing
 /// is rewritten. Any other event without one names no note, and the fold sets it aside.
 pub fn upgrade(e: &mut Event) {
     use sha2::{Digest, Sha256};
@@ -116,6 +116,10 @@ pub fn upgrade(e: &mut Event) {
     }
     if let Change::Create { text, owner, .. } = &e.change {
         let mut h = Sha256::new();
+        // The event's own id, unique per writer, is hashed in: two lines saying the same words in
+        // the same millisecond are two notes, never one.
+        h.update(e.id.as_bytes());
+        h.update([0]);
         h.update(e.time.to_be_bytes());
         h.update(owner.as_deref().unwrap_or_default().as_bytes());
         h.update([0]);

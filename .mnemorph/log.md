@@ -6304,3 +6304,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** an amend's own propagation marks what rests on the amended claim before any landing does: a test
   of the landing must ground those first, or it asserts the wrong cause.
   Open (@?): nothing rebirths or retires a creature yet — M11's lifecycle calls `invalidate(Moved::Creature)`.
+
+---
+
+### [2026-10-30T16:16:17+01:00] rimuru — #95, Fable's review: direct-only doubts and facts, live file hashes, collision-safe ids
+- **Done:** a doubt (`Moved::Doubted`) and a newly contested fact mark direct dependents only; retire, supersede,
+  creature and landed files stay transitive. Recall (`gather`) and `memory status` re-hash File dependencies
+  live and read a mismatch as needing review, no event; `confirm` marks a credited claim whose file moved.
+  Derived ids hash the event id too; a second creation of an id in other words or by another owner is an
+  unproven write (reported). `memory status` folds newlines. Docs 08, 09.
+- **Tests:** a doubt stops at the direct dependent, the retirement reaches the far one; a fact marks direct
+  only, a creature downstream; a file edited outside a landing reads as review live and credit marks it;
+  same-millisecond id-less lines stay two notes, a collision is reported; the fixed worst-case ordering draw.
+- **Learned:** a cascade's reach belongs to its trigger: what one body can cause alone marks one hop.

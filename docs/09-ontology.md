@@ -325,8 +325,9 @@ reports `contested-fact`, `stale-fact` and `untriaged-fact` beside the shape fin
 
 **A contested fact moves the claims resting on it.** A memory note may name a fact it rests on, by
 id ([the claim graph](08-memory.md#the-claim-graph)). When an event leaves a fact contested that
-was not before, every claim resting on it, and every claim resting on those, needs review: marked,
-never deleted, and recalled lower until a route grounds it again. Settling the fact clears nothing
+was not before, every claim resting on it directly needs review — one creature's counter can
+contest a fact, so the mark goes no further downstream: marked, never deleted, and recalled lower
+until a route grounds it again. Settling the fact clears nothing
 by itself; the claim is grounded again on its own evidence.
 
 `@U law` and `@U colony` are not ontology facts; they land as [memory notes](08-memory.md).

@@ -232,6 +232,10 @@ fn a_changed_file_marks_its_dependents_transitively_and_a_cycle_ends() {
 /// A claim retired by the failures laid at its door no longer holds up what rests on it: its
 /// dependents need review, and the retirement says which.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one story: a doubt, a re-grounding, a retirement"
+)]
 fn a_retired_dependency_marks_its_dependents() {
     use mnemorph_memory::{Anchor, retire, revise};
     let w = world("retired");
@@ -259,6 +263,16 @@ fn a_retired_dependency_marks_its_dependents() {
         vec![on(&bad)],
     )
     .unwrap();
+    let far = propose_resting(
+        &w,
+        "slime-u",
+        "the utf8 suite runs in a second",
+        vec![],
+        None,
+        vec![],
+        vec![on(&rests.note)],
+    )
+    .unwrap();
     let anchors = [Anchor {
         id: bad.clone(),
         personal: false,
@@ -278,14 +292,22 @@ fn a_retired_dependency_marks_its_dependents() {
         std::thread::sleep(std::time::Duration::from_millis(3));
         seen.push(retire(&w, "slime-s", &anchors, v).unwrap());
         if seen.len() == 1 {
-            // The first failure laid at its door already strikes it: what rests on it is marked.
+            // The first failure laid at its door doubts it: what rests on it directly is marked,
+            // and no further — one failure never flags a whole subgraph.
             let n = note_of(&w, &Tier::Personal("slime-t".into()), &rests.note);
             assert!(
                 n.review
                     .as_deref()
-                    .is_some_and(|c| c.contains(&bad) && c.contains("struck by a failure")),
+                    .is_some_and(|c| c.contains(&bad) && c.contains("doubted by a failure")),
                 "{:?}",
                 n.review
+            );
+            assert_eq!(seen[0].reviewed, vec![rests.note.clone()]);
+            assert!(
+                note_of(&w, &Tier::Personal("slime-u".into()), &far.note)
+                    .review
+                    .is_none(),
+                "a doubt reaches no further"
             );
             // The human grounds it again; the retirement marks it anew.
             let again = mnemorph_memory::proposed(&w, "slime-t", &rests.note)
@@ -296,7 +318,11 @@ fn a_retired_dependency_marks_its_dependents() {
     }
     assert_eq!(seen[0].doubted, vec![bad.clone()]);
     assert_eq!(seen[1].retired, vec![bad.clone()]);
-    assert_eq!(seen[1].reviewed, vec![rests.note.clone()]);
+    assert_eq!(
+        seen[1].reviewed,
+        vec![rests.note.clone(), far.note.clone()],
+        "a retirement reaches downstream"
+    );
     let n = note_of(&w, &Tier::Personal("slime-t".into()), &rests.note);
     assert!(
         n.review
@@ -317,8 +343,8 @@ fn a_retired_dependency_marks_its_dependents() {
     let _ = fs::remove_dir_all(&w);
 }
 
-/// A fact of the ontology moving — contested — or a creature — rebirthed, retired — marks the
-/// claims resting on it.
+/// A fact newly contested — one body's counter can do it — marks only the claims resting on it
+/// directly; a creature rebirthed or retired marks downstream too.
 #[test]
 fn a_moved_fact_marks_the_claims_resting_on_it() {
     let w = world("fact");
@@ -334,13 +360,33 @@ fn a_moved_fact_marks_the_claims_resting_on_it() {
         }],
     )
     .unwrap();
+    let below = |owner: &str, id: &str| {
+        propose_resting(
+            &w,
+            owner,
+            "it rests further",
+            vec![],
+            None,
+            vec![],
+            vec![on(id)],
+        )
+        .unwrap()
+        .note
+    };
+    let c_far = below("slime-v", &c.note);
     assert_eq!(
         invalidate(&w, Moved::Fact("other"), "contested").unwrap(),
         Vec::<String>::new(),
     );
     assert_eq!(
         invalidate(&w, Moved::Fact("abc123"), "fact #abc123 is contested").unwrap(),
-        vec![c.note]
+        vec![c.note],
+        "direct only"
+    );
+    assert!(
+        note_of(&w, &Tier::Personal("slime-v".into()), &c_far)
+            .review
+            .is_none()
     );
     let d = propose_resting(
         &w,
@@ -354,9 +400,11 @@ fn a_moved_fact_marks_the_claims_resting_on_it() {
         }],
     )
     .unwrap();
+    let d_far = below("slime-w", &d.note);
     assert_eq!(
         invalidate(&w, Moved::Creature("slime-s"), "slime-s was rebirthed").unwrap(),
-        vec![d.note]
+        vec![d.note, d_far],
+        "downstream"
     );
     let _ = fs::remove_dir_all(&w);
 }
@@ -548,4 +596,136 @@ fn old_notes_upgrade_on_reading() {
     assert_eq!(first[derived[0]].text, "a note with no id");
     assert_eq!(fs::read_to_string(&file).unwrap(), old, "nothing rewritten");
     let _ = fs::remove_dir_all(&w);
+}
+
+/// A file moved by any hand — a human's edit, no landing — reads as needing review, computed live
+/// in recall and in what `memory status` lists, with no event written. A passing ask that cites
+/// such a claim marks it for good.
+#[test]
+fn a_file_moved_outside_a_landing_reads_as_needing_review() {
+    use mnemorph_memory::{Anchor, confirm, gather, under_review};
+    let w = world("live");
+    fs::write(w.join("src/lexer.rs"), "fn lex() {}").unwrap();
+    let c = propose_on(
+        &w,
+        "slime-s",
+        "src/lexer.rs splits interval fractions",
+        vec![],
+        None,
+        vec!["src/lexer.rs".into()],
+    )
+    .unwrap();
+    let id = ground(&w, c, &Proof::confirmed("the human")).unwrap().note;
+    let tier = Tier::Shared;
+    let live = |w: &Path| {
+        gather(w, "slime-s", |_| false)
+            .unwrap()
+            .notes
+            .into_iter()
+            .find(|(n, _)| n.id == id)
+            .unwrap()
+            .0
+    };
+    assert!(live(&w).review.is_none());
+    assert_eq!(under_review(&w, "slime-s").unwrap(), vec![]);
+    fs::write(w.join("src/lexer.rs"), "fn lex() { todo!() }").unwrap();
+    let n = live(&w);
+    assert!(
+        n.review
+            .as_deref()
+            .is_some_and(|c| c.contains("src/lexer.rs")),
+        "{:?}",
+        n.review
+    );
+    assert_eq!(under_review(&w, "slime-s").unwrap().len(), 1);
+    assert_eq!(reviews(&w, &tier), 0, "computed: no event written");
+    // A pass that cites it vouches for nothing the bytes now say: marked, as an event.
+    let cited = [Anchor {
+        id: id.clone(),
+        personal: true,
+        dissent: false,
+        cited: true,
+    }];
+    assert_eq!(confirm(&w, "slime-s", &cited, "log.md #9").unwrap(), 1);
+    let marked = note_of(&w, &Tier::Personal("slime-s".into()), &id);
+    assert!(
+        marked
+            .review
+            .as_deref()
+            .is_some_and(|c| c.contains("credited by log.md #9")),
+        "{:?}",
+        marked.review
+    );
+    // Put back as it was, the file reads as recorded: only the marked event remains.
+    fs::write(w.join("src/lexer.rs"), "fn lex() {}").unwrap();
+    assert!(note_of(&w, &tier, &id).review.is_some());
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// Two id-less lines saying the same words, by the same owner, in the same millisecond are two
+/// notes: the event id is hashed in. A second creation of one id in other words is reported as a
+/// collision, never silently dropped.
+#[test]
+fn derived_ids_never_collide_and_a_collision_is_reported() {
+    let w = world("collide");
+    let file = w.join(Tier::Personal("slime-s".into()).file());
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    let line = |event: &str, note: &str, text: &str| {
+        let note = if note.is_empty() {
+            String::new()
+        } else {
+            format!(r#""note":"{note}","#)
+        };
+        format!(
+            r#"{{"id":"{event}","time":5,{note}"by":"record","kind":"create","text":"{text}","owner":"slime-s","polarity":"support","salience":0.5,"confidence":0.5}}"#
+        )
+    };
+    let lines = [
+        line("e1", "", "the same words"),
+        line("e2", "", "the same words"),
+        line("e3", "n-x", "the first words"),
+        line("e4", "n-x", "other words"),
+    ];
+    fs::write(&file, lines.join("\n") + "\n").unwrap();
+    let notes = fold(&read(&w, &Tier::Personal("slime-s".into())).unwrap().rows);
+    let derived: Vec<&String> = notes.keys().filter(|k| k.starts_with('h')).collect();
+    assert_eq!(derived.len(), 2, "{:?}", notes.keys());
+    assert_eq!(notes["n-x"].text, "the first words");
+    let found = mnemorph_memory::findings(&w, "slime-s").unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        (found[0].event.as_str(), found[0].note.as_str()),
+        ("e4", "n-x")
+    );
+    assert!(found[0].why.contains("collision"));
+    let _ = fs::remove_dir_all(&w);
+}
+
+/// The worst case, fixed: the weakest grounding — accepted, never corroborated, 900 days old, its
+/// confidence at the doubt floor — against an unproven claim at the highest confidence it can
+/// reach, both at the same match, relation, salience and age.
+#[test]
+fn the_weakest_grounded_claim_still_outranks_the_strongest_unproven_one() {
+    let now = 1000 * DAY;
+    let mut proven = grounded("g", "accepted: log.md #2", 0.3, 1, 900);
+    proven.salience = 1.0;
+    let mut unproven = proven.clone();
+    unproven.id = "u".into();
+    unproven.status = Status::Proposed;
+    unproven.proof = None;
+    unproven.groundings.clear();
+    unproven.grounded_at = None;
+    unproven.confidence = 0.95;
+    let mut notes = vec![(unproven, Relation::Own), (proven, Relation::Own)];
+    notes.extend(others());
+    let r = recall(
+        "tokenizer interval fractions",
+        &notes,
+        now,
+        6,
+        &Weights::default(),
+    );
+    let ids: Vec<&str> = r.anchors.iter().map(|h| h.note.id.as_str()).collect();
+    assert_eq!(ids, vec!["g", "u"]);
+    assert!(r.anchors[0].score > r.anchors[1].score);
 }

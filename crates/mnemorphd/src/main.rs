@@ -785,7 +785,10 @@ fn needing_review(world: &Path, name: &str) -> Vec<String> {
         .unwrap_or_default()
         .into_iter()
         .map(|(id, text, cause)| {
-            let text: String = text.chars().take(100).collect();
+            // One line each: a note's text and its cause may hold newlines.
+            let one_line = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
+            let text: String = one_line(&text).chars().take(100).collect();
+            let cause = one_line(&cause);
             format!(
                 "needs review: {id} — {text} ({cause}; ground it again: mnemorphd memory confirm \
                  {id})"

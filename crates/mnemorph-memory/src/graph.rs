@@ -13,9 +13,14 @@ use crate::store::{Tier, append, read};
 /// What moved: the origin of an invalidation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Moved<'a> {
-    /// A claim, by id: superseded, struck by an attributable failure, or retired.
+    /// A claim, by id: superseded by a new version, or retired. What rests on it is marked, and
+    /// what rests on that, transitively.
     Claim(&'a str),
-    /// A fact of the ontology, by id: contested.
+    /// A claim, by id, doubted by a first attributable failure: one body's failure, so only the
+    /// claims resting on it directly are marked — a doubt never flags a whole subgraph.
+    Doubted(&'a str),
+    /// A fact of the ontology, by id, newly contested: one body's counter can contest it, so only
+    /// the claims resting on it directly are marked.
     Fact(&'a str),
     /// A creature, by name: rebirthed, rewritten or retired.
     Creature(&'a str),
@@ -163,26 +168,33 @@ fn walk(
     Ok(marked)
 }
 
-/// A claim or a fact moved, for `why`: every claim resting on it needs review, and every claim
-/// resting on those, transitively. Returns the ids marked.
+/// Something moved, for `why`: every claim resting on it needs review — and, for a claim
+/// superseded or retired, a creature or (through [`landed`]) a file, every claim resting on those,
+/// transitively. A doubt or a contested fact, which one body's word can cause, marks only the
+/// claims resting on it directly. Returns the ids marked.
 ///
 /// # Errors
 ///
 /// A note file cannot be read or written.
 pub fn invalidate(world: &Path, moved: Moved<'_>, why: &str) -> std::io::Result<Vec<String>> {
-    let (origin, key) = match moved {
-        Moved::Claim(id) => (Some(id), Dependency::Claim { id: id.to_owned() }),
-        Moved::Fact(id) => (None, Dependency::Fact { id: id.to_owned() }),
+    let (origin, key, downstream) = match moved {
+        Moved::Claim(id) => (Some(id), Dependency::Claim { id: id.to_owned() }, true),
+        Moved::Doubted(id) => (Some(id), Dependency::Claim { id: id.to_owned() }, false),
+        Moved::Fact(id) => (None, Dependency::Fact { id: id.to_owned() }, false),
         Moved::Creature(name) => (
             None,
             Dependency::Creature {
                 name: name.to_owned(),
             },
+            true,
         ),
     };
-    propagate(world, origin, |n| {
-        n.depends_on.contains(&key).then(|| why.to_owned())
-    })
+    walk(
+        world,
+        origin,
+        |n| n.depends_on.contains(&key).then(|| why.to_owned()),
+        downstream,
+    )
 }
 
 /// A landing changed `changed`, under the verdict `cited`: every claim resting on one of those
@@ -209,6 +221,59 @@ pub fn landed(world: &Path, changed: &[String], cited: &str) -> std::io::Result<
                 .map(|_| format!("`{path}` changed in {cited}")),
             _ => None,
         })
+    })
+}
+
+/// Why `n` needs review by its files alone, read live: the first file it rests on whose bytes no
+/// longer hash as recorded — changed or gone by any hand, a human's edit or a failed run's
+/// included. Computed, never written; `None` when every file still reads as it did.
+#[must_use]
+pub fn moved_file(world: &Path, n: &Note) -> Option<String> {
+    n.depends_on.iter().find_map(|d| match d {
+        Dependency::File { path, hash } => (file_hash(world, path).as_deref()
+            != Some(hash.as_str()))
+        .then(|| format!("`{path}` changed since it was recorded")),
+        _ => None,
+    })
+}
+
+/// Read every live note's files afresh: one whose file moved needs review, computed — no event
+/// is written, and grounding it again records the new bytes. Each path is hashed once.
+pub fn recheck<'a>(world: &Path, notes: impl IntoIterator<Item = &'a mut Note>) {
+    let mut hashes: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for n in notes {
+        if n.review.is_some() || !matches!(n.status, Status::Proposed | Status::Grounded) {
+            continue;
+        }
+        n.review = n.depends_on.iter().find_map(|d| match d {
+            Dependency::File { path, hash } => {
+                let now = hashes
+                    .entry(path.clone())
+                    .or_insert_with(|| file_hash(world, path));
+                (now.as_deref() != Some(hash.as_str()))
+                    .then(|| format!("`{path}` changed since it was recorded"))
+            }
+            _ => None,
+        });
+    }
+}
+
+/// The claims `ids` a passing ask cited and credited: one whose file no longer reads as recorded
+/// is marked for review, and what rests on it — a pass over changed bytes vouches for nothing it
+/// was said about. Returns the ids marked.
+///
+/// # Errors
+///
+/// A note file cannot be read or written.
+pub fn credited(world: &Path, ids: &[String], cited: &str) -> std::io::Result<Vec<String>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    propagate(world, None, |n| {
+        if !ids.contains(&n.id) {
+            return None;
+        }
+        moved_file(world, n).map(|why| format!("{why}, credited by {cited}"))
     })
 }
 
@@ -443,7 +508,9 @@ fn eval(
 pub fn under_review(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String, String)>> {
     let mut out: Vec<(String, String, String)> = Vec::new();
     for tier in [Tier::Personal(owner.to_owned()), Tier::Shared] {
-        for n in fold(&read(world, &tier)?.rows).into_values() {
+        let mut notes: Vec<Note> = fold(&read(world, &tier)?.rows).into_values().collect();
+        recheck(world, notes.iter_mut());
+        for n in notes {
             let Some(cause) = &n.review else {
                 continue;
             };

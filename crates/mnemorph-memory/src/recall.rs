@@ -262,10 +262,14 @@ pub fn gather(
     // The body's own: its personal notes and its short-tier cache, both personal in scope.
     let mut events = own;
     events.extend(short);
-    let mine = crate::note::fold(&events);
+    let mut mine = crate::note::fold(&events);
+    // A file moved by any hand — a human's edit, a failed run — reads as needing review.
+    crate::graph::recheck(world, mine.values_mut());
     let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
     let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
-    for n in crate::note::fold(&shared).into_values() {
+    let mut shared = crate::note::fold(&shared);
+    crate::graph::recheck(world, shared.values_mut());
+    for n in shared.into_values() {
         if personal.contains(&n.id) {
             continue;
         }

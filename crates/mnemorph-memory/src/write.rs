@@ -631,6 +631,7 @@ pub fn confirm(
     }
     crate::audit::unfrozen(world, owner)?;
     let mut credited = 0;
+    let mut ids = Vec::new();
     for a in cited {
         let tier = if a.personal {
             Tier::Personal(owner.to_owned())
@@ -671,7 +672,10 @@ pub fn confirm(
             }
         }
         credited += 1;
+        ids.push(a.id.clone());
     }
+    // A pass over bytes the claim no longer describes vouches for nothing: marked for review.
+    crate::graph::credited(world, &ids, verdict)?;
     Ok(credited)
 }
 
@@ -762,16 +766,21 @@ pub fn retire(
             }
         }
     }
-    // A claim struck — doubted or retired — no longer holds up what rests on it.
-    for (id, how) in out
+    // A claim retired no longer holds up what rests on it, nor what rests on that; a first doubt —
+    // one failure — marks only what rests on it directly.
+    for (moved, id, how) in out
         .retired
         .iter()
-        .map(|i| (i, "retired"))
-        .chain(out.doubted.iter().map(|i| (i, "struck by a failure")))
+        .map(|i| (crate::graph::Moved::Claim(i), i, "retired"))
+        .chain(
+            out.doubted
+                .iter()
+                .map(|i| (crate::graph::Moved::Doubted(i), i, "doubted by a failure")),
+        )
     {
         for marked in crate::graph::invalidate(
             world,
-            crate::graph::Moved::Claim(id),
+            moved,
             &format!("`{id}` it rests on was {how} ({verdict})"),
         )? {
             if !out.reviewed.contains(&marked) {
