@@ -13,6 +13,7 @@ pub mod findings;
 pub mod graph;
 pub mod heal;
 pub mod log;
+pub mod meters;
 pub mod minds;
 pub mod own;
 pub mod queue;

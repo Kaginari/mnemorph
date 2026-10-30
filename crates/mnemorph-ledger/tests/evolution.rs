@@ -58,6 +58,7 @@ fn run(s: &Swap, task: &str, control: bool, pass: bool) -> EvolutionRow {
         gate: Some(if pass { Gate::Pass } else { Gate::Fail }),
         first_try: pass,
         holes_found: 0,
+        ask: None,
     })
 }
 

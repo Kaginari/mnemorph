@@ -198,6 +198,7 @@ async fn a_change_that_changes_nothing_rolls_back() {
                     gate,
                     first_try,
                     holes_found: 0,
+                    ask: None,
                 }))
                 .unwrap();
         }

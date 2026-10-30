@@ -30,6 +30,11 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd challenge score [--world <dir>]
        mnemorphd challenge decide <landing> <fingerprint> upheld|false-positive
                  --why <reason> [--world <dir>]
+       mnemorphd meters [--world <dir>] [--json]
+       mnemorphd evolution swap <id> --creature <name> [--arm mutate|split|rebirth]
+                 [--body <name>]... [--remove <path>]... [--proven-on <task>]...
+                 [--world <dir>]
+       mnemorphd evolution judge <id> [--world <dir>]
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
 SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
@@ -84,6 +89,24 @@ upheld rate and the last ten — and the rise or fall it proposes, which only th
 `decide <landing> <fingerprint> upheld|false-positive --why <reason>` records the human's word on
 one finding for that score, after showing it and asking for `y` at the terminal. A body never
 runs it.
+
+`meters` shows every living creature's meters by race, each with its count and its 95% Wilson
+interval — `precision 0.90 (18/20, 95% 0.70–0.97)` — or `no reports` where no fold reads it
+yet. Only the Dark Elf's meters are live, folded from the challenge records per speciality; the
+other races' fold from their reports, and the general report fold is M11's. Shown, never judged
+on: every rise and fall reads the point estimate.
+
+`evolution` is the human's door to a creature's evolution. `swap <id>` swaps in the plan staged
+under `.mnemorph/tmp/evolution/<id>/` — each file there at the world path it replaces (a Mind,
+a creature doc), and `--remove` for each file it removes — after showing it and asking for `y`
+at the terminal: the soil under `.mnemorph/` is hashed before and after, a diff other than
+exactly the named files puts the world back, and a swap row (the id, every file with its SHA-256
+before and after, the build) goes to the evolution ledger under the state directory. From then
+on, each ask of its bodies (`--body`, the creature unless named) is stamped and appended as a run
+row until its window of 10 is full. `judge <id>` runs, through the configured model, the
+do-nothing control of every window run still without one — the same ask, by the same body, in a
+scratch copy of the world with the named files as they were before — then judges the swap and
+proposes keep or rollback; applying either is the human's. A body never runs it.
 
 `housekeep --verify` walks each chained journal — the usage ledger, the Dark Elf's value ledger
 and the evolution ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
@@ -146,6 +169,12 @@ fn main() -> ExitCode {
     }
     if all.first().map(String::as_str) == Some("challenge") {
         return challenge(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("meters") {
+        return meters(&all[1..]);
+    }
+    if all.first().map(String::as_str) == Some("evolution") {
+        return evolution(&all[1..]);
     }
     let mut resume = None;
     let mut args = all.into_iter();
@@ -1473,6 +1502,262 @@ fn queue(args: &[String]) -> ExitCode {
         Some("close") => moved(nth(1), Move::Close { drop: a.drop }),
         Some(other) => fail(&format!("q has no `{other}`; see --help")),
     }
+}
+
+/// `meters [--world <dir>] [--json]`: every living creature's meters, by race.
+fn meters(args: &[String]) -> ExitCode {
+    let (mut world, mut json) = (None, false);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--json" => json = true,
+            "--world" => match it.next() {
+                Some(dir) => world = Some(PathBuf::from(dir)),
+                None => return refused(&"--world needs a value"),
+            },
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let all = mnemorph_server::world::meters::read(&world);
+    let safe = mnemorph_server::challenge::safe;
+    if json {
+        for m in &all {
+            let readings: Vec<serde_json::Value> = m
+                .readings
+                .iter()
+                .map(|r| {
+                    let (lo, hi) = r.rate.and_then(|x| x.interval()).unzip();
+                    serde_json::json!({
+                        "meter": r.meter,
+                        "successes": r.rate.map(|x| x.successes),
+                        "n": r.rate.map(|x| x.n),
+                        "value": r.rate.and_then(|x| x.value()),
+                        "lo": lo,
+                        "hi": hi,
+                    })
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::json!({"creature": m.name, "race": m.race.name(), "meters": readings})
+            );
+        }
+        return ExitCode::SUCCESS;
+    }
+    if all.is_empty() {
+        println!("no living creature in this world");
+        return ExitCode::SUCCESS;
+    }
+    for race in mnemorph_server::world::meters::Race::ALL {
+        let of: Vec<_> = all.iter().filter(|m| m.race == race).collect();
+        if of.is_empty() {
+            continue;
+        }
+        println!("{}", race.name());
+        for m in of {
+            println!("  {}", safe(&m.to_string()));
+        }
+    }
+    println!(
+        "\nshown with their count and 95% interval, never judged on; only the Dark Elf's meters \
+         fold yet — the other races' report fold is M11's"
+    );
+    ExitCode::SUCCESS
+}
+
+/// `evolution swap|judge`: the human swaps an accepted plan in, or judges a swap.
+fn evolution(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::evolution::{Arm, Plan, Staged};
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: an evolution is the human's to swap in and judge, never a body's"
+        ));
+    }
+    let (mut world, mut creature, mut arm) = (None, None, Arm::Mutate);
+    let (mut bodies, mut removes, mut proven) = (Vec::new(), Vec::new(), Vec::new());
+    let mut words = Vec::new();
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        let mut value = |name: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{name} needs a value"))
+        };
+        let got = match w.as_str() {
+            "--world" => value("--world").map(|v| world = Some(PathBuf::from(v))),
+            "--creature" => value("--creature").map(|v| creature = Some(v)),
+            "--body" => value("--body").map(|v| bodies.push(v)),
+            "--remove" => value("--remove").map(|v| removes.push(v)),
+            "--proven-on" => value("--proven-on").map(|v| proven.push(v)),
+            "--arm" => value("--arm").and_then(|v| {
+                arm = match v.as_str() {
+                    "mutate" => Arm::Mutate,
+                    "split" => Arm::Split,
+                    "rebirth" => Arm::Rebirth,
+                    other => return Err(format!("`{other}` is no arm: mutate, split or rebirth")),
+                };
+                Ok(())
+            }),
+            other if other.starts_with("--") => {
+                Err(format!("unknown argument `{other}`; see --help"))
+            }
+            _ => {
+                words.push(w.clone());
+                Ok(())
+            }
+        };
+        if let Err(e) = got {
+            return refused(&e);
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    match words.as_slice() {
+        [verb, id] if verb == "swap" => {
+            let Some(creature) = creature else {
+                return refused(&"a swap names its creature: --creature <name>");
+            };
+            let staged = world.join(".mnemorph/tmp/evolution").join(id);
+            let mut files = match staged_files(&staged) {
+                Ok(f) => f,
+                Err(e) => return refused(&e),
+            };
+            files.extend(removes.into_iter().map(|path| Staged { path, after: None }));
+            if bodies.is_empty() {
+                bodies.push(creature.clone());
+            }
+            let plan = Plan {
+                id: id.clone(),
+                creature,
+                bodies,
+                arm,
+                files,
+                proven_on: proven,
+            };
+            swap_in(&world, &plan)
+        }
+        [verb, id] if verb == "judge" => judge_swap(&world, id),
+        _ => refused(&"evolution needs a verb: swap <id> or judge <id>; see --help"),
+    }
+}
+
+/// `evolution swap`: the plan shown, asked at the terminal, then swapped in and its row written.
+fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> ExitCode {
+    let safe = mnemorph_server::challenge::safe;
+    println!(
+        "swap {} for {} ({:?}), judged on {}:",
+        safe(&plan.id),
+        safe(&plan.creature),
+        plan.arm,
+        safe(&plan.bodies.join(", "))
+    );
+    for f in &plan.files {
+        let what = f
+            .after
+            .as_ref()
+            .map_or_else(|| "removed".to_owned(), |b| format!("{} bytes", b.len()));
+        println!("  {} — {what}", safe(&f.path));
+    }
+    match at_terminal(&format!("swap {} in?", plan.id)) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was swapped"),
+        Err(e) => return refused(&e),
+    }
+    match mnemorph_server::world::evolution::swap(world, plan) {
+        Ok(s) => {
+            println!("swapped {} under build {}", safe(&s.id), s.build);
+            for f in &s.files {
+                let short =
+                    |d: &Option<String>| d.as_deref().map_or("absent", |d| &d[..12]).to_owned();
+                println!(
+                    "  {} {} → {}",
+                    safe(&f.path),
+                    short(&f.before),
+                    short(&f.after)
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution judge`: the controls that wait run, then the judgement and what it proposes.
+fn judge_swap(world: &Path, id: &str) -> ExitCode {
+    let safe = mnemorph_server::challenge::safe;
+    match mnemorph_server::evolution::judge(world, id, &|v| std::env::var(v).ok()) {
+        Ok(j) => {
+            for line in &j.controls {
+                println!("{}", safe(line));
+            }
+            let (proposal, code) = match &j.judgement {
+                mnemorph_server::world::evolution::Judgement::Keep(_) => {
+                    (Some("keep"), ExitCode::SUCCESS)
+                }
+                mnemorph_server::world::evolution::Judgement::Rollback(_) => {
+                    (Some("rollback"), ExitCode::SUCCESS)
+                }
+                mnemorph_server::world::evolution::Judgement::Pending { .. } => {
+                    (None, ExitCode::SUCCESS)
+                }
+                mnemorph_server::world::evolution::Judgement::Refused(_) => {
+                    (None, ExitCode::FAILURE)
+                }
+            };
+            println!("{}", safe(&j.judgement.to_string()));
+            if let Some(w) = proposal {
+                println!("proposed to the human: {w} — nothing changes until the human applies it");
+            }
+            code
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// The plan staged under `dir`: every file there, at the world path it replaces.
+fn staged_files(dir: &Path) -> Result<Vec<mnemorph_server::world::evolution::Staged>, String> {
+    fn walk(
+        root: &Path,
+        dir: &Path,
+        out: &mut Vec<mnemorph_server::world::evolution::Staged>,
+    ) -> std::io::Result<()> {
+        for e in std::fs::read_dir(dir)? {
+            let e = e?;
+            let kind = e.file_type()?;
+            if kind.is_dir() {
+                walk(root, &e.path(), out)?;
+            } else if kind.is_file() {
+                let rel = e.path();
+                let rel = rel.strip_prefix(root).map_err(std::io::Error::other)?;
+                let path = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                out.push(mnemorph_server::world::evolution::Staged {
+                    path,
+                    after: Some(std::fs::read(e.path())?),
+                });
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    match walk(dir, dir, &mut out) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{}: {e}", dir.display())),
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
 }
 
 /// `path` made absolute against `cwd` and read segment by segment, without touching the disk:

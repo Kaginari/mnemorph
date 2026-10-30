@@ -1186,6 +1186,21 @@ How a fall is read (`mnemorph-races`, `falls`):
   own unit and its Wilson score interval (`wilson`, `Rate`) — `Upheld 0.85 (17/20, 95%
   0.64–0.95)` — and `no reports` when `n` is zero. Eighteen of twenty is a lower bound near 0.70,
   and none seen is never no risk: the interval says how far the record can be trusted.
+- **Where the meters show** (`mnemorph_world::meters`). `mnemorph status` prints one compact line
+  per living creature, and `mnemorphd meters` (`--json` too) groups them by race; each meter by
+  its law name, with its count and interval:
+
+  ```text
+  meters   glim (dark-elf): precision 0.90 (18/20, 95% 0.70–0.97) · upheldRate 0.90 (18/20, 95% 0.70–0.97) · cannotVerifyRate 0.10 (1/10, 95% 0.02–0.40)
+  meters   sly (slime): no reports — landRate, gateRate, holeRate
+  ```
+
+  **Live today: the Dark Elf's** `precision`, `upheldRate` and `cannotVerifyRate`, folded from
+  the challenge records per speciality, by the creature that bears the speciality's name. Every
+  other race's meters (`landRate`, `gateRate`, `holeRate`, `gateRight`, `planLandRate`,
+  `reaskRate`, `outwardCleanRate`, `verifyGreenRate`, `askDoneRate`) fold from its reports, and
+  the general report fold over the journal is M11's: until it exists they read `no reports`,
+  never a number, and the JSON carries no count rather than a zero.
 - **The interval is shown, never judged on.** Every bar — a meter's band, a rise, a fall, a
   recovery — reads the point estimate, so a record exactly at a rise bar rises whatever its lower
   bound. Judging on the lower bound would change the law; that is the human's decision to make.
@@ -1409,6 +1424,49 @@ what comes after it, and only that:
   the line names; a ledger whose chain breaks is judged on nothing.
 - **A proposal.** A keep or a rollback is proposed to the human like every other change to a race;
   rolling a swap back, like applying it, is the human's.
+
+**The lifecycle, end to end** (`mnemorph_world::evolution`, `mnemorph_loop::evolution`). Nothing
+here runs on its own: the human swaps a plan in and asks for its judgement.
+
+1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
+   path it replaces — a Mind under `.mnemorph/minds/`, a creature doc under
+   `.mnemorph/<race>/<name>/`. Who drafts it is free (a body, the human, the evolution trigger
+   from M11); it changes nothing while staged.
+2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` (`--arm`,
+   `--body` for each body judged — the creature unless named — `--remove` for a file it removes,
+   `--proven-on` for each task it was proven on). The plan is shown and asked for `y` at the
+   terminal; a body never runs it. The harness hashes the soil under `.mnemorph/` (the
+   instruments, memory and scratch left out) before and after writing it, keeps the named files'
+   bytes before beside the ledger (`<ledger>.swaps/<id>/before/`), and appends one `swap` row:
+   the id, the creature and bodies, the arm, the build, every named file with its SHA-256 before
+   and after, and the soil's diff. A plan whose diff is not exactly its named files, whose id is
+   taken, a path outside the creature docs and Minds, or a body still in another swap's window
+   is refused and the world put back: no row. One evolution at a time per body.
+3. **Run.** Every ask of a body the swap names — the session's own or a commissioned one — is
+   stamped when it opens, while the window is open: the swap's id, the build, the task's
+   fingerprint (the SHA-256 of the ask as sent, which is kept on the row for its control) and the
+   named files' state as the run found them. When the ask ends, a `run` row adds the state the
+   run left them in and the harness's facts: the gate's last word, a first-try pass, and the holes
+   it found (a *tests intact* failure). An ask the human stops writes no row; a task the ledger
+   already holds is never stamped again, since it could no longer be held out. After 10 rows the
+   window is full and asks run unstamped.
+4. **Controlled**, on demand: no scheduler runs the controls beside the window.
+   `mnemorphd evolution judge <id>` runs the do-nothing control of every window run still without
+   one — the same ask, by the same body (Rimuru solo, or the creature with its own prompt, soil
+   and verify lines), through the configured model, under the swap's own build — in a scratch
+   copy of the world (build output, instruments and scratch left out) whose named files are put
+   back to the bytes kept before; the scratch's state must read the swap's before state. No
+   human is asked there: every gated act is denied. Each is appended as a control row. With
+   nothing waiting, no model is reached.
+5. **Judged and proposed.** The swap is judged by the rule above, from the ledger held to its
+   anchored head, and the keep or the rollback is printed with its lines and `proposed to the
+   human`; pending says how many runs and controls are in. Applying either is the human's.
+
+The window's fixtures carry the cases where doing nothing is right, beside the fixes: a task with
+nothing to change, a review of a sound file where **no finding** is the right output (a body that
+always files something fails it), and an ask whose words no note holds, where **no recall hit**
+is the right output (the run recalls nothing). They are deterministic: the same script gives the
+same gate word every time.
 
 ### What changed from isekai, and why
 

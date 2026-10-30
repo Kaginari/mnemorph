@@ -150,6 +150,42 @@ fn open_from(
         other => other,
     };
     let config = Config::load(&Paths::resolve(world))?;
+    let (model, backend, named) = model_of(&config, &env)?;
+    let mut opened = build(
+        world,
+        &config,
+        Bound {
+            model,
+            model_id: &backend.model,
+            attic: None,
+        },
+        start,
+        gate,
+        observer,
+        env,
+    )?;
+    opened.key = backend.provider.key_env.as_ref().map(|var| {
+        let field = format!("providers.{}.key_env", backend.provider_name);
+        match config.get(&field) {
+            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
+            None => var.clone(),
+        }
+    });
+    opened.model = named;
+    opened.provider = backend.provider_name;
+    Ok(opened)
+}
+
+/// The session's model, reached through the backend the human chose, its key read from the
+/// variable the provider names: the model, its backend and the name the configuration gives it.
+///
+/// # Errors
+///
+/// The model's backend is unknown, its key variable is not set, or the HTTP stack cannot start.
+pub fn model_of(
+    config: &Config,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<(Arc<dyn Model>, mnemorph_config::Backend, String), String> {
     let named = config.model_for("rimuru", Race::Rimuru, None);
     let backend = config.backend(&named)?;
     let key = match &backend.provider.key_env {
@@ -191,29 +227,7 @@ fn open_from(
             ));
         }
     };
-    let mut opened = build(
-        world,
-        &config,
-        Bound {
-            model,
-            model_id: &backend.model,
-            attic: None,
-        },
-        start,
-        gate,
-        observer,
-        env,
-    )?;
-    opened.key = backend.provider.key_env.as_ref().map(|var| {
-        let field = format!("providers.{}.key_env", backend.provider_name);
-        match config.get(&field) {
-            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
-            None => var.clone(),
-        }
-    });
-    opened.model = named;
-    opened.provider = backend.provider_name;
-    Ok(opened)
+    Ok((model, backend, named))
 }
 
 /// What [`open_with`] is given rather than built: the model, and where the attic lives.

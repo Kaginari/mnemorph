@@ -6342,3 +6342,27 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `write::save` makes its sibling `create_new` at the file's own mode (`0600` for a file not there yet), sets it on the open file, writes and syncs it before the rename: the envelopes never exist at the umask's mode. The config walk runs under umask 002 and asserts the global file stays `0600` in every state. A duplicate sentence in docs/02 removed.
 - **Tests:** the sibling's mode at creation and a new file's, under umasks 002 and 022; the walk fails, under a 022 shell, when the old rewrite is put back.
 - **Learned:** a fix that sets the mode after writing still leaves a window; a check that reads only under the CI's umask misses the bug it was written for.
+
+### [2026-10-30T17:03:30+01:00] rimuru — #98 and #100: meters with intervals in status; the evolution writer, controls on demand, the do-nothing fixtures
+- **Done:** `mnemorph_world::meters`: every living creature's meters with their count and 95% Wilson
+  interval, in `mnemorph status` (one compact line per creature, printed even when no session
+  opens) and `mnemorphd meters [--json]` (by race). Only the Dark Elf's fold is live
+  (precision, upheldRate, cannotVerifyRate from the challenge records); every other race reads
+  `no reports` until M11's report fold. The writer: `mnemorphd evolution swap <id>` swaps the plan
+  staged under `.mnemorph/tmp/evolution/<id>/` in after `y` at the terminal, hashes the soil under
+  `.mnemorph/` before and after, keeps the bytes before beside the ledger and appends one stamped
+  swap row, or puts the world back and writes none. Each ask of a swapped body then appends a run
+  row (task fingerprint, ask, states before and after, the gate's facts) until the window of 10 is
+  full. `mnemorphd evolution judge <id>` runs the missing do-nothing controls in scratch copies on
+  the before state, appends them, judges and proposes keep or rollback. Docs 02, 04, 05, 06,
+  roadmap.
+- **Tests:** status and `meters` show intervals and `no reports`; a swap writes its stamped row and
+  keeps the bytes before, a refused plan writes nothing; runs write rows until the window closes, a
+  repeated task is not stamped, a mid-run edit shows; end to end, a Mind swap, ten stamped runs,
+  controls on demand and a replayed keep; the no-finding and no-recall fixtures give the same gate
+  word every time and only the right output lands. With the swap row's append or the run row's
+  record turned off, the end-to-end test fails.
+- **Learned:** a held-out rule over "any earlier row of the task" refuses a window forever once a
+  body repeats an ask: the writer must skip a task the ledger already holds, not stamp it.
+  Open (@?): controls run only on demand; M11's trigger, staged plans and `evolve apply | reject`
+  are still to build, and the board shows no meter yet.

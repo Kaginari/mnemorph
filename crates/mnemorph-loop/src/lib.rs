@@ -10,6 +10,7 @@ pub mod council;
 pub mod coverage_tool;
 pub mod decisions;
 pub mod envelope;
+pub mod evolution;
 pub mod gate;
 pub mod incident;
 pub mod model;
@@ -46,7 +47,7 @@ pub use mnemorph_tools::gate::{
 pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
-pub use open::{Bound, Opened, open, open_with, resume, resume_with};
+pub use open::{Bound, Opened, model_of, open, open_with, resume, resume_with};
 pub use queue_tool::{QUEUE, QueueTool};
 pub use resume::{Stopped, stopped};
 pub use route::{
