@@ -437,7 +437,9 @@ is the client: `stdio()` starts `mnemorphd` and speaks on its pipes; a `Client` 
 requests, refuses a core that speaks another protocol, delivers every event to its listeners in
 order and once each (`resync()` replays from the last `seq` it saw, dropping what it already
 had), answers `gate/ask` with the handler the interface gives it — denying when there is none —
-and fails whatever waits when the core's end closes, with the reason the core gave.
+and fails whatever waits when the core's end closes, with the reason the core gave. `ws()` (from `@mnemorph/sdk/browser`, which leaves Node
+out) is the board's transport: it reconnects, and the client then takes control back if it had it
+and replays from the last `seq`, holding live events until the replay is done.
 
 **The terminal client.** `mnemorph` opens a session in this world, hosted in its own process,
 and draws it in the terminal ([the terminal UI](05-architecture.md#the-terminal-ui)); `mnemorph
@@ -473,7 +475,9 @@ Rules:
 - Every event carries `{session, run, body, seq}`; `seq` rises by one, in the order events reach
   the wire, so a client that reconnects asks `session/events {since: seq}` and loses nothing. The
   core keeps the last 10 000: the answer says the oldest it kept (`oldest`), and `complete: false`
-  when the client asked from further back, so a gap is never silent.
+  when the client asked from further back, so a gap is never silent. The board's bridge answers the same
+  request in pages, `more: true` while another follows; the core answers all it keeps
+  (`more: false`).
 - An event from a body the session commissioned carries that body and its run, at any depth: the
   client sees the whole order at work. The terminal shows such events as short lines under the
   body's name — what it started on, each tool call, a gate that refused it, how it ended — and
@@ -489,6 +493,9 @@ Rules:
   human did not answer. Planned, with no milestone: the run checkpoints as `SUSPENDED` instead (a
   neutral word: no strain, no failure) and resumes at that act when the human answers — an
   overnight run waits instead of dying.
-- The board's WebSocket accepts only `Host: 127.0.0.1|localhost`, checks `Origin`, and requires
-  the per-launch token `mnemorphd` prints — reads included, not only acts.
+- The board carries this protocol over `WS /ws/session/<id>`, a child `mnemorphd` per chat
+  ([the chat bridge](05-architecture.md#the-chat-bridge)): its Host and Origin are checked, the
+  cookie traded for the printed key and the CSRF token are required, and the bridge adds
+  `board/role`, `board/askGone`, `board/refused`, `board/ended` and `board/oversize`, `leftMs` on a
+  `gate/ask` sent again, and `board/takeOver` from a tab.
 - Protocol changes are versioned; the generated TypeScript is checked in and CI fails on a diff.

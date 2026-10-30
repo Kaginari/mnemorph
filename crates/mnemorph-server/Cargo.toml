@@ -9,18 +9,23 @@ publish = false
 
 [dependencies]
 mnemorph-loop = { path = "../mnemorph-loop" }
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "ws"] }
 getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 subtle = "2.6"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "net", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "net", "signal", "time", "process", "io-util"] }
 ts-rs = { version = "12.0.1", features = ["serde-json-impl"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
 
 [dev-dependencies]
 serde_json = "1"
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [lints]
 workspace = true
