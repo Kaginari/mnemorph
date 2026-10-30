@@ -17,7 +17,8 @@
       "!crates/mnemorph-tui/assets",
       "!packages/protocol/src/generated",
       "!crates/mnemorph-proving/fixtures",
-      "!crates/mnemorph-tools/src/index/fixtures"
+      "!crates/mnemorph-tools/src/index/fixtures",
+      "!crates/mnemorph-provider/tests/cassettes"
     ]
   },
   "formatter": {
