@@ -1,4 +1,5 @@
-//! The wire: the envelope bodies speak — tags, parser, encoder, trimming. No I/O.
+//! The wire: the envelope bodies speak — tags, parser, encoder, trimming — and the one rule for
+//! what a human could not see for what it is ([`hidden`], [`shown`]). No I/O.
 //!
 //! A [`Commission`] goes down (`@ROOT @SCOPE @ASK @CAP @BUDGET @DUMP @SIZE`), a [`Report`] comes
 //! back (`@S @? @U @V @F @W @T @$ @FORGE @R @H @E`). The tags and their meaning are defined in
@@ -19,6 +20,7 @@ pub use fnv::fnv64a;
 mod forge;
 mod hole;
 mod report;
+mod shown;
 mod tag;
 
 pub use commission::{Ask, Commission, DEFAULT_CAP, Office, parse_budget};
@@ -28,4 +30,6 @@ pub use report::{
     COURIER_BYTES, Courier, DarkElfReport, Enqueue, FIELD_BYTES, Finding, Proven, Report,
     RootCause, Unsaid, UnsaidKind, Word, enqueues_of, fingerprint, one_line, repo_path,
 };
-pub use tag::invisible;
+pub use shown::{
+    HIDDEN, MARKS, MARKS_KEPT, SPACES, Strict, hidden, invisible, kept_in_prose, mark, shown,
+};

@@ -676,8 +676,8 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster, dimension: bool)
             "{}\t{}\t{}\t{}",
             f.severity.word(),
             f.code,
-            mnemorph_server::wire::one_line(&f.at),
-            mnemorph_server::wire::one_line(&f.message)
+            field(&f.at),
+            field(&f.message)
         );
     }
     for g in &glues {
@@ -685,13 +685,13 @@ fn check(world: &Path, roster: &mnemorph_server::world::Roster, dimension: bool)
             if v.is_empty() {
                 "-".to_owned()
             } else {
-                v.join(",")
+                v.iter().map(|x| field(x)).collect::<Vec<_>>().join(",")
             }
         };
         let _ = writeln!(
             out,
             "dimension\t{}\tglued {}\tours {}\ttheirs {}",
-            mnemorph_server::wire::one_line(&g.neighbour),
+            field(&g.neighbour),
             list(&g.shared),
             list(&g.ours),
             list(&g.theirs)
@@ -1181,6 +1181,13 @@ fn session_verify_note(world: &Path) {
     }
 }
 
+/// A text a model or a document wrote, as a printed field shows it: its line breaks folded to
+/// spaces (`wire::one_line`), then every character a reader could not see escaped
+/// (`wire::shown`), so no field can open a line, redraw the terminal or read as another.
+fn field(text: &str) -> String {
+    mnemorph_server::wire::shown(&mnemorph_server::wire::one_line(text))
+}
+
 /// A creature's claims that need review — something they rest on moved — each a `memory status`
 /// line with how to ground it again.
 fn needing_review(world: &Path, name: &str) -> Vec<String> {
@@ -1188,10 +1195,11 @@ fn needing_review(world: &Path, name: &str) -> Vec<String> {
         .unwrap_or_default()
         .into_iter()
         .map(|(id, text, cause)| {
-            // One line each: a note's text and its cause may hold newlines.
+            // One line each: a note's text and its cause may hold newlines, and whatever a reader
+            // could not see is escaped.
             let one_line = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
-            let text: String = one_line(&text).chars().take(100).collect();
-            let cause = one_line(&cause);
+            let text = field(&one_line(&text).chars().take(100).collect::<String>());
+            let cause = field(&one_line(&cause));
             format!(
                 "needs review: {id} — {text} ({cause}; ground it again: mnemorphd memory confirm \
                  {id})"

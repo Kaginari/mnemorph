@@ -307,9 +307,7 @@ impl Waiver {
 fn reasoned(reason: &str) -> bool {
     reason.len() <= mnemorph_proving::coverage::MAX_TEXT
         && mnemorph_proving::coverage::substantive(reason)
-        && !reason
-            .chars()
-            .any(|c| c.is_control() || mnemorph_wire::invisible(c))
+        && !reason.chars().any(mnemorph_wire::hidden)
 }
 
 /// Where a landing's challenge stands.

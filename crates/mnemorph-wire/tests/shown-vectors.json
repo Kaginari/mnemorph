@@ -1,0 +1,1139 @@
+{
+  "about": "Shared test vectors for the escaping rule (mnemorph_wire: `hidden`, `shown`): the Rust tests and the board's TypeScript port both read this file. `escaped` is the rule itself: the ranges hidden beyond Unicode's controls (Cc), each inclusive, in hex; both suites check every code point against them, so the rule has one source. `spaces` are the space separators `shown` escapes too (the card and one-line fields, never prose); `marks` are the combining marks (Mn, Me), of which a base keeps `marks_kept` and `shown` escapes the rest. `prose` names what the transcript's prose keeps as written though it is hidden. A `hidden` entry names a code point in hex and whether it is hidden; a `shown` entry gives an input and the text a human is shown.",
+  "escaped": [
+    {
+      "from": "ad",
+      "to": "ad",
+      "why": "SOFT HYPHEN (Cf): drawn only at a line break"
+    },
+    {
+      "from": "34f",
+      "to": "34f",
+      "why": "COMBINING GRAPHEME JOINER (default-ignorable): draws nothing"
+    },
+    {
+      "from": "600",
+      "to": "605",
+      "why": "Arabic number signs (Cf): span the text after them"
+    },
+    {
+      "from": "61c",
+      "to": "61c",
+      "why": "ARABIC LETTER MARK (Cf): a bidi control"
+    },
+    {
+      "from": "6dd",
+      "to": "6dd",
+      "why": "ARABIC END OF AYAH (Cf)"
+    },
+    {
+      "from": "70f",
+      "to": "70f",
+      "why": "SYRIAC ABBREVIATION MARK (Cf)"
+    },
+    {
+      "from": "890",
+      "to": "891",
+      "why": "Arabic pound and piastre marks above (Cf)"
+    },
+    {
+      "from": "8e2",
+      "to": "8e2",
+      "why": "ARABIC DISPUTED END OF AYAH (Cf)"
+    },
+    {
+      "from": "115f",
+      "to": "1160",
+      "why": "Hangul choseong and jungseong fillers (default-ignorable): blank letters"
+    },
+    {
+      "from": "17b4",
+      "to": "17b5",
+      "why": "Khmer inherent vowels (default-ignorable): draw nothing"
+    },
+    {
+      "from": "180b",
+      "to": "180f",
+      "why": "Mongolian free variation selectors and VOWEL SEPARATOR (U+180E, Cf): invisible"
+    },
+    {
+      "from": "200b",
+      "to": "200f",
+      "why": "zero-width space, non-joiner, joiner (emoji sequences show it: approvals are exact), LRM, RLM"
+    },
+    {
+      "from": "2028",
+      "to": "202e",
+      "why": "LINE and PARAGRAPH SEPARATOR (Zl, Zp), the bidi embeddings and overrides"
+    },
+    {
+      "from": "2060",
+      "to": "206f",
+      "why": "word joiner, invisible operators, bidi isolates, deprecated format characters"
+    },
+    {
+      "from": "3164",
+      "to": "3164",
+      "why": "HANGUL FILLER (default-ignorable): a blank letter"
+    },
+    {
+      "from": "fe00",
+      "to": "fe0f",
+      "why": "variation selectors 1-16, U+FE0F too: after a letter it draws nothing; prose keeps it"
+    },
+    {
+      "from": "feff",
+      "to": "feff",
+      "why": "ZERO WIDTH NO-BREAK SPACE (byte-order mark)"
+    },
+    {
+      "from": "ffa0",
+      "to": "ffa0",
+      "why": "HALFWIDTH HANGUL FILLER (default-ignorable): a blank letter"
+    },
+    {
+      "from": "fff0",
+      "to": "fffb",
+      "why": "reserved default-ignorables and the interlinear annotation controls (Cf)"
+    },
+    {
+      "from": "110bd",
+      "to": "110bd",
+      "why": "KAITHI NUMBER SIGN (Cf)"
+    },
+    {
+      "from": "110cd",
+      "to": "110cd",
+      "why": "KAITHI NUMBER SIGN ABOVE (Cf)"
+    },
+    {
+      "from": "13430",
+      "to": "1343f",
+      "why": "Egyptian hieroglyph format controls (Cf)"
+    },
+    {
+      "from": "1bca0",
+      "to": "1bca3",
+      "why": "shorthand format controls (Cf)"
+    },
+    {
+      "from": "1d173",
+      "to": "1d17a",
+      "why": "musical symbol format controls (Cf)"
+    },
+    {
+      "from": "e0000",
+      "to": "e0fff",
+      "why": "tag characters (invisible ASCII: a text smuggled in a text), variation selectors supplement, reserved default-ignorables"
+    }
+  ],
+  "spaces": [
+    {
+      "from": "a0",
+      "to": "a0",
+      "why": "NO-BREAK SPACE"
+    },
+    {
+      "from": "2000",
+      "to": "200a",
+      "why": "the typographic spaces, en quad to hair space"
+    },
+    {
+      "from": "202f",
+      "to": "202f",
+      "why": "NARROW NO-BREAK SPACE"
+    },
+    {
+      "from": "205f",
+      "to": "205f",
+      "why": "MEDIUM MATHEMATICAL SPACE"
+    },
+    {
+      "from": "3000",
+      "to": "3000",
+      "why": "IDEOGRAPHIC SPACE"
+    }
+  ],
+  "marks_kept": 2,
+  "marks": [
+    ["300", "36f"],
+    ["483", "489"],
+    ["591", "5bd"],
+    ["5bf", "5bf"],
+    ["5c1", "5c2"],
+    ["5c4", "5c5"],
+    ["5c7", "5c7"],
+    ["610", "61a"],
+    ["64b", "65f"],
+    ["670", "670"],
+    ["6d6", "6dc"],
+    ["6df", "6e4"],
+    ["6e7", "6e8"],
+    ["6ea", "6ed"],
+    ["711", "711"],
+    ["730", "74a"],
+    ["7a6", "7b0"],
+    ["7eb", "7f3"],
+    ["7fd", "7fd"],
+    ["816", "819"],
+    ["81b", "823"],
+    ["825", "827"],
+    ["829", "82d"],
+    ["859", "85b"],
+    ["897", "89f"],
+    ["8ca", "8e1"],
+    ["8e3", "902"],
+    ["93a", "93a"],
+    ["93c", "93c"],
+    ["941", "948"],
+    ["94d", "94d"],
+    ["951", "957"],
+    ["962", "963"],
+    ["981", "981"],
+    ["9bc", "9bc"],
+    ["9c1", "9c4"],
+    ["9cd", "9cd"],
+    ["9e2", "9e3"],
+    ["9fe", "9fe"],
+    ["a01", "a02"],
+    ["a3c", "a3c"],
+    ["a41", "a42"],
+    ["a47", "a48"],
+    ["a4b", "a4d"],
+    ["a51", "a51"],
+    ["a70", "a71"],
+    ["a75", "a75"],
+    ["a81", "a82"],
+    ["abc", "abc"],
+    ["ac1", "ac5"],
+    ["ac7", "ac8"],
+    ["acd", "acd"],
+    ["ae2", "ae3"],
+    ["afa", "aff"],
+    ["b01", "b01"],
+    ["b3c", "b3c"],
+    ["b3f", "b3f"],
+    ["b41", "b44"],
+    ["b4d", "b4d"],
+    ["b55", "b56"],
+    ["b62", "b63"],
+    ["b82", "b82"],
+    ["bc0", "bc0"],
+    ["bcd", "bcd"],
+    ["c00", "c00"],
+    ["c04", "c04"],
+    ["c3c", "c3c"],
+    ["c3e", "c40"],
+    ["c46", "c48"],
+    ["c4a", "c4d"],
+    ["c55", "c56"],
+    ["c62", "c63"],
+    ["c81", "c81"],
+    ["cbc", "cbc"],
+    ["cbf", "cbf"],
+    ["cc6", "cc6"],
+    ["ccc", "ccd"],
+    ["ce2", "ce3"],
+    ["d00", "d01"],
+    ["d3b", "d3c"],
+    ["d41", "d44"],
+    ["d4d", "d4d"],
+    ["d62", "d63"],
+    ["d81", "d81"],
+    ["dca", "dca"],
+    ["dd2", "dd4"],
+    ["dd6", "dd6"],
+    ["e31", "e31"],
+    ["e34", "e3a"],
+    ["e47", "e4e"],
+    ["eb1", "eb1"],
+    ["eb4", "ebc"],
+    ["ec8", "ece"],
+    ["f18", "f19"],
+    ["f35", "f35"],
+    ["f37", "f37"],
+    ["f39", "f39"],
+    ["f71", "f7e"],
+    ["f80", "f84"],
+    ["f86", "f87"],
+    ["f8d", "f97"],
+    ["f99", "fbc"],
+    ["fc6", "fc6"],
+    ["102d", "1030"],
+    ["1032", "1037"],
+    ["1039", "103a"],
+    ["103d", "103e"],
+    ["1058", "1059"],
+    ["105e", "1060"],
+    ["1071", "1074"],
+    ["1082", "1082"],
+    ["1085", "1086"],
+    ["108d", "108d"],
+    ["109d", "109d"],
+    ["135d", "135f"],
+    ["1712", "1714"],
+    ["1732", "1733"],
+    ["1752", "1753"],
+    ["1772", "1773"],
+    ["17b4", "17b5"],
+    ["17b7", "17bd"],
+    ["17c6", "17c6"],
+    ["17c9", "17d3"],
+    ["17dd", "17dd"],
+    ["180b", "180d"],
+    ["180f", "180f"],
+    ["1885", "1886"],
+    ["18a9", "18a9"],
+    ["1920", "1922"],
+    ["1927", "1928"],
+    ["1932", "1932"],
+    ["1939", "193b"],
+    ["1a17", "1a18"],
+    ["1a1b", "1a1b"],
+    ["1a56", "1a56"],
+    ["1a58", "1a5e"],
+    ["1a60", "1a60"],
+    ["1a62", "1a62"],
+    ["1a65", "1a6c"],
+    ["1a73", "1a7c"],
+    ["1a7f", "1a7f"],
+    ["1ab0", "1add"],
+    ["1ae0", "1aeb"],
+    ["1b00", "1b03"],
+    ["1b34", "1b34"],
+    ["1b36", "1b3a"],
+    ["1b3c", "1b3c"],
+    ["1b42", "1b42"],
+    ["1b6b", "1b73"],
+    ["1b80", "1b81"],
+    ["1ba2", "1ba5"],
+    ["1ba8", "1ba9"],
+    ["1bab", "1bad"],
+    ["1be6", "1be6"],
+    ["1be8", "1be9"],
+    ["1bed", "1bed"],
+    ["1bef", "1bf1"],
+    ["1c2c", "1c33"],
+    ["1c36", "1c37"],
+    ["1cd0", "1cd2"],
+    ["1cd4", "1ce0"],
+    ["1ce2", "1ce8"],
+    ["1ced", "1ced"],
+    ["1cf4", "1cf4"],
+    ["1cf8", "1cf9"],
+    ["1dc0", "1dff"],
+    ["20d0", "20f0"],
+    ["2cef", "2cf1"],
+    ["2d7f", "2d7f"],
+    ["2de0", "2dff"],
+    ["302a", "302d"],
+    ["3099", "309a"],
+    ["a66f", "a672"],
+    ["a674", "a67d"],
+    ["a69e", "a69f"],
+    ["a6f0", "a6f1"],
+    ["a802", "a802"],
+    ["a806", "a806"],
+    ["a80b", "a80b"],
+    ["a825", "a826"],
+    ["a82c", "a82c"],
+    ["a8c4", "a8c5"],
+    ["a8e0", "a8f1"],
+    ["a8ff", "a8ff"],
+    ["a926", "a92d"],
+    ["a947", "a951"],
+    ["a980", "a982"],
+    ["a9b3", "a9b3"],
+    ["a9b6", "a9b9"],
+    ["a9bc", "a9bd"],
+    ["a9e5", "a9e5"],
+    ["aa29", "aa2e"],
+    ["aa31", "aa32"],
+    ["aa35", "aa36"],
+    ["aa43", "aa43"],
+    ["aa4c", "aa4c"],
+    ["aa7c", "aa7c"],
+    ["aab0", "aab0"],
+    ["aab2", "aab4"],
+    ["aab7", "aab8"],
+    ["aabe", "aabf"],
+    ["aac1", "aac1"],
+    ["aaec", "aaed"],
+    ["aaf6", "aaf6"],
+    ["abe5", "abe5"],
+    ["abe8", "abe8"],
+    ["abed", "abed"],
+    ["fb1e", "fb1e"],
+    ["fe00", "fe0f"],
+    ["fe20", "fe2f"],
+    ["101fd", "101fd"],
+    ["102e0", "102e0"],
+    ["10376", "1037a"],
+    ["10a01", "10a03"],
+    ["10a05", "10a06"],
+    ["10a0c", "10a0f"],
+    ["10a38", "10a3a"],
+    ["10a3f", "10a3f"],
+    ["10ae5", "10ae6"],
+    ["10d24", "10d27"],
+    ["10d69", "10d6d"],
+    ["10eab", "10eac"],
+    ["10efa", "10eff"],
+    ["10f46", "10f50"],
+    ["10f82", "10f85"],
+    ["11001", "11001"],
+    ["11038", "11046"],
+    ["11070", "11070"],
+    ["11073", "11074"],
+    ["1107f", "11081"],
+    ["110b3", "110b6"],
+    ["110b9", "110ba"],
+    ["110c2", "110c2"],
+    ["11100", "11102"],
+    ["11127", "1112b"],
+    ["1112d", "11134"],
+    ["11173", "11173"],
+    ["11180", "11181"],
+    ["111b6", "111be"],
+    ["111c9", "111cc"],
+    ["111cf", "111cf"],
+    ["1122f", "11231"],
+    ["11234", "11234"],
+    ["11236", "11237"],
+    ["1123e", "1123e"],
+    ["11241", "11241"],
+    ["112df", "112df"],
+    ["112e3", "112ea"],
+    ["11300", "11301"],
+    ["1133b", "1133c"],
+    ["11340", "11340"],
+    ["11366", "1136c"],
+    ["11370", "11374"],
+    ["113bb", "113c0"],
+    ["113ce", "113ce"],
+    ["113d0", "113d0"],
+    ["113d2", "113d2"],
+    ["113e1", "113e2"],
+    ["11438", "1143f"],
+    ["11442", "11444"],
+    ["11446", "11446"],
+    ["1145e", "1145e"],
+    ["114b3", "114b8"],
+    ["114ba", "114ba"],
+    ["114bf", "114c0"],
+    ["114c2", "114c3"],
+    ["115b2", "115b5"],
+    ["115bc", "115bd"],
+    ["115bf", "115c0"],
+    ["115dc", "115dd"],
+    ["11633", "1163a"],
+    ["1163d", "1163d"],
+    ["1163f", "11640"],
+    ["116ab", "116ab"],
+    ["116ad", "116ad"],
+    ["116b0", "116b5"],
+    ["116b7", "116b7"],
+    ["1171d", "1171d"],
+    ["1171f", "1171f"],
+    ["11722", "11725"],
+    ["11727", "1172b"],
+    ["1182f", "11837"],
+    ["11839", "1183a"],
+    ["1193b", "1193c"],
+    ["1193e", "1193e"],
+    ["11943", "11943"],
+    ["119d4", "119d7"],
+    ["119da", "119db"],
+    ["119e0", "119e0"],
+    ["11a01", "11a0a"],
+    ["11a33", "11a38"],
+    ["11a3b", "11a3e"],
+    ["11a47", "11a47"],
+    ["11a51", "11a56"],
+    ["11a59", "11a5b"],
+    ["11a8a", "11a96"],
+    ["11a98", "11a99"],
+    ["11b60", "11b60"],
+    ["11b62", "11b64"],
+    ["11b66", "11b66"],
+    ["11c30", "11c36"],
+    ["11c38", "11c3d"],
+    ["11c3f", "11c3f"],
+    ["11c92", "11ca7"],
+    ["11caa", "11cb0"],
+    ["11cb2", "11cb3"],
+    ["11cb5", "11cb6"],
+    ["11d31", "11d36"],
+    ["11d3a", "11d3a"],
+    ["11d3c", "11d3d"],
+    ["11d3f", "11d45"],
+    ["11d47", "11d47"],
+    ["11d90", "11d91"],
+    ["11d95", "11d95"],
+    ["11d97", "11d97"],
+    ["11ef3", "11ef4"],
+    ["11f00", "11f01"],
+    ["11f36", "11f3a"],
+    ["11f40", "11f40"],
+    ["11f42", "11f42"],
+    ["11f5a", "11f5a"],
+    ["13440", "13440"],
+    ["13447", "13455"],
+    ["1611e", "16129"],
+    ["1612d", "1612f"],
+    ["16af0", "16af4"],
+    ["16b30", "16b36"],
+    ["16f4f", "16f4f"],
+    ["16f8f", "16f92"],
+    ["16fe4", "16fe4"],
+    ["1bc9d", "1bc9e"],
+    ["1cf00", "1cf2d"],
+    ["1cf30", "1cf46"],
+    ["1d167", "1d169"],
+    ["1d17b", "1d182"],
+    ["1d185", "1d18b"],
+    ["1d1aa", "1d1ad"],
+    ["1d242", "1d244"],
+    ["1da00", "1da36"],
+    ["1da3b", "1da6c"],
+    ["1da75", "1da75"],
+    ["1da84", "1da84"],
+    ["1da9b", "1da9f"],
+    ["1daa1", "1daaf"],
+    ["1e000", "1e006"],
+    ["1e008", "1e018"],
+    ["1e01b", "1e021"],
+    ["1e023", "1e024"],
+    ["1e026", "1e02a"],
+    ["1e08f", "1e08f"],
+    ["1e130", "1e136"],
+    ["1e2ae", "1e2ae"],
+    ["1e2ec", "1e2ef"],
+    ["1e4ec", "1e4ef"],
+    ["1e5ee", "1e5ef"],
+    ["1e6e3", "1e6e3"],
+    ["1e6e6", "1e6e6"],
+    ["1e6ee", "1e6ef"],
+    ["1e6f5", "1e6f5"],
+    ["1e8d0", "1e8d6"],
+    ["1e944", "1e94a"],
+    ["e0100", "e01ef"]
+  ],
+  "prose": ["fe0f"],
+  "hidden": [
+    {
+      "cp": "0",
+      "hidden": true
+    },
+    {
+      "cp": "9",
+      "hidden": true
+    },
+    {
+      "cp": "a",
+      "hidden": true
+    },
+    {
+      "cp": "d",
+      "hidden": true
+    },
+    {
+      "cp": "1b",
+      "hidden": true
+    },
+    {
+      "cp": "1f",
+      "hidden": true
+    },
+    {
+      "cp": "20",
+      "hidden": false
+    },
+    {
+      "cp": "41",
+      "hidden": false
+    },
+    {
+      "cp": "5c",
+      "hidden": false
+    },
+    {
+      "cp": "7e",
+      "hidden": false
+    },
+    {
+      "cp": "7f",
+      "hidden": true
+    },
+    {
+      "cp": "80",
+      "hidden": true
+    },
+    {
+      "cp": "85",
+      "hidden": true
+    },
+    {
+      "cp": "9b",
+      "hidden": true
+    },
+    {
+      "cp": "9f",
+      "hidden": true
+    },
+    {
+      "cp": "a0",
+      "hidden": false
+    },
+    {
+      "cp": "ac",
+      "hidden": false
+    },
+    {
+      "cp": "ad",
+      "hidden": true
+    },
+    {
+      "cp": "ae",
+      "hidden": false
+    },
+    {
+      "cp": "34e",
+      "hidden": false
+    },
+    {
+      "cp": "34f",
+      "hidden": true
+    },
+    {
+      "cp": "600",
+      "hidden": true
+    },
+    {
+      "cp": "605",
+      "hidden": true
+    },
+    {
+      "cp": "606",
+      "hidden": false
+    },
+    {
+      "cp": "61b",
+      "hidden": false
+    },
+    {
+      "cp": "61c",
+      "hidden": true
+    },
+    {
+      "cp": "6dd",
+      "hidden": true
+    },
+    {
+      "cp": "70f",
+      "hidden": true
+    },
+    {
+      "cp": "890",
+      "hidden": true
+    },
+    {
+      "cp": "891",
+      "hidden": true
+    },
+    {
+      "cp": "8e2",
+      "hidden": true
+    },
+    {
+      "cp": "115f",
+      "hidden": true
+    },
+    {
+      "cp": "1160",
+      "hidden": true
+    },
+    {
+      "cp": "17b4",
+      "hidden": true
+    },
+    {
+      "cp": "17b5",
+      "hidden": true
+    },
+    {
+      "cp": "180a",
+      "hidden": false
+    },
+    {
+      "cp": "180b",
+      "hidden": true
+    },
+    {
+      "cp": "180e",
+      "hidden": true
+    },
+    {
+      "cp": "180f",
+      "hidden": true
+    },
+    {
+      "cp": "1810",
+      "hidden": false
+    },
+    {
+      "cp": "2000",
+      "hidden": false
+    },
+    {
+      "cp": "200a",
+      "hidden": false
+    },
+    {
+      "cp": "200b",
+      "hidden": true
+    },
+    {
+      "cp": "200c",
+      "hidden": true
+    },
+    {
+      "cp": "200d",
+      "hidden": true
+    },
+    {
+      "cp": "200e",
+      "hidden": true
+    },
+    {
+      "cp": "200f",
+      "hidden": true
+    },
+    {
+      "cp": "2010",
+      "hidden": false
+    },
+    {
+      "cp": "2027",
+      "hidden": false
+    },
+    {
+      "cp": "2028",
+      "hidden": true
+    },
+    {
+      "cp": "2029",
+      "hidden": true
+    },
+    {
+      "cp": "202a",
+      "hidden": true
+    },
+    {
+      "cp": "202b",
+      "hidden": true
+    },
+    {
+      "cp": "202c",
+      "hidden": true
+    },
+    {
+      "cp": "202d",
+      "hidden": true
+    },
+    {
+      "cp": "202e",
+      "hidden": true
+    },
+    {
+      "cp": "202f",
+      "hidden": false
+    },
+    {
+      "cp": "205f",
+      "hidden": false
+    },
+    {
+      "cp": "2060",
+      "hidden": true
+    },
+    {
+      "cp": "2064",
+      "hidden": true
+    },
+    {
+      "cp": "2065",
+      "hidden": true
+    },
+    {
+      "cp": "2066",
+      "hidden": true
+    },
+    {
+      "cp": "2067",
+      "hidden": true
+    },
+    {
+      "cp": "2068",
+      "hidden": true
+    },
+    {
+      "cp": "2069",
+      "hidden": true
+    },
+    {
+      "cp": "206a",
+      "hidden": true
+    },
+    {
+      "cp": "206f",
+      "hidden": true
+    },
+    {
+      "cp": "2800",
+      "hidden": false
+    },
+    {
+      "cp": "3000",
+      "hidden": false
+    },
+    {
+      "cp": "3163",
+      "hidden": false
+    },
+    {
+      "cp": "3164",
+      "hidden": true
+    },
+    {
+      "cp": "fe00",
+      "hidden": true
+    },
+    {
+      "cp": "fe0e",
+      "hidden": true
+    },
+    {
+      "cp": "fe0f",
+      "hidden": true
+    },
+    {
+      "cp": "fe10",
+      "hidden": false
+    },
+    {
+      "cp": "feff",
+      "hidden": true
+    },
+    {
+      "cp": "ff9f",
+      "hidden": false
+    },
+    {
+      "cp": "ffa0",
+      "hidden": true
+    },
+    {
+      "cp": "ffa1",
+      "hidden": false
+    },
+    {
+      "cp": "fff0",
+      "hidden": true
+    },
+    {
+      "cp": "fff9",
+      "hidden": true
+    },
+    {
+      "cp": "fffb",
+      "hidden": true
+    },
+    {
+      "cp": "fffc",
+      "hidden": false
+    },
+    {
+      "cp": "fffd",
+      "hidden": false
+    },
+    {
+      "cp": "110bd",
+      "hidden": true
+    },
+    {
+      "cp": "110be",
+      "hidden": false
+    },
+    {
+      "cp": "110cd",
+      "hidden": true
+    },
+    {
+      "cp": "13430",
+      "hidden": true
+    },
+    {
+      "cp": "1343f",
+      "hidden": true
+    },
+    {
+      "cp": "13440",
+      "hidden": false
+    },
+    {
+      "cp": "1bca0",
+      "hidden": true
+    },
+    {
+      "cp": "1bca3",
+      "hidden": true
+    },
+    {
+      "cp": "1d173",
+      "hidden": true
+    },
+    {
+      "cp": "1d17a",
+      "hidden": true
+    },
+    {
+      "cp": "1d17b",
+      "hidden": false
+    },
+    {
+      "cp": "1f1eb",
+      "hidden": false
+    },
+    {
+      "cp": "1f3fd",
+      "hidden": false
+    },
+    {
+      "cp": "1f468",
+      "hidden": false
+    },
+    {
+      "cp": "1f600",
+      "hidden": false
+    },
+    {
+      "cp": "dffff",
+      "hidden": false
+    },
+    {
+      "cp": "e0000",
+      "hidden": true
+    },
+    {
+      "cp": "e0001",
+      "hidden": true
+    },
+    {
+      "cp": "e0020",
+      "hidden": true
+    },
+    {
+      "cp": "e0041",
+      "hidden": true
+    },
+    {
+      "cp": "e007f",
+      "hidden": true
+    },
+    {
+      "cp": "e0100",
+      "hidden": true
+    },
+    {
+      "cp": "e01ef",
+      "hidden": true
+    },
+    {
+      "cp": "e0fff",
+      "hidden": true
+    },
+    {
+      "cp": "e1000",
+      "hidden": false
+    },
+    {
+      "cp": "f0000",
+      "hidden": false
+    }
+  ],
+  "shown": [
+    {
+      "in": "",
+      "out": ""
+    },
+    {
+      "in": "plain text",
+      "out": "plain text"
+    },
+    {
+      "in": "<script>alert(1)</script>",
+      "out": "<script>alert(1)</script>"
+    },
+    {
+      "in": "a\nb",
+      "out": "a\\u{a}b"
+    },
+    {
+      "in": "tab\there",
+      "out": "tab\\u{9}here"
+    },
+    {
+      "in": "cr\r\n",
+      "out": "cr\\u{d}\\u{a}"
+    },
+    {
+      "in": "nul\u0000",
+      "out": "nul\\u{0}"
+    },
+    {
+      "in": "\u001b[31mred\u001b[0m",
+      "out": "\\u{1b}[31mred\\u{1b}[0m"
+    },
+    {
+      "in": "del\u007f",
+      "out": "del\\u{7f}"
+    },
+    {
+      "in": "c1\u0085\u009b",
+      "out": "c1\\u{85}\\u{9b}"
+    },
+    {
+      "in": "zero\u200bwidth",
+      "out": "zero\\u{200b}width"
+    },
+    {
+      "in": "\u200c\u200d\u200e\u200f",
+      "out": "\\u{200c}\\u{200d}\\u{200e}\\u{200f}"
+    },
+    {
+      "in": "line\u2028para\u2029",
+      "out": "line\\u{2028}para\\u{2029}"
+    },
+    {
+      "in": "evil\u202egnp.exe",
+      "out": "evil\\u{202e}gnp.exe"
+    },
+    {
+      "in": "\u202a\u202b\u202c\u202d",
+      "out": "\\u{202a}\\u{202b}\\u{202c}\\u{202d}"
+    },
+    {
+      "in": "\u2066iso\u2069\u2067\u2068",
+      "out": "\\u{2066}iso\\u{2069}\\u{2067}\\u{2068}"
+    },
+    {
+      "in": "join\u2060er\u2064",
+      "out": "join\\u{2060}er\\u{2064}"
+    },
+    {
+      "in": "\ufeffbom",
+      "out": "\\u{feff}bom"
+    },
+    {
+      "in": "back\\slash",
+      "out": "back\\u{5c}slash"
+    },
+    {
+      "in": "a fake \\u{202e} escape",
+      "out": "a fake \\u{5c}u{202e} escape"
+    },
+    {
+      "in": "caf\u00e9 cafe\u0301",
+      "out": "caf\u00e9 cafe\u0301"
+    },
+    {
+      "in": "emoji \ud83d\ude00 and \u4e2d\u6587",
+      "out": "emoji \ud83d\ude00 and \u4e2d\u6587"
+    },
+    {
+      "in": "nbsp\u00a0soft\u00adnnbsp\u202f",
+      "out": "nbsp\\u{a0}soft\\u{ad}nnbsp\\u{202f}"
+    },
+    {
+      "in": "tag\udb40\udc41",
+      "out": "tag\\u{e0041}"
+    },
+    {
+      "in": "rm -rf /\udb40\udc41\udb40\udc4c\udb40\udc4c",
+      "out": "rm -rf /\\u{e0041}\\u{e004c}\\u{e004c}"
+    },
+    {
+      "in": "\udb40\udc01\udb40\udc20\udb40\udc7f",
+      "out": "\\u{e0001}\\u{e0020}\\u{e007f}"
+    },
+    {
+      "in": "alm\u061cmvs\u180e",
+      "out": "alm\\u{61c}mvs\\u{180e}"
+    },
+    {
+      "in": "soft\u00ad\u034fcgj",
+      "out": "soft\\u{ad}\\u{34f}cgj"
+    },
+    {
+      "in": "\u115f\u1160\u3164\uffa0",
+      "out": "\\u{115f}\\u{1160}\\u{3164}\\u{ffa0}"
+    },
+    {
+      "in": "vs\ufe00\udb40\udd00",
+      "out": "vs\\u{fe00}\\u{e0100}"
+    },
+    {
+      "in": "rm\ufe0f",
+      "out": "rm\\u{fe0f}"
+    },
+    {
+      "in": "ok \u2714\ufe0f",
+      "out": "ok \u2714\\u{fe0f}"
+    },
+    {
+      "in": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+      "out": "\ud83d\udc68\\u{200d}\ud83d\udc69\\u{200d}\ud83d\udc67"
+    },
+    {
+      "in": "\ud83c\uddeb\ud83c\uddf7 \ud83d\udc4d\ud83c\udffd \ud83d\ude00",
+      "out": "\ud83c\uddeb\ud83c\uddf7 \ud83d\udc4d\ud83c\udffd \ud83d\ude00"
+    },
+    {
+      "in": "wide\u3000space\u2003em",
+      "out": "wide\\u{3000}space\\u{2003}em"
+    },
+    {
+      "in": "\ufff9a\ufffab\ufffb",
+      "out": "\\u{fff9}a\\u{fffa}b\\u{fffb}"
+    },
+    {
+      "in": "a\u2000b\u200ac\u205fd",
+      "out": "a\\u{2000}b\\u{200a}c\\u{205f}d"
+    },
+    {
+      "in": "ogham\u1680mark",
+      "out": "ogham\u1680mark"
+    },
+    {
+      "in": "vi\u1ec7t e\u0323\u0302",
+      "out": "vi\u1ec7t e\u0323\u0302"
+    },
+    {
+      "in": "z\u0301\u0302\u0303\u0304",
+      "out": "z\u0301\u0302\\u{303}\\u{304}"
+    },
+    {
+      "in": "a\u0301\u0302\u0303b\u0301",
+      "out": "a\u0301\u0302\\u{303}b\u0301"
+    },
+    {
+      "in": "\u0301\u0302\u0303lead",
+      "out": "\u0301\u0302\\u{303}lead"
+    },
+    {
+      "in": "\u0928\u093f\u0902\u0926\u0940",
+      "out": "\u0928\u093f\u0902\u0926\u0940"
+    }
+  ]
+}

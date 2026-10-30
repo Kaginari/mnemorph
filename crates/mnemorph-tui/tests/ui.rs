@@ -406,6 +406,40 @@ fn hostile_card() -> (Card, Arc<Pending>) {
 }
 
 #[test]
+fn the_approval_card_shows_tag_characters_and_invisible_marks_as_escapes() {
+    let mut m = model(Variant::Dark);
+    turn(&mut m, "clean up");
+    let ask = GateAsk {
+        body: "rimuru".into(),
+        race: Race::Rimuru,
+        class: ToolClass::Destructive,
+        act: "rm -rf /\u{E0041}\u{E004C}\u{E004C} \u{61C}x\u{180E}y\u{FE0F}".into(),
+        why: vec!["deletes\u{E0020} a tree".into()],
+        outside: vec![],
+        fingerprint: None,
+    };
+    update(&mut m, Msg::Gate(Card::of(&ask, Pending::new())));
+    let scr = screen(&draw(&mut m, 100, 30));
+    for raw in [
+        '\u{E0041}',
+        '\u{E004C}',
+        '\u{E0020}',
+        '\u{61C}',
+        '\u{180E}',
+        '\u{FE0F}',
+    ] {
+        assert!(!scr.contains(raw), "{raw:?} reached the screen");
+    }
+    // The act wraps on the card: each part shows, escaped.
+    assert!(
+        scr.contains(r"rm -rf /\u{e0041}\u{e004c}\u{e004c}"),
+        "{scr}"
+    );
+    assert!(scr.contains(r"\u{61c}x\u{180e}y\u{fe0f}"), "{scr}");
+    assert!(scr.contains(r"deletes\u{e0020} a tree"), "{scr}");
+}
+
+#[test]
 fn the_approval_card_escapes_a_hostile_act_and_takes_only_a_confirmed_choice() {
     let mut m = model(Variant::Dark);
     turn(&mut m, "upload");

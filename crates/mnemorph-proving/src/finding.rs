@@ -542,18 +542,9 @@ fn sized(r: &FindingRecord) -> bool {
         && r.trace.len() <= TRACE_STEPS
 }
 
-/// A character that may not ride in a record: a control, or an invisible format character that
-/// can reorder or hide text.
+/// A character that may not ride in a record: the shared rule's [`mnemorph_wire::hidden`].
 fn unsafe_char(c: char) -> bool {
-    c.is_control()
-        || matches!(c,
-            '\u{00AD}' | '\u{061C}' | '\u{180E}'
-            | '\u{200B}'..='\u{200F}'
-            | '\u{2028}'..='\u{202E}'
-            | '\u{2060}'..='\u{206F}'
-            | '\u{FEFF}'
-            | '\u{FFF9}'..='\u{FFFB}'
-            | '\u{E0000}'..='\u{E007F}')
+    mnemorph_wire::hidden(c)
 }
 
 fn hidden(text: &str) -> bool {

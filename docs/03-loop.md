@@ -133,7 +133,8 @@ stopped, the last ask — and the session says the command when it stops at a ch
   is refused; a run whose lock cannot be made opens no session at all. `mnemorphd runs` only probes
   the lock, and a resume waits that instant out. When a session ends with nothing left to resume,
   its lock file is removed while still held. What `runs` prints from a journal — the last ask, why
-  it stopped — has its control, bidi and zero-width characters escaped.
+  it stopped — has every character `mnemorph_loop::hidden` names (controls, format and bidi
+  characters, separators, default-ignorables) escaped.
 - **The model it rode.** The journal says which model the run rides, and a resumed run keeps it.
   When the configuration now names another, the run switches and the body is told as a context
   update appended after what was already sent: the prefix stays append-only.
