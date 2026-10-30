@@ -68,10 +68,60 @@ pub fn unproven(events: &[Event]) -> Vec<(&Event, String)> {
             break;
         }
     }
+    let collided = collisions(events);
     events
         .iter()
-        .filter_map(|e| why_unproven(e, &grounded).map(|why| (e, why)))
+        .filter_map(|e| {
+            why_unproven(e, &grounded)
+                .or_else(|| collided.contains(&e.id.as_str()).then(|| collision(e)))
+                .map(|why| (e, why))
+        })
         .collect()
+}
+
+fn collision(e: &Event) -> String {
+    format!(
+        "a second creation of `{}` in other words or by another owner: an id collision",
+        e.note
+    )
+}
+
+/// The creations that collide with an earlier one of the same note id: another owner, or other
+/// words not written by a route (a route grounding a corrected claim again restates it in its
+/// newest words). The fold keeps the first; these are reported, never silently dropped. The same
+/// event twice — a merge's duplicate, an heir's copy — is no collision.
+fn collisions(events: &[Event]) -> BTreeSet<&str> {
+    let mut creates: Vec<&Event> = events
+        .iter()
+        .filter(|e| matches!(e.change, Change::Create { .. }))
+        .collect();
+    creates.sort_by(|a, b| (a.time, &a.id).cmp(&(b.time, &b.id)));
+    let mut first: std::collections::BTreeMap<&str, &Event> = std::collections::BTreeMap::new();
+    let mut out = BTreeSet::new();
+    for e in creates {
+        let Some(f) = first.get(e.note.as_str()) else {
+            first.insert(e.note.as_str(), e);
+            continue;
+        };
+        if f.id == e.id {
+            continue;
+        }
+        let (
+            Change::Create {
+                text: ft,
+                owner: fo,
+                ..
+            },
+            Change::Create { text, owner, .. },
+        ) = (&f.change, &e.change)
+        else {
+            continue;
+        };
+        if fo != owner || (ft != text && !matches!(e.by, By::Route)) {
+            out.insert(e.id.as_str());
+        }
+    }
+    out
 }
 
 /// The events of one tier, those that do not resolve left out: what recall folds.

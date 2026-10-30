@@ -33,6 +33,7 @@ fn create(note: &str, time: u64, source: Option<&str>) -> Event {
             source: source.map(str::to_owned),
             links: vec![],
             evidence: vec![],
+            depends_on: vec![],
         },
     }
 }

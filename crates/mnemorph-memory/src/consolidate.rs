@@ -72,6 +72,7 @@ pub fn distill(
             confidence,
             source: None,
             evidence: Vec::new(),
+            depends_on: Vec::new(),
             links: merged
                 .iter()
                 .map(|n| Link {
@@ -158,6 +159,7 @@ pub fn forget(
                     confidence: (n.confidence - 0.1).max(0.3),
                     source: n.source.clone(),
                     evidence: Vec::new(),
+                    depends_on: Vec::new(),
                     links: vec![Link {
                         note: id.to_owned(),
                         weight: 1.0,

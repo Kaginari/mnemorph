@@ -703,6 +703,8 @@ fn memory(args: &[String]) -> ExitCode {
                     "retired, kept dormant: {id} — {text} (undo: mnemorphd memory wake {id})"
                 ));
             }
+            // What rests on something that moved, until a route grounds it again.
+            seen.extend(needing_review(&world, name));
             // What waits for a route, newest first: the human may vouch for any of it. JSON
             // gives it a field of its own: a claim waiting is no pathology.
             if json {
@@ -774,6 +776,25 @@ fn session_verify_note(world: &Path) {
     if let Some(why) = mnemorph_server::world::verify::missing_session_verify(world, &roster) {
         println!("note: {why}");
     }
+}
+
+/// A creature's claims that need review — something they rest on moved — each a `memory status`
+/// line with how to ground it again.
+fn needing_review(world: &Path, name: &str) -> Vec<String> {
+    mnemorph_server::world::memory::under_review(world, name)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, text, cause)| {
+            // One line each: a note's text and its cause may hold newlines.
+            let one_line = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
+            let text: String = one_line(&text).chars().take(100).collect();
+            let cause = one_line(&cause);
+            format!(
+                "needs review: {id} — {text} ({cause}; ground it again: mnemorphd memory confirm \
+                 {id})"
+            )
+        })
+        .collect()
 }
 
 /// How many proposed claims `memory status` shows per creature.

@@ -404,13 +404,33 @@ impl Facts {
         Facts::fold(&events)
     }
 
-    /// Append one event to the world's facts journal.
+    /// Append one event to the world's facts journal. A fact it leaves contested that was not
+    /// before marks for review every claim in memory resting on it, and what rests on those.
     ///
     /// # Errors
     ///
-    /// The journal cannot be written.
+    /// The journal cannot be written. Memory that cannot be marked is said on stderr: the fact
+    /// is filed either way.
     pub fn record(world: &Path, event: &Event) -> std::io::Result<()> {
-        Journal::<Event>::new(world.join(FACTS)).append(event)
+        let contested = |f: &Facts| -> BTreeSet<String> {
+            f.facts
+                .values()
+                .filter(|x| x.status() == Status::Contested)
+                .map(|x| x.id.clone())
+                .collect()
+        };
+        let before = contested(&Facts::load(world));
+        Journal::<Event>::new(world.join(FACTS)).append(event)?;
+        for id in contested(&Facts::load(world)).difference(&before) {
+            if let Err(e) = mnemorph_memory::invalidate(
+                world,
+                mnemorph_memory::Moved::Fact(id),
+                &format!("fact #{id} it rests on is contested"),
+            ) {
+                eprintln!("mnemorph: the claims resting on fact #{id} could not be marked: {e}");
+            }
+        }
+        Ok(())
     }
 
     /// Fold events, in the order written, into facts; then the collisions among keyed facts

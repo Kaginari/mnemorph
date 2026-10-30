@@ -21,6 +21,9 @@ pub struct Weights {
     pub freshness: f64,
     /// The dissent's boost, `β`.
     pub dissent: f64,
+    /// The claim strength's weight, `w_σ`: at the default, a grounded claim in good health
+    /// (strength at least 0.5) gains more than any confidence can give an unproven one.
+    pub strength: f64,
     /// Freshness halves every this many days, `H`.
     pub half_life_days: f64,
     /// The floor the meaning term alone must clear, `θ`: the priors rank notes that match, they
@@ -39,6 +42,7 @@ impl Default for Weights {
             confidence: 0.07,
             freshness: 0.07,
             dissent: 0.10,
+            strength: 0.10,
             half_life_days: 120.0,
             floor: 0.12,
             // Set against the fixtures: a lone note matching three content words of four clears
@@ -72,7 +76,7 @@ impl Relation {
     }
 }
 
-/// One recalled note: the note, its score, and its meaning term.
+/// One recalled note: the note, its score, its meaning term and its strength.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
     /// The note.
@@ -81,6 +85,8 @@ pub struct Hit {
     pub score: f64,
     /// Its meaning term alone, `w_q · bm25/(bm25 + c)`.
     pub meaning: f64,
+    /// Its claim strength, with what made it.
+    pub strength: crate::graph::Strength,
 }
 
 /// What a recall returns: the anchors, and what it cut that cleared the floor — a count and at
@@ -130,6 +136,8 @@ pub fn recall(
         .iter()
         .map(|(n, _)| content_words(&format!("{} {}", n.text, n.tags.join(" "))))
         .collect();
+    // Over every note, the dormant too: a claim resting on a retired one is no stronger than it.
+    let strengths = crate::graph::strengths(notes.iter().map(|(n, _)| n), now);
     let saturation = match terms.len() {
         1 => weights.saturation[0],
         2 | 3 => weights.saturation[1],
@@ -161,16 +169,19 @@ pub fn recall(
             } else {
                 0.0
             };
+            let strength = strengths.get(&n.id).cloned()?;
             let score = meaning
                 + weights.relation * rel.weight()
                 + weights.salience * n.salience
                 + weights.confidence * n.confidence
                 + weights.freshness * fresh
+                + weights.strength * strength.value
                 + dissent;
             Some(Hit {
                 note: n.clone(),
                 score,
                 meaning,
+                strength,
             })
         })
         .collect();
@@ -251,10 +262,14 @@ pub fn gather(
     // The body's own: its personal notes and its short-tier cache, both personal in scope.
     let mut events = own;
     events.extend(short);
-    let mine = crate::note::fold(&events);
+    let mut mine = crate::note::fold(&events);
+    // A file moved by any hand — a human's edit, a failed run — reads as needing review.
+    crate::graph::recheck(world, mine.values_mut());
     let personal: std::collections::BTreeSet<String> = mine.keys().cloned().collect();
     let mut notes: Vec<(Note, Relation)> = mine.into_values().map(|n| (n, Relation::Own)).collect();
-    for n in crate::note::fold(&shared).into_values() {
+    let mut shared = crate::note::fold(&shared);
+    crate::graph::recheck(world, shared.values_mut());
+    for n in shared.into_values() {
         if personal.contains(&n.id) {
             continue;
         }
@@ -321,8 +336,8 @@ fn lend_to_corrections(notes: &mut [(Note, Relation)]) {
     }
 }
 
-/// A recall on the wire, as `@M` lines: each anchor with its scope, standing and polarity, then
-/// its text; the cut above the floor as a count and at most three ids; and, when no dissent was
+/// A recall on the wire, as `@M` lines: each anchor with its scope, standing and polarity — and
+/// `review` while something it rests on has moved — then its text; the cut above the floor as a count and at most three ids; and, when no dissent was
 /// selected, that it was none selected — never that none exist. Nothing for an empty recall.
 #[must_use]
 pub fn lines(r: &Recalled, personal: &std::collections::BTreeSet<String>) -> Vec<String> {
@@ -348,7 +363,15 @@ pub fn lines(r: &Recalled, personal: &std::collections::BTreeSet<String>) -> Vec
                 crate::note::Polarity::Revise => "revise",
             };
             let text: String = h.note.text.split_whitespace().collect::<Vec<_>>().join(" ");
-            format!("@M {} {scope} {standing} {polarity}: {text}", h.note.id)
+            let review = if h.note.review.is_some() {
+                " review"
+            } else {
+                ""
+            };
+            format!(
+                "@M {} {scope} {standing} {polarity}{review}: {text}",
+                h.note.id
+            )
         })
         .collect();
     if r.cut > 0 {

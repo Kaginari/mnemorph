@@ -4,6 +4,7 @@
 
 pub mod audit;
 pub mod consolidate;
+pub mod graph;
 pub mod note;
 pub mod pathology;
 pub mod recall;
@@ -14,12 +15,13 @@ pub mod write;
 
 pub use audit::{Unproven, findings, status, unfrozen};
 pub use consolidate::{Forget, distill, forget};
-pub use note::{By, Change, Event, Link, Note, Polarity, Status, fold};
+pub use graph::{Class, Moved, Strength, invalidate, landed, strengths, under_review};
+pub use note::{By, Change, Dependency, Event, Link, Note, Polarity, Status, Version, fold};
 pub use recall::{Hit, Memory, Recalled, Relation, Weights, gather, lines, recall};
 pub use standing::{Standing, standing};
 pub use store::{Tier, inherit, read, union_merge};
 pub use write::{
-    Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, Seconded, attributable,
-    cache, confirm, corroborate, ground, propose, propose_on, proposed, retire, retired, revise,
-    wake,
+    Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, Seconded, amend,
+    attributable, cache, confirm, corroborate, ground, propose, propose_on, propose_resting,
+    proposed, retire, retired, revise, wake,
 };
