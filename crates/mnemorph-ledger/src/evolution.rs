@@ -6,20 +6,23 @@
 //!   the harness saw between the soil before and after the swap ([`snapshot`], [`diff`]).
 //! - **The file set.** The diff must be exactly the named files, with the named hashes: a file the
 //!   swap changed and did not name contaminates it, a named file the swap did not change is
-//!   missing, a file created must not have existed. A run of the window must find the named files
-//!   in their after state, a control run in their before state ([`state`]).
+//!   missing, a file created must not have existed. A run of the window must find and leave the
+//!   named files in their after state, a control run in its before state ([`state`]).
 //! - **The window.** Only runs after the swap's row, stamped with its id and its build, by one of
 //!   its bodies, are judged — the first [`EVOLUTION_WINDOW`] of them. A row before the swap never
 //!   counts, whatever it is stamped with.
 //! - **The held-out tasks.** A window's task is used once: never one the plan was proven on before
-//!   the swap, never twice in the window, never one another swap's window used first. Tasks are
-//!   told apart by fingerprint.
-//! - **The control.** Every window task is also run without the change — a do-nothing fixture,
-//!   stamped as the control. The evolution is kept only when it beats doing nothing over the same
-//!   tasks: a higher `landRate`, and a `holeRate` no higher. Equal is not better: it rolls back.
-//! - **Replay.** A judgement's lines carry the chain digest of the window's last row and the
-//!   window's first and last row; the ledger read again up to that row gives the same judgement
-//!   ([`replay`]).
+//!   the swap, and never one any earlier run row carries — stamped or not, of this swap or another
+//!   — but this swap's own controls. Tasks are told apart by fingerprint.
+//! - **The control.** Every window task is also run without the change, after the swap, by the
+//!   same body — a do-nothing fixture, stamped as the control. Paired by task, the evolution is
+//!   kept only on at least `min_net_wins` net wins (tasks it landed and the control did not, less
+//!   the reverse; `evolution.min_net_wins`, 2 unless the human sets it) and a `holeRate` no higher.
+//!   Else it rolls back.
+//! - **Replay.** The ledger is chained and harness-only, kept outside the world; it is read held to
+//!   the newest head anchored for it, and an unchained ledger is never judged. A judgement's lines
+//!   carry the chain digest of the window's last row and the window's first and last row; the
+//!   ledger read again up to that row gives the same judgement ([`replay`]).
 //!
 //! A keep or a rollback is only proposed here: applying either is the human's.
 
@@ -34,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use crate::Build;
-use crate::chain::{self, Report, Walk};
+use crate::chain::{self, Head, Report, Walk};
 
 /// How many post-swap runs an evolution is judged on.
 pub const EVOLUTION_WINDOW: usize = 10;
@@ -119,6 +122,8 @@ pub struct Run {
     pub control: bool,
     /// The named files' state as the run found them ([`state`]).
     pub state: String,
+    /// The named files' state as the run left them: a change made mid-run shows here.
+    pub state_after: String,
     /// The gate's word on its landing; `None` when nothing landed.
     pub gate: Option<Gate>,
     /// The gate passed on its first try.
@@ -344,8 +349,11 @@ pub enum Refusal {
     NoSwap(String),
     /// Two swaps carry that id.
     TwiceSwapped(String),
-    /// The ledger's chain breaks at that line.
+    /// The ledger's chain breaks at that line, or does not hold its anchored head.
     ChainBroken(usize),
+    /// The ledger carries no chain, or the window's last row, at that line, is not a link of it:
+    /// nothing would anchor the judgement for a replay.
+    Unchained(Option<u64>),
     /// The swap names no file.
     NoFiles,
     /// A named file whose digest before is its digest after.
@@ -375,6 +383,10 @@ impl fmt::Display for Refusal {
             Refusal::NoSwap(id) => write!(f, "no swap `{id}` in the ledger"),
             Refusal::TwiceSwapped(id) => write!(f, "two swaps carry the id `{id}`"),
             Refusal::ChainBroken(line) => write!(f, "the ledger's chain breaks at line {line}"),
+            Refusal::Unchained(None) => f.write_str("the ledger carries no chain"),
+            Refusal::Unchained(Some(at)) => {
+                write!(f, "the row at {at} is not a link of the ledger's chain")
+            }
             Refusal::NoFiles => f.write_str("the swap names no file"),
             Refusal::Unchanged(p) => write!(f, "{p}: named, but the same before and after"),
             Refusal::NamedTwice(p) => write!(f, "{p}: named twice"),
@@ -440,25 +452,27 @@ impl fmt::Display for Judgement {
 }
 
 /// Reads the evolution ledger at `path` once: its rows, numbered by line, and its chain over the
-/// same bytes. A missing file is an empty ledger.
+/// same bytes, held to `anchor` — the newest head kept for it outside the file — so a chain dropped
+/// at its end or rooted again is broken. A missing file is an empty ledger.
 ///
 /// # Errors
 ///
 /// The file exists but cannot be read.
-pub fn read(path: &Path) -> io::Result<Ledger> {
-    read_upto(path, None)
+pub fn read(path: &Path, anchor: Option<&Head>) -> io::Result<Ledger> {
+    read_upto(path, None, anchor)
 }
 
-/// [`read`], up to and including line `to`.
+/// [`read`], its rows up to and including line `to`; the chain is still walked over the whole file
+/// and held to `anchor`.
 ///
 /// # Errors
 ///
 /// The file exists but cannot be read.
-pub fn read_to(path: &Path, to: u64) -> io::Result<Ledger> {
-    read_upto(path, Some(to))
+pub fn read_to(path: &Path, to: u64, anchor: Option<&Head>) -> io::Result<Ledger> {
+    read_upto(path, Some(to), anchor)
 }
 
-fn read_upto(path: &Path, to: Option<u64>) -> io::Result<Ledger> {
+fn read_upto(path: &Path, to: Option<u64>, anchor: Option<&Head>) -> io::Result<Ledger> {
     let bytes = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Ledger::default()),
@@ -466,14 +480,14 @@ fn read_upto(path: &Path, to: Option<u64>) -> io::Result<Ledger> {
     };
     let mut out = Ledger::default();
     let mut walk = Walk::new();
+    if let Some(a) = anchor {
+        walk = walk.anchored(a.clone());
+    }
     let mut chained = false;
     let mut rest: &[u8] = &bytes;
     let mut n: u64 = 0;
     while !rest.is_empty() {
         n += 1;
-        if to.is_some_and(|t| n > t) {
-            break;
-        }
         let (line, next) = match rest.iter().position(|&b| b == b'\n') {
             Some(i) => (&rest[..i], &rest[i + 1..]),
             None => (rest, &rest[rest.len()..]),
@@ -481,7 +495,7 @@ fn read_upto(path: &Path, to: Option<u64>) -> io::Result<Ledger> {
         let whole = &rest[..rest.len() - next.len()];
         rest = next;
         walk.feed(whole);
-        if line.iter().all(u8::is_ascii_whitespace) {
+        if to.is_some_and(|t| n > t) || line.iter().all(u8::is_ascii_whitespace) {
             continue;
         }
         let sealed = chain::is_sealed(line);
@@ -497,7 +511,7 @@ fn read_upto(path: &Path, to: Option<u64>) -> io::Result<Ledger> {
         let report = walk.report();
         let digest = report
             .head
-            .filter(|h| u64::try_from(h.line).ok() == Some(n) && report.broken.is_none())
+            .filter(|h| u64::try_from(h.line).ok() == Some(n))
             .map(|h| h.digest);
         out.entries.push(Entry { at: n, row, digest });
     }
@@ -506,28 +520,38 @@ fn read_upto(path: &Path, to: Option<u64>) -> io::Result<Ledger> {
 }
 
 /// Judges the swap `id` over `ledger`: its file set, its post-swap window, its held-out tasks and
-/// its do-nothing controls.
+/// its do-nothing controls; kept on at least `min_net_wins` net paired wins
+/// (`evolution.min_net_wins`).
 #[must_use]
-pub fn judge(ledger: &Ledger, id: &str) -> Judgement {
-    match judged(ledger, id) {
+pub fn judge(ledger: &Ledger, id: &str, min_net_wins: u32) -> Judgement {
+    match judged(ledger, id, min_net_wins) {
         Ok(j) => j,
         Err(r) => Judgement::Refused(r),
     }
 }
 
-/// Reads the ledger at `path` up to line `to` — the last row a judgement's lines name — and judges
-/// `id` again: the same ledger gives the same judgement.
+/// Reads the ledger at `path` up to line `to` — the last row a judgement's lines name — its chain
+/// held to `anchor`, and judges `id` again: the same ledger gives the same judgement.
 ///
 /// # Errors
 ///
 /// The file exists but cannot be read.
-pub fn replay(path: &Path, id: &str, to: u64) -> io::Result<Judgement> {
-    Ok(judge(&read_to(path, to)?, id))
+pub fn replay(
+    path: &Path,
+    id: &str,
+    to: u64,
+    anchor: Option<&Head>,
+    min_net_wins: u32,
+) -> io::Result<Judgement> {
+    Ok(judge(&read_to(path, to, anchor)?, id, min_net_wins))
 }
 
-fn judged(ledger: &Ledger, id: &str) -> Result<Judgement, Refusal> {
+fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Refusal> {
     if let Some((line, _)) = ledger.chain.broken {
         return Err(Refusal::ChainBroken(line));
+    }
+    if ledger.chain.head.is_none() {
+        return Err(Refusal::Unchained(None));
     }
     let mut swaps = ledger.entries.iter().filter_map(|e| match &e.row {
         EvolutionRow::Swap(s) if s.id == id => Some((e.at, s)),
@@ -559,17 +583,17 @@ fn judged(ledger: &Ledger, id: &str) -> Result<Judgement, Refusal> {
     let proven: BTreeSet<&str> = swap.proven_on.iter().map(String::as_str).collect();
     let mut used = BTreeSet::new();
     for (e, r) in &window {
-        if r.state != after {
+        if r.state != after || r.state_after != after {
             return Err(Refusal::Drifted(e.at));
         }
         if proven.contains(r.task.as_str()) {
             return Err(Refusal::Leaked(r.task.clone()));
         }
+        // Any earlier run of the task, stamped or not, but this swap's own controls.
         let elsewhere = runs().any(|(o, other)| {
             o.at < e.at
-                && !other.control
                 && other.task == r.task
-                && other.swap.as_deref().is_some_and(|s| s != id)
+                && !(other.control && other.swap.as_deref() == Some(id))
         });
         if !used.insert(r.task.as_str()) || elsewhere {
             return Err(Refusal::Reused(r.task.clone()));
@@ -578,10 +602,12 @@ fn judged(ledger: &Ledger, id: &str) -> Result<Judgement, Refusal> {
     let controls: Vec<(&Entry, &Run)> = window
         .iter()
         .filter_map(|(_, w)| {
-            runs().find(|(_, c)| {
+            runs().find(|(e, c)| {
                 c.control
+                    && e.at > swapped_at
                     && c.swap.as_deref() == Some(id)
                     && c.build == swap.build
+                    && c.body == w.body
                     && c.task == w.task
             })
         })
@@ -592,24 +618,38 @@ fn judged(ledger: &Ledger, id: &str) -> Result<Judgement, Refusal> {
             controls: controls.len(),
         });
     }
-    if let Some((e, _)) = controls.iter().find(|(_, c)| c.state != before) {
+    if let Some((e, _)) = controls
+        .iter()
+        .find(|(_, c)| c.state != before || c.state_after != before)
+    {
         return Err(Refusal::ControlState(e.at));
     }
-    Ok(verdict(ledger, &window, &controls))
+    verdict(ledger, &window, &controls, min_net_wins)
 }
 
-/// A full window against its controls: kept when it beats doing nothing on every bar, else rolled
-/// back on each bar it failed; every line carries the chain digest of the window's last row.
-fn verdict(ledger: &Ledger, window: &[(&Entry, &Run)], controls: &[(&Entry, &Run)]) -> Judgement {
+/// A full window against its controls, paired by task: kept when its net paired wins — tasks it
+/// landed and the control did not, less those the control landed and it did not — reach
+/// `min_net_wins` and its `holeRate` is no higher; else rolled back on each bar it failed. Every
+/// line carries the chain digest of the window's last row.
+fn verdict(
+    ledger: &Ledger,
+    window: &[(&Entry, &Run)],
+    controls: &[(&Entry, &Run)],
+    min_net_wins: u32,
+) -> Result<Judgement, Refusal> {
     let lines = window.iter().chain(controls).map(|(e, _)| e.at);
     let rows = lines.clone().min().zip(lines.max());
-    let head = rows.and_then(|(_, to)| {
-        ledger
-            .entries
-            .iter()
-            .find(|e| e.at == to)
-            .and_then(|e| e.digest.clone())
-    });
+    let last = rows.map(|(_, to)| to);
+    let head = last
+        .and_then(|to| ledger.entries.iter().find(|e| e.at == to))
+        .and_then(|e| e.digest.clone())
+        .ok_or(Refusal::Unchained(last))?;
+    let landed = |r: &Run| r.gate == Some(Gate::Pass);
+    let net: i64 = window
+        .iter()
+        .zip(controls)
+        .map(|((_, w), (_, c))| i64::from(landed(w)) - i64::from(landed(c)))
+        .sum();
     let evolved = fold_reports(&window.iter().map(|(_, r)| r.outcome()).collect::<Vec<_>>());
     let nothing = fold_reports(
         &controls
@@ -618,11 +658,11 @@ fn verdict(ledger: &Ledger, window: &[(&Entry, &Run)], controls: &[(&Entry, &Run
             .collect::<Vec<_>>(),
     );
     let n = u32::try_from(window.len()).unwrap_or(u32::MAX);
-    let line = |meter, reading, op, threshold| {
+    let line = |meter, scale, reading, op, threshold| {
         Explanation {
             kind: Kind::Keep,
             meter,
-            scale: Scale::Rate,
+            scale,
             reading,
             op,
             threshold,
@@ -634,16 +674,29 @@ fn verdict(ledger: &Ledger, window: &[(&Entry, &Run)], controls: &[(&Entry, &Run
             from: None,
             to: None,
         }
-        .on_ledger(head.as_deref(), rows)
+        .on_ledger(Some(&head), rows)
     };
+    #[allow(clippy::cast_precision_loss, reason = "at most EVOLUTION_WINDOW pairs")]
     let bars = [
-        line("landRate", evolved.land_rate, Op::Gt, nothing.land_rate),
-        line("holeRate", evolved.hole_rate, Op::Le, nothing.hole_rate),
+        line(
+            "netWins",
+            Scale::Count,
+            net as f64,
+            Op::Ge,
+            f64::from(min_net_wins),
+        ),
+        line(
+            "holeRate",
+            Scale::Rate,
+            evolved.hole_rate,
+            Op::Le,
+            nothing.hole_rate,
+        ),
     ];
     if bars.iter().all(Explanation::holds) {
-        return Judgement::Keep(bars.to_vec());
+        return Ok(Judgement::Keep(bars.to_vec()));
     }
-    Judgement::Rollback(
+    Ok(Judgement::Rollback(
         bars.into_iter()
             .filter(|b| !b.holds())
             .map(|b| Explanation {
@@ -657,5 +710,5 @@ fn verdict(ledger: &Ledger, window: &[(&Entry, &Run)], controls: &[(&Entry, &Run
                 ..b
             })
             .collect(),
-    )
+    ))
 }

@@ -124,7 +124,8 @@ fixed order:
   appended, written there first) gained meanwhile: a command's edit is undone, and a parallel
   run's rows are kept.
 
-Chained today: the usage ledger and the Dark Elf's value ledger (its challenge records). Gate
+Chained today: the usage ledger, the Dark Elf's value ledger (its challenge records) and the
+evolution ledger. Gate
 verdicts, seals, envelopes and Kijin posts are chained as each is opened with
 `Journal::chained` and named in `mnemorph_world::chains::journals`.
 

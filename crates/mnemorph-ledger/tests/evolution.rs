@@ -42,17 +42,19 @@ fn swap(id: &str) -> Swap {
 }
 
 fn run(s: &Swap, task: &str, control: bool, pass: bool) -> EvolutionRow {
+    let state = if control {
+        s.before_state()
+    } else {
+        s.after_state()
+    };
     EvolutionRow::Run(Run {
         swap: Some(s.id.clone()),
         build: s.build.clone(),
         body: "slime-wire".into(),
         task: task.into(),
         control,
-        state: if control {
-            s.before_state()
-        } else {
-            s.after_state()
-        },
+        state_after: state.clone(),
+        state,
         gate: Some(if pass { Gate::Pass } else { Gate::Fail }),
         first_try: pass,
         holes_found: 0,
@@ -81,7 +83,17 @@ fn judged(rows: &[EvolutionRow], id: &str) -> Judgement {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("evolution.jsonl");
     ledger(&path, rows);
-    evolution::judge(&evolution::read(&path).unwrap(), id)
+    evolution::judge(&evolution::read(&path, None).unwrap(), id, MIN)
+}
+
+/// The keep bar the tests judge on: `evolution.min_net_wins` unless the human sets it.
+const MIN: u32 = 2;
+
+fn unrun(row: EvolutionRow) -> Run {
+    match row {
+        EvolutionRow::Run(r) => r,
+        EvolutionRow::Swap(_) => unreachable!(),
+    }
 }
 
 #[test]
@@ -89,24 +101,18 @@ fn the_window_excludes_rows_before_the_swap() {
     let s = swap("e1");
     // Before the swap: the staging's own runs, stamped early, and plain runs — every one failing.
     let mut rows: Vec<EvolutionRow> = (0..EVOLUTION_WINDOW)
-        .map(|i| run(&s, &format!("held-{i}"), false, false))
+        .map(|i| run(&s, &format!("old-{i}"), false, false))
         .collect();
     rows.push(EvolutionRow::Run(Run {
         swap: None,
-        ..match run(&s, "held-0", false, false) {
-            EvolutionRow::Run(r) => r,
-            EvolutionRow::Swap(_) => unreachable!(),
-        }
+        ..unrun(run(&s, "old-10", false, false))
     }));
     let swapped_at = u64::try_from(rows.len()).unwrap() + 1;
     rows.push(EvolutionRow::Swap(s.clone()));
     // After it, under another build: not its window either.
     rows.push(EvolutionRow::Run(Run {
         build: Build::default(),
-        ..match run(&s, "held-0", false, false) {
-            EvolutionRow::Run(r) => r,
-            EvolutionRow::Swap(_) => unreachable!(),
-        }
+        ..unrun(run(&s, "other-0", false, false))
     }));
     let half: Vec<bool> = (0..EVOLUTION_WINDOW).map(|i| i % 2 == 0).collect();
     rows.extend(window(&s, &[true; EVOLUTION_WINDOW], &half));
@@ -114,15 +120,15 @@ fn the_window_excludes_rows_before_the_swap() {
         panic!("{}", judged(&rows, "e1"));
     };
     assert!(
-        (lines[0].reading - 100.0).abs() < 1e-9,
+        (lines[0].reading - 5.0).abs() < 1e-9,
         "only post-swap runs: {}",
         lines[0]
     );
     assert!(lines.iter().all(|l| l.from > Some(swapped_at + 1)));
     assert!(
-        lines[0].to_string().starts_with(
-            "keep: landRate 1.00 > 0.50 (over 10 runs beside do-nothing); ledger head "
-        ),
+        lines[0]
+            .to_string()
+            .starts_with("keep: netWins 5 >= 2 (over 10 runs beside do-nothing); ledger head "),
         "{}",
         lines[0]
     );
@@ -143,7 +149,7 @@ fn an_evolution_equal_to_doing_nothing_rolls_back() {
     assert!(
         lines[0]
             .to_string()
-            .starts_with("rollback: landRate 0.70 <= 0.70 (over 10 runs beside do-nothing)"),
+            .starts_with("rollback: netWins 0 < 2 (over 10 runs beside do-nothing)"),
         "{}",
         lines[0]
     );
@@ -329,13 +335,13 @@ fn replaying_the_ledger_reproduces_the_judgement() {
     let path = dir.path().join("evolution.jsonl");
     let s = swap("e1");
     let mut rows = vec![
-        run(&s, "held-0", false, false),
+        run(&s, "old-0", false, false),
         EvolutionRow::Swap(s.clone()),
     ];
     let nothing: Vec<bool> = (0..EVOLUTION_WINDOW).map(|i| i % 3 == 0).collect();
     rows.extend(window(&s, &[true; EVOLUTION_WINDOW], &nothing));
     let j = ledger(&path, &rows);
-    let first = evolution::judge(&evolution::read(&path).unwrap(), "e1");
+    let first = evolution::judge(&evolution::read(&path, None).unwrap(), "e1", MIN);
     let Judgement::Keep(lines) = &first else {
         panic!("{first}");
     };
@@ -356,18 +362,201 @@ fn replaying_the_ledger_reproduces_the_judgement() {
     ] {
         j.append(&r).unwrap();
     }
-    let again = evolution::judge(&evolution::read(&path).unwrap(), "e1");
+    let anchor = j.head().unwrap();
+    let again = evolution::judge(&evolution::read(&path, anchor.as_ref()).unwrap(), "e1", MIN);
     assert_eq!(again, first, "a full window is judged once and for all");
-    assert_eq!(evolution::replay(&path, "e1", to).unwrap(), first);
+    assert_eq!(
+        evolution::replay(&path, "e1", to, anchor.as_ref(), MIN).unwrap(),
+        first
+    );
     // The named head is the digest of the window's last row, as the chain walks it.
-    let prefix = evolution::read_to(&path, to).unwrap();
-    assert_eq!(prefix.chain.head.unwrap().digest, head);
+    let prefix = evolution::read_to(&path, to, anchor.as_ref()).unwrap();
+    let last = prefix.entries.last().unwrap();
+    assert_eq!((last.at, last.digest.as_deref()), (to, Some(head.as_str())));
     assert_eq!(first.to_string().lines().count(), 2);
     // An edited row breaks the chain: nothing is judged on it.
     let text = fs::read_to_string(&path).unwrap();
     fs::write(&path, text.replacen("\"pass\"", "\"fail\"", 1)).unwrap();
     assert!(matches!(
-        evolution::replay(&path, "e1", to).unwrap(),
+        evolution::replay(&path, "e1", to, None, MIN).unwrap(),
+        Judgement::Refused(Refusal::ChainBroken(_))
+    ));
+}
+
+#[test]
+fn it_keeps_on_two_net_paired_wins_and_rolls_back_on_one() {
+    let s = swap("e1");
+    let nothing = [false, false, true, true, true, true, true, true, true, true];
+    // One task won, none lost: one net win.
+    let one = [true; EVOLUTION_WINDOW];
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(window(&s, &one, &nothing));
+    let mut only_one = nothing;
+    only_one[1] = true;
+    let mut rows_one = vec![EvolutionRow::Swap(s.clone())];
+    rows_one.extend(window(&s, &one, &only_one));
+    let Judgement::Rollback(lines) = judged(&rows_one, "e1") else {
+        panic!("{}", judged(&rows_one, "e1"));
+    };
+    assert!(
+        lines[0].to_string().starts_with("rollback: netWins 1 < 2"),
+        "{}",
+        lines[0]
+    );
+    // Two won: kept.
+    let Judgement::Keep(lines) = judged(&rows, "e1") else {
+        panic!("{}", judged(&rows, "e1"));
+    };
+    assert!(
+        lines[0].to_string().starts_with("keep: netWins 2 >= 2"),
+        "{}",
+        lines[0]
+    );
+    // Two won and one lost elsewhere: one net, rolled back.
+    let mut lost = one;
+    lost[5] = false;
+    let mut rows_lost = vec![EvolutionRow::Swap(s.clone())];
+    rows_lost.extend(window(&s, &lost, &nothing));
+    assert!(matches!(judged(&rows_lost, "e1"), Judgement::Rollback(_)));
+    // The human's bar is the one judged on.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("evolution.jsonl");
+    ledger(&path, &rows_one);
+    assert!(matches!(
+        evolution::judge(&evolution::read(&path, None).unwrap(), "e1", 1),
+        Judgement::Keep(_)
+    ));
+}
+
+#[test]
+fn a_control_counts_only_after_the_swap_and_by_the_same_body() {
+    let s = swap("e1");
+    let evolved: Vec<EvolutionRow> = (0..EVOLUTION_WINDOW)
+        .map(|i| run(&s, &format!("held-{i}"), false, true))
+        .collect();
+    let controls: Vec<EvolutionRow> = (0..EVOLUTION_WINDOW)
+        .map(|i| run(&s, &format!("held-{i}"), true, false))
+        .collect();
+    // Controls run before the swap: none counts.
+    let mut rows = controls.clone();
+    rows.push(EvolutionRow::Swap(s.clone()));
+    rows.extend(evolved.clone());
+    assert_eq!(
+        judged(&rows, "e1"),
+        Judgement::Pending {
+            runs: EVOLUTION_WINDOW,
+            controls: 0
+        }
+    );
+    // Controls run by another body: none counts.
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(evolved.clone());
+    rows.extend(controls.iter().cloned().map(|c| {
+        EvolutionRow::Run(Run {
+            body: "slime-other".into(),
+            ..unrun(c)
+        })
+    }));
+    assert_eq!(
+        judged(&rows, "e1"),
+        Judgement::Pending {
+            runs: EVOLUTION_WINDOW,
+            controls: 0
+        }
+    );
+    // After the swap, by the same body: judged.
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(evolved);
+    rows.extend(controls);
+    assert!(matches!(judged(&rows, "e1"), Judgement::Keep(_)));
+}
+
+#[test]
+fn a_task_any_earlier_run_carries_is_refused() {
+    let s = swap("e1");
+    // An unstamped run of the task, long before the swap.
+    let mut rows = vec![
+        EvolutionRow::Run(Run {
+            swap: None,
+            ..unrun(run(&s, "held-4", false, true))
+        }),
+        EvolutionRow::Swap(s.clone()),
+    ];
+    rows.extend(window(
+        &s,
+        &[true; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    assert_eq!(
+        judged(&rows, "e1"),
+        Judgement::Refused(Refusal::Reused("held-4".into()))
+    );
+}
+
+#[test]
+fn a_mid_run_edit_refuses_its_row() {
+    let s = swap("e1");
+    let edited = evolution::state([(MIND, Some("edited mid-run"))]);
+    let full = || {
+        let mut rows = vec![EvolutionRow::Swap(s.clone())];
+        rows.extend(window(
+            &s,
+            &[true; EVOLUTION_WINDOW],
+            &[false; EVOLUTION_WINDOW],
+        ));
+        rows
+    };
+    let mut rows = full();
+    if let EvolutionRow::Run(r) = &mut rows[5] {
+        r.state_after.clone_from(&edited);
+    }
+    assert_eq!(judged(&rows, "e1"), Judgement::Refused(Refusal::Drifted(6)));
+    let mut rows = full();
+    if let EvolutionRow::Run(r) = &mut rows[6] {
+        r.state_after.clone_from(&edited);
+    }
+    assert_eq!(
+        judged(&rows, "e1"),
+        Judgement::Refused(Refusal::ControlState(7))
+    );
+}
+
+#[test]
+fn an_unchained_or_rechained_ledger_is_never_judged() {
+    let s = swap("e1");
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(window(
+        &s,
+        &[true; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let plain = dir.path().join("plain.jsonl");
+    let j: Journal<EvolutionRow> = Journal::new(&plain);
+    for r in &rows {
+        j.append(r).unwrap();
+    }
+    assert_eq!(
+        evolution::judge(&evolution::read(&plain, None).unwrap(), "e1", MIN),
+        Judgement::Refused(Refusal::Unchained(None))
+    );
+    // A body that could write the file chains it again from the start, a control rewritten: the
+    // head anchored outside the file no longer holds.
+    let path = dir.path().join("evolution.jsonl");
+    let anchor = ledger(&path, &rows).head().unwrap().unwrap();
+    let forged = dir.path().join("forged.jsonl");
+    let mut changed = rows.clone();
+    if let EvolutionRow::Run(r) = &mut changed[2] {
+        r.gate = Some(Gate::Pass);
+    }
+    ledger(&forged, &changed);
+    fs::copy(&forged, &path).unwrap();
+    assert!(matches!(
+        evolution::judge(&evolution::read(&path, None).unwrap(), "e1", MIN),
+        Judgement::Keep(_)
+    ));
+    assert!(matches!(
+        evolution::judge(&evolution::read(&path, Some(&anchor)).unwrap(), "e1", MIN),
         Judgement::Refused(Refusal::ChainBroken(_))
     ));
 }

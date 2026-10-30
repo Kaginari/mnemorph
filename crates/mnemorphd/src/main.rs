@@ -85,8 +85,8 @@ upheld rate and the last ten — and the rise or fall it proposes, which only th
 one finding for that score, after showing it and asking for `y` at the terminal. A body never
 runs it.
 
-`housekeep --verify` walks each chained journal — the usage ledger and the Dark Elf's value
-ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
+`housekeep --verify` walks each chained journal — the usage ledger, the Dark Elf's value ledger
+and the evolution ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
 torn tail (a truncation, not tampering) with the head it holds to, or the first broken link with
 its line — a dropped tail or a chain rooted again breaks the anchor. It says when `log.md`'s
 newest anchor and the copy kept under the state directory disagree. Then it anchors each head

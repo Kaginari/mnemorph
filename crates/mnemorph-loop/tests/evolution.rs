@@ -184,6 +184,8 @@ async fn a_change_that_changes_nothing_rolls_back() {
             let w = World::new(&format!("{id}-{control}"), doc);
             let state = evolution::state_now(&w.world(), &s).unwrap();
             let (gate, first_try) = w.run(task).await;
+            // Stamped after the run too: a Mind edited mid-run shows.
+            let state_after = evolution::state_now(&w.world(), &s).unwrap();
             ledger
                 .append(&EvolutionRow::Run(Ran {
                     swap: Some(s.id.clone()),
@@ -192,6 +194,7 @@ async fn a_change_that_changes_nothing_rolls_back() {
                     task: id.clone(),
                     control,
                     state,
+                    state_after,
                     gate,
                     first_try,
                     holes_found: 0,
@@ -210,13 +213,14 @@ async fn a_change_that_changes_nothing_rolls_back() {
     };
     assert_eq!(gate_of("fix-0"), [Some(Gate::Pass); 2]);
     assert_eq!(gate_of("broken-2"), [Some(Gate::Fail); 2]);
-    let judged = evolution::judge(&evolution::read(ledger.path()).unwrap(), "careful-1");
+    let judged = evolution::judge(
+        &evolution::read(ledger.path(), ledger.head().unwrap().as_ref()).unwrap(),
+        "careful-1",
+        mnemorph_config::MIN_NET_WINS,
+    );
     let Judgement::Rollback(lines) = &judged else {
         panic!("{judged}");
     };
-    assert_eq!(lines[0].meter, "landRate");
-    assert!(
-        (lines[0].reading - lines[0].threshold).abs() < 1e-9,
-        "{judged}"
-    );
+    assert_eq!(lines[0].meter, "netWins");
+    assert!(lines[0].reading.abs() < 1e-9, "{judged}");
 }

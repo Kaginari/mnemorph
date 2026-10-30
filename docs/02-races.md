@@ -1355,7 +1355,14 @@ reject` instead — a proposal is refused if the world moved since it was drawn.
 graded itself on the verify lines it wrote; once swapped in, the change is frozen and judged on
 what comes after it, and only that:
 
-- **The swap row.** The evolution ledger is a chained journal; each swap is one row of it — the
+- **The ledger.** The evolution ledger lives outside the world, under the human's state directory
+  (`$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl`, else `~/.local/state/…`), written by
+  the harness alone and out of every command's reach, like the challenge records. It is chained by
+  hash, and its head is anchored with the world's other chained journals (`mnemorphd housekeep
+  --verify`); judging reads it held to the newest anchored head, so a ledger chained again from
+  its start, or cut at its end, is broken. A ledger with no chain is never judged, nor a window
+  whose last row is not a link of it.
+- **The swap row.** Each swap is one row of the ledger — the
   swap's id, the creature, the bodies whose runs judge it (the creature, or a split's young), the
   arm, the build that swapped it in, the tasks the plan was proven on, and **the exact file set**:
   every file it changes, by path, with its SHA-256 before and after (none before for a file it
@@ -1366,32 +1373,39 @@ what comes after it, and only that:
   another digest than the named one — a file the swap creates must not have existed. It refuses
   a swap that names no file, a file twice, or a file the same before and after.
 - **The post-swap window.** Every run is stamped with the swap's id, the build and the state of
-  the named files as the run found them (`state`, one digest over each path and its digest). The
+  the named files as the run found them and as it left them (`state`, one digest over each path
+  and its digest), so a file edited mid-run shows. The
   window is the first 10 runs (`EVOLUTION_WINDOW`) after the swap's row, stamped with its id and
   its build, by one of its bodies; a row before the swap never counts, whatever it is stamped
-  with, and neither does a run under another build. A window run that found the named files other
-  than the swap left them refuses the judgement: the state judged is not the state named.
+  with, and neither does a run under another build. A window run that found or left the named
+  files other than the swap left them refuses the judgement: the state judged is not the state
+  named.
 - **Held-out tasks, used once.** Tasks are told apart by fingerprint. A window's task is never one
-  the plan was proven on, never twice in the window, and never one another swap's window used
-  first; any of these refuses the judgement.
-- **The do-nothing control.** Every window task is run again without the change — a fixture on the
-  named files' before state, stamped as the control — and the fixtures include tasks where no
-  change is the right output. Both sides are folded by the report fold (`fold_reports`, the
-  harness's facts alone). The evolution is kept only when it beats doing nothing: a `landRate`
-  strictly higher and a `holeRate` no higher than the control's over the same tasks. Equal is not
-  better — it rolls back. Until the window and its controls are whole, the judgement is pending.
+  the plan was proven on, and never one any earlier run row carries — stamped or not, of this swap
+  or another, twice in the window included — but this swap's own controls; any of these refuses
+  the judgement.
+- **The do-nothing control.** Every window task is run again without the change, after the swap
+  and by the same body — a fixture that finds and leaves the named files in their before state,
+  stamped as the control — and the fixtures include tasks where no change is the right output. A
+  control run before the swap, or by another body, never counts. Paired by task, a **win** is a
+  task the evolution landed and the control did not, a **loss** the reverse. The evolution is
+  kept only on **net wins** (wins less losses) of at least `evolution.min_net_wins` — 2 unless the
+  human's own file says, at least 1 — and a `holeRate` (the report fold's, the harness's facts
+  alone) no higher than the control's. Anything less rolls back: equal to doing nothing, or one
+  net win, is not enough. Until the window and its controls are whole, the judgement is pending.
 - **One line per bar** ([Explanation](#ascension--earned-granted-revocable)): a keep names both
-  bars, a rollback each bar it failed, the control's reading as the threshold, with the chain
-  digest of the window's last row and the window's first and last row:
+  bars, a rollback each bar it failed, with the bar's threshold — the net wins required, the
+  control's `holeRate` — the chain digest of the window's last row and the window's first and last
+  row:
 
   ```text
-  keep: landRate 1.00 > 0.50 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 14–33
-  rollback: landRate 0.70 <= 0.70 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 2–21
+  keep: netWins 5 >= 2 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 14–33
+  rollback: netWins 1 < 2 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 2–21
   ```
 
-- **Replay.** The ledger read again up to the row a line names (`replay`) gives the same
-  judgement, and its chain's head there is the digest the line names; a ledger whose chain breaks
-  is judged on nothing.
+- **Replay.** The ledger read again up to the row a line names (`replay`), its chain walked whole
+  and held to the anchored head, gives the same judgement, and the row there carries the digest
+  the line names; a ledger whose chain breaks is judged on nothing.
 - **A proposal.** A keep or a rollback is proposed to the human like every other change to a race;
   rolling a swap back, like applying it, is the human's.
 
