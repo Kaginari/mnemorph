@@ -88,6 +88,10 @@ fn a_swap_writes_one_stamped_row_naming_every_file_before_and_after() {
     let rows = w.rows();
     assert_eq!(rows, vec![EvolutionRow::Swap(s.clone())]);
     assert_eq!(s.build, Build::this(), "stamped with the build");
+    assert_ne!(
+        s.build.version, "unknown",
+        "an unstamped swap would be refused"
+    );
     let mind = s.files.iter().find(|f| f.path == MIND).unwrap();
     assert_eq!(mind.before, Some(evolution::digest(&old)));
     assert_eq!(mind.after, Some(evolution::digest(new.as_bytes())));

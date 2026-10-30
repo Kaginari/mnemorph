@@ -832,6 +832,40 @@ fn the_queue_witness_is_one_place() {
     );
 }
 
+/// Every trust journal is walked where its writer keeps it: the envelopes' uses and revocations
+/// where the gate counts them, each Kijin post's witness where the post journal writes it.
+#[test]
+fn the_chained_journals_are_walked_where_they_are_written() {
+    use mnemorph_loop::world::chains;
+    use mnemorph_races::Post;
+    let world = std::path::Path::new("/some/world");
+    let Some(uses) = mnemorph_config::uses_path() else {
+        return;
+    };
+    let walked = chains::journals(world);
+    let at = |name: &str| {
+        walked
+            .iter()
+            .find(|c| c.name == name)
+            .map(|c| c.path.clone())
+    };
+    assert_eq!(at("uses"), Some(uses.clone()));
+    assert_eq!(
+        at("revocations"),
+        Some(uses.with_file_name("revoked.jsonl"))
+    );
+    for post in Post::ALL {
+        assert_eq!(
+            chains::post_witness(world, post),
+            mnemorph_tools::kijin_witness(world, post.creature())
+        );
+        assert_eq!(
+            mnemorph_config::PostJournal::of(world, post).witness(),
+            mnemorph_tools::kijin_witness(world, post.creature()).as_deref()
+        );
+    }
+}
+
 /// At a turn's end the wake runs each held order its body can carry out — claimed in its name,
 /// commissioned by the body it reports to — closes it on DONE, leaves an order off its body's
 /// ground held with the reason, and opens the next turn with what it ran.

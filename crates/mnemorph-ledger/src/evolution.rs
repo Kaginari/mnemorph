@@ -80,7 +80,9 @@ pub struct Swap {
     pub bodies: Vec<String>,
     /// The arm.
     pub arm: Arm,
-    /// The build that swapped it in: every run of its window carries it.
+    /// The build that swapped it in: every run of its window carries it. A row from before
+    /// stamps reads as `unknown`.
+    #[serde(default)]
     pub build: Build,
     /// The exact files it names.
     pub files: Vec<FileChange>,
@@ -184,6 +186,24 @@ pub struct Ledger {
     pub chain: Report,
     /// Lines that did not parse.
     pub skipped: Vec<u64>,
+}
+
+impl EvolutionRow {
+    /// The build that wrote the row; `unknown` for a row from before stamps.
+    #[must_use]
+    pub fn build(&self) -> &Build {
+        match self {
+            EvolutionRow::Swap(s) => &s.build,
+            EvolutionRow::Run(r) => &r.build,
+        }
+    }
+}
+
+impl Ledger {
+    /// The rows `build` wrote, in order: a replay held to one build's rules.
+    pub fn by_build<'a>(&'a self, build: &'a Build) -> impl Iterator<Item = &'a Entry> {
+        self.entries.iter().filter(move |e| e.row.build() == build)
+    }
 }
 
 /// The SHA-256 of `bytes`, 64 lowercase hex digits.
@@ -378,6 +398,9 @@ pub enum Refusal {
     Leaked(String),
     /// A held-out task used before: twice in the window, or first by another swap's window.
     Reused(String),
+    /// The swap's row carries no build stamp: no run's build can match it, so its window would
+    /// never fill.
+    Unstamped(String),
 }
 
 impl fmt::Display for Refusal {
@@ -416,6 +439,10 @@ impl fmt::Display for Refusal {
             ),
             Refusal::Leaked(t) => write!(f, "task {t}: the plan was proven on it before the swap"),
             Refusal::Reused(t) => write!(f, "task {t}: a held-out task already used"),
+            Refusal::Unstamped(id) => write!(
+                f,
+                "swap {id}: its row carries no build, so no run can be counted in its window"
+            ),
         }
     }
 }
@@ -573,6 +600,10 @@ fn window_of<'a>(ledger: &'a Ledger, id: &str) -> Result<Window<'a>, Refusal> {
         return Err(Refusal::TwiceSwapped(id.to_owned()));
     }
     swap.check()?;
+    // A version is always compiled in; only a row from before stamps lacks one.
+    if swap.build.version == crate::UNKNOWN {
+        return Err(Refusal::Unstamped(id.to_owned()));
+    }
     let after = swap.after_state();
     let window: Vec<(&Entry, &Run)> = runs_of(ledger)
         .filter(|(e, r)| {

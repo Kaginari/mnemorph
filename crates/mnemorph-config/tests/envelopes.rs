@@ -167,7 +167,7 @@ impl Fixture {
 
     /// Record `n` earlier uses of the envelope `name` signed on `signed`.
     fn used(&self, name: &str, signed: Day, n: u64) {
-        let j = Journal::<UseRow>::new(self.uses_path());
+        let j = Journal::<UseRow>::chained(self.uses_path());
         for i in 1..=n {
             j.append(&UseRow {
                 envelope: name.into(),

@@ -233,8 +233,9 @@ pub(crate) fn cards_below(world: &Path, roster: &Roster, name: &str) -> String {
         .living()
         .filter(|c| c.reports_to.as_deref() == Some(name))
         .map(|c| format!("- {}", records.card(roster, &c.name).line()))
+        .chain(records.note().map(|n| format!("- ({n})")))
         .collect();
-    if lines.is_empty() {
+    if lines.len() == usize::from(records.note().is_some()) {
         return String::new();
     }
     format!(
@@ -335,6 +336,12 @@ fn lawful(
     }
     // Three failed runs in a row on the same files harden into the lawful next acts: an order
     // that names them again is refused.
+    if let Some(why) = records.unsound() {
+        return Err(format!(
+            "the gate's verdict journal does not verify ({why}): whether {} is stuck cannot be read, so nothing is dispatched until the human runs `mnemorphd housekeep --verify`",
+            a.to
+        ));
+    }
     let stuck = records.stuck(&a.to);
     if let Some(path) = stuck
         .iter()
@@ -944,7 +951,13 @@ pub(crate) fn carrier(
         }
         Ok(Hop::Direct(_)) => {}
     }
-    let stuck = mnemorph_world::worth::Records::load(world).stuck(to);
+    let records = mnemorph_world::worth::Records::load(world);
+    if let Some(why) = records.unsound() {
+        return Err(format!(
+            "the gate's verdict journal does not verify ({why}): the order waits for the human"
+        ));
+    }
+    let stuck = records.stuck(to);
     if let Some(path) = stuck
         .iter()
         .find(|p| mnemorph_world::worth::names(&item.ask, p))
@@ -1147,6 +1160,7 @@ fn clock_memo(world: &Path, roster: &Roster, to: &str, ending: &Ending) -> Optio
                 k.name != to
                     && k.reports_to == me.reports_to
                     && k.race.base() == me.race.base()
+                    && records.unsound().is_none()
                     && records.stuck(&k.name).is_empty()
             })
             .map(|k| {

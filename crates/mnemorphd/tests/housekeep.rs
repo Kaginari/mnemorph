@@ -57,7 +57,9 @@ fn verify_says_each_chain_and_anchors_its_head() {
         text.contains("usage (") && text.contains(&format!("OK, head {d2} at line 2")),
         "{text}"
     );
-    assert!(text.contains("value ("), "{text}");
+    for name in ["value", "evolution", "gate", "uses", "revocations"] {
+        assert!(text.contains(&format!("{name} (")), "{name}: {text}");
+    }
     assert!(text.contains("anchored in log.md: ### ["), "{text}");
     let log = fs::read_to_string(world.join(".mnemorph/log.md")).unwrap();
     assert!(

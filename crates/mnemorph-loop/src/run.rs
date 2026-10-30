@@ -1669,7 +1669,31 @@ impl Run {
             title: format!("gate: {word}"),
             lines,
         };
-        match mnemorph_world::log::append_entry(self.cx.world(), &entry) {
+        let written = mnemorph_world::log::append_entry(self.cx.world(), &entry);
+        // The verdict kept again outside the world, chained and stamped with this build.
+        let kept = mnemorph_world::verdicts::record(
+            self.cx.world(),
+            mnemorph_world::verdicts::VerdictRow {
+                ts: mnemorph_ledger::Timestamp::now(),
+                body: self.body.name.clone(),
+                verdict: word.clone(),
+                changed: verdict
+                    .changed
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect(),
+                failures: verdict.failures.clone(),
+                unverified: verdict.unverified.clone(),
+                entry: written.as_ref().ok().cloned().flatten(),
+                build: mnemorph_ledger::Build::default(),
+            },
+        );
+        if let Err(e) = kept {
+            self.record(&Beat::Warning {
+                text: format!("the gate's verdict could not reach its chained journal: {e}"),
+            });
+        }
+        match written {
             Ok(heading) => {
                 // A change landed only when the gate passed it: a failure is no new outcome, and
                 // a landing whose challenge is pending has not landed yet.

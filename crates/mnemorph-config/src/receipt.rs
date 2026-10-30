@@ -897,7 +897,8 @@ impl Receipt {
 /// harness alone, and read by the post's bodies. Every row is written first to a witness under
 /// the human's state directory (`mnemorph_tools::kijin_witness`), out of every command's reach:
 /// the tripwire rebuilds the journal from it after each command, and [`PostJournal::tally`] reads
-/// the witness alone, so a row a body forges never counts.
+/// the witness alone, so a row a body forges never counts. The witness chains its rows by hash
+/// ([`mnemorph_ledger::chain`]), and the journal holds the same bytes.
 #[derive(Debug, Clone)]
 pub struct PostJournal {
     /// The post whose acts it journals: it commits no other.
@@ -974,18 +975,21 @@ impl PostJournal {
     /// is one.
     #[must_use]
     pub fn of(world: &Path, post: Post) -> Self {
+        let journal = Journal::chained(post_journal(world, post));
+        let witness = kijin_witness(world, post.creature())
+            .map(|w| Journal::chained(w).mirrored_to(journal.path()));
         Self {
             post,
             world: world.to_path_buf(),
-            journal: Journal::new(post_journal(world, post)),
-            witness: kijin_witness(world, post.creature()).map(Journal::new),
+            journal,
+            witness,
         }
     }
 
     /// The same journal, witnessed in `file` instead.
     #[must_use]
     pub fn witnessed_at(mut self, file: &Path) -> Self {
-        self.witness = Some(Journal::new(file));
+        self.witness = Some(Journal::chained(file).mirrored_to(self.journal.path()));
         self
     }
 
@@ -995,20 +999,19 @@ impl PostJournal {
         self.witness.as_ref().map(Journal::path)
     }
 
-    /// One row: the witness first, under its lock — a row the journal holds and its witness does
-    /// not would be dropped by the next command's tripwire — then the journal.
+    /// One row: the witness first — a row the journal holds and its witness does not would be
+    /// dropped by the next command's tripwire — chained to the witness's head, then the same bytes
+    /// to the journal, both under the witness's lock. The witness is the trusted record and its
+    /// chain the one verified; with no witness, the journal chains its own rows.
     pub(crate) fn append(&self, row: &Row) -> io::Result<()> {
-        let held = match &self.witness {
+        match &self.witness {
             Some(w) => {
-                let held = lock(w.path())?;
-                w.append(row)?;
-                Some(held)
+                // Made private to the human before the journal opens it.
+                drop(private_file(w.path())?);
+                w.append(row)
             }
-            None => None,
-        };
-        self.journal.append(row)?;
-        drop(held);
-        Ok(())
+            None => self.journal.append(row),
+        }
     }
 
     /// Where it lives.

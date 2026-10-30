@@ -6343,6 +6343,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** the sibling's mode at creation and a new file's, under umasks 002 and 022; the walk fails, under a 022 shell, when the old rewrite is put back.
 - **Learned:** a fix that sets the mode after writing still leaves a window; a check that reads only under the CI's umask misses the bug it was written for.
 
+### [2026-10-30T16:53:27+01:00] rimuru — #91 and #105, the rest: every trust journal chained, every value row stamped
+- **Done:** chained, walked by `housekeep --verify` and anchored (log.md and the state dir): the end gate's verdicts (new, `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl`, `mnemorph_world::verdicts`, each row stamped with its build), the envelopes' uses and revocations (`oni/uses.jsonl`, `oni/revoked.jsonl`), each Kijin post's witness (the trusted copy: `Journal::mirrored_to` chains the witness and writes the same bytes to the post journal, all under the witness's lock). Seal proposals are rows of the challenge records, already chained. Evolution swaps read `unknown` with no build; `Ledger::by_build` and `verdicts::by_build` keep one build's rows. Docs 02, 03, 05 (a table of the chained journals), 06.
+- **Tests:** per newly chained journal, concurrent writers stay linear, an edit is found at its line, a dropped tail against the anchor; verify walks every journal and finds each one's dropped tail; the paths agree with their writers'; stamps on new rows, `unknown` on old. With `Uses::at` or `verdicts::journal_at` unchained, their tests fail.
+- **Learned:** a witness locked by its writer cannot be appended to by a chained journal in the same process (two flocks on one file deadlock), so the chained witness takes the lock itself and mirrors.
+
+### [2026-10-30T17:13:30+01:00] rimuru — #91/#105, Fable's review: verdicts read from their chain; an unstamped swap refused
+- **Done:** `Records::load` reads the gate verdicts from the chained journal, held to its anchor, falling back to log.md only where none is kept (the cards say so); a journal that does not verify trusts no body and dispatch refuses. `Refusal::Unstamped`: a swap row with no build is refused, never pending forever. Doc 03.
+- **Tests:** the journal outranks forged log.md passes; an edit and a dropped tail fail closed; an unstamped swap is refused.
 ### [2026-10-30T17:03:30+01:00] rimuru — #98 and #100: meters with intervals in status; the evolution writer, controls on demand, the do-nothing fixtures
 - **Done:** `mnemorph_world::meters`: every living creature's meters with their count and 95% Wilson
   interval, in `mnemorph status` (one compact line per creature, printed even when no session

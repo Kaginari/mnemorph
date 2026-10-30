@@ -762,3 +762,66 @@ fn a_journal_commits_only_its_posts_acts() {
     );
     assert!(f.rows().is_empty(), "nothing was journaled");
 }
+
+/// The witness, the trusted copy, chains its rows by hash, and the journal in the world holds the
+/// same bytes: concurrent commits stay one line of links, an edit is found at its line, and a
+/// dropped tail is found against the head kept outside.
+#[test]
+fn the_witness_is_chained_and_the_journal_holds_its_bytes() {
+    use mnemorph_ledger::chain::{self, Break};
+    let f = Fixture::new();
+    let planned = f.planned(&branch("feat/x"));
+    let pin = Pin::Push {
+        urls: vec![f.remote.to_str().unwrap().to_owned()],
+        sha: f.head.clone(),
+    };
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                let journal = f.journal();
+                for _ in 0..5 {
+                    journal.commit(&planned, pin.clone(), None).unwrap();
+                }
+            });
+        }
+    });
+    let report = chain::verify(&f.witness).unwrap();
+    assert!(report.holds(), "{report}");
+    assert_eq!(report.rows, 20);
+    assert_eq!(report.genesis.as_ref().map(|g| g.line), Some(1));
+    assert_eq!(
+        fs::read(&f.witness).unwrap(),
+        fs::read(f.journal().path()).unwrap(),
+        "the journal holds the witness's bytes"
+    );
+    assert_eq!(f.rows().len(), 20);
+    let head = report.head.unwrap();
+
+    let text = fs::read_to_string(&f.witness).unwrap();
+    let edited: Vec<String> = text
+        .lines()
+        .enumerate()
+        .map(|(i, l)| {
+            if i == 2 {
+                l.replacen("committed", "observed", 1)
+            } else {
+                l.to_owned()
+            }
+        })
+        .collect();
+    fs::write(&f.witness, edited.join("\n") + "\n").unwrap();
+    assert_eq!(
+        chain::verify(&f.witness).unwrap().broken,
+        Some((3, Break::Edited))
+    );
+
+    let kept: Vec<&str> = text.lines().take(12).collect();
+    fs::write(&f.witness, kept.join("\n") + "\n").unwrap();
+    assert!(chain::verify(&f.witness).unwrap().holds());
+    assert_eq!(
+        chain::verify_against(&f.witness, Some(&head))
+            .unwrap()
+            .broken,
+        Some((20, Break::Anchor))
+    );
+}
