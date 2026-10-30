@@ -112,7 +112,7 @@ function Centre({
   if (route.name === 'run') {
     return <PastChat key={route.run} w={world} run={route.run} chats={chats} onSide={onSide} />;
   }
-  return <WorldView w={world} />;
+  return <WorldView key={world.id} w={world} now={now} />;
 }
 
 /** The centre's title, for the top bar and the tab. */

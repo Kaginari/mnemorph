@@ -4,18 +4,16 @@
 //!
 //! The journals live inside the world, which a body can write: nothing read here grants anything,
 //! and every read is bounded. A journal is opened only by a session run's id (`r<ms>-<pid>`, never
-//! a path), only as a regular file — a symlink is never followed (`O_NOFOLLOW`), a pipe or a
-//! device planted in its place is never waited on (`O_NONBLOCK`, then a regular-file check on the
-//! open file) — and through a journals directory none of whose parts under the world is a symlink.
+//! a path), only as a regular file through the world's shared reader (`world::regular`: a
+//! symlink never followed, a pipe or a device never waited on, the handle checked) — and through a journals directory none of whose parts under the world is a symlink.
 //! Each read stops at a size cap; the listing reads the newest runs only, under a total budget.
 
-use std::fs::File;
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use mnemorph_loop::Beat;
 use mnemorph_loop::resume::{is_session_run, journals};
+use mnemorph_loop::world::regular::{self, Unread};
 use serde::Serialize;
 use serde_json::{Value, json};
 use ts_rs::TS;
@@ -129,43 +127,15 @@ fn journals_dir(world: &Path) -> Option<PathBuf> {
     Some(dir)
 }
 
-/// `path` opened for reading only if it is a regular file: a symlink is not followed, a pipe is
-/// not waited on.
-fn open_plain(path: &Path) -> std::io::Result<File> {
-    #[cfg(unix)]
-    let file = {
-        use rustix::fs::{Mode, OFlags};
-        let fd = rustix::fs::open(
-            path,
-            OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
-        File::from(fd)
-    };
-    #[cfg(not(unix))]
-    let file = {
-        if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
-            return Err(std::io::Error::other("a symlink"));
-        }
-        File::open(path)?
-    };
-    if !file.metadata()?.is_file() {
-        return Err(std::io::Error::other("not a regular file"));
-    }
-    Ok(file)
-}
-
-/// The bytes of the plain file at `path`, if it holds at most `cap`.
+/// The bytes of the plain file at `path`, if it holds at most `cap`: the world's shared reader
+/// (a link not followed, a pipe not waited on, the handle checked).
 fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
-    let file = open_plain(path).map_err(|e| format!("not read: {e}"))?;
-    let mut bytes = Vec::new();
-    file.take(cap + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("not read: {e}"))?;
-    if bytes.len() as u64 > cap {
-        return Err(format!("past {} MiB: not read whole", cap >> 20));
+    match regular::read(path, cap) {
+        Ok(Some(b)) => Ok(b),
+        Ok(None) => Err("not read: it is gone".into()),
+        Err(Unread::TooLarge(_)) => Err(format!("past {} MiB: not read whole", cap >> 20)),
+        Err(e) => Err(format!("not read: {e}")),
     }
-    Ok(bytes)
 }
 
 /// The journal's beats, and the numbers of the lines that do not read.
@@ -187,11 +157,8 @@ fn beats(bytes: &[u8]) -> (Vec<Beat>, Vec<u32>) {
 /// Whether a live session holds `run` now: its lock probed for an instant, opened only as a
 /// regular file.
 fn held(dir: &Path, run: &str) -> bool {
-    open_plain(&dir.join(format!("{run}.lock"))).is_ok_and(|f| {
-        matches!(
-            f.try_lock_shared(),
-            Err(std::fs::TryLockError::WouldBlock)
-        )
+    regular::open(&dir.join(format!("{run}.lock"))).is_ok_and(|f| {
+        f.is_some_and(|f| matches!(f.try_lock_shared(), Err(std::fs::TryLockError::WouldBlock)))
     })
 }
 
@@ -292,7 +259,11 @@ fn summary(dir: &Path, id: String, at: SystemTime, budget: &mut u64) -> BoardRun
     let unknown = |why: String| BoardRun {
         id: id.clone(),
         when: rfc3339(at),
-        state: if live { RunState::Live } else { RunState::Unknown },
+        state: if live {
+            RunState::Live
+        } else {
+            RunState::Unknown
+        },
         why: mnemorph_loop::wire::shown(&why),
         ask: String::new(),
         turns: 0,
@@ -305,7 +276,10 @@ fn summary(dir: &Path, id: String, at: SystemTime, budget: &mut u64) -> BoardRun
     *budget = budget.saturating_sub(bytes.len() as u64);
     let (beats, skipped) = beats(&bytes);
     if !skipped.is_empty() {
-        return unknown(format!("{} line(s) of its journal do not read", skipped.len()));
+        return unknown(format!(
+            "{} line(s) of its journal do not read",
+            skipped.len()
+        ));
     }
     let (state, why) = standing(&beats);
     let ask = beats
@@ -472,7 +446,7 @@ mod tests {
     fn a_stop_and_an_ending_read_as_the_resume_reads_them() {
         let ask = Beat::Ask { text: "go".into() };
         let end = |e: &str| Beat::End { ending: e.into() };
-        assert_eq!(standing(&[ask.clone()]).0, RunState::Stopped);
+        assert_eq!(standing(std::slice::from_ref(&ask)).0, RunState::Stopped);
         assert_eq!(
             standing(&[ask.clone(), end("interrupted")]),
             (RunState::Stopped, "interrupted".into())
@@ -491,7 +465,7 @@ mod tests {
         assert_eq!(cut("abc", 3), ("abc".into(), 0));
         assert_eq!(one_line("a\n b\tc", 2), "a …");
         assert_eq!(
-            rfc3339(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_793_361_600)),
+            rfc3339(SystemTime::UNIX_EPOCH + std::time::Duration::from_hours(498_156)),
             "2026-10-30T12:00:00Z"
         );
         assert_eq!(rfc3339(SystemTime::UNIX_EPOCH), "1970-01-01T00:00:00Z");

@@ -4,8 +4,9 @@
  * theme and hostile text.
  */
 import { fileURLToPath } from 'node:url';
-import { expect, type Page, test } from '@playwright/test';
-import { FIXTURE_NOW, fixtureWorlds } from '../src/data/fixtures.ts';
+import type { BoardOverview } from '@mnemorph/protocol';
+import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
+import { FIXTURE_NOW, fixtureOverviews, fixtureWorlds } from '../src/data/fixtures.ts';
 
 /** Where the screenshots go: test-results/screens/<project>-<theme>-<page>.png. */
 const screen = (file: string) =>
@@ -15,10 +16,18 @@ const LIVE = fixtureWorlds.worlds.find((w) => w.name === 'tempest-try');
 if (!LIVE) throw new Error('the fixtures hold tempest-try');
 
 /**
- * Opens the board at `hash`, with the API answering `body`. Every CSP violation the page reports
- * is collected, and `violations` reads them: the page runs under the board server's own CSP.
+ * Opens the board at `hash`, with `/api/worlds` answering `body` and `/api/w/<id>` the overview
+ * `overviews` holds (404 for another). The push socket is the test's: `sockets` collects each one
+ * the page opens. Every CSP violation the page reports is collected, and `violations` reads them:
+ * the page runs under the board server's own CSP.
  */
-async function open(page: Page, hash: string, body: unknown = fixtureWorlds) {
+async function open(
+  page: Page,
+  hash: string,
+  body: unknown = fixtureWorlds,
+  overviews: Record<string, unknown> = fixtureOverviews,
+  sockets: WebSocketRoute[] = [],
+) {
   await page.addInitScript(() => {
     const seen: string[] = [];
     (window as { __csp?: string[] }).__csp = seen;
@@ -30,6 +39,19 @@ async function open(page: Page, hash: string, body: unknown = fixtureWorlds) {
   await page.route('**/api/worlds', (r) =>
     r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }),
   );
+  await page.route('**/api/session', (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ csrf: 'ab'.repeat(32) }) }),
+  );
+  await page.route('**/api/w/*', (r) => {
+    const id = decodeURIComponent(new URL(r.request().url()).pathname.split('/').pop() ?? '');
+    const o = overviews[id];
+    return o
+      ? r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) })
+      : r.fulfill({ status: 404, contentType: 'text/plain', body: 'no listed world has this id' });
+  });
+  await page.routeWebSocket('**/ws/board', (ws) => {
+    sockets.push(ws);
+  });
   await page.goto(`/${hash}`);
   await expect(page.locator('.shell')).toBeVisible();
 }
@@ -117,8 +139,21 @@ function unlabelled(page: Page) {
   );
 }
 
+const byName = (name: string) => {
+  const w = fixtureWorlds.worlds.find((x) => x.name === name);
+  if (!w) throw new Error(`the fixtures hold ${name}`);
+  return w;
+};
+const SQLGLOT = byName('sqlglot');
+const NOTES = byName('notes');
+const GONE = byName('old-spike');
+
 const PAGES: [string, string][] = [
   ['home', '#/'],
+  ['world-live', `#/w/${LIVE.id}`],
+  ['world-tui-live', `#/w/${SQLGLOT.id}`],
+  ['world-silent', `#/w/${NOTES.id}`],
+  ['world-missing', `#/w/${GONE.id}`],
   ['session', `#/w/${LIVE.id}/s/r-17`],
   ['settings', '#/settings'],
 ];
@@ -171,7 +206,7 @@ test('every world reads in words, the latest first', async ({ page }, info) => {
   const cards = page.locator('.world-card');
   await expect(cards).toHaveCount(4);
   await expect(cards.first()).toContainText('tempest-try');
-  await expect(cards.first()).toContainText('present');
+  await expect(cards.first()).toContainText('live');
   await expect(cards.last()).toContainText('never opened');
   await expect(page.locator('.world-card', { hasText: 'old-spike' })).toContainText('missing');
   if (info.project.name === 'desktop') {
@@ -275,5 +310,120 @@ test('a page that loads with no console error', async ({ page }) => {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await open(page, '#/');
   await expect(page.locator('.world-card').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('each home row says its world: status, standing, gate, cost, what waits', async ({ page }) => {
+  await open(page, '#/');
+  const row = (w: { name: string }) => page.locator('.world-card', { hasText: w.name });
+  await expect(row(LIVE)).toContainText('live');
+  await expect(row(LIVE)).toContainText('grounded 41');
+  await expect(row(LIVE)).toContainText('shared 12');
+  await expect(row(LIVE)).toContainText('1 unproven');
+  await expect(row(LIVE)).toContainText('gate PASS');
+  await expect(row(LIVE)).toContainText('$0.42');
+  await expect(row(LIVE)).toContainText('waiting for you: 1 gate ask');
+  await expect(row(SQLGLOT)).toContainText('live in a terminal');
+  await expect(row(SQLGLOT)).toContainText('2 challenges open');
+  await expect(row(SQLGLOT)).toContainText('$0.03 + 2 unpriced');
+  await expect(row(NOTES)).toContainText('idle');
+  await expect(row(NOTES)).toContainText('no gate verdict yet');
+  await expect(row(NOTES)).not.toContainText('$');
+  await expect(row(GONE)).toContainText('missing');
+  await expect(row(GONE)).toContainText('memory unknown');
+});
+
+test('a world overview says each source, and unknown where it is', async ({ page }) => {
+  await open(page, `#/w/${NOTES.id}`);
+  const panel = (t: string) => page.getByRole('region', { name: t });
+  await expect(panel('Status')).toContainText('idle');
+  await expect(panel('Last activity')).toContainText(
+    'unknown — nothing has happened here that the board can read',
+  );
+  await expect(panel('Latest spend')).toContainText('unknown — no call is booked yet');
+  await expect(panel('Challenges')).toContainText('no state directory');
+  await expect(panel('Challenges')).toContainText('harness');
+  await expect(panel('Memory')).toContainText('in-world, shown only');
+  await expect(panel('End gate')).toContainText('No verdict yet.');
+
+  await page.goto(`/#/w/${GONE.id}`);
+  await expect(page.locator('.page-head')).toContainText('missing');
+  await expect(page.getByText("This world's directory is gone.")).toBeVisible();
+  await expect(panel('Memory')).toContainText('unknown — the directory is gone');
+  await expect(panel('Challenges')).toContainText('pending');
+
+  await page.goto(`/#/w/${SQLGLOT.id}`);
+  await expect(page.getByText('too many entries: updates slowed')).toBeVisible();
+
+  await page.goto(`/#/w/${LIVE.id}`);
+  await expect(panel('Meters')).toContainText('precision 0.90 (18/20, 95% 0.70–0.97)');
+  await expect(panel('Meters')).toContainText('gateRight no reports');
+  await expect(page.getByText('Waiting for you: 1 gate ask')).toBeVisible();
+});
+
+test('a pushed world/changed is shown within a second', async ({ page }) => {
+  const sockets: WebSocketRoute[] = [];
+  const overviews: Record<string, BoardOverview> = structuredClone(fixtureOverviews);
+  await open(page, `#/w/${LIVE.id}`, fixtureWorlds, overviews, sockets);
+  await expect(page.locator('.page-live')).toHaveText('Updates as the world changes.');
+  await expect(page.getByRole('region', { name: 'Last activity' })).toContainText('log.md written');
+  const live = overviews[LIVE.id];
+  if (!live) throw new Error('fixtures');
+  live.activity = {
+    value: { at: '2026-10-30T11:59:59Z', what: 'a run journal written' },
+    source: '.mnemorph/instruments/loop/',
+    trusted: false,
+    why: null,
+  };
+  const [ws] = sockets;
+  if (!ws) throw new Error('the page opened no push socket');
+  const sent = Date.now();
+  ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'world/changed', params: { id: LIVE.id } }));
+  await expect(page.getByRole('region', { name: 'Last activity' })).toContainText(
+    'a run journal written',
+    { timeout: 1000 },
+  );
+  expect(Date.now() - sent).toBeLessThan(1000);
+  // Another world's change rereads nothing here.
+  ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'world/changed', params: { id: 'other' } }));
+});
+
+test('hostile names, paths and notes in an overview stay text', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const base = fixtureOverviews[LIVE.id];
+  if (!base) throw new Error('fixtures');
+  const world = {
+    ...LIVE,
+    id: 'evil-2',
+    name: '<img src=x onerror="window.__pwned=1">\u202egnp',
+    path: '/tmp/<script>window.__pwned=2</script>',
+  };
+  const evil: BoardOverview = structuredClone(base);
+  evil.world = world;
+  evil.status.why = '<b onmouseover="window.__pwned=3">run</b> \u001b[31m held';
+  if (evil.gate.value?.last)
+    evil.gate.value.last.verdict = '<a href="javascript:alert(1)">PASS</a>';
+  if (evil.gate.value?.last) evil.gate.value.last.body = 'orc\u200bwire';
+  if (evil.spend.value) evil.spend.value.session = '<svg onload=alert(1)>';
+  evil.memory.source = 'javascript:window.__pwned=4';
+  await open(page, '#/', { worlds: [world] }, { 'evil-2': evil });
+  await expect(page.locator('.world-card')).toContainText('<img src=x');
+  await expect(page.locator('.world-card .safe-esc').first()).toHaveText('\\u{202e}');
+  await page.goto('/#/w/evil-2');
+  await expect(page.getByRole('region', { name: 'Status' })).toContainText('<b onmouseover');
+  await expect(page.getByRole('region', { name: 'Status' }).locator('.safe-esc')).toHaveText(
+    '\\u{1b}',
+  );
+  await expect(page.getByRole('region', { name: 'End gate' })).toContainText('<a href=');
+  await expect(page.getByRole('region', { name: 'End gate' }).locator('.safe-esc')).toHaveText(
+    '\\u{200b}',
+  );
+  expect(
+    await page
+      .locator('main img, main script, main svg, main b, main a[href^="javascript"]')
+      .count(),
+  ).toBe(0);
+  expect(await page.evaluate(() => (window as { __pwned?: number }).__pwned)).toBeUndefined();
   expect(errors).toEqual([]);
 });

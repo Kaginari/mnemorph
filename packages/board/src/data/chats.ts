@@ -12,7 +12,8 @@ import type {
   RunState,
 } from '@mnemorph/protocol';
 import { eventType } from '@mnemorph/protocol';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePush } from './push.ts';
 import { establish, post } from './session.ts';
 
 const str = (v: unknown): v is string => typeof v === 'string';
@@ -115,10 +116,14 @@ export interface Chats {
   refresh: () => void;
 }
 
+/** The least time between two reads a push asks for. */
+export const PUSH_EVERY = 2000;
+
 /** How often the chat list is read again while a world is open. */
 export const CHATS_EVERY = 10_000;
 
-/** The chats of `world`, read on opening, every `CHATS_EVERY` and on `refresh`. */
+/** The chats of `world`, read on opening, on a push that the world changed, every
+ * `CHATS_EVERY`, and on `refresh`. */
 export function useChats(world: string | undefined): Chats {
   const [state, setState] = useState<Omit<Chats, 'refresh'>>({
     live: [],
@@ -128,6 +133,23 @@ export function useChats(world: string | undefined): Chats {
   });
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
+  // A write in the world (a journal among them) is told on the board's push channel: read again
+  // at most every `PUSH_EVERY`, a live chat writing its journal at each step.
+  const pushed = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(pushed.current), []);
+  usePush(
+    useCallback(
+      (c: { kind: string; id?: string }) => {
+        if (c.kind !== 'worlds' && c.id !== world) return;
+        if (pushed.current !== undefined) return;
+        pushed.current = window.setTimeout(() => {
+          pushed.current = undefined;
+          refresh();
+        }, PUSH_EVERY);
+      },
+      [world, refresh],
+    ),
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` asks for a read again
   useEffect(() => {
     if (world === undefined) return;

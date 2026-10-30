@@ -6,7 +6,8 @@
  * The trade answers the CSRF token bound to the session. It lives in this module's memory only —
  * never storage, the DOM or a log — and a reloaded page asks for it again at `GET /api/session`
  * while the cookie lives. Every mutation sends it in `x-mnemorph-csrf`; a chat's WebSocket offers
- * it as the subprotocol entry `mnemorph.csrf.<token>` (the SDK's `ws({csrf})`).
+ * it as the subprotocol entry `mnemorph.csrf.<token>` (the SDK's `ws({csrf})`), and so does the
+ * board's push socket.
  */
 
 /** The key a fragment carries: 64 hex characters, or nothing. */

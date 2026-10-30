@@ -28,7 +28,8 @@ struct Fixture {
 
 impl Fixture {
     fn new(name: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("mnemorph-runs-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("mnemorph-runs-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("world/.mnemorph/instruments/loop")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -54,7 +55,7 @@ impl Fixture {
     /// A journal of `beats`, last written `ago` seconds back.
     fn journal(&self, run: &str, beats: &[Value], ago: u64) -> PathBuf {
         let path = self.journals().join(format!("{run}.jsonl"));
-        let text: String = beats.iter().map(|b| format!("{b}\n")).collect();
+        let text: String = beats.iter().map(|b| b.to_string() + "\n").collect();
         std::fs::write(&path, text).unwrap();
         let at = SystemTime::now() - Duration::from_secs(ago);
         std::fs::File::options()
@@ -231,7 +232,11 @@ async fn a_line_that_does_not_read_is_counted_never_guessed() {
     assert_eq!(t.events.len(), 7);
     let list = runs::list(&f.world);
     assert_eq!(list.runs[0].state, RunState::Unknown);
-    assert!(list.runs[0].why.contains("do not read"), "{}", list.runs[0].why);
+    assert!(
+        list.runs[0].why.contains("do not read"),
+        "{}",
+        list.runs[0].why
+    );
 }
 
 #[tokio::test]
@@ -286,7 +291,7 @@ async fn a_symlink_is_never_followed_and_a_pipe_never_waited_on() {
     .unwrap();
     let by = |id: &str| list.runs.iter().find(|r| r.id == id).unwrap().clone();
     assert_eq!(by("r1000-1").state, RunState::Unknown);
-    assert!(by("r1000-1").ask.is_empty());
+    assert_eq!(by("r1000-1").ask, "");
     assert_eq!(by("r2000-2").state, RunState::Unknown);
     assert_eq!(by("r3000-3").state, RunState::Stopped);
     for run in ["r1000-1", "r2000-2"] {
@@ -297,7 +302,7 @@ async fn a_symlink_is_never_followed_and_a_pipe_never_waited_on() {
     let elsewhere = f.root.join("elsewhere");
     std::fs::rename(f.journals(), &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, f.journals()).unwrap();
-    assert!(runs::list(&f.world).runs.is_empty());
+    assert_eq!(runs::list(&f.world).runs, vec![]);
     assert_eq!(runs::transcript(&f.world, "r3000-3").unwrap_err().0, 404);
 }
 
@@ -316,6 +321,6 @@ async fn a_journal_past_its_cap_is_not_read() {
 #[test]
 fn a_world_without_journals_lists_none() {
     let w = Path::new("/nonexistent/mnemorph-world");
-    assert!(runs::list(w).runs.is_empty());
+    assert_eq!(runs::list(w).runs, vec![]);
     assert_eq!(runs::transcript(w, "r1-2").unwrap_err().0, 404);
 }

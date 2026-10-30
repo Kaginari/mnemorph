@@ -99,8 +99,14 @@ fn board(root: &Path) -> Result<(), String> {
         env: vec![
             ("PATH".into(), std::env::var("PATH").unwrap_or_default()),
             ("HOME".into(), root.display().to_string()),
-            ("XDG_STATE_HOME".into(), root.join("state").display().to_string()),
-            ("XDG_CONFIG_HOME".into(), root.join("config").display().to_string()),
+            (
+                "XDG_STATE_HOME".into(),
+                root.join("state").display().to_string(),
+            ),
+            (
+                "XDG_CONFIG_HOME".into(),
+                root.join("config").display().to_string(),
+            ),
             ("LANG".into(), "C".into()),
         ],
         global: root.join("global.toml"),

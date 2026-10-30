@@ -387,10 +387,11 @@ async fn a_mutation_or_upgrade_needs_the_csrf_token() {
             .status(),
         StatusCode::FORBIDDEN
     );
-    // Admitted by the guard; no route answers it yet.
+    // Admitted by the guard, the route answers: with no real socket under it, the upgrade
+    // itself cannot be made (400), which is past every refusal of the guard's.
     assert_eq!(
         f.send(upgrade(Some(ORIGIN), Some(&token))).await.status(),
-        StatusCode::NOT_FOUND
+        StatusCode::BAD_REQUEST
     );
 
     // With the token, the session ends and its cookie opens nothing more.

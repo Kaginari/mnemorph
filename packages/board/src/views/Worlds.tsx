@@ -1,29 +1,125 @@
-/** Home: every world on this machine, live first. */
+/**
+ * Home: every world on this machine, the latest session first — a row each with its status, path,
+ * activity, memory standing, open challenges, gate and spend, and "waiting for you" when one of the
+ * board's chats keeps a gate ask.
+ */
 import type { BoardWorld } from '@mnemorph/protocol';
 import { useState } from 'react';
+import { type OverviewLoad, useOverview } from '../data/overview.ts';
 import type { Load } from '../data/worlds.ts';
 import { format } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
 import { ago } from '../time.ts';
 import { Empty } from '../ui/Empty.tsx';
-import { Mark, STATUS } from '../ui/Mark.tsx';
+import { Mark, STATUS, WORLD_STATUS } from '../ui/Mark.tsx';
+import { GatePill, money, Unknown, When } from './facts.tsx';
+
+/** The overview's line under a world: standing, challenges, gate, cost — or why it is not here. */
+function Facts({ load, now }: { load: OverviewLoad; now: number }) {
+  if (load.state === 'loading') return <span className="world-card-note">reading…</span>;
+  const o = load.data;
+  if (!o) {
+    return (
+      <span className="world-card-note">
+        overview unavailable: <Safe text={load.state === 'failed' ? load.reason : ''} />
+      </span>
+    );
+  }
+  const m = o.memory.value;
+  const c = o.challenges.value;
+  const held = c ? c.pending + c.blocked + c.verifying : 0;
+  return (
+    <>
+      {m ? (
+        <>
+          <span>grounded {m.grounded}</span>
+          <span>shared {m.shared}</span>
+          {m.unproven > 0 && (
+            <Mark tone="gold" glyph="⚠">
+              {m.unproven} unproven
+            </Mark>
+          )}
+        </>
+      ) : (
+        <span>
+          memory <Unknown why={o.memory.why} />
+        </span>
+      )}
+      {c && held > 0 && (
+        <Mark tone={c.blocked > 0 ? 'alarm' : 'gold'} glyph="◇">
+          {held} {held === 1 ? 'challenge' : 'challenges'} open
+        </Mark>
+      )}
+      {o.gate.value ? (
+        <GatePill g={o.gate.value} />
+      ) : (
+        <span>
+          gate <Unknown why={o.gate.why} />
+        </span>
+      )}
+      {o.spend.value && <span>{money(o.spend.value)}</span>}
+      {o.activity.value && (
+        <span className="world-card-activity">
+          <Safe text={o.activity.value.what} /> <When at={o.activity.value.at} now={now} />
+        </span>
+      )}
+      {load.state === 'failed' && (
+        <Mark tone="gold" glyph="⚠">
+          stale: <Safe text={load.reason} />
+        </Mark>
+      )}
+    </>
+  );
+}
+
+/** "Waiting for you", when the board's chats in a world keep a gate ask. */
+function Waiting({ load }: { load: OverviewLoad }) {
+  const n = load.state === 'ready' ? (load.data.waiting.value ?? 0) : 0;
+  if (n === 0) return null;
+  return (
+    <div className="world-card-waiting">
+      <Mark tone="gold" glyph="◆">
+        waiting for you: {n} gate {n === 1 ? 'ask' : 'asks'}
+      </Mark>
+    </div>
+  );
+}
+
+function Status({ w, load }: { w: BoardWorld; load: OverviewLoad }) {
+  const v = load.state === 'ready' ? load.data.status.value : null;
+  const s = v
+    ? WORLD_STATUS[v]
+    : w.state === 'missing'
+      ? WORLD_STATUS.missing
+      : {
+          glyph: '◌',
+          tone: 'muted' as const,
+          label: load.state === 'loading' ? 'reading' : 'unknown',
+        };
+  return (
+    <Mark tone={s.tone} glyph={s.glyph}>
+      <span className="world-card-name">
+        <Safe text={w.name} />
+      </span>
+      <span className="visually-hidden"> — {s.label}</span>
+    </Mark>
+  );
+}
 
 function Card({ w, now }: { w: BoardWorld; now: number }) {
-  const s = STATUS[w.state];
+  const load = useOverview(w.id);
+  const v = load.state === 'ready' ? load.data.status.value : null;
+  const label = v ? WORLD_STATUS[v].label : STATUS[w.state].label;
   return (
     <li>
       <a className="world-card" href={format({ name: 'world', world: w.id })}>
         <div className="world-card-top">
-          <Mark tone={s.tone} glyph={s.glyph}>
-            <span className="world-card-name">
-              <Safe text={w.name} />
-            </span>
-          </Mark>
+          <Status w={w} load={load} />
           <span className="world-card-path mono">
             <Safe text={w.path} />
           </span>
           <span className="world-card-when">
-            {s.label}
+            {label}
             {w.state !== 'missing' && ` · ${w.last === null ? 'never opened' : ago(w.last, now)}`}
           </span>
         </div>
@@ -36,7 +132,9 @@ function Card({ w, now }: { w: BoardWorld; now: number }) {
               <Safe text={w.remote} />
             </span>
           )}
+          <Facts load={load} now={now} />
         </div>
+        <Waiting load={load} />
       </a>
     </li>
   );
