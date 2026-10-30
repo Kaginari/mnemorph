@@ -417,7 +417,7 @@ string becomes markup, and nothing runs, so the page holds under `require-truste
 'script'`. A hostile depth or length costs linear work: each line is read by a scan or a regex with
 no overlapping quantifiers (a backtracking pattern on one long line would freeze every tab showing
 it), brackets are paired in one pass, a closer's search resumes where the last one stopped, nesting
-stops at 8, and past 100,000 characters an answer is shown as plain text. A test times every parser
+stops at 8, a text parses into at most 2,000 blocks (the rest one paragraph), and past 100,000 characters an answer is shown as plain text. A test times every parser
 the board runs on such text — the Markdown subset, the highlighter, the safe-text runs, the router —
 on adversarial 100 KB inputs, each under 50 ms.
 
