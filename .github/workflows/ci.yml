@@ -37,6 +37,42 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: just check
 
+  board:
+    # The board end to end: Chromium at the version @playwright/test pins, its binary cached by
+    # that version. Linux only: the page is the same everywhere.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The pinned Playwright version
+        id: pw
+        run: echo "version=$(pnpm --filter @mnemorph/board exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Chromium and its system libraries
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @mnemorph/board exec playwright install --with-deps chromium
+      - name: Chromium's system libraries (the browser is cached)
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @mnemorph/board exec playwright install-deps chromium
+      - name: Screenshots, contrast, labels, router, drawers, hostile text
+        run: pnpm --filter @mnemorph/board e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: board-e2e
+          path: |
+            packages/board/test-results/
+            packages/board/playwright-report/
+
   docs:
     runs-on: ubuntu-latest
     steps:
