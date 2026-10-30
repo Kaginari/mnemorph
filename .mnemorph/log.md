@@ -6252,3 +6252,37 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** a root cause confirmed before the window and refuted inside it recomputes from the
   prefix, and not from the window alone; the chained-records test reads rows and chain in one go.
 - **Learned:** a window's rows are not its inputs when a fold dedupes across them.
+
+---
+
+### [2026-10-30T15:20:15+01:00] rimuru — #100: an evolution judged after the freeze — post-swap window, do-nothing control, exact file set
+- **Done:** `mnemorph_ledger::evolution`: a chained evolution ledger of `swap` and `run` rows. A swap names
+  its exact files (SHA-256 before and after) and keeps the soil diff the harness saw (`snapshot`, `diff`);
+  judging refuses a contaminated, missing or mismatched file set. The window is the first 10 runs after the
+  swap's row stamped with its id, its build and the named files' after `state`, by its bodies; held-out tasks
+  are used once by fingerprint (not proven on, not twice, not first used by another swap). Every window task
+  has a do-nothing control on the before state; keep only on `landRate` strictly higher and `holeRate` no
+  higher, else a rollback — both proposals, one `Explanation` per bar (new kinds `keep`, `rollback`) with
+  the digest of the window's last row; `replay` reads the ledger to that row and judges again. Docs 02, roadmap.
+- **Tests:** pre-swap and other-build rows excluded; equal to do-nothing rolls back (and a ScriptedModel
+  fixture in mnemorph-loop: the same ten tasks, nothing-to-do ones among them, with and without a Mind change);
+  a contaminated, missing, mismatched or drifted swap refused; held-out reuse refused; pending until whole;
+  replay reproduces, an edited row refuses. Each guard disabled in turn fails a test.
+- **Learned:** the shared dev target can hold another worktree's rlib under the same hash: a build that says
+  a re-exported name is missing from a crate that plainly has it wants its sources touched, not a fix.
+  Open (@?): nothing writes swap or run rows yet — the swap itself (M11) must stamp runs and run the controls.
+
+---
+
+### [2026-10-30T15:38:30+01:00] rimuru — #100, Fable's review: an anchored ledger, controls after the swap, net paired wins
+- **Done:** the evolution ledger lives at `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl`
+  (`mnemorph_world::evolution`), harness-only, anchored with the other chained journals; it is read held to
+  the newest anchored head, and an unchained ledger or a window whose last row is no link is refused. Controls
+  count only after the swap and by the window run's body; any earlier run of a task, stamped or not, refuses
+  it; runs stamp the named files' state after the run too. Keep needs net paired wins >= `evolution.min_net_wins`
+  (2, at least 1, the human's alone) and no holeRate regression: `keep: netWins 5 >= 2 …`. Docs 02, 05, 06.
+- **Tests:** one net win rolls back, two keep, the human's bar judged on; pre-swap and other-body controls do not
+  count; an unstamped earlier run refuses; a mid-run edit refuses its run and control rows; an unchained ledger
+  and one chained again from its start (anchored) refused. Each new guard disabled in turn fails a test.
+- **Learned:** an anchored walk reports the anchor unmet until it reaches it: a row's own digest is read from
+  the head at its line, never from the walk's verdict mid-file.

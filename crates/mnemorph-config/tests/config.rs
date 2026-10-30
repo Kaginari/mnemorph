@@ -1101,3 +1101,21 @@ fn recall_weights_are_numbers_a_layer_sets() {
         );
     }
 }
+
+#[test]
+fn an_evolution_keeps_on_two_net_wins_unless_the_human_says() {
+    let g = Ground::new("min-net-wins");
+    assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
+    g.local("[evolution]\nmin_net_wins = 3\n");
+    assert_eq!(g.load().unwrap().evolution_min_net_wins(), 3);
+    g.local("[evolution]\nmin_net_wins = 0\n");
+    let e = g.load().unwrap_err();
+    assert!(
+        e.contains("evolution.min_net_wins is a count of paired wins, at least 1"),
+        "{e}"
+    );
+    // Fewer wins keep more: the world's tracked file cannot lower the bar.
+    g.local("");
+    g.tracked("[evolution]\nmin_net_wins = 1\n");
+    assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
+}

@@ -1,5 +1,5 @@
-//! Why a rise, a probation or a fall is proposed: one line per bar, typed, so the decision can be
-//! read back and recomputed.
+//! Why a rise, a probation or a fall is proposed — and whether an evolution is kept or rolled back:
+//! one line per bar, typed, so the decision can be read back and recomputed.
 //!
 //! Every bar the race law reads is a meter held against a threshold by an operator. An
 //! [`Explanation`] names the meter, its reading, the operator, the threshold and the record it was
@@ -56,16 +56,23 @@ pub enum Kind {
     Probation,
     /// An event that ends the ascension at once.
     Fall,
+    /// One bar of an evolution kept: it beat doing nothing over its post-swap window, on every
+    /// bar.
+    Keep,
+    /// A bar an evolution failed against doing nothing over its post-swap window: a rollback.
+    Rollback,
 }
 
 impl Kind {
-    /// `rise`, `probation` or `fall`.
+    /// `rise`, `probation`, `fall`, `keep` or `rollback`.
     #[must_use]
     pub fn word(self) -> &'static str {
         match self {
             Kind::Rise => "rise",
             Kind::Probation => "probation",
             Kind::Fall => "fall",
+            Kind::Keep => "keep",
+            Kind::Rollback => "rollback",
         }
     }
 }
@@ -185,7 +192,7 @@ impl Explanation {
 
 impl fmt::Display for Explanation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let span = if self.kind == Kind::Rise {
+        let span = if matches!(self.kind, Kind::Rise | Kind::Keep | Kind::Rollback) {
             "over"
         } else {
             "last"

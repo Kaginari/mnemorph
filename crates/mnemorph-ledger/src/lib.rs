@@ -1,6 +1,7 @@
 //! The usage ledger: weighted tokens, prices, budgets and envelopes, caps, folds; and the value
-//! ledger's Dark Elf folds, findings per speciality ([`fold_findings`]); and the uses of Oni
-//! envelopes ([`Uses`]), counted under a lock at the moment of use.
+//! ledger's Dark Elf folds, findings per speciality ([`fold_findings`]); the uses of Oni
+//! envelopes ([`Uses`]), counted under a lock at the moment of use; and an evolution judged after
+//! the freeze, on its post-swap window against doing nothing ([`evolution`]).
 //!
 //! Budget flows down like context; spend flows up like memory. Every model call writes one
 //! [`UsageRow`] to an append-only journal; envelopes carve the session's budget down the chain;
@@ -12,6 +13,7 @@ mod caps;
 pub mod chain;
 mod clock;
 mod envelope;
+pub mod evolution;
 mod findings;
 mod fold;
 mod journal;
