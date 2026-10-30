@@ -43,8 +43,6 @@ function Card({ w, now }: { w: WorldSummary; now: number }) {
   );
 }
 
-const ADD = 'mnemorphd board add <dir>';
-
 export function WorldsView({ load, now }: { load: Load; now: number }) {
   const [adding, setAdding] = useState(false);
   return (
@@ -65,8 +63,8 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
       </header>
       {adding && (
         <p className="hint">
-          A world joins the board when a session opens in it. To add one by hand, run{' '}
-          <code className="mono">{ADD}</code> in a terminal.
+          A world joins the board when a session opens in it: run{' '}
+          <code className="mono">mnemorph</code> in its directory.
         </p>
       )}
       {load.state === 'loading' && (
@@ -79,15 +77,13 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
           <p>
             <Safe text={load.reason} />.
           </p>
-          <p>
-            Is the board server running? Start it with <code className="mono">mnemorph board</code>.
-          </p>
+          <p>Is the board server still running? Reload once it is.</p>
         </Empty>
       )}
       {load.state === 'ready' && load.data.worlds.length === 0 && (
         <Empty glyph="◈" title="No worlds yet">
-          Open a session with <code className="mono">mnemorph</code> in a directory, or run{' '}
-          <code className="mono">{ADD}</code>.
+          Open a session with <code className="mono">mnemorph</code> in a directory, and it appears
+          here.
         </Empty>
       )}
       {load.state === 'ready' && load.data.worlds.length > 0 && (

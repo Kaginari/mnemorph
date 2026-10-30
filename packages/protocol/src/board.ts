@@ -1,6 +1,6 @@
 /**
  * The board's HTTP API, as the page reads it. Written by hand, not generated: the board server
- * (`mnemorphd board`) owns these shapes, and its tests and the board's fixtures keep them equal.
+ * (the board server) owns these shapes, and its tests and the board's fixtures keep them equal.
  */
 
 /** How a world stands right now. */

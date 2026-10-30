@@ -12,7 +12,8 @@ export function MetricsView() {
       </header>
       <Empty glyph="▤" title="No metrics drawn yet">
         Spend, tokens, cache and the races' value meters appear here once the board server reads the
-        ledgers. Until then, <code className="mono">mnemorph ledger</code> prints them.
+        ledgers. Until then, <code className="mono">mnemorph status</code> and{' '}
+        <code className="mono">mnemorphd meters</code> print them.
       </Empty>
     </div>
   );

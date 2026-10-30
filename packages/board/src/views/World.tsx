@@ -43,8 +43,7 @@ export function WorldView({ w }: { w: WorldSummary }) {
       </p>
       {w.status === 'missing' ? (
         <Empty glyph="✕" title="This world's directory is gone">
-          It stays listed until it is forgotten with{' '}
-          <code className="mono">mnemorphd board forget</code>.
+          It stays listed, never silently dropped, so a moved or deleted world is noticed.
         </Empty>
       ) : (
         <Empty glyph="◈" title="The world overview is not drawn yet">
