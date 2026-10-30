@@ -39,6 +39,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
+       mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open]
+       mnemorphd board add|forget <dir>
 
 Speaks the client protocol (JSON-RPC 2.0, one message per line) on stdin and stdout, for the
 SDK and the board; the `mnemorph` command hosts its session in its own process. The admin
@@ -129,6 +131,18 @@ owner — the human unless `--owner` names the creature that proposed it (on ado
 loading, `unretire <name>` takes that back. Each shows the Mind and asks for `y` at the terminal
 (`/dev/tty`; piped input is refused). A body never runs them.
 
+`board` serves the board — the web cockpit over every world on this machine — on loopback
+(`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
+for another machine, forward the port over SSH). It prints `http://127.0.0.1:<port>/#k=<key>`:
+the key works once, traded by the page for a session cookie, and a new one waits after it. One
+board runs per machine: a second launch prints the running board's URL, with the key waiting now,
+and exits. `--open` also opens the board in the browser (the URL passes through the opener's
+command line, so it carries a key of its own, valid once and for a minute; it is refused when
+no board is built in). An untraded key is replaced after 10 minutes, and a second launch prints
+the new one; a session ends after 12 idle hours, or 7 days. The worlds are those a session opened in (`$XDG_STATE_HOME/mnemorph/worlds.jsonl`)
+and those added by hand: `board add <dir>` lists a world, `board forget <dir>` stops listing one
+until it is added again or a session opens in it. A body never runs any of them.
+
 `housekeep --verify` walks each chained journal — the usage ledger, the Dark Elf's value ledger
 and the evolution ledger — once, held to the newest head anchored for it, and says for each: OK with its head, a
 torn tail (a truncation, not tampering) with the head it holds to, or the first broken link with
@@ -200,6 +214,9 @@ fn main() -> ExitCode {
     if all.first().map(String::as_str) == Some("mind") {
         return mind(&all[1..]);
     }
+    if all.first().map(String::as_str) == Some("board") {
+        return board(&all[1..]);
+    }
     let mut resume = None;
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
@@ -242,6 +259,165 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&e),
     }
+}
+
+/// `board [--port <n>] [--bind <addr>] [--open]`, `board add|forget <dir>`: the human's board. A
+/// body never runs it.
+fn board(args: &[String]) -> ExitCode {
+    use mnemorph_server::world::dimension;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: the board is the human's to serve, and its worlds the human's to \
+             add and forget"
+        ));
+    }
+    let Some(registry) = dimension::registry() else {
+        return fail("no state directory: set XDG_STATE_HOME or HOME");
+    };
+    let hand = dimension::hand_file(&registry);
+    if let Some(act @ ("add" | "forget")) = args.first().map(String::as_str) {
+        return board_hand(act, args, &registry, &hand);
+    }
+    serve_board(args, registry, hand)
+}
+
+/// `board add|forget <dir>`.
+fn board_hand(act: &str, args: &[String], registry: &Path, hand: &Path) -> ExitCode {
+    use mnemorph_server::world::dimension;
+    let [_, dir] = args else {
+        return fail(&format!("board {act} needs one directory; see --help"));
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let hand_act = if act == "add" {
+        dimension::Hand::Add
+    } else {
+        dimension::Hand::Forget
+    };
+    match dimension::hand(hand, registry, hand_act, &absolute(&cwd, Path::new(dir))) {
+        Ok(w) if act == "add" => {
+            println!("on the board: {} ({})", w.world.display(), w.id);
+            ExitCode::SUCCESS
+        }
+        Ok(w) => {
+            println!("forgotten: {} ({})", w.world.display(), w.id);
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `board [--port <n>] [--bind <addr>] [--open]`: serve the board until Ctrl-C, or print the
+/// running one's URL.
+fn serve_board(args: &[String], registry: PathBuf, hand: PathBuf) -> ExitCode {
+    use mnemorph_server::board::{self, instance};
+    let mut port = board::DEFAULT_PORT;
+    let mut bind = None;
+    let mut open = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--open" => open = true,
+            "--port" => match it.next().map(|p| p.parse::<u16>()) {
+                Some(Ok(p)) => port = p,
+                _ => return fail("--port needs a port number"),
+            },
+            "--bind" => {
+                let Some(addr) = it.next() else {
+                    return fail("--bind needs an address: 127.0.0.1 or ::1");
+                };
+                match addr.parse::<std::net::IpAddr>() {
+                    Ok(ip) => match board::loopback(ip) {
+                        Ok(()) => bind = Some(ip),
+                        Err(e) => return refused(&e),
+                    },
+                    Err(_) => return refused(&board::loopback_only(addr)),
+                }
+            }
+            other => return fail(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    if open && !board::built() {
+        return refused(
+            &"--open: this mnemorphd has no board built in, so no page would spend the key it \
+              opens; build the board (pnpm --filter @mnemorph/board build), then mnemorphd",
+        );
+    }
+    let Some(dir) = registry.parent() else {
+        return fail("no state directory");
+    };
+    let instance = match instance::claim(dir) {
+        Ok(instance::Claim::Ours(i)) => i,
+        Ok(instance::Claim::Running(url)) => {
+            println!("{url}");
+            let _ = writeln!(
+                std::io::stderr(),
+                "mnemorphd board: already running; its key above works once"
+            );
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => return fail(&e),
+    };
+    let listeners = match board::listen(port, bind) {
+        Ok(l) => l,
+        Err(e) => return fail(&e),
+    };
+    let served = match board::Board::new(&listeners, registry, hand, instance.publisher()) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    let url = served.url();
+    if let Err(e) = instance.publish(&url) {
+        return fail(&e);
+    }
+    println!("{url}");
+    let _ = std::io::stdout().flush();
+    let addrs: Vec<String> = listeners
+        .iter()
+        .filter_map(|l| l.local_addr().ok())
+        .map(|a| a.to_string())
+        .collect();
+    let _ = writeln!(
+        std::io::stderr(),
+        "mnemorphd board: serving on {}{}; open the URL above — its key works once. Ctrl-C stops it.",
+        addrs.join(" and "),
+        if board::built() {
+            ""
+        } else {
+            " (the board is not built into this binary: a placeholder page)"
+        }
+    );
+    if open && let Err(e) = open_board(&served) {
+        return fail(&e);
+    }
+    let out = board::run(listeners, &served);
+    drop(instance);
+    match out {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => fail(&e),
+    }
+}
+
+/// Open the board in the browser. The browser gets a key of its own, spent on arrival or dead
+/// within the minute: an opener's command line is readable by every local user while it runs.
+fn open_board(served: &mnemorph_server::board::Board) -> Result<(), String> {
+    let url = served.open_url()?;
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    if let Err(e) = std::process::Command::new(opener)
+        .arg(&url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        let _ = writeln!(std::io::stderr(), "mnemorphd board: {opener}: {e}");
+    }
+    Ok(())
 }
 
 /// `runs [--world <dir>] [--json]`: the runs that stopped and may be resumed, newest first.
