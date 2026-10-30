@@ -217,20 +217,29 @@ export class Client {
     this.pending.clear();
   }
 
+  /** Catch up: every event after `lastSeq` the core still keeps, then the live ones that came
+   * meanwhile — each once, in order. A tab opening on a chat already running calls it at once,
+   * beside `initialize`: live events wait from the call on, so none overtakes the replay. If the
+   * replay fails, they keep waiting, for the next catch-up. */
+  async catchUp(): Promise<EventsResult> {
+    this.held ??= [];
+    const result = await this.resync();
+    const held = this.held ?? [];
+    this.held = undefined;
+    for (const m of held) this.deliver(m);
+    return result;
+  }
+
   /** The connection is back: control taken again if this tab had it, then the events missed,
    * then the live ones that came meanwhile. */
   private async reopened(): Promise<void> {
-    this.held = [];
+    this.held ??= [];
     try {
       if (this.role === 'controller') await this.takeOver().catch(() => {});
-      await this.resync();
+      await this.catchUp();
     } catch {
       // Dropped again: the next reopening replays from the same place.
-      return;
     }
-    const held = this.held;
-    this.held = undefined;
-    for (const m of held) this.deliver(m);
   }
 
   private receive(line: string): void {

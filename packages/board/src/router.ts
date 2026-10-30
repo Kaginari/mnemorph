@@ -1,5 +1,6 @@
 /**
- * The board's own hash router: every view has an address (`#/w/<world>/s/<session>`), so a link,
+ * The board's own hash router: every view has an address (`#/w/<world>/s/<chat>` a live chat,
+ * `#/w/<world>/r/<run>` a past one), so a link,
  * a reload or the back button lands where it was. No library: a parse, a format and a hook.
  */
 import { useEffect, useState } from 'react';
@@ -13,6 +14,7 @@ export type Route =
   | { name: 'world'; world: string }
   | { name: 'section'; world: string; section: WorldSection }
   | { name: 'session'; world: string; session: string }
+  | { name: 'run'; world: string; run: string }
   | { name: 'metrics' }
   | { name: 'integrations' }
   | { name: 'settings' }
@@ -30,7 +32,12 @@ function decode(segment: string): string | undefined {
 /** The route a location hash names; anything else is `unknown`, carrying the path as written. */
 export function parse(hash: string): Route {
   const path = hash.replace(/^#/, '');
-  const trimmed = path.replace(/^\/+/, '').replace(/\/+$/, '');
+  // Slashes trimmed by a scan: a regex anchored at the end backtracks over a long run of them.
+  let from = 0;
+  let to = path.length;
+  while (from < to && path[from] === '/') from++;
+  while (to > from && path[to - 1] === '/') to--;
+  const trimmed = path.slice(from, to);
   if (trimmed === '') return { name: 'worlds' };
   const parts = trimmed.split('/');
   const unknown: Route = { name: 'unknown', path };
@@ -46,6 +53,10 @@ export function parse(hash: string): Route {
   if (b === 's') {
     const session = c === undefined ? undefined : decode(c);
     return session === undefined ? unknown : { name: 'session', world, session };
+  }
+  if (b === 'r') {
+    const run = c === undefined ? undefined : decode(c);
+    return run === undefined ? unknown : { name: 'run', world, run };
   }
   if (c === undefined && (WORLD_SECTIONS as readonly string[]).includes(b)) {
     return { name: 'section', world, section: b as WorldSection };
@@ -65,6 +76,8 @@ export function format(route: Route): string {
       return `${w(route.world)}/${route.section}`;
     case 'session':
       return `${w(route.world)}/s/${encodeURIComponent(route.session)}`;
+    case 'run':
+      return `${w(route.world)}/r/${encodeURIComponent(route.run)}`;
     case 'unknown':
       return `#${route.path}`;
     default:
