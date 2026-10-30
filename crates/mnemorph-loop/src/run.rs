@@ -286,6 +286,10 @@ pub struct Run {
     recall_trace: Option<(String, bool, Option<String>, Option<String>)>,
     /// What this ask landed: the gate's journal heading for a change it judged.
     landed_in_ask: Option<String>,
+    /// The MCP tools this ask called: what the world's usage record learns at its end.
+    mcp_used: std::sync::Mutex<std::collections::BTreeSet<String>>,
+    /// Where the world's MCP usage record is kept, when the run is offered MCP tools.
+    mcp_record: Option<PathBuf>,
     /// The evolution ledger this run's asks are stamped on: the world's own under the state
     /// directory (`None`), or the one given.
     evolution_ledger: Option<PathBuf>,
@@ -429,6 +433,8 @@ impl Run {
             office: "ask".into(),
             recall_trace: None,
             landed_in_ask: None,
+            mcp_used: std::sync::Mutex::default(),
+            mcp_record: None,
             evolution_ledger: None,
             evolving: std::sync::Mutex::new(None),
             opening: None,
@@ -794,6 +800,14 @@ impl Run {
         self
     }
 
+    /// Keep what this run's MCP calls came to in the usage record under `record` (an MCP
+    /// state directory); `None` keeps nothing.
+    #[must_use]
+    pub fn with_mcp_record(mut self, record: Option<PathBuf>) -> Self {
+        self.mcp_record = record;
+        self
+    }
+
     /// The toolbox's manifest, said with the first ask: in the changing tail, never as tool
     /// definitions, so the cached prefix holds whatever Minds the world has.
     #[must_use]
@@ -906,10 +920,31 @@ impl Run {
         }
     }
 
+    /// The MCP tools this ask called, counted in the world's usage record: each helped when the
+    /// ask ended answered with no failure at its gate. The harness counts; no model writes it.
+    fn learn_mcp(&self, ending: &Ending) {
+        let used = std::mem::take(
+            &mut *self
+                .mcp_used
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        let Some(record) = &self.mcp_record else {
+            return;
+        };
+        let helped = matches!(ending, Ending::Answered(_)) && self.failed_in_ask.is_none();
+        if let Err(e) = mnemorph_tools::mcp::learn(record, &used, helped) {
+            self.record(&Beat::Warning {
+                text: format!("the MCP usage record could not be kept: {e}"),
+            });
+        }
+    }
+
     fn end(&self, ending: Ending) -> Ending {
         // A line sent too late for this turn is said with this turn's end.
         self.drop_steering();
         self.record_evolving(&ending);
+        self.learn_mcp(&ending);
         if let Ending::Answered(text) = &ending {
             self.accept(text);
             // A commissioned body's claims are its dispatcher's to keep; a body answering the
@@ -1257,7 +1292,7 @@ impl Run {
         if verdict.unrun() {
             return Some(Ending::Failed(format!(
                 "the end gate could not verify: {} — make the sandbox work on this machine, or set \
-`sandbox.allow_unguarded = true` in your local config",
+`sandbox.allow_unguarded = true` in your global config",
                 verdict.unverified.join("; ")
             )));
         }
@@ -2830,6 +2865,12 @@ impl Run {
     /// Journal what the guts read from one act, with the act's instruments: the record a learned
     /// value model will train on.
     fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
+        if let Some(tool) = &o.meta.mcp {
+            self.mcp_used
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(tool.clone());
+        }
         let reading = self.stress.last().clone();
         self.record(&Beat::Guts {
             tool_use_id: id.to_owned(),

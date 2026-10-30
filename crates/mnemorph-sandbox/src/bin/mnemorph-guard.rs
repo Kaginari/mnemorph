@@ -1,10 +1,11 @@
-//! `mnemorph-guard [--read P]… [--write P]… [--rules FILE] [--network] -- PROGRAM ARGS…`
+//! `mnemorph-guard [--read P]… [--write P]… [--rules FILE] [--network] [--die-with-parent] -- PROGRAM ARGS…`
 //!
 //! `--rules` reads `r`/`w` and a path, each NUL-terminated, from FILE and removes it.
 //!
 //! Restricts its own process with landlock and seccomp, then execs PROGRAM in its place, so the
 //! command and everything it starts inherit the restriction. `--probe` restricts and prints the
-//! status line instead of running anything. Exit 125: the restriction could not be enforced,
+//! status line instead of running anything. `--die-with-parent` has the kernel kill PROGRAM when
+//! the thread that started the guard ends, so a long-lived server never outlives the harness. Exit 125: the restriction could not be enforced,
 //! nothing ran; exit 127: PROGRAM could not be executed.
 
 #[cfg(target_os = "linux")]
@@ -17,6 +18,8 @@ fn main() {
 
     let mut rules = Rules::default();
     let mut probe = false;
+    let mut die_with_parent = false;
+    let parent = rustix::process::getppid();
     let mut args = std::env::args_os().skip(1);
     let mut program: Vec<std::ffi::OsString> = Vec::new();
     while let Some(a) = args.next() {
@@ -35,6 +38,7 @@ fn main() {
                 }
             }
             Some("--probe") => probe = true,
+            Some("--die-with-parent") => die_with_parent = true,
             Some("--") => {
                 program.extend(args.by_ref());
                 break;
@@ -43,6 +47,18 @@ fn main() {
                 eprintln!("mnemorph-guard: unknown argument {}", a.to_string_lossy());
                 exit(125);
             }
+        }
+    }
+    if die_with_parent {
+        // Set before the parent can be checked, then checked: a parent gone in between is caught.
+        if let Err(e) =
+            rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL))
+        {
+            eprintln!("mnemorph-guard: the parent-death signal: {e}; nothing ran");
+            exit(125);
+        }
+        if rustix::process::getppid() != parent {
+            exit(125);
         }
     }
     let status = match restrict(&rules) {

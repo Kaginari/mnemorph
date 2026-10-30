@@ -92,7 +92,7 @@ impl Tool for Bash {
             && !cx.allows_unguarded()
         {
             return Outcome::error(format!(
-                "no kernel guard is in force ({reason}), so the command did not run; to run commands unguarded, set `sandbox.allow_unguarded = true` in your local or global config"
+                "no kernel guard is in force ({reason}), so the command did not run; to run commands unguarded, set `sandbox.allow_unguarded = true` in your global config"
             ));
         }
         let timeout = a

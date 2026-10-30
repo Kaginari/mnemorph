@@ -117,6 +117,8 @@ pub struct Commissioner {
     /// How many reviewers one landing's challenge commissions at one sweep
     /// ([`crate::challenge::REVIEWERS`] unless the configuration says).
     pub reviewers: usize,
+    /// The session's MCP servers: each child is offered its race's share, ranked for its ask.
+    pub mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>,
     /// The registry of worlds a commissioned body's manifest reads are sighted against; `None`
     /// sights nothing.
     pub registry: Option<PathBuf>,
@@ -521,6 +523,7 @@ pub(crate) async fn order(
         slice,
         child_cx.with_body(&a.to),
         model,
+        &a.ask,
     )
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
@@ -1280,6 +1283,8 @@ impl Drop for Seat {
 
 /// The child body for `to`: its prompt, its tools over its own soil, its slice as its budget,
 /// the human's caps and stress line, its gate, and the commission tool when its race dispatches.
+// The order's parts, each read once here: bundling them would only move the list.
+#[allow(clippy::too_many_arguments)]
 fn child_run(
     c: &Arc<Commissioner>,
     roster: &Roster,
@@ -1288,6 +1293,7 @@ fn child_run(
     slice: u64,
     cx: Context,
     model: String,
+    ask: &str,
 ) -> Run {
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
@@ -1330,6 +1336,11 @@ fn child_run(
     if creature.race.base() == mnemorph_races::Race::Kijin {
         tools.push(Box::new(mnemorph_config::OutwardTool));
     }
+    // The race's MCP share, ranked for this ask: decided now, never changed mid-run.
+    if let Some(m) = &c.mcp {
+        let offer = m.offer(creature.race, ask, &cx, &crate::open::reserved(&tools));
+        tools.extend(offer.tools);
+    }
     let setup = Setup {
         model: Arc::clone(&c.model),
         tools,
@@ -1358,6 +1369,7 @@ fn child_run(
     let mut child = Run::new(body, limits, setup)
         .with_gate(gate)
         .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
+        .with_mcp_record(c.mcp.as_ref().map(|m| m.state().to_path_buf()))
         .with_registry(c.registry.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {

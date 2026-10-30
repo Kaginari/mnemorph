@@ -72,8 +72,9 @@ cargo install --path crates/mnemorphd         # mnemorphd: the server and the ad
 ```
 
 Name a provider and a model once, for every world, in `~/.config/mnemorph/config.toml`
-(`$XDG_CONFIG_HOME/mnemorph/config.toml`); a world's `.mnemorph/config.local.toml` overrides it
-([configuration](docs/05-architecture.md#configuration)):
+(`$XDG_CONFIG_HOME/mnemorph/config.toml`). A world's `.mnemorph/config.local.toml` overrides it,
+except for providers, caps, MCP servers and anything that loosens the gate or the sandbox, which
+only this global file sets ([configuration](docs/05-architecture.md#configuration)):
 
 ```toml
 [providers.openrouter]

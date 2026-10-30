@@ -329,6 +329,20 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 - Caches are per model: "identical for every body" pays off among bodies on the same model.
 - `cacheHitRate` is a signal in the value ledger, per tier; the board shows it per race.
 
+### MCP tool schemas
+
+An MCP tool's schema rides every request of a run that is offered it, so it is priced before it
+is offered ([MCP](07-mcp.md)):
+
+- each tool's price is its name, description and schema at four bytes a token; `mnemorph status`
+  shows it per tool, offered or deferred, and the frame's total;
+- the schemas a frame carries stay within `mcp.schema_tokens` (4,000): past it, or past
+  `mcp.defer_above` tools, the rest are deferred behind `mcp_search`, whose answer shows each
+  tool's price before the body calls it;
+- what is offered is decided when the run is made and never changes mid-run, so the schemas are
+  read from the cache at the cache-read price after the first request, and every token of them is
+  in the usage ledger's input like the rest of the frame.
+
 ### Reads by range
 
 File reads are the largest class of tokens a body spends: a file read whole is paid for when it

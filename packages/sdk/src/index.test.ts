@@ -121,15 +121,17 @@ afterEach(() => {
 test.runIf(existsSync(daemon))('speaks to the real mnemorphd over stdio', async () => {
   dir = mkdtempSync(join(tmpdir(), 'mnemorph-sdk-'));
   mkdirSync(join(dir, '.mnemorph'));
+  // A provider says where a key goes: only the human's global file names one.
+  mkdirSync(join(dir, 'mnemorph'));
   writeFileSync(
-    join(dir, '.mnemorph/config.local.toml'),
+    join(dir, 'mnemorph/config.toml'),
     '[providers.local]\nkind = "openai"\nbase_url = "http://127.0.0.1:9"\n[models]\nprovider = "local"\ndefault = "m"\n',
   );
   const c = new Client(
     stdio({
       command: daemon,
       world: dir,
-      env: { PATH: process.env.PATH, HOME: dir, XDG_STATE_HOME: dir },
+      env: { PATH: process.env.PATH, HOME: dir, XDG_STATE_HOME: dir, XDG_CONFIG_HOME: dir },
     }),
   );
   const hello = await c.initialize({ name: 'sdk-test' });

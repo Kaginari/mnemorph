@@ -157,11 +157,8 @@ async fn the_session_lands_through_the_end_gate() {
     )
     .unwrap();
     // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
-    fs::write(
-        w.join(".mnemorph/config.local.toml"),
-        "[sandbox]\nallow_unguarded = true\n",
-    )
-    .unwrap();
+    let global = w.with_extension("global.toml");
+    fs::write(&global, "[sandbox]\nallow_unguarded = true\n").unwrap();
     let model = Arc::new(ScriptedModel::new([
         ScriptedModel::tool(
             "w1",
@@ -176,7 +173,7 @@ async fn the_session_lands_through_the_end_gate() {
         ),
         ScriptedModel::text("Fixed.\n@U law out.txt says fixed once the gate passes"),
     ]));
-    let config = Config::load(&Paths::with_global(w.join("no-global.toml"), &w)).unwrap();
+    let config = Config::load(&Paths::with_global(global, &w)).unwrap();
     let attic = w.join("../mnemorph-session-gate-attic");
     let mut opened = open_with(
         &w,

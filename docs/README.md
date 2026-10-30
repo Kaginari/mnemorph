@@ -38,7 +38,7 @@ review a canvas change like a code change.
 | 4 | [Communication](04-communication.md) | the wire between bodies, dispatch down and back, the client protocol |
 | 5 | [Architecture](05-architecture.md) | crates, packages, processes, storage, sandbox |
 | 6 | [Consumption](06-consumption.md) | how every token is budgeted, metered and stopped |
-| 7 | [MCP](07-mcp.md) | the client, agent-mcp and toolbox-mcp: every spec in, only the needed ones out |
+| 7 | [MCP](07-mcp.md) | the client: servers from your config, scoped by race, ranked, priced and learned; only the needed specs out |
 | 8 | [Memory](08-memory.md) | the archive and the traces, recall with a seat for dissent, why only the gate writes memory |
 | 9 | [Ontology](09-ontology.md) | who owns each path, facts with who said them, relations between worlds |
 | 10 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |

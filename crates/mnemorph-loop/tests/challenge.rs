@@ -128,6 +128,7 @@ impl World {
             queue: None,
             challenges: Some(self.records()),
             reviewers,
+            mcp: None,
         }
     }
 
