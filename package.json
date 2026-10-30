@@ -6,7 +6,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "lint": "biome check .",
+    "lint": "biome check . && node tools/check-board.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
   },

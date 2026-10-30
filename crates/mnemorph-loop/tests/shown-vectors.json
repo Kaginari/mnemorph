@@ -1,0 +1,283 @@
+{
+  "about": "Shared test vectors for `hidden` and `shown` (mnemorph_loop::run): the Rust tests and the board's TypeScript port both read this file. A `hidden` entry names a code point in hex and whether it is hidden; a `shown` entry gives an input and the text a human is shown.",
+  "hidden": [
+    {
+      "cp": "0",
+      "hidden": true
+    },
+    {
+      "cp": "9",
+      "hidden": true
+    },
+    {
+      "cp": "a",
+      "hidden": true
+    },
+    {
+      "cp": "d",
+      "hidden": true
+    },
+    {
+      "cp": "1b",
+      "hidden": true
+    },
+    {
+      "cp": "1f",
+      "hidden": true
+    },
+    {
+      "cp": "20",
+      "hidden": false
+    },
+    {
+      "cp": "41",
+      "hidden": false
+    },
+    {
+      "cp": "5c",
+      "hidden": false
+    },
+    {
+      "cp": "7e",
+      "hidden": false
+    },
+    {
+      "cp": "7f",
+      "hidden": true
+    },
+    {
+      "cp": "80",
+      "hidden": true
+    },
+    {
+      "cp": "85",
+      "hidden": true
+    },
+    {
+      "cp": "9b",
+      "hidden": true
+    },
+    {
+      "cp": "9f",
+      "hidden": true
+    },
+    {
+      "cp": "a0",
+      "hidden": false
+    },
+    {
+      "cp": "ad",
+      "hidden": false
+    },
+    {
+      "cp": "200a",
+      "hidden": false
+    },
+    {
+      "cp": "200b",
+      "hidden": true
+    },
+    {
+      "cp": "200c",
+      "hidden": true
+    },
+    {
+      "cp": "200d",
+      "hidden": true
+    },
+    {
+      "cp": "200e",
+      "hidden": true
+    },
+    {
+      "cp": "200f",
+      "hidden": true
+    },
+    {
+      "cp": "2010",
+      "hidden": false
+    },
+    {
+      "cp": "2027",
+      "hidden": false
+    },
+    {
+      "cp": "2028",
+      "hidden": true
+    },
+    {
+      "cp": "2029",
+      "hidden": true
+    },
+    {
+      "cp": "202a",
+      "hidden": true
+    },
+    {
+      "cp": "202b",
+      "hidden": true
+    },
+    {
+      "cp": "202c",
+      "hidden": true
+    },
+    {
+      "cp": "202d",
+      "hidden": true
+    },
+    {
+      "cp": "202e",
+      "hidden": true
+    },
+    {
+      "cp": "202f",
+      "hidden": false
+    },
+    {
+      "cp": "205f",
+      "hidden": false
+    },
+    {
+      "cp": "2060",
+      "hidden": true
+    },
+    {
+      "cp": "2064",
+      "hidden": true
+    },
+    {
+      "cp": "2066",
+      "hidden": true
+    },
+    {
+      "cp": "2067",
+      "hidden": true
+    },
+    {
+      "cp": "2068",
+      "hidden": true
+    },
+    {
+      "cp": "2069",
+      "hidden": true
+    },
+    {
+      "cp": "206a",
+      "hidden": false
+    },
+    {
+      "cp": "feff",
+      "hidden": true
+    },
+    {
+      "cp": "fffd",
+      "hidden": false
+    },
+    {
+      "cp": "1f600",
+      "hidden": false
+    },
+    {
+      "cp": "e0041",
+      "hidden": false
+    }
+  ],
+  "shown": [
+    {
+      "in": "",
+      "out": ""
+    },
+    {
+      "in": "plain text",
+      "out": "plain text"
+    },
+    {
+      "in": "<script>alert(1)</script>",
+      "out": "<script>alert(1)</script>"
+    },
+    {
+      "in": "a\nb",
+      "out": "a\\u{a}b"
+    },
+    {
+      "in": "tab\there",
+      "out": "tab\\u{9}here"
+    },
+    {
+      "in": "cr\r\n",
+      "out": "cr\\u{d}\\u{a}"
+    },
+    {
+      "in": "nul\u0000",
+      "out": "nul\\u{0}"
+    },
+    {
+      "in": "\u001b[31mred\u001b[0m",
+      "out": "\\u{1b}[31mred\\u{1b}[0m"
+    },
+    {
+      "in": "del\u007f",
+      "out": "del\\u{7f}"
+    },
+    {
+      "in": "c1\u0085\u009b",
+      "out": "c1\\u{85}\\u{9b}"
+    },
+    {
+      "in": "zero\u200bwidth",
+      "out": "zero\\u{200b}width"
+    },
+    {
+      "in": "\u200c\u200d\u200e\u200f",
+      "out": "\\u{200c}\\u{200d}\\u{200e}\\u{200f}"
+    },
+    {
+      "in": "line\u2028para\u2029",
+      "out": "line\\u{2028}para\\u{2029}"
+    },
+    {
+      "in": "evil\u202egnp.exe",
+      "out": "evil\\u{202e}gnp.exe"
+    },
+    {
+      "in": "\u202a\u202b\u202c\u202d",
+      "out": "\\u{202a}\\u{202b}\\u{202c}\\u{202d}"
+    },
+    {
+      "in": "\u2066iso\u2069\u2067\u2068",
+      "out": "\\u{2066}iso\\u{2069}\\u{2067}\\u{2068}"
+    },
+    {
+      "in": "join\u2060er\u2064",
+      "out": "join\\u{2060}er\\u{2064}"
+    },
+    {
+      "in": "\ufeffbom",
+      "out": "\\u{feff}bom"
+    },
+    {
+      "in": "back\\slash",
+      "out": "back\\u{5c}slash"
+    },
+    {
+      "in": "a fake \\u{202e} escape",
+      "out": "a fake \\u{5c}u{202e} escape"
+    },
+    {
+      "in": "caf\u00e9 cafe\u0301",
+      "out": "caf\u00e9 cafe\u0301"
+    },
+    {
+      "in": "emoji \ud83d\ude00 and \u4e2d\u6587",
+      "out": "emoji \ud83d\ude00 and \u4e2d\u6587"
+    },
+    {
+      "in": "nbsp\u00a0soft\u00adnnbsp\u202f",
+      "out": "nbsp\u00a0soft\u00adnnbsp\u202f"
+    },
+    {
+      "in": "tag\udb40\udc41",
+      "out": "tag\udb40\udc41"
+    }
+  ]
+}

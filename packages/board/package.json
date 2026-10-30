@@ -8,13 +8,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "e2e": "playwright test"
   },
   "dependencies": {
+    "@mnemorph/protocol": "workspace:*",
+    "@mnemorph/theme": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

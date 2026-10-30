@@ -33,13 +33,21 @@ law:
     cargo llvm-cov clean --workspace
     cargo llvm-cov -p mnemorph-races --fail-under-regions 100 --summary-only
 
-# TypeScript: Biome, types, tests.
+# TypeScript: Biome and the board's own lint (tokens only, no HTML from strings), types, tests,
+# and the board's build. Its Playwright suite is `just board-e2e` (CI runs it on Linux).
 ts:
     pnpm lint
     pnpm typecheck
+    pnpm --filter @mnemorph/board build
     # The SDK's tests speak to the real core.
     cargo build -q -p mnemorphd
     pnpm test
+
+# The board end to end in Chromium, at phone and desktop widths in both themes: screenshots in
+# packages/board/test-results/screens/. Needs the pinned browser once:
+# `pnpm --filter @mnemorph/board exec playwright install chromium`.
+board-e2e:
+    pnpm --filter @mnemorph/board e2e
 
 # Every crate depends only on lower layers (docs/05-architecture.md).
 layers:
