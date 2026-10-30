@@ -3,7 +3,9 @@
 //!
 //! The journal lives under the human's state directory, outside every world: a body can neither
 //! write a use away nor read one in. A use is counted against the envelope's name and the day it
-//! was signed, so an envelope signed again under the same name starts a new count.
+//! was signed, so an envelope signed again under the same name starts a new count. Its rows are
+//! chained by hash ([`crate::chain`]): a use written away or edited is found; a journal from
+//! before the chain gains its genesis on the next use.
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -57,11 +59,11 @@ pub struct Held<'a> {
 }
 
 impl Uses {
-    /// The journal at `path`; its lock is `path` with the extension `lock`.
+    /// The journal at `path`, chained; its lock is `path` with the extension `lock`.
     #[must_use]
     pub fn at(path: impl Into<PathBuf>) -> Self {
         Self {
-            journal: Journal::new(path),
+            journal: Journal::chained(path),
         }
     }
 
@@ -166,6 +168,66 @@ mod tests {
         assert_eq!(held.count("forge", d1).unwrap(), 2);
         assert_eq!(held.count("forge", d2).unwrap(), 1);
         assert_eq!(held.count("ci", d2).unwrap(), 0);
+    }
+
+    /// The uses are chained: a use from before the chain is bound by its genesis, concurrent
+    /// holders stay one line of links, an edit is found at its line and a dropped tail against
+    /// the head kept outside.
+    #[test]
+    fn uses_are_chained() {
+        use crate::chain::{self, Break};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oni/uses.jsonl");
+        let day = Day::new(2026, 10, 1).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let old = serde_json::to_string(&row("forge", day, 0)).unwrap();
+        std::fs::write(&path, format!("{old}\n")).unwrap();
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let path = path.clone();
+                scope.spawn(move || {
+                    let uses = Uses::at(path);
+                    for _ in 0..5 {
+                        let held = uses.hold().unwrap();
+                        let n = held.count("forge", day).unwrap() + 1;
+                        held.record(&row("forge", day, n)).unwrap();
+                    }
+                });
+            }
+        });
+        let report = chain::verify(&path).unwrap();
+        assert!(report.holds(), "{report}");
+        assert_eq!((report.legacy, report.rows), (1, 20));
+        assert_eq!(report.genesis.as_ref().map(|g| g.line), Some(2));
+        let counted = Uses::at(&path).hold().unwrap().count("forge", day).unwrap();
+        assert_eq!(counted, 21, "the use from before the chain still counts");
+        let head = report.head.unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let edited: Vec<String> = text
+            .lines()
+            .enumerate()
+            .map(|(i, l)| {
+                if i == 4 {
+                    l.replacen("act", "acx", 1)
+                } else {
+                    l.to_owned()
+                }
+            })
+            .collect();
+        std::fs::write(&path, edited.join("\n") + "\n").unwrap();
+        assert_eq!(
+            chain::verify(&path).unwrap().broken,
+            Some((5, Break::Edited))
+        );
+
+        let kept: Vec<&str> = text.lines().take(10).collect();
+        std::fs::write(&path, kept.join("\n") + "\n").unwrap();
+        assert!(chain::verify(&path).unwrap().holds());
+        assert_eq!(
+            chain::verify_against(&path, Some(&head)).unwrap().broken,
+            Some((head.line, Break::Anchor))
+        );
     }
 
     #[test]

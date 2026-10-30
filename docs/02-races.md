@@ -485,7 +485,8 @@ act after it `other`.
   probe: its receipt is `unobserved`, and says so; a cut act found never landed is `absent`. Every
   row is written first to a witness under the human's state directory
   (`$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, found again by the world's
-  path; the folder `0700`, its files `0600`); after each command the tripwire rebuilds the journal from what it held and what the
+  path; the folder `0700`, its files `0600`), hash-chained — the witness is the trusted copy, its
+chain walked and anchored, and the journal holds the same bytes; after each command the tripwire rebuilds the journal from what it held and what the
   witness gained, and the count M11 reads comes from the witness alone, so a row a body forges
   never counts. A `reconcile` waits for the human
   (`mnemorphd incident open` or `settle`) until a later row settles it; it is not a clean outward act, so it is what
@@ -1002,7 +1003,9 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   1. The proposal is a gated act: Rimuru records it with the challenge and puts it to the human
      with the witness. Nothing in the harness applies a seal: only the human confirms one.
   2. The witness is **frozen by content hash** at the proposal, and the seal holds that hash: the
-     Dark Elf can no longer change what it is judged by.
+     Dark Elf can no longer change what it is judged by. The proposal is a row of the challenge
+     records, hash-chained and anchored with the world's other chained journals, so an edit of a
+     frozen hash is found.
   3. While sealed, the gate refuses landings on that territory except the fix.
   4. The fix copies the frozen witness into the owning zone's tests — from then on it is the
      Slime's regression test, and its Orc's verify line runs it. The seal lifts when that test
@@ -1264,7 +1267,8 @@ Rules that hold for every ascension:
      envelope could cover;
   6. that envelope in force (not revoked, signed, not expired) and under its cap: its uses
      counted in the uses ledger under the human's state directory (`mnemorph/oni/uses.jsonl`, one
-     row per admitted act, for every world), a row that does not read giving no count;
+     row per admitted act, for every world, hash-chained so a use written away or edited is
+     found), a row that does not read giving no count;
   7. that envelope not suspended by an open incident.
 
   The runner reads this once to decide whether to ask, and again at the moment of use — after

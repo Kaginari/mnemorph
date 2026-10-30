@@ -437,7 +437,9 @@ first one that did not pass and `, unrun` when no kernel guard let any check run
 the paths it changed and what failed; a pass that changed nothing is not journaled. The writer
 only appends, whole entries in one write, each on lines of its own — a control character in a
 command's output or a file name becomes a space — and never writes through a link; a world
-without `.mnemorph/` has no journal. Three fails running for the same
+without `.mnemorph/` has no journal. The same verdict is kept again outside the world, by the
+harness alone, in the hash-chained gate journal (`mnemorph_world::verdicts`, anchored as `gate`),
+stamped with the build that gave it. Three fails running for the same
 body on the same files harden into the lawful next acts: rewrite the commission, split, escalate.
 The journal is the record — the body's last three verdicts all `FAIL` (a failure handed back to
 be fixed does not count), and the files every one of them changed — and an order that names one of

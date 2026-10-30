@@ -468,10 +468,13 @@ fails when the two differ.
 | personal notes | `.mnemorph/memory/creature/<name>.jsonl` — one creature's note events | yes |
 | semantic cache | `.mnemorph/memory/short/` — one body's recent recalls | no — machine-local |
 | shared work queue | `.mnemorph/shared/queue.jsonl` — append-only snapshots; its witness under `$XDG_STATE_HOME/mnemorph/queue/` | no — machine-local |
-| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
+| Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads — the witness hash-chained, its head anchored with the other chained journals as `kijin-<post>`, and the journal holding its bytes; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
 | evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after and the soil diff the harness saw, each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
+| gate verdicts | `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each verdict the end gate journals in `log.md`, again: the body, the verdict, the paths changed, the failures and unverified checks, the `log.md` heading, and `build: { version, commit }` (a row from before reading `unknown`; `mnemorph_world::verdicts::by_build` keeps one build's); written by the harness alone, append-only and hash-chained, anchored as `gate`; outside the world | no — machine-local |
+| envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
+| chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
@@ -484,6 +487,22 @@ fails when the two differ.
 
 Every index is derived and can be deleted, and is rebuilt from what it derives from; a stale index
 is rebuilt, never routed around.
+
+The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name in
+`mnemorphd housekeep --verify` and in its `log.md` anchors:
+
+| Name | The journal | Writers |
+|---|---|---|
+| `usage` | the usage ledger, in the world; its witness under `mnemorph/usage/` | every model call of every process |
+| `value` | the Dark Elf's challenge records: findings, verdicts, seal proposals, waivers | the harness, under the records' lock |
+| `evolution` | the evolution ledger | the harness |
+| `gate` | the end gate's verdicts | every session and commission that lands |
+| `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
+| `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
+
+A journal written by several processes takes its file's lock from the head's read to the row's
+sync, so their rows stay one line of links; a journal from before its chain gains its genesis on
+its next row.
 
 ### Sandbox
 
@@ -847,7 +866,8 @@ an empty list or table never overrides a lower layer:
   Revoking (`mnemorphd envelope revoke <name>`) writes `revoked = <day>` into the
   human's file that holds the envelope, through `toml_edit` like any write, and only once: the
   envelope stays on record and covers nothing again; the revocation is journaled beside the
-  uses (`revoked.jsonl`). An envelope signed ahead may be revoked
+  uses (`revoked.jsonl`). Both journals are hash-chained and anchored with each world's chained
+  journals. An envelope signed ahead may be revoked
   before its signing day. The dates are the ledger's `Day`, the one calendar in the
   workspace, so config reads the ledger crate.
 - **Writes** go through `toml_edit` — comments and layout kept — and the result is parsed again

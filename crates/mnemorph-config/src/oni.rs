@@ -378,7 +378,7 @@ impl EnvelopeGate {
             file: file.display().to_string(),
             at: Timestamp::now(),
         };
-        mnemorph_ledger::Journal::new(self.revocations())
+        mnemorph_ledger::Journal::chained(self.revocations())
             .append(&row)
             .map_err(|e| {
                 format!(

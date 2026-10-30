@@ -80,7 +80,9 @@ pub struct Swap {
     pub bodies: Vec<String>,
     /// The arm.
     pub arm: Arm,
-    /// The build that swapped it in: every run of its window carries it.
+    /// The build that swapped it in: every run of its window carries it. A row from before
+    /// stamps reads as `unknown`.
+    #[serde(default)]
     pub build: Build,
     /// The exact files it names.
     pub files: Vec<FileChange>,
@@ -181,6 +183,24 @@ pub struct Ledger {
     pub chain: Report,
     /// Lines that did not parse.
     pub skipped: Vec<u64>,
+}
+
+impl EvolutionRow {
+    /// The build that wrote the row; `unknown` for a row from before stamps.
+    #[must_use]
+    pub fn build(&self) -> &Build {
+        match self {
+            EvolutionRow::Swap(s) => &s.build,
+            EvolutionRow::Run(r) => &r.build,
+        }
+    }
+}
+
+impl Ledger {
+    /// The rows `build` wrote, in order: a replay held to one build's rules.
+    pub fn by_build<'a>(&'a self, build: &'a Build) -> impl Iterator<Item = &'a Entry> {
+        self.entries.iter().filter(move |e| e.row.build() == build)
+    }
 }
 
 /// The SHA-256 of `bytes`, 64 lowercase hex digits.

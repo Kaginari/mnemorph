@@ -32,21 +32,28 @@ pub fn witness_of(world: &Path) -> Option<PathBuf> {
 /// `$XDG_STATE_HOME/mnemorph/<kind>/<world>-<fnv64a>.jsonl`, else under `~/.local/state`; `None`
 /// when there is no home.
 pub(crate) fn state_file(world: &Path, kind: &str) -> Option<PathBuf> {
-    let state = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
+    Some(state_file_in(&state_dir()?, world, kind))
+}
+
+/// [`state_file`], under the state directory `state`.
+pub(crate) fn state_file_in(state: &Path, world: &Path, kind: &str) -> PathBuf {
     let h = fnv64a(world.as_os_str().as_encoded_bytes());
     let name = world
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    Some(
-        state
-            .join("mnemorph")
-            .join(kind)
-            .join(format!("{name}-{h:016x}.jsonl")),
-    )
+    state
+        .join("mnemorph")
+        .join(kind)
+        .join(format!("{name}-{h:016x}.jsonl"))
+}
+
+/// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
+pub(crate) fn state_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))
 }
 
 /// The human, as a mover: they stand over every body.

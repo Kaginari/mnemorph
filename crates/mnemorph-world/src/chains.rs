@@ -1,52 +1,104 @@
-//! The world's chained journals, walked and anchored: the usage ledger, the Dark Elf's value
-//! ledger (the challenge records) and the evolution ledger chain their rows by hash ([`mnemorph_ledger::chain`]), and
-//! their heads are anchored outside the files — an entry in `log.md`, and a copy kept under the
-//! human's state directory, out of every command's reach — so each walk is held to the newest head
-//! kept, and a dropped tail or a chain rooted again is found. `mnemorphd housekeep --verify` walks
-//! and anchors them; the Dark Elf's law audit calls [`verify`].
+//! The world's chained journals, walked and anchored. Each chains its rows by hash
+//! ([`mnemorph_ledger::chain`]), and their heads are anchored outside the files — an entry in
+//! `log.md`, and a copy kept under the human's state directory, out of every command's reach — so
+//! each walk is held to the newest head kept, and a dropped tail or a chain rooted again is found.
+//! `mnemorphd housekeep --verify` walks and anchors them; the Dark Elf's law audit calls
+//! [`verify`]. The journals:
 //!
-//! Gate verdicts, seals, envelopes and Kijin posts are not chained yet: each is chained by opening
-//! its journal with [`mnemorph_ledger::Journal::chained`] and naming it in [`journals`].
+//! - `usage`: the usage ledger, in the world;
+//! - `value`: the Dark Elf's challenge records — findings, verdicts, seal proposals, waivers;
+//! - `evolution`: the evolution ledger;
+//! - `gate`: the end gate's verdicts ([`crate::verdicts`]);
+//! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
+//! - `kijin-<post>`: each Kijin post's witness, the trusted copy of its journal.
+//!
+//! Every one but `usage` lives under the human's state directory, so a world with no home keeps
+//! only `usage`.
 
 use std::path::{Path, PathBuf};
 
 use mnemorph_ledger::chain::{self, Head, Report};
 use mnemorph_ledger::{Journal, Timestamp};
+use mnemorph_races::Post;
 use serde::{Deserialize, Serialize};
 
 use crate::log::{Entry, LOG};
+use crate::queue::state_file_in;
 use crate::worth::USAGE;
 
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value` or `evolution`.
+    /// Its name: `usage`, `value`, `evolution`, `gate`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
 }
 
-/// The chained journals of `world`: the usage ledger, and the value and evolution ledgers when
-/// there is a home to keep them under.
+/// The chained journals of `world`: the usage ledger, and with a home to keep them under, the
+/// value, evolution and gate journals, the envelopes' uses and revocations, and each Kijin post's
+/// witness that is kept or was anchored.
 #[must_use]
 pub fn journals(world: &Path) -> Vec<Chained> {
+    journals_under(world, crate::queue::state_dir().as_deref())
+}
+
+/// [`journals`], the human's state directory at `state`.
+fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     let mut out = vec![Chained {
         name: "usage",
         path: world.join(USAGE),
     }];
-    if let Some(path) = crate::challenge::records_of(world) {
+    let Some(state) = state else {
+        return out;
+    };
+    for (name, kind) in [
+        ("value", "challenges"),
+        ("evolution", "evolution"),
+        ("gate", "gate"),
+    ] {
         out.push(Chained {
-            name: "value",
-            path,
+            name,
+            path: state_file_in(state, world, kind),
         });
     }
-    if let Some(path) = crate::evolution::ledger_of(world) {
-        out.push(Chained {
-            name: "evolution",
-            path,
-        });
+    let oni = state.join("mnemorph/oni");
+    out.push(Chained {
+        name: "uses",
+        path: oni.join("uses.jsonl"),
+    });
+    out.push(Chained {
+        name: "revocations",
+        path: oni.join("revoked.jsonl"),
+    });
+    // A post's witness is walked once kept, and for good once anchored: a witness removed whole
+    // is then found against its anchor.
+    let anchors = state_file_in(state, world, "anchors");
+    for post in Post::ALL {
+        let path = post_witness_in(state, world, post);
+        if path.exists() || anchored(world, &anchors, post.creature()).is_some() {
+            out.push(Chained {
+                name: post.creature(),
+                path,
+            });
+        }
     }
     out
+}
+
+/// Where the witness of `world`'s Kijin `post` is kept:
+/// `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, else under `~/.local/state`;
+/// `None` with no home. The post journal writes it at the same place
+/// (`mnemorph_tools::kijin_witness`).
+#[must_use]
+pub fn post_witness(world: &Path, post: Post) -> Option<PathBuf> {
+    Some(post_witness_in(&crate::queue::state_dir()?, world, post))
+}
+
+fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
+    state_file_in(state, world, "kijin")
+        .with_extension("")
+        .join(format!("{}.jsonl", post.creature()))
 }
 
 /// Where `world`'s anchors are kept apart from `log.md`:
@@ -114,16 +166,30 @@ pub fn verify(world: &Path) -> Vec<Reading> {
 /// `log.md`'s; `None` when none was anchored yet.
 #[must_use]
 pub fn anchor_of(world: &Path, name: &str) -> Option<Head> {
-    let kept = kept_at(world)
-        .and_then(|p| Journal::<Kept>::new(p).read().ok())
-        .map(|r| r.rows)
-        .unwrap_or_default();
-    kept.iter()
-        .rev()
-        .find(|k| k.journal == name)
-        .map(|k| Head {
-            digest: k.digest.clone(),
-            line: k.line,
+    match kept_at(world) {
+        Some(kept) => anchored(world, &kept, name),
+        None => logged(
+            &std::fs::read_to_string(world.join(LOG)).unwrap_or_default(),
+            name,
+        ),
+    }
+}
+
+/// The newest head of the journal `name` anchored in `kept` or, failing that, in `world`'s
+/// `log.md`.
+fn anchored(world: &Path, kept: &Path, name: &str) -> Option<Head> {
+    Journal::<Kept>::new(kept)
+        .read()
+        .ok()
+        .and_then(|r| {
+            r.rows
+                .into_iter()
+                .rev()
+                .find(|k| k.journal == name)
+                .map(|k| Head {
+                    digest: k.digest,
+                    line: k.line,
+                })
         })
         .or_else(|| {
             logged(
@@ -135,6 +201,11 @@ pub fn anchor_of(world: &Path, name: &str) -> Option<Head> {
 
 /// [`verify`], the anchors kept at `kept`.
 fn verify_kept(world: &Path, kept: Option<&Path>) -> Vec<Reading> {
+    verify_these(world, kept, journals(world))
+}
+
+/// `journals` of `world` walked, the anchors kept at `kept`.
+fn verify_these(world: &Path, kept: Option<&Path>, journals: Vec<Chained>) -> Vec<Reading> {
     let kept = kept
         .map(|p| {
             Journal::<Kept>::new(p)
@@ -144,7 +215,7 @@ fn verify_kept(world: &Path, kept: Option<&Path>) -> Vec<Reading> {
         })
         .unwrap_or_default();
     let log = std::fs::read_to_string(world.join(LOG)).unwrap_or_default();
-    journals(world)
+    journals
         .into_iter()
         .map(|journal| {
             let k = kept
@@ -403,6 +474,62 @@ mod tests {
                 .mismatch
                 .is_some_and(|m| m.contains("log.md holds no anchor"))
         );
+    }
+
+    /// With a home, every trust journal is walked: the usage, value, evolution and gate
+    /// journals, the envelopes' uses and revocations, and each Kijin post's witness once kept or
+    /// anchored; a dropped tail of any is found against the head kept for it.
+    #[test]
+    fn every_trust_journal_is_walked_and_held_to_its_anchor() {
+        let (dir, kept, _usage) = world(1);
+        let world = dir.path().join("w");
+        let state = dir.path().join("state");
+        let names = |j: &[Chained]| j.iter().map(|c| c.name).collect::<Vec<_>>();
+        assert_eq!(names(&journals_under(&world, None)), ["usage"]);
+        let all = journals_under(&world, Some(&state));
+        assert_eq!(
+            names(&all),
+            ["usage", "value", "evolution", "gate", "uses", "revocations"]
+        );
+        assert!(all.iter().skip(1).all(|c| c.path.starts_with(&state)));
+        // A post's witness, kept.
+        let forge = post_witness_in(&state, &world, Post::Forge);
+        std::fs::create_dir_all(forge.parent().unwrap()).unwrap();
+        std::fs::write(&forge, "").unwrap();
+        let mut all = journals_under(&world, Some(&state));
+        assert_eq!(
+            all.last().map(|c| (c.name, &c.path)),
+            Some(("kijin-forge", &forge))
+        );
+        // Two rows in each, anchored, then the last of each dropped: each is found.
+        for c in &all {
+            let j = Journal::<UsageRow>::chained(&c.path);
+            if c.name != "usage" {
+                j.append(&usage_row(0)).unwrap();
+            }
+            j.append(&usage_row(1)).unwrap();
+        }
+        let readings = verify_these(&world, Some(&kept), all.clone());
+        assert!(readings.iter().all(Reading::holds));
+        anchor_kept(&world, "housekeep", &readings, Some(&kept)).unwrap();
+        for c in &all {
+            let text = std::fs::read_to_string(&c.path).unwrap();
+            std::fs::write(&c.path, text.lines().next().unwrap().to_owned() + "\n").unwrap();
+        }
+        for r in verify_these(&world, Some(&kept), all.clone()) {
+            assert_eq!(
+                r.report.as_ref().unwrap().broken,
+                Some((2, chain::Break::Anchor)),
+                "{}: {}",
+                r.journal.name,
+                r.text()
+            );
+        }
+        // A witness removed whole is still walked, since it was anchored, and found.
+        std::fs::remove_file(&forge).unwrap();
+        all = journals_under(&world, Some(&state));
+        let gone = all.iter().find(|c| c.name == "kijin-forge").cloned();
+        assert!(gone.is_some(), "an anchored witness stays walked");
     }
 
     #[test]

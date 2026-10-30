@@ -560,3 +560,30 @@ fn an_unchained_or_rechained_ledger_is_never_judged() {
         Judgement::Refused(Refusal::ChainBroken(_))
     ));
 }
+
+/// Every row carries its build, a row from before stamps reads `unknown`, and a replay can keep
+/// one build's rows.
+#[test]
+fn rows_carry_their_build_and_a_replay_filters_by_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("evolution.jsonl");
+    let s = swap("e1");
+    let mut old = serde_json::to_value(EvolutionRow::Swap(swap("e0"))).unwrap();
+    old.as_object_mut().unwrap().remove("build").unwrap();
+    fs::write(&path, format!("{old}\n")).unwrap();
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(window(&s, &[true], &[false]));
+    ledger(&path, &rows);
+    let read = evolution::read(&path, None).unwrap();
+    assert_eq!(read.entries.len(), 4);
+    assert_eq!(read.entries[0].row.build(), &Build::default());
+    assert_eq!(read.by_build(&build()).count(), 3);
+    assert_eq!(read.by_build(&Build::default()).count(), 1);
+    let raw = fs::read_to_string(&path).unwrap();
+    assert!(
+        raw.lines()
+            .skip(1)
+            .all(|l| l.contains("\"build\":{\"version\":\"1.2.0\"")),
+        "{raw}"
+    );
+}
