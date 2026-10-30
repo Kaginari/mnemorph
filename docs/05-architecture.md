@@ -901,7 +901,9 @@ bar's parts then sharing its height in proportion. Colours are the theme's token
 from the series' name, and every series is named in a legend beside it, never colour alone. Words
 a world wrote reach a chart only as escaped text in `<title>` nodes.
 
-<img src="../assets/board/desktop-dark-metrics.png" width="640" alt="The metrics page, dark: the totals line, spend per day by race on a log axis with its legend, the cache hit rate, the burn">
+<img src="../assets/board/desktop-dark-metrics.png" width="640" alt="The metrics page, dark: the totals line, spend per day by race on a log axis with its legend, the cache hit rate, the burn"> <img src="../assets/board/phone-dark-metrics.png" width="180" alt="The metrics page at phone width, dark: the window tabs, the totals line, the stacked bars">
+
+<img src="../assets/board/desktop-light-integrations.png" width="640" alt="The integrations page, light: providers with their key sources, never values; models and prices; MCP servers">
 
 **Data.** The page first trades the key in its address (`#k=<key>`, see the board server above):
 before anything renders, the key leaves the address bar and the history, and is posted once to
