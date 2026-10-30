@@ -149,9 +149,41 @@ pub fn hold(world: &Path, run: &str) -> Result<Hold, String> {
 
 /// Whether a live session holds `run` now: a non-blocking probe, its shared lock let go at once —
 /// a resume that meets it waits it out.
+/// Only a regular lock file is opened: the directory is the world's, and a pipe or a link put in
+/// its place is no session's.
 fn held(world: &Path, run: &str) -> bool {
     let path = journals(world).join(format!("{run}.lock"));
-    File::open(&path).is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
+    mnemorph_world::regular::open(&path).is_ok_and(|f| {
+        f.is_some_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
+    })
+}
+
+/// The most entries [`live`] reads from a world's run journals.
+pub const LIVE_ENTRIES: usize = 4096;
+
+/// The world's session runs a live session holds now, by id, sorted: each lock probed for an
+/// instant, as a listing probes, among the directory's first [`LIVE_ENTRIES`] entries.
+#[must_use]
+pub fn live(world: &Path) -> Vec<String> {
+    live_within(world, LIVE_ENTRIES)
+}
+
+/// [`live`], among the directory's first `entries` entries: for a caller on a budget.
+#[must_use]
+pub fn live_within(world: &Path, entries: usize) -> Vec<String> {
+    let Ok(dir) = std::fs::read_dir(journals(world)) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = dir
+        .take(entries)
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let run = e.file_name().to_str()?.strip_suffix(".lock")?.to_owned();
+            (is_session_run(&run) && held(world, &run)).then_some(run)
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 /// The world's session runs that stopped and may be resumed, newest first: a checkpoint, an
@@ -276,5 +308,28 @@ mod tests {
         );
         assert!(stop_of(&[ask.clone(), end("answered")]).is_err());
         assert!(stop_of(&[ask, end("failed: the provider")]).is_err());
+    }
+
+    #[test]
+    fn a_held_run_reads_live_and_a_planted_pipe_is_never_opened() {
+        let world = std::env::temp_dir().join(format!("mnemorph-live-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&world);
+        assert_eq!(live(&world), Vec::<String>::new());
+        let run = "r1730000000000-7";
+        let hold = hold(&world, run).unwrap();
+        // A body's run, and a lock no one holds, are not live.
+        drop(super::hold(&world, "slime-x").unwrap());
+        std::fs::write(journals(&world).join("r1-2.lock"), "").unwrap();
+        #[cfg(unix)]
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(journals(&world).join("r3-4.lock"))
+                .status()
+                .is_ok_and(|s| s.success())
+        );
+        assert_eq!(live(&world), vec![run.to_owned()]);
+        drop(hold);
+        assert_eq!(live(&world), Vec::<String>::new());
+        let _ = std::fs::remove_dir_all(&world);
     }
 }

@@ -101,7 +101,7 @@ function Centre({
   if (!world) return <NoWorld id={route.world} />;
   if (route.name === 'section') return <SectionView w={world} section={route.section} />;
   if (route.name === 'session') return <SessionView w={world} session={route.session} />;
-  return <WorldView w={world} />;
+  return <WorldView key={world.id} w={world} now={now} />;
 }
 
 /** The centre's title, for the top bar and the tab. */

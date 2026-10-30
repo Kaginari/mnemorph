@@ -16,9 +16,13 @@ mod assets;
 pub mod bridge;
 pub mod guard;
 pub mod instance;
+pub mod overview;
+pub mod snapshot;
+pub mod watch;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -35,6 +39,8 @@ use subtle::ConstantTimeEq;
 use ts_rs::TS;
 
 use crate::world::dimension;
+pub use overview::{BoardOverview, Chats};
+pub use watch::Change;
 
 /// The port the board listens on unless told otherwise.
 pub const DEFAULT_PORT: u16 = 7878;
@@ -55,6 +61,8 @@ const SESSIONS: usize = 8;
 /// The largest body the key exchange reads.
 const EXCHANGE_BYTES: usize = 1024;
 
+/// The changes a slow socket may fall behind by before it is told everything moved.
+const CHANGES: usize = 256;
 /// The largest body `POST /api/w/<world>/sessions` reads.
 const START_BYTES: usize = 1024;
 
@@ -159,6 +167,12 @@ pub struct Board {
     bridge: Arc<bridge::Bridge>,
     /// Told the URL with each new key, for a second launch to print.
     on_key: Box<dyn Fn(&str) + Send + Sync>,
+    /// What the watcher tells the board's sockets.
+    changes: tokio::sync::broadcast::Sender<Change>,
+    /// The board sockets open.
+    sockets: AtomicUsize,
+    /// The worlds the watcher looks at slowly: past its budget.
+    slowed: Mutex<std::collections::BTreeSet<String>>,
 }
 
 /// A fresh secret: 32 random bytes, in hex.
@@ -344,6 +358,9 @@ impl Board {
             bridge: Arc::new(bridge::Bridge::new(child, limits, clock.clone())),
             clock,
             on_key,
+            changes: tokio::sync::broadcast::channel(CHANGES).0,
+            sockets: AtomicUsize::new(0),
+            slowed: Mutex::new(std::collections::BTreeSet::new()),
         }))
     }
 
@@ -366,6 +383,8 @@ impl Board {
             .route("/api/session", get(session))
             .route("/api/session/end", post(end))
             .route("/api/worlds", get(worlds))
+            .route("/api/w/{world}", get(world_overview))
+            .route("/ws/board", get(watch::socket))
             .route(
                 "/api/w/{world}/sessions",
                 post(start).layer(DefaultBodyLimit::max(START_BYTES)),
@@ -510,6 +529,46 @@ impl Board {
         found
     }
 
+    /// Whether `cookie` names a session still alive — its use not recorded: a socket's check
+    /// keeps no session from idling out.
+    fn alive(&self, cookie: &str) -> bool {
+        let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
+        self.expire(&mut keys);
+        keys.sessions
+            .iter()
+            .fold(false, |found, s| same(&s.cookie, cookie) | found)
+    }
+
+    /// The overview of the listed world `id`; `None` when no listed world has it.
+    #[must_use]
+    pub fn overview(&self, id: &str) -> Option<BoardOverview> {
+        let world = self.worlds().worlds.into_iter().find(|w| w.id == id)?;
+        let chats = self
+            .bridge
+            .list()
+            .sessions
+            .iter()
+            .filter(|s| s.world == id)
+            .fold(Chats::default(), |c, s| Chats {
+                open: c.open.saturating_add(1),
+                asks: c
+                    .asks
+                    .saturating_add(u32::try_from(s.asks).unwrap_or(u32::MAX)),
+            });
+        let slowed = self
+            .slowed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(id);
+        Some(overview::overview(world, chats, slowed))
+    }
+
+    /// Tell the board's sockets `change`, as the watcher does: for a test.
+    #[doc(hidden)]
+    pub fn tell(&self, change: Change) {
+        let _ = self.changes.send(change);
+    }
+
     /// End the session `cookie` names.
     fn end(&self, cookie: &str) {
         let mut keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
@@ -605,6 +664,15 @@ async fn end(State(board): State<Arc<Board>>, headers: axum::http::HeaderMap) ->
 async fn worlds(State(board): State<Arc<Board>>) -> Response {
     match tokio::task::spawn_blocking(move || board.worlds()).await {
         Ok(w) => Json(w).into_response(),
+        Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+/// `GET /api/w/<id>`: [`BoardOverview`] of a listed world, or 404.
+async fn world_overview(State(board): State<Arc<Board>>, Path(id): Path<String>) -> Response {
+    match tokio::task::spawn_blocking(move || board.overview(&id)).await {
+        Ok(Some(o)) => Json(o).into_response(),
+        Ok(None) => refuse(StatusCode::NOT_FOUND, "no listed world has this id"),
         Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -779,8 +847,11 @@ pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<
                 let _ = refresher.refresh();
             }
         });
+        // The worlds' files, watched: each change is told on `WS /ws/board`.
+        let watcher = tokio::spawn(watch::watch(Arc::clone(board)));
         signal().await;
         ticker.abort();
+        watcher.abort();
         // Every chat's child asked to leave, then its group killed: none outlives the board.
         board.bridge.end_all("the board stopped").await;
         let _ = stop.send(true);
