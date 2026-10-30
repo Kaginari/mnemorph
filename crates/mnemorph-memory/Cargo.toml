@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mnemorph-sandbox = { path = "../mnemorph-sandbox" }
 mnemorph-ledger = { path = "../mnemorph-ledger" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

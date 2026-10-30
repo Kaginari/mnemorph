@@ -748,7 +748,7 @@ pub(crate) fn args<T: DeserializeOwned>(name: &str, value: Value) -> Result<T, O
 #[must_use]
 pub fn ignored(world: &Path) -> Vec<PathBuf> {
     // Outside the sandbox: a clone's own configuration must not run anything (fsmonitor, hooks).
-    let out = std::process::Command::new("git")
+    let out = mnemorph_sandbox::git()
         .args(["-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null"])
         .arg("-C")
         .arg(world)

@@ -16,6 +16,13 @@ use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
 
 fn main() -> ExitCode {
+    // First, before any key is read: the harness's environment and memory close to every
+    // non-root process, sandboxed or not.
+    let hardened = mnemorph_server::harden_self()
+        .map_err(|e| format!("this process could not be made non-dumpable ({e}): other processes of the user may read its environment, the provider key included"));
+    if let Err(e) = &hardened {
+        eprintln!("mnemorph: warning: {e}");
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = match parse(&args) {
         Ok(c) => c,
@@ -38,7 +45,7 @@ fn main() -> ExitCode {
             world,
             resume,
             theme,
-        } => chat(world, resume.as_deref(), theme.as_deref()),
+        } => chat(world, resume.as_deref(), theme.as_deref(), hardened.err()),
         Command::Run {
             ask,
             world,
@@ -155,7 +162,12 @@ fn status(world: Option<PathBuf>) -> ExitCode {
 }
 
 /// The terminal app.
-fn chat(world: Option<PathBuf>, resume: Option<&str>, theme: Option<&str>) -> ExitCode {
+fn chat(
+    world: Option<PathBuf>,
+    resume: Option<&str>,
+    theme: Option<&str>,
+    unhardened: Option<String>,
+) -> ExitCode {
     let world = match world_of(world) {
         Ok(w) => w,
         Err(e) => return fail(&e, 1),
@@ -183,6 +195,9 @@ fn chat(world: Option<PathBuf>, resume: Option<&str>, theme: Option<&str>) -> Ex
         "{} via {} · sandbox {}",
         opened.model, opened.provider, opened.sandbox
     ));
+    if let Some(e) = unhardened {
+        model.info(format!("warning: {e}"));
+    }
     if resume.is_some() {
         model.info(format!(
             "resumed run {} from its journal: ask to go on",

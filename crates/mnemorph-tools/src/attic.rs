@@ -222,7 +222,7 @@ impl Attic {
     /// An attic at `dir` for `world`; `None` when `git` is missing.
     #[must_use]
     pub fn at(dir: &Path, world: &Path) -> Option<Self> {
-        Command::new("git")
+        mnemorph_sandbox::git()
             .arg("--version")
             .output()
             .ok()
@@ -330,7 +330,7 @@ impl Attic {
         fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
         let _held = self.lock()?;
         if !self.dir.join("store.git/HEAD").exists() {
-            let out = Command::new("git")
+            let out = mnemorph_sandbox::git()
                 .args(["init", "--bare", "-q"])
                 .arg(self.dir.join("store.git"))
                 .env("GIT_CONFIG_NOSYSTEM", "1")
