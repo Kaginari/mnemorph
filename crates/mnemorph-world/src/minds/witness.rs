@@ -83,10 +83,12 @@ pub struct Witnessed {
 }
 
 /// Where `world`'s Minds' witness is kept: `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl`,
-/// else under `~/.local/state`; `None` with no home.
+/// else under `~/.local/state`; `None` with no home. The world is named by its real path, so
+/// every spelling of it (`/var/…` and `/private/var/…` on macOS, a symlink) finds one witness.
 #[must_use]
 pub fn path_of(world: &Path) -> Option<PathBuf> {
-    crate::queue::state_file(world, "minds")
+    let real = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    crate::queue::state_file(&real, "minds")
 }
 
 /// The witness kept at `path`, chained.

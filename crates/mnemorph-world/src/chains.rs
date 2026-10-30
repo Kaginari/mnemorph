@@ -61,9 +61,13 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         ("gate", "gate"),
         ("minds", "minds"),
     ] {
+        // The Minds' witness names the world by its real path ([`crate::minds::witness`]).
+        let real = (kind == "minds")
+            .then(|| world.canonicalize().ok())
+            .flatten();
         out.push(Chained {
             name,
-            path: state_file_in(state, world, kind),
+            path: state_file_in(state, real.as_deref().unwrap_or(world), kind),
         });
     }
     let oni = state.join("mnemorph/oni");

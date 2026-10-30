@@ -629,6 +629,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&bare);
     }
 
+    /// The witness names the world by its real path: adopted through one spelling of the world
+    /// (a symlink, or macOS's `/var` for `/private/var`), the Mind loads through the other.
+    #[test]
+    fn every_spelling_of_a_world_finds_one_witness() {
+        let w = world("spelling");
+        forget(&w);
+        let w = world("spelling");
+        let link = w.with_file_name(format!("mnemorph-minds-link-{}", std::process::id()));
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&w, &link).unwrap();
+        assert_eq!(super::witness::path_of(&link), super::witness::path_of(&w));
+        witness_all(&link, Act::Adopt);
+        assert_eq!(load(&w).len(), 2);
+        let _ = std::fs::remove_file(&link);
+        forget(&w);
+    }
+
     /// A world with the two Minds of [`world`], and a witness under a state directory of its own.
     struct Witnessed {
         world: std::path::PathBuf,
