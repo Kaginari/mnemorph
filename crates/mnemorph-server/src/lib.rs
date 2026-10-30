@@ -7,6 +7,7 @@
 //! blocking a run can never block the read that would release it. One driver task owns the
 //! session and takes the human's lines strictly in the order they came.
 
+pub mod board;
 pub mod protocol;
 
 /// The Dark Elf challenges as the human reads them.

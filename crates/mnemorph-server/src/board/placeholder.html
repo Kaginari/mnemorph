@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mnemorph — the board is not built</title>
+  </head>
+  <body>
+    <h1>The board is not built</h1>
+    <p>
+      This <code>mnemorphd</code> was compiled without the board's assets, so it serves this page
+      and its API only. Build the board, then <code>mnemorphd</code>:
+    </p>
+    <pre>pnpm install --frozen-lockfile
+pnpm --filter @mnemorph/board build
+cargo build --release -p mnemorphd</pre>
+  </body>
+</html>

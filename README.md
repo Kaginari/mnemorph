@@ -56,7 +56,7 @@ Mnemorph ships two Rust binaries over the same core. Install both.
 | Binary | For | Use it to |
 |---|---|---|
 | `mnemorph` | you, at a terminal, and your scripts | talk to Rimuru in the terminal app (`mnemorph`), ask once without it (`mnemorph run "<ask>"`), pick up a run that stopped (`mnemorph resume <run|last>`), check the setup (`mnemorph status`) |
-| `mnemorphd` | other programs, and the world's upkeep | serve the client protocol (JSON-RPC over stdio) to the TypeScript SDK, and the web board (from M12); run the admin commands: `runs`, `memory`, `onto`, `q`, `incident`, `housekeep`, `relief` |
+| `mnemorphd` | other programs, and the world's upkeep | serve the client protocol (JSON-RPC over stdio) to the TypeScript SDK, and the web board on loopback (`mnemorphd board`); run the admin commands: `runs`, `memory`, `onto`, `q`, `incident`, `housekeep`, `relief` |
 
 They are two binaries because they answer two kinds of caller. `mnemorph` holds the session in
 its own process, so nothing sits between the screen and the core. `mnemorphd` is the core
@@ -68,8 +68,12 @@ without a session. Both share the same crates, so a rule enforced in one is enfo
 
 ```sh
 cargo install --path crates/mnemorph-tui      # mnemorph, into ~/.cargo/bin
-cargo install --path crates/mnemorphd         # mnemorphd: the server and the admin commands
+pnpm install --frozen-lockfile && pnpm --filter @mnemorph/board build   # the board, built into…
+cargo install --path crates/mnemorphd         # mnemorphd: the server, the board and the admin commands
 ```
+
+`mnemorphd` embeds the board as it finds it built in `packages/board/dist` when it is compiled;
+compiled without it, it serves a page saying so, and its API.
 
 Name a provider and a model once, for every world, in `~/.config/mnemorph/config.toml`
 (`$XDG_CONFIG_HOME/mnemorph/config.toml`). A world's `.mnemorph/config.local.toml` overrides it,
@@ -98,7 +102,13 @@ mnemorph run "<ask>"                # one ask without the app: the answer on std
 echo "<ask>" | mnemorph run --json  # every event as a JSON line, then a result line
 mnemorph resume last                # pick up the newest run that stopped
 mnemorphd runs                      # the runs that may be resumed
+mnemorphd board                     # the board on 127.0.0.1:7878: open the URL it prints
 ```
+
+`mnemorphd board` prints `http://127.0.0.1:7878/#k=<key>`; the key works once, traded by the page
+for a session cookie. It listens on loopback only — from another machine, forward the same port:
+`ssh -L 7878:127.0.0.1:7878 <host>`, then open the printed URL. A second `mnemorphd board` prints
+the running board's URL, with the key waiting now ([the board server](docs/05-architecture.md#the-board-server)).
 
 `mnemorph run` goes through the same session and end gate as the app, and exits 0 only when the
 answer landed; it denies every act that needs your approval unless you pass `--gate-tty`

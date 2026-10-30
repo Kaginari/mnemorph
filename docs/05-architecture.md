@@ -117,7 +117,7 @@ mnemorph/
 |---|---|---|
 | async runtime | tokio | the ecosystem default; cancellation through the run's own `Interrupt`, which reaches a running command |
 | HTTP | reqwest + rustls | no OpenSSL; private CA bundles loadable |
-| server | JSON-RPC over stdio, three threads (writer, reader, driver); axum from M12 | the board's WebSocket + static assets + JSON-RPC in one router |
+| server | JSON-RPC over stdio, three threads (writer, reader, driver); axum for the board (`mnemorphd board`) | the board's WebSocket + static assets + JSON-RPC in one router |
 | types → TS | ts-rs | one source of truth for the protocol |
 | config | TOML via `toml_edit` | edits preserve comments; isekai's YAML-append bug cannot exist |
 | recall | BM25 in `mnemorph-memory`, no index engine | local, model-free by default (Nature 7) |
@@ -150,12 +150,12 @@ mnemorph run "<ask>"              # one ask without the app
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
 `envelope`, `challenge`, `meters`, `evolution`, `housekeep` (`--verify` walks the chained
-journals) and `relief` (`mnemorphd --help`).
+journals) and `relief`, and the board's: `board`, `board add`, `board forget` (`mnemorphd --help`).
 
 **Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
 a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
 screen and the loop. `mnemorphd` is for programs that are not Rust: the SDK and an editor plugin start it as a
-child and speak JSON-RPC to it, and the board (M12) is served by it; every such client sees the
+child and speak JSON-RPC to it, and the board is served by it (`mnemorphd board`); every such client sees the
 same sessions, gate and events. The upkeep commands sit with it because they work on the world's
 records directly, without a session. Both link the same crates (`mnemorph-loop`, `-world`,
 `-races`, `-tools`, `-sandbox`), so a law, a gate or a sandbox rule holds the same in either.
@@ -168,11 +168,76 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
 | read every creature's meters, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
-| open the board (M12) | the board is served by `mnemorphd` |
+| open the board | `mnemorphd board`, then the URL it prints |
 
 `resume <run|last>` opens the session on a run that stopped instead of a new one, through the
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
 to resume is refused in plain text, before the terminal is taken. `mnemorphd runs` lists them.
+
+#### The board server
+
+`mnemorphd board [--port 7878] [--bind 127.0.0.1|::1] [--open]` is one daemon for every world on
+the machine: an axum router in `mnemorph-server` (`src/board/`) on `127.0.0.1` and `[::1]`. Any
+other address is refused — remote use is an SSH port-forward of the same port
+(`ssh -L 7878:127.0.0.1:7878 <host>`), the explicit opt-in. One board runs per machine:
+`$XDG_STATE_HOME/mnemorph/board.lock` is held for its life, and `board.url` beside it (`0600`)
+holds the URL with the key waiting now, which a second launch prints before it exits. A body never
+runs `board`, `board add` or `board forget` (`MNEMORPH_BODY` is refused).
+
+**The worlds** are the registry's — every world a session opened in — and the human's hand,
+`$XDG_STATE_HOME/mnemorph/board/worlds.jsonl`: `board add <dir>` lists a world no session opened in
+yet; `board forget <dir>` stops listing one until it is added again or a session opens in it.
+A world whose directory vanished stays listed as `missing`. Nothing inside a world is read to list
+it, and nothing read from inside a world grants trust.
+
+**The key, the cookie, the token.** The daemon prints `http://127.0.0.1:<port>/#k=<key>`, 32 random
+bytes in hex in the fragment, which a browser never sends or logs. The page reads it, drops it from
+the address bar, and posts it once: `POST /session` with `{"key": "<key>"}` as `application/json`.
+The key dies on that use — reused, it is refused — and a fresh one waits in `board.url`. The answer
+sets the cookie `mnemorph_board` (`HttpOnly; SameSite=Strict; Path=/`) and carries
+`{"csrf": "<token>"}`, the token bound to that session; a reloaded page gets it again from
+`GET /api/session`. Every mutation sends the token in `x-mnemorph-csrf`; a WebSocket handshake,
+which cannot set a header, sends it as a `Sec-WebSocket-Protocol` entry `mnemorph.csrf.<token>`.
+`POST /api/session/end` ends the session and clears its cookie.
+
+Every secret is short-lived. A printed key not traded within 10 minutes is replaced, and the new
+URL kept in `board.url` for a second launch to print. `--open` hands the browser a key of its own,
+valid once and for 60 seconds, because the opener's command line is readable by every local user
+— and by a body's sandbox, which reads `/proc` — while it runs; it is refused when no board is built
+in, since no page would spend the key. A session ends after 12 idle hours, or 7 days after it
+began.
+
+**The guard** runs before every route, so a route added later is held to it without naming it:
+
+| Check | Applies to | Refused with |
+|---|---|---|
+| `Host` is a bound address, literally (`127.0.0.1:<port>`, `[::1]:<port>`) — never a name, so a rebound DNS name fails | every request | 403 |
+| `Sec-Fetch-Site`, when sent, is `same-origin` or `none` — another port of `127.0.0.1` is the same *site*, so `SameSite` alone does not hold it | every request | 403 |
+| `Origin`, when sent, is `http://` + the `Host`; it must be sent | every request; required on a mutation and a WebSocket upgrade | 403 |
+| the session cookie | `/api/…` but `/api/health`, `/ws`, `/ws/…`, every mutation and upgrade but `POST /session` | 401 |
+| the CSRF token | every mutation and upgrade but `POST /session` | 403 |
+
+**Every response**, a refusal included, carries `Content-Security-Policy: default-src 'none';
+script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src
+'self' ws://127.0.0.1:<port>; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+require-trusted-types-for 'script'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy:
+same-origin` and `Cache-Control: no-store`.
+
+**The assets** are `packages/board/dist`, embedded when `mnemorphd` is compiled by a fixed name
+map: each file's path under `dist/` (`/index.html`, `/assets/index-<hash>.js`) is one entry, `/` is
+`/index.html`, and any other path is 404 — a request path is never joined, decoded or normalised.
+Source maps are left out.
+Build the board first (`pnpm --filter @mnemorph/board build`); compiled without it, `mnemorphd`
+embeds a placeholder page saying so, and serves the API all the same.
+
+**The API** so far, all JSON, its types generated into `@mnemorph/protocol`:
+
+| Route | Answers |
+|---|---|
+| `GET /api/health` | `{"ok": true}`, with no session |
+| `GET /api/session` | `{"csrf": "<token>"}` |
+| `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}]}` — `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present` or `missing`; the latest session first. Paths and names are the world's own text: the page renders them as text, never markup |
 
 #### `mnemorph run`
 
@@ -482,6 +547,7 @@ fails when the two differ.
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
 | relation sightings | `$XDG_STATE_HOME/mnemorph/dimension/<world>-<fnv64a>/sightings.jsonl` (else `~/.local/state/…`) — cross-world references the harness saw a body read in a committed manifest, the other world named by id; the ledger relations are learned from, the harness's alone | no — machine-local |
+| board's list and lock | `$XDG_STATE_HOME/mnemorph/board/worlds.jsonl` (else `~/.local/state/…`) — each world the human added to the board or forgot, written only by `mnemorphd board add` and `board forget`; `board.lock`, held while a board runs, and `board.url` (`0600`), its URL with the key waiting now | no — machine-local |
 | world registry | `$XDG_STATE_HOME/mnemorph/worlds.jsonl` (else `~/.local/state/…`), one for every world — a row each time a session opens: the world's canonical path, its id `<world>-<fnv64a>`, its `origin` remote normalised (`host/owner/repo`, never a credential) and when; the board finds worlds there, and a world's row count is the session clock a learned relation's expiry reads | no — machine-local |
 | advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |

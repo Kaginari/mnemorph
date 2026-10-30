@@ -1,7 +1,10 @@
 /**
  * The protocol between mnemorphd and its clients. The types are generated from the Rust crates
- * (`crates/mnemorph-server/src/protocol.rs`) and checked in; the check fails when they drift.
+ * (`crates/mnemorph-server/src/protocol.rs`, and the board's API in `src/board/mod.rs`) and checked
+ * in; the check fails when they drift.
  */
+export type { BoardWorld } from './generated/BoardWorld.js';
+export type { BoardWorlds } from './generated/BoardWorlds.js';
 export type { Budget } from './generated/Budget.js';
 export type { Envelope } from './generated/Envelope.js';
 export type { Event } from './generated/Event.js';
@@ -13,6 +16,7 @@ export type { Hello } from './generated/Hello.js';
 export type { PromptParams } from './generated/PromptParams.js';
 export type { PromptResult } from './generated/PromptResult.js';
 export type { JsonValue } from './generated/serde_json/JsonValue.js';
+export type { WorldState } from './generated/WorldState.js';
 
 import type { Envelope } from './generated/Envelope.js';
 import type { Event } from './generated/Event.js';
