@@ -6317,3 +6317,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   only, a creature downstream; a file edited outside a landing reads as review live and credit marks it;
   same-millisecond id-less lines stay two notes, a collision is reported; the fixed worst-case ordering draw.
 - **Learned:** a cascade's reach belongs to its trigger: what one body can cause alone marks one hop.
+### [2026-10-30T15:27:38+01:00] rimuru — #107: the lifecycles explored whole, with witnesses; two bugs found and fixed
+- **Done:** a breadth-first walk over the real code of each lifecycle, in each crate's
+  `tests/lifecycles.rs`: ascension (5 forms, 36–162 states, fixpoint), the receipt (7 states,
+  fixpoint), an Oni's act with its envelope and incident (~130 states, depth 5, every move on a
+  fork of its parent's files and stub forge), the envelope's time and count (fixpoint), a Dark Elf
+  challenge with its finding (464 states, fixpoint at 9), a session's run (40 states, depth 4).
+  Each asserts its invariants in every state, a shortest witness for every intended state, and
+  that no unintended one is reached. Docs 02, 05.
+- **Bugs:** (1) `rises` let a High Orc and a Named Slime rise with an overturned pass on a sealed
+  territory or a *tests intact* failure in the window, so a body that just rose read as falling at
+  once: the event now bars the rise, as the Oni's already did. (2) `write::save` replaced the
+  human's global file through a sibling the umask made: a revoke turned a `0600` file `0664` under
+  umask 002, and every other envelope in it stopped being honoured. The sibling now takes the
+  file's mode.
+- **Tests:** the walks; `law.rs` misses for both new operands; a revoke keeps the file `0600` and
+  the other envelope admits.
+- **Learned:** an abstraction that drops a field a move changes hides every state after that move
+  (the verifier's assignment did). A cut before the act still spends an envelope use, since it may
+  have run. A command spawned by another thread can carry a lock fd for an instant; the run walk
+  rereads the listing rather than reading that as a live session.
+
+### [2026-10-30T16:20:00+01:00] rimuru — #107, Fable's review: the config sibling is born private; the walk catches a loose rewrite
+- **Done:** `write::save` makes its sibling `create_new` at the file's own mode (`0600` for a file not there yet), sets it on the open file, writes and syncs it before the rename: the envelopes never exist at the umask's mode. The config walk runs under umask 002 and asserts the global file stays `0600` in every state. A duplicate sentence in docs/02 removed.
+- **Tests:** the sibling's mode at creation and a new file's, under umasks 002 and 022; the walk fails, under a 022 shell, when the old rewrite is put back.
+- **Learned:** a fix that sets the mode after writing still leaves a window; a check that reads only under the CI's umask misses the bug it was written for.

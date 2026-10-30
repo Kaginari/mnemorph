@@ -945,6 +945,24 @@ signed = 2026-10-24                # expires 2026-11-23, unless `expires` says s
 uses = 50                          # optional: at most 50 acts in all
 ```
 
+### Lifecycles, explored whole
+
+Each lifecycle the harness keeps is walked breadth-first over its real code, never a model of it:
+every state reachable from a fresh start over a small alphabet of events, the shortest event path
+to each kept as its witness. The test fails when a state the lifecycle intends is unreachable,
+when one it does not intend is reached, or when an invariant breaks in any state. A walk over
+files forks its parent state on disk for every move. The walks live in each crate's
+`tests/lifecycles.rs`.
+
+| Lifecycle | Driven through | Bound | Invariants in every state |
+|---|---|---|---|
+| Ascension, probation, fall (`mnemorph-races`) | `rises`, `falls`, `recovers`, per ascended form | fixpoint | the form changes only on the human's word; a reading at the rise bars never reads as falling; recovery needs five reports; no rise proposed in a declined candidate's cooldown; an Oni never reaches probation |
+| A receipt (`mnemorph-config`) | `PostJournal::commit`, `ran`, `observe` | fixpoint | `observed` only with a probe run and seen; a command rests `unobserved`; a refused move writes nothing |
+| An Oni's act, its envelope, its incident (`mnemorph-config`) | `Runner::act`, `undo`, `settle`, `open_incident`, `lesson`, `EnvelopeGate::revoke`, stub forge | depth 5 | each act moves only along the receipt's edges; a correction names an undo seen landed; a closed incident holds its four receipts, read again from the witness; no use past the cap, after a revocation or while suspended; no act on an open incident's target; nothing runs that neither the human nor an envelope let run |
+| An envelope's time and count | `Envelope::admits` | fixpoint | never past its cap; revoked, expired or spent never comes back into force |
+| A Dark Elf challenge and its finding (`mnemorph-world`) | `Challenges` and its verification | fixpoint | cleared only with every routed ledger, no torn line, every finding ruled and none blocking; a critical is blocked until the human waives it; a waiver is final; a verdict only from the assigned verifier, once; a seal only on a confirmation at high or more; the value ledger's fold agrees |
+| A session's run (`mnemorph-loop`) | `open_with`, `resume_with`, `ask` | depth 4 | every answer passed the end gate; a resume is refused exactly when the run answered, failed or is held; a run is listed to resume exactly when it stopped and no live session holds it |
+
 ### System One decisions
 
 Some of Mnemorph's questions are decisions, not conversations: did this piped test run pass, which

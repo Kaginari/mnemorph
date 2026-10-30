@@ -311,7 +311,9 @@ fn rise_record(risen: Race) -> u32 {
     }
 }
 
-/// The bars of `risen`'s rise, its record first; none when `risen` is not an ascended form.
+/// The bars of `risen`'s rise, its record first; none when `risen` is not an ascended form. An
+/// event that would end the form at once bars the rise while it is in the window, so a body that
+/// just rose never reads as falling.
 fn rise_bars(risen: Race) -> Vec<Bar> {
     let at_least = |meter: &'static str, read: fn(&Signals) -> f64| {
         Bar::count(meter, read, Op::Ge, f64::from(rise_record(risen)))
@@ -327,12 +329,24 @@ fn rise_bars(risen: Race) -> Vec<Bar> {
             reports(),
             Bar::rate("gateRight", |s| s.gate_right, Op::Ge, 90.0),
             Bar::rate("holeRate", |s| s.hole_rate, Op::Le, 10.0),
+            Bar::count(
+                "overturnedOnSealed",
+                |s| f64::from(s.overturned_on_sealed),
+                Op::Le,
+                0.0,
+            ),
         ],
         Race::NamedSlime => vec![
             reports(),
             Bar::rate("landRate", |s| s.land_rate, Op::Ge, 90.0),
             Bar::rate("gateRate", |s| s.gate_rate, Op::Ge, 90.0),
             Bar::rate("holeRate", |s| s.hole_rate, Op::Le, 5.0),
+            Bar::count(
+                "testsIntactFailures",
+                |s| f64::from(s.tests_intact_failures),
+                Op::Le,
+                0.0,
+            ),
         ],
         Race::Oni => vec![
             at_least("outwardActs", |s| f64::from(s.outward_acts)),
