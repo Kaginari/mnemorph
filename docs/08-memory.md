@@ -425,6 +425,7 @@ of its time, owner and text: the same on every machine and every read, nothing r
 | `claim` | the claim's id | it is superseded by a new version, struck by an attributable failure (doubted) or retired |
 | `fact` | the fact's id in [the ontology](09-ontology.md#facts-who-said-what) | an event leaves it contested |
 | `file` | the path, and the SHA-256 of its bytes (16 hex digits) | a landing the gate passed changes or deletes it |
+| `creature` | its name | it is rebirthed, rewritten or retired — the lifecycle's call, `invalidate(Moved::Creature)` |
 
 A claim's evidence files are recorded with their hashes when it is proposed, and again when a route
 grounds it — what the grounding saw replaces what the proposal did; a claim may name further claims

@@ -86,6 +86,12 @@ pub enum Dependency {
         /// The fact's id.
         id: String,
     },
+    /// A creature, by name — the one whose word or doc the claim rests on: rebirthed, rewritten or
+    /// retired, it moves.
+    Creature {
+        /// The creature's name.
+        name: String,
+    },
     /// A file of the world, with the SHA-256 of its bytes when the claim was proposed or grounded:
     /// a landing that changes them moves it.
     File {

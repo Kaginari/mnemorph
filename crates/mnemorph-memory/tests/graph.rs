@@ -317,7 +317,8 @@ fn a_retired_dependency_marks_its_dependents() {
     let _ = fs::remove_dir_all(&w);
 }
 
-/// A fact of the ontology moving — contested — marks the claims resting on it.
+/// A fact of the ontology moving — contested — or a creature — rebirthed, retired — marks the
+/// claims resting on it.
 #[test]
 fn a_moved_fact_marks_the_claims_resting_on_it() {
     let w = world("fact");
@@ -340,6 +341,22 @@ fn a_moved_fact_marks_the_claims_resting_on_it() {
     assert_eq!(
         invalidate(&w, Moved::Fact("abc123"), "fact #abc123 is contested").unwrap(),
         vec![c.note]
+    );
+    let d = propose_resting(
+        &w,
+        "slime-t",
+        "slime-s owns the lexer",
+        vec![],
+        None,
+        vec![],
+        vec![Dependency::Creature {
+            name: "slime-s".into(),
+        }],
+    )
+    .unwrap();
+    assert_eq!(
+        invalidate(&w, Moved::Creature("slime-s"), "slime-s was rebirthed").unwrap(),
+        vec![d.note]
     );
     let _ = fs::remove_dir_all(&w);
 }

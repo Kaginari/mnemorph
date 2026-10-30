@@ -17,6 +17,8 @@ pub enum Moved<'a> {
     Claim(&'a str),
     /// A fact of the ontology, by id: contested.
     Fact(&'a str),
+    /// A creature, by name: rebirthed, rewritten or retired.
+    Creature(&'a str),
 }
 
 /// The SHA-256 of a world file's bytes, its first 16 hex digits: `None` when it is not a readable
@@ -171,6 +173,12 @@ pub fn invalidate(world: &Path, moved: Moved<'_>, why: &str) -> std::io::Result<
     let (origin, key) = match moved {
         Moved::Claim(id) => (Some(id), Dependency::Claim { id: id.to_owned() }),
         Moved::Fact(id) => (None, Dependency::Fact { id: id.to_owned() }),
+        Moved::Creature(name) => (
+            None,
+            Dependency::Creature {
+                name: name.to_owned(),
+            },
+        ),
     };
     propagate(world, origin, |n| {
         n.depends_on.contains(&key).then(|| why.to_owned())
