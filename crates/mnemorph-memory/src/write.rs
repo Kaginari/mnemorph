@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 use std::path::Path;
 
-use crate::note::{By, Change, Note, Polarity, Status};
+use crate::note::{By, Change, Dependency, Note, Polarity, Status};
 use crate::store::{Tier, append, event_id, now_ms};
 
 /// A claim said, not proved.
@@ -32,6 +32,8 @@ pub struct Claim<S> {
     pub source: Option<String>,
     /// What it rests on: the files its run read or changed.
     pub evidence: Vec<String>,
+    /// What it depends on: claims, facts, files with their hashes.
+    pub depends_on: Vec<Dependency>,
     standing: PhantomData<S>,
 }
 
@@ -227,7 +229,32 @@ pub fn propose_on(
     source: Option<String>,
     evidence: Vec<String>,
 ) -> std::io::Result<Claim<Proposed>> {
+    propose_resting(world, owner, text, tags, source, evidence, Vec::new())
+}
+
+/// [`propose_on`], with what the claim depends on besides its evidence's files: other claims by
+/// id, facts of the ontology. Each evidence file is recorded with its content hash now, so a
+/// landing that changes it marks the claim for review.
+///
+/// # Errors
+///
+/// The creature's memory is frozen ([`crate::unfrozen`]), or the note file cannot be written.
+pub fn propose_resting(
+    world: &Path,
+    owner: &str,
+    text: &str,
+    tags: Vec<String>,
+    source: Option<String>,
+    evidence: Vec<String>,
+    depends_on: Vec<Dependency>,
+) -> std::io::Result<Claim<Proposed>> {
     crate::audit::unfrozen(world, owner)?;
+    let mut depends_on = depends_on;
+    for f in crate::graph::files(world, &evidence) {
+        if !depends_on.contains(&f) {
+            depends_on.push(f);
+        }
+    }
     let note = format!("n{}", event_id(now_ms()));
     append(
         world,
@@ -245,6 +272,7 @@ pub fn propose_on(
             source: source.clone(),
             links: Vec::new(),
             evidence: evidence.clone(),
+            depends_on: depends_on.clone(),
         },
     )?;
     Ok(Claim {
@@ -254,12 +282,14 @@ pub fn propose_on(
         tags,
         source,
         evidence,
+        depends_on,
         standing: PhantomData,
     })
 }
 
 /// Ground a claim by its route's proof: in its owner's personal tier, and in shared memory, each
-/// event citing the proof, at the route's confidence.
+/// event citing the proof, at the route's confidence. The files its evidence names are recorded
+/// again with their hashes now — what the grounding saw — and a review it waited under is answered.
 ///
 /// # Errors
 ///
@@ -279,6 +309,20 @@ pub fn ground(
     let cites = format!("{}: {}", proof.route.word(), proof.cites);
     let confidence = proof.route.confidence();
     let personal = Tier::Personal(claim.owner.clone());
+    let seen = crate::graph::files(world, &claim.evidence);
+    let mut depends_on = claim.depends_on.clone();
+    depends_on.retain(|d| !matches!(d, Dependency::File { .. }));
+    depends_on.extend(seen.iter().cloned());
+    if !seen.is_empty() {
+        append(
+            world,
+            &personal,
+            &claim.note,
+            By::Route,
+            Some(cites.clone()),
+            Change::Depends { on: seen.clone() },
+        )?;
+    }
     append(
         world,
         &personal,
@@ -313,8 +357,21 @@ pub fn ground(
             source: claim.source.clone(),
             links: Vec::new(),
             evidence: claim.evidence.clone(),
+            depends_on: depends_on.clone(),
         },
     )?;
+    // Shared memory may hold it already — a claim grounded again after a review: what this
+    // grounding saw replaces what the first one did.
+    if !seen.is_empty() {
+        append(
+            world,
+            &Tier::Shared,
+            &claim.note,
+            By::Route,
+            Some(cites.clone()),
+            Change::Depends { on: seen },
+        )?;
+    }
     append(
         world,
         &Tier::Shared,
@@ -332,6 +389,7 @@ pub fn ground(
         tags: claim.tags,
         source: claim.source,
         evidence: claim.evidence,
+        depends_on,
         standing: PhantomData,
     })
 }
@@ -415,6 +473,7 @@ pub fn revise(
                 source: Some(verdict.to_owned()),
                 evidence: Vec::new(),
                 links,
+                depends_on: Vec::new(),
             },
         )?;
         append(
@@ -470,6 +529,7 @@ pub fn cache(world: &Path, body: &str, text: &str) -> std::io::Result<String> {
             source: None,
             evidence: Vec::new(),
             links: Vec::new(),
+            depends_on: Vec::new(),
         },
     )?;
     Ok(note)
@@ -622,6 +682,8 @@ pub struct Retired {
     pub retired: Vec<String>,
     /// Doubted: a first attributable failure took [`DOUBT`] of their confidence.
     pub doubted: Vec<String>,
+    /// Marked for review: the claims resting on a note retired or doubted, transitively.
+    pub reviewed: Vec<String>,
 }
 
 /// Weigh what a run-ending failure says of the notes its ask cited. A failure counts against a
@@ -697,6 +759,23 @@ pub fn retire(
                     Some(verdict.to_owned()),
                     change.clone(),
                 )?;
+            }
+        }
+    }
+    // A claim struck — doubted or retired — no longer holds up what rests on it.
+    for (id, how) in out
+        .retired
+        .iter()
+        .map(|i| (i, "retired"))
+        .chain(out.doubted.iter().map(|i| (i, "struck by a failure")))
+    {
+        for marked in crate::graph::invalidate(
+            world,
+            crate::graph::Moved::Claim(id),
+            &format!("`{id}` it rests on was {how} ({verdict})"),
+        )? {
+            if !out.reviewed.contains(&marked) {
+                out.reviewed.push(marked);
             }
         }
     }
@@ -789,9 +868,10 @@ pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String
     Ok(out)
 }
 
-/// The claim `id` of `owner`, still proposed in its personal tier: what a route may ground later —
-/// a commissioner's verdict that accepts it, a second voice. `None` when the owner holds no such
-/// note, or it is no longer proposed.
+/// The claim `id` of `owner`, still proposed in its personal tier — or grounded and waiting under
+/// review for a route to ground it again: what a route may ground later — a commissioner's verdict
+/// that accepts it, a second voice, the human. `None` when the owner holds no such note, or it is
+/// neither.
 ///
 /// # Errors
 ///
@@ -801,7 +881,10 @@ pub fn proposed(world: &Path, owner: &str, id: &str) -> std::io::Result<Option<C
     let notes = crate::note::fold(&rows);
     Ok(notes
         .get(id)
-        .filter(|n| n.status == Status::Proposed && n.owner.as_deref() == Some(owner))
+        .filter(|n| {
+            (n.status == Status::Proposed || (n.status == Status::Grounded && n.review.is_some()))
+                && n.owner.as_deref() == Some(owner)
+        })
         .map(|n| Claim {
             note: n.id.clone(),
             owner: owner.to_owned(),
@@ -809,8 +892,64 @@ pub fn proposed(world: &Path, owner: &str, id: &str) -> std::io::Result<Option<C
             tags: n.tags.clone(),
             source: n.source.clone(),
             evidence: n.evidence.clone(),
+            depends_on: n.depends_on.clone(),
             standing: PhantomData,
         }))
+}
+
+/// Correct the claim `id` of `owner`: its next version, under the same id, never an edit in place.
+/// The new version rests on `depends_on`, with the files its evidence names hashed now; it is
+/// proposed until a route grounds it, in every tier that holds it. Whatever rests on the claim
+/// needs review: what it said has been superseded. Returns the new version's number and the ids
+/// marked for review.
+///
+/// # Errors
+///
+/// The creature's memory is frozen ([`crate::unfrozen`]), `owner` holds no live claim `id`, or a
+/// note file cannot be read or written.
+pub fn amend(
+    world: &Path,
+    owner: &str,
+    id: &str,
+    text: &str,
+    depends_on: Vec<Dependency>,
+) -> std::io::Result<(u32, Vec<String>)> {
+    crate::audit::unfrozen(world, owner)?;
+    let personal = Tier::Personal(owner.to_owned());
+    let rows = crate::store::read(world, &personal)?.rows;
+    let notes = crate::note::fold(&rows);
+    let Some(n) = notes.get(id).filter(|n| {
+        n.owner.as_deref() == Some(owner) && matches!(n.status, Status::Proposed | Status::Grounded)
+    }) else {
+        return Err(std::io::Error::other(format!(
+            "{owner} holds no live claim `{id}` to correct"
+        )));
+    };
+    let mut depends_on = depends_on;
+    for f in crate::graph::files(world, &n.evidence) {
+        if !depends_on.contains(&f) {
+            depends_on.push(f);
+        }
+    }
+    let change = Change::Version {
+        text: text.to_owned(),
+        depends_on,
+    };
+    append(world, &personal, id, By::Record, None, change.clone())?;
+    if crate::store::read(world, &Tier::Shared)?
+        .rows
+        .iter()
+        .any(|e| e.note == id)
+    {
+        append(world, &Tier::Shared, id, By::Record, None, change)?;
+    }
+    let version = n.version + 1;
+    let marked = crate::graph::invalidate(
+        world,
+        crate::graph::Moved::Claim(id),
+        &format!("`{id}` it rests on was superseded by version {version}"),
+    )?;
+    Ok((version, marked))
 }
 
 /// What [`corroborate`] leaves: the claim grounded with the id of the one that corroborated it,

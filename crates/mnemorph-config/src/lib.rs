@@ -203,6 +203,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("recall.confidence", Kind::Number),
     ("recall.freshness", Kind::Number),
     ("recall.dissent", Kind::Number),
+    ("recall.strength", Kind::Number),
     ("recall.half_life_days", Kind::Number),
     ("recall.floor", Kind::Number),
     ("recall.saturation_short", Kind::Number),

@@ -21,6 +21,7 @@ fn note(id: &str, text: &str, polarity: Polarity, status: Status) -> Note {
         links: vec![],
         lent: vec![],
         evidence: vec![],
+        ..Note::default()
     }
 }
 

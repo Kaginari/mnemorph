@@ -181,10 +181,16 @@ pub fn force(r: &mut Recalled, note: &Note, k: usize) {
         r.cut_ids.insert(0, out.note.id);
         r.cut_ids.truncate(3);
     }
+    // Seen alone: what it rests on is not in sight here, so nothing caps it.
+    let strength = crate::graph::strengths([note], crate::store::now_ms())
+        .into_values()
+        .next()
+        .unwrap_or_default();
     r.anchors.push(Hit {
         note: note.clone(),
         score: 0.0,
         meaning: 0.0,
+        strength,
     });
 }
 

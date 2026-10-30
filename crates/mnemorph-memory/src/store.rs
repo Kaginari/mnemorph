@@ -99,7 +99,41 @@ pub(crate) fn append(
 ///
 /// The file exists but cannot be read.
 pub fn read(world: &Path, tier: &Tier) -> std::io::Result<ReadBack<Event>> {
-    tier.journal(world).read()
+    let mut back = tier.journal(world).read()?;
+    for e in &mut back.rows {
+        upgrade(e);
+    }
+    Ok(back)
+}
+
+/// A creation written without a note id — an import, a hand-written line — is given one derived
+/// from what it is: the same line reads as the same id on every machine, every time, and nothing
+/// is rewritten. Any other event without one names no note, and the fold sets it aside.
+pub fn upgrade(e: &mut Event) {
+    use sha2::{Digest, Sha256};
+    if !e.note.is_empty() {
+        return;
+    }
+    if let Change::Create { text, owner, .. } = &e.change {
+        let mut h = Sha256::new();
+        h.update(e.time.to_be_bytes());
+        h.update(owner.as_deref().unwrap_or_default().as_bytes());
+        h.update([0]);
+        h.update(text.as_bytes());
+        e.note = format!("h{}", hex16(&h.finalize()));
+    }
+}
+
+/// The first 8 bytes of a digest, as 16 hex digits.
+pub(crate) fn hex16(digest: &[u8]) -> String {
+    digest
+        .iter()
+        .take(8)
+        .fold(String::with_capacity(16), |mut hex, b| {
+            use std::fmt::Write as _;
+            let _ = write!(hex, "{b:02x}");
+            hex
+        })
 }
 
 /// On a split, each heir inherits `from`'s notes whose source lies in its ground; a note whose

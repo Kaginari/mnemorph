@@ -1606,6 +1606,7 @@ impl Run {
                 {
                     self.landed_in_ask = Some(h.to_owned());
                     self.credit(h);
+                    self.review_downstream(&verdict.changed, h);
                 }
                 // A pass still waiting on its challenge proves nothing checked yet.
                 if verdict.passed() && !pending {
@@ -1715,6 +1716,27 @@ impl Run {
         }
     }
 
+    /// A landing moved the files it changed: every claim resting on one whose bytes no longer hash
+    /// as they did needs review, and what rests on those — marked, never deleted.
+    fn review_downstream(&mut self, changed: &[PathBuf], heading: &str) {
+        let changed: Vec<String> = changed
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        match mnemorph_memory::landed(self.cx.world(), &changed, &format!("log.md {heading}")) {
+            Ok(marked) if !marked.is_empty() => self.record(&Beat::Warning {
+                text: format!(
+                    "memory: needs review, a file it rests on changed: {}",
+                    marked.join(", ")
+                ),
+            }),
+            Ok(_) => {}
+            Err(e) => self.record(&Beat::Warning {
+                text: format!("the landing could not mark what rests on its files: {e}"),
+            }),
+        }
+    }
+
     fn reconsolidate(&mut self, acts: &[String], heading: Option<&str>) {
         let anchors = self.cited_anchors();
         let verdict = heading.map_or_else(
@@ -1747,6 +1769,14 @@ impl Run {
                             "memory: retired, kept dormant — its failures outnumber its passes \
                              (`mnemorphd memory wake <id>` undoes it): {}",
                             r.retired.join(", ")
+                        ),
+                    });
+                }
+                if !r.reviewed.is_empty() {
+                    self.record(&Beat::Warning {
+                        text: format!(
+                            "memory: needs review, a claim it rests on was struck: {}",
+                            r.reviewed.join(", ")
                         ),
                     });
                 }

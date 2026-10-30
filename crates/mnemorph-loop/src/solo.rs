@@ -102,6 +102,7 @@ pub fn recall_weights(config: &mnemorph_config::Config) -> mnemorph_memory::Weig
         confidence: n("confidence", d.confidence),
         freshness: n("freshness", d.freshness),
         dissent: n("dissent", d.dissent),
+        strength: n("strength", d.strength),
         half_life_days: n("half_life_days", d.half_life_days),
         floor: n("floor", d.floor),
         saturation: [

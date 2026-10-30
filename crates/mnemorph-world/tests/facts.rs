@@ -539,3 +539,55 @@ fn the_true_duplicate_is_shown_for_triage() {
     // Docs 09 quote these ranks: a change here is a change there.
     assert_eq!(ranks, [3, 1, 1, 1, 2, 1, 3, 1]);
 }
+
+/// A fact an event leaves contested moves the memory claims resting on it: each is marked for
+/// review, once — a later event that keeps it contested marks nothing again.
+#[test]
+fn a_fact_newly_contested_marks_the_claims_resting_on_it() {
+    use mnemorph_world::memory::{Change, Dependency, Tier, fold, propose_resting, read};
+    let w = std::env::temp_dir().join(format!("mnemorph-fact-review-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(&w).unwrap();
+    let f = ("src/", "the parser is hand-written");
+    let id = fact_id(f.0, f.1);
+    let claim = propose_resting(
+        &w,
+        "slime-s",
+        "the grammar is hand-written too",
+        vec![],
+        None,
+        vec![],
+        vec![Dependency::Fact { id: id.clone() }],
+    )
+    .unwrap();
+    let tier = Tier::Personal("slime-s".into());
+    let reviews = || {
+        read(&w, &tier)
+            .unwrap()
+            .rows
+            .iter()
+            .filter(|e| matches!(e.change, Change::Review { .. }))
+            .count()
+    };
+    Facts::record(&w, &say(f.0, f.1, "a")).unwrap();
+    Facts::record(&w, &say(f.0, f.1, "b")).unwrap();
+    assert_eq!(reviews(), 0, "agreed: nothing moved");
+    Facts::record(&w, &counter(f.0, f.1, "c")).unwrap();
+    Facts::record(&w, &counter(f.0, f.1, "d")).unwrap();
+    assert_eq!(Facts::load(&w).facts[&id].status(), Status::Contested);
+    let note = fold(&read(&w, &tier).unwrap().rows)
+        .remove(&claim.note)
+        .unwrap();
+    assert!(
+        note.review
+            .as_deref()
+            .is_some_and(|c| c.contains(&id) && c.contains("contested")),
+        "{:?}",
+        note.review
+    );
+    let marked = reviews();
+    Facts::record(&w, &counter(f.0, f.1, "e")).unwrap();
+    Facts::record(&w, &say(f.0, f.1, "g")).unwrap();
+    assert_eq!(reviews(), marked, "still contested: marked once");
+    let _ = fs::remove_dir_all(&w);
+}
