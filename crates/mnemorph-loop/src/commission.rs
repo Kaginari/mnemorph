@@ -316,12 +316,13 @@ fn lawful(
     a: &CommissionArgs,
     plan: &[String],
     slice: u64,
-    left: Option<u64>,
+    (left, cap): (Option<u64>, Option<&'static str>),
 ) -> Result<(), String> {
     let ask = Ask {
         plan,
         slice_wt: slice,
         left_wt: left.unwrap_or(u64::MAX),
+        cap,
     };
     match dispatch(roster, parent, &a.to, &ask) {
         Err(why) => return Err(why.to_string()),
@@ -445,10 +446,13 @@ async fn route_child(
 
 /// Run one commission: the law, the child body, the repair of what it changed off its ground,
 /// and its report.
+///
+/// `budget` is what the dispatcher has left, and the human's cap that sets it when it spends the
+/// session's budget itself (`None` for a slice its commander carved): a budget refusal names it.
 pub(crate) async fn order(
     c: &Arc<Commissioner>,
     parent: &Body,
-    left: Option<u64>,
+    budget: (Option<u64>, Option<&'static str>),
     cx: &Context,
     interrupt: &Arc<crate::run::Interrupt>,
     input: &str,
@@ -466,16 +470,22 @@ pub(crate) async fn order(
     };
     let (model, rode, route_wt) = route_child(c, &roster, &a, office, parent, interrupt).await;
     // Routing comes first: what Metis costs comes out of what the dispatcher has left to give.
+    let (left, cap) = budget;
     let left = left.map(|l| l.saturating_sub(route_wt));
     let records = mnemorph_world::worth::Records::load(&c.world);
     let (slice, topup, granted) = grant(&records, &roster, &a, left, c.slice_floor);
     if slice == 0 {
-        return refused(format!(
-            "no budget left to carve for {}: @? budget to your commander",
-            a.to
-        ));
+        return refused(nothing_to_carve(&a, left, cap, c.slice_floor));
     }
-    if let Err(why) = lawful(&records, &roster, &parent.name, &a, &plan, slice, left) {
+    if let Err(why) = lawful(
+        &records,
+        &roster,
+        &parent.name,
+        &a,
+        &plan,
+        slice,
+        (left, cap),
+    ) {
         return refused(why);
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
@@ -561,6 +571,27 @@ fn refused_order(text: String) -> Order {
         interrupted: false,
         offered: Vec::new(),
         answer: None,
+    }
+}
+
+/// Why nothing could be carved for `a`: with budget left too small for a slice, the least slice
+/// and the top-up it needs, from `cap` or the commander.
+fn nothing_to_carve(
+    a: &CommissionArgs,
+    left: Option<u64>,
+    cap: Option<&'static str>,
+    floor: u64,
+) -> String {
+    match left.filter(|_| a.budget_wt != Some(0)) {
+        Some(have) => format!(
+            "{}: no budget left to carve for {}",
+            mnemorph_ledger::BudgetShort { need: floor, have }.refusal(cap),
+            a.to
+        ),
+        None => format!(
+            "no budget left to carve for {}: @? budget to your commander",
+            a.to
+        ),
     }
 }
 
@@ -904,6 +935,7 @@ pub(crate) fn carrier(
         plan: &plan,
         slice_wt: left.map_or(u64::MAX, |l| l / 2),
         left_wt,
+        cap: None,
     };
     match dispatch(roster, &parent, to, &ask) {
         Err(why) => return Err(why.to_string()),

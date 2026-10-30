@@ -332,6 +332,7 @@ fn build(
     // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
     if !lanes.is_empty() {
         limits.budget_wt = budget.map(|b| b.wt);
+        limits.budget_cap = budget.map(|b| b.cap);
     }
     // One decider for the session's run and its commissioner's routes.
     let decided = decisions(config, world, model.clone(), env)?;

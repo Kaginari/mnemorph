@@ -1073,25 +1073,44 @@ impl Challenges {
     /// ([`mnemorph_ledger::fold_findings`]).
     #[must_use]
     pub fn finding_rows(&self) -> Vec<FindingRow> {
-        self.read()
-            .into_iter()
-            .flat_map(|(id, open)| {
-                let at = open.at;
-                open.findings.into_iter().map(move |f| {
-                    let (at, build) = at.get(f.fingerprint()).cloned().unwrap_or_default();
-                    FindingRow {
-                        speciality: f.found.record.speciality.clone(),
-                        fingerprint: f.fingerprint().to_owned(),
-                        landing: id.clone(),
-                        standing: f.standing(),
-                        at,
-                        build,
-                    }
-                })
-            })
-            .collect()
+        rows_of(self.read())
     }
 
+    /// [`Challenges::finding_rows`], and the records' hash chain walked over the same bytes, from
+    /// one read under the lock; no rows and no chain when the records cannot be read.
+    #[must_use]
+    pub fn finding_rows_chained(&self) -> (Vec<FindingRow>, Option<mnemorph_ledger::Report>) {
+        if !self.path.exists() {
+            return (Vec::new(), None);
+        }
+        match self.hold() {
+            Ok(held) => (rows_of(held.all), Some(held.walk.report())),
+            Err(_) => (Vec::new(), None),
+        }
+    }
+}
+
+/// Every finding of the folded records, as [`Challenges::finding_rows`] gives them.
+fn rows_of(all: std::collections::BTreeMap<String, super::Open>) -> Vec<FindingRow> {
+    all.into_iter()
+        .flat_map(|(id, open)| {
+            let at = open.at;
+            open.findings.into_iter().map(move |f| {
+                let (at, build) = at.get(f.fingerprint()).cloned().unwrap_or_default();
+                FindingRow {
+                    speciality: f.found.record.speciality.clone(),
+                    fingerprint: f.fingerprint().to_owned(),
+                    landing: id.clone(),
+                    standing: f.standing(),
+                    at,
+                    build,
+                }
+            })
+        })
+        .collect()
+}
+
+impl Challenges {
     /// Every confirmed and refuted verdict the records keep, landing by landing: the rows a
     /// precision fold reads per finder speciality.
     #[must_use]

@@ -23,7 +23,10 @@
 
 use std::collections::BTreeMap;
 
-use mnemorph_races::{FallReading, Meter, Race, Rate, Recent, Signals, falls, meter, rises};
+use mnemorph_races::{
+    Explanation, Kind, Meter, Op, Race, Rate, Recent, Recover, Scale, Signals, explain_fall,
+    explain_rise, meter, rerise, rises,
+};
 
 use crate::Build;
 
@@ -93,7 +96,8 @@ pub struct FindingRow {
     pub landing: String,
     /// Where it stands there.
     pub standing: Standing,
-    /// The order of the record that settled it there: a later record is greater.
+    /// The order of the record that settled it there: a later record is greater. The challenge
+    /// records number it by line, from 1, as their hash chain counts lines.
     pub at: u64,
     /// The build that wrote the record that settled it there; `unknown` for a record written
     /// before records were stamped.
@@ -124,6 +128,15 @@ pub struct SpecialityFold {
     /// Findings per build of the record that settled each: which rules the record was earned
     /// under. Shown, never scored apart.
     pub builds: BTreeMap<Build, u32>,
+    /// The records' first and last row ([`FindingRow::at`]) of every finding folded: the window a
+    /// rise reads.
+    pub rows: Option<(u64, u64)>,
+    /// The records' first and last row of [`SpecialityFold::recent`]: the
+    /// window a fall reads.
+    pub recent_rows: Option<(u64, u64)>,
+    /// The records' first and last row of the last [`WINDOW`] findings filed: the window the
+    /// `cannot-verify` bar reads.
+    pub filed_rows: Option<(u64, u64)>,
 }
 
 /// What the fold proposes to the human for a speciality. Nothing here applies it.
@@ -134,6 +147,16 @@ pub enum Ascension {
     /// The Arch Dark Elf's precision over its last ten settled fell under the fall bar, or its
     /// `cannot-verify` rate over its last ten findings rose past [`CANNOT_VERIFY_BAR`]: probation.
     Probation,
+}
+
+/// A proposal and why: one line per bar ([`Explanation`]), each carrying the records' head digest
+/// and the rows of the window it read, so the decision can be recomputed from the records.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Proposed {
+    /// What is proposed.
+    pub ascension: Ascension,
+    /// Why: for a rise, every bar of it; for probation, each bar that failed.
+    pub why: Vec<Explanation>,
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -225,17 +248,62 @@ impl SpecialityFold {
     /// bar on a full last ten findings, goes on probation.
     #[must_use]
     pub fn proposal(&self, form: Race) -> Option<Ascension> {
-        let stalled = self.last_filed as usize >= WINDOW
-            && self
-                .cannot_verify_rate()
-                .is_some_and(|r| r > CANNOT_VERIFY_BAR);
+        self.proposed(form, None).map(|p| p.ascension)
+    }
+
+    /// [`SpecialityFold::proposal`], explained: each line names its bar, its reading and the
+    /// rows of the window it read, with `head`, the records' chain head digest when the fold was
+    /// read.
+    #[must_use]
+    pub fn proposed(&self, form: Race, head: Option<&str>) -> Option<Proposed> {
         match form {
-            Race::DarkElf => rises(Race::ArchDarkElf, &self.signals()).then_some(Ascension::Rise),
-            Race::ArchDarkElf => (stalled
-                || falls(Race::ArchDarkElf, &self.last()) != FallReading::Holds)
-                .then_some(Ascension::Probation),
+            Race::DarkElf => rises(Race::ArchDarkElf, &self.signals()).then(|| Proposed {
+                ascension: Ascension::Rise,
+                // A rise reads the whole record.
+                why: explain_rise(Race::ArchDarkElf, &self.signals())
+                    .into_iter()
+                    .map(|e| e.on_ledger(head, self.rows))
+                    .collect(),
+            }),
+            Race::ArchDarkElf => {
+                let mut why: Vec<Explanation> = explain_fall(Race::ArchDarkElf, &self.last())
+                    .into_iter()
+                    .map(|e| e.on_ledger(head, self.recent_rows))
+                    .collect();
+                why.extend(self.stalled().map(|e| e.on_ledger(head, self.filed_rows)));
+                (!why.is_empty()).then_some(Proposed {
+                    ascension: Ascension::Probation,
+                    why,
+                })
+            }
             _ => None,
         }
+    }
+
+    /// The `cannot-verify` bar over a full last ten findings, when it is past: probation.
+    fn stalled(&self) -> Option<Explanation> {
+        let rate = self.cannot_verify_rate()?;
+        let e = Explanation {
+            kind: Kind::Probation,
+            meter: "cannotVerifyRate",
+            scale: Scale::Rate,
+            reading: rate,
+            op: Op::Gt,
+            threshold: CANNOT_VERIFY_BAR,
+            window: self.last_filed,
+            unit: "findings",
+            recover: Some(Recover {
+                op: Op::Le,
+                threshold: CANNOT_VERIFY_BAR,
+                within: mnemorph_races::RECOVER_REPORTS,
+                unit: "findings",
+            }),
+            rerise: rerise(Race::ArchDarkElf, "cannotVerifyRate"),
+            head: None,
+            from: None,
+            to: None,
+        };
+        (self.last_filed as usize >= WINDOW && e.holds()).then_some(e)
     }
 }
 
@@ -304,18 +372,26 @@ fn fold_with(rows: &[FindingRow], dedupe: bool) -> BTreeMap<String, SpecialityFo
         let from = s.len().saturating_sub(WINDOW);
         if let Some(f) = out.get_mut(speciality) {
             f.recent = s[from..].iter().map(|(_, u)| *u).collect();
+            f.recent_rows = span(&s[from..]);
         }
     }
     for (speciality, mut s) in filed {
         s.sort_by_key(|(at, _)| *at);
         let last = &s[s.len().saturating_sub(WINDOW)..];
         if let Some(f) = out.get_mut(speciality) {
+            f.rows = span(&s);
             f.last_filed = u32::try_from(last.len()).unwrap_or(u32::MAX);
             f.last_cannot_verify =
                 u32::try_from(last.iter().filter(|(_, nv)| *nv).count()).unwrap_or(u32::MAX);
+            f.filed_rows = span(last);
         }
     }
     out
+}
+
+/// The first and last row of a window sorted by row.
+fn span<T>(window: &[(u64, T)]) -> Option<(u64, u64)> {
+    Some((window.first()?.0, window.last()?.0))
 }
 
 /// Of two standings of one root cause, the one that stands: the human's latest word, else the
@@ -566,6 +642,91 @@ mod tests {
         rows[0].standing = Standing::Confirmed;
         rows.pop();
         assert_eq!(harness(&rows).proposal(Race::DarkElf), None);
+    }
+
+    /// A proposal carries one line per bar, with the head and the rows of the window it read;
+    /// the rows inside that window, folded again, give the same reading and the same decision.
+    #[test]
+    fn a_proposal_is_explained_and_recomputes_from_its_window() {
+        // Older confirmations, then ten settled: six refuted. Root cause `x` has rows on both
+        // sides of the window's first: confirmed before it, refuted inside it — it stands
+        // confirmed, before the window.
+        let mut rows: Vec<FindingRow> = (0..5u64)
+            .map(|i| row(&format!("old{i}"), "l0", Standing::Confirmed, 1 + i))
+            .collect();
+        rows.extend((0..10u64).map(|i| {
+            let s = if i < 6 {
+                Standing::Refuted
+            } else {
+                Standing::Confirmed
+            };
+            row(&format!("f{i}"), "l1", s, 20 + 2 * i)
+        }));
+        rows.push(row("x", "l0", Standing::Confirmed, 8));
+        rows.push(row("x", "l1", Standing::Refuted, 25));
+        let f = harness(&rows);
+        let p = f.proposed(Race::ArchDarkElf, Some("ab12")).unwrap();
+        assert_eq!(p.ascension, Ascension::Probation);
+        assert_eq!(p.why.len(), 1);
+        let e = &p.why[0];
+        assert_eq!(
+            e.to_string(),
+            "probation: precision 0.40 < 0.70 (last 10 findings); recover: >= 0.70 within 5 \
+             findings; re-rise: precision >= 0.85 over 20 findings; ledger head ab12, rows 20–38"
+        );
+        // Recomputed from the records up to the window's last row: the same reading, the same
+        // decision. The rows inside the window alone would not do: `x`'s refutation there would
+        // stand once its earlier confirmation is left out.
+        let (from, to) = (e.from.unwrap(), e.to.unwrap());
+        let upto: Vec<FindingRow> = rows.iter().filter(|r| r.at <= to).cloned().collect();
+        let again = harness(&upto);
+        assert_eq!(again.recent_precision(), Some(e.reading));
+        assert!(e.op.holds(e.reading, e.threshold));
+        assert_eq!(
+            again.proposed(Race::ArchDarkElf, Some("ab12")),
+            Some(p.clone())
+        );
+        let inside: Vec<FindingRow> = rows
+            .iter()
+            .filter(|r| (from..=to).contains(&r.at))
+            .cloned()
+            .collect();
+        assert_ne!(
+            harness(&inside).proposed(Race::ArchDarkElf, Some("ab12")),
+            Some(p.clone())
+        );
+        assert_eq!(f.proposal(Race::ArchDarkElf), Some(Ascension::Probation));
+        // A stalled record names the cannot-verify bar and the rows of the last ten filed.
+        let stalled: Vec<FindingRow> = (0..10u64)
+            .map(|i| {
+                let s = if i < 4 {
+                    Standing::Confirmed
+                } else {
+                    Standing::CannotVerify
+                };
+                row(&format!("c{i}"), "l1", s, 40 + i)
+            })
+            .collect();
+        let p = harness(&stalled).proposed(Race::ArchDarkElf, None).unwrap();
+        assert_eq!(
+            p.why[0].to_string(),
+            "probation: cannotVerifyRate 0.60 > 0.50 (last 10 findings); recover: <= 0.50 within \
+             5 findings; re-rise: upheldRate >= 0.80 over 20 findings; ledger unchained, rows \
+             40–49"
+        );
+        // A rise names every bar, over the whole record's rows.
+        let rise: Vec<FindingRow> = (0..20u64)
+            .map(|i| row(&format!("r{i}"), "l1", Standing::Confirmed, 3 + i))
+            .collect();
+        let p = harness(&rise)
+            .proposed(Race::DarkElf, Some("cd34"))
+            .unwrap();
+        assert_eq!(p.ascension, Ascension::Rise);
+        assert_eq!(p.why.len(), 3);
+        assert!(p.why.iter().all(|e| (e.from, e.to) == (Some(3), Some(22))));
+        assert!(p.why.iter().all(Explanation::holds));
+        assert_eq!(harness(&rise).proposed(Race::Orc, None), None);
+        assert_eq!(harness(&rise[..5]).proposed(Race::DarkElf, None), None);
     }
 
     /// Each row carries its build; old rows read as `unknown`. The fold counts findings per the

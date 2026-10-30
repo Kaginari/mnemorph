@@ -4,6 +4,7 @@
 
 use std::fmt;
 
+use mnemorph_ledger::{BudgetShort, Shortfall};
 use mnemorph_races::{DispatchContext, Race, Refusal, Route, may_dispatch};
 use mnemorph_wire::Hole;
 
@@ -18,6 +19,9 @@ pub struct Ask<'a> {
     pub slice_wt: u64,
     /// What its envelope has left.
     pub left_wt: u64,
+    /// The human's cap that sets what is left — `session`, `day` or `month` — when the dispatcher
+    /// spends the session's budget itself; `None` for an envelope its commander carved.
+    pub cap: Option<&'static str>,
 }
 
 /// A lawful dispatch: to whom the order goes.
@@ -43,13 +47,16 @@ pub struct Refused {
     pub next: String,
     /// The creature the next act goes to, when it goes to one.
     pub whom: Option<String>,
+    /// For a budget refusal, the shortfall and the top-up that would let the slice fit.
+    pub short: Option<Shortfall>,
 }
 
 impl fmt::Display for Refused {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.why {
-            Some(why) => write!(f, "{why}: {}", self.next),
-            None => f.write_str(&self.next),
+        match (self.short, self.why) {
+            (Some(short), _) => write!(f, "{short}: {}", self.next),
+            (None, Some(why)) => write!(f, "{why}: {}", self.next),
+            (None, None) => f.write_str(&self.next),
         }
     }
 }
@@ -65,6 +72,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
         why: None,
         next: format!("`{name}` is no living creature: Rimuru routes its birth"),
         whom: None,
+        short: None,
     };
     let a = living(from).ok_or_else(|| unknown(from))?;
     let b = living(to).ok_or_else(|| unknown(to))?;
@@ -139,12 +147,21 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
                         "`{n}` is no living creature: Rimuru routes a new commander for its line"
                     ),
                     whom: None,
+                    short: None,
                 });
             }
+            let short = (why == Refusal::Budget).then(|| {
+                BudgetShort {
+                    need: ask.slice_wt,
+                    have: ask.left_wt,
+                }
+                .refusal(ask.cap)
+            });
             Err(Refused {
                 why: Some(why),
                 next,
                 whom,
+                short,
             })
         }
     }

@@ -1127,10 +1127,10 @@ fn challenge(args: &[String]) -> ExitCode {
                 Err(e) => refused(&e),
             }
         }
-        [verb] if verb == "score" => match mnemorph_server::world::challenge::scores(&world) {
-            Ok(folded) => {
+        [verb] if verb == "score" => match mnemorph_server::world::challenge::scored(&world) {
+            Ok((folded, chain)) => {
                 let roster = mnemorph_server::world::Roster::load(&world);
-                for line in score(&folded, &roster, &records.unreadable()) {
+                for line in score(&folded, &roster, &records, chain.as_ref()) {
                     println!("{line}");
                 }
                 ExitCode::SUCCESS
@@ -1205,14 +1205,18 @@ fn decide(
 /// Each speciality's value ledger, as `challenge score` says it, escaped: the counts; precision,
 /// the upheld rate on the race's meter, the last ten and the `cannot-verify` rate, each with its
 /// count and 95% interval; the builds its findings were settled under; and what is proposed to
-/// the human — after the records' unreadable rows, when there are any.
+/// the human, one line per bar that decided it, with the records' chain head and the rows of the
+/// window it read — after the records' unreadable rows, and a chain that does not hold, when
+/// there are any.
 fn score(
     folded: &std::collections::BTreeMap<String, mnemorph_server::world::challenge::SpecialityFold>,
     roster: &mnemorph_server::world::Roster,
-    unreadable: &[u64],
+    records: &mnemorph_server::world::challenge::Challenges,
+    chain: Option<&mnemorph_server::world::challenge::ChainReport>,
 ) -> Vec<String> {
     use mnemorph_server::world::challenge::Ascension;
     let safe = mnemorph_server::challenge::safe;
+    let unreadable = records.unreadable();
     let mut lines = Vec::new();
     if !unreadable.is_empty() {
         let rows: Vec<String> = unreadable.iter().map(u64::to_string).collect();
@@ -1222,6 +1226,17 @@ fn score(
             rows.join(", ")
         ));
     }
+    // A proposal names the records' chain head — walked over the very bytes the fold read — so it
+    // can be recomputed from them.
+    let head = match chain {
+        Some(r) if r.holds() => r.head.as_ref().map(|h| h.digest.clone()),
+        Some(r) => {
+            lines.push(format!("the records' chain does not hold: {r}"));
+            None
+        }
+        None => None,
+    };
+    let head = head.as_deref();
     if folded.is_empty() {
         lines.push("no Dark Elf finding is on record".to_owned());
         return lines;
@@ -1265,8 +1280,8 @@ fn score(
             .map(|(b, n)| format!("{} {n}", safe(&b.to_string())))
             .collect();
         lines.push(format!("  settled under: {}", builds.join(" · ")));
-        if let Some(a) = form.and_then(|r| f.proposal(r)) {
-            let what = match a {
+        if let Some(p) = form.and_then(|r| f.proposed(r, head)) {
+            let what = match p.ascension {
                 Ascension::Rise => "rise to Arch Dark Elf",
                 Ascension::Probation => {
                     "probation: precision under 70% over the last ten settled, or cannot-verify \
@@ -1276,6 +1291,9 @@ fn score(
             lines.push(format!(
                 "  proposed to the human: {what} — nothing changes until the human applies it"
             ));
+            for why in &p.why {
+                lines.push(format!("    {}", safe(&why.to_string())));
+            }
         }
     }
     lines

@@ -1191,6 +1191,54 @@ How a fall is read (`mnemorph-races`, `falls`):
   recovery — reads the point estimate, so a record exactly at a rise bar rises whatever its lower
   bound. Judging on the lower bound would change the law; that is the human's decision to make.
 
+Every decision is explained (`explain_rise`, `explain_fall`, `Explanation`):
+
+- **One line per bar.** A rise is explained by every bar of its form; a probation or a fall by
+  each bar that failed. A line is typed — the meter, its reading, the operator, the threshold and
+  the record read; for a probation the bar that ends it, for a probation or a fall the rise bar to
+  earn again; and, from a ledger fold, the ledger's chain head digest and the first and last row of
+  the window it read:
+
+  ```text
+  probation: landRate 0.71 < 0.75 (last 10 reports); recover: >= 0.75 within 5 reports; re-rise: landRate >= 0.90 over 20 reports; ledger head 3f…9a, rows 12–48
+  fall: rollbacks 1 > 0 (last 12 outward acts); recover: none, it falls at once; re-rise: outwardCleanRate >= 0.95 over 30 outward acts
+  rise: precision 0.90 >= 0.85 (over 20 findings); ledger head 3f…9a, rows 3–40
+  ```
+
+  A rate reads as a proportion, with the digits that keep it apart from its bar
+  (`0.7495 < 0.75`); a count reads whole.
+- **The lines are the decision.** `rises`, `falls` and `recovers` read the same bars the lines
+  name, so a line cannot say one thing while the law does another; each line, its reading held
+  against its threshold (`Explanation::holds`), recomputes it. Given a line and the records, the
+  chain walked again holds at the named head, and the records up to the window's last row,
+  folded again, give the same reading and the same proposal — the whole prefix, since one root
+  cause's rows can lie on both sides of the window's first. The fold and the head come from one
+  read of the records, so the head is the head of the rows folded.
+- **The Dark Elf's proposals carry their lines** (`SpecialityFold::proposed`): the
+  `cannot-verify` bar is a line of its own (`cannotVerifyRate > 0.50`, recovering at `<= 0.50`,
+  rising again on `upheldRate`). The challenge records number their rows by line, from 1, as their
+  chain counts lines; `mnemorphd challenge score` prints each line, escaped, under its proposal,
+  and says when the records' chain does not hold — a proposal then names no head.
+
+Honest bad news never lowers a score. The report fold (`fold_reports`) reads the harness's facts
+about each report — the gate's word on its landing, a first-try pass, the holes the harness found
+— and never the body's own word, its `@?` holes or its prose:
+
+- **`landRate`** is the share of reports whose landing the gate passed. A body that says
+  `@S FAIL` or `@S ESCALATE` over a landing the gate passed has still landed: reading the word
+  would score the honest body under one that says nothing.
+- **`gateRate`** is the share whose landing passed on the first try; **`holeRate`** the share in
+  which the harness found a hole — an edited or deleted verify line — never a body's own `@?`.
+- **The properties are tested over the compiled formulas**, for every race: a report that says
+  `@S FAIL`, `@S ESCALATE` or raises an `@?` hole never scores, ranks, rises or falls worse than
+  the same outcome left silent; a body's `@?` never moves `holeRate`, a hole the harness finds
+  always does; and a gate verdict never depends on a report's prose — any answer that says
+  something, a claimed pass included, gets the verdict and the failures the plain one does. Only
+  an empty answer fails, on *duties done*.
+- **`fold_reports` has no journal behind it yet.** When M11 builds the general report fold over
+  the journal, that fold must keep these properties: they are re-asserted against it, not assumed
+  from this one.
+
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in
