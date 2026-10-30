@@ -4,9 +4,11 @@
 //! The approval card goes further and uses [`mnemorph_loop::shown`] verbatim, the core's own
 //! rule for what a human approves. The transcript keeps newlines (Markdown needs them), expands
 //! tabs, drops terminal colour sequences a tool printed, and escapes every other
-//! [`mnemorph_loop::hidden`] character as `\u{…}`.
+//! [`mnemorph_loop::hidden`] character as `\u{…}` but the emoji selector prose keeps
+//! ([`mnemorph_loop::kept_in_prose`]). Code and a one-line field — a name, a path, a reason —
+//! keep none.
 
-use mnemorph_loop::hidden;
+use mnemorph_loop::{hidden, kept_in_prose};
 
 /// The tab stop tool output is expanded to.
 const TAB: usize = 4;
@@ -14,6 +16,24 @@ const TAB: usize = 4;
 /// `text` with every line made safe; newlines kept.
 #[must_use]
 pub fn clean(text: &str) -> String {
+    render(text, true)
+}
+
+/// Code a human may copy and run, made safe: newlines kept, and every [`hidden`] character
+/// escaped, the emoji selector too.
+#[must_use]
+pub fn code(text: &str) -> String {
+    render(text, false)
+}
+
+/// One line of `text`, made safe: the newlines escaped too, and every [`hidden`] character.
+#[must_use]
+pub fn one_line(text: &str) -> String {
+    render(text, false).replace('\n', "\\u{a}")
+}
+
+/// [`clean`] and [`one_line`]: with `prose`, what [`kept_in_prose`] names is kept.
+fn render(text: &str, prose: bool) -> String {
     let text = strip_sgr(text);
     let mut out = String::with_capacity(text.len());
     let mut col = 0;
@@ -29,7 +49,7 @@ pub fn clean(text: &str) -> String {
                 col += n;
             }
             '\r' => {}
-            c if hidden(c) => {
+            c if hidden(c) && !(prose && kept_in_prose(c)) => {
                 let e: String = c.escape_unicode().collect();
                 col += e.len();
                 out.push_str(&e);
@@ -41,12 +61,6 @@ pub fn clean(text: &str) -> String {
         }
     }
     out
-}
-
-/// One line of `text`, made safe: the newlines escaped too.
-#[must_use]
-pub fn one_line(text: &str) -> String {
-    clean(text).replace('\n', "\\u{a}")
 }
 
 /// `text` without the colour sequences (`ESC [ … m`) a terminal program prints; any other escape
@@ -85,5 +99,13 @@ mod tests {
         assert_eq!(clean("a\tb\nc"), "a   b\nc");
         assert_eq!(one_line("a\nb"), "a\\u{a}b");
         assert_eq!(clean("back\\slash"), "back\\slash");
+        // Prose keeps the emoji selector; a one-line field and every other invisible escape.
+        assert_eq!(clean("ok \u{2714}\u{FE0F}"), "ok \u{2714}\u{FE0F}");
+        assert_eq!(one_line("rm\u{FE0F}"), "rm\\u{fe0f}");
+        assert_eq!(code("rm\u{FE0F}\nx"), "rm\\u{fe0f}\nx");
+        assert_eq!(
+            clean("tag\u{E0041}\u{61C}\u{180E}"),
+            "tag\\u{e0041}\\u{61c}\\u{180e}"
+        );
     }
 }

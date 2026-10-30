@@ -3393,15 +3393,93 @@ fn card_list(failures: &[String]) -> String {
     shown.join("; ")
 }
 
-/// Whether `c` is a character a human could not see for what it is: a control character, a bidi
-/// control, a zero-width or line-separator character.
+/// The characters [`hidden`] escapes beyond Unicode's controls (Cc), as sorted, inclusive ranges:
+/// every format character (Cf), the line and paragraph separators (Zl, Zp) and every
+/// default-ignorable code point — each draws nothing, or reorders what is drawn, so a text holding
+/// one reads as another. The space separators (Zs) stay as written: each draws as space.
+/// The shared vectors (`tests/shown-vectors.json`) list the same ranges, and the Rust and the
+/// board's tests both check every code point against them, so the rules cannot drift.
+pub const HIDDEN: &[(char, char)] = &[
+    // SOFT HYPHEN: drawn only at a line break.
+    ('\u{AD}', '\u{AD}'),
+    // COMBINING GRAPHEME JOINER: draws nothing.
+    ('\u{34F}', '\u{34F}'),
+    // Arabic number and end-of-ayah signs (Cf): marks that span the text after them.
+    ('\u{600}', '\u{605}'),
+    // ARABIC LETTER MARK: a bidi control.
+    ('\u{61C}', '\u{61C}'),
+    ('\u{6DD}', '\u{6DD}'),
+    // SYRIAC ABBREVIATION MARK (Cf).
+    ('\u{70F}', '\u{70F}'),
+    // Arabic pound and piastre marks above, disputed end of ayah (Cf).
+    ('\u{890}', '\u{891}'),
+    ('\u{8E2}', '\u{8E2}'),
+    // HANGUL CHOSEONG and JUNGSEONG FILLER: blank letters, the classic invisible name.
+    ('\u{115F}', '\u{1160}'),
+    // KHMER VOWEL INHERENT AQ and AA: default-ignorable, draw nothing.
+    ('\u{17B4}', '\u{17B5}'),
+    // MONGOLIAN FREE VARIATION SELECTORS and VOWEL SEPARATOR: invisible.
+    ('\u{180B}', '\u{180F}'),
+    // ZERO WIDTH SPACE, NON-JOINER and JOINER, LEFT-TO-RIGHT and RIGHT-TO-LEFT MARK. The joiner
+    // too, though it glues emoji sequences: what a human approves is exact, so a family emoji
+    // shows its joiners.
+    ('\u{200B}', '\u{200F}'),
+    // LINE and PARAGRAPH SEPARATOR, then the bidi embeddings and overrides (U+202A–202E).
+    ('\u{2028}', '\u{202E}'),
+    // WORD JOINER, the invisible operators, the bidi isolates (U+2066–2069) and the deprecated
+    // format characters (U+206A–206F).
+    ('\u{2060}', '\u{206F}'),
+    // HANGUL FILLER: a blank letter.
+    ('\u{3164}', '\u{3164}'),
+    // VARIATION SELECTORS 1–16. U+FE0F too, though emoji take it: after a letter it draws
+    // nothing, so `rm` and `rm` + U+FE0F would read alike. Prose keeps it ([`kept_in_prose`]).
+    ('\u{FE00}', '\u{FE0F}'),
+    // ZERO WIDTH NO-BREAK SPACE (the byte-order mark).
+    ('\u{FEFF}', '\u{FEFF}'),
+    // HALFWIDTH HANGUL FILLER: a blank letter.
+    ('\u{FFA0}', '\u{FFA0}'),
+    // Reserved default-ignorables, then the interlinear annotation controls (U+FFF9–FFFB).
+    ('\u{FFF0}', '\u{FFFB}'),
+    // Kaithi number signs (Cf).
+    ('\u{110BD}', '\u{110BD}'),
+    ('\u{110CD}', '\u{110CD}'),
+    // Egyptian hieroglyph format controls (Cf).
+    ('\u{13430}', '\u{1343F}'),
+    // Shorthand format controls (Cf).
+    ('\u{1BCA0}', '\u{1BCA3}'),
+    // Musical symbol beams, ties and phrases (Cf): draw nothing alone.
+    ('\u{1D173}', '\u{1D17A}'),
+    // The tag characters (U+E0000–E007F): invisible, and they spell ASCII — a text smuggled
+    // inside a text. Then the variation selectors supplement (U+E0100–E01EF) and the rest of the
+    // reserved default-ignorable plane block.
+    ('\u{E0000}', '\u{E0FFF}'),
+];
+
+/// Whether `c` is a character a human could not see for what it is: a control character (Cc),
+/// or one of [`HIDDEN`] — a format character, a bidi control, a line or paragraph separator, a
+/// default-ignorable code point.
 #[must_use]
 pub fn hidden(c: char) -> bool {
     c.is_control()
-        || matches!(
-            c,
-            '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}'
-        )
+        || HIDDEN
+            .binary_search_by(|&(lo, hi)| {
+                if hi < c {
+                    std::cmp::Ordering::Less
+                } else if lo > c {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .is_ok()
+}
+
+/// Whether prose — the transcript's text, never an act or a name — keeps `c` as written though
+/// it is [`hidden`]: U+FE0F alone, which only asks for the emoji form of the character before it.
+/// What a human approves, and every one-line field, escapes it.
+#[must_use]
+pub fn kept_in_prose(c: char) -> bool {
+    c == '\u{FE0F}'
 }
 
 /// A text a model's choice reaches, as a human is shown it: every [`hidden`] character escaped,

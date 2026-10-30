@@ -58,8 +58,8 @@ pub use route::{
     Meter, ROUTE_POINT, Reason, Routed, Stop, Work, band, capped, pick, route, route_ask, tier_of,
 };
 pub use run::{
-    Body, COMPACTION, Ending, FOLD, Interrupt, Limits, MOVED, OMITTED, Observer, Run, SENT, Seen,
-    Setup, Steer, UPDATE, hidden, shown, strip_thinking,
+    Body, COMPACTION, Ending, FOLD, HIDDEN, Interrupt, Limits, MOVED, OMITTED, Observer, Run, SENT,
+    Seen, Setup, Steer, UPDATE, hidden, kept_in_prose, shown, strip_thinking,
 };
 pub use sequence::validate;
 pub use session::{Queue, Session};

@@ -1,5 +1,133 @@
 {
-  "about": "Shared test vectors for `hidden` and `shown` (mnemorph_loop::run): the Rust tests and the board's TypeScript port both read this file. A `hidden` entry names a code point in hex and whether it is hidden; a `shown` entry gives an input and the text a human is shown.",
+  "about": "Shared test vectors for `hidden` and `shown` (mnemorph_loop::run): the Rust tests and the board's TypeScript port both read this file. `escaped` is the rule itself: the ranges hidden beyond Unicode's controls (Cc), each inclusive, in hex; both suites check every code point against them, so the rule has one source. `prose` names what the transcript's prose keeps as written though it is hidden. A `hidden` entry names a code point in hex and whether it is hidden; a `shown` entry gives an input and the text a human is shown.",
+  "escaped": [
+    {
+      "from": "ad",
+      "to": "ad",
+      "why": "SOFT HYPHEN (Cf): drawn only at a line break"
+    },
+    {
+      "from": "34f",
+      "to": "34f",
+      "why": "COMBINING GRAPHEME JOINER (default-ignorable): draws nothing"
+    },
+    {
+      "from": "600",
+      "to": "605",
+      "why": "Arabic number signs (Cf): span the text after them"
+    },
+    {
+      "from": "61c",
+      "to": "61c",
+      "why": "ARABIC LETTER MARK (Cf): a bidi control"
+    },
+    {
+      "from": "6dd",
+      "to": "6dd",
+      "why": "ARABIC END OF AYAH (Cf)"
+    },
+    {
+      "from": "70f",
+      "to": "70f",
+      "why": "SYRIAC ABBREVIATION MARK (Cf)"
+    },
+    {
+      "from": "890",
+      "to": "891",
+      "why": "Arabic pound and piastre marks above (Cf)"
+    },
+    {
+      "from": "8e2",
+      "to": "8e2",
+      "why": "ARABIC DISPUTED END OF AYAH (Cf)"
+    },
+    {
+      "from": "115f",
+      "to": "1160",
+      "why": "Hangul choseong and jungseong fillers (default-ignorable): blank letters"
+    },
+    {
+      "from": "17b4",
+      "to": "17b5",
+      "why": "Khmer inherent vowels (default-ignorable): draw nothing"
+    },
+    {
+      "from": "180b",
+      "to": "180f",
+      "why": "Mongolian free variation selectors and VOWEL SEPARATOR (U+180E, Cf): invisible"
+    },
+    {
+      "from": "200b",
+      "to": "200f",
+      "why": "zero-width space, non-joiner, joiner (emoji sequences show it: approvals are exact), LRM, RLM"
+    },
+    {
+      "from": "2028",
+      "to": "202e",
+      "why": "LINE and PARAGRAPH SEPARATOR (Zl, Zp), the bidi embeddings and overrides"
+    },
+    {
+      "from": "2060",
+      "to": "206f",
+      "why": "word joiner, invisible operators, bidi isolates, deprecated format characters"
+    },
+    {
+      "from": "3164",
+      "to": "3164",
+      "why": "HANGUL FILLER (default-ignorable): a blank letter"
+    },
+    {
+      "from": "fe00",
+      "to": "fe0f",
+      "why": "variation selectors 1-16, U+FE0F too: after a letter it draws nothing; prose keeps it"
+    },
+    {
+      "from": "feff",
+      "to": "feff",
+      "why": "ZERO WIDTH NO-BREAK SPACE (byte-order mark)"
+    },
+    {
+      "from": "ffa0",
+      "to": "ffa0",
+      "why": "HALFWIDTH HANGUL FILLER (default-ignorable): a blank letter"
+    },
+    {
+      "from": "fff0",
+      "to": "fffb",
+      "why": "reserved default-ignorables and the interlinear annotation controls (Cf)"
+    },
+    {
+      "from": "110bd",
+      "to": "110bd",
+      "why": "KAITHI NUMBER SIGN (Cf)"
+    },
+    {
+      "from": "110cd",
+      "to": "110cd",
+      "why": "KAITHI NUMBER SIGN ABOVE (Cf)"
+    },
+    {
+      "from": "13430",
+      "to": "1343f",
+      "why": "Egyptian hieroglyph format controls (Cf)"
+    },
+    {
+      "from": "1bca0",
+      "to": "1bca3",
+      "why": "shorthand format controls (Cf)"
+    },
+    {
+      "from": "1d173",
+      "to": "1d17a",
+      "why": "musical symbol format controls (Cf)"
+    },
+    {
+      "from": "e0000",
+      "to": "e0fff",
+      "why": "tag characters (invisible ASCII: a text smuggled in a text), variation selectors supplement, reserved default-ignorables"
+    }
+  ],
+  "prose": ["fe0f"],
   "hidden": [
     {
       "cp": "0",
@@ -66,7 +194,103 @@
       "hidden": false
     },
     {
+      "cp": "ac",
+      "hidden": false
+    },
+    {
       "cp": "ad",
+      "hidden": true
+    },
+    {
+      "cp": "ae",
+      "hidden": false
+    },
+    {
+      "cp": "34e",
+      "hidden": false
+    },
+    {
+      "cp": "34f",
+      "hidden": true
+    },
+    {
+      "cp": "600",
+      "hidden": true
+    },
+    {
+      "cp": "605",
+      "hidden": true
+    },
+    {
+      "cp": "606",
+      "hidden": false
+    },
+    {
+      "cp": "61b",
+      "hidden": false
+    },
+    {
+      "cp": "61c",
+      "hidden": true
+    },
+    {
+      "cp": "6dd",
+      "hidden": true
+    },
+    {
+      "cp": "70f",
+      "hidden": true
+    },
+    {
+      "cp": "890",
+      "hidden": true
+    },
+    {
+      "cp": "891",
+      "hidden": true
+    },
+    {
+      "cp": "8e2",
+      "hidden": true
+    },
+    {
+      "cp": "115f",
+      "hidden": true
+    },
+    {
+      "cp": "1160",
+      "hidden": true
+    },
+    {
+      "cp": "17b4",
+      "hidden": true
+    },
+    {
+      "cp": "17b5",
+      "hidden": true
+    },
+    {
+      "cp": "180a",
+      "hidden": false
+    },
+    {
+      "cp": "180b",
+      "hidden": true
+    },
+    {
+      "cp": "180e",
+      "hidden": true
+    },
+    {
+      "cp": "180f",
+      "hidden": true
+    },
+    {
+      "cp": "1810",
+      "hidden": false
+    },
+    {
+      "cp": "2000",
       "hidden": false
     },
     {
@@ -146,6 +370,10 @@
       "hidden": true
     },
     {
+      "cp": "2065",
+      "hidden": true
+    },
+    {
       "cp": "2066",
       "hidden": true
     },
@@ -163,6 +391,42 @@
     },
     {
       "cp": "206a",
+      "hidden": true
+    },
+    {
+      "cp": "206f",
+      "hidden": true
+    },
+    {
+      "cp": "2800",
+      "hidden": false
+    },
+    {
+      "cp": "3000",
+      "hidden": false
+    },
+    {
+      "cp": "3163",
+      "hidden": false
+    },
+    {
+      "cp": "3164",
+      "hidden": true
+    },
+    {
+      "cp": "fe00",
+      "hidden": true
+    },
+    {
+      "cp": "fe0e",
+      "hidden": true
+    },
+    {
+      "cp": "fe0f",
+      "hidden": true
+    },
+    {
+      "cp": "fe10",
       "hidden": false
     },
     {
@@ -170,7 +434,91 @@
       "hidden": true
     },
     {
+      "cp": "ff9f",
+      "hidden": false
+    },
+    {
+      "cp": "ffa0",
+      "hidden": true
+    },
+    {
+      "cp": "ffa1",
+      "hidden": false
+    },
+    {
+      "cp": "fff0",
+      "hidden": true
+    },
+    {
+      "cp": "fff9",
+      "hidden": true
+    },
+    {
+      "cp": "fffb",
+      "hidden": true
+    },
+    {
+      "cp": "fffc",
+      "hidden": false
+    },
+    {
       "cp": "fffd",
+      "hidden": false
+    },
+    {
+      "cp": "110bd",
+      "hidden": true
+    },
+    {
+      "cp": "110be",
+      "hidden": false
+    },
+    {
+      "cp": "110cd",
+      "hidden": true
+    },
+    {
+      "cp": "13430",
+      "hidden": true
+    },
+    {
+      "cp": "1343f",
+      "hidden": true
+    },
+    {
+      "cp": "13440",
+      "hidden": false
+    },
+    {
+      "cp": "1bca0",
+      "hidden": true
+    },
+    {
+      "cp": "1bca3",
+      "hidden": true
+    },
+    {
+      "cp": "1d173",
+      "hidden": true
+    },
+    {
+      "cp": "1d17a",
+      "hidden": true
+    },
+    {
+      "cp": "1d17b",
+      "hidden": false
+    },
+    {
+      "cp": "1f1eb",
+      "hidden": false
+    },
+    {
+      "cp": "1f3fd",
+      "hidden": false
+    },
+    {
+      "cp": "1f468",
       "hidden": false
     },
     {
@@ -178,7 +526,47 @@
       "hidden": false
     },
     {
+      "cp": "dffff",
+      "hidden": false
+    },
+    {
+      "cp": "e0000",
+      "hidden": true
+    },
+    {
+      "cp": "e0001",
+      "hidden": true
+    },
+    {
+      "cp": "e0020",
+      "hidden": true
+    },
+    {
       "cp": "e0041",
+      "hidden": true
+    },
+    {
+      "cp": "e007f",
+      "hidden": true
+    },
+    {
+      "cp": "e0100",
+      "hidden": true
+    },
+    {
+      "cp": "e01ef",
+      "hidden": true
+    },
+    {
+      "cp": "e0fff",
+      "hidden": true
+    },
+    {
+      "cp": "e1000",
+      "hidden": false
+    },
+    {
+      "cp": "f0000",
       "hidden": false
     }
   ],
@@ -273,11 +661,59 @@
     },
     {
       "in": "nbsp\u00a0soft\u00adnnbsp\u202f",
-      "out": "nbsp\u00a0soft\u00adnnbsp\u202f"
+      "out": "nbsp\u00a0soft\\u{ad}nnbsp\u202f"
     },
     {
       "in": "tag\udb40\udc41",
-      "out": "tag\udb40\udc41"
+      "out": "tag\\u{e0041}"
+    },
+    {
+      "in": "rm -rf /\udb40\udc41\udb40\udc4c\udb40\udc4c",
+      "out": "rm -rf /\\u{e0041}\\u{e004c}\\u{e004c}"
+    },
+    {
+      "in": "\udb40\udc01\udb40\udc20\udb40\udc7f",
+      "out": "\\u{e0001}\\u{e0020}\\u{e007f}"
+    },
+    {
+      "in": "alm\u061cmvs\u180e",
+      "out": "alm\\u{61c}mvs\\u{180e}"
+    },
+    {
+      "in": "soft\u00ad\u034fcgj",
+      "out": "soft\\u{ad}\\u{34f}cgj"
+    },
+    {
+      "in": "\u115f\u1160\u3164\uffa0",
+      "out": "\\u{115f}\\u{1160}\\u{3164}\\u{ffa0}"
+    },
+    {
+      "in": "vs\ufe00\udb40\udd00",
+      "out": "vs\\u{fe00}\\u{e0100}"
+    },
+    {
+      "in": "rm\ufe0f",
+      "out": "rm\\u{fe0f}"
+    },
+    {
+      "in": "ok \u2714\ufe0f",
+      "out": "ok \u2714\\u{fe0f}"
+    },
+    {
+      "in": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+      "out": "\ud83d\udc68\\u{200d}\ud83d\udc69\\u{200d}\ud83d\udc67"
+    },
+    {
+      "in": "\ud83c\uddeb\ud83c\uddf7 \ud83d\udc4d\ud83c\udffd \ud83d\ude00",
+      "out": "\ud83c\uddeb\ud83c\uddf7 \ud83d\udc4d\ud83c\udffd \ud83d\ude00"
+    },
+    {
+      "in": "wide\u3000space\u2003em",
+      "out": "wide\u3000space\u2003em"
+    },
+    {
+      "in": "\ufff9a\ufffab\ufffb",
+      "out": "\\u{fff9}a\\u{fffa}b\\u{fffb}"
     }
   ]
 }
