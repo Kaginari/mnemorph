@@ -978,6 +978,27 @@ fn an_envelope_revoked_after_the_preview_is_read_again_at_the_moment_of_use() {
     assert!(w.gate().revoke("forge").is_err(), "revoked twice");
 }
 
+/// Lesson: a revoke rewrote the human's private global file through a sibling the umask made, so
+/// under a group-writable umask every other envelope in it stopped being honoured. The file keeps
+/// its own mode.
+#[test]
+fn a_revoke_keeps_the_global_file_private_and_its_other_envelopes_honoured() {
+    let w = Fixture::new();
+    let other = envelope(-1, 20, "").replace("name = \"forge\"", "name = \"other\"");
+    w.sign(&format!("{}\n{other}", envelope(-1, 20, "")));
+    w.gate().revoke("forge").unwrap();
+    let mode = fs::metadata(&w.global).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "{mode:o}");
+    let signed = w.gate().signed(&w.world).unwrap();
+    assert_eq!(signed.len(), 2, "{signed:?}");
+    let forge = Forge::new();
+    assert_eq!(
+        w.oni_comment("Looks fine.", &forge).unwrap().state,
+        State::Observed
+    );
+    assert_eq!(w.human.asked(), 0, "the other envelope was not honoured");
+}
+
 #[test]
 fn a_body_that_is_no_oni_is_never_admitted() {
     for race in [Race::Kijin, Race::Slime, Race::Orc] {

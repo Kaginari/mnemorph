@@ -231,19 +231,26 @@ pub fn meter(race: Race, s: &Signals) -> Meter {
 }
 
 /// Whether a body of `risen`'s base race has earned `risen` over the window (the 28-day
-/// fold). False when `risen` is not an ascended form.
+/// fold). False when `risen` is not an ascended form. An event that would end the form at once
+/// bars the rise while it is in the window, so a body that just rose never reads as falling.
 #[must_use]
 pub fn rises(risen: Race, s: &Signals) -> bool {
     match risen {
         Race::HighElf => {
             s.reports >= RISE_RECORD && s.plan_land_rate >= 85.0 && s.reask_rate <= 10.0
         }
-        Race::HighOrc => s.reports >= RISE_RECORD && s.gate_right >= 90.0 && s.hole_rate <= 10.0,
+        Race::HighOrc => {
+            s.reports >= RISE_RECORD
+                && s.gate_right >= 90.0
+                && s.hole_rate <= 10.0
+                && s.overturned_on_sealed == 0
+        }
         Race::NamedSlime => {
             s.reports >= RISE_RECORD
                 && s.land_rate >= 90.0
                 && s.gate_rate >= 90.0
                 && s.hole_rate <= 5.0
+                && s.tests_intact_failures == 0
         }
         Race::Oni => {
             s.outward_acts >= RISE_OUTWARD

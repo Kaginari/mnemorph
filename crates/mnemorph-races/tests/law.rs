@@ -349,6 +349,10 @@ fn rise_cases() -> Vec<(Race, Signals, Vec<Signals>)> {
                     hole_rate: 10.1,
                     ..high_orc
                 },
+                Signals {
+                    overturned_on_sealed: 1,
+                    ..high_orc
+                },
             ],
         ),
         (
@@ -369,6 +373,10 @@ fn rise_cases() -> Vec<(Race, Signals, Vec<Signals>)> {
                 },
                 Signals {
                     hole_rate: 5.1,
+                    ..named
+                },
+                Signals {
+                    tests_intact_failures: 1,
                     ..named
                 },
             ],

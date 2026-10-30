@@ -111,7 +111,9 @@ fn open(path: &Path) -> Result<DocumentMut, String> {
     text.parse().map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// Parse the edit again, then put it in place of the file through a sibling and a rename.
+/// Parse the edit again, then put it in place of the file through a sibling and a rename. The
+/// sibling takes the file's own mode before it replaces it: a rename would otherwise swap the
+/// human's private file for one the umask made, which the gate then refuses to read envelopes from.
 fn save(path: &Path, doc: &DocumentMut) -> Result<(), String> {
     let out = doc.to_string();
     out.parse::<toml::Table>().map_err(|e| {
@@ -125,5 +127,11 @@ fn save(path: &Path, doc: &DocumentMut) -> Result<(), String> {
     }
     let tmp = path.with_extension("toml.mnemorph-tmp");
     fs::write(&tmp, out).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    if let Ok(was) = fs::metadata(path) {
+        fs::set_permissions(&tmp, was.permissions()).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("{}: {e}", tmp.display())
+        })?;
+    }
     fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
 }

@@ -6219,3 +6219,24 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the gate reads envelopes from the global file alone (`Config::load_global`). A local file's envelopes are ignored and `envelope list` says so. Each envelope names a `world` (canonical) and/or a `repo` (`owner/name`, a push's pinned URLs); one naming neither admits nothing. Optional `post` and `body`. `own_file` also requires this uid and a folder no one else may write. `secret_in` splits at `=:/.` and quotes before testing prefixes. The envelopes and their scope are read before `excluded`, so ls-remote and the forge compare run only when an envelope could apply. `pushed_paths` docstring fixed.
 - **Tests:** `an_envelope_admits_only_where_it_is_signed_for` (8 scopes), `a_local_file_and_a_folder_others_may_write_are_never_read_for_envelopes`, a private local file in the project-file table, and each secret shape.
 - **Learned:** this machine's umask is 002, so a `~/.config/mnemorph` made by hand is 0775 and refused. The refusal names the folder. The uid check cannot be exercised without root.
+
+### [2026-10-30T15:27:38+01:00] rimuru — #107: the lifecycles explored whole, with witnesses; two bugs found and fixed
+- **Done:** a breadth-first walk over the real code of each lifecycle, in each crate's
+  `tests/lifecycles.rs`: ascension (5 forms, 36–162 states, fixpoint), the receipt (7 states,
+  fixpoint), an Oni's act with its envelope and incident (~130 states, depth 5, every move on a
+  fork of its parent's files and stub forge), the envelope's time and count (fixpoint), a Dark Elf
+  challenge with its finding (464 states, fixpoint at 9), a session's run (40 states, depth 4).
+  Each asserts its invariants in every state, a shortest witness for every intended state, and
+  that no unintended one is reached. Docs 02, 05.
+- **Bugs:** (1) `rises` let a High Orc and a Named Slime rise with an overturned pass on a sealed
+  territory or a *tests intact* failure in the window, so a body that just rose read as falling at
+  once: the event now bars the rise, as the Oni's already did. (2) `write::save` replaced the
+  human's global file through a sibling the umask made: a revoke turned a `0600` file `0664` under
+  umask 002, and every other envelope in it stopped being honoured. The sibling now takes the
+  file's mode.
+- **Tests:** the walks; `law.rs` misses for both new operands; a revoke keeps the file `0600` and
+  the other envelope admits.
+- **Learned:** an abstraction that drops a field a move changes hides every state after that move
+  (the verifier's assignment did). A cut before the act still spends an envelope use, since it may
+  have run. A command spawned by another thread can carry a lock fd for an instant; the run walk
+  rereads the listing rather than reading that as a live session.
