@@ -151,7 +151,7 @@ mnemorph run "<ask>"              # one ask without the app
 
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
-`envelope`, `challenge`, `meters`, `evolution`, `housekeep` (`--verify` walks the chained
+`envelope`, `challenge`, `meters`, `usage`, `evolution`, `housekeep` (`--verify` walks the chained
 journals) and `relief`, and the board's: `board`, `board add`, `board forget` (`mnemorphd --help`).
 
 **Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
@@ -246,6 +246,8 @@ embeds a placeholder page saying so, and serves the API all the same.
 | `POST /api/w/<id>/memory/<note>/wake` | `{"seen"}`: a note the gate retired, woken as `mnemorphd memory wake`; `BoardDone {done}` |
 | `GET /api/w/<id>/facts` | `BoardFacts`: the counts of each status, a page of facts — `?status=settled\|agreed\|single\|contested\|countered`, `?offset=`, `?limit=` — `onto check`'s findings, the paths' owners and the verdicts a settle may cite |
 | `POST /api/w/<id>/facts/<fact>/settle` | `{"seen", "verdict": <n>}` or `{"seen", "statement": "…"}`: the fact settled on that proof, `by: human (board)`; no proof, or both, is refused (400); `BoardDone {done}` |
+| `GET /api/metrics` | `BoardMetrics` for `?world=<id>` or `all` (the default) over `?window=7d\|28d\|all` (`7d` by default; another word is 400): the usage ledgers' fold, the meters, the Dark Elf's scores and the bench — see *Metrics and integrations* below |
+| `GET /api/integrations` | `BoardIntegrations`, read-only and redacted: the global file alone, or `?world=<id>`'s files layered over it — see *Metrics and integrations* below |
 | `WS /ws/board` | the push channel, subprotocol `mnemorph.board.v1` beside the CSRF entry; the server alone speaks — see *The watcher* below |
 | `POST /api/w/<world>/sessions` | a chat in a listed, present world: `{}` opens a new session, `{"resume": "<run>"}` (a session's run id, `r<ms>-<pid>`) or `{"resume": "last"}` resumes a stopped run through `mnemorph resume`'s opening; `201` with `BoardStarted`: `{"session": BoardSession, "hello": Hello}`. `429` past the cap of live chats, `502` with the child's reason when it does not open. The browser that posts it owns the chat |
 | `GET /api/sessions` | `BoardSessions`: `{"sessions": [{"id", "world", "session", "run", "controlled", "tabs", "asks"}]}`, the live chats |
@@ -404,6 +406,57 @@ root, `.`, an absolute path or one with `..` is proved by no verdict) — the pa
 the human's own statement (1 to
 1,000 characters), filed as `the human's word (board): <statement>`. A verdict that failed, landed
 elsewhere, or does not exist is refused (422).
+
+#### Metrics and integrations
+
+**Metrics** are the CLI's folds, in-process. The usage ledgers — each world's witness under the
+state directory (`$XDG_STATE_HOME/mnemorph/usage/<world>-<fnv64a>.jsonl`, every byte the harness
+appended), its chain walked and trusted while it holds; for a world with no witness yet, its own
+`.mnemorph/instruments/usage.jsonl`, marked untrusted; the newest 64 MiB at most, a regular file
+only — go through
+`mnemorph_world::spend::fold` — the fold `mnemorphd usage [--window 7d|28d|all] [--json]` prints, so
+the board's totals are the CLI's on the same ledger. A window holds its last 7 or 28 days, or
+everything; it folds calls, weighted tokens, the four token classes and dollars in total and by
+session (the latest first, with the world that booked it), UTC day (and each day by race), body,
+race and model, with the cache hit rate (`cacheRead` over all input; none with no input). The burn
+is weighted tokens per five minutes over the last twelve hours, the last slot ending now, whatever
+the window. Dollars cover the priced calls only: a group with no priced call carries `usd: null`
+and its count of unpriced calls, and the page says `unpriced (n)`, never $0. The meters are `mnemorphd meters --json`'s, each with its count
+and 95% Wilson interval; a meter with no report has no count, and the page says it is *silent
+since* the creature's first call the ledger holds (or that it has booked none). The Dark Elf's
+scores are `mnemorphd challenge score`'s fold of the challenge records under the state directory:
+findings, upheld, refuted, cannot-verify, held, precision over all and over the last ten, and the
+rise or probation it proposes — which only the human applies.
+
+**The bench** is optional. `board.bench_results`, a key only the human's global file may set (a
+world's file naming one is a hole), names a directory of result rows laid out as
+`<suite>/<harness>/<model>.jsonl` — Kaginari's bench `results/`. Absent, the page says no bench
+results are configured. The walk follows no link, opens at most 512 files of at most 8 MiB, and
+never enters a directory named `heldout…` or `held-out…` (a held-out suite is read only by its final
+comparison), `traces` or `suites`. Of each row it reads only `task`, `mode`, `model`, `passed`,
+`valid` and `usd`: per suite, harness, model and mode, the last valid row of each task stands, an
+invalid row is counted apart, and dollars sum the priced rows.
+
+**Integrations** load the configuration as a session would — the global file alone, or a world's
+tracked and local files over it — and show an allowlist of its fields: each provider's kind, base
+URL and key *source* (`env OPENROUTER_API_KEY: set` — whether the variable is set, never its value);
+each model a `models.*` key names, the provider its requests go to and its price from the shipped
+table (`unpriced` when the table lacks it); the holes, each with its file and why; the MCP servers
+the global file declares, with their scope (races), class (read-only or outward), sandbox network
+and the variables they are passed by name; and the effective configuration, each key with its
+layer, its file and whether only the global file may set it. Every string passes one redaction
+layer (`board::integrations::redact`): a key whose name names a secret, a URL with credentials, a
+`NAME=value` whose name is a secret, a word with a token's prefix (`sk-`, `ghp_`, …) or the shape of
+a key (a long run mixing letters and digits) is dropped and shown as hidden; an argument after a
+flag that names a secret is hidden too; a key source that is not a variable's name (a key written
+in its place) is hidden; a configuration error shows its first line only, redacted, since a parse
+error quotes the line it stopped at — the metrics' bench says a global file that does not read
+the same way. Last, every metrics and integrations answer is searched for the value of every secret
+variable in the board's environment (`is_secret`, eight bytes or more, a value that is not UTF-8
+read lossily) — as written, escaped as a JSON string writes it, and percent-encoded — and one that
+holds any is withheld whole (500). The page has no edit control: each section carries
+a "how to add" snippet for the global file, to copy. The board's port and bound addresses close it;
+the theme is the browser's own choice, in Settings.
 
 #### The watcher
 
@@ -833,6 +886,28 @@ address, so a link, a reload or the back button lands where it was:
 Segments are URI-encoded, and `parse(format(r))` gives every route back. Any other address, a
 world the board does not know, and a view whose data is not served yet each say so in an empty
 state, never a blank pane.
+
+**Metrics and integrations.** `#/metrics` filters by world (every world by default) and window
+(`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls` —
+then spend per day stacked by race, the cache hit rate per day, the burn per five minutes, the
+spend per race, every creature's meters (a point with its 95% interval, or *silent since …*), the
+sessions, the Dark Elf's scores and the bench (suite, harness, model, mode, passed of valid,
+dollars, date). `#/integrations` is read-only: providers with their key sources, models and
+prices, MCP servers, holes, the effective configuration with origins, the board's port; each
+section ends in a "how to add" snippet for the global file. Their data is described with the
+board server above.
+
+**Charts** are hand-made SVG — stacked bars, a line, a sparkline and a point with its interval
+whisker — drawn from a tested data layer (`src/data/charts.ts`: scales, ticks and geometry as plain
+numbers). A single point is given room rather than a zero-wide domain; values that span more than
+a thousandfold are drawn on a log axis ticked at powers of ten and labelled *log axis*, a stacked
+bar's parts then sharing its height in proportion. Colours are the theme's tokens, set by class
+from the series' name, and every series is named in a legend beside it, never colour alone. Words
+a world wrote reach a chart only as escaped text in `<title>` nodes.
+
+<img src="../assets/board/desktop-dark-metrics.png" width="640" alt="The metrics page, dark: the totals line, spend per day by race on a log axis with its legend, the cache hit rate, the burn"> <img src="../assets/board/phone-dark-metrics.png" width="180" alt="The metrics page at phone width, dark: the window tabs, the totals line, the stacked bars">
+
+<img src="../assets/board/desktop-light-integrations.png" width="640" alt="The integrations page, light: providers with their key sources, never values; models and prices; MCP servers">
 
 **Data.** The page first trades the key in its address (`#k=<key>`, see the board server above):
 before anything renders, the key leaves the address bar and the history, and is posted once to
@@ -1333,9 +1408,11 @@ an empty list or table never overrides a lower layer:
   costs), so they are honoured only from the global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere.
+  So is `board.*` (`board.bench_results`, the directory of bench result rows the board shows):
+  the board reads the files it names.
 - **The local file widens nothing.** `.mnemorph/config.local.toml` lives inside the world, where
   a body's command or a repository's script (a `make test` the gate runs) may write it. Every key
-  above, every `budget.*` cap, every `providers.*` and every `mcp.*` from it is a hole: the
+  above, every `budget.*` cap, every `providers.*`, every `mcp.*` and every `board.*` from it is a hole: the
   global file alone loosens the gate, opens the sandbox, starts an MCP server or says where a
   key goes. Nothing else feeds them: no environment variable and no flag.
   `gate.verify_secs`, how long each of the end gate's verify commands may run, is the project's

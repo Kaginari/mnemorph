@@ -17,8 +17,10 @@ pub mod bridge;
 pub mod facts;
 pub mod guard;
 pub mod instance;
+pub mod integrations;
 pub mod knowledge;
 pub mod memory;
+pub mod metrics;
 pub mod overview;
 pub mod runs;
 pub mod snapshot;
@@ -177,6 +179,8 @@ pub struct Board {
     sockets: AtomicUsize,
     /// The worlds the watcher looks at slowly: past its budget.
     slowed: Mutex<std::collections::BTreeSet<String>>,
+    /// The human's global configuration file; `None` reads it where every reader resolves it.
+    global: Mutex<Option<PathBuf>>,
 }
 
 /// A fresh secret: 32 random bytes, in hex.
@@ -365,6 +369,7 @@ impl Board {
             changes: tokio::sync::broadcast::channel(CHANGES).0,
             sockets: AtomicUsize::new(0),
             slowed: Mutex::new(std::collections::BTreeSet::new()),
+            global: Mutex::new(None),
         }))
     }
 
@@ -402,6 +407,8 @@ impl Board {
                 "/api/w/{world}/facts/{fact}/settle",
                 post(knowledge::settle).layer(DefaultBodyLimit::max(knowledge::ACT_BYTES)),
             )
+            .route("/api/metrics", get(metrics_of))
+            .route("/api/integrations", get(integrations_of))
             .route("/ws/board", get(watch::socket))
             .route(
                 "/api/w/{world}/sessions",
@@ -583,6 +590,77 @@ impl Board {
         Some(overview::overview(world, chats, slowed))
     }
 
+    /// Read the human's global configuration from `file` rather than where every reader
+    /// resolves it: for a test.
+    #[doc(hidden)]
+    pub fn configure(&self, file: PathBuf) {
+        *self.global.lock().unwrap_or_else(PoisonError::into_inner) = Some(file);
+    }
+
+    /// The human's global configuration file.
+    fn global_file(&self) -> PathBuf {
+        self.global
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .unwrap_or_else(integrations::global_file)
+    }
+
+    /// The board's metrics over `window`, of the listed world `world` or of `all`; `None` when no
+    /// listed world has the id.
+    #[must_use]
+    pub fn metrics(
+        &self,
+        world: &str,
+        window: mnemorph_loop::world::spend::Window,
+        now: mnemorph_loop::world::ledger::Timestamp,
+    ) -> Option<metrics::BoardMetrics> {
+        let all = self.worlds().worlds;
+        let of: Vec<BoardWorld> = if world == "all" {
+            all
+        } else {
+            vec![all.into_iter().find(|w| w.id == world)?]
+        };
+        let global = self.global_file();
+        let paths = mnemorph_loop::Paths::with_global(global, std::path::Path::new("/nonexistent"));
+        let bench = mnemorph_loop::Config::load_global(&paths)
+            .map(|c| c.bench_results())
+            .map_err(|e| {
+                format!(
+                    "your global file does not read: {}",
+                    integrations::first_line(&e)
+                )
+            });
+        Some(metrics::metrics(world, &of, window, now, bench))
+    }
+
+    /// The integrations, of the listed world `world`'s files over the global one, or of the global
+    /// file alone; `None` when no listed, present world has the id.
+    #[must_use]
+    pub fn integrations(&self, world: Option<&str>) -> Option<integrations::BoardIntegrations> {
+        let at = match world {
+            Some(id) => {
+                let w = self.worlds().worlds.into_iter().find(|w| w.id == id)?;
+                if w.state == WorldState::Missing {
+                    return None;
+                }
+                Some((w.id, PathBuf::from(w.path)))
+            }
+            None => None,
+        };
+        let board = integrations::BoardSettings {
+            port: self.host.port(),
+            hosts: self.hosts.clone(),
+        };
+        let set = |name: &str| std::env::var_os(name).is_some_and(|v| !v.is_empty());
+        Some(integrations::integrations(
+            &self.global_file(),
+            at.as_ref().map(|(id, p)| (id.as_str(), p.as_path())),
+            board,
+            &set,
+        ))
+    }
+
     /// Tell the board's sockets `change`, as the watcher does: for a test.
     #[doc(hidden)]
     pub fn tell(&self, change: Change) {
@@ -693,6 +771,86 @@ async fn world_overview(State(board): State<Arc<Board>>, Path(id): Path<String>)
     match tokio::task::spawn_blocking(move || board.overview(&id)).await {
         Ok(Some(o)) => Json(o).into_response(),
         Ok(None) => refuse(StatusCode::NOT_FOUND, "no listed world has this id"),
+        Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+/// The value of `name` in a query string, percent-decoded; `None` when it is absent or does not
+/// decode.
+fn query(uri: &Uri, name: &str) -> Option<String> {
+    let q = uri.query()?;
+    let raw = q
+        .split('&')
+        .filter_map(|p| p.split_once('=').or(Some((p, ""))))
+        .find(|(k, _)| *k == name)?
+        .1;
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
+                out.push(u8::from_str_radix(hex, 16).ok()?);
+                i += 3;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// `value` as JSON, unless it holds the value of a secret variable in the board's environment:
+/// then it is withheld whole.
+fn withheld<T: Serialize>(value: &T) -> Response {
+    let Ok(bytes) = serde_json::to_vec(value) else {
+        return refuse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the answer did not serialise",
+        );
+    };
+    if integrations::leaks(&bytes, &integrations::secret_values(std::env::vars_os())) {
+        return refuse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "withheld: the answer held the value of a secret variable",
+        );
+    }
+    ([(header::CONTENT_TYPE, "application/json")], bytes).into_response()
+}
+
+/// `GET /api/metrics?world=<id|all>&window=7d|28d|all`: [`metrics::BoardMetrics`]; `all` and
+/// `7d` unless asked.
+async fn metrics_of(State(board): State<Arc<Board>>, uri: Uri) -> Response {
+    use mnemorph_loop::world::spend::Window;
+    let world = query(&uri, "world").unwrap_or_else(|| "all".to_owned());
+    let Some(window) = Window::parse(query(&uri, "window").as_deref().unwrap_or("7d")) else {
+        return refuse(StatusCode::BAD_REQUEST, "`window` is 7d, 28d or all");
+    };
+    let now = mnemorph_loop::world::ledger::Timestamp::now();
+    match tokio::task::spawn_blocking(move || board.metrics(&world, window, now)).await {
+        Ok(Some(m)) => withheld(&m),
+        Ok(None) => refuse(StatusCode::NOT_FOUND, "no listed world has this id"),
+        Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+/// `GET /api/integrations[?world=<id>]`: [`integrations::BoardIntegrations`], read-only and
+/// redacted.
+async fn integrations_of(State(board): State<Arc<Board>>, uri: Uri) -> Response {
+    let world = query(&uri, "world");
+    match tokio::task::spawn_blocking(move || board.integrations(world.as_deref())).await {
+        Ok(Some(i)) => withheld(&i),
+        Ok(None) => refuse(
+            StatusCode::NOT_FOUND,
+            "no listed, present world has this id",
+        ),
         Err(e) => refuse(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }

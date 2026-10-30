@@ -1,0 +1,234 @@
+/* The metrics and integrations pages: charts drawn in tokens, tables, filters, snippets. */
+
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
+.metrics-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.select select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--mn-text);
+  background: var(--mn-panel);
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  padding: 4px 8px;
+  max-width: 220px;
+}
+.tabs {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  overflow: hidden;
+}
+.tab {
+  font: inherit;
+  font-size: 14px;
+  padding: 4px 12px;
+  color: var(--mn-text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.tab + .tab {
+  border-left: 1px solid var(--mn-line);
+}
+.tab[aria-pressed="true"] {
+  color: var(--mn-text);
+  background: color-mix(in srgb, var(--mn-holo) 16%, transparent);
+}
+
+.metrics-total {
+  margin: -6px 0 16px;
+  font-size: 18px;
+  color: var(--mn-text);
+}
+.metric-big {
+  margin: 0;
+  font-family: var(--mn-font-mono);
+  font-size: 22px;
+}
+.metrics-charts,
+.metrics-tables {
+  margin-bottom: 12px;
+}
+.metrics-charts {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.chart {
+  margin: 0;
+}
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+.sparkline {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+}
+.whisker {
+  display: inline-block;
+  width: 120px;
+  height: 14px;
+  vertical-align: middle;
+}
+.chart-grid {
+  stroke: var(--mn-line);
+  stroke-width: 1;
+}
+.chart-tick {
+  fill: var(--mn-text-muted);
+  font-family: var(--mn-font-mono);
+  font-size: 10px;
+}
+.chart-log {
+  fill: var(--mn-gold);
+}
+.chart-line {
+  fill: none;
+  stroke: var(--mn-holo);
+  stroke-width: 2;
+}
+.chart-dot {
+  fill: var(--mn-holo);
+}
+.chart-whisker {
+  stroke: var(--mn-text);
+  stroke-width: 1.5;
+}
+.chart-fill {
+  fill: var(--mn-text-muted);
+}
+.chart-fill[data-series="rimuru"] {
+  fill: var(--mn-race-rimuru);
+}
+.chart-fill[data-series="elf"] {
+  fill: var(--mn-race-elf);
+}
+.chart-fill[data-series="orc"] {
+  fill: var(--mn-race-orc);
+}
+.chart-fill[data-series="slime"] {
+  fill: var(--mn-race-slime);
+}
+.chart-fill[data-series="kijin"] {
+  fill: var(--mn-race-kijin);
+}
+.chart-fill[data-series="dark-elf"] {
+  fill: var(--mn-race-dark-elf);
+}
+.chart-fill[data-series="high-elf"] {
+  fill: var(--mn-race-high-elf);
+}
+.chart-fill[data-series="high-orc"] {
+  fill: var(--mn-race-high-orc);
+}
+.chart-fill[data-series="named-slime"] {
+  fill: var(--mn-race-named-slime);
+}
+.chart-fill[data-series="oni"] {
+  fill: var(--mn-race-oni);
+}
+.chart-fill[data-series="arch-dark-elf"] {
+  fill: var(--mn-race-arch-dark-elf);
+}
+.chart-fill[data-series="veldora"] {
+  fill: var(--mn-race-veldora);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+th .chart-legend,
+.meter-who .chart-legend {
+  display: inline-flex;
+  margin: 0;
+}
+.chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-swatch {
+  width: 10px;
+  height: 10px;
+}
+.meter-who {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.meter-reading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th,
+.table td {
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--mn-line);
+  overflow-wrap: anywhere;
+}
+.table thead th {
+  font-weight: 600;
+  color: var(--mn-text-muted);
+}
+.table tbody th {
+  font-weight: 600;
+}
+
+.hole-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.howto {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.howto summary {
+  cursor: pointer;
+  color: var(--mn-holo);
+}
+.howto-text {
+  margin: 8px 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: var(--mn-panel-raised);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text);
+}

@@ -1,4 +1,4 @@
-//! Folds over the usage journal: totals by body, race, model or day.
+//! Folds over the usage journal: totals by session, body, race, model or day.
 
 use std::collections::BTreeMap;
 
@@ -7,6 +7,8 @@ use crate::{Usage, UsageRow};
 /// What to group by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
+    /// The session.
+    Session,
     /// The creature.
     Body,
     /// The race.
@@ -78,6 +80,7 @@ pub fn fold(rows: &[UsageRow], key: Key) -> BTreeMap<String, Totals> {
     let mut out: BTreeMap<String, Totals> = BTreeMap::new();
     for r in rows {
         let k = match key {
+            Key::Session => r.session.clone(),
             Key::Body => r.body.clone(),
             Key::Race => r.race.clone(),
             Key::Model => r.model.clone(),

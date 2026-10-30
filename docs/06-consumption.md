@@ -363,9 +363,12 @@ read's, and the files it outlines count as what the ask read.
 | left | envelope left for the active body and the session | status line |
 | cache | cache read ÷ input, rolling | status line, board |
 | burn | tokens per minute over the last 5 minutes | board |
-| per race | spend and pass rate by race over 28 days | board, `mnemorph ledger` (M12) |
+| per race | spend, tokens and cache hit by race over 7 or 28 days, or all | board, `mnemorphd usage` |
 
-From M12, `mnemorph ledger [--by race|body|model|day]` prints the same folds in the terminal.
+`mnemorphd usage [--window 7d|28d|all] [--json]` prints the same folds in the terminal — by race,
+model, body, day and session — and the board's metrics are that fold ([the board's
+metrics](05-architecture.md#metrics-and-integrations)). A group with no priced call reads
+`unpriced`, never $0.
 
 ### Building Mnemorph within your plan
 
