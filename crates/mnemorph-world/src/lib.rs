@@ -5,6 +5,7 @@ pub use mnemorph_ledger as ledger;
 /// The world's memory: notes, recall, the write rule and the audit, for the human's commands.
 pub use mnemorph_memory as memory;
 
+pub mod answers;
 pub mod chains;
 pub mod challenge;
 pub mod dimension;

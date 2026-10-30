@@ -10,6 +10,12 @@
 //! - **Asks**: `gate/ask` is a request, not an event, so the bridge keeps each waiting ask and
 //!   sends it again to a tab that connects, with its time left (`leftMs`). With no controller for
 //!   the grace (60 s), the waiting asks are denied and the chat ends.
+//! - **Approvals**: every field of an ask reaches the tabs already passed through `shown`, with
+//!   the SHA-256 of that text. The page renders it as text; its card acknowledges the render
+//!   (`board/seen`) when it is first visible. An allow is taken only from the controller, once,
+//!   naming that digest, from the tab that acknowledged, at least [`ARM`] after it did — the
+//!   client is never trusted to have enforced its own card. Every answer, taken or refused, is
+//!   journaled with its connection, chained, under the human's state directory.
 //! - **Roles**: one controller per chat, which alone may prompt, steer, interrupt, end the chat
 //!   and answer the gate; every other tab observes. Control belongs to the browser that opened
 //!   the chat (its board cookie): a tab of that browser takes it with `board/takeOver`.
@@ -30,6 +36,10 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 use tokio::sync::{mpsc, oneshot, watch};
 use ts_rs::TS;
+
+use mnemorph_loop::wire::shown;
+use mnemorph_loop::world::answers::{self, AnswerRow};
+use mnemorph_loop::world::ledger::{Journal, Timestamp, evolution::digest as sha256};
 
 use super::same;
 use crate::protocol::{GateReply, PROTOCOL, REPLAY};
@@ -55,6 +65,20 @@ const ID_BYTES: usize = 128;
 
 /// Lines waiting for the child's input.
 const INPUT: usize = 256;
+
+/// How long after a tab's render acknowledgement of an ask its allow is first taken: the card's
+/// arming, the TUI's 300 ms, held by the server too.
+pub const ARM: Duration = Duration::from_millis(300);
+
+/// The refused answers journaled for one ask: past these, a tab that keeps sending them is
+/// still refused, and no longer written down.
+const REFUSALS_KEPT: u8 = 8;
+
+/// The ids of answered asks remembered, so a late answer hears it was answered elsewhere.
+const ANSWERED: usize = 64;
+
+/// The most bytes of the act an answer's journal row keeps.
+const ACT_KEPT: usize = 4096;
 
 /// Close codes a tab reads: past these, it does not reconnect.
 pub mod close {
@@ -127,6 +151,9 @@ impl Default for Limits {
 /// The arguments a child is started with, for a world and the run it resumes.
 pub type Args = Arc<dyn Fn(&Path, Option<&str>) -> Vec<OsString> + Send + Sync>;
 
+/// Where a world's answers to the gate are journaled; `None` with no home to keep them under.
+pub type Answers = Arc<dyn Fn(&Path) -> Option<PathBuf> + Send + Sync>;
+
 /// How a chat's child is started.
 #[derive(Clone)]
 pub struct Child {
@@ -138,6 +165,9 @@ pub struct Child {
     pub env: Vec<(String, String)>,
     /// The human's global configuration, where the provider keys are named.
     pub global: PathBuf,
+    /// Where each world's answers to the gate are journaled: under the human's state directory
+    /// ([`answers::answers_of`]).
+    pub answers: Answers,
 }
 
 impl Child {
@@ -157,6 +187,7 @@ impl Child {
                 .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
                 .collect(),
             global: mnemorph_loop::Paths::resolve(Path::new("/")).global,
+            answers: Arc::new(answers::answers_of),
         }
     }
 }
@@ -329,14 +360,99 @@ pub struct BoardStarted {
     pub hello: Value,
 }
 
+/// An ask as a human is shown it: every field the child sent, passed through `shown`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Shown {
+    /// The body asking.
+    pub body: String,
+    /// Its race.
+    pub race: String,
+    /// The act's class.
+    pub class: String,
+    /// The act as it will run.
+    pub act: String,
+    /// Why it has its class.
+    pub why: Vec<String>,
+    /// Paths outside the world it opens.
+    pub outside: Vec<String>,
+    /// The plan the approval binds to, in short.
+    pub plan: Option<String>,
+}
+
+impl Shown {
+    /// The ask in the child's `params`, each field escaped; a field missing or of another type
+    /// reads empty.
+    #[must_use]
+    pub fn of(params: &Value) -> Self {
+        let text = |k: &str| shown(params[k].as_str().unwrap_or_default());
+        let list = |k: &str| {
+            params[k]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|v| shown(v.as_str().unwrap_or_default()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        Self {
+            body: shown(params["body"].as_str().unwrap_or(SESSION_BODY)),
+            race: text("race"),
+            class: text("class"),
+            act: text("act"),
+            why: list("why"),
+            outside: list("outside"),
+            plan: params["plan"].as_str().map(shown),
+        }
+    }
+
+    /// The SHA-256 of ask `id` as shown, in lowercase hex: each field as its length in UTF-8
+    /// bytes, a colon, the text and a newline, in a fixed order after a version line; each list
+    /// first its count; the plan `-` when absent, `+` before it when present. The board's page
+    /// computes the same over what it renders (`packages/board/src/data/approval.ts`).
+    #[must_use]
+    pub fn digest(&self, id: &str) -> String {
+        fn field(out: &mut Vec<u8>, s: &str) {
+            out.extend_from_slice(format!("{}:", s.len()).as_bytes());
+            out.extend_from_slice(s.as_bytes());
+            out.push(b'\n');
+        }
+        let mut out = b"mnemorph.ask.v1\n".to_vec();
+        for s in [id, &self.body, &self.race, &self.class, &self.act] {
+            field(&mut out, s);
+        }
+        for list in [&self.why, &self.outside] {
+            out.extend_from_slice(format!("{}\n", list.len()).as_bytes());
+            for s in list {
+                field(&mut out, s);
+            }
+        }
+        match &self.plan {
+            None => out.extend_from_slice(b"-\n"),
+            Some(p) => {
+                out.push(b'+');
+                field(&mut out, p);
+            }
+        }
+        sha256(&out)
+    }
+}
+
 /// An ask waiting for the human.
 struct Ask {
-    /// The body asking.
+    /// The body asking, as the child named it: the turn whose end withdraws the ask.
     body: String,
-    /// The request's parameters, as the child sent them.
-    params: Value,
+    /// The ask as it is shown.
+    shown: Shown,
+    /// The SHA-256 of what is shown ([`Shown::digest`]).
+    digest: String,
     /// When the child asked, on the board's clock.
     at: Instant,
+    /// The controller tab that acknowledged rendering the card, and when; cleared whenever
+    /// control moves.
+    seen: Option<(u64, Instant)>,
+    /// The refused answers journaled.
+    refusals: u8,
 }
 
 /// Why a tab was closed, for its socket to say.
@@ -363,6 +479,8 @@ struct State {
     asks: BTreeMap<String, Ask>,
     conns: BTreeMap<u64, Conn>,
     controller: Option<u64>,
+    /// The asks answered lately, for a late answer to hear so.
+    answered: VecDeque<String>,
     /// Since when no tab controls the chat.
     orphaned: Option<Instant>,
     /// The child-side id's number → the tab and the id it used.
@@ -399,16 +517,20 @@ fn cut(s: &str, max: usize) -> &str {
     &s[..end]
 }
 
-/// An ask as a tab receives it: the child's request, with the time it has left.
+/// Milliseconds, for the wire and the journal.
+fn ms(d: Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// An ask as a tab receives it: the child's request as shown, its digest, and the time it has
+/// left.
 fn ask_line(id: &str, ask: &Ask, now: Instant) -> Utf8Bytes {
     let left = GATE_WAIT.saturating_sub(now.saturating_duration_since(ask.at));
-    let mut params = ask.params.clone();
-    if let Some(o) = params.as_object_mut() {
-        o.insert(
-            "leftMs".into(),
-            json!(u64::try_from(left.as_millis()).unwrap_or(u64::MAX)),
-        );
-    }
+    let s = &ask.shown;
+    let params = json!({
+        "body": s.body, "race": s.race, "class": s.class, "act": s.act, "why": s.why,
+        "outside": s.outside, "plan": s.plan, "leftMs": ms(left), "digest": ask.digest,
+    });
     json!({"jsonrpc": "2.0", "id": id, "method": "gate/ask", "params": params})
         .to_string()
         .into()
@@ -454,9 +576,18 @@ impl State {
         }
         self.calls.retain(|_, (c, _)| *c != conn);
         if self.controller == Some(conn) {
-            self.controller = None;
+            self.control(None);
             self.orphaned = Some(now);
             self.roles(limits, now);
+        }
+    }
+
+    /// Control moves to `conn`: every card must be seen again, by the tab that now controls,
+    /// before an allow is taken.
+    fn control(&mut self, conn: Option<u64>) {
+        self.controller = conn;
+        for ask in self.asks.values_mut() {
+            ask.seen = None;
         }
     }
 
@@ -487,8 +618,8 @@ impl State {
         }
     }
 
-    /// Drop the asks `which` picks, and tell every tab they are gone.
-    fn withdraw(&mut self, which: impl Fn(&Ask) -> bool, limits: &Limits, now: Instant) {
+    /// Drop the asks `which` picks, and tell every tab they are gone, and `why`.
+    fn withdraw(&mut self, which: impl Fn(&Ask) -> bool, why: &str, limits: &Limits, now: Instant) {
         let gone: Vec<String> = self
             .asks
             .iter()
@@ -497,8 +628,18 @@ impl State {
             .collect();
         for id in gone {
             self.asks.remove(&id);
-            self.broadcast(&notice("board/askGone", &json!({"id": id})), limits, now);
+            self.gone(id, why, limits, now);
         }
+    }
+
+    /// Ask `id` left the list, `why`: every tab is told, and a late answer hears it.
+    fn gone(&mut self, id: String, why: &str, limits: &Limits, now: Instant) {
+        let msg = notice("board/askGone", &json!({"id": id, "why": why}));
+        if self.answered.len() == ANSWERED {
+            self.answered.pop_front();
+        }
+        self.answered.push_back(id);
+        self.broadcast(&msg, limits, now);
     }
 
     /// Keep an event for a replay: 10,000 at most, and within the byte cap.
@@ -553,6 +694,8 @@ struct Live {
     hello: OnceLock<Value>,
     /// The child's input; `None` once the chat ends.
     input: Mutex<Option<mpsc::Sender<String>>>,
+    /// Where the answers to its asks are journaled; `None` with no home.
+    answers: Option<Journal<AnswerRow>>,
     state: Mutex<State>,
     limits: Limits,
     /// Asked to end, with why.
@@ -610,7 +753,12 @@ impl Live {
                 if m == "event/turnEnded" {
                     // A turn that ended waits on nothing: the session's own ends them all.
                     let body = value["params"]["body"].as_str().unwrap_or(SESSION_BODY);
-                    st.withdraw(|a| body == SESSION_BODY || a.body == body, limits, now);
+                    st.withdraw(
+                        |a| body == SESSION_BODY || a.body == body,
+                        "withdrawn: the asking turn ended",
+                        limits,
+                        now,
+                    );
                 }
                 let msg = Utf8Bytes::from(line);
                 st.keep(seq, msg.clone(), limits);
@@ -624,14 +772,18 @@ impl Live {
                 else {
                     return;
                 };
-                let params = value["params"].clone();
+                let params = &value["params"];
                 if !params.is_object() {
                     return;
                 }
+                let shown = Shown::of(params);
                 let ask = Ask {
                     body: params["body"].as_str().unwrap_or(SESSION_BODY).to_owned(),
-                    params,
+                    digest: shown.digest(id),
+                    shown,
                     at: now,
+                    seen: None,
+                    refusals: 0,
                 };
                 let msg = ask_line(id, &ask, now);
                 st.asks.insert(id.to_owned(), ask);
@@ -716,7 +868,7 @@ impl Live {
             },
         );
         if owner && st.controller.is_none() {
-            st.controller = Some(id);
+            st.control(Some(id));
             st.orphaned = None;
         }
         st.roles(limits, now);
@@ -786,6 +938,7 @@ impl Live {
                 }
             }
             "board/takeOver" => self.take_over(&mut st, conn, id.as_ref(), now),
+            "board/seen" => self.seen(&mut st, conn, controller, id.as_ref(), &value, now),
             "session/prompt" | "session/send" | "session/interrupt" | "shutdown" => {
                 if !controller {
                     if id.is_some() {
@@ -850,7 +1003,7 @@ impl Live {
             st.push(conn, &answer(id, &json!({})), limits, now);
         }
         if st.controller != Some(conn) {
-            st.controller = Some(conn);
+            st.control(Some(conn));
             st.orphaned = None;
             st.roles(limits, now);
             st.asks_to(conn, limits, now);
@@ -924,11 +1077,114 @@ impl Live {
         }
         // Esc denies what waits at the gate, in the child as here.
         if method == "session/interrupt" {
-            st.withdraw(|_| true, limits, now);
+            st.withdraw(|_| true, "denied: the turn was interrupted", limits, now);
         }
     }
 
-    /// A tab's answer to an ask: the controller's alone, once.
+    /// `board/seen {id, digest}`: the controller's card for ask `id` is on its screen, showing
+    /// the act whose digest it names. The first acknowledgement of the tab that controls starts
+    /// the [`ARM`] an allow waits for; control moving clears it.
+    fn seen(
+        &self,
+        st: &mut State,
+        conn: u64,
+        controller: bool,
+        id: Option<&Value>,
+        value: &Value,
+        now: Instant,
+    ) {
+        let limits = &self.limits;
+        let ask = value["params"]["id"].as_str().unwrap_or_default();
+        let named = value["params"]["digest"].as_str();
+        let outcome = if controller {
+            match st.asks.get_mut(ask) {
+                None => Err((
+                    -32014,
+                    "no such ask waits: answered, withdrawn or past its time",
+                )),
+                Some(a) if named != Some(a.digest.as_str()) => Err((
+                    -32015,
+                    "the digest names another act than the one the board showed",
+                )),
+                Some(a) => {
+                    if a.seen.is_none_or(|(c, _)| c != conn) {
+                        a.seen = Some((conn, now));
+                    }
+                    Ok(())
+                }
+            }
+        } else {
+            Err((-32011, "this tab observes: take over to answer"))
+        };
+        let Some(id) = id else { return };
+        let msg = match outcome {
+            Ok(()) => answer(id, &json!({})),
+            Err((code, why)) => error(id, code, why),
+        };
+        st.push(conn, &msg, limits, now);
+    }
+
+    /// Why an allow from tab `conn` for `ask` is not taken, if it is not: it must name the
+    /// digest of the act as shown, and come from the tab that acknowledged the card, at least
+    /// [`ARM`] after it did.
+    fn unready(ask: &Ask, conn: u64, named: Option<&str>, now: Instant) -> Option<&'static str> {
+        if named != Some(ask.digest.as_str()) {
+            return Some(
+                "the answer names another act than the one the board showed (its digest differs)",
+            );
+        }
+        let Some((_, at)) = ask.seen.filter(|(by, _)| *by == conn) else {
+            return Some(
+                "the card was not seen in this tab: an allow follows its render acknowledgement",
+            );
+        };
+        (now.saturating_duration_since(at) < ARM)
+            .then_some("too fast: an allow comes at least 300 ms after the card was seen")
+    }
+
+    /// The row journaling tab `conn`'s answer to `ask`.
+    fn row(
+        &self,
+        id: &str,
+        ask: &Ask,
+        conn: u64,
+        reply: &GateReply,
+        outcome: &str,
+        now: Instant,
+    ) -> AnswerRow {
+        AnswerRow {
+            ts: Timestamp::now(),
+            chat: self.id.clone(),
+            ask: id.to_owned(),
+            conn,
+            body: ask.shown.body.clone(),
+            class: ask.shown.class.clone(),
+            act: cut(&ask.shown.act, ACT_KEPT).to_owned(),
+            shown_digest: ask.digest.clone(),
+            named_digest: reply.digest.as_deref().map(|d| cut(d, 128).to_owned()),
+            allow: reply.allow,
+            outcome: outcome.to_owned(),
+            asked_ms: ms(now.saturating_duration_since(ask.at)),
+            seen_ms: ask
+                .seen
+                .filter(|(by, _)| *by == conn)
+                .map(|(_, at)| ms(now.saturating_duration_since(at))),
+            build: mnemorph_loop::world::ledger::Build::default(),
+        }
+    }
+
+    /// Journal `row`: `Err` when it could not be written. No home to keep it under writes
+    /// nothing, and is no error.
+    fn journal(&self, row: AnswerRow) -> Result<(), String> {
+        match &self.answers {
+            Some(j) => answers::record(j, row).map_err(|e| e.to_string()),
+            None => Ok(()),
+        }
+    }
+
+    /// A tab's answer to an ask: the controller's alone, once; an allow only as [`Self::unready`]
+    /// says. Each is journaled — a refused one too, the first few of each ask — and an allow that
+    /// cannot be journaled is refused.
     fn gate_reply(&self, st: &mut State, conn: u64, controller: bool, value: &Value, now: Instant) {
         let limits = &self.limits;
         let id = value["id"].as_str().filter(|i| i.starts_with("gate-"));
@@ -943,41 +1199,67 @@ impl Live {
         let Some(id) = id else {
             return refuse(st, "not an answer to an ask");
         };
-        if !controller {
-            return refuse(
-                st,
-                "this tab observes: only the controller answers the gate",
-            );
-        }
-        if !st.asks.contains_key(id) {
-            return refuse(
-                st,
-                "no such ask waits: answered, withdrawn or past its time",
-            );
-        }
         let reply = match (value.get("result"), value.get("error")) {
             (Some(r), _) => serde_json::from_value::<GateReply>(r.clone()).unwrap_or(GateReply {
                 allow: false,
                 reason: Some("the client's answer did not read".into()),
+                digest: None,
             }),
             _ => GateReply {
                 allow: false,
                 reason: Some("the client could not ask the human".into()),
+                digest: None,
             },
         };
-        let line = json!({"jsonrpc": "2.0", "id": id, "result": {
-            "allow": reply.allow,
-            "reason": reply.reason.as_deref().map(|r| cut(r, REASON_BYTES)),
-        }})
-        .to_string();
-        let sent = lock(&self.input)
-            .as_ref()
-            .is_some_and(|input| input.try_send(line).is_ok());
-        if !sent {
-            return refuse(st, "the chat is busy or ended: answer again");
+        let Some(ask) = st.asks.get_mut(id) else {
+            let why = if st.answered.iter().any(|a| a == id) {
+                "answered elsewhere: another answer, or the core, came first"
+            } else {
+                "no such ask waits: answered, withdrawn or past its time"
+            };
+            return refuse(st, why);
+        };
+        let refusal = if controller {
+            reply
+                .allow
+                .then(|| Self::unready(ask, conn, reply.digest.as_deref(), now))
+                .flatten()
+        } else {
+            Some("this tab observes: only the controller answers the gate")
+        };
+        if let Some(why) = refusal {
+            if ask.refusals < REFUSALS_KEPT {
+                ask.refusals += 1;
+                let row = self.row(id, ask, conn, &reply, &format!("refused: {why}"), now);
+                let _ = self.journal(row);
+            }
+            return refuse(st, why);
         }
+        // A place in the child's input first, then the journal, then the answer: an answer is
+        // journaled before the core hears it, and only once it surely will.
+        let input = lock(&self.input).clone();
+        let Some(permit) = input.as_ref().and_then(|i| i.try_reserve().ok()) else {
+            return refuse(st, "the chat is busy or ended: answer again");
+        };
+        let row = self.row(id, ask, conn, &reply, "answered", now);
+        if let Err(e) = self.journal(row)
+            && reply.allow
+        {
+            drop(permit);
+            return refuse(
+                st,
+                &format!("the answer could not be journaled, so it is not taken: {e}"),
+            );
+        }
+        permit.send(
+            json!({"jsonrpc": "2.0", "id": id, "result": {
+                "allow": reply.allow,
+                "reason": reply.reason.as_deref().map(|r| cut(r, REASON_BYTES)),
+            }})
+            .to_string(),
+        );
         st.asks.remove(id);
-        st.broadcast(&notice("board/askGone", &json!({"id": id})), limits, now);
+        st.gone(id.to_owned(), "answered", limits, now);
     }
 
     /// The clock's tick: asks past the gate's wait are dropped; past the grace with no
@@ -987,6 +1269,7 @@ impl Live {
         let mut st = lock(&self.state);
         st.withdraw(
             |a| now.saturating_duration_since(a.at) >= GATE_WAIT,
+            "denied: no answer in 10 minutes",
             limits,
             now,
         );
@@ -1270,6 +1553,7 @@ impl Bridge {
             owner: owner.to_owned(),
             hello: OnceLock::new(),
             input: Mutex::new(Some(input.clone())),
+            answers: (self.child.answers)(world).map(answers::journal_at),
             state: Mutex::new(State {
                 init: Some(init),
                 ..State::default()
@@ -1394,7 +1678,7 @@ impl Bridge {
                 &self.limits,
                 now,
             );
-            st.controller = None;
+            st.control(None);
             for (_, c) in std::mem::take(&mut st.conns) {
                 let _ = c.close.set((close::ENDED, "the chat ended"));
             }

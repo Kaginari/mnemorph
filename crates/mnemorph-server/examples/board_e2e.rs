@@ -110,6 +110,10 @@ fn board(root: &Path) -> Result<(), String> {
             ("LANG".into(), "C".into()),
         ],
         global: root.join("global.toml"),
+        answers: {
+            let state = root.join("state");
+            Arc::new(move |w| Some(mnemorph_server::world::answers::answers_in(&state, w)))
+        },
     };
     let listeners = listen(0, Some([127, 0, 0, 1].into()))?;
     let addrs: Vec<_> = listeners

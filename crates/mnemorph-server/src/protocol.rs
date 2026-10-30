@@ -257,6 +257,12 @@ pub struct GateRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub left_ms: Option<u64>,
+    /// The SHA-256 of the act as shown, in hex: set by the board, which sends every field above
+    /// already passed through `shown`; an allow must name it, so it approves exactly what the
+    /// card showed. Absent from the core itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub digest: Option<String>,
 }
 
 /// The human's answer to `gate/ask`.
@@ -270,6 +276,11 @@ pub struct GateReply {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub reason: Option<String>,
+    /// On the board: the digest of the act as shown, as `gate/ask` carried it. An allow that
+    /// names another, or none, is refused; the core itself reads no digest.
+    #[serde(default)]
+    #[ts(optional)]
+    pub digest: Option<String>,
 }
 
 /// Every event's envelope, beside its own fields.

@@ -38,4 +38,10 @@ plan?: string | null,
  * The milliseconds it has left before it is denied: set by the board, which sends a waiting
  * ask again to a tab that connects; absent from the core itself.
  */
-leftMs?: number, };
+leftMs?: number, 
+/**
+ * The SHA-256 of the act as shown, in hex: set by the board, which sends every field above
+ * already passed through `shown`; an allow must name it, so it approves exactly what the
+ * card showed. Absent from the core itself.
+ */
+digest?: string, };

