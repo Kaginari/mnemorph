@@ -7,6 +7,7 @@ pub mod chains;
 pub mod challenge;
 pub mod dispatch;
 pub mod doc;
+pub mod evolution;
 pub mod facts;
 pub mod findings;
 pub mod graph;

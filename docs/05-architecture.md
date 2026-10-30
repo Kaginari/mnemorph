@@ -471,6 +471,7 @@ fails when the two differ.
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
+| evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after and the soil diff the harness saw, each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
 | dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
 | ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
@@ -814,6 +815,9 @@ an empty list or table never overrides a lower layer:
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
   `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at
   once (3; 1 to 7), is the human's alone: fewer reviewers delay a review.
+  `evolution.min_net_wins`, how many more paired tasks an evolution must win than lose against
+  doing nothing to be kept ([judged after the freeze](02-races.md#evolution--the-other-way-to-change);
+  2, at least 1), is the human's alone too: a lower bar keeps more.
 - **Holes and errors.** An unknown key is a hole, reported with its file, and the session goes
   on. A file that does not parse, a value of the wrong type, a floor rule in `ask_rules`, an
   envelope that is a bare `*` or admits a destructive or refused act, an envelope without the

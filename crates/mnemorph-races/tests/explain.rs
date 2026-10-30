@@ -234,3 +234,35 @@ fn every_operator_reads_as_the_law_holds_it() {
         ["rise", "probation", "fall"]
     );
 }
+
+#[test]
+fn an_evolution_line_reads_over_its_window_against_doing_nothing() {
+    let line = |kind, op, reading| Explanation {
+        kind,
+        meter: "landRate",
+        scale: Scale::Rate,
+        reading,
+        op,
+        threshold: 70.0,
+        window: 10,
+        unit: "runs beside do-nothing",
+        recover: None,
+        rerise: None,
+        head: Some("3f9a".into()),
+        from: Some(4),
+        to: Some(23),
+    };
+    let keep = line(Kind::Keep, Op::Gt, 90.0);
+    assert!(keep.holds());
+    assert_eq!(
+        keep.to_string(),
+        "keep: landRate 0.90 > 0.70 (over 10 runs beside do-nothing); ledger head 3f9a, rows 4–23"
+    );
+    let rollback = line(Kind::Rollback, Op::Le, 70.0);
+    assert!(rollback.holds());
+    assert_eq!(
+        rollback.to_string(),
+        "rollback: landRate 0.70 <= 0.70 (over 10 runs beside do-nothing); ledger head 3f9a, rows \
+         4–23"
+    );
+}

@@ -1,5 +1,5 @@
-//! The world's chained journals, walked and anchored: the usage ledger and the Dark Elf's value
-//! ledger (the challenge records) chain their rows by hash ([`mnemorph_ledger::chain`]), and
+//! The world's chained journals, walked and anchored: the usage ledger, the Dark Elf's value
+//! ledger (the challenge records) and the evolution ledger chain their rows by hash ([`mnemorph_ledger::chain`]), and
 //! their heads are anchored outside the files — an entry in `log.md`, and a copy kept under the
 //! human's state directory, out of every command's reach — so each walk is held to the newest head
 //! kept, and a dropped tail or a chain rooted again is found. `mnemorphd housekeep --verify` walks
@@ -20,14 +20,14 @@ use crate::worth::USAGE;
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage` or `value`.
+    /// Its name: `usage`, `value` or `evolution`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
 }
 
-/// The chained journals of `world`: the usage ledger, and the value ledger when there is a home
-/// to keep it under.
+/// The chained journals of `world`: the usage ledger, and the value and evolution ledgers when
+/// there is a home to keep them under.
 #[must_use]
 pub fn journals(world: &Path) -> Vec<Chained> {
     let mut out = vec![Chained {
@@ -37,6 +37,12 @@ pub fn journals(world: &Path) -> Vec<Chained> {
     if let Some(path) = crate::challenge::records_of(world) {
         out.push(Chained {
             name: "value",
+            path,
+        });
+    }
+    if let Some(path) = crate::evolution::ledger_of(world) {
+        out.push(Chained {
+            name: "evolution",
             path,
         });
     }
@@ -102,6 +108,29 @@ impl Reading {
 #[must_use]
 pub fn verify(world: &Path) -> Vec<Reading> {
     verify_kept(world, kept_at(world).as_deref())
+}
+
+/// The newest head anchored for the journal `name` of `world`: the state directory's, else
+/// `log.md`'s; `None` when none was anchored yet.
+#[must_use]
+pub fn anchor_of(world: &Path, name: &str) -> Option<Head> {
+    let kept = kept_at(world)
+        .and_then(|p| Journal::<Kept>::new(p).read().ok())
+        .map(|r| r.rows)
+        .unwrap_or_default();
+    kept.iter()
+        .rev()
+        .find(|k| k.journal == name)
+        .map(|k| Head {
+            digest: k.digest.clone(),
+            line: k.line,
+        })
+        .or_else(|| {
+            logged(
+                &std::fs::read_to_string(world.join(LOG)).unwrap_or_default(),
+                name,
+            )
+        })
 }
 
 /// [`verify`], the anchors kept at `kept`.

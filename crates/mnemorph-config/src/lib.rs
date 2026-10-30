@@ -76,6 +76,7 @@ max_consults = 3
 
 [evolution]
 mode = "auto"
+min_net_wins = 2
 
 [models]
 provider = "anthropic"
@@ -111,6 +112,20 @@ pub const CHALLENGE_REVIEWERS: usize = 3;
 const CHALLENGE_REVIEWERS_CEILING: i64 = 7;
 
 /// `gate.challenge_reviewers` holds a count of reviewers from 1 to every speciality.
+/// `evolution.min_net_wins`: a count of paired wins, at least 1.
+fn net_wins(value: &Value, at: &Origin) -> Result<(), String> {
+    if value
+        .as_integer()
+        .is_some_and(|n| (1..=i64::from(u32::MAX)).contains(&n))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{at}: evolution.min_net_wins is a count of paired wins, at least 1"
+        ))
+    }
+}
+
 fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
     if value
         .as_integer()
@@ -124,6 +139,10 @@ fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
     }
 }
 
+/// How many more paired tasks an evolution must win than lose to be kept, unless the human sets
+/// `evolution.min_net_wins`.
+pub const MIN_NET_WINS: u32 = 2;
+
 /// Keys only the local or global file may set: each one loosens the human gate.
 const LOOSENING: &[&str] = &[
     "gate.enabled",
@@ -132,6 +151,7 @@ const LOOSENING: &[&str] = &[
     "gate.approve",
     "oni.envelopes",
     "oni.envelope_days",
+    "evolution.min_net_wins",
     "sandbox.allow_unguarded",
     "models.provider",
     "budget.session",
@@ -189,6 +209,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("recall.saturation_mid", Kind::Number),
     ("recall.saturation_long", Kind::Number),
     ("evolution.mode", Kind::Str),
+    ("evolution.min_net_wins", Kind::Int),
     ("models.provider", Kind::Str),
     ("models.default", Kind::Str),
     ("models.race.*", Kind::Str),
@@ -708,6 +729,7 @@ impl Config {
                     ));
                 }
                 "gate.challenge_reviewers" => reviewers(&leaf.value, at)?,
+                "evolution.min_net_wins" => net_wins(&leaf.value, at)?,
                 "oni.envelope_days"
                     if !leaf
                         .value
@@ -895,6 +917,16 @@ impl Config {
     #[must_use]
     pub fn evolution_proposes(&self) -> bool {
         self.get("evolution.mode").and_then(|l| l.value.as_str()) == Some("propose")
+    }
+
+    /// How many more paired tasks an evolution must win than lose against doing nothing to be
+    /// kept: `evolution.min_net_wins`, at least 1, 2 unless set.
+    #[must_use]
+    pub fn evolution_min_net_wins(&self) -> u32 {
+        self.int("evolution.min_net_wins")
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n >= 1)
+            .unwrap_or(MIN_NET_WINS)
     }
 
     /// The model the human chose for a body, if they chose one: the creature's own, else its
