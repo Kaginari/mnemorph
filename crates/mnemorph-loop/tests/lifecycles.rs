@@ -151,7 +151,7 @@ impl Node {
     fn config(&self, steps: Option<u32>) -> Config {
         let steps = steps.map_or_else(String::new, |n| format!("\n[steps]\nsolo = {n}\n"));
         fs::write(
-            self.world().join(".mnemorph/config.local.toml"),
+            self.root().join("no-global.toml"),
             format!("[sandbox]\nallow_unguarded = true\n{steps}"),
         )
         .unwrap();

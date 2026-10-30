@@ -1094,7 +1094,14 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[gate]\nask_rules = [\"in-place-edit\"]\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
+        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
+    )
+    .unwrap();
+    // Letting a rule ask loosens the gate: the global file alone says it.
+    fs::create_dir_all(&root).unwrap();
+    fs::write(
+        root.join("none.toml"),
+        "[gate]\nask_rules = [\"in-place-edit\"]\n",
     )
     .unwrap();
     let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
@@ -2138,24 +2145,28 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
     fs::write(&list, Value::Array(tools).to_string()).unwrap();
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../mnemorph-tools/tests/fixtures/fake-mcp.sh");
-    let mcp = Mcp::new(Settings {
-        top_k: 2,
-        servers: vec![Server {
-            name: "hub".into(),
-            command: "bash".into(),
-            args: vec![
-                fixture.display().to_string(),
-                list.display().to_string(),
-                w.world().join("../mcp-log").display().to_string(),
-            ],
-            env: Vec::new(),
-            races: vec![Race::Slime],
-            read_only: true,
-            network: false,
-            timeout: std::time::Duration::from_secs(10),
-        }],
-        ..Settings::default()
-    });
+    let state = w.world().join("../mcp-state");
+    let mcp = Mcp::new(
+        Settings {
+            top_k: 2,
+            servers: vec![Server {
+                name: "hub".into(),
+                command: "bash".into(),
+                args: vec![
+                    fixture.display().to_string(),
+                    list.display().to_string(),
+                    w.world().join("../mcp-log").display().to_string(),
+                ],
+                env: Vec::new(),
+                races: vec![Race::Slime],
+                read_only: true,
+                network: false,
+                timeout: std::time::Duration::from_secs(10),
+            }],
+            ..Settings::default()
+        },
+        state.clone(),
+    );
     let model = Arc::new(ScriptedModel::new([
         tool("t1", "hub__web_search", json!({"q": "release"})),
         tool("t2", SEARCH, json!({"query": "find an issue"})),
@@ -2173,7 +2184,7 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
     let offer = mcp.offer(Race::Slime, "search the web", &setup.cx, &reserved);
     assert_eq!(offer.offered[0].name, "hub__web_search");
     setup.tools.extend(offer.tools);
-    let mut run = Run::new(body(), limits(), setup);
+    let mut run = Run::new(body(), limits(), setup).with_mcp_record(Some(state.clone()));
     assert_eq!(
         ask(&mut run, "search the web, then find the issue").await,
         Ending::Answered("first".into())
@@ -2216,7 +2227,7 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
         "the search showed the schema"
     );
     assert!(said.contains("called issue_find"), "the door called it");
-    let usage = mnemorph_tools::mcp::Usage::load(&w.world());
+    let usage = mnemorph_tools::mcp::Usage::load(&state);
     assert_eq!(usage.tools["hub__web_search"].helped, 1);
     assert_eq!(usage.tools["hub__issue_find"].helped, 1);
     assert_eq!(usage.tools["hub__filler_3"].called, 1);

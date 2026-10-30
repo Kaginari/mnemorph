@@ -47,8 +47,20 @@ pub const MAX_DESCRIPTION: usize = 1024;
 pub const SEARCH: &str = "mcp_search";
 /// The call door: calls any tool in scope by name, deferred or offered.
 pub const CALL: &str = "mcp_call";
-/// Where listed catalogs are cached, relative to the world.
-pub const CATALOGS: &str = ".mnemorph/instruments/mcp/catalog";
+/// The most bytes of arguments a call sends: past it the call is refused before anything is asked.
+pub const MAX_ARGS: usize = 64 * 1024;
+
+/// Where a world's MCP state lives — the cached catalogs, the usage record, each server's scratch
+/// and working directory: `$XDG_STATE_HOME/mnemorph/mcp/<world>-<fnv64a>/`, else under
+/// `~/.local/state`, else the temporary directory. Outside the world, so nothing a body or a
+/// repository's script writes there reaches it.
+#[must_use]
+pub fn state_dir(world: &Path) -> PathBuf {
+    crate::tripwire::state_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("mnemorph/mcp")
+        .join(crate::tripwire::world_key(world))
+}
 
 /// One server, as the human's configuration declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +206,7 @@ impl Spec {
             o.remove("$schema");
             o.insert("type".into(), json!("object"));
         }
+        clean_strings(&mut schema);
         let bytes = schema.to_string().len();
         if bytes > MAX_SCHEMA {
             return Err(format!(
@@ -234,6 +247,7 @@ impl Spec {
 /// The MCP servers of a session: their catalog, listed once, and the servers started so far.
 pub struct Mcp {
     settings: Settings,
+    state: PathBuf,
     catalog: OnceLock<(Vec<Spec>, Vec<String>)>,
     conns: Mutex<BTreeMap<String, Conn>>,
 }
@@ -288,11 +302,13 @@ impl Offer {
 }
 
 impl Mcp {
-    /// The servers of `settings`, none started.
+    /// The servers of `settings`, none started, keeping their state under `state` (a world's
+    /// [`state_dir`]).
     #[must_use]
-    pub fn new(settings: Settings) -> Arc<Self> {
+    pub fn new(settings: Settings, state: PathBuf) -> Arc<Self> {
         Arc::new(Self {
             settings,
+            state,
             catalog: OnceLock::new(),
             conns: Mutex::new(BTreeMap::new()),
         })
@@ -304,6 +320,16 @@ impl Mcp {
         &self.settings
     }
 
+    /// Where this world's MCP state lives: the usage record the loop learns into.
+    #[must_use]
+    pub fn state(&self) -> &Path {
+        &self.state
+    }
+
+    fn scratch(&self, server: &str) -> PathBuf {
+        self.state.join("scratch").join(server)
+    }
+
     /// Every server's tools, listed once a session — from the cache when it is fresh — and what
     /// could not be listed.
     pub fn catalog(&self, cx: &Context) -> &(Vec<Spec>, Vec<String>) {
@@ -312,7 +338,7 @@ impl Mcp {
             let mut holes = Vec::new();
             let mut seen = BTreeSet::new();
             for server in &self.settings.servers {
-                match listed(server, cx) {
+                match listed(server, cx, &self.state, &self.scratch(&server.name)) {
                     Ok(raw) => {
                         for r in &raw {
                             match Spec::of(server, r) {
@@ -378,7 +404,7 @@ impl Mcp {
         let (offered, deferred) = if scope.len() <= st.defer_above && total <= st.schema_tokens {
             (scope.clone(), Vec::new())
         } else {
-            let usage = Usage::load(cx.world());
+            let usage = Usage::load(&self.state);
             let mut offered = Vec::new();
             let mut deferred = Vec::new();
             let mut spent = 0u64;
@@ -403,6 +429,7 @@ impl Mcp {
             .collect();
         if !deferred.is_empty() {
             tools.push(Box::new(Search {
+                state: self.state.clone(),
                 scope: scope.clone(),
             }));
             tools.push(Box::new(Call {
@@ -427,16 +454,24 @@ impl Mcp {
         if !arguments.is_object() {
             return Outcome::error(format!("the arguments to {} are an object", spec.name));
         }
+        let shown = serde_json::to_string_pretty(arguments).unwrap_or_default();
+        if shown.len() > MAX_ARGS {
+            return Outcome::error(format!(
+                "the arguments to {} are {} bytes, past {MAX_ARGS}; nothing was sent",
+                spec.name,
+                shown.len()
+            ));
+        }
         let Some(server) = self.settings.servers.iter().find(|s| s.name == spec.server) else {
             return Outcome::error(format!("MCP server `{}` is not configured", spec.server));
         };
         if spec.class != ToolClass::Read {
-            let shown: String = arguments.to_string().chars().take(500).collect();
             let ask = Ask {
                 body: cx.body().to_owned(),
                 race: cx.race(),
                 class: spec.class,
-                act: format!("MCP {}: {} {shown}", spec.server, spec.tool),
+                // Every argument, one per line and indented, cleaned: nothing hides past a cut.
+                act: format!("MCP {}: {}\n{}", spec.server, spec.tool, clean(&shown)),
                 why: vec![format!(
                     "MCP server `{}` is not marked `read_only` in your configuration",
                     spec.server
@@ -452,7 +487,7 @@ impl Mcp {
         }
         let mut conns = self.conns.lock().unwrap_or_else(PoisonError::into_inner);
         if !conns.contains_key(&server.name) {
-            match Conn::start(server, cx) {
+            match Conn::start(server, cx, &self.scratch(&server.name)) {
                 Ok(c) => {
                     conns.insert(server.name.clone(), c);
                 }
@@ -481,13 +516,18 @@ impl Mcp {
 
 /// A server's raw tool list: from the cache when it is fresh and the server's identity is the
 /// same, else listed now and cached.
-fn listed(server: &Server, cx: &Context) -> Result<Vec<Value>, String> {
-    let file = catalog_file(cx.world(), &server.name);
+fn listed(
+    server: &Server,
+    cx: &Context,
+    state: &Path,
+    scratch: &Path,
+) -> Result<Vec<Value>, String> {
+    let file = catalog_file(state, &server.name);
     let id = server.identity();
     if let Some(tools) = cached(&file, &id) {
         return Ok(tools);
     }
-    let tools = Conn::start(server, cx)?.list()?;
+    let tools = Conn::start(server, cx, scratch)?.list()?;
     if let Some(dir) = file.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -509,10 +549,37 @@ fn cached(file: &Path, id: &str) -> Option<Vec<Value>> {
         .flatten()
 }
 
-/// Where a world caches the catalog of `server`.
+/// Where the catalog of `server` is cached, under a world's [`state_dir`].
 #[must_use]
-pub fn catalog_file(world: &Path, server: &str) -> PathBuf {
-    world.join(CATALOGS).join(format!("{server}.json"))
+pub fn catalog_file(state: &Path, server: &str) -> PathBuf {
+    state.join("catalog").join(format!("{server}.json"))
+}
+
+/// Every string of a schema — keys and values — without control characters.
+fn clean_strings(value: &mut Value) {
+    match value {
+        Value::String(t) => *t = clean(t),
+        Value::Array(items) => items.iter_mut().for_each(clean_strings),
+        Value::Object(o) => {
+            let entries: Vec<(String, Value)> = std::mem::take(o)
+                .into_iter()
+                .map(|(k, mut v)| {
+                    clean_strings(&mut v);
+                    (clean(&k), v)
+                })
+                .collect();
+            o.extend(entries);
+        }
+        _ => {}
+    }
+}
+
+/// `&`, `<` and `>` escaped: text from a server that cannot close an envelope around it.
+#[must_use]
+pub fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Text without control characters but newlines and tabs: no terminal escape, no hidden reset.
@@ -533,10 +600,7 @@ pub fn wrap(spec: &Spec, text: &str) -> String {
         cut -= 1;
     }
     let dropped = text.len() - cut;
-    let body = text[..cut]
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
+    let body = escape(&text[..cut]);
     let more = if dropped > 0 {
         format!("\n[{dropped} more bytes cut]")
     } else {
@@ -602,6 +666,7 @@ struct SearchArgs {
 
 /// The search door: the scope's tools ranked for a query, each with its price and full schema.
 struct Search {
+    state: PathBuf,
     scope: Vec<Spec>,
 }
 
@@ -630,12 +695,12 @@ impl Tool for Search {
     fn example(&self) -> Value {
         json!({"query": "search the web"})
     }
-    fn run(&self, raw: Value, cx: &mut Context) -> Outcome {
+    fn run(&self, raw: Value, _cx: &mut Context) -> Outcome {
         let a: SearchArgs = match args(SEARCH, raw) {
             Ok(a) => a,
             Err(o) => return o,
         };
-        let usage = Usage::load(cx.world());
+        let usage = Usage::load(&self.state);
         let found: Vec<String> = rank(&self.scope, &a.query, &usage)
             .into_iter()
             .take(SHOWN)
@@ -645,11 +710,8 @@ impl Tool for Search {
                     s.name,
                     s.class,
                     s.tokens,
-                    s.description
-                        .replace('&', "&amp;")
-                        .replace('<', "&lt;")
-                        .replace('>', "&gt;"),
-                    s.schema
+                    escape(&s.description),
+                    escape(&s.schema.to_string())
                 )
             })
             .collect();

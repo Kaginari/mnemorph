@@ -1365,7 +1365,8 @@ fn child_run(
     let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup)
         .with_gate(gate)
-        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name));
+        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
+        .with_mcp_record(c.mcp.as_ref().map(|m| m.state().to_path_buf()));
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();

@@ -510,7 +510,7 @@ impl Context {
     }
 
     /// Let commands run when no kernel guard is in force — the human's own choice, from their
-    /// local or global configuration. Without it, no guard means no command.
+    /// global configuration. Without it, no guard means no command.
     #[must_use]
     pub fn with_unguarded(mut self, allowed: bool) -> Self {
         self.unguarded = allowed;

@@ -11,7 +11,7 @@ config:
     wrappingWidth: 360
 ---
 flowchart LR
-    H["your config<br/>global · local"] -->|"servers, races,<br/>read_only, network"| C
+    H["your global config"] -->|"servers, races,<br/>read_only, network"| C
     S[("MCP server<br/>in the sandbox")] <-->|"listed once,<br/>cached on disk"| C["MCP client<br/>scope · rank · price"]
     subgraph mnemorph["Mnemorph"]
       C -->|"the race's share,<br/>decided at run start"| A["a body<br/>its frame"]
@@ -33,7 +33,7 @@ flowchart LR
 ## In plain words
 
 An MCP server is a program that offers tools. Mnemorph starts only the servers you declare in your
-own configuration, inside the sandbox, and shows each body only the tools of the servers you
+global configuration, inside the sandbox, and shows each body only the tools of the servers you
 named for its race.
 
 A server always sends every one of its tool definitions. Mnemorph lists each server once, keeps
@@ -51,9 +51,12 @@ the harness, never written by a model.
 
 ### Declaring a server
 
-Servers live under `mcp.servers.<name>` in your global or local file. The tracked file (shared by
-everyone who clones the repository) cannot declare one: each of its `mcp.*` keys is a hole, since
-a server is a program started with its own reach.
+Servers live under `mcp.servers.<name>` in your global file. Neither the tracked file (shared by
+everyone who clones the repository) nor the local one (`.mnemorph/config.local.toml`, inside the
+world, where a body's command or a repository's script may write it) can declare one: each of
+their `mcp.*` keys is a hole `status` shows, since a server is a program started with its own
+reach. The same holds for `sandbox.allow_unguarded` and every key that loosens the gate
+([configuration](05-architecture.md#configuration)).
 
 ```toml
 [mcp]
@@ -81,18 +84,30 @@ message a line: `initialize`, `notifications/initialized`, `tools/list` (the cur
 most 32 pages) and `tools/call`. Nothing else is answered; a server's own requests and
 notifications are passed over.
 
+- **State outside the world.** Everything MCP keeps lives under
+  `$XDG_STATE_HOME/mnemorph/mcp/<world>-<fnv64a>/` (else `~/.local/state`): the cached catalogs,
+  the usage record and each server's scratch. Nothing a body or a script writes in the world
+  reaches it.
+- **Never through the world.** The program is found on the harness's `PATH`, its relative and
+  in-world directories left out; a relative path, or a program inside the world, is refused.
+  The server works in its scratch, never the world, so `npx`, `node` and `python -m` find no
+  project there; `PYTHONNOUSERSITE`, `PYTHONSAFEPATH` and an empty `NODE_PATH` close the rest.
 - **Sandboxed.** The server runs under the session's kernel guard: the world and the toolchains
-  readable, never writable; its scratch (`.mnemorph/tmp/mcp/<server>`) writable; sockets only
-  when its `network = true`. With no guard in force it does not start, unless you set
-  `sandbox.allow_unguarded`. Its environment is the harness's with secrets scrubbed, plus the
-  variables its `env` names.
-- **Bounded.** Every answer waits at most the server's timeout; a line longer than 4 MB cuts the
-  server off. A dead, silent or refusing server is an error that names it, never a hang. A
-  server that fails a call is dropped and started again at the next one.
-- **Cached and lazy.** The catalog is listed once a session, and kept in
-  `.mnemorph/instruments/mcp/catalog/<server>.json`, keyed by the server's identity (command,
-  arguments, passed variables, network) and trusted for 24 hours. A session that reads a fresh
-  cache starts no server until one of its tools is called.
+  readable, never writable; its scratch writable; sockets only when its `network = true`. With no
+  guard in force it does not start, unless your global file sets `sandbox.allow_unguarded`. Its
+  environment is the harness's with secrets scrubbed, plus the variables its `env` names. On
+  Linux the guard has the kernel kill it when the thread that started it ends, and dropping a
+  server kills its process group, so none outlives the harness.
+- **Bounded.** Every answer waits at most the server's timeout. A line longer than 4 MB cuts the
+  server off; at most 8 lines wait between it and the client, so a server writing faster waits
+  on its own pipe; more than 256 messages that answer nothing while a request waits cut it off as
+  flooding. A server listing more than 128 tools is refused whole. Messages to it go through a
+  writer thread, so one that stops reading blocks nothing but itself. A dead, silent or flooding
+  server is an error that names it, never a hang. A server that fails a call is dropped and
+  started again at the next one.
+- **Cached and lazy.** The catalog is listed once a session and cached, keyed by the server's
+  identity (command, arguments, passed variables, network) and trusted for 24 hours. A session
+  that reads a fresh cache starts no server until one of its tools is called.
 
 ### Normalised and priced
 
@@ -102,7 +117,8 @@ Each listed tool becomes a spec once:
   digits, `_` and `-`, or that makes the name longer than 64, is refused (it could pass as
   another server's);
 - its description loses its control characters and keeps 1,024 characters;
-- its schema is an object schema (`$schema` dropped); one past 32 KB is refused;
+- its schema is an object schema (`$schema` dropped), every key and string without control
+  characters; one past 32 KB is refused;
 - its price is name, description and schema at four bytes a token, the estimate the Minds are
   priced by.
 
@@ -128,7 +144,8 @@ The tools block is built once, when a run is made, and sent byte-identical for i
   holds scores its rarity across the catalog (`ln(1 + n/df)`), plus the learned nudge below.
   The top `top_k` that fit within `schema_tokens` ride the frame. Beside them ride two doors:
   - `mcp_search` (`read`): the best five tools in scope for a query, each with its class, price
-    and full schema — a tool result, appended like any other;
+    and full schema, descriptions and schemas escaped as server words — a tool result, appended
+    like any other;
   - `mcp_call` (`read` itself; the tool it reaches keeps its own class): calls any tool in scope
     by name.
 
@@ -145,9 +162,10 @@ The tools block is built once, when a run is made, and sent byte-identical for i
 ### A call
 
 1. The shelf: the tool's class must be on the calling race's shelf.
-2. The arguments must be an object.
-3. An `outward` tool asks the human gate, naming the server, the tool and the arguments; a denial
-   runs nothing and the server never sees the call.
+2. The arguments must be an object of at most 64 KB; larger, nothing is asked or sent.
+3. An `outward` tool asks the human gate, naming the server and the tool, then every argument,
+   one a line and indented, cleaned of control characters and never cut, so no padding can hide
+   a payload; a denial runs nothing and the server never sees the call.
 4. The server starts on its first call, inside the sandbox.
 5. The answer's text items are joined; any other item is said as `[<type> content omitted]`.
    Control characters are dropped, the text is capped at 16 KB (the rest counted), `&`, `<` and
@@ -157,7 +175,7 @@ The tools block is built once, when a run is made, and sent byte-identical for i
 
 ### Learned
 
-`.mnemorph/instruments/mcp/usage.json` holds, per tool, the asks it was called in and, of those,
+The usage record (`usage.json` in the world's MCP state) holds, per tool, the asks it was called in and, of those,
 the asks it helped: asks that ended answered with nothing failing at their gate. The loop counts
 them at each ask's end from the calls the harness ran; no model writes it. In ranking a tool gains
 `ln(1 + helped)` and loses `0.25 · ln(1 + called − helped)`, so a tool that keeps helping climbs

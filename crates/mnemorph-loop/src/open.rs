@@ -378,6 +378,7 @@ fn build(
         reviewers: config.challenge_reviewers(),
         mcp,
     });
+    let mcp_record = commissioner.mcp.as_ref().map(|m| m.state().to_path_buf());
     let setup = Setup {
         model: model.clone(),
         tools,
@@ -401,7 +402,8 @@ fn build(
         Run::new(body, limits, setup)
     }
     .with_observer(observer)
-    .with_gate(gate);
+    .with_gate(gate)
+    .with_mcp_record(mcp_record);
     let run = equip(
         run,
         world,
@@ -449,7 +451,7 @@ fn mcp_share(
     if settings.servers.is_empty() {
         return Ok((None, Vec::new(), Vec::new()));
     }
-    let mcp = mnemorph_tools::mcp::Mcp::new(settings);
+    let mcp = mnemorph_tools::mcp::Mcp::new(settings, mnemorph_tools::mcp::state_dir(cx.world()));
     let offer = mcp.offer(race, "", cx, &reserved(tools));
     let lines = offer.lines();
     let holes = offer.holes.clone();

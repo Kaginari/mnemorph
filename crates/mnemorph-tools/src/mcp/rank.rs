@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use super::Spec;
 
-/// Where a world keeps what its MCP tools came to, relative to the world: machine-local
-/// instruments, never a body's to write.
-pub const USAGE: &str = ".mnemorph/instruments/mcp/usage.json";
+/// The usage record's file, under a world's MCP state directory (`super::state_dir`): outside
+/// the world, never a body's to write.
+pub const USAGE: &str = "usage.json";
 
 /// How much one helped ask weighs against lexical relevance: `ln(1 + helped)` times this.
 pub const HELPED_WEIGHT: f64 = 1.0;
@@ -34,10 +34,10 @@ pub struct Usage {
 }
 
 impl Usage {
-    /// The record of `world`; empty when there is none or it does not read.
+    /// The record kept under `state`; empty when there is none or it does not read.
     #[must_use]
-    pub fn load(world: &Path) -> Self {
-        std::fs::read(path(world))
+    pub fn load(state: &Path) -> Self {
+        std::fs::read(path(state))
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default()
@@ -54,20 +54,20 @@ impl Usage {
     }
 }
 
-fn path(world: &Path) -> PathBuf {
-    world.join(USAGE)
+fn path(state: &Path) -> PathBuf {
+    state.join(USAGE)
 }
 
-/// Record one ask: each tool in `used` was called in it, and helped when the ask did.
+/// Record one ask under `state`: each tool in `used` was called in it, and helped when the ask did.
 ///
 /// # Errors
 ///
 /// The record could not be written.
-pub fn learn(world: &Path, used: &BTreeSet<String>, helped: bool) -> std::io::Result<()> {
+pub fn learn(state: &Path, used: &BTreeSet<String>, helped: bool) -> std::io::Result<()> {
     if used.is_empty() {
         return Ok(());
     }
-    let mut usage = Usage::load(world);
+    let mut usage = Usage::load(state);
     for tool in used {
         let t = usage.tools.entry(tool.clone()).or_default();
         t.called += 1;
@@ -75,7 +75,7 @@ pub fn learn(world: &Path, used: &BTreeSet<String>, helped: bool) -> std::io::Re
             t.helped += 1;
         }
     }
-    let file = path(world);
+    let file = path(state);
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -108,6 +108,11 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec,
         })
         .collect();
     let query: BTreeSet<String> = words(query).into_iter().collect();
+    // Each query word's document frequency, counted once: ranking stays linear in the catalog.
+    let df: BTreeMap<&String, usize> = query
+        .iter()
+        .map(|w| (w, docs.iter().filter(|d| d.contains(w)).count()))
+        .collect();
     #[allow(clippy::cast_precision_loss)]
     let n = specs.len() as f64;
     let mut scored: Vec<(usize, f64)> = docs
@@ -119,7 +124,7 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec,
                 .filter(|w| doc.contains(*w))
                 .map(|w| {
                     #[allow(clippy::cast_precision_loss)]
-                    let df = docs.iter().filter(|d| d.contains(w)).count() as f64;
+                    let df = df[w] as f64;
                     (n / df).ln_1p()
                 })
                 .sum();

@@ -25,7 +25,7 @@ impl World {
         .unwrap();
         // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
         fs::write(
-            w.join(".mnemorph/config.local.toml"),
+            w.with_extension("global.toml"),
             "[sandbox]\nallow_unguarded = true\n",
         )
         .unwrap();
@@ -45,8 +45,11 @@ impl World {
         before: impl FnOnce(Arc<mnemorph_loop::Interrupt>),
     ) -> (u8, String, String) {
         let model = Arc::new(model);
-        let config =
-            Config::load(&Paths::with_global(self.0.join("no-global.toml"), &self.0)).unwrap();
+        let config = Config::load(&Paths::with_global(
+            self.0.with_extension("global.toml"),
+            &self.0,
+        ))
+        .unwrap();
         let attic = self.0.with_extension("attic");
         let (tx, rx) = headless::channel();
         let opened = open_with(
@@ -191,7 +194,7 @@ fn a_gated_act_is_denied_and_said_escaped() {
     fs::write(w.0.join("keep.txt"), "keep\n").unwrap();
     // An in-place edit is refused unless the human lets its rule ask: here it asks.
     fs::write(
-        w.0.join(".mnemorph/config.local.toml"),
+        w.0.with_extension("global.toml"),
         "[sandbox]\nallow_unguarded = true\n[gate]\nask_rules = [\"in-place-edit\"]\n",
     )
     .unwrap();

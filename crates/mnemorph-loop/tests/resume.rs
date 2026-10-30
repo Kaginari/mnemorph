@@ -40,7 +40,7 @@ impl World {
     fn config(&self, solo_steps: Option<u32>) {
         let steps = solo_steps.map_or_else(String::new, |n| format!("\n[steps]\nsolo = {n}\n"));
         fs::write(
-            self.world().join(".mnemorph/config.local.toml"),
+            self.root.join("no-global.toml"),
             format!("[sandbox]\nallow_unguarded = true\n{steps}"),
         )
         .unwrap();

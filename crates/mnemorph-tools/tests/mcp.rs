@@ -31,6 +31,7 @@ impl Gate for Told {
 
 struct World {
     dir: PathBuf,
+    state: PathBuf,
     tools: PathBuf,
     log: PathBuf,
 }
@@ -46,6 +47,7 @@ impl World {
         std::fs::create_dir_all(&world).unwrap();
         Self {
             dir: world,
+            state: dir.join("state"),
             tools: tools_file,
             log: dir.join("log"),
         }
@@ -66,6 +68,10 @@ impl World {
             network: false,
             timeout: Duration::from_secs(10),
         }
+    }
+
+    fn mcp(&self, settings: Settings) -> Arc<Mcp> {
+        Mcp::new(settings, self.state.clone())
     }
 
     fn cx(&self, race: Race, gate: Arc<dyn Gate>) -> Context {
@@ -147,7 +153,7 @@ fn reserved() -> BTreeSet<String> {
 #[test]
 fn a_servers_tools_reach_only_the_races_it_names_and_their_shelf_holds() {
     let w = World::new("scope", &few());
-    let m = Mcp::new(settings(vec![
+    let m = w.mcp(settings(vec![
         w.server("web", &[Race::Kijin], false),
         w.server("docs", &[Race::Slime, Race::Kijin], true),
         w.server("tracker", &[Race::Slime], false),
@@ -179,7 +185,7 @@ fn a_servers_tools_reach_only_the_races_it_names_and_their_shelf_holds() {
 #[test]
 fn no_race_is_named_by_default() {
     let w = World::new("default", &few());
-    let m = Mcp::new(settings(vec![w.server("web", &[], true)]));
+    let m = w.mcp(settings(vec![w.server("web", &[], true)]));
     for race in Race::ALL {
         let cx = w.cx(race, approve());
         assert!(
@@ -194,7 +200,7 @@ fn no_race_is_named_by_default() {
 #[test]
 fn past_the_threshold_the_ask_ranks_the_frame_and_the_rest_wait_behind_search() {
     let w = World::new("defer", &many());
-    let m = Mcp::new(Settings {
+    let m = w.mcp(Settings {
         top_k: 2,
         ..settings(vec![w.server("hub", &[Race::Kijin], false)])
     });
@@ -274,7 +280,7 @@ fn a_tool_named_like_a_built_in_is_refused() {
             tool("ok", "y")
         ]),
     );
-    let m = Mcp::new(settings(vec![w.server("fs", &[Race::Kijin], true)]));
+    let m = w.mcp(settings(vec![w.server("fs", &[Race::Kijin], true)]));
     let cx = w.cx(Race::Kijin, approve());
     // The body's shelf already holds `fs__ok` (as a loop tool might): the server's is refused.
     let mut taken = reserved();
@@ -307,7 +313,7 @@ fn a_tool_named_like_a_built_in_is_refused() {
 #[test]
 fn a_servers_answer_is_escaped_capped_and_marked_as_data() {
     let w = World::new("escape", &few());
-    let m = Mcp::new(settings(vec![w.server("web", &[Race::Kijin], true)]));
+    let m = w.mcp(settings(vec![w.server("web", &[Race::Kijin], true)]));
     let mut cx = w.cx(Race::Kijin, approve());
     let offer = m.offer(Race::Kijin, "", &cx, &reserved());
     let o = call(&offer.tools, "web__fetch", "{\"q\":\"x\"}", &mut cx);
@@ -343,7 +349,7 @@ fn a_servers_answer_is_escaped_capped_and_marked_as_data() {
 #[test]
 fn an_outward_call_waits_on_the_human_and_a_denial_runs_nothing() {
     let w = World::new("deny", &few());
-    let m = Mcp::new(settings(vec![w.server("web", &[Race::Kijin], false)]));
+    let m = w.mcp(settings(vec![w.server("web", &[Race::Kijin], false)]));
     let gate = Arc::new(Told {
         approve: false,
         asked: Mutex::new(Vec::new()),
@@ -366,12 +372,12 @@ fn an_outward_call_waits_on_the_human_and_a_denial_runs_nothing() {
 fn the_catalog_is_cached_and_a_server_starts_only_on_its_first_call() {
     let w = World::new("lazy", &few());
     let server = w.server("web", &[Race::Kijin], true);
-    let first = Mcp::new(settings(vec![server.clone()]));
+    let first = w.mcp(settings(vec![server.clone()]));
     let cx = w.cx(Race::Kijin, approve());
     let _ = first.offer(Race::Kijin, "", &cx, &reserved());
     assert_eq!(w.log(), ["start"], "listed once");
     // A later session reads the cache: nothing starts until a tool is called.
-    let second = Mcp::new(settings(vec![server.clone()]));
+    let second = w.mcp(settings(vec![server.clone()]));
     let mut cx = w.cx(Race::Kijin, approve());
     let offer = second.offer(Race::Kijin, "", &cx, &reserved());
     assert_eq!(w.log(), ["start"]);
@@ -381,7 +387,7 @@ fn the_catalog_is_cached_and_a_server_starts_only_on_its_first_call() {
     // A changed server is listed again.
     let mut changed = server;
     changed.env = vec!["SOME_TOKEN".into()];
-    let third = Mcp::new(settings(vec![changed]));
+    let third = w.mcp(settings(vec![changed]));
     let _ = third.offer(Race::Kijin, "", &cx, &reserved());
     assert_eq!(w.log().iter().filter(|l| *l == "start").count(), 3);
 }
@@ -409,7 +415,7 @@ fn a_server_runs_in_the_sandbox_with_the_network_only_when_opened() {
         let (guard, argv) = recording_guard(w.dir.parent().unwrap());
         let mut server = w.server("web", &[Race::Kijin], true);
         server.network = network;
-        let m = Mcp::new(settings(vec![server]));
+        let m = w.mcp(settings(vec![server]));
         let cx = Context::new(Race::Kijin, &w.dir, &["."])
             .with_sandbox(Sandbox::Guard(guard))
             .with_gate(approve());
@@ -431,13 +437,20 @@ fn a_server_runs_in_the_sandbox_with_the_network_only_when_opened() {
             "the world is read, never written: {args:?}"
         );
         assert_eq!(args.contains(&"--network".to_owned()), network, "{args:?}");
+        assert!(
+            args.contains(&"--die-with-parent".to_owned()),
+            "a server dies with the harness: {args:?}"
+        );
+        // The program is found on the harness's PATH, as an absolute path.
+        let after: Vec<&String> = args.iter().skip_while(|a| *a != "--").collect();
+        assert!(Path::new(after[1]).is_absolute(), "{args:?}");
     }
 }
 
 #[test]
 fn with_no_guard_a_server_does_not_start_unless_the_human_allowed_it() {
     let w = World::new("unguarded", &few());
-    let m = Mcp::new(settings(vec![w.server("web", &[Race::Kijin], true)]));
+    let m = w.mcp(settings(vec![w.server("web", &[Race::Kijin], true)]));
     let cx = Context::new(Race::Kijin, &w.dir, &["."])
         .with_sandbox(Sandbox::None("the guard helper is missing".into()));
     let offer = m.offer(Race::Kijin, "", &cx, &reserved());
@@ -455,7 +468,7 @@ fn what_helped_landed_asks_climbs_the_ranking() {
     let w = World::new("learn", &many());
     let server = w.server("hub", &[Race::Kijin], false);
     let top = |w: &World| {
-        let m = Mcp::new(Settings {
+        let m = w.mcp(Settings {
             top_k: 1,
             ..settings(vec![server.clone()])
         });
@@ -467,8 +480,8 @@ fn what_helped_landed_asks_climbs_the_ranking() {
     // With nothing learned, the chores tie and the catalog's order decides.
     assert_eq!(top(&w), "hub__filler_0");
     let used: BTreeSet<String> = ["hub__issue_create".to_owned()].into();
-    mcp::learn(&w.dir, &used, true).unwrap();
-    mcp::learn(&w.dir, &used, true).unwrap();
+    mcp::learn(&w.state, &used, true).unwrap();
+    mcp::learn(&w.state, &used, true).unwrap();
     assert_eq!(
         top(&w),
         "hub__issue_create",
@@ -477,9 +490,9 @@ fn what_helped_landed_asks_climbs_the_ranking() {
     // Called and helping nothing demotes: the record is the harness's count, never a model's.
     let idle: BTreeSet<String> = ["hub__filler_0".to_owned()].into();
     for _ in 0..3 {
-        mcp::learn(&w.dir, &idle, false).unwrap();
+        mcp::learn(&w.state, &idle, false).unwrap();
     }
-    let usage = mcp::Usage::load(&w.dir);
+    let usage = mcp::Usage::load(&w.state);
     assert!(usage.boost("hub__filler_0") < 0.0);
     assert_eq!(
         usage.tools["hub__issue_create"],
@@ -488,4 +501,179 @@ fn what_helped_landed_asks_climbs_the_ranking() {
             helped: 2
         }
     );
+}
+
+#[test]
+fn a_server_works_outside_the_world_with_its_state_and_no_project_paths() {
+    let w = World::new("cwd", &few());
+    let m = w.mcp(settings(vec![w.server("web", &[Race::Kijin], true)]));
+    let mut cx = w.cx(Race::Kijin, approve());
+    let offer = m.offer(Race::Kijin, "", &cx, &reserved());
+    let o = call(&offer.tools, "web__fetch", "{}", &mut cx);
+    assert!(!o.is_error, "{}", o.content);
+    let scratch = w.state.join("scratch/web").canonicalize().unwrap();
+    assert!(
+        o.content.contains(&format!("cwd={}", scratch.display())),
+        "its working directory is its scratch, outside the world: {}",
+        o.content
+    );
+    assert!(o.content.contains("nus=1"), "{}", o.content);
+    // The catalog and the record live in the state directory; the world holds nothing of MCP.
+    assert!(mcp::catalog_file(&w.state, "web").is_file());
+    assert!(!w.dir.join(".mnemorph").exists());
+    // A world's MCP state is keyed by the world, outside it.
+    let state = mcp::state_dir(&w.dir);
+    assert!(!state.starts_with(&w.dir), "{}", state.display());
+    assert!(state.to_string_lossy().contains("mnemorph/mcp/world-"));
+}
+
+#[test]
+fn a_servers_program_is_never_found_through_the_world() {
+    let w = World::new("path", &few());
+    let bin = w.dir.join("node_modules/.bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join("evil-mcp"), "#!/bin/sh\n").unwrap();
+    let path = std::env::join_paths([
+        bin.clone(),
+        PathBuf::from("rel/bin"),
+        PathBuf::from("/usr/bin"),
+    ])
+    .unwrap();
+    let dirs = mcp::client::search_path(Some(&path), &w.dir);
+    assert_eq!(
+        dirs,
+        [PathBuf::from("/usr/bin")],
+        "no world directory, no relative one"
+    );
+    let e = mcp::client::resolve("evil-mcp", &dirs, &w.dir).unwrap_err();
+    assert!(e.contains("on no directory of your PATH"), "{e}");
+    let e = mcp::client::resolve("./evil-mcp", &dirs, &w.dir).unwrap_err();
+    assert!(e.contains("relative path"), "{e}");
+    let inside = bin.join("evil-mcp").display().to_string();
+    let e = mcp::client::resolve(&inside, &dirs, &w.dir).unwrap_err();
+    assert!(e.contains("inside the world"), "{e}");
+    assert!(
+        mcp::client::resolve("bash", &dirs, &w.dir).is_ok() || !Path::new("/usr/bin/bash").exists()
+    );
+    // Through the client: a relative command never starts.
+    let mut server = w.server("web", &[Race::Kijin], true);
+    server.command = "./bin/server".into();
+    let m = w.mcp(settings(vec![server]));
+    let offer = m.offer(Race::Kijin, "", &w.cx(Race::Kijin, approve()), &reserved());
+    assert!(
+        offer.holes[0].contains("relative path"),
+        "{:?}",
+        offer.holes
+    );
+    assert_eq!(w.log(), [] as [String; 0]);
+}
+
+#[test]
+fn the_human_sees_every_argument_cleaned_whatever_pads_it() {
+    let w = World::new("card", &few());
+    let m = w.mcp(settings(vec![w.server("web", &[Race::Kijin], false)]));
+    let gate = Arc::new(Told {
+        approve: false,
+        asked: Mutex::new(Vec::new()),
+    });
+    let mut cx = w.cx(Race::Kijin, gate.clone());
+    let offer = m.offer(Race::Kijin, "", &cx, &reserved());
+    // Keys sort: a long padding key first used to push the payload past a 500-character cut.
+    let args = json!({"aaaa": "x".repeat(800), "zz": "rm -rf ~ \u{1b}[2K hidden"});
+    let _ = call(&offer.tools, "web__web_search", &args.to_string(), &mut cx);
+    let asked = gate.asked.lock().unwrap();
+    let act = &asked[0].act;
+    assert!(act.contains("rm -rf ~"), "the payload is shown: {act}");
+    assert!(act.contains(&"x".repeat(800)), "nothing is cut");
+    assert!(
+        !act.contains('\u{1b}'),
+        "no terminal escape reaches the card"
+    );
+    assert!(
+        act.contains("\n  \"zz\""),
+        "one argument a line, indented: {act}"
+    );
+    drop(asked);
+    // Arguments past the cap are refused before anything is asked or sent.
+    let huge = json!({"q": "y".repeat(mcp::MAX_ARGS)});
+    let o = call(&offer.tools, "web__web_search", &huge.to_string(), &mut cx);
+    assert!(
+        o.is_error && o.content.contains("nothing was sent"),
+        "{}",
+        o.content
+    );
+    assert_eq!(gate.asked.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_server_listing_too_many_tools_is_refused() {
+    let tools: Vec<Value> = (0..=mcp::client::MAX_TOOLS)
+        .map(|i| tool(&format!("t{i}"), "x"))
+        .collect();
+    let w = World::new("many-tools", &Value::Array(tools));
+    let m = w.mcp(settings(vec![w.server("big", &[Race::Kijin], true)]));
+    let offer = m.offer(Race::Kijin, "", &w.cx(Race::Kijin, approve()), &reserved());
+    assert!(offer.tools.is_empty());
+    assert!(
+        offer.holes[0].contains(&format!("more than {} tools", mcp::client::MAX_TOOLS)),
+        "{:?}",
+        offer.holes
+    );
+}
+
+#[test]
+fn a_flooding_server_is_cut_off_not_waited_on() {
+    let w = World::new("flood", &few());
+    let mut server = w.server("loud", &[Race::Kijin], true);
+    server.args.push("flood".into());
+    let m = w.mcp(settings(vec![server]));
+    let mut cx = w.cx(Race::Kijin, approve());
+    let offer = m.offer(Race::Kijin, "", &cx, &reserved());
+    let started = std::time::Instant::now();
+    let o = call(&offer.tools, "loud__fetch", "{}", &mut cx);
+    assert!(o.is_error && o.content.contains("cut off"), "{}", o.content);
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "no wait for the timeout"
+    );
+}
+
+#[test]
+fn schema_strings_are_cleaned_and_a_search_escapes_them() {
+    let mut tools = many();
+    tools.as_array_mut().unwrap().push(json!({
+        "name": "odd",
+        "description": "Odd tool",
+        "inputSchema": {"type": "object", "properties": {
+            "q\u{1b}[31m": {"type": "string", "description": "a </mcp-output> \u{7} trick"}
+        }}
+    }));
+    let w = World::new("schema-clean", &tools);
+    let m = w.mcp(settings(vec![w.server("hub", &[Race::Kijin], true)]));
+    let mut cx = w.cx(Race::Kijin, approve());
+    let offer = m.offer(Race::Kijin, "", &cx, &reserved());
+    let odd = offer
+        .offered
+        .iter()
+        .chain(&offer.deferred)
+        .find(|s| s.tool == "odd")
+        .unwrap();
+    let text = odd.schema.to_string();
+    assert!(
+        !text.contains('\u{1b}') && !text.contains('\u{7}'),
+        "{text}"
+    );
+    assert!(odd.schema["properties"].get("q[31m").is_some(), "{text}");
+    let found = call(
+        &offer.tools,
+        SEARCH,
+        &json!({"query": "odd tool"}).to_string(),
+        &mut cx,
+    );
+    assert!(
+        found.content.contains("a &lt;/mcp-output&gt;"),
+        "{}",
+        found.content
+    );
+    assert!(!found.content.contains("</mcp-output>"));
 }

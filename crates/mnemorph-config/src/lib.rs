@@ -7,9 +7,11 @@
 //! never overrides a lower layer.
 //!
 //! The tracked file may only tighten the human gate. What loosens it — guard rules that ask
-//! instead of refusing, a gate turned off, standing approvals, Oni envelopes — is honoured only
-//! from the local or global file. Nothing else feeds those keys: not the environment, not a flag,
-//! and not a body, which cannot write `.mnemorph/` at all. An envelope is bounded besides: it is
+//! instead of refusing, a gate turned off, standing approvals, Oni envelopes, running unguarded —
+//! and what reaches further — an MCP server, a provider, a spending cap — is honoured only from
+//! the global file: the local file lives inside the world, where a body's command or a
+//! repository's script may write it, so there those keys are holes too. Nothing else feeds them:
+//! not the environment, not a flag. An envelope is bounded besides: it is
 //! signed on a day, expires at most `oni.envelope_days` later (30 unless the human's own file
 //! says, never more than a year), may cap its uses, and stays in the file once revoked, so the
 //! record of what was allowed is never lost.
@@ -163,7 +165,18 @@ pub const MIN_NET_WINS: u32 = 2;
 /// The most `tools.read.range_over` may be: past it, the rule never asks.
 const RANGE_OVER_CEILING: i64 = 1_000_000;
 
-/// Keys only the local or global file may set: each one loosens the human gate.
+/// Whether only the human's global file may set `key`: everything that loosens the gate, an MCP
+/// server, a provider (where a key is sent) and every spending cap. The local file lives inside
+/// the world, where whatever runs there may write it.
+fn global_only(key: &str) -> bool {
+    LOOSENING.contains(&key)
+        || ["mcp.", "providers.", "budget."]
+            .iter()
+            .any(|p| key.starts_with(p))
+}
+
+/// Keys only the global file may set (a tracked one is a hole, and so is a local one): each one
+/// loosens the human gate.
 const LOOSENING: &[&str] = &[
     "gate.enabled",
     "gate.challenge_reviewers",
@@ -578,7 +591,7 @@ impl Config {
             .chain(
                 files
                     .iter()
-                    .filter(|(l, ..)| *l != Layer::Tracked)
+                    .filter(|(l, ..)| *l == Layer::Global)
                     .map(|(.., t)| t),
             )
             .filter_map(|t| t.get("providers").and_then(toml::Value::as_table))
@@ -611,11 +624,19 @@ impl Config {
                 continue;
             };
             check_kind(&key, &value, kind, origin)?;
+            if origin.layer == Layer::Local && global_only(&key) {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: "the local file lives inside the world, where a body or a repository's script can write it; this key widens the sandbox, the gate, a spending cap or where a key is sent, so it is honoured only from your global file".into(),
+                });
+                continue;
+            }
             if origin.layer == Layer::Tracked && key.starts_with("mcp.") {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "an MCP server is a program started with its own reach, so it is honoured only from the local or global file".into(),
+                    why: "an MCP server is a program started with its own reach, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -623,7 +644,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "a provider decides where a key is sent, so it is honoured only from the local or global file".into(),
+                    why: "a provider decides where a key is sent, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -648,7 +669,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "a spending cap is the human's: a cloned repository neither raises nor sets one, so it is honoured only from the local or global file".into(),
+                    why: "a spending cap is the human's: a cloned repository neither raises nor sets one, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -656,7 +677,8 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "loosens the human gate, so it is honoured only from the local or global file".into(),
+                    why: "loosens the human gate, so it is honoured only from your global file"
+                        .into(),
                 });
                 continue;
             }
@@ -854,7 +876,7 @@ impl Config {
             .collect()
     }
 
-    /// The human gate is on (only the local or global file can turn it off).
+    /// The human gate is on (only the global file can turn it off).
     #[must_use]
     pub fn gate_enabled(&self) -> bool {
         self.get("gate.enabled")
@@ -885,7 +907,7 @@ impl Config {
             .unwrap_or(CHALLENGE_REVIEWERS)
     }
 
-    /// Commands may run with no kernel guard in force (local or global file only).
+    /// Commands may run with no kernel guard in force (global file only).
     #[must_use]
     pub fn allow_unguarded(&self) -> bool {
         self.get("sandbox.allow_unguarded")
@@ -1288,7 +1310,7 @@ impl Config {
         })
     }
 
-    /// The Oni envelopes the human signed (local or global file; the gate reads only the global), revoked and expired ones
+    /// The Oni envelopes the human signed (the global file alone), revoked and expired ones
     /// included: [`Envelope::admits`] says which are in force.
     #[must_use]
     pub fn envelopes(&self) -> Vec<Envelope> {
