@@ -587,3 +587,19 @@ fn rows_carry_their_build_and_a_replay_filters_by_it() {
         "{raw}"
     );
 }
+
+/// A swap whose row carries no build is refused, never left pending forever.
+#[test]
+fn an_unstamped_swap_is_refused() {
+    let mut s = swap("e1");
+    s.build = Build::default();
+    let mut rows = vec![EvolutionRow::Swap(s.clone())];
+    rows.extend(window(&s, &[true], &[false]));
+    let j = judged(&rows, "e1");
+    assert_eq!(j, Judgement::Refused(Refusal::Unstamped("e1".into())));
+    assert!(
+        j.to_string()
+            .starts_with("refused: swap e1: its row carries no build"),
+        "{j}"
+    );
+}

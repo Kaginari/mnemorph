@@ -395,6 +395,9 @@ pub enum Refusal {
     Leaked(String),
     /// A held-out task used before: twice in the window, or first by another swap's window.
     Reused(String),
+    /// The swap's row carries no build stamp: no run's build can match it, so its window would
+    /// never fill.
+    Unstamped(String),
 }
 
 impl fmt::Display for Refusal {
@@ -433,6 +436,10 @@ impl fmt::Display for Refusal {
             ),
             Refusal::Leaked(t) => write!(f, "task {t}: the plan was proven on it before the swap"),
             Refusal::Reused(t) => write!(f, "task {t}: a held-out task already used"),
+            Refusal::Unstamped(id) => write!(
+                f,
+                "swap {id}: its row carries no build, so no run can be counted in its window"
+            ),
         }
     }
 }
@@ -582,6 +589,10 @@ fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Ref
         return Err(Refusal::TwiceSwapped(id.to_owned()));
     }
     swap.check()?;
+    // A version is always compiled in; only a row from before stamps lacks one.
+    if swap.build.version == crate::UNKNOWN {
+        return Err(Refusal::Unstamped(id.to_owned()));
+    }
     let after = swap.after_state();
     let before = swap.before_state();
     let runs = || {
