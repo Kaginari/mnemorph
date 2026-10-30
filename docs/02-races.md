@@ -1351,6 +1351,50 @@ at a time, and `evolution.mode = "propose"` queues plans for `mnemorph evolve li
 reject` instead — a proposal is refused if the world moved since it was drawn. Each arm writes an
 `evolution` (or `rebirth`) row.
 
+**Judged after the freeze** (`mnemorph_ledger::evolution`). A plan proven in the sandbox has only
+graded itself on the verify lines it wrote; once swapped in, the change is frozen and judged on
+what comes after it, and only that:
+
+- **The swap row.** The evolution ledger is a chained journal; each swap is one row of it — the
+  swap's id, the creature, the bodies whose runs judge it (the creature, or a split's young), the
+  arm, the build that swapped it in, the tasks the plan was proven on, and **the exact file set**:
+  every file it changes, by path, with its SHA-256 before and after (none before for a file it
+  creates, none after for one it removes).
+- **The exact file set.** The harness hashes the soil before and after the swap (`snapshot`,
+  `diff`) and keeps the diff on the row. Judging refuses a swap whose diff holds a file it did not
+  name (*contaminated*), lacks a file it named (*missing*), or moved a named file from or to
+  another digest than the named one — a file the swap creates must not have existed. It refuses
+  a swap that names no file, a file twice, or a file the same before and after.
+- **The post-swap window.** Every run is stamped with the swap's id, the build and the state of
+  the named files as the run found them (`state`, one digest over each path and its digest). The
+  window is the first 10 runs (`EVOLUTION_WINDOW`) after the swap's row, stamped with its id and
+  its build, by one of its bodies; a row before the swap never counts, whatever it is stamped
+  with, and neither does a run under another build. A window run that found the named files other
+  than the swap left them refuses the judgement: the state judged is not the state named.
+- **Held-out tasks, used once.** Tasks are told apart by fingerprint. A window's task is never one
+  the plan was proven on, never twice in the window, and never one another swap's window used
+  first; any of these refuses the judgement.
+- **The do-nothing control.** Every window task is run again without the change — a fixture on the
+  named files' before state, stamped as the control — and the fixtures include tasks where no
+  change is the right output. Both sides are folded by the report fold (`fold_reports`, the
+  harness's facts alone). The evolution is kept only when it beats doing nothing: a `landRate`
+  strictly higher and a `holeRate` no higher than the control's over the same tasks. Equal is not
+  better — it rolls back. Until the window and its controls are whole, the judgement is pending.
+- **One line per bar** ([Explanation](#ascension--earned-granted-revocable)): a keep names both
+  bars, a rollback each bar it failed, the control's reading as the threshold, with the chain
+  digest of the window's last row and the window's first and last row:
+
+  ```text
+  keep: landRate 1.00 > 0.50 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 14–33
+  rollback: landRate 0.70 <= 0.70 (over 10 runs beside do-nothing); ledger head 3f…9a, rows 2–21
+  ```
+
+- **Replay.** The ledger read again up to the row a line names (`replay`) gives the same
+  judgement, and its chain's head there is the digest the line names; a ledger whose chain breaks
+  is judged on nothing.
+- **A proposal.** A keep or a rollback is proposed to the human like every other change to a race;
+  rolling a swap back, like applying it, is the human's.
+
 ### What changed from isekai, and why
 
 | isekai | Mnemorph | Why |

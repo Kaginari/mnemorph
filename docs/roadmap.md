@@ -368,7 +368,10 @@ includes the witness.
 
 - The value ledger and its fold into each race's signals, score folds per race, meters, minimum
   record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
-  proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject` —
+  proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
+  each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over
+  exactly the files it named, its judgement replayed from the chained ledger (the judgement is
+  built; the swap that writes its rows is not) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed

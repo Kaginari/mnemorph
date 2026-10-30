@@ -6252,3 +6252,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** a root cause confirmed before the window and refuted inside it recomputes from the
   prefix, and not from the window alone; the chained-records test reads rows and chain in one go.
 - **Learned:** a window's rows are not its inputs when a fold dedupes across them.
+
+---
+
+### [2026-10-30T15:20:15+01:00] rimuru — #100: an evolution judged after the freeze — post-swap window, do-nothing control, exact file set
+- **Done:** `mnemorph_ledger::evolution`: a chained evolution ledger of `swap` and `run` rows. A swap names
+  its exact files (SHA-256 before and after) and keeps the soil diff the harness saw (`snapshot`, `diff`);
+  judging refuses a contaminated, missing or mismatched file set. The window is the first 10 runs after the
+  swap's row stamped with its id, its build and the named files' after `state`, by its bodies; held-out tasks
+  are used once by fingerprint (not proven on, not twice, not first used by another swap). Every window task
+  has a do-nothing control on the before state; keep only on `landRate` strictly higher and `holeRate` no
+  higher, else a rollback — both proposals, one `Explanation` per bar (new kinds `keep`, `rollback`) with
+  the digest of the window's last row; `replay` reads the ledger to that row and judges again. Docs 02, roadmap.
+- **Tests:** pre-swap and other-build rows excluded; equal to do-nothing rolls back (and a ScriptedModel
+  fixture in mnemorph-loop: the same ten tasks, nothing-to-do ones among them, with and without a Mind change);
+  a contaminated, missing, mismatched or drifted swap refused; held-out reuse refused; pending until whole;
+  replay reproduces, an edited row refuses. Each guard disabled in turn fails a test.
+- **Learned:** the shared dev target can hold another worktree's rlib under the same hash: a build that says
+  a re-exported name is missing from a crate that plainly has it wants its sources touched, not a fix.
+  Open (@?): nothing writes swap or run rows yet — the swap itself (M11) must stamp runs and run the controls.
