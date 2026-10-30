@@ -433,16 +433,27 @@ impl Facts {
 
     /// Settle the fact `id` — `#<id>` or `<id>` — by `by`, citing `proof`: the human's act
     /// (`mnemorphd onto settle`, the board's settle), the one besides an Orc's verdict that
-    /// settles; recency never does. Refused when the world's ontology holds no such fact. Returns
-    /// the id settled.
+    /// settles; recency never does. Refused when the world's ontology holds no such fact, or when
+    /// it no longer says what the human read: `seen_as` is its `mnemorph_memory::seen` digest,
+    /// checked against the fact read afresh right before the write. Returns the id settled.
     ///
     /// # Errors
     ///
-    /// No fact has the id, or the journal cannot be written.
-    pub fn settle(world: &Path, id: &str, by: &str, proof: &str) -> Result<String, String> {
+    /// No fact has the id, it changed since it was read, or the journal cannot be written.
+    pub fn settle(
+        world: &Path,
+        id: &str,
+        by: &str,
+        proof: &str,
+        seen_as: &str,
+    ) -> Result<String, String> {
         let id = id.trim_start_matches('#');
-        if !Facts::load(world).facts.contains_key(id) {
+        let Some(fact) = Facts::load(world).facts.remove(id) else {
             return Err(format!("no fact `#{id}` in this world's ontology"));
+        };
+        // Read afresh right before the write: a fact rewritten since the human read it is refused.
+        if mnemorph_memory::seen(&fact.id, &fact.text) != seen_as {
+            return Err(mnemorph_memory::changed(&format!("#{id}")));
         }
         let event = Event::Settle {
             id: id.to_owned(),

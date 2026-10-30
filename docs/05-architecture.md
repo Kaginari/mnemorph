@@ -376,7 +376,10 @@ the anchor it gave and whether what it points at moved since, and its counters, 
 reason; a settled fact says who settled it and on what proof. Beside them, `onto check`'s findings
 (at most 500 listed, all counted) with its PASS or FAIL, the roster's problems, and the owner of each
 path a fact is about, as `mnemorphd onto owner` says it. Running `onto check` reads the world's
-tracked files with git, its own config's filesystem monitor off; the check's other reads inside the
+tracked files with the harness's git (`mnemorph_sandbox::git`, every harness call's): its
+environment scrubbed of secrets, the system config unread (`GIT_CONFIG_NOSYSTEM`), no filesystem
+monitor (`core.fsmonitor` empty) and no hooks (`core.hooksPath=/dev/null`), since a world's
+`.git/config` is a body's to write; the check's other reads inside the
 world — creature docs, the law, the Minds, the anchors a fact cites, the files the verify line is
 guessed from — open only regular files under 8 MiB (`regular::text`), for the CLI as for the board.
 
@@ -390,10 +393,15 @@ a board started inside a body's command (`MNEMORPH_BODY`) refuses every act; the
 note or fact, the act still applies (409 if not), and its text is the one the human read — the
 request names the SHA-256 of its id and text (`seen`), and a note or fact rewritten since is
 refused (409); no step from the world down to the file the act appends to is a link (422). The
+writing function checks `seen` once more on what it reads right before its write — `vouch`,
+`wake_by` and `Facts::settle` all take it, and the CLI passes the digest of the text it prints —
+so a body that rewrites the claim between the copy's check and the write is refused too. The
 journal says it was the human, from the board: a confirm cites `confirmed: the human's word
 (board)`, a wake `woken by the human (board)`, a settle is filed `by: human (board)`. A settle
 needs one proof: a passing end-gate verdict, by its number in the harness's chained journal, that
-changed a path at or under the fact's — the page offers those — or the human's own statement (1 to
+changed the fact's path or a path under it at a `/` boundary (both normalised; a fact about the
+root, `.`, an absolute path or one with `..` is proved by no verdict) — the page offers those — or
+the human's own statement (1 to
 1,000 characters), filed as `the human's word (board): <statement>`. A verdict that failed, landed
 elsewhere, or does not exist is refused (422).
 

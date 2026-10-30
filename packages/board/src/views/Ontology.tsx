@@ -112,10 +112,21 @@ function Side({ title, sides, empty }: { title: string; sides: FactSide[]; empty
   );
 }
 
+/** A path as a landing is matched against it; `undefined` for one naming nothing a landing changes. */
+export function normalPath(path: string): string | undefined {
+  const parts = path.split('/').filter((p) => p !== '' && p !== '.');
+  if (parts.length === 0 || parts.includes('..') || path.startsWith('/')) return undefined;
+  return parts.join('/');
+}
+
 /** Whether `v` landed on the path `about`: the rule the server holds a verdict to. */
 export function landedOn(v: ProofVerdict, about: string): boolean {
-  const a = about.replace(/\/+$/, '');
-  return v.changed.some((p) => a === '' || p === a || p.startsWith(`${a}/`));
+  const a = normalPath(about);
+  if (a === undefined) return false;
+  return v.changed.some((c) => {
+    const p = normalPath(c);
+    return p !== undefined && (p === a || p.startsWith(`${a}/`));
+  });
 }
 
 function FactRow({ f, onSettle }: { f: BoardFact; onSettle: (f: BoardFact) => void }) {

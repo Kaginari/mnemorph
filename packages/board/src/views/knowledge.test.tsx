@@ -210,4 +210,7 @@ test('a verdict proves a fact only when it landed on its path', () => {
   expect(landedOn(v, 'src/a.rs')).toBe(true);
   expect(landedOn(v, 'src/ab')).toBe(false);
   expect(landedOn(v, 'docs/')).toBe(false);
+  expect(landedOn(v, '/')).toBe(false);
+  expect(landedOn(v, '')).toBe(false);
+  expect(landedOn(v, '../src')).toBe(false);
 });

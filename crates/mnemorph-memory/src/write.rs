@@ -800,43 +800,105 @@ pub fn retire(
 ///
 /// No tier holds the note as one the gate retired, or a note file cannot be read or written.
 pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
-    wake_by(world, id, "woken by the human")
+    let text = retired_note(world, id)?.unwrap_or_default();
+    wake_by(world, id, "woken by the human", &seen(id, &text))
 }
 
-/// As [`wake`], the event citing `said`: `woken by the human` from the CLI, `woken by the human
-/// (board)` from the board.
+/// The text of the note `id` as the gate retired it, from the first tier that holds it retired —
+/// shared memory, then each creature's; `None` when none does.
 ///
 /// # Errors
 ///
-/// As [`wake`].
-pub fn wake_by(world: &Path, id: &str, said: &str) -> std::io::Result<Vec<String>> {
-    let mut tiers = vec![Tier::Shared];
-    if let Ok(rd) = std::fs::read_dir(world.join(".mnemorph/memory/creature")) {
-        for entry in rd.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.extension().is_some_and(|x| x == "jsonl")
-                && let Some(stem) = path.file_stem()
-            {
-                tiers.push(Tier::Personal(stem.to_string_lossy().into_owned()));
-            }
+/// A note file cannot be read.
+pub fn retired_note(world: &Path, id: &str) -> std::io::Result<Option<String>> {
+    for tier in tiers_of(world) {
+        let rows = crate::store::read(world, &tier)?.rows;
+        if gate_retired(&rows, id) {
+            return Ok(crate::note::fold(&rows).get(id).map(|n| n.text.clone()));
         }
     }
-    let mut woke = Vec::new();
+    Ok(None)
+}
+
+/// Shared memory and every creature's tier, as `wake` walks them.
+fn tiers_of(world: &Path) -> Vec<Tier> {
+    let mut tiers = vec![Tier::Shared];
+    let mut names: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    tiers.extend(names.into_iter().map(Tier::Personal));
+    tiers
+}
+
+/// The digest a human act names: the SHA-256 of a note's or a fact's id and full text, in hex.
+/// The page or the command shows the text; the act carries this; the function that writes reads
+/// the text afresh and refuses when it differs, so what was read is what is vouched for.
+#[must_use]
+pub fn seen(id: &str, text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(id.as_bytes());
+    h.update([0]);
+    h.update(text.as_bytes());
+    h.finalize()
+        .iter()
+        .fold(String::with_capacity(64), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
+}
+
+/// Why an act on `id` is refused: it changed since the human read it.
+#[must_use]
+pub fn changed(id: &str) -> String {
+    format!("`{id}` changed since it was read: read it again before you act on it")
+}
+
+/// As [`wake`], the event citing `said` — `woken by the human` from the CLI, `woken by the human
+/// (board)` from the board — and only while the note says what the human read: `seen_as` is its
+/// [`seen`] digest, checked against every tier that holds it retired, read afresh right before
+/// the first write. A note rewritten since is refused, and nothing is written.
+///
+/// # Errors
+///
+/// As [`wake`], or the note changed since it was read.
+pub fn wake_by(world: &Path, id: &str, said: &str, seen_as: &str) -> std::io::Result<Vec<String>> {
+    let tiers = tiers_of(world);
+    let mut retired = Vec::new();
     for tier in tiers {
         let rows = crate::store::read(world, &tier)?.rows;
         if gate_retired(&rows, id) {
-            append(
-                world,
-                &tier,
-                id,
-                By::Human,
-                Some(said.to_owned()),
-                Change::Status {
-                    status: Status::Grounded,
-                },
-            )?;
-            woke.push(tier.file().display().to_string());
+            let text = crate::note::fold(&rows)
+                .get(id)
+                .map(|n| n.text.clone())
+                .unwrap_or_default();
+            if seen(id, &text) != seen_as {
+                return Err(std::io::Error::other(changed(id)));
+            }
+            retired.push(tier);
         }
+    }
+    let mut woke = Vec::new();
+    for tier in retired {
+        append(
+            world,
+            &tier,
+            id,
+            By::Human,
+            Some(said.to_owned()),
+            Change::Status {
+                status: Status::Grounded,
+            },
+        )?;
+        woke.push(tier.file().display().to_string());
     }
     if woke.is_empty() {
         return Err(std::io::Error::other(format!(
@@ -889,37 +951,48 @@ pub fn retired(world: &Path, owner: &str) -> std::io::Result<Vec<(String, String
 
 /// The human vouches for the claim `id`, whichever creature holds it proposed — the
 /// **confirmed** route, citing `answer` — and it is grounded and shared. Returns its owner. What
-/// `mnemorphd memory confirm` and the board's confirm both do; a body never runs either.
+/// `mnemorphd memory confirm` and the board's confirm both do; a body never runs either. Only while
+/// the claim says what the human read: `seen_as` is its [`seen`] digest, checked against the claim
+/// read afresh right before the writes, so a claim rewritten since is refused, not grounded.
 ///
 /// # Errors
 ///
-/// No creature holds `id` as a proposed claim (or one waiting under review), a creature's memory
-/// cannot be read, or the claim cannot be grounded.
-pub fn vouch(world: &Path, id: &str, answer: &str) -> Result<String, String> {
-    let mut owners: Vec<String> = std::fs::read_dir(world.join(".mnemorph/memory/creature"))
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
-                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                .collect()
-        })
-        .unwrap_or_default();
-    owners.sort();
-    for owner in owners {
+/// No creature holds `id` as a proposed claim (or one waiting under review), it changed since it
+/// was read, a creature's memory cannot be read, or the claim cannot be grounded.
+pub fn vouch(world: &Path, id: &str, answer: &str, seen_as: &str) -> Result<String, String> {
+    let Some(claim) = pending(world, id)? else {
+        return Err(format!(
+            "no creature holds `{id}` as a proposed claim: `mnemorphd memory status` lists them"
+        ));
+    };
+    // Read afresh right before the writes: a claim rewritten since the human read it is refused.
+    if seen(id, &claim.text) != seen_as {
+        return Err(changed(id));
+    }
+    let owner = claim.owner.clone();
+    ground(world, claim, &Proof::confirmed(answer))
+        .map(|_| owner)
+        .map_err(|e| format!("{id} could not be grounded: {e}"))
+}
+
+/// The claim `id`, whichever creature holds it proposed (or grounded and waiting under review):
+/// what [`vouch`] would ground. `None` when no creature holds it so.
+///
+/// # Errors
+///
+/// A creature's memory cannot be read.
+pub fn pending(world: &Path, id: &str) -> Result<Option<Claim<Proposed>>, String> {
+    for tier in tiers_of(world) {
+        let Tier::Personal(owner) = tier else {
+            continue;
+        };
         match proposed(world, &owner, id) {
-            Ok(Some(claim)) => {
-                return ground(world, claim, &Proof::confirmed(answer))
-                    .map(|_| owner)
-                    .map_err(|e| format!("{id} could not be grounded: {e}"));
-            }
+            Ok(Some(claim)) => return Ok(Some(claim)),
             Ok(None) => {}
             Err(e) => return Err(format!("{owner}'s memory cannot be read: {e}")),
         }
     }
-    Err(format!(
-        "no creature holds `{id}` as a proposed claim: `mnemorphd memory status` lists them"
-    ))
+    Ok(None)
 }
 
 /// The claims `owner` holds proposed in its personal tier, newest first: what waits for a route,

@@ -960,7 +960,22 @@ fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, w));
-    match Facts::settle(&world, id, "human", "the human's word") {
+    // What is settled is shown, and its digest carried: a fact rewritten meanwhile is refused.
+    let facts = Facts::load(&world);
+    let text = facts
+        .facts
+        .get(id.trim_start_matches('#'))
+        .map(|f| f.text.clone())
+        .unwrap_or_default();
+    if !text.is_empty() {
+        println!(
+            "settling #{}: {}",
+            field(id.trim_start_matches('#')),
+            field(&text)
+        );
+    }
+    let seen = mnemorph_server::world::memory::seen(id.trim_start_matches('#'), &text);
+    match Facts::settle(&world, id, "human", "the human's word", &seen) {
         Ok(id) => {
             println!("settled #{id}");
             ExitCode::SUCCESS
@@ -1152,12 +1167,22 @@ fn proposed_of(world: &Path, name: &str) -> Vec<(String, String)> {
 /// `memory confirm <claim>`: the human vouches for a proposed claim — the **confirmed** route —
 /// and it is grounded and shared, citing their word. A body never confirms one.
 fn confirm(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::memory::{pending, seen, vouch};
     if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
             "{body} runs this: confirming a claim is the human's act, never a body's"
         ));
     }
-    match mnemorph_server::world::memory::vouch(world, id, "the human's word") {
+    // What is vouched for is shown, and its digest carried: a claim rewritten meanwhile is refused.
+    let text = match pending(world, id) {
+        Ok(Some(claim)) => claim.text,
+        Ok(None) => String::new(),
+        Err(e) => return refused(&e),
+    };
+    if !text.is_empty() {
+        println!("confirming {}: {}", field(id), field(&text));
+    }
+    match vouch(world, id, "the human's word", &seen(id, &text)) {
         Ok(owner) => {
             println!("confirmed {id}: {owner}'s claim, grounded and shared");
             ExitCode::SUCCESS
@@ -1168,12 +1193,21 @@ fn confirm(world: &Path, id: &str) -> ExitCode {
 
 /// `memory wake <note>`: the human restores a note the gate retired. A body never wakes one.
 fn wake(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::memory::{retired_note, seen, wake_by};
     if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
             "{body} runs this: waking a note is the human's act, never a body's"
         ));
     }
-    match mnemorph_server::world::memory::wake(world, id) {
+    // What is woken is shown, and its digest carried: a note rewritten meanwhile is refused.
+    let text = match retired_note(world, id) {
+        Ok(t) => t.unwrap_or_default(),
+        Err(e) => return refused(&e),
+    };
+    if !text.is_empty() {
+        println!("waking {}: {}", field(id), field(&text));
+    }
+    match wake_by(world, id, "woken by the human", &seen(id, &text)) {
         Ok(files) => {
             println!("woke {id}: grounded again in {}", files.join(", "));
             ExitCode::SUCCESS

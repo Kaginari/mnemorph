@@ -821,3 +821,46 @@ fn a_link_in_the_world_is_refused_at_once_and_said() {
     );
     assert!(res.starts_with("HTTP/1.1 503"), "{res}");
 }
+
+#[test]
+fn a_claim_rewritten_after_the_page_read_it_is_not_confirmed() {
+    let mut h = Home::new("rewrite");
+    h.memory();
+    let (host, cookie, csrf) = h.serve();
+    // A body rewrites the claim after the page showed it: the old digest is refused.
+    let twin8 = create("e12", 12, "n9", "slime-b", "c is pure", "");
+    let rewrite = r#"{"id":"e13","time":13,"note":"n9","by":"record","kind":"version","text":"c is impure","depends_on":[]}"#;
+    let tier = h.world.join(".mnemorph/memory/creature/slime-b.jsonl");
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&tier)
+        .unwrap();
+    writeln!(f, "{twin8}").unwrap();
+    drop(f);
+    let shown = h.get(&host, &cookie, "memory");
+    let read_as = note(&shown, "n9", "personal")["seen"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&tier)
+        .unwrap();
+    writeln!(f, "{rewrite}").unwrap();
+    drop(f);
+    let res = post(
+        &host,
+        &format!("/api/w/{}/memory/n9/confirm", h.id()),
+        &cookie,
+        Some(&csrf),
+        &format!("{{\"seen\":\"{read_as}\"}}"),
+    );
+    assert!(res.starts_with("HTTP/1.1 409"), "{res}");
+    assert!(res.contains("changed since it was read"), "{res}");
+    let mut lines = events(&h.world, ".mnemorph/memory/creature/slime-b.jsonl");
+    assert_eq!(
+        lines.pop().unwrap()["id"],
+        "e13",
+        "nothing written after the rewrite"
+    );
+}

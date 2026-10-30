@@ -263,18 +263,7 @@ fn count(n: usize) -> u32 {
 /// The SHA-256 of a note's id and text, in hex.
 #[must_use]
 pub fn seen(id: &str, text: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(id.as_bytes());
-    h.update([0]);
-    h.update(text.as_bytes());
-    h.finalize()
-        .iter()
-        .fold(String::with_capacity(64), |mut s, b| {
-            use std::fmt::Write as _;
-            let _ = write!(s, "{b:02x}");
-            s
-        })
+    m::seen(id, text)
 }
 
 /// `text`, cut at `cap` characters, and whether it was.
@@ -567,10 +556,7 @@ pub fn act(world: &Path, id: &str, seen_as: &str, act: Act) -> Result<String, (u
         ));
     };
     if target.seen != seen_as {
-        return Err((
-            409,
-            format!("`{id}` changed since it was read: read it again before you act on it"),
-        ));
+        return Err((409, m::changed(id)));
     }
     let mut files = vec![".mnemorph/memory/shared/notes.jsonl".to_owned()];
     files.extend(
@@ -580,11 +566,21 @@ pub fn act(world: &Path, id: &str, seen_as: &str, act: Act) -> Result<String, (u
     );
     super::knowledge::no_links(world, &files).map_err(|e| (422, e))?;
     match act {
-        Act::Confirm => m::vouch(world, id, BOARD_WORD)
+        Act::Confirm => m::vouch(world, id, BOARD_WORD, seen_as)
             .map(|owner| format!("confirmed {id}: {owner}'s claim, grounded and shared"))
-            .map_err(|e| (422, e)),
-        Act::Wake => m::wake_by(world, id, BOARD_WAKE)
+            .map_err(|e| (raced(id, &e), e)),
+        Act::Wake => m::wake_by(world, id, BOARD_WAKE, seen_as)
             .map(|files| format!("woke {id}: grounded again in {}", files.join(", ")))
-            .map_err(|e| (422, e.to_string())),
+            .map_err(|e| {
+                let e = e.to_string();
+                (raced(id, &e), e)
+            }),
     }
+}
+
+/// The status of a refused act on `id`: 409 when the note or fact changed between the copy's
+/// check and the write, else 422.
+#[must_use]
+pub fn raced(id: &str, why: &str) -> u16 {
+    if why == m::changed(id) { 409 } else { 422 }
 }

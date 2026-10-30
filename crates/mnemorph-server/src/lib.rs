@@ -30,11 +30,11 @@ pub use mnemorph_loop::world;
 pub use mnemorph_loop::{Stopped, stopped};
 
 /// The files git tracks in `world`, relative to it, as `onto check` reads them; `None` when the
-/// world is no git repository. The world's own git config runs nothing: no filesystem monitor.
+/// world is no git repository. The world's own git config runs nothing ([`git`]).
 #[must_use]
 pub fn tracked(world: &std::path::Path) -> Option<Vec<String>> {
     let out = git()
-        .args(["-c", "core.fsmonitor=false", "-C"])
+        .arg("-C")
         .arg(world)
         // `-z`: names as they are, never quoted (`src/café.rs`, not `"src/caf\303\251.rs"`).
         .args(["ls-files", "-z"])

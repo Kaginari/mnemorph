@@ -444,6 +444,27 @@ pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
     })
 }
 
+/// A path as a verdict's landing is matched against it: `./` and the trailing `/` dropped; `None`
+/// for a path that names nothing a landing changes — empty, the root, `.`, or one with `..`.
+#[must_use]
+pub fn normal(path: &str) -> Option<String> {
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
+    (!parts.is_empty() && !parts.contains(&"..") && !path.starts_with('/')).then(|| parts.join("/"))
+}
+
+/// Whether a landing that changed `changed` landed on `about` (normalised): a path equal to it, or
+/// under it at a `/` boundary.
+#[must_use]
+pub fn landed_on(changed: &[String], about: &str) -> bool {
+    changed
+        .iter()
+        .filter_map(|p| normal(p))
+        .any(|p| p == about || p.starts_with(&format!("{about}/")))
+}
+
 /// A settle's proof, as the human gives it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Proof {
@@ -513,12 +534,17 @@ pub fn settle(
                     ),
                 ));
             }
-            let about = f.about.trim_end_matches('/');
-            let landed = row
-                .changed
-                .iter()
-                .any(|p| about.is_empty() || p == about || p.starts_with(&format!("{about}/")));
-            if !landed {
+            let Some(about) = normal(&f.about) else {
+                return Err((
+                    422,
+                    format!(
+                        "#{id} is about `{}`, no path a landing changes: a verdict proves nothing \
+                         of it; give your statement",
+                        f.about
+                    ),
+                ));
+            };
+            if !landed_on(&row.changed, &about) {
                 return Err((
                     422,
                     format!(
@@ -535,7 +561,27 @@ pub fn settle(
         }
     };
     super::knowledge::no_links(world, &[FACTS.to_owned()]).map_err(|e| (422, e))?;
-    Facts::settle(world, id, "human (board)", &said)
+    Facts::settle(world, id, "human (board)", &said, seen_as)
         .map(|id| format!("settled #{id}"))
-        .map_err(|e| (422, e))
+        .map_err(|e| (super::memory::raced(&format!("#{id}"), &e), e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_verdict_lands_on_a_path_exactly_or_below_it() {
+        let changed = vec!["src/a.rs".to_owned(), "./docs/x.md".to_owned()];
+        for about in ["src/a.rs", "src/", "src", "./src/", "docs"] {
+            assert!(landed_on(&changed, &normal(about).unwrap()), "{about}");
+        }
+        for about in ["src/ab", "sr", "src/a.rs.bak", "tests/"] {
+            assert!(!landed_on(&changed, &normal(about).unwrap()), "{about}");
+        }
+        // The root, nothing, `.` or a climb names no path a landing changes.
+        for about in ["/", "", ".", "./", "//", "../src", "/etc/passwd"] {
+            assert_eq!(normal(about), None, "{about}");
+        }
+    }
 }
