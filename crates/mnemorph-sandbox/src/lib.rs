@@ -182,6 +182,9 @@ pub struct Policy {
     /// Home toolchain rules left out because they resolve — through a link — onto, inside or
     /// above a credential path.
     pub refused: Vec<PathBuf>,
+    /// The command is killed when the thread that started it ends (Linux): a long-lived process
+    /// such as an MCP server never outlives the harness.
+    pub die_with_parent: bool,
 }
 
 impl Policy {
@@ -217,6 +220,7 @@ impl Policy {
             hidden,
             network,
             refused,
+            die_with_parent: false,
         }
     }
 
@@ -324,6 +328,9 @@ impl Sandbox {
                 }
                 if policy.network {
                     cmd.arg("--network");
+                }
+                if policy.die_with_parent {
+                    cmd.arg("--die-with-parent");
                 }
                 cmd.arg("--").arg(program).args(args);
                 cmd

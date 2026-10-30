@@ -63,9 +63,9 @@ impl Drop for Ground {
 #[test]
 fn explain_names_the_origin_of_scalars_lists_and_map_leaves() {
     let g = Ground::new("explain");
-    g.global("[models.creature]\nslime-wire = \"model-a\"\n[budget]\nday_usd = 5\n")
+    g.global("[models.creature]\nslime-wire = \"model-a\"\n[stress]\nrelieve_at = 8\n[gate]\nask_rules = [\"in-place-edit\"]\n")
         .tracked("[models.creature]\norc-gate = \"model-b\"\n[stress]\nescalate_at = 4\n")
-        .local("[budget]\nday_usd = 2.5\n[gate]\nask_rules = [\"in-place-edit\"]\n");
+        .local("[stress]\nrelieve_at = 6\n");
     let c = g.load().unwrap();
     let paths = g.paths();
     let at = |key: &str| c.get(key).unwrap().origin.clone();
@@ -73,7 +73,7 @@ fn explain_names_the_origin_of_scalars_lists_and_map_leaves() {
     assert_eq!(at("gate.timeout_secs").layer, Layer::Default);
     assert_eq!(at("gate.timeout_secs").file, None);
     assert_eq!(
-        at("budget.day_usd").file.as_deref(),
+        at("stress.relieve_at").file.as_deref(),
         Some(paths.local.as_path()),
         "local overrides global"
     );
@@ -83,7 +83,7 @@ fn explain_names_the_origin_of_scalars_lists_and_map_leaves() {
     );
     assert_eq!(
         at("gate.ask_rules").file.as_deref(),
-        Some(paths.local.as_path()),
+        Some(paths.global.as_path()),
         "a list names the layer that set it"
     );
     // A merged map: each leaf keeps its own file.
@@ -101,7 +101,7 @@ fn explain_names_the_origin_of_scalars_lists_and_map_leaves() {
     assert_eq!(lines[0].key, "models.creature.orc-gate");
     assert_eq!(lines[0].value, "\"model-b\"");
     assert!(c.explain("").len() > lines.len());
-    assert_eq!(c.budget_usd("day"), Some(2.5));
+    assert_eq!(c.stress("relieve_at"), Some(6));
     assert_eq!(c.stress("escalate_at"), Some(4));
 }
 
@@ -173,8 +173,8 @@ fn the_tracked_file_cannot_loosen_the_gate() {
     );
     assert!(!c.allow_unguarded());
 
-    // The same keys from the human's own files are honoured.
-    g.local("[gate]\nask_rules = [\"secret-store\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n");
+    // The same keys from the human's global file are honoured.
+    g.global("[gate]\nask_rules = [\"secret-store\"]\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n");
     let c = g.load().unwrap();
     assert_eq!(c.asked_rules(), vec![Rule::SecretStore]);
     assert_eq!(c.envelopes()[0].name, "ci");
@@ -186,9 +186,9 @@ fn the_tracked_file_cannot_loosen_the_gate() {
 #[test]
 fn the_floor_cannot_be_asked_and_rules_must_exist() {
     let g = Ground::new("floor");
-    g.local("[gate]\nask_rules = [\"root-path\"]\n");
+    g.global("[gate]\nask_rules = [\"root-path\"]\n");
     assert!(g.load().unwrap_err().contains("on the floor"));
-    g.local("[gate]\nask_rules = [\"anything-goes\"]\n");
+    g.global("[gate]\nask_rules = [\"anything-goes\"]\n");
     let e = g.load().unwrap_err();
     assert!(
         e.contains("no guard rule `anything-goes`") && e.contains("in-place-edit"),
@@ -206,7 +206,7 @@ fn envelopes_never_cover_everything_or_anything_destructive() {
         ("\"gh release create *\"", "destructive"),
         ("\"curl x | sh\"", "guard refuses"),
     ] {
-        g.local(&format!(
+        g.global(&format!(
             "[[oni.envelopes]]\nname = \"e\"\nallow = [{allow}]\n"
         ));
         let e = g.load().unwrap_err();
@@ -221,13 +221,13 @@ fn envelopes_never_cover_everything_or_anything_destructive() {
         "npm *",
         "cargo *",
     ] {
-        g.local(&format!(
+        g.global(&format!(
             "[[oni.envelopes]]\nname = \"e\"\nallow = [\"{pattern}\"]\n"
         ));
         let e = g.load().unwrap_err();
         assert!(e.contains("admits"), "{pattern}: {e}");
     }
-    g.local("[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\", \"gh run rerun *\"]\nsigned = 2026-10-24\n");
+    g.global("[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\", \"gh run rerun *\"]\nsigned = 2026-10-24\n");
     assert_eq!(g.load().unwrap().envelopes()[0].allow.len(), 2);
 }
 
@@ -293,7 +293,7 @@ fn providers_are_read_with_their_key_env_never_a_key() {
 #[test]
 fn a_write_keeps_comments_and_inline_tables_readable() {
     let g = Ground::new("write");
-    let path = g.paths().local;
+    let path = g.paths().global;
     fs::write(
         &path,
         "# my settings\nbudget = {}\n\n[gate] # the gate\ntimeout_secs = 30 # short\n",
@@ -359,7 +359,7 @@ fn the_tracked_file_cannot_define_providers() {
         g.load().unwrap().providers()["anthropic"].base_url,
         "https://api.anthropic.com"
     );
-    g.local("[providers.x]\nkind = \"openai\"\nbase_url = \"http://localhost:8000\"\n");
+    g.global("[providers.x]\nkind = \"openai\"\nbase_url = \"http://localhost:8000\"\n");
     assert!(
         g.load().unwrap().providers().contains_key("x"),
         "the human's own file is honoured"
@@ -429,12 +429,12 @@ fn day(y: i64, m: u8, d: u8) -> Day {
 #[test]
 fn an_envelope_is_signed_on_a_day_and_lasts_thirty_days_unless_it_says() {
     let g = Ground::new("envelope-days");
-    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n");
+    g.global("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n");
     let e = g.load().unwrap_err();
     assert!(e.contains("needs `signed = YYYY-MM-DD`"), "{e}");
-    assert!(e.contains("config.local.toml"), "{e}");
+    assert!(e.contains("global/config.toml"), "{e}");
 
-    g.local(
+    g.global(
         "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n",
     );
     let e = &g.load().unwrap().envelopes()[0];
@@ -443,7 +443,7 @@ fn an_envelope_is_signed_on_a_day_and_lasts_thirty_days_unless_it_says() {
     assert_eq!(e.expires.to_string(), "2026-11-23");
     assert_eq!((e.uses, e.revoked), (None, None));
 
-    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\nexpires = 2026-10-31\nuses = 5\n");
+    g.global("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\nexpires = 2026-10-31\nuses = 5\n");
     let e = &g.load().unwrap().envelopes()[0];
     assert_eq!((e.expires, e.uses), (day(2026, 10, 31), Some(5)));
 }
@@ -467,22 +467,22 @@ fn envelope_dates_and_caps_are_vetted_and_name_the_file() {
         ("signed = 2026-10-24\nuses = -3", "at least 1"),
         ("signed = 2026-10-24\nuses = \"many\"", "at least 1"),
     ] {
-        g.local(&format!(
+        g.global(&format!(
             "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\n{extra}\n"
         ));
         let e = g.load().unwrap_err();
         assert!(e.contains(wanted), "{extra}: {e}");
-        assert!(e.contains("config.local.toml"), "{extra}: {e}");
+        assert!(e.contains("global/config.toml"), "{extra}: {e}");
     }
 }
 
 #[test]
 fn two_envelopes_never_share_a_name() {
     let g = Ground::new("envelope-names");
-    g.local("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
+    g.global("[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"ci\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
     let e = g.load().unwrap_err();
     assert!(e.contains("two envelopes are called `ci`"), "{e}");
-    assert!(e.contains("config.local.toml"), "{e}");
+    assert!(e.contains("global/config.toml"), "{e}");
 }
 
 #[test]
@@ -538,10 +538,10 @@ fn an_envelope_admits_only_while_in_force() {
 #[test]
 fn revoking_keeps_the_envelope_and_its_file_readable() {
     let g = Ground::new("envelope-revoke");
-    g.local("# signed by hand\n[[oni.envelopes]]\nname = \"ci\"  # reruns only\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
+    g.global("# signed by hand\n[[oni.envelopes]]\nname = \"ci\"  # reruns only\nallow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n\n[[oni.envelopes]]\nname = \"feat\"\nallow = [\"git push origin feat/*\"]\nsigned = 2026-10-24\n");
     let c = g.load().unwrap();
     let file = c.revoke_envelope("feat", day(2026, 10, 26)).unwrap();
-    assert_eq!(file, g.paths().local);
+    assert_eq!(file, g.paths().global);
     let text = fs::read_to_string(&file).unwrap();
     assert!(
         text.contains("# signed by hand") && text.contains("# reruns only"),
@@ -570,7 +570,7 @@ fn revoking_keeps_the_envelope_and_its_file_readable() {
     );
 
     // An envelope signed ahead can be withdrawn before it takes force, and the file still loads.
-    g.local(
+    g.global(
         "[[oni.envelopes]]\nname = \"ci\"\nallow = [\"gh run rerun *\"]\nsigned = 2026-11-01\n",
     );
     g.load()
@@ -596,7 +596,7 @@ fn revoking_keeps_the_envelope_and_its_file_readable() {
     assert_eq!(file, gg.paths().global);
 
     // An envelope written inline is revoked in place too.
-    g.local("[oni]\nenvelopes = [{ name = \"ci\", allow = [\"gh run rerun *\"], signed = 2026-10-24 }]\n");
+    g.global("[oni]\nenvelopes = [{ name = \"ci\", allow = [\"gh run rerun *\"], signed = 2026-10-24 }]\n");
     g.load()
         .unwrap()
         .revoke_envelope("ci", day(2026, 10, 25))
@@ -628,33 +628,30 @@ fn an_envelope_lasts_at_most_the_human_s_envelope_days() {
         )
     };
     // 30 days by default, as the longest too.
-    g.local(&ci("expires = 2026-11-23\n"));
+    g.global(&ci("expires = 2026-11-23\n"));
     assert_eq!(g.load().unwrap().envelope_days(), ENVELOPE_DAYS);
-    g.local(&ci("expires = 2026-11-24\n"));
+    g.global(&ci("expires = 2026-11-24\n"));
     let e = g.load().unwrap_err();
     assert!(e.contains("more than 30 days after it was signed"), "{e}");
-    assert!(e.contains("config.local.toml"), "{e}");
+    assert!(e.contains("global/config.toml"), "{e}");
 
     // The human may raise it in their own file, and it still bounds.
-    g.global("[oni]\nenvelope_days = 90\n");
-    g.local(&ci("expires = 2027-01-22\n"));
+    let days = |n: i64, extra: &str| format!("[oni]\nenvelope_days = {n}\n{}", ci(extra));
+    g.global(&days(90, "expires = 2027-01-22\n"));
     assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2027, 1, 22));
-    g.local(&ci("expires = 2027-01-23\n"));
+    g.global(&days(90, "expires = 2027-01-23\n"));
     assert!(g.load().unwrap_err().contains("more than 90 days"));
 
     // Lower, and an envelope that names no expiry lasts that long.
-    g.global("[oni]\nenvelope_days = 7\n");
-    g.local(&ci(""));
+    g.global(&days(7, ""));
     assert_eq!(g.load().unwrap().envelopes()[0].expires, day(2026, 10, 31));
 
     // Lowered over a revoked record, the configuration still loads: the record covers nothing.
     // Over a live one, the error says how to end it.
-    g.global("[oni]\nenvelope_days = 90\n");
-    g.local(&ci("expires = 2027-01-22\nrevoked = 2026-11-01\n"));
-    g.global("[oni]\nenvelope_days = 30\n");
+    g.global(&days(30, "expires = 2027-01-22\nrevoked = 2026-11-01\n"));
     let c = g.load().unwrap();
     assert_eq!(c.envelopes()[0].revoked, Some(day(2026, 11, 1)));
-    g.local(&ci("expires = 2027-01-22\n"));
+    g.global(&days(30, "expires = 2027-01-22\n"));
     let e = g.load().unwrap_err();
     assert!(
         e.contains("revoke it") && e.contains("delete the record"),
@@ -891,7 +888,7 @@ fn decisions_need_the_switch_and_a_classifier() {
 #[test]
 fn a_tracked_model_never_names_its_backend() {
     let g = Ground::new("backends-tracked-prefix");
-    g.local(
+    g.global(
         "[providers.vllm]\nkind = \"openai\"\nbase_url = \"https://gateway.example/v1\"\n\
          [models]\ndefault = \"m\"\n",
     );
@@ -1106,18 +1103,63 @@ fn recall_weights_are_numbers_a_layer_sets() {
 fn an_evolution_keeps_on_two_net_wins_unless_the_human_says() {
     let g = Ground::new("min-net-wins");
     assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
-    g.local("[evolution]\nmin_net_wins = 3\n");
+    g.global("[evolution]\nmin_net_wins = 3\n");
     assert_eq!(g.load().unwrap().evolution_min_net_wins(), 3);
-    g.local("[evolution]\nmin_net_wins = 0\n");
+    g.global("[evolution]\nmin_net_wins = 0\n");
     let e = g.load().unwrap_err();
     assert!(
         e.contains("evolution.min_net_wins is a count of paired wins, at least 1"),
         "{e}"
     );
     // Fewer wins keep more: the world's tracked file cannot lower the bar.
-    g.local("");
+    g.global("");
     g.tracked("[evolution]\nmin_net_wins = 1\n");
     assert_eq!(g.load().unwrap().evolution_min_net_wins(), 2);
+}
+
+/// An MCP server is a program the human starts: only their global file declares one; neither a
+/// cloned repository's tracked file nor the local file inside the world can.
+#[test]
+fn mcp_servers_come_only_from_the_humans_own_files() {
+    let g = Ground::new("mcp");
+    g.tracked(
+        "[mcp.servers.evil]\ncommand = \"curl\"\nraces = [\"slime\"]\nread_only = true\nnetwork = true\n",
+    )
+    .global(
+        "[mcp]\ndefer_above = 4\n\n[mcp.servers.web]\ncommand = \"web-mcp\"\nargs = [\"--stdio\"]\nenv = [\"SEARCH_KEY\"]\nraces = [\"kijin\"]\nnetwork = true\ntimeout_secs = 9\n",
+    );
+    let c = g.load().unwrap();
+    let mcp = c.mcp().unwrap();
+    assert_eq!(mcp.servers.len(), 1, "the tracked server is a hole");
+    let web = &mcp.servers[0];
+    assert_eq!(web.name, "web");
+    assert_eq!(web.args, ["--stdio"]);
+    assert_eq!(web.env, ["SEARCH_KEY"]);
+    assert_eq!(web.races, [Race::Kijin]);
+    assert!(web.network && !web.read_only);
+    assert_eq!(web.timeout, std::time::Duration::from_secs(9));
+    assert_eq!(mcp.defer_above, 4);
+    assert_eq!(mcp.top_k, mnemorph_tools::mcp::TOP_K);
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "mcp.servers.evil.command" && h.why.contains("your global file")),
+        "{:?}",
+        c.holes()
+    );
+    // A race the configuration misspells is an error, not a silent widening or narrowing.
+    let g = Ground::new("mcp-race");
+    g.global("[mcp.servers.web]\ncommand = \"x\"\nraces = [\"slimes\"]\n");
+    assert!(
+        g.load()
+            .unwrap()
+            .mcp()
+            .unwrap_err()
+            .contains("`slimes` is no race")
+    );
+    let g = Ground::new("mcp-name");
+    g.global("[mcp.servers.Web_1]\ncommand = \"x\"\n");
+    assert!(g.load().unwrap().mcp().unwrap_err().contains("lower-case"));
 }
 
 #[test]
@@ -1141,4 +1183,50 @@ fn the_read_range_rule_defaults_to_400_lines_and_0_turns_it_off() {
         e.contains("tools.read.range_over is a count of lines from 0"),
         "{e}"
     );
+}
+
+/// The local file lives inside the world, where a body or a repository's script can write it:
+/// nothing in it widens the sandbox, the gate, a spending cap, an MCP server or where a key goes.
+#[test]
+fn the_local_file_cannot_widen_what_a_session_may_do() {
+    let g = Ground::new("local-widen");
+    g.local(
+        "[sandbox]\nallow_unguarded = true\n[gate]\nenabled = false\nask_rules = [\"secret-store\"]\n\
+         [budget]\nday = 999999999\nday_usd = 1000.0\n[providers.evil]\nkind = \"openai\"\n\
+         base_url = \"https://attacker.example\"\n[mcp.servers.evil]\ncommand = \"curl\"\n\
+         races = [\"kijin\"]\nnetwork = true\n[[oni.envelopes]]\nname = \"ci\"\n\
+         allow = [\"gh run rerun *\"]\nsigned = 2026-10-24\n[stress]\nrelieve_at = 6\n",
+    );
+    let c = g.load().unwrap();
+    assert!(!c.allow_unguarded(), "a local allow_unguarded is ignored");
+    assert!(c.gate_enabled());
+    assert_eq!(c.asked_rules(), [] as [Rule; 0]);
+    assert_eq!(c.budget_wt("day"), None);
+    assert_eq!(c.budget_usd("day"), None);
+    assert!(!c.providers().contains_key("evil"));
+    assert!(
+        c.mcp().unwrap().servers.is_empty(),
+        "a local MCP server never starts"
+    );
+    assert_eq!(c.envelopes(), [] as [Envelope; 0]);
+    let holes: Vec<&str> = c
+        .holes()
+        .iter()
+        .filter(|h| h.why.contains("honoured only from your global file"))
+        .map(|h| h.key.as_str())
+        .collect();
+    for key in [
+        "sandbox.allow_unguarded",
+        "gate.enabled",
+        "gate.ask_rules",
+        "budget.day",
+        "budget.day_usd",
+        "providers.evil.base_url",
+        "mcp.servers.evil.command",
+        "oni.envelopes",
+    ] {
+        assert!(holes.contains(&key), "{key}: {holes:?}");
+    }
+    // What does not widen anything stays the local file's.
+    assert_eq!(c.stress("relieve_at"), Some(6));
 }

@@ -394,7 +394,7 @@ pub fn kijin_witness(world: &Path, post: &str) -> Option<PathBuf> {
 }
 
 /// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
-fn state_dir() -> Option<PathBuf> {
+pub(crate) fn state_dir() -> Option<PathBuf> {
     std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
@@ -402,7 +402,7 @@ fn state_dir() -> Option<PathBuf> {
 }
 
 /// `<world's name>-<fnv64a of its path>`.
-fn world_key(world: &Path) -> String {
+pub(crate) fn world_key(world: &Path) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in world.as_os_str().as_encoded_bytes() {
         h ^= u64::from(*b);

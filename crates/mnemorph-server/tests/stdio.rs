@@ -36,7 +36,8 @@ impl Client {
         let _ = std::fs::remove_dir_all(&root);
         let world = root.join("world");
         std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
-        std::fs::write(world.join(".mnemorph/config.local.toml"), config).unwrap();
+        // The test's settings — running unguarded among them — are the human's global file's.
+        std::fs::write(root.join("global.toml"), config).unwrap();
         std::fs::write(world.join("notes.txt"), "a\n").unwrap();
         let (server_in, to) = std::io::pipe().unwrap();
         let (from, server_out) = std::io::pipe().unwrap();

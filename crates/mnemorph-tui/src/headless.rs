@@ -464,6 +464,8 @@ pub fn status(opened: &Opened) -> Vec<String> {
             ),
         ),
     ];
+    // Each MCP tool the body is offered or can reach, priced, then the frame's total.
+    lines.extend(opened.mcp.iter().map(|l| ("mcp", l.clone())));
     lines.extend(opened.holes.iter().map(|h| ("hole", h.clone())));
     lines
         .into_iter()

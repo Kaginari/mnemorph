@@ -120,6 +120,7 @@ impl World {
                 &self.0.with_extension("challenges.jsonl"),
             )),
             reviewers: mnemorph_loop::challenge::REVIEWERS,
+            mcp: None,
         };
         let setup = Setup {
             model,
@@ -693,10 +694,11 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
     use mnemorph_loop::open::{Bound, open_with};
     use mnemorph_loop::{Config, Paths};
     let w = World::new("session");
-    // A test binary has no guard beside it; the human allows commands unguarded, as a session
-    // without the guard installed would have to.
+    // A test binary has no guard beside it; the human allows commands unguarded in their global
+    // file, as a session without the guard installed would have to.
+    fs::create_dir_all(w.attic()).unwrap();
     fs::write(
-        w.0.join(".mnemorph/config.local.toml"),
+        w.attic().join("no-global.toml"),
         "[sandbox]\nallow_unguarded = true\n",
     )
     .unwrap();

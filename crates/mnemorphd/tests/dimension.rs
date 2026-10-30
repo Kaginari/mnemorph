@@ -72,8 +72,10 @@ fn s(p: &Path) -> &str {
 fn a_session_opening_writes_a_registry_row() {
     let d = Dim::new("open");
     let w = d.world("w");
+    // The provider and running unguarded are the human's global file's to set.
+    fs::create_dir_all(d.root.join("config/mnemorph")).unwrap();
     fs::write(
-        w.join(".mnemorph/config.local.toml"),
+        d.root.join("config/mnemorph/config.toml"),
         "[sandbox]\nallow_unguarded = true\n\n[models]\nprovider = \"local\"\n\n[providers.local]\nkind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\n",
     )
     .unwrap();

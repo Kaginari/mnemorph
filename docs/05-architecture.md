@@ -548,7 +548,7 @@ flowchart LR
   23.10+ through AppArmor).
 - **No guard, no command.** When no guard is in force — the helper missing, an unsupported
   system — `bash` refuses to run and says why. The human may choose otherwise with
-  `sandbox.allow_unguarded = true` in their local or global file (never the tracked one); the
+  `sandbox.allow_unguarded = true` in their global file (never the tracked or the local one); the
   status line then reads `none — <reason>`.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
     (`.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
@@ -857,10 +857,14 @@ an empty list or table never overrides a lower layer:
   `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
   decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
   `decide.cutoff.*` and `decide.route` loosen decisions (where their state goes, how sure they must be, which model does the work and what it
-  costs), so they are honoured only from the local or global file; from
+  costs), so they are honoured only from the global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
-  a key is sent, and a cloned repository must not point one elsewhere. Nothing else feeds them: no environment
-  variable, no flag, and no body — the tripwire keeps every body out of `.mnemorph/`.
+  a key is sent, and a cloned repository must not point one elsewhere.
+- **The local file widens nothing.** `.mnemorph/config.local.toml` lives inside the world, where
+  a body's command or a repository's script (a `make test` the gate runs) may write it. Every key
+  above, every `budget.*` cap, every `providers.*` and every `mcp.*` from it is a hole: the
+  global file alone loosens the gate, opens the sandbox, starts an MCP server or says where a
+  key goes. Nothing else feeds them: no environment variable and no flag.
   `gate.verify_secs`, how long each of the end gate's verify commands may run, is the project's
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
   `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at

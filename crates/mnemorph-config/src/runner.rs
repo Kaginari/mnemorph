@@ -1771,7 +1771,7 @@ impl<'a> Runner<'a> {
             && !self.cx.allows_unguarded()
         {
             return Err(Refusal::Refused(format!(
-                "no kernel guard is in force ({reason}), so the act did not run; to run unguarded, set `sandbox.allow_unguarded = true` in your local or global config"
+                "no kernel guard is in force ({reason}), so the act did not run; to run unguarded, set `sandbox.allow_unguarded = true` in your global config"
             )));
         }
         if self.cx.race().base() != Race::Kijin
