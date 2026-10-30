@@ -1,12 +1,12 @@
-//! Real responses, recorded from OpenRouter (`tests/live_openrouter.rs` with `MNEMORPH_RECORD`)
-//! and replayed here: no key, no network, every run.
+//! Real responses, recorded from OpenRouter's free models (`tests/live_openrouter.rs` with
+//! `MNEMORPH_RECORD`), scrubbed, and replayed here: no key, no network, every run.
 
 use std::sync::Arc;
 
 use mnemorph_ledger::Usage;
 use mnemorph_provider::{
-    Block, Event, Message, OPAQUE_PREFIX, OpenAiCompatible, Policy, Reply, Request, Role, Scripted,
-    StopReason, encode_chat,
+    Block, Error, Event, Message, OPAQUE_PREFIX, OpenAiCompatible, Policy, Reply, Request, Role,
+    Scripted, StopReason, encode_chat,
 };
 use serde_json::{Value, json};
 
@@ -15,6 +15,9 @@ use serde_json::{Value, json};
 const TEXT: &str = include_str!("cassettes/openrouter-text-0.sse");
 const TOOL_CALL: &str = include_str!("cassettes/openrouter-tool-0.sse");
 const TOOL_ANSWER: &str = include_str!("cassettes/openrouter-tool-1.sse");
+const REASONING: &str = include_str!("cassettes/openrouter-reasoning-0.sse");
+const ERROR: &str = include_str!("cassettes/openrouter-error-0.json");
+const ALL: [&str; 5] = [TEXT, TOOL_CALL, TOOL_ANSWER, REASONING, ERROR];
 
 fn request() -> Request {
     Request {
@@ -187,12 +190,111 @@ async fn a_recorded_tool_round_trip() {
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_recorded_reasoning_turn() {
+    let (r, events) = replay(REASONING).await;
+    assert_eq!(r.stop, StopReason::EndTurn);
+    let thought: String = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Thinking(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(!thought.is_empty(), "the reasoning streams as it comes");
+    // Every `reasoning_details` item is kept, in order, to go back with the next turn; on this
+    // server their texts are the streamed reasoning itself.
+    let details = r
+        .content
+        .iter()
+        .find_map(|b| match b {
+            Block::Opaque(v)
+                if v["type"].as_str() == Some(&format!("{OPAQUE_PREFIX}reasoning_details")) =>
+            {
+                v["items"].as_array().cloned()
+            }
+            _ => None,
+        })
+        .expect("the reasoning details are kept");
+    assert!(
+        details.iter().all(|d| d["type"] == "reasoning.text"),
+        "{details:?}"
+    );
+    let joined: String = details.iter().filter_map(|d| d["text"].as_str()).collect();
+    assert_eq!(joined, thought);
+    let text: String = r
+        .content
+        .iter()
+        .filter_map(|b| match b {
+            Block::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(text.trim().to_lowercase(), "no", "91 is 7 × 13");
+
+    let mut next = request();
+    next.messages.push(Message {
+        role: Role::Assistant,
+        content: r.content,
+    });
+    let body = encode_chat(&next);
+    assert_eq!(body["messages"][1]["reasoning_details"], json!(details));
+}
+
+/// OpenRouter's refusal of a request carries a numeric `code`: it is the error's kind, the body's
+/// message its message, and a 400 is not retried.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_refusal() {
+    let script = Arc::new(Scripted::new([Reply::status(400, ERROR, &[])]));
+    let client = OpenAiCompatible::new(
+        script.clone(),
+        "https://openrouter.ai/api",
+        Some("k".into()),
+        Policy::default(),
+    );
+    let mut on = |_: Event| {};
+    let err = client
+        .complete(&request(), &mut on)
+        .await
+        .expect_err("the recorded refusal");
+    assert_eq!(
+        err,
+        Error::Api {
+            status: 400,
+            kind: "400".into(),
+            message: "mnemorph/no-such-model:free is not a valid model ID".into(),
+        }
+    );
+    assert_eq!(script.sent().len(), 1, "a refusal is not retried");
+}
+
 #[test]
 fn the_recordings_hold_no_secret() {
-    for cassette in [TEXT, TOOL_CALL, TOOL_ANSWER] {
+    for cassette in ALL {
         assert!(
             !cassette.contains("sk-or-") && !cassette.contains("Bearer"),
             "a cassette holds a credential"
         );
+    }
+}
+
+/// What differs between runs or names the account is scrubbed to stable placeholders.
+#[test]
+fn the_recordings_are_scrubbed() {
+    for cassette in ALL {
+        for (key, kept) in [
+            ("\"id\":\"", ["gen-recorded\"", "call-recorded-"]),
+            ("\"created\":", ["0,", "0}"]),
+            ("\"user_id\":\"", ["user-recorded\"", "user-recorded\""]),
+        ] {
+            for (at, _) in cassette.match_indices(key) {
+                let value = &cassette[at + key.len()..];
+                assert!(
+                    kept.iter().any(|k| value.starts_with(k)),
+                    "unscrubbed {key}{}",
+                    &value[..value.len().min(40)]
+                );
+            }
+        }
     }
 }

@@ -1000,6 +1000,35 @@ signed = 2026-10-24                # expires 2026-11-23, unless `expires` says s
 uses = 50                          # optional: at most 50 acts in all
 ```
 
+### Provider cassettes
+
+The providers are tested against real responses, recorded once and replayed on every run with no
+key and no network: `crates/mnemorph-provider/tests/cassettes/`, read by `tests/cassettes.rs`
+through `Scripted`. CI never records and holds no key. Each cassette is a response body as the
+server sent it (the raw SSE, or an error's JSON), never a header: the key travels in a request
+header and the response headers carry request ids. Before a body is written the recorder scrubs
+what differs between runs or names the account (generation ids to `gen-recorded`, tool call ids to
+`call-recorded-<n>`, `user_id` to `user-recorded`, `created` to `0`) and refuses to write one
+holding `sk-or-` or `Bearer`; a test checks every cassette stays that way.
+
+OpenRouter is recorded from free models (`:free`, cost 0): a text answer and a tool round trip
+(`nvidia/nemotron-3.5-lightning:free`), a reasoning turn with its `reasoning_details`
+(`dots-studio/dots-3-note-preview:free`), and a refusal whose `code` is a number (an unknown model
+id). To record again, by hand:
+
+```sh
+MNEMORPH_LIVE=1 MNEMORPH_RECORD=$PWD/crates/mnemorph-provider/tests/cassettes \
+  OPENROUTER_API_KEY=… [MNEMORPH_LIVE_OR_MODEL=<id>:free] \
+  cargo nextest run -p mnemorph-provider --run-ignored only --no-capture live_openrouter
+git add -A && git grep -nE 'sk-or-v1-[0-9a-f]+'   # must print nothing before a commit
+```
+
+The hand-written streams in `tests/openai.rs` and `tests/review.rs` cover what no recording
+holds: a mid-stream error (`finish_reason: "error"` or an `error` chunk after a 200), which no
+legitimate request provokes, and Gemini's `extra_content.google.thought_signature`, which needs a
+Gemini model (none is free). Anthropic, vLLM and Ollama have no cassette: they need a key or a
+local server.
+
 ### Lifecycles, explored whole
 
 Each lifecycle the harness keeps is walked breadth-first over its real code, never a model of it:

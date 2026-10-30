@@ -1,0 +1,122 @@
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"First","reasoning_details":[{"type":"reasoning.text","text":"First","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":",","reasoning_details":[{"type":"reasoning.text","text":",","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" the user","reasoning_details":[{"type":"reasoning.text","text":" the user","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" asks: \"Is","reasoning_details":[{"type":"reasoning.text","text":" asks: \"Is","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 91 a","reasoning_details":[{"type":"reasoning.text","text":" 91 a","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" prime number? Answer","reasoning_details":[{"type":"reasoning.text","text":" prime number? Answer","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" yes or no.\"","reasoning_details":[{"type":"reasoning.text","text":" yes or no.\"","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" I need to give","reasoning_details":[{"type":"reasoning.text","text":" I need to give","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" a concise","reasoning_details":[{"type":"reasoning.text","text":" a concise","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" answer.\n\nA","reasoning_details":[{"type":"reasoning.text","text":" answer.\n\nA","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" prime number is a","reasoning_details":[{"type":"reasoning.text","text":" prime number is a","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" number greater than ","reasoning_details":[{"type":"reasoning.text","text":" number greater than ","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"1 that has no","reasoning_details":[{"type":"reasoning.text","text":"1 that has no","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" positive divisors other","reasoning_details":[{"type":"reasoning.text","text":" positive divisors other","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" than 1 and","reasoning_details":[{"type":"reasoning.text","text":" than 1 and","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" itself. So,","reasoning_details":[{"type":"reasoning.text","text":" itself. So,","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" I need to check","reasoning_details":[{"type":"reasoning.text","text":" I need to check","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" if 91","reasoning_details":[{"type":"reasoning.text","text":" if 91","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" is divisible","reasoning_details":[{"type":"reasoning.text","text":" is divisible","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" by any number other","reasoning_details":[{"type":"reasoning.text","text":" by any number other","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" than 1 and","reasoning_details":[{"type":"reasoning.text","text":" than 1 and","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 91.\n\n","reasoning_details":[{"type":"reasoning.text","text":" 91.\n\n","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"I recall","reasoning_details":[{"type":"reasoning.text","text":"I recall","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" that 91","reasoning_details":[{"type":"reasoning.text","text":" that 91","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" might not","reasoning_details":[{"type":"reasoning.text","text":" might not","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" be prime because","reasoning_details":[{"type":"reasoning.text","text":" be prime because","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" it can","reasoning_details":[{"type":"reasoning.text","text":" it can","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" be factored.","reasoning_details":[{"type":"reasoning.text","text":" be factored.","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" Let me think:","reasoning_details":[{"type":"reasoning.text","text":" Let me think:","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 91 divided","reasoning_details":[{"type":"reasoning.text","text":" 91 divided","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" by 7 is","reasoning_details":[{"type":"reasoning.text","text":" by 7 is","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 13,","reasoning_details":[{"type":"reasoning.text","text":" 13,","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" since 7 times","reasoning_details":[{"type":"reasoning.text","text":" since 7 times","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 13 is","reasoning_details":[{"type":"reasoning.text","text":" 13 is","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 91.","reasoning_details":[{"type":"reasoning.text","text":" 91.","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" So, 9","reasoning_details":[{"type":"reasoning.text","text":" So, 9","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"1 has divisors","reasoning_details":[{"type":"reasoning.text","text":"1 has divisors","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" 7 and ","reasoning_details":[{"type":"reasoning.text","text":" 7 and ","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"13, which","reasoning_details":[{"type":"reasoning.text","text":"13, which","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" means it's not","reasoning_details":[{"type":"reasoning.text","text":" means it's not","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" a","reasoning_details":[{"type":"reasoning.text","text":" a","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" prime number.\n\nTherefore","reasoning_details":[{"type":"reasoning.text","text":" prime number.\n\nTherefore","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":", the answer should","reasoning_details":[{"type":"reasoning.text","text":", the answer should","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" be no.\n\nThe","reasoning_details":[{"type":"reasoning.text","text":" be no.\n\nThe","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" user said \"Answer","reasoning_details":[{"type":"reasoning.text","text":" user said \"Answer","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" yes or no,\"","reasoning_details":[{"type":"reasoning.text","text":" yes or no,\"","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" so I should just","reasoning_details":[{"type":"reasoning.text","text":" so I should just","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" say","reasoning_details":[{"type":"reasoning.text","text":" say","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" \"no\" without","reasoning_details":[{"type":"reasoning.text","text":" \"no\" without","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" any explanation","reasoning_details":[{"type":"reasoning.text","text":" any explanation","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":",","reasoning_details":[{"type":"reasoning.text","text":",","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" as","reasoning_details":[{"type":"reasoning.text","text":" as","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" per the instruction to","reasoning_details":[{"type":"reasoning.text","text":" per the instruction to","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" be terse.\n\nSo","reasoning_details":[{"type":"reasoning.text","text":" be terse.\n\nSo","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":", my response should","reasoning_details":[{"type":"reasoning.text","text":", my response should","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" be: no\n","reasoning_details":[{"type":"reasoning.text","text":" be: no\n","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"\n\nno","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"stop","native_finish_reason":"stop"}]}
+
+data: {"id":"gen-recorded","object":"chat.completion.chunk","created":0,"model":"dots-studio/dots-3-note-preview:free","provider":"AtlasCloud","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}],"usage":{"prompt_tokens":27,"completion_tokens":194,"total_tokens":221,"cost":0,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0,"upstream_inference_prompt_cost":0,"upstream_inference_completions_cost":0},"completion_tokens_details":{"reasoning_tokens":167,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+
