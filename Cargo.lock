@@ -1741,6 +1741,7 @@ name = "mnemorph-wire"
 version = "0.0.0"
 dependencies = [
  "proptest",
+ "serde_json",
  "sha2",
 ]
 

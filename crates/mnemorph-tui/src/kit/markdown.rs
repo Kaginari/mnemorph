@@ -12,7 +12,7 @@ use ratatui::text::{Line, Span};
 
 use super::highlight::highlight;
 use super::text::{Align, Lines, cells, fit, line_cells, truncate, wrap};
-use crate::safe::clean;
+use crate::safe::{self, clean};
 use crate::theme::Theme;
 
 /// The styles Markdown is drawn in.
@@ -147,16 +147,18 @@ impl Renderer<'_> {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
             Event::Text(text) => {
-                let text = clean(&text);
                 if let Some((_, code)) = &mut self.code {
-                    code.push_str(&text);
+                    code.push_str(&safe::code(&text));
                 } else {
-                    self.push(&text, Style::new());
+                    self.push(&clean(&text), Style::new());
                 }
             }
-            Event::Code(text) => self.push(&clean(&text), self.sheet.code),
+            Event::Code(text) => self.push(&safe::code(&text), self.sheet.code),
             Event::Html(text) | Event::InlineHtml(text) => {
-                self.push(&clean(text.trim_end_matches('\n')), self.sheet.link_url);
+                self.push(
+                    &safe::code(text.trim_end_matches('\n')),
+                    self.sheet.link_url,
+                );
             }
             Event::SoftBreak => self.push(" ", Style::new()),
             Event::HardBreak => self.inline.push(Vec::new()),

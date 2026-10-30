@@ -21,7 +21,7 @@ pub use classify::{
     Place, Push, Rule, Verdict, classify, classify_acts, classify_reach, remote_name,
 };
 pub use fingerprint::Fingerprint;
-pub use gate::{Answer, Ask, Gate, NoHuman, Pending, Terminal};
+pub use gate::{Answer, Ask, Gate, NoHuman, Pending};
 /// What a sandboxed command may touch, for a harness process the tools do not start.
 pub use mnemorph_sandbox::Policy;
 /// The sandbox a context runs commands in, as the context takes it.
