@@ -2097,12 +2097,11 @@ async fn a_session_of_changes_only_appends_except_at_its_fold() {
     for f in ["f1.txt", "f2.txt", "f3.txt", "f4.txt"] {
         fs::write(w.world().join(f), &big).unwrap();
     }
-    fs::create_dir_all(w.world().join(".mnemorph/minds")).unwrap();
-    fs::write(
-        w.world().join(".mnemorph/minds/light.md"),
+    adopted_mind(
+        &w.world(),
+        "light",
         "# Light\n\n- **Shared:** yes\n\nThe light Mind's know-how.\n",
-    )
-    .unwrap();
+    );
     let model = Arc::new(Steered {
         script: ScriptedModel::new([
             tool("t1", "read", json!({"path": "f1.txt"})),
@@ -2194,6 +2193,19 @@ async fn a_session_of_changes_only_appends_except_at_its_fold() {
         mnemorph_loop::compact::fingerprints(&rebuilt),
         mnemorph_loop::compact::fingerprints(run.messages())
     );
+}
+
+/// The Mind `name` written into `world` with `text`, and adopted in the witness kept for it, as
+/// the human's `mnemorphd mind adopt` would record it.
+fn adopted_mind(world: &std::path::Path, name: &str, text: &str) {
+    use mnemorph_world::minds::{propose_at, witness};
+    fs::create_dir_all(world.join(".mnemorph/minds")).unwrap();
+    fs::write(world.join(format!(".mnemorph/minds/{name}.md")), text).unwrap();
+    let at = witness::path_of(world).expect("a home");
+    let row = propose_at(world, &at, witness::Act::Adopt, name, None)
+        .unwrap()
+        .row;
+    witness::record_at(&at, row).unwrap();
 }
 
 /// #48 under #231: a run's MCP tools are decided when it is made. Past the threshold the frame

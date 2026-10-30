@@ -75,7 +75,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | Class | What | Read from |
 |---|---|---|
 | a race (`Slime`, `Orc`, `Elf`, `Kijin`, `DarkElf`, the throne and the ascended) | a creature | its doc under `.mnemorph/<race>/<name>/` |
-| `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes`, or `- **Retired:** yes`, which stops it loading — and a doc's Minds field |
+| `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes` — and a doc's Minds field; its adoption, digest, owner and retirement are the human's, kept in the Minds' witness under the state directory (`mnemorphd mind`) |
 | `Doc` | a creature's document | the file itself |
 | `Fact` (`Territory`) | something learned about a path | `@U territory` lines, as events |
 | `World` | this world and its neighbours | `.mnemorph/dimension.toml` |

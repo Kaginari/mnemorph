@@ -568,9 +568,16 @@ Know-how a body may load, in two levels, priced by exactly what each injects:
   real tokens once it is worn. A worn Mind cannot be unloaded, so a throne that can hand work down
   never wears one over 2,000 tokens: the body below that needs it wears it and dies with its
   task.
-- **Retiring a Mind.** A Mind is know-how, never law. One marked `- **Retired:** yes` in its
-  header — outworn, or found poisoned — no longer loads: no manifest offers it and no body may
-  wear it, whoever names it. Its file stays on disk.
+- **Adopting and retiring a Mind.** A Mind is know-how, never law, and its provenance is kept
+  outside the world: the human adopts it (`mnemorphd mind adopt <name> [--owner <creature>]`),
+  which records its doc, the SHA-256 of its bytes and its owner in a chained witness under the
+  state directory. It loads while its doc holds those bytes; edited since, it is *changed since
+  adoption* and loads no more until re-adopted. Retired by the human (`mnemorphd mind retire`) —
+  outworn, or found poisoned — it no longer loads: no manifest offers it and no body may wear it,
+  whoever names it; `unretire` takes that back. Its file stays on disk. A Mind never adopted does
+  not load: it is shown *unadopted* in `status`, and a world from before the witness adopts its
+  Minds once. A body never writes `.mnemorph/minds/`
+  ([Mind provenance](02-races.md)).
 - **Every command a prompt or hint names exists in the build.** A test reads every backticked
   `mnemorph …` or `mnemorphd …` command in the shipped sources against the help of the binary it
   names — `mnemorph` or `mnemorphd`.

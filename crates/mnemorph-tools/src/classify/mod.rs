@@ -114,11 +114,13 @@ pub enum Rule {
     RootPath,
     /// A function that calls itself in the background: a fork bomb. Floor.
     ForkBomb,
+    /// Writing or removing a Mind under `.mnemorph/minds/`: the human's alone. Floor.
+    Mind,
 }
 
 impl Rule {
     /// Every rule.
-    pub const ALL: [Rule; 10] = [
+    pub const ALL: [Rule; 11] = [
         Rule::Unreadable,
         Rule::NotLiteral,
         Rule::InPlaceEdit,
@@ -129,6 +131,7 @@ impl Rule {
         Rule::MachineTool,
         Rule::RootPath,
         Rule::ForkBomb,
+        Rule::Mind,
     ];
 
     /// The name a configuration uses.
@@ -145,6 +148,7 @@ impl Rule {
             Rule::MachineTool => "machine-tool",
             Rule::RootPath => "root-path",
             Rule::ForkBomb => "fork-bomb",
+            Rule::Mind => "mind",
         }
     }
 
@@ -159,7 +163,7 @@ impl Rule {
     pub fn floor(self) -> bool {
         matches!(
             self,
-            Rule::Device | Rule::MachineTool | Rule::RootPath | Rule::ForkBomb
+            Rule::Device | Rule::MachineTool | Rule::RootPath | Rule::ForkBomb | Rule::Mind
         )
     }
 }

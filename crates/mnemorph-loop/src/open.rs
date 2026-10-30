@@ -506,7 +506,8 @@ fn attic_of(config: &Config, dir: &Path, world: &Path) -> Result<mnemorph_tools:
 }
 
 /// What the session opens saying it cannot do or still waits on: the configuration's holes, the
-/// caps it could not read, the outward acts waiting for the human, the open incidents.
+/// caps it could not read, the outward acts waiting for the human, the open incidents, the
+/// unadopted Minds.
 fn holes(config: &Config, unread: Vec<String>, world: &Path) -> Vec<String> {
     config
         .holes()
@@ -517,6 +518,8 @@ fn holes(config: &Config, unread: Vec<String>, world: &Path) -> Vec<String> {
         .chain(mnemorph_config::reconciling(world))
         // An incident stays open until its four receipts are recorded.
         .chain(mnemorph_config::incidents(world))
+        // A Mind the witness never adopted does not load until the human adopts it.
+        .chain(mnemorph_world::minds::unadopted(world))
         .collect()
 }
 

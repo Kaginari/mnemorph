@@ -102,6 +102,7 @@ async fn the_first_ask_lists_the_minds_and_wear_brings_one_in() {
         "# Dialects\n\n- **Shared:** yes\n\nHow a dialect overrides the generator.\n\nOverride `TRANSFORMS`.\n",
     )
     .unwrap();
+    adopt(&w, &["dialects"]);
     let model = Arc::new(ScriptedModel::new([
         ScriptedModel::tool("w1", "wear", serde_json::json!({"mind": "dialects"})),
         ScriptedModel::text("done"),
@@ -209,4 +210,17 @@ async fn the_session_lands_through_the_end_gate() {
     assert_eq!(n.status, Status::Grounded, "the check grounds it: {n:?}");
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(&attic);
+}
+
+/// The Minds `names` of `world` adopted in the witness kept for it, as the human's `mnemorphd mind
+/// adopt` would record them.
+fn adopt(world: &std::path::Path, names: &[&str]) {
+    use mnemorph_world::minds::{propose_at, witness};
+    let at = witness::path_of(world).expect("a home");
+    for name in names {
+        let row = propose_at(world, &at, witness::Act::Adopt, name, None)
+            .unwrap()
+            .row;
+        witness::record_at(&at, row).unwrap();
+    }
 }

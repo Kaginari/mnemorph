@@ -367,6 +367,8 @@ fn the_law_audit_holds_its_checklist() {
                 "un-retire",
                 "a_retired_mind_never_loads",
                 "a_worn_mind_names_its_source",
+                "a_mind_edited_since_adoption_does_not_load",
+                "retirement_comes_from_the_witness",
                 "`chains::verify`",
                 "anchored",
                 "a_silent_edit_is_found_at_its_row",

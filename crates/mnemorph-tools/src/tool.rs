@@ -672,6 +672,14 @@ impl Context {
         let own_plan = path.file_name().is_some_and(|f| f == "plan.md")
             && self.seat.is_some()
             && path.parent() == self.seat.as_deref();
+        if path.starts_with(self.world.join(".mnemorph").join("minds")) {
+            return Err(format!(
+                "`{}` is a Mind's: Minds are the human's, adopted and retired with `mnemorphd \
+                 mind`, and a doc changed since adoption no longer loads; propose the change in \
+                 your report",
+                self.shown(&path)
+            ));
+        }
         if crate::tripwire::protects(&self.world, &path) && !own_plan {
             return Err(format!(
                 "`{}` is protected: git's executable configuration and the world's records are not written by tools",

@@ -23,6 +23,8 @@ pub(crate) enum Spot {
         root: bool,
         /// Inside `.git` or the world's records in `.mnemorph` (but `tmp/`, `intel/` and `report/`).
         records: bool,
+        /// Inside `.mnemorph/minds/`: a Mind, the human's alone.
+        mind: bool,
     },
     /// A device file.
     Device(Device),
@@ -126,6 +128,7 @@ pub(crate) fn locate(text: Option<&str>, cwd: Option<&Path>, place: &Place) -> S
         return Spot::Inside {
             root: path == world,
             records,
+            mind: rel.starts_with(".mnemorph/minds"),
         };
     }
     let top_level = forms.iter().any(|f| f.components().count() <= 2);
@@ -212,6 +215,16 @@ pub(crate) fn judge(spot: &Spot, act: Act, what: &str, place: &Place, t: &mut Ta
         }
         (Spot::Device(Device::Other), _) => {
             t.refuse(Rule::Device, format!("{what} writes a device"));
+        }
+        // A Mind's provenance is the human's: its doc is never a body's to write, retire or remove.
+        (Spot::Inside { mind: true, .. }, Act::Modify | Act::Delete) => {
+            t.refuse(
+                Rule::Mind,
+                format!(
+                    "{what} changes a Mind under .mnemorph/minds/: Minds are the human's, adopted \
+                     and retired with `mnemorphd mind`; propose the change in your report"
+                ),
+            );
         }
         // Written in place, an object the attic keeps by hard link would change in the attic too:
         // changing the repository or the records asks, as deleting them does.

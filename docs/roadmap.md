@@ -356,7 +356,9 @@ and coverage validators and the challenge's block, with a paid evaluation of rec
 (`just seeded-eval`) kept out of CI, the fresh verifier, each speciality's score folded
 from the challenge records, its rise or fall proposed to the human
 (`mnemorphd challenge score`), the law audit's stop-propagation and Mind-provenance checks, each
-with its witness, and the reviewers' calibration on a gold set (`just calibrate`). Toward the
+with its witness — a Mind's adoption, owner and retirement kept in a witness outside the world
+(`mnemorphd mind`); stop propagation covers foreground commissions, and the Arch Dark Elf's
+campaigns inherit it when built — and the reviewers' calibration on a gold set (`just calibrate`). Toward the
 exit still: seals, the witness rule's coverage of the cited line, the seal lifting on a fix that
 carries the frozen witness, and applying a proposed rise or fall (M11).
 

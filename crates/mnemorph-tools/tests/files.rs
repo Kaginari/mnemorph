@@ -777,6 +777,33 @@ fn protected_files_are_not_written_by_tools() {
     );
     // The shared work queue moves only through the harness, never by a body's tool.
     assert!(o.is_error && o.content.contains("is protected"), "{o:?}");
+    // A Mind is the human's: a body is told so, never silently ignored.
+    fs::create_dir_all(w.world().join(".mnemorph/minds")).unwrap();
+    fs::write(w.world().join(".mnemorph/minds/release.md"), "# Release\n").unwrap();
+    for (name, args) in [
+        (
+            "write",
+            r#"{"path": ".mnemorph/minds/release.md", "content": "- **Retired:** yes\n"}"#,
+        ),
+        (
+            "edit",
+            r##"{"path": ".mnemorph/minds/release.md", "old_string": "# Release", "new_string": "# Mine"}"##,
+        ),
+        (
+            "write",
+            r##"{"path": ".mnemorph/minds/new/README.md", "content": "# New\n"}"##,
+        ),
+    ] {
+        let o = run(&mut cx, name, args);
+        assert!(
+            o.is_error && o.content.contains("is a Mind's: Minds are the human's"),
+            "{name} {args}: {o:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(w.world().join(".mnemorph/minds/release.md")).unwrap(),
+        "# Release\n"
+    );
 }
 
 fn use_tool(cx: &mut Context, name: &str, args: &serde_json::Value) -> Outcome {
