@@ -86,7 +86,8 @@ impl Fixture {
             .unwrap()
     }
 
-    /// `args` run at a terminal, `input` typed once the question is up.
+    /// `args` run at a terminal (util-linux `script`), `input` typed once the question is up.
+    #[cfg(target_os = "linux")]
     fn at_tty(&self, args: &[&str], input: &str) -> Output {
         use std::io::Write as _;
         let quoted: Vec<String> = args
@@ -230,6 +231,19 @@ fn a_swap_is_asked_at_the_terminal_and_never_a_bodys() {
     assert_eq!(fs::read(f.world.join(MIND)).unwrap(), before);
     assert!(!f.ledger().exists(), "nothing swapped, nothing written");
     // At the terminal, `y` swaps it in: the Mind rewritten, one swap row naming it.
+    #[cfg(target_os = "linux")]
+    swapped_at_tty(&f);
+    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["evolution", "judge", "careful-1"])
+        .env("MNEMORPH_BODY", "slime-a")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out).1.contains("never a body's"));
+}
+
+#[cfg(target_os = "linux")]
+fn swapped_at_tty(f: &Fixture) {
     let out = f.at_tty(
         &["evolution", "swap", "careful-1", "--creature", "sly"],
         "y\n",
@@ -249,13 +263,6 @@ fn a_swap_is_asked_at_the_terminal_and_never_a_bodys() {
         rows.contains(r#""row":"swap""#) && rows.contains(MIND),
         "{rows}"
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
-        .args(["evolution", "judge", "careful-1"])
-        .env("MNEMORPH_BODY", "slime-a")
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(2));
-    assert!(text(&out).1.contains("never a body's"));
 }
 
 #[test]
