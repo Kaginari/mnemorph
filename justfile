@@ -44,9 +44,12 @@ ts:
     pnpm test
 
 # The board end to end in Chromium, at phone and desktop widths in both themes: screenshots in
-# packages/board/test-results/screens/. Needs the pinned browser once:
-# `pnpm --filter @mnemorph/board exec playwright install chromium`.
+# packages/board/test-results/screens/. A chat runs once on the real server and bridge, over a
+# scripted model (mnemorph-server's `board_e2e` example, which embeds the built board). Needs the
+# pinned browser once: `pnpm --filter @mnemorph/board exec playwright install chromium`.
 board-e2e:
+    pnpm --filter @mnemorph/board build
+    cargo build -p mnemorph-server --example board_e2e
     pnpm --filter @mnemorph/board e2e
 
 # Every crate depends only on lower layers (docs/05-architecture.md).

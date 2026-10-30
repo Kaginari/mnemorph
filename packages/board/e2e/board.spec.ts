@@ -197,7 +197,7 @@ test("the page runs under the board server's CSP", async ({ page }) => {
   await open(page, '#/settings');
   await page.getByRole('radio', { name: 'light' }).check();
   await page.goto(`/#/w/${LIVE.id}/s/r-17`);
-  await expect(page.locator('.page-title')).toContainText('r-17');
+  await expect(page.locator('.page-chat .composer')).toBeVisible();
   expect(await violations(page)).toEqual([]);
 });
 
@@ -219,7 +219,7 @@ test('deep links land, the back button returns', async ({ page }) => {
   await page.goto(`/#/w/${LIVE.id}/memory`);
   await expect(page.locator('.page-title')).toContainText('Memory');
   await page.goto(`/#/w/${LIVE.id}/s/r-17`);
-  await expect(page.locator('.page-title')).toContainText('r-17');
+  await expect(page.locator('.page-chat .composer')).toBeVisible();
   await page.goBack();
   await expect(page.locator('.page-title')).toContainText('Memory');
   await expect(page).toHaveTitle(/tempest-try · Mnemorph/);

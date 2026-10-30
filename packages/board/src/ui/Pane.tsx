@@ -5,7 +5,9 @@ import type { Load } from '../data/worlds.ts';
 import type { Route } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
 import { ago } from '../time.ts';
+import type { Side } from '../views/Chat.tsx';
 import { Mark, STATUS } from './Mark.tsx';
+import { SessionPane } from './SessionPane.tsx';
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -63,24 +65,15 @@ export function Pane({
   load,
   world,
   now,
+  side,
 }: {
   route: Route;
   load: Load;
   world: BoardWorld | undefined;
   now: number;
+  side: Side | undefined;
 }) {
-  if (route.name === 'session') {
-    return (
-      <>
-        <h2 className="pane-head">Session</h2>
-        {['vitals', 'memory', 'files', 'bodies'].map((t) => (
-          <Block key={t} title={t}>
-            <p className="pane-note">— nothing yet</p>
-          </Block>
-        ))}
-      </>
-    );
-  }
+  if (route.name === 'session' || route.name === 'run') return <SessionPane side={side} />;
   if (world) {
     return (
       <>

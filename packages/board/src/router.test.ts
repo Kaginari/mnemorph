@@ -13,6 +13,7 @@ describe('the router', () => {
     ['#/w/sqlglot-9a1c/memory', { name: 'section', world: 'sqlglot-9a1c', section: 'memory' }],
     ['#/w/a/s/r-17', { name: 'session', world: 'a', session: 'r-17' }],
     ['#/w/a%20b/s/x%2Fy', { name: 'session', world: 'a b', session: 'x/y' }],
+    ['#/w/a/r/r1-2', { name: 'run', world: 'a', run: 'r1-2' }],
   ])('reads %j', (hash, route) => expect(parse(hash)).toEqual(route));
 
   it.each([
@@ -21,6 +22,7 @@ describe('the router', () => {
     '#/w/',
     '#/w/a/s',
     '#/w/a/s/',
+    '#/w/a/r',
     '#/w/a/nope',
     '#/w/a/memory/extra',
     '#/metrics/extra',
@@ -37,5 +39,6 @@ describe('the router', () => {
     { name: 'world', world: 'x-1' },
     { name: 'section', world: 'x/1', section: 'ontology' },
     { name: 'session', world: 'w?#', session: 's p' },
+    { name: 'run', world: 'w', run: 'r1-2' },
   ])('formats %j and reads it back', (route) => expect(parse(format(route))).toEqual(route));
 });

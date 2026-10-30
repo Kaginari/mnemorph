@@ -233,3 +233,25 @@ test('a close that ends the chat is final; other drops reconnect until the tries
   expect(again.sockets).toHaveLength(3);
   expect(d.closed).toMatch(/gave up after 3 tries/);
 });
+
+test('a tab opening on a running chat replays first, the live events that overtake it after', async () => {
+  const board = new Board();
+  const c = connect(board);
+  const seen: number[] = [];
+  c.on((e: Arrived) => seen.push(e.seq));
+  const caught = c.catchUp();
+  await tick();
+  board.last.open();
+  await tick();
+  // A live event arrives before the replay answers: it waits, it does not jump ahead.
+  board.last.say(event('textDelta', 3, { text: 'c' }));
+  board.last.answer('session/events', {
+    events: [event('turnStarted', 1, { text: 'go' }), event('textDelta', 2, { text: 'b' })],
+    oldest: 1,
+    complete: true,
+    more: false,
+  });
+  await caught;
+  board.last.say(event('textDelta', 4, { text: 'd' }));
+  expect(seen).toEqual([1, 2, 3, 4]);
+});

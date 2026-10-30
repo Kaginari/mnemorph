@@ -237,6 +237,9 @@ importers:
       "@mnemorph/protocol":
         specifier: workspace:*
         version: link:../protocol
+      "@mnemorph/sdk":
+        specifier: workspace:*
+        version: link:../sdk
       "@mnemorph/theme":
         specifier: workspace:*
         version: link:../theme
