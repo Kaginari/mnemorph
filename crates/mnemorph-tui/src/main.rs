@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use mnemorph_loop::Law;
 use mnemorph_tui::app::Model;
 use mnemorph_tui::cli::{Command, HELP, VERSION, parse};
 use mnemorph_tui::headless;
@@ -51,7 +52,14 @@ fn main() -> ExitCode {
             world,
             json,
             gate_tty,
-        } => ask_once(ask, world, json, gate_tty),
+            no_law,
+        } => ask_once(
+            ask,
+            world,
+            json,
+            gate_tty,
+            if no_law { Law::Off } else { Law::On },
+        ),
         Command::Status { world } => status(world),
     }
 }
@@ -69,7 +77,13 @@ fn world_of(world: Option<PathBuf>) -> Result<PathBuf, String> {
 }
 
 /// `run`: one ask, without the app.
-fn ask_once(ask: Option<String>, world: Option<PathBuf>, json: bool, gate_tty: bool) -> ExitCode {
+fn ask_once(
+    ask: Option<String>,
+    world: Option<PathBuf>,
+    json: bool,
+    gate_tty: bool,
+    law: Law,
+) -> ExitCode {
     let ask = match ask {
         Some(a) => a,
         None if std::io::stdin().is_terminal() => {
@@ -96,9 +110,14 @@ fn ask_once(ask: Option<String>, world: Option<PathBuf>, json: bool, gate_tty: b
     };
     let (tx, rx) = headless::channel();
     let gate = headless::gate(tx.clone(), gate_tty);
-    let opened = mnemorph_loop::open(&world, gate.clone(), headless::observer(tx.clone()), |v| {
-        std::env::var(v).ok()
-    });
+    // The law switch is the human's command line alone: no configuration a world holds sets it.
+    let opened = mnemorph_loop::open_law(
+        &world,
+        law,
+        gate.clone(),
+        headless::observer(tx.clone()),
+        |v| std::env::var(v).ok(),
+    );
     let opened = match opened {
         Ok(o) => o,
         Err(e) => return fail(&e, 2),

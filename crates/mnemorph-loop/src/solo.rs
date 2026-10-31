@@ -43,10 +43,38 @@ briefly, in plain words. Then, one line each, what you learned that is written n
 next session should know: `@U law <path> <fact>` for a rule of a file you changed — name the path, \
 so this work's own tests can prove it — or `@U colony <fact>` for how this repository is worked.";
 
+/// What a session's fixed prompt carries of the world's own words: the law (`.mnemorph/law.md`),
+/// the creature cards, the Minds' manifests and the journal's opening — or none of them, for a
+/// bench's law-off arm. The harness's own instructions, the tools and the lanes stay either way.
+/// It is set only by the human's command line (`mnemorph run --no-law`), never by a
+/// configuration a world holds, and every run journals it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Law {
+    /// The world's words are said: every session but a bench's law-off arm.
+    #[default]
+    On,
+    /// None of them is said.
+    Off,
+}
+
+impl Law {
+    /// Whether the world's words are said.
+    #[must_use]
+    pub fn on(self) -> bool {
+        self == Law::On
+    }
+}
+
 /// The solo body for `model`, and its tools' context over `world`: Rimuru's voice, a Slime's
 /// shelf (read and write; nothing outward), the whole repository as soil.
 #[must_use]
 pub fn solo(world: &Path, model: &str) -> (Body, Context) {
+    solo_as(world, model, Law::On)
+}
+
+/// [`solo`], its prompt carrying the world's law or not.
+#[must_use]
+pub fn solo_as(world: &Path, model: &str, law: Law) -> (Body, Context) {
     let mut system = SOLO_PROMPT.to_owned();
     // The root by name: a body that knows where it stands does not spend calls finding out.
     // Escaped: a path is the human's, but a backtick or a newline in it must not break the line.
@@ -55,7 +83,9 @@ pub fn solo(world: &Path, model: &str) -> (Body, Context) {
         "\n\nThe repository root: {:?}.",
         world.display().to_string()
     );
-    with_law(&mut system, world);
+    if law.on() {
+        with_law(&mut system, world);
+    }
     let body = Body {
         name: "rimuru".into(),
         race: Race::Rimuru,

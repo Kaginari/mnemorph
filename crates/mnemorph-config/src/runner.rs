@@ -2606,6 +2606,7 @@ fn paired(result: Result<Paired, Refusal>) -> Outcome {
     out.is_error = first.is_error || second.is_error;
     out.meta.exit = second.meta.exit.or(first.meta.exit);
     out.meta.denied = first.meta.denied || second.meta.denied;
+    out.meta.unenveloped = first.meta.unenveloped || second.meta.unenveloped;
     out
 }
 
@@ -2632,6 +2633,8 @@ fn outcome(result: Result<Report, Refusal>) -> Outcome {
         Err(refusal) => {
             let mut out = Outcome::error(refusal.to_string());
             out.meta.denied = matches!(refusal, Refusal::Denied(_));
+            // Every act the runner puts to the human is one no envelope admitted.
+            out.meta.unenveloped = out.meta.denied;
             out
         }
     }

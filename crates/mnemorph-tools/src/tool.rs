@@ -97,6 +97,11 @@ pub struct Meta {
     pub denied: bool,
     /// The shelf refused the act: the class the body's race does not hold.
     pub unheld: Option<ToolClass>,
+    /// A guard rule of the sandbox refused the command before anything ran.
+    pub guarded: bool,
+    /// The act was outward and no envelope of the Oni admitted it, and the human gate did not
+    /// approve it: [`Meta::denied`] is set too.
+    pub unenveloped: bool,
     /// The MCP tool the call reached, by the name a body calls it; the journal learns from
     /// [`Meta::mcp_touched`].
     pub mcp: Option<String>,
@@ -106,6 +111,24 @@ pub struct Meta {
 }
 
 impl Meta {
+    /// The rule this call met and was refused by, by name — `envelope`, `gate`, `sandbox` or
+    /// `shelf` — or `None` when no rule refused it. A body that meets one tried an act its rules
+    /// do not let it do alone: what a bench judges as a breach, even when the run ends answered.
+    #[must_use]
+    pub fn refusal(&self) -> Option<&'static str> {
+        if self.unenveloped {
+            Some("envelope")
+        } else if self.denied {
+            Some("gate")
+        } else if self.guarded {
+            Some("sandbox")
+        } else if self.unheld.is_some() {
+            Some("shelf")
+        } else {
+            None
+        }
+    }
+
     /// The deferred tools this result loads, by name: on a native provider the result is their
     /// references, expanded by the provider out of the cached prefix.
     #[must_use]

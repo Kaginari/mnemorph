@@ -376,6 +376,8 @@ pub struct Run {
     unheld: Option<(String, String)>,
     /// The model the journal last said the run rides: a change is said again at the next ask.
     rode: Option<String>,
+    /// Whether the run's fixed prompt carries the world's words, and whether the journal said it.
+    law: (crate::Law, bool),
     /// The Dark Elf challenges' records; `None` keeps them in the human's state directory.
     challenges: Option<mnemorph_world::challenge::Challenges>,
     /// What sends the Dark Elves a landing's challenge routes: the throne's alone.
@@ -495,6 +497,7 @@ impl Run {
             asked: String::new(),
             unheld: None,
             rode: None,
+            law: (crate::Law::On, false),
             challenges: None,
             challenger: None,
             reserve: None,
@@ -851,6 +854,15 @@ impl Run {
     pub fn with_mcp(mut self, mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>) -> Self {
         self.mcp_journal = mcp.as_ref().map(|m| crate::mcp_journal::journal(m.state()));
         self.mcp = mcp;
+        self
+    }
+
+    /// Whether the run's prompt was built with the world's law, cards, manifests and opening
+    /// ([`crate::Law`]): journaled once, before the first request, so a report reads the arm from
+    /// the run itself. It records what was built; it changes no prompt.
+    #[must_use]
+    pub fn with_law(mut self, law: crate::Law) -> Self {
+        self.law = (law, false);
         self
     }
 
@@ -1248,6 +1260,12 @@ impl Run {
 
     /// The model the run rides, journaled when it is new to the journal: what a resume keeps.
     fn ride(&mut self) {
+        if !self.law.1 {
+            self.law.1 = true;
+            self.record(&Beat::Law {
+                on: self.law.0.on(),
+            });
+        }
         if self.rode.as_deref() != Some(self.body.model.as_str()) {
             self.rode = Some(self.body.model.clone());
             self.record(&Beat::Rides {
@@ -3171,6 +3189,7 @@ impl Run {
                     content: content.clone(),
                     is_error: true,
                     references: Vec::new(),
+                    refused: None,
                 });
                 results.push(Block::ToolResult {
                     tool_use_id: id,
@@ -3195,6 +3214,7 @@ impl Run {
                 content: o.content.clone(),
                 is_error: o.is_error,
                 references: o.meta.references().to_vec(),
+                refused: o.meta.refusal().map(str::to_owned),
             });
             let command = (name == "bash")
                 .then(|| serde_json::from_str::<serde_json::Value>(&input).ok())

@@ -165,10 +165,11 @@ async fn a_direct_answer_is_journaled_and_priced() {
     assert_eq!(ask(&mut run, "hi").await, Ending::Answered("hello".into()));
     let beats = w.journal().read().unwrap().rows;
     assert!(
-        matches!(&beats[0], Beat::Rides { model } if model == "claude-sonnet-5-5")
-            && matches!(beats[1], Beat::Ask { .. })
-            && matches!(beats[2], Beat::Model { .. })
-            && matches!(beats[3], Beat::End { .. }),
+        matches!(beats[0], Beat::Law { on: true })
+            && matches!(&beats[1], Beat::Rides { model } if model == "claude-sonnet-5-5")
+            && matches!(beats[2], Beat::Ask { .. })
+            && matches!(beats[3], Beat::Model { .. })
+            && matches!(beats[4], Beat::End { .. }),
         "{beats:?}"
     );
     let rows = w.ledger().read().unwrap().rows;

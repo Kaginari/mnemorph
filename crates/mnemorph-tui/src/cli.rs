@@ -29,6 +29,11 @@ Options:
   --json            with run: every event as a JSON line on stdout, then a `result` line
   --gate-tty        with run: put each gated act to you on the terminal (/dev/tty); without it
                     run denies every gated act, since no one is there to approve it
+  --no-law          with run: the prompts carry none of the world's own words — its law
+                    (.mnemorph/law.md), the creature cards, the Minds' manifests, the journal's
+                    opening — for a bench's law-off arm; the tools, the gates and the sandbox stay.
+                    A command-line flag only: no configuration sets it. The run's journal and
+                    --json's result line (`law`) say which it was
   -h, --help        this help
   -V, --version     the version
 
@@ -85,6 +90,8 @@ pub enum Command {
         json: bool,
         /// Gated acts are put to the human on `/dev/tty`, not denied.
         gate_tty: bool,
+        /// The prompts carry none of the world's law, cards, manifests or opening.
+        no_law: bool,
     },
     /// What the session would open with.
     Status {
@@ -95,6 +102,10 @@ pub enum Command {
 
 /// The options, wherever they stand, and the words between them.
 #[derive(Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each flag is read on its own, as the command line gave it"
+)]
 struct Flags {
     world: Option<PathBuf>,
     resume: Option<String>,
@@ -102,6 +113,7 @@ struct Flags {
     probe: bool,
     json: bool,
     gate_tty: bool,
+    no_law: bool,
     words: Vec<String>,
 }
 
@@ -133,6 +145,7 @@ fn flags(args: &[String]) -> Result<Flags, String> {
             "--probe" => f.probe = true,
             "--json" => f.json = true,
             "--gate-tty" => f.gate_tty = true,
+            "--no-law" => f.no_law = true,
             other if other.starts_with("--") => {
                 return Err(format!("unknown option `{other}`; see mnemorph --help"));
             }
@@ -162,6 +175,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         probe,
         json,
         gate_tty,
+        no_law,
         words,
     } = flags(args)?;
     let first = words.first().map(String::as_str);
@@ -171,6 +185,9 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         }
         if gate_tty {
             return Err("--gate-tty goes with run".into());
+        }
+        if no_law {
+            return Err("--no-law goes with run".into());
         }
     }
     if probe {
@@ -212,6 +229,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             world: world.clone(),
             json,
             gate_tty,
+            no_law,
         }),
         Some(other) => Err(format!(
             "unknown command `{other}`; see mnemorph --help (the world's admin commands are \

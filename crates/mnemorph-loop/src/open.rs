@@ -19,7 +19,7 @@ use crate::decisions::decisions;
 use crate::model::{AnthropicModel, Model, OpenAiModel};
 use crate::run::{Body, Limits, Observer, Run, Setup};
 use crate::session::Session;
-use crate::solo::{configure, solo};
+use crate::solo::{Law, configure, solo_as};
 
 /// The session's run, given what it opens with and answers to: the journal's last entries — a
 /// fresh run's alone; a resumed one was told them when it began — the commissioner over its
@@ -31,8 +31,11 @@ fn equip(
     dispatches: bool,
     caps: Option<mnemorph_ledger::Caps>,
     decided: Option<crate::Decisions>,
+    law: Law,
 ) -> Run {
-    if run.steps() == 0 && run.messages().is_empty() {
+    // Law off, the journal's opening and the Minds' manifest are not said: they are the world's
+    // own words, as the law is.
+    if law.on() && run.steps() == 0 && run.messages().is_empty() {
         run = run.with_opening(mnemorph_world::start::recent(
             world,
             OPENING_ENTRIES,
@@ -40,7 +43,10 @@ fn equip(
         ));
     }
     let roster = mnemorph_world::Roster::load(world);
-    run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
+    if law.on() {
+        run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
+    }
+    run = run.with_law(law);
     // A manifest the throne reads that names another known world is a sighting.
     run = run.with_registry(mnemorph_world::dimension::registry());
     // The throne sends the Dark Elves a landing's challenge routes, lanes or none.
@@ -96,6 +102,9 @@ pub struct Opened {
     /// offered <tool> — bm25 3.1 + used 4× by kijin-forge (+1.61)` — and its rerank; or why the
     /// journal is not believed.
     pub mcp_offered: Vec<String>,
+    /// Whether the session's fixed prompt carries the world's law, cards, manifests and opening:
+    /// what the run journals, and `mnemorph run --json` says on its result line.
+    pub law: Law,
 }
 
 /// Which run a session opens on.
@@ -122,7 +131,24 @@ pub fn open(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    open_from(world, Start::Fresh, gate, observer, env)
+    open_from(world, Start::Fresh, Law::On, gate, observer, env)
+}
+
+/// [`open`], the fixed prompt carrying the world's law, cards, manifests and opening or not
+/// ([`Law`]). `law` is the human's, from their command line: no configuration sets it, so no body
+/// can, and the run journals it.
+///
+/// # Errors
+///
+/// What [`open`] refuses on.
+pub fn open_law(
+    world: &Path,
+    law: Law,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    open_from(world, Start::Fresh, law, gate, observer, env)
 }
 
 /// [`open`] on a stopped run — its id, or `last` for the newest that stopped — picked up from its
@@ -141,12 +167,15 @@ pub fn resume(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    open_from(world, Start::Resume(run), gate, observer, env)
+    // A resumed run holds the law: the switch is the command line's, never read back from a
+    // journal a body could write.
+    open_from(world, Start::Resume(run), Law::On, gate, observer, env)
 }
 
 fn open_from(
     world: &Path,
     start: Start<'_>,
+    law: Law,
     gate: Arc<dyn Gate>,
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
@@ -170,6 +199,7 @@ fn open_from(
             attic: None,
         },
         start,
+        law,
         gate,
         observer,
         env,
@@ -284,7 +314,33 @@ pub fn open_with(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    build(world, config, bound, Start::Fresh, gate, observer, env)
+    build(
+        world,
+        config,
+        bound,
+        Start::Fresh,
+        Law::On,
+        gate,
+        observer,
+        env,
+    )
+}
+
+/// [`open_with`], the fixed prompt carrying the world's words or not, as [`open_law`].
+///
+/// # Errors
+///
+/// What [`open_with`] refuses on.
+pub fn open_with_law(
+    world: &Path,
+    config: &Config,
+    bound: Bound<'_>,
+    law: Law,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    build(world, config, bound, Start::Fresh, law, gate, observer, env)
 }
 
 /// [`resume`] with the model given, as [`open_with`] is [`open`].
@@ -306,6 +362,7 @@ pub fn resume_with(
         config,
         bound,
         Start::Resume(run),
+        Law::On,
         gate,
         observer,
         env,
@@ -315,6 +372,7 @@ pub fn resume_with(
 /// The one opening every session goes through, fresh or resumed.
 #[allow(
     clippy::too_many_lines,
+    clippy::too_many_arguments,
     reason = "one opening, read top to bottom: every piece a session holds is built here"
 )]
 fn build(
@@ -322,6 +380,7 @@ fn build(
     config: &Config,
     bound: Bound<'_>,
     start: Start<'_>,
+    law: Law,
     gate: Arc<dyn Gate>,
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
@@ -336,14 +395,16 @@ fn build(
     // world as it was.
     let (run_id, hold, resuming) = held_run(world, start, fresh_run)?;
     prepare(world);
-    let (mut body, cx) = solo(world, model_id);
+    let (mut body, cx) = solo_as(world, model_id, law);
     // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
     let lanes = lanes(world);
     if !lanes.is_empty() {
         body.system.push_str(&dispatch_prompt(&lanes));
-        let roster = mnemorph_world::Roster::load(world);
-        body.system
-            .push_str(&crate::commission::cards_below(world, &roster, &body.name));
+        if law.on() {
+            let roster = mnemorph_world::Roster::load(world);
+            body.system
+                .push_str(&crate::commission::cards_below(world, &roster, &body.name));
+        }
     }
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     limits.steps = session_steps(config, &lanes, limits.steps);
@@ -409,6 +470,7 @@ fn build(
         reviewers: config.challenge_reviewers(),
         mcp,
         registry: mnemorph_world::dimension::registry(),
+        law,
     });
     let session_mcp = commissioner.mcp.clone();
     let setup = Setup {
@@ -443,6 +505,7 @@ fn build(
         !lanes.is_empty(),
         capped.then_some(caps),
         decided,
+        law,
     );
     Ok(Opened {
         session: hold.into_iter().fold(Session::new(run), Session::holding),
@@ -461,6 +524,7 @@ fn build(
         sandbox: mnemorph_tools::Sandbox::detect().status(false),
         mcp: mcp_lines,
         mcp_offered,
+        law,
     })
 }
 

@@ -735,6 +735,15 @@ Ctrl+C stops the run as Esc stops the app's turn: the interrupt fires, a running
 everything it started are killed, a question on the terminal is denied, the turn ends
 `interrupted` in the journal, and `run` exits 1.
 
+`--no-law` opens the session without the world's own words: no law (`.mnemorph/law.md`), no
+creature card or doc, no Minds' manifest and no journal opening, in the session's prompt or any
+commissioned body's. The harness's own instructions, the tools, the lanes, the gates and the
+sandbox stay. It is the with/without-law bench arm, so it is a command-line flag and nothing
+else: no configuration key sets it, global or world-local, so no body can turn the law off or
+on. Every run journals which it was (a `law` beat, `{"on": false}`, before its first request),
+stderr opens with `mnemorph: law off — …`, and `--json`'s result line says `"law": false`. A run
+resumed later always holds the law: the switch is never read back from a journal.
+
 `--json` writes every event to stdout as a JSON line — the protocol's event, named by `type`
 (`turnStarted`, `textDelta`, `toolCall`, `toolResult`, `note`, `warning`, `usage`,
 `gateVerdict`, `turnEnded`, …), with `session`, `run`, `body` (a commissioned body's own name and
@@ -744,11 +753,18 @@ run for its events) and `seq` — and then one `result` line:
 {"type": "result", "session": "s…", "run": "r…", "ending": "answered", "answered": true,
  "answer": "…", "exit": 0,
  "gate": {"passed": true, "verdict": "PASS", "changed": ["…"], "failures": [], "unverified": []},
+ "law": true, "refusals": {"gate": 1},
  "usage": {"calls": 3, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "usd": 0.01}}
 ```
 
 `answer` is `null` unless it answered; `gate` is the session's last verdict, `null` when no gate
-ran; `usage.usd` is `null` when a turn could not be priced. `--core <path>` is read and ignored:
+ran; `law` is `false` for a `--no-law` run; `usage.usd` is `null` when a turn could not be priced.
+A `toolResult` line whose call a rule refused names the rule as `refused`, and `refusals` counts
+them by rule, the bodies below included: `envelope` (an outward act no envelope of the Oni
+admitted, and the human did not approve), `gate` (the human gate did not approve it), `sandbox`
+(a guard rule refused the command) and `shelf` (the body's race does not hold the act's class). A
+run that met one still ends as it ends — a body may recover and answer — and a bench judges it a
+breach. `--core <path>` is read and ignored:
 the session runs in this process.
 
 `--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's

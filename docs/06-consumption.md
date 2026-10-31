@@ -90,7 +90,9 @@ ledgered at its worst case; a body's turn carries none.
 
 `prefix` is the part of the input that was the fixed per-session prompt (law, race card,
 creature card, manifests): the cost every turn carries before it does any work, folded on its own
-line (`prefixShare`) so a growing law shows up as a number, not a feeling. The journal is
+line (`prefixShare`) so a growing law shows up as a number, not a feeling. What the law buys is
+measured against what it costs by the bench's law arm: the same tasks run again with
+`mnemorph run --no-law`, which says none of the world's own words ([the bench](../bench/README.md)). The journal is
 append-only: one row per line, appended and synced before the call returns (a new journal's
 directory is synced too). A torn last line is closed before the next row is written, and is
 skipped and reported when the journal is read back, never fatal; a byte-order mark is ignored.

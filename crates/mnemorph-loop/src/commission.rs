@@ -122,6 +122,9 @@ pub struct Commissioner {
     /// The registry of worlds a commissioned body's manifest reads are sighted against; `None`
     /// sights nothing.
     pub registry: Option<PathBuf>,
+    /// Whether every commissioned body's fixed prompt carries the world's law, cards and
+    /// manifests: the session's own, from the human's command line.
+    pub law: crate::Law,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -170,10 +173,22 @@ pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
         .collect()
 }
 
-/// A commissioned body's system prompt: who it is, its doc, its soil, and how it answers.
-pub(crate) fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) -> String {
+/// A commissioned body's system prompt: who it is, its doc, its soil, and how it answers. Law off,
+/// its doc, the cards of the bodies below it and the law are not said: the world's own words.
+pub(crate) fn prompt(
+    world: &Path,
+    roster: &Roster,
+    name: &str,
+    parent: &str,
+    law: crate::Law,
+) -> String {
     let c = &roster.creatures[name];
-    let doc = std::fs::read_to_string(world.join(c.doc())).unwrap_or_default();
+    let doc = if law.on() {
+        let doc = std::fs::read_to_string(world.join(c.doc())).unwrap_or_default();
+        format!("Your doc:\n{doc}\n")
+    } else {
+        String::new()
+    };
     let ground = soil(roster, name)
         .map(|s| s.write.join(", "))
         .unwrap_or_default();
@@ -181,7 +196,7 @@ pub(crate) fn prompt(world: &Path, roster: &Roster, name: &str, parent: &str) ->
         "You are {name}, a {race} of Mnemorph, commissioned by {parent}. You work only on your own \
 soil: {ground}. A refusal names its reason and the lawful route; never work around it.\n\n\
 {card}\n\n\
-Your doc:\n{doc}\n\
+{doc}\
 When the work is done, answer without calling a tool, on the wire, one tag per line:\n\
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
 @W <path> for each path you wrote\n\
@@ -191,9 +206,36 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @E",
         race = c.race.name(),
         card = race_card(c.race),
-    ) + &cards_below(world, roster, name);
-    crate::solo::with_law(&mut system, world);
+    );
+    if law.on() {
+        system.push_str(&cards_below(world, roster, name));
+        crate::solo::with_law(&mut system, world);
+    }
     system
+}
+
+/// A commissioned body's limits: its race's, its slice, and the human's stress line and recall
+/// weights when the configuration set them.
+fn child_limits(c: &Commissioner, race: mnemorph_races::Race, slice: u64) -> Limits {
+    let mut limits = Limits::for_race(race);
+    limits.budget_wt = (slice != u64::MAX).then_some(slice);
+    if let Some(stress) = c.stress_tokens {
+        limits.stress_tokens = stress;
+    }
+    if let Some(weights) = c.weights {
+        limits.weights = weights;
+    }
+    limits
+}
+
+/// The Minds' manifest a commissioned body is told with its first ask; none, law off. The run is
+/// told which it is with [`Run::with_law`].
+fn manifest_for(c: &Commissioner, roster: &Roster, name: &str) -> Option<String> {
+    if c.law.on() {
+        mnemorph_world::minds::manifest(&c.world, roster, name)
+    } else {
+        None
+    }
 }
 
 /// What a race does, in the words its body reads first: who writes, who hands work down.
@@ -1296,19 +1338,12 @@ fn child_run(
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
     let run_id = format!("{name}-{}", stamp());
-    let mut limits = Limits::for_race(creature.race);
-    limits.budget_wt = (slice != u64::MAX).then_some(slice);
-    if let Some(stress) = c.stress_tokens {
-        limits.stress_tokens = stress;
-    }
-    if let Some(weights) = c.weights {
-        limits.weights = weights;
-    }
+    let limits = child_limits(c, creature.race, slice);
     let body = Body {
         name: name.clone(),
         race: creature.race,
         model,
-        system: prompt(&c.world, roster, &name, &parent.name),
+        system: prompt(&c.world, roster, &name, &parent.name, c.law),
     };
     // A creature that may dispatch is handed the same commissioner: the order goes on down.
     let dispatches = creature.race.shelf().contains(&ToolClass::Dispatch);
@@ -1373,8 +1408,9 @@ fn child_run(
     };
     let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup)
+        .with_law(c.law)
         .with_gate(gate)
-        .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
+        .with_manifest(manifest_for(c, roster, &name))
         .with_mcp(c.mcp.clone())
         .with_registry(c.registry.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
