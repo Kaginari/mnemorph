@@ -208,6 +208,7 @@ fn swap(w: &World) {
             files: vec![Staged {
                 path: MIND.into(),
                 after: Some(NEW.as_bytes().to_vec()),
+                creates: false,
             }],
             proven_on: Vec::new(),
         },

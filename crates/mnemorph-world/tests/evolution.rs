@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use mnemorph_ledger::evolution::{self, EVOLUTION_WINDOW, EvolutionRow, Gate};
 use mnemorph_ledger::{Build, Journal};
 use mnemorph_world::evolution::{
-    Arm, Facts, Plan, Staged, fingerprint, kept_before, restore_before, stale_at, stamp_for,
-    swap_at,
+    Arm, Facts, FileSet, Plan, Staged, fingerprint, kept_before, restore_before,
+    staged as read_staged, staging, stale_at, stamp_for, swap_at,
 };
 
 const MIND: &str = ".mnemorph/minds/careful/README.md";
@@ -67,6 +67,14 @@ fn staged(path: &str, after: Option<&str>) -> Staged {
     Staged {
         path: path.into(),
         after: after.map(|a| a.as_bytes().to_vec()),
+        creates: false,
+    }
+}
+
+fn created(path: &str, after: &str) -> Staged {
+    Staged {
+        creates: true,
+        ..staged(path, Some(after))
     }
 }
 
@@ -81,7 +89,7 @@ fn a_swap_writes_one_stamped_row_naming_every_file_before_and_after() {
         &w.ledger(),
         &plan(
             "careful-1",
-            vec![staged(MIND, Some(new)), staged(added, Some("- read\n"))],
+            vec![staged(MIND, Some(new)), created(added, "- read\n")],
         ),
     )
     .unwrap();
@@ -322,4 +330,118 @@ fn a_swap_from_another_build_is_not_stamped_and_asks_for_a_reswap() {
         Vec::<String>::new(),
         "the new swap is the open one"
     );
+}
+
+/// The staged plan holds exactly the file set named: an extra or a missing file, or a link, fails.
+#[test]
+fn the_staged_plan_holds_exactly_its_file_set() {
+    let w = World::new("fileset");
+    let world = w.world();
+    let added = ".mnemorph/minds/careful/checklist.md";
+    let dir = staging(&world, "p1");
+    for (path, text) in [(MIND, "new\n"), (added, "- read\n")] {
+        fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
+        fs::write(dir.join(path), text).unwrap();
+    }
+    let set = |replaces: &[&str], creates: &[&str]| FileSet {
+        replaces: replaces.iter().map(|p| (*p).to_owned()).collect(),
+        creates: creates.iter().map(|p| (*p).to_owned()).collect(),
+        removes: Vec::new(),
+    };
+    let plan = read_staged(&world, "p1", &set(&[MIND], &[added])).unwrap();
+    assert_eq!(
+        plan,
+        vec![staged(MIND, Some("new\n")), created(added, "- read\n")]
+    );
+    let e = read_staged(&world, "p1", &set(&[MIND], &[])).unwrap_err();
+    assert!(e.contains("an extra file") && e.contains(added), "{e}");
+    let ghost = ".mnemorph/minds/careful/ghost.md";
+    let e = read_staged(&world, "p1", &set(&[MIND, ghost], &[added])).unwrap_err();
+    assert!(e.contains("a missing file") && e.contains(ghost), "{e}");
+    // A removed file is never staged: staged, it is extra.
+    let mut removing = set(&[MIND], &[added]);
+    removing.removes.push(added.into());
+    removing.creates.clear();
+    let e = read_staged(&world, "p1", &removing).unwrap_err();
+    assert!(e.contains("an extra file"), "{e}");
+    #[cfg(unix)]
+    {
+        let link = dir.join(".mnemorph/minds/careful/link.md");
+        std::os::unix::fs::symlink("/etc/hostname", &link).unwrap();
+        let e = read_staged(&world, "p1", &set(&[MIND], &[added])).unwrap_err();
+        assert!(e.contains("not a regular file"), "{e}");
+        fs::remove_file(&link).unwrap();
+        let elsewhere = w.root.join("elsewhere");
+        fs::create_dir_all(&elsewhere).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, staging(&world, "p2")).unwrap();
+        let e = read_staged(&world, "p2", &set(&[], &[])).unwrap_err();
+        assert!(e.contains("a link"), "{e}");
+    }
+    assert!(read_staged(&world, "../p1", &set(&[MIND], &[added])).is_err());
+}
+
+/// A file the plan creates must not already exist, one it replaces must, and no folder on its way
+/// may be a link: refused before anything is written.
+#[test]
+fn an_existing_destination_is_refused() {
+    let w = World::new("destination");
+    let world = w.world();
+    let before = fs::read(world.join(MIND)).unwrap();
+    let e = swap_at(&world, &w.ledger(), &plan("p", vec![created(MIND, "x\n")])).unwrap_err();
+    assert!(e.contains("destination already exists"), "{e}");
+    assert_eq!(fs::read(world.join(MIND)).unwrap(), before);
+    let ghost = ".mnemorph/minds/careful/ghost.md";
+    let e = swap_at(
+        &world,
+        &w.ledger(),
+        &plan("p", vec![staged(ghost, Some("x"))]),
+    )
+    .unwrap_err();
+    assert!(e.contains("does not exist"), "{e}");
+    assert!(!world.join(ghost).exists());
+    #[cfg(unix)]
+    {
+        let outside = w.root.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, world.join(".mnemorph/young")).unwrap();
+        let e = swap_at(
+            &world,
+            &w.ledger(),
+            &plan("p", vec![created(".mnemorph/young/README.md", "# young\n")]),
+        )
+        .unwrap_err();
+        assert!(e.contains("a link"), "{e}");
+        assert!(!outside.join("README.md").exists());
+    }
+    assert!(w.rows().is_empty(), "a refused plan writes no row");
+    swap_at(
+        &world,
+        &w.ledger(),
+        &plan(
+            "p",
+            vec![created(".mnemorph/minds/young/README.md", "# y\n")],
+        ),
+    )
+    .unwrap();
+}
+
+/// A task another swap's plan was proven on is never stamped: it is in that split, not held out.
+#[test]
+fn a_task_another_swap_was_proven_on_is_not_stamped() {
+    let w = World::new("splits");
+    let mut first = plan("p0", vec![staged(MIND, Some("one\n"))]);
+    first.bodies = vec!["veldora".into()];
+    first.proven_on = vec![fingerprint("a proving task")];
+    swap_at(&w.world(), &w.ledger(), &first).unwrap();
+    swap_at(
+        &w.world(),
+        &w.ledger(),
+        &plan(
+            "p1",
+            vec![created(".mnemorph/minds/careful/more.md", "x\n")],
+        ),
+    )
+    .unwrap();
+    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a proving task").is_none());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a fresh task").is_some());
 }

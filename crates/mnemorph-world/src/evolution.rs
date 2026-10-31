@@ -10,6 +10,10 @@
 //!   beside the ledger for the controls ([`restore_before`]), and one `swap` row names every file
 //!   with its digest before and after and the build. A plan whose diff is not exactly its named
 //!   files is put back and writes no row.
+//! - **The staged plan** ([`staged`]). The plan staged under `.mnemorph/tmp/evolution/<id>/` must
+//!   hold exactly the file set the human names: a staged file not named, a named file not staged,
+//!   or anything there but a regular file refuses it. A file the plan creates must not already
+//!   exist, and no folder on a named path may be a link: the world is the bodies' to write.
 //! - **The runs** ([`stamp_for`], [`Stamp::record`]). Each ask of a body a swap names, while its
 //!   window is open, is stamped with the swap's id, the build, the task's fingerprint (the SHA-256
 //!   of the ask) and the named files' state as the run found and left them, and appended as a
@@ -21,9 +25,9 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-use mnemorph_ledger::evolution::{self, EvolutionRow, FileChange, Ledger, Run};
+use mnemorph_ledger::evolution::{self, FileChange, Ledger, Run};
 /// The arm, the gate's word, the swap row and the judgement, as the writer's callers name them.
-pub use mnemorph_ledger::evolution::{Arm, Gate, Judgement, Swap};
+pub use mnemorph_ledger::evolution::{Arm, EvolutionRow, Gate, Judgement, Swap};
 use mnemorph_ledger::{Build, Journal};
 
 /// Where a world's evolution ledger is kept:
@@ -148,6 +152,155 @@ pub struct Staged {
     pub path: String,
     /// Its bytes after the swap; `None` when the swap removes it.
     pub after: Option<Vec<u8>>,
+    /// The plan creates it: its destination must not exist. Otherwise the file it replaces or
+    /// removes must.
+    pub creates: bool,
+}
+
+/// The file set the human names for a staged plan: the files it replaces, those it creates and
+/// those it removes, each by world path.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FileSet {
+    /// Files the plan rewrites: each exists in the world and is staged.
+    pub replaces: Vec<String>,
+    /// Files the plan creates: each is staged, and must not exist in the world.
+    pub creates: Vec<String>,
+    /// Files the plan removes: never staged.
+    pub removes: Vec<String>,
+}
+
+/// Where a plan is staged in `world`: `.mnemorph/tmp/evolution/<id>/`.
+#[must_use]
+pub fn staging(world: &Path, id: &str) -> PathBuf {
+    world.join(".mnemorph/tmp/evolution").join(id)
+}
+
+/// The plan `id` staged in `world`, read against the file set the human named: every file under
+/// its staging folder at the world path it replaces or creates, plus each file it removes. The
+/// staging folder must hold exactly the named files to replace and create — a staged file not
+/// named is extra, a named file not staged is missing — and nothing but folders and regular
+/// files; no link on the way to it or under it is followed.
+///
+/// # Errors
+///
+/// The id is malformed, the staging folder holds more or less than the file set, a link or
+/// another kind of file, or it cannot be read.
+pub fn staged(world: &Path, id: &str, set: &FileSet) -> Result<Vec<Staged>, String> {
+    fn walk(
+        world: &Path,
+        root: &Path,
+        dir: &Path,
+        out: &mut BTreeMap<String, Vec<u8>>,
+    ) -> Result<(), String> {
+        let shown = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
+        let entries = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for e in entries {
+            let e = e.map_err(|e| format!("{}: {e}", dir.display()))?;
+            let path = e.path();
+            let kind = fs::symlink_metadata(&path)
+                .map_err(|e| format!("{}: {e}", shown(&path)))?
+                .file_type();
+            if kind.is_dir() {
+                walk(world, root, &path, out)?;
+            } else if kind.is_file() {
+                let rel = path
+                    .strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                // Read through no link: a folder or the file swapped for one since is refused.
+                let from = rel_of(world, &path);
+                let bytes = crate::beneath::read(world, &from, KEPT_CAP)
+                    .map_err(|e| format!("{rel}: {e}"))?
+                    .ok_or_else(|| format!("{rel}: staged, and gone while read"))?;
+                out.insert(rel, bytes);
+            } else {
+                return Err(format!(
+                    "{}: staged, and not a regular file: a staged plan holds files alone",
+                    shown(&path)
+                ));
+            }
+        }
+        Ok(())
+    }
+    valid_id(id)?;
+    let dir = staging(world, id);
+    no_link_on_the_way(world, &dir)?;
+    let mut found = BTreeMap::new();
+    match fs::symlink_metadata(&dir) {
+        Ok(m) if m.is_dir() => walk(world, &dir, &dir, &mut found)?,
+        Ok(_) => return Err(format!("{}: the staging is no folder", dir.display())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{}: {e}", dir.display())),
+    }
+    let named: std::collections::BTreeSet<&str> = set
+        .replaces
+        .iter()
+        .chain(&set.creates)
+        .map(String::as_str)
+        .collect();
+    if let Some(extra) = found.keys().find(|p| !named.contains(p.as_str())) {
+        return Err(format!(
+            "{extra}: staged, and not in the plan's file set: an extra file"
+        ));
+    }
+    if let Some(missing) = named.iter().find(|p| !found.contains_key(**p)) {
+        return Err(format!(
+            "{missing}: in the plan's file set, and not staged: a missing file"
+        ));
+    }
+    let mut out: Vec<Staged> = set
+        .replaces
+        .iter()
+        .map(|p| (p, false))
+        .chain(set.creates.iter().map(|p| (p, true)))
+        .map(|(p, creates)| Staged {
+            path: p.clone(),
+            after: found.get(p).cloned(),
+            creates,
+        })
+        .collect();
+    out.extend(set.removes.iter().map(|p| Staged {
+        path: p.clone(),
+        after: None,
+        creates: false,
+    }));
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+/// Refuses when any folder from `world` down to `to`, `to` itself included, is a link or no
+/// folder: a body could point one out of the world.
+fn no_link_on_the_way(world: &Path, to: &Path) -> Result<(), String> {
+    let rel = to.strip_prefix(world).map_err(|e| e.to_string())?;
+    let mut at = world.to_path_buf();
+    for part in rel.components() {
+        at.push(part);
+        match fs::symlink_metadata(&at) {
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err(format!(
+                    "{}: a link on a plan's path; a swap follows none",
+                    rel_of(world, &at)
+                ));
+            }
+            Ok(m) if !m.is_dir() && at != to => {
+                return Err(format!(
+                    "{}: a file where a plan's path needs a folder",
+                    rel_of(world, &at)
+                ));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(format!("{}: {e}", rel_of(world, &at))),
+        }
+    }
+    Ok(())
+}
+
+fn rel_of(world: &Path, at: &Path) -> String {
+    at.strip_prefix(world).unwrap_or(at).display().to_string()
 }
 
 /// An evolution the human accepted, to be swapped in.
@@ -224,19 +377,42 @@ pub fn kept_before(ledger: &Path, id: &str) -> PathBuf {
 pub fn restore_before(ledger: &Path, swap: &Swap, root: &Path) -> io::Result<()> {
     let kept = kept_before(ledger, &swap.id);
     for f in &swap.files {
-        let at = root.join(&f.path);
         if f.before.is_some() {
-            let bytes = fs::read(kept.join(&f.path))?;
-            if let Some(dir) = at.parent() {
-                fs::create_dir_all(dir)?;
-            }
-            fs::write(&at, bytes)?;
+            let bytes = crate::regular::read(&kept.join(&f.path), KEPT_CAP)
+                .map_err(|e| io::Error::other(format!("{}: {e}", f.path)))?
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::NotFound, format!("{}: not kept", f.path))
+                })?;
+            crate::beneath::write(root, &f.path, &bytes, false)?;
         } else {
-            match fs::remove_file(&at) {
-                Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
-            }
+            crate::beneath::remove(root, &f.path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Each file of `plan` against the world before it: no link on its way, a file it creates absent,
+/// a file it replaces or removes present.
+fn destinations(
+    world: &Path,
+    plan: &Plan,
+    before: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    for f in &plan.files {
+        let at = world.join(&f.path);
+        no_link_on_the_way(world, &at)?;
+        let exists = before.contains_key(&f.path) || fs::symlink_metadata(&at).is_ok();
+        if f.creates && exists {
+            return Err(format!(
+                "{}: the plan creates it, and the destination already exists",
+                f.path
+            ));
+        }
+        if !f.creates && !exists {
+            return Err(format!(
+                "{}: the plan replaces or removes it, and it does not exist",
+                f.path
+            ));
         }
     }
     Ok(())
@@ -294,15 +470,14 @@ pub fn swap_at(world: &Path, ledger: &Journal<EvolutionRow>, plan: &Plan) -> Res
         ));
     }
     let before = soil(world).map_err(|e| format!("the soil cannot be read: {e}"))?;
+    destinations(world, plan, &before)?;
     let kept = kept_before(ledger.path(), &plan.id);
     if kept.exists() {
         return Err(format!("{} already exists", kept.display()));
     }
     for f in &plan.files {
-        if before.contains_key(&f.path) {
-            let to = kept.join(&f.path);
-            fs::create_dir_all(to.parent().unwrap_or(&kept))
-                .and_then(|()| fs::copy(world.join(&f.path), &to).map(|_| ()))
+        if let Some(digest) = before.get(&f.path) {
+            keep(world, &kept, &f.path, digest)
                 .map_err(|e| format!("{}: its bytes before cannot be kept: {e}", f.path))?;
         }
     }
@@ -374,21 +549,38 @@ fn swap_named(plan: &Plan, before: &BTreeMap<String, String>) -> Swap {
     }
 }
 
+/// The most bytes a staged file, or a named file's bytes before, may hold: what the other
+/// journals read of one file.
+pub const KEPT_CAP: u64 = crate::regular::TEXT_CAP;
+
+/// Keeps the world file `path`'s bytes before the swap under `kept`, read through no link, at
+/// most [`KEPT_CAP`], and only if they are still the bytes the soil hashed (`digest`). The folders
+/// are the human's alone (0700), the file too (0600).
+fn keep(world: &Path, kept: &Path, path: &str, digest: &str) -> io::Result<()> {
+    let bytes = crate::beneath::read(world, path, KEPT_CAP)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "gone since the soil was read"))?;
+    if evolution::digest(&bytes) != digest {
+        return Err(io::Error::other("changed since the soil was read"));
+    }
+    let to = kept.join(path);
+    let mut dirs = fs::DirBuilder::new();
+    dirs.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut dirs, 0o700);
+    dirs.create(to.parent().unwrap_or(kept))?;
+    let mut open = fs::OpenOptions::new();
+    open.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+    io::Write::write_all(&mut open.open(&to)?, &bytes)
+}
+
+/// Writes the plan into `world` through no link: a file it creates only where nothing stands.
 fn write_plan(world: &Path, plan: &Plan) -> io::Result<()> {
     for f in &plan.files {
-        let at = world.join(&f.path);
         match &f.after {
-            Some(bytes) => {
-                if let Some(dir) = at.parent() {
-                    fs::create_dir_all(dir)?;
-                }
-                fs::write(&at, bytes)?;
-            }
-            None => match fs::remove_file(&at) {
-                Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
-            },
+            Some(bytes) => crate::beneath::write(world, &f.path, bytes, f.creates)?,
+            None => crate::beneath::remove(world, &f.path)?,
         }
     }
     Ok(())
@@ -399,10 +591,24 @@ fn read_ledger(path: &Path) -> Result<Ledger, String> {
     evolution::read(path, None).map_err(|e| format!("the evolution ledger cannot be read: {e}"))
 }
 
-/// A task's fingerprint: the SHA-256 of the ask, trimmed.
+/// A task's fingerprint: the SHA-256 of the ask normalized — trimmed, every run of whitespace one
+/// space, lowercased. A reworded ask is another task.
 #[must_use]
 pub fn fingerprint(ask: &str) -> String {
-    evolution::digest(ask.trim().as_bytes())
+    let normal = ask.split_whitespace().collect::<Vec<_>>().join(" ");
+    evolution::digest(normal.to_lowercase().as_bytes())
+}
+
+/// The fingerprint of a task the human names: a 64-digit lowercase hex digest as given, else the
+/// [`fingerprint`] of the text — the same the runs are stamped with.
+#[must_use]
+pub fn task_of(given: &str) -> String {
+    let g = given.trim();
+    if g.len() == 64 && g.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        g.to_owned()
+    } else {
+        fingerprint(given)
+    }
 }
 
 /// A run in a swap's window, stamped when it starts and written when it ends.
@@ -435,8 +641,8 @@ pub struct Facts {
 
 /// The stamp for an ask of `body` in `world`, over the ledger at `ledger`: `None` when no swap's
 /// window is open for the body, the swap was made by another build (its window could never fill
-/// under this one), the ask's task is already on the ledger or is one the plan was proven on (it
-/// could not be held out), or the ledger cannot be read — then the run is no evolution's to judge.
+/// under this one), the ask's task is already on the ledger or is one any swap's plan was proven
+/// on (it could not be held out), or the ledger cannot be read — then the run is no evolution's to judge.
 #[must_use]
 pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<Stamp> {
     let read = read_ledger(ledger).ok()?;
@@ -445,7 +651,7 @@ pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<S
         return None;
     }
     let fp = fingerprint(ask);
-    if evolution::seen(&read, &fp) || swap.proven_on.contains(&fp) {
+    if evolution::seen(&read, &fp) || evolution::proven(&read, &fp) {
         return None;
     }
     let state = evolution::state_now(world, swap).ok()?;
@@ -502,5 +708,110 @@ mod tests {
                 .any(|j| j.name == "evolution" && j.path == at)
         );
         assert!(journal(world).is_some_and(|j| j.is_chained()));
+    }
+
+    fn plan_of(files: Vec<Staged>) -> Plan {
+        Plan {
+            id: "p".into(),
+            creature: "rimuru".into(),
+            bodies: vec!["rimuru".into()],
+            arm: Arm::Split,
+            files,
+            proven_on: Vec::new(),
+        }
+    }
+
+    /// A folder or file swapped for a link after the destinations were checked: the write, the
+    /// kept copy and the restore all refuse it, and nothing outside the world is touched.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_swapped_in_after_the_check_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("world");
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(world.join(".mnemorph/minds/careful")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(world.join(".mnemorph/minds/careful/README.md"), "old").unwrap();
+        fs::write(outside.join("README.md"), "secret").unwrap();
+        let young = ".mnemorph/young/README.md";
+        let create = plan_of(vec![Staged {
+            path: young.into(),
+            after: Some(b"# young".to_vec()),
+            creates: true,
+        }]);
+        let before = soil(&world).unwrap();
+        destinations(&world, &create, &before).unwrap();
+        std::os::unix::fs::symlink(&outside, world.join(".mnemorph/young")).unwrap();
+        assert!(write_plan(&world, &create).is_err());
+        assert_eq!(
+            fs::read_to_string(outside.join("README.md")).unwrap(),
+            "secret"
+        );
+        fs::remove_file(world.join(".mnemorph/young")).unwrap();
+        // The created file itself planted as a link: the create refuses.
+        fs::create_dir_all(world.join(".mnemorph/young")).unwrap();
+        std::os::unix::fs::symlink(outside.join("README.md"), world.join(young)).unwrap();
+        assert!(write_plan(&world, &create).is_err());
+        assert_eq!(
+            fs::read_to_string(outside.join("README.md")).unwrap(),
+            "secret"
+        );
+        // The replaced file's folder swapped for a link: its bytes before are never kept from it.
+        let mind = ".mnemorph/minds/careful/README.md";
+        let digest = before[mind].clone();
+        fs::rename(world.join(".mnemorph/minds"), dir.path().join("minds")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("minds"), world.join(".mnemorph/minds"))
+            .unwrap();
+        let kept = dir.path().join("state/x.swaps/p/before");
+        assert!(keep(&world, &kept, mind, &digest).is_err());
+        assert!(!kept.join(mind).exists());
+        let replace = plan_of(vec![Staged {
+            path: mind.into(),
+            after: Some(b"new".to_vec()),
+            creates: false,
+        }]);
+        assert!(write_plan(&world, &replace).is_err());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("minds/careful/README.md")).unwrap(),
+            "old"
+        );
+    }
+
+    /// The bytes before are kept capped, their folders and file the owner's alone, and only while
+    /// they are the bytes the soil hashed.
+    #[cfg(unix)]
+    #[test]
+    fn the_bytes_before_are_kept_private_capped_and_as_hashed() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("world");
+        let mind = ".mnemorph/minds/careful/README.md";
+        fs::create_dir_all(world.join(".mnemorph/minds/careful")).unwrap();
+        fs::write(world.join(mind), "old").unwrap();
+        let kept = dir.path().join("state/x.swaps/p/before");
+        let digest = evolution::digest(b"old");
+        assert!(keep(&world, &kept, mind, &evolution::digest(b"other")).is_err());
+        keep(&world, &kept, mind, &digest).unwrap();
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&kept.join(mind)), 0o600);
+        assert_eq!(mode(&kept), 0o700);
+        assert_eq!(mode(kept.join(mind).parent().unwrap()), 0o700);
+        let big = vec![b'x'; usize::try_from(KEPT_CAP).unwrap() + 1];
+        fs::write(world.join(mind), &big).unwrap();
+        let other = dir.path().join("state/x.swaps/q/before");
+        assert!(keep(&world, &other, mind, &evolution::digest(&big)).is_err());
+    }
+
+    #[test]
+    fn a_task_is_fingerprinted_normalized_and_a_digest_is_taken_as_given() {
+        assert_eq!(
+            fingerprint("  Fix the\tparser\n"),
+            fingerprint("fix   THE parser")
+        );
+        assert_ne!(fingerprint("fix the parser"), fingerprint("fix a parser"));
+        let fp = fingerprint("fix the parser");
+        assert_eq!(task_of(&fp), fp);
+        assert_eq!(task_of(" Fix the parser "), fp);
+        assert_eq!(task_of(&fp.to_uppercase()), fingerprint(&fp.to_uppercase()));
     }
 }

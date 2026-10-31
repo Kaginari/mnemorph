@@ -373,9 +373,11 @@ includes the witness.
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
   each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over
   exactly the files it named, its judgement replayed from the chained ledger (built: the
-  human's `mnemorphd evolution swap` writes the swap row, every ask of its bodies a run row, and
-  `mnemorphd evolution judge` runs the controls on demand and proposes; still M11's: the trigger
-  and the staged, proven plans, and `evolve apply | reject`) —
+  human's `mnemorphd evolution swap` swaps in a staged plan that is exactly its named file set,
+  creating no file over an existing one, and writes the swap row; every ask of its bodies a run
+  row, a task in two splits held out by none; `mnemorphd evolution judge` runs the controls on
+  demand and proposes; still M11's: the trigger, the plans proven over an overlay, and `evolve
+  apply | reject`) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed

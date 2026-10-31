@@ -1420,10 +1420,14 @@ what comes after it, and only that:
   with, and neither does a run under another build. A window run that found or left the named
   files other than the swap left them refuses the judgement: the state judged is not the state
   named.
-- **Held-out tasks, used once.** Tasks are told apart by fingerprint. A window's task is never one
-  the plan was proven on, and never one any earlier run row carries — stamped or not, of this swap
-  or another, twice in the window included — but this swap's own controls; any of these refuses
-  the judgement.
+- **Held-out tasks, used once.** Tasks are told apart by fingerprint: the SHA-256 of the ask
+  normalized — trimmed, every run of whitespace one space, lowercased. The record is only as
+  strong as the ask's source: a reworded ask is a new task. The
+  tasks a plan was proven on are one split, its window's tasks the held-out other, and the ledger
+  under the state directory is the record of both. A window's task is never one the plan was
+  proven on, never one an earlier swap was proven on (*a task in two splits* holds out nothing),
+  and never one any earlier run row carries — stamped or not, of this swap or another, twice in
+  the window included — but this swap's own controls; any of these refuses the judgement.
 - **The do-nothing control.** Every window task is run again without the change, after the swap
   and by the same body — a fixture that finds and leaves the named files in their before state,
   stamped as the control — and the fixtures include tasks where no change is the right output. A
@@ -1453,15 +1457,27 @@ what comes after it, and only that:
 here runs on its own: the human swaps a plan in and asks for its judgement.
 
 1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
-   path it replaces — a Mind under `.mnemorph/minds/`, a creature doc under
-   `.mnemorph/<race>/<name>/`. Who drafts it is free (a body, the human, the evolution trigger
-   from M11); it changes nothing while staged.
-2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` (`--arm`,
-   `--body` for each body judged — the creature unless named — `--remove` for a file it removes,
-   `--proven-on` for each task it was proven on). The plan is shown and asked for `y` at the
-   terminal; a body never runs it. The harness hashes the soil under `.mnemorph/` (the
+   path it replaces or creates — a Mind under `.mnemorph/minds/`, a creature doc under
+   `.mnemorph/<race>/<name>/`, a split's young in a folder of its own. Who drafts it is free (a
+   body, the human, the evolution trigger from M11); it changes nothing while staged.
+2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
+   `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it
+   removes — and `--arm`, `--body` for each body judged (the creature unless named) and
+   `--proven-on` for each task it was proven on, by the ask's text (fingerprinted as the runs
+   are) or by that 64-digit digest. **The staged plan is exactly its file set:** a
+   staged file the set does not name is extra, a named file not staged is missing, and anything
+   staged but a folder or a regular file — a link above all — refuses the plan, since the bodies
+   can write the staging. **The destination must not exist:** a file the plan creates that is
+   already there, or one it replaces or removes that is not, is refused, and so is any link on a
+   named path, before a byte is written. A body can plant a link after that check, so every read
+   and write of a named or staged file opens its path one folder at a time from the world,
+   following no link, and the file itself without following one, checked on its handle: a
+   created file goes in only where nothing stands, a replaced one is renamed into place, never
+   written through a link. A staged file, or a named file's bytes before, is read up to 8 MiB. The plan is shown and asked for `y` at the terminal; a
+   body never runs it. The harness hashes the soil under `.mnemorph/` (the
    instruments, memory and scratch left out) before and after writing it, keeps the named files'
-   bytes before beside the ledger (`<ledger>.swaps/<id>/before/`), and appends one `swap` row:
+   bytes before beside the ledger (`<ledger>.swaps/<id>/before/`, folders 0700 and files 0600,
+   kept only while they are the bytes the soil hashed), and appends one `swap` row:
    the id, the creature and bodies, the arm, the build, every named file with its SHA-256 before
    and after, and the soil's diff. A plan whose diff is not exactly its named files, whose id is
    taken, a path outside the creature docs and Minds, or a body still in another swap's window
@@ -1472,7 +1488,7 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    named files' state as the run found them. When the ask ends, a `run` row adds the state the
    run left them in and the harness's facts: the gate's last word, a first-try pass, and the holes
    it found (a *tests intact* failure). An ask the human stops writes no row; a task the ledger
-   already holds, or one the plan was proven on, is never stamped, since it could no longer be
+   already holds, or one any swap's plan was proven on, is never stamped, since it could no longer be
    held out. Neither is an ask under another build than the swap's: that window could never fill,
    so `mnemorph status` and `judge` say `swap <id> built by <x>; this build <y>: re-swap to judge`,
    and such a swap holds no body against a new one. After 10 rows the window is full and asks run
