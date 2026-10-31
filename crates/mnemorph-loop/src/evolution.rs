@@ -153,7 +153,7 @@ fn body_run(
             name: name.to_owned(),
             race: creature.race,
             model: c.model_id.clone(),
-            system: crate::commission::prompt(world, &roster, name, "human"),
+            system: crate::commission::prompt(world, &roster, name, "human", crate::Law::On),
         };
         let gate = EndGate {
             verify: creature.verify.clone(),

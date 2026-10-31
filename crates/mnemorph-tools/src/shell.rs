@@ -337,10 +337,12 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
             } else {
                 format!(" (the human may let rule `{}` ask instead)", rule.name())
             };
-            return Err(Outcome::error(format!(
+            let mut refused = Outcome::error(format!(
                 "refused by guard rule `{}`: {reason}{hint}",
                 rule.name()
-            )));
+            ));
+            refused.meta.guarded = true;
+            return Err(refused);
         }
         Verdict::Run {
             class,

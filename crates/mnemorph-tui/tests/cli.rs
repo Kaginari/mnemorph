@@ -43,6 +43,7 @@ fn run_reads_its_ask_from_the_words_or_stdin() {
         world: world.map(PathBuf::from),
         json,
         gate_tty,
+        no_law: false,
     };
     assert_eq!(
         p(&["run", "fix", "the", "bug"]),
@@ -67,6 +68,19 @@ fn run_reads_its_ask_from_the_words_or_stdin() {
         p(&["run", "--gate-tty", "go"]),
         Ok(run(Some("go"), None, false, true))
     );
+    // The law switch is the command line's, and only run's.
+    assert_eq!(
+        p(&["run", "go", "--no-law"]),
+        Ok(Command::Run {
+            ask: Some("go".into()),
+            world: None,
+            json: false,
+            gate_tty: false,
+            no_law: true,
+        })
+    );
+    assert!(p(&["--no-law"]).is_err(), "--no-law goes with run");
+    assert!(p(&["status", "--no-law"]).is_err());
     assert!(p(&["--json"]).is_err(), "--json goes with run");
     assert!(p(&["--gate-tty"]).is_err());
     assert!(p(&["run", "x", "--resume", "last"]).is_err());

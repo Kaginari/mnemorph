@@ -1,16 +1,18 @@
 //! `mnemorph run`: one ask, without the terminal app, through the same session — the same
 //! opening, the same loop, the same end gate. Progress goes to stderr, the answer to stdout; with
 //! `--json`, every event goes to stdout as a JSON line (the client protocol's event, named by
-//! `type`, with its `session`, `run`, `body` and `seq`), and a last `result` line says how it
-//! ended. No one is there to approve a gated act: the gate denies it, said on stderr, unless the
+//! `type`, with its `session`, `run`, `body` and `seq`, and on a tool result a rule refused, the
+//! rule as `refused`), and a last `result` line says how it ended, whether the law was said, and
+//! the refusals counted by rule. No one is there to approve a gated act: the gate denies it, said on stderr, unless the
 //! human asked to be put the question on the terminal.
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use mnemorph_loop::{Ending, GateAnswer, GateAsk, Observer, Opened, Seen, StreamEvent};
+use mnemorph_loop::{Beat, Ending, GateAnswer, GateAsk, Observer, Opened, Seen, StreamEvent};
 use mnemorph_server::SESSION_BODY;
 use mnemorph_server::protocol::Event;
 use mnemorph_tools::Pending;
@@ -29,6 +31,9 @@ pub enum Out {
         event: Event,
         /// The body below the session, and its run.
         below: Option<(String, String)>,
+        /// On a tool result, the rule that refused the call — `envelope`, `gate`, `sandbox` or
+        /// `shelf` — when one did.
+        refused: Option<String>,
     },
     /// A gated act the gate denied, in words for stderr.
     Denied(String),
@@ -50,10 +55,15 @@ pub fn observer(tx: Sender<Out>) -> Observer {
             below = Some((body.clone(), run.clone()));
             inner = seen;
         }
+        let refused = match inner {
+            Seen::Beat(Beat::Result { refused, .. }) => refused.clone(),
+            _ => None,
+        };
         for event in mnemorph_server::events(inner) {
             let _ = tx.send(Out::Event {
                 event,
                 below: below.clone(),
+                refused: refused.clone(),
             });
         }
     })
@@ -181,6 +191,8 @@ struct Progress {
     usage: [u64; 4],
     usd: Option<f64>,
     gate: Option<Value>,
+    /// The tool results a rule refused, by rule, the bodies below included.
+    refusals: BTreeMap<String, u64>,
 }
 
 /// How `run` prints.
@@ -212,6 +224,13 @@ pub fn run(
         .build()
         .map_err(|e| format!("runtime: {e}"))?;
     let (session_id, run_id) = (opened.session_id.clone(), opened.run_id.clone());
+    let law = opened.law;
+    if !law.on() {
+        let _ = writeln!(
+            err,
+            "mnemorph: law off — this run's prompts carry no law, cards, manifests or opening"
+        );
+    }
     let mut session = opened.session;
     let ask = ask.to_owned();
     let streaming = tx;
@@ -222,7 +241,11 @@ pub fn run(
                 StreamEvent::ToolStart { id, name } => Event::ToolStart { id, name },
                 StreamEvent::ToolInput { .. } | StreamEvent::Thinking(_) => return,
             };
-            let _ = streaming.send(Out::Event { event, below: None });
+            let _ = streaming.send(Out::Event {
+                event,
+                below: None,
+                refused: None,
+            });
         };
         session.drive(&ask, &mut on).await
     });
@@ -233,6 +256,7 @@ pub fn run(
         usage: [0; 4],
         usd: Some(0.0),
         gate: None,
+        refusals: BTreeMap::new(),
     };
     loop {
         match rx.recv_timeout(Duration::from_millis(50)) {
@@ -268,6 +292,8 @@ pub fn run(
             "answered": matches!(ending, Some(Ending::Answered(_))),
             "answer": answer,
             "gate": p.gate,
+            "law": law.on(),
+            "refusals": p.refusals,
             "usage": {
                 "calls": p.calls, "input": input, "output": output,
                 "cacheRead": cache_read, "cacheWrite": cache_write, "usd": p.usd,
@@ -306,13 +332,22 @@ fn print(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) {
-    let (event, below) = match msg {
+    let (event, below, refused) = match msg {
         Out::Denied(line) => {
             newline(p, err);
             let _ = writeln!(err, "mnemorph: {line}");
             return;
         }
-        Out::Event { event, below } => (event, below.as_ref()),
+        Out::Event {
+            event,
+            below,
+            refused,
+        } => {
+            if let Some(rule) = refused {
+                *p.refusals.entry(rule.clone()).or_default() += 1;
+            }
+            (event, below.as_ref(), refused.as_deref())
+        }
     };
     if let Event::Usage {
         input,
@@ -342,6 +377,9 @@ fn print(
             o.insert("run".into(), json!(run));
             o.insert("body".into(), json!(body));
             o.insert("seq".into(), json!(p.seq));
+            if let Some(rule) = refused {
+                o.insert("refused".into(), json!(rule));
+            }
         }
         let _ = writeln!(out, "{line}");
     }

@@ -224,3 +224,59 @@ fn adopt(world: &std::path::Path, names: &[&str]) {
         witness::record_at(&at, row).unwrap();
     }
 }
+
+/// The law switch is the human's command line alone: a world's own configuration that asks for
+/// the law off — under any key — opens a session that still says the law, and journals it on.
+#[tokio::test]
+async fn a_world_s_configuration_cannot_turn_the_law_off() {
+    let w = std::env::temp_dir().join(format!("mnemorph-law-local-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    fs::write(
+        w.join(".mnemorph/law.md"),
+        "# The law\n\n1. **Kept** — said.\n",
+    )
+    .unwrap();
+    for file in ["config.toml", "config.local.toml"] {
+        fs::write(
+            w.join(".mnemorph").join(file),
+            "no_law = true\nlaw_off = true\n[run]\nno_law = true\nlaw = \"off\"\n[bench]\nlaw = \"off\"\nno_law = true\n",
+        )
+        .unwrap();
+    }
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let config = Config::load(&Paths::with_global(w.join("no-global.toml"), &w)).unwrap();
+    let attic = w.join("../mnemorph-law-local-attic");
+    let mut opened = open_with(
+        &w,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    assert_eq!(opened.law, mnemorph_loop::Law::On);
+    let run_id = opened.run_id.clone();
+    opened.session.run().ask("go", &mut |_| {}).await;
+    assert!(format!("{:?}", model.requests()[0].system).contains("**Kept** — said."));
+    let beats = mnemorph_ledger::Journal::<mnemorph_loop::Beat>::new(
+        w.join(".mnemorph/instruments/loop")
+            .join(format!("{run_id}.jsonl")),
+    )
+    .read()
+    .unwrap()
+    .rows;
+    assert!(
+        beats
+            .iter()
+            .any(|b| matches!(b, mnemorph_loop::Beat::Law { on: true, .. })),
+        "{beats:?}"
+    );
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+}

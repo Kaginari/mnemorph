@@ -326,12 +326,14 @@ mod tests {
                 content: "abc".to_owned(),
                 is_error: false,
                 references: Vec::new(),
+                refused: None,
             },
             Beat::Result {
                 tool_use_id: "t2".to_owned(),
                 content: "abc".to_owned(),
                 is_error: false,
                 references: Vec::new(),
+                refused: None,
             },
         ]
     }

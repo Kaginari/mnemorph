@@ -108,6 +108,7 @@ impl World {
     fn commissioner(&self, model: Arc<dyn Model>, reviewers: usize) -> Commissioner {
         Commissioner {
             registry: None,
+            law: mnemorph_loop::Law::On,
             world: self.world().canonicalize().unwrap(),
             model,
             prices: anthropic_prices().unwrap(),

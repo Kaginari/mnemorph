@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """The solo-against-hierarchy bench: 30 small tasks, each run twice — solo (the throne alone,
-escalating on the signals code reads) and hierarchy (the ask handed to the Elf) — on one model.
+escalating on the signals code reads) and hierarchy (the ask handed to the Elf) — on one model,
+and with `--law on,off` each of those again with the law off (`mnemorph run --no-law`).
 
     python3 bench/run.py --check                 # every task's verify fails on its starter: no model
-    python3 bench/run.py [--model M] [--tasks 01,02] [--modes solo,hierarchy] [--limit N]
+    python3 bench/run.py [--model M] [--tasks 01,02] [--modes solo,hierarchy] [--law on,off] [--limit N]
 
 The key: OPENROUTER_API_KEY from the environment, else ~/.config/mnemorph/openrouter.key. It is
 handed only to the run's own process, never written, never printed. Results go one line per run
@@ -117,6 +118,22 @@ def ledger(world):
     return calls, wt, usd, below
 
 
+def law_beats(world):
+    """Every `law` beat the run's journals wrote, the session's and each body's: what a report
+    checks the arm against, and a resume would show in."""
+    loop = world / ".mnemorph" / "instruments" / "loop"
+    beats = []
+    for journal in sorted(loop.glob("*.jsonl")) if loop.exists() else []:
+        for line in journal.read_text().splitlines():
+            try:
+                beat = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(beat, dict) and beat.get("beat") == "law":
+                beats.append({"on": beat.get("on"), "resumed": bool(beat.get("resumed"))})
+    return beats
+
+
 def escalations(world):
     loop = world / ".mnemorph" / "instruments" / "loop"
     n = 0
@@ -125,12 +142,37 @@ def escalations(world):
     return n
 
 
-def run_one(task, mode, model, secret, timeout, keep=False):
+def read_json(stdout):
+    """What `mnemorph run --json` said: its result line, the session's own turn endings, and the
+    acts a rule refused, by rule — the bodies below included. A line that does not parse is
+    skipped: a run killed mid-line has no result."""
+    result, endings, refusals = None, [], {}
+    for line in (stdout or "").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        if kind == "result":
+            result = event
+        elif kind == "turnEnded" and event.get("body") == "rimuru":
+            endings.append(event.get("ending") or "")
+        elif kind == "toolResult" and event.get("refused") in report.SHOWN:
+            refusals[event["refused"]] = refusals.get(event["refused"], 0) + 1
+    return result, endings, refusals
+
+
+def run_one(task, mode, model, secret, timeout, keep=False, law="on"):
+    # A fresh world for every run: the two law arms of a case share its trial key, never its state.
     world = world_for(task, model)
     ask = (task / "ask.md").read_text().strip()
     if mode == "hierarchy":
         ask = HANDOFF + ask
     cli = [str(REPO / "target/debug/mnemorph"), "run", ask, "--world", str(world), "--json"]
+    if law == "off":
+        cli.append("--no-law")
     env = dict(os.environ, OPENROUTER_API_KEY=secret)
     start = time.time()
     # Its own process group: a timeout ends the run and anything it started, key and all.
@@ -149,13 +191,29 @@ def run_one(task, mode, model, secret, timeout, keep=False):
     daily = bool(DAILY.search(err or "") or DAILY.search(stdout or ""))
     calls, wt, usd, below = ledger(world)
     scrubbed = (err or "").replace(secret, "[key]")
-    # How it ended, as the CLI says for any ending but `answered`: the report reads the cause.
-    said = [l[len("mnemorph: "):] for l in (err or "").splitlines() if l.startswith("mnemorph: ")]
-    ended = ("hang" if code is None else "answered" if code == 0
-             else said[-1] if said else "")
+    # How it ended: the result line `--json` writes, else the session's last `turnEnded`, else the
+    # `mnemorph: <ending>` line stderr ends on. The report reads the cause.
+    said, endings, refusals = read_json(stdout)
+    told = [l[len("mnemorph: "):] for l in (err or "").splitlines() if l.startswith("mnemorph: ")]
+    if code is None:
+        ended = "hang"
+    elif said and said.get("ending"):
+        ended = said["ending"]
+    elif endings:
+        ended = endings[-1]
+    else:
+        ended = "answered" if code == 0 else told[-1] if told else ""
     result = {
         "task": task.name, "mode": mode, "model": model,
+        # The case: both law arms of it carry the same key.
+        "trial": "%s/%s" % (task.name, mode),
+        "law": law,
+        # The law as the run itself said it; None when it wrote no result line.
+        "law_said": said.get("law") if said else None,
+        "law_beats": law_beats(world),
         "passed": verify(task, world), "exit": code, "ending": ended.replace(secret, "[key]"),
+        "turns": [e.replace(secret, "[key]") for e in endings],
+        "refusals": refusals,
         "seconds": seconds,
         "calls": calls, "wt": wt, "usd": round(usd, 6),
         "escalations": escalations(world), "below": below,
@@ -178,6 +236,7 @@ def main():
     p.add_argument("--model", default=os.environ.get("MNEMORPH_BENCH_MODEL", DEFAULT_MODEL))
     p.add_argument("--tasks", default="")
     p.add_argument("--modes", default="solo,hierarchy")
+    p.add_argument("--law", default="on", help="the law arms: on, off, or on,off")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
     # Past the core's one-hour clock: slow work ends as a checkpoint, and this kills only a hang.
     p.add_argument("--timeout", type=int, default=3900)
@@ -188,6 +247,10 @@ def main():
     a = p.parse_args()
     if a.check:
         return check()
+    laws = a.law.split(",")
+    if any(l not in report.LAWS for l in laws) or len(set(laws)) != len(laws):
+        print("--law is on, off, or on,off")
+        return 2
     secret = key()
     if not secret:
         print("no key: set OPENROUTER_API_KEY, or write ~/.config/mnemorph/openrouter.key (mode 600)")
@@ -202,12 +265,13 @@ def main():
             # is run again, unless a later row already stands in for it.
             if a.redo_invalid and not report.judged(r):
                 continue
-            done.add((r["task"], r["mode"]))
+            done.add((r["task"], r["mode"], report.law(r)))
     only = set(a.tasks.split(",")) - {""}
     ran = 0
+    arms = [(mode, lw) for mode in a.modes.split(",") for lw in laws]
     for t in tasks(only):
-        for mode in a.modes.split(","):
-            if (t.name, mode) in done:
+        for mode, lw in arms:
+            if (t.name, mode, lw) in done:
                 continue
             if a.limit and ran >= a.limit:
                 return 0
@@ -216,7 +280,7 @@ def main():
             spent = {"calls": 0, "wt": 0, "usd": 0.0}
             attempts = 0
             for wait in (70, 140, 280, None):
-                r = run_one(t, mode, a.model, secret, a.timeout, a.keep)
+                r = run_one(t, mode, a.model, secret, a.timeout, a.keep, lw)
                 attempts += 1
                 if not r["limited"]:
                     break
@@ -225,9 +289,9 @@ def main():
                 if r.get("world"):
                     print("a limited attempt's world is kept at %s" % r["world"])
                 if r["daily"] or wait is None:
-                    print("rate-limited at %s %s: stopping; rerun later to resume" % (t.name, mode))
+                    print("rate-limited at %s %s law %s: stopping; rerun later to resume" % (t.name, mode, lw))
                     return 3
-                print("rate-limited at %s %s: waiting %ds" % (t.name, mode, wait))
+                print("rate-limited at %s %s law %s: waiting %ds" % (t.name, mode, lw, wait))
                 time.sleep(wait)
             for k in spent:
                 r[k] += spent[k]
@@ -235,9 +299,10 @@ def main():
             with out.open("a") as f:
                 f.write(json.dumps(r) + "\n")
             ran += 1
-            print("%s %-9s %s  %ss  %d calls (%d below)  %d wt  esc %d%s" % (
-                t.name, mode, "PASS" if r["passed"] else "fail", r["seconds"], r["calls"], r["below"],
-                r["wt"], r["escalations"], "" if r["valid"] else "  INVALID: nothing ran below"))
+            print("%s %-9s law %-3s %s  %ss  %d calls (%d below)  %d wt  esc %d  refused %d%s" % (
+                t.name, mode, lw, "PASS" if r["passed"] else "fail", r["seconds"], r["calls"],
+                r["below"], r["wt"], r["escalations"], report.breaches(r),
+                "" if r["valid"] else "  INVALID: nothing ran below"))
     return 0
 
 

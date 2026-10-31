@@ -355,7 +355,8 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
         | Beat::Recall { .. }
         | Beat::Compacted { .. }
         | Beat::Prefix { .. }
-        | Beat::Rides { .. } => {
+        | Beat::Rides { .. }
+        | Beat::Law { .. } => {
             vec![]
         }
         Beat::End { ending } => vec![Event::TurnEnded {

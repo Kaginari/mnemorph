@@ -58,7 +58,9 @@ pub use mnemorph_tools::is_secret;
 pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
-pub use open::{Bound, Opened, model_of, open, open_with, resume, resume_with};
+pub use open::{
+    Bound, Opened, model_of, open, open_law, open_with, open_with_law, resume, resume_with,
+};
 pub use queue_tool::{QUEUE, QueueTool};
 pub use resume::{Stopped, stopped};
 pub use route::{
@@ -70,6 +72,6 @@ pub use run::{
 };
 pub use sequence::validate;
 pub use session::{Queue, Session};
-pub use solo::{SOLO_PROMPT, configure, solo};
+pub use solo::{Law, SOLO_PROMPT, configure, solo, solo_as};
 pub use stress::{Bench, Read, Reading, Signal, Stress, bench_of, muted};
 pub use verdict_tool::{VERDICT, VerdictTool};

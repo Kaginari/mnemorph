@@ -102,6 +102,7 @@ impl World {
         let journals = self.0.join(".mnemorph/instruments/loop");
         let commissioner = Commissioner {
             registry: None,
+            law: mnemorph_loop::Law::On,
             world: self.0.canonicalize().unwrap(),
             model: model.clone(),
             prices: anthropic_prices().unwrap(),
@@ -2129,4 +2130,134 @@ fn adopt(world: &std::path::Path, names: &[&str]) {
             .row;
         witness::record_at(&at, row).unwrap();
     }
+}
+
+/// The chain of [`a_session_in_a_world_with_creatures_dispatches`], opened with the law on or off
+/// in a world with a law, a journal and an adopted Mind: the model that saw every request, and the
+/// `Law` beats of every journal the chain wrote.
+async fn chain_under(name: &str, law: mnemorph_loop::Law) -> (Arc<ScriptedModel>, Vec<bool>) {
+    use mnemorph_loop::open::{Bound, open_with_law};
+    use mnemorph_loop::{Config, Paths};
+    let w = World::new(name);
+    fs::write(
+        w.0.join(".mnemorph/law.md"),
+        "# The law\n\n1. **Vitality** — the bench's own law line.\n",
+    )
+    .unwrap();
+    fs::write(
+        w.0.join(".mnemorph/log.md"),
+        "# Journal\n\n### [2026-10-30T10:00:00+01:00] rimuru — an entry\n- learned the opening line\n",
+    )
+    .unwrap();
+    fs::create_dir_all(w.0.join(".mnemorph/minds")).unwrap();
+    fs::write(
+        w.0.join(".mnemorph/minds/dialects.md"),
+        "# Dialects\n\n- **Shared:** yes\n\nHow a dialect overrides the generator.\n",
+    )
+    .unwrap();
+    {
+        use mnemorph_world::minds::{propose_at, witness};
+        let at = witness::path_of(&w.0).expect("a home");
+        let row = propose_at(&w.0, &at, witness::Act::Adopt, "dialects", None)
+            .unwrap()
+            .row;
+        witness::record_at(&at, row).unwrap();
+    }
+    fs::create_dir_all(w.attic()).unwrap();
+    fs::write(
+        w.attic().join("no-global.toml"),
+        "[sandbox]\nallow_unguarded = true\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let config = Config::load(&Paths::with_global(w.attic().join("no-global.toml"), &w.0)).unwrap();
+    let attic = w.attic();
+    let mut opened = open_with_law(
+        &w.0,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        law,
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    assert_eq!(opened.law, law);
+    let ending = opened
+        .session
+        .run()
+        .ask("leave a done marker", &mut |_| {})
+        .await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    assert_eq!(model.requests().len(), 8);
+    let mut said = Vec::new();
+    for journal in fs::read_dir(w.0.join(".mnemorph/instruments/loop")).unwrap() {
+        let path = journal.unwrap().path();
+        if path.extension().is_some_and(|e| e == "jsonl") {
+            let rows = Journal::<Beat>::new(path).read().unwrap().rows;
+            said.extend(rows.iter().filter_map(|b| match b {
+                Beat::Law { on, .. } => Some(*on),
+                _ => None,
+            }));
+        }
+    }
+    (model, said)
+}
+
+/// Everything a request carries: its system prompt and its messages, as text.
+fn request_text(r: &mnemorph_provider::Request) -> String {
+    format!("{:?}\n{:?}", r.system, r.messages)
+}
+
+/// The bench's law-off arm: no body of the chain is told the law, a creature's card or doc, the
+/// Minds' manifest or the journal's opening — and every body is, law on. Every run journals which.
+#[tokio::test]
+async fn law_off_no_body_is_told_the_world_s_own_words() {
+    let (on, said_on) = chain_under("law-on", mnemorph_loop::Law::On).await;
+    let (off, said_off) = chain_under("law-off", mnemorph_loop::Law::Off).await;
+    let words = [
+        "the bench's own law line",
+        "The cards:",
+        "Your doc:",
+        "@T mind:dialects",
+        "learned the opening line",
+    ];
+    let seen_on: String = on.requests().iter().map(request_text).collect();
+    for w in words {
+        assert!(seen_on.contains(w), "law on says `{w}`");
+    }
+    // Every body of the chain, law on, reads the law in its system prompt.
+    for r in on.requests() {
+        assert!(format!("{:?}", r.system).contains("the bench's own law line"));
+    }
+    for r in off.requests() {
+        let seen = request_text(&r);
+        for w in words {
+            assert!(!seen.contains(w), "law off says `{w}`: {seen}");
+        }
+    }
+    // The tools and the lanes stay: the order still goes down.
+    assert!(format!("{:?}", off.requests()[0].system).contains("elf-e: src/"));
+    assert_eq!(
+        said_on, [true; 4],
+        "the session and its three bodies say law on"
+    );
+    assert_eq!(said_off, [false; 4], "and law off");
 }
