@@ -1258,6 +1258,13 @@ enabled = false
     let g = Ground::new("mcp-rerank-bad");
     g.global("[mcp.rerank]\nmargin_pct = 101\n");
     assert!(g.load().unwrap().mcp().unwrap_err().contains("a percent"));
+    // A negative count is refused when the file is read, never taken as the default.
+    for key in ["above", "margin_pct"] {
+        let g = Ground::new("mcp-rerank-negative");
+        g.global(&format!("[mcp.rerank]\n{key} = -1\n"));
+        let e = g.load().unwrap_err();
+        assert!(e.contains(&format!("mcp.rerank.{key} is integer")), "{e}");
+    }
 }
 
 #[test]

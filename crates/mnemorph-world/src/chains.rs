@@ -369,6 +369,7 @@ mod tests {
             wt: n,
             usd: None,
             envelope: None,
+            purpose: None,
         }
     }
 

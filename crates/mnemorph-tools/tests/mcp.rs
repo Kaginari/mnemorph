@@ -782,6 +782,82 @@ fn a_creatures_own_use_outweighs_its_races() {
 }
 
 #[test]
+fn an_ask_counts_once_per_tool_however_often_it_calls_it() {
+    let who = mcp::Who {
+        creature: "kijin-scout".into(),
+        race: "kijin".into(),
+    };
+    let terms = mcp::rank::words("release chore").into_iter().collect();
+    let lift = |rows: Vec<mcp::Row>| {
+        mcp::Learned::from_rows(rows).lifts(&terms, &who)["hub__filler_7"].clone()
+    };
+    let once = lift(vec![row(
+        mcp::Kind::Call,
+        "hub__filler_7",
+        "kijin-scout",
+        "r#1",
+        "release chore",
+        true,
+    )]);
+    let spammed = lift(
+        (0..7)
+            .map(|_| {
+                row(
+                    mcp::Kind::Call,
+                    "hub__filler_7",
+                    "kijin-scout",
+                    "r#1",
+                    "release chore",
+                    true,
+                )
+            })
+            .collect(),
+    );
+    assert_eq!(spammed, once, "seven junk calls in one ask count as one");
+    assert_eq!(spammed.by_creature, 1);
+    let two_asks = lift(vec![
+        row(
+            mcp::Kind::Call,
+            "hub__filler_7",
+            "kijin-scout",
+            "r#1",
+            "release chore",
+            true,
+        ),
+        row(
+            mcp::Kind::Call,
+            "hub__filler_7",
+            "kijin-scout",
+            "r#2",
+            "release chore",
+            true,
+        ),
+    ]);
+    assert!(two_asks.relation > once.relation && two_asks.by_creature == 2);
+}
+
+#[test]
+fn a_tie_breaks_by_name_not_by_where_the_catalog_lists_it() {
+    let w = World::new(
+        "tie-name",
+        &json!([
+            tool("zeta", "Does the chore"),
+            tool("alpha", "Does the chore")
+        ]),
+    );
+    let m = w.mcp(vec![w.server("hub", &[Race::Kijin], None)]);
+    let mut cx = w.cx(Race::Kijin, approve());
+    let offer = m.offer(Race::Kijin, &cx);
+    let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
+    let names: Vec<String> = m
+        .ranked(Race::Kijin, "the chore", &cx)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert_eq!(names, ["hub__alpha", "hub__zeta"]);
+}
+
+#[test]
 fn a_schema_loaded_and_never_called_decays_its_tool() {
     let (_w, m, cx) = listed_hub("idle");
     let top = |m: &Mcp| m.ranked(Race::Kijin, "do a chore", &cx)[0].name.clone();

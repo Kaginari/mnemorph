@@ -70,7 +70,7 @@ pub fn bm25(docs: &[Vec<String>], query: &BTreeSet<String>) -> Vec<f64> {
 /// `specs` ordered best first for `query`: BM25 of the query's words over each tool's name,
 /// server and description, plus the learned lift for `who` — the relation to what this creature
 /// or race used on similar asks, less the decaying penalty of loads never used. No model ranks;
-/// ties keep the catalog's own order, so the result is deterministic.
+/// ties break by name, then by the catalog's order, so the result is deterministic.
 #[must_use]
 pub fn rank<'a>(specs: &'a [Spec], query: &str, learned: &Learned, who: &Who) -> Vec<Ranked<'a>> {
     let docs: Vec<Vec<String>> = specs
@@ -94,6 +94,7 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, learned: &Learned, who: &Who) ->
     scored.sort_by(|a, b| {
         (b.1 + b.2.net())
             .total_cmp(&(a.1 + a.2.net()))
+            .then_with(|| specs[a.0].name.cmp(&specs[b.0].name))
             .then(a.0.cmp(&b.0))
     });
     scored

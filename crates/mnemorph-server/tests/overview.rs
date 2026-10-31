@@ -391,6 +391,7 @@ async fn a_link_a_pipe_or_a_huge_file_in_the_world_is_not_read() {
         wt: 1,
         usd: None,
         envelope: None,
+        purpose: None,
     })
     .unwrap();
     let mut text = String::new();

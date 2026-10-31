@@ -48,6 +48,10 @@ pub struct UsageRow {
     /// The envelope after the call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub envelope: Option<EnvelopeReading>,
+    /// What the call was for when it was not a body's turn — `rerank` for the MCP shortlist's
+    /// fast-tier call, `rerank (timed out, estimated)` when it gave no answer in time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
 }
 
 impl UsageRow {
@@ -87,6 +91,7 @@ mod tests {
                 left: 54_888,
                 of: 60_000,
             }),
+            purpose: None,
         }
     }
 

@@ -75,6 +75,10 @@ tables do not know, so its `wt` still reaches the meters and the budget:
  "envelope":{"left":54888,"of":60000}}
 ```
 
+A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
+fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is
+ledgered at its worst case; a body's turn carries none.
+
 `prefix` is the part of the input that was the fixed per-session prompt (law, race card,
 creature card, manifests): the cost every turn carries before it does any work, folded on its own
 line (`prefixShare`) so a growing law shows up as a number, not a feeling. The journal is

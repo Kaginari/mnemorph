@@ -66,6 +66,15 @@ pub fn state_dir(world: &Path) -> PathBuf {
         .join(crate::tripwire::world_key(world))
 }
 
+/// Every folder of a world's MCP state is the owner's alone: each one created is `0700`.
+pub(crate) fn private_dir(dir: &Path) -> std::io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(dir)
+}
+
 /// The class a configuration names: `read`, `write`, `outward` or `destructive` — the classes an
 /// outside tool may hold; dispatching and sealing stay the harness's own.
 #[must_use]
@@ -512,7 +521,7 @@ impl Mcp {
         };
         let file = catalog_file(&self.state, &server.name);
         if let Some(dir) = file.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            let _ = private_dir(dir);
         }
         // Written aside then renamed: a torn write never reads as a catalog.
         let tmp = file.with_extension("json.tmp");

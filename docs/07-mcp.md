@@ -203,7 +203,7 @@ and names the top `top_k` at level 1 in its tail, under `MCP tools that fit this
 is BM25 (`k1 = 1.2`, `b = 0.75`, the formula recall uses) of the ask's words — stop words and
 single letters aside — over each tool's name, server and description, plus the learned nudge
 below; only tools with a positive BM25 score are named — what was learned orders them, never
-admits one — ties keep the catalog's order, and the same catalog, journal and ask always give the
+admits one — ties break by name, then by the catalog's order, and the same catalog, journal and ask always give the
 same list. A commissioned body is ranked for its commission's ask, the session's body for each of
 its asks.
 
@@ -221,8 +221,11 @@ goes to the fast tier (`models.tier.fast`) in one call, before the ask is sent:
   name — another server's tool, one the shelf hides, one made up — is dropped. The rerank can
   reorder or trim the shortlist; it can never widen it, the shelf or a class, and a call still
   goes through the scope, the shelf and the gate;
-- the call is a usage ledger row like any other, under the asking body, and its cost is said in
-  the run's journal (`MCP rerank by <model>: reranked, N wt`) and the MCP journal;
+- the call is a usage ledger row like any other, under the asking body, marked `"purpose":
+  "rerank"`, and its cost is said in the run's journal (`MCP rerank by <model>: reranked, N wt`)
+  and the MCP journal. A call that gives no answer in time may still be billed, so its row is an
+  estimate — the whole prompt in, the whole 256-token ceiling out — marked `rerank (timed out,
+  estimated)`;
 - its answer is kept for the session by the model and every byte it was shown, so the same ask
   over the same catalog never pays twice;
 - with no fast tier on the session's provider, `enabled = false`, a call that fails or runs past
@@ -254,17 +257,27 @@ creature and race, the ask's id, its words (sorted, at most 32) and their finger
 weighted tokens it put in the conversation or cost, whether the tool was called after it in the
 same ask, how it ended, and whether the ask ended answered with nothing failing at its gate.
 The loop writes the rows at each ask's end from what its own doors reported; no model and no
-body writes one, and nothing of it lives in the world.
+body writes one, and nothing of it lives in the world. It holds every ask's words, so its files
+are `0600` and every folder it makes `0700` — as every journal's are.
 
 The journal is chained like the usage ledger, every byte written first to its witness beside the
-state directory (`<world>-<hash>.witness.jsonl`). Before each ask the loop walks both: an edited
-row, a torn tail, or a head that is not the witness's (rows dropped or put in) means the journal
-is not believed, the ranking learns nothing for that ask, and the run's journal says why.
+state directory (`<world>-<hash>.witness.jsonl`), under a lock every reader and writer holds.
+Before each ask the loop walks both: an edited row, a torn tail, or a head that is not the
+witness's (rows dropped or put in) means the journal is not believed, the ranking learns nothing
+for that ask, and the run's journal says why.
+
+Past 2,048 rows the live segment and its witness are sealed aside (`journal.sealed.jsonl`,
+`<world>-<hash>.witness.sealed.jsonl`, the sealed pair before replaced), and the new segment opens
+with a seal row naming the sealed head's digest and line, so the chain goes on across the cut. An
+ask reads the live segment and the sealed one's tail, never more; a sealed segment that fails its
+own walk, its witness, or the seal's head — edited, cut or swapped — is not believed either. A
+segment that is not believed is never sealed: the evidence stays where it is.
 
 From the newest 4,096 rows, model-free, bounded and deterministic:
 
 - **Relation.** Each past call that answered, by this creature (weight 1) or another of its race
-  (weight ½), counts its ask's similarity to this one — BM25 of this ask's words over the past
+  (weight ½), counts its ask's similarity to this one — once per ask and tool, however often the
+  ask called it — BM25 of this ask's words over the past
   asks' words, over the best such score — halved when that ask did not end well. A tool gains
   `ln(1 + Σ)`, at most 2.
 - **Idle penalty.** Each schema loaded and never called in its ask costs its tool 0.5, halved

@@ -188,6 +188,7 @@ fn row(
         wt: wt(usage, 5.0),
         usd,
         envelope: None,
+        purpose: None,
     }
 }
 

@@ -427,6 +427,7 @@ async fn a_spent_cap_runs_no_control() {
             wt: 50,
             usd: None,
             envelope: None,
+            purpose: None,
         })
         .unwrap();
     let config = w.config();

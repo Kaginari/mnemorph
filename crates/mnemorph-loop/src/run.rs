@@ -235,6 +235,8 @@ No tools.";
 
 /// The longest a drain turn may take: what is left of the clock, up to this.
 pub const DRAIN_GRACE: Duration = Duration::from_secs(120);
+/// What a usage row of the MCP shortlist's fast-tier call is for.
+pub const RERANK: &str = "rerank";
 /// How long the fast tier may take to rerank an ask's MCP shortlist before the BM25 order stands.
 pub const RERANK_WAIT: Duration = Duration::from_secs(15);
 /// The share of the window the stress line may never pass (percent).
@@ -971,13 +973,14 @@ impl Run {
             ts: u64::try_from(Timestamp::now().0).unwrap_or_default(),
         }
         .rows(&offered, self.mcp_reranked.as_ref(), &touched);
-        for row in rows {
-            if let Err(e) = journal.append(&row) {
-                self.record(&Beat::Warning {
-                    text: format!("the MCP journal could not be kept: {e}"),
-                });
-                return;
-            }
+        let state = self.mcp.as_ref().map(|m| m.state().to_path_buf());
+        let kept = state.map_or(Ok(()), |state| {
+            crate::mcp_journal::keep(&state, journal, &rows, crate::mcp_journal::SEGMENT)
+        });
+        if let Err(e) = kept {
+            self.record(&Beat::Warning {
+                text: format!("the MCP journal could not be kept: {e}"),
+            });
         }
     }
 
@@ -1034,7 +1037,7 @@ impl Run {
                 (if cached { "cached" } else { "reranked" }.to_owned(), wt)
             }
             Ok((_, wt, _)) => ("fallback: it named no tool of the shortlist".to_owned(), wt),
-            Err(why) => (format!("fallback: {why}"), 0),
+            Err((why, wt)) => (format!("fallback: {why}"), wt),
         };
         self.record(&Beat::Warning {
             text: format!("MCP rerank by {model}: {outcome}, {wt} wt"),
@@ -1045,14 +1048,15 @@ impl Run {
     /// One call to the fast tier `model` over `shortlist`, the servers' words escaped in a block
     /// marked as data, priced in the ledger like any call; its answer read only as names of the
     /// shortlist, and kept so the same ask over the same catalog never pays twice. The names, the
-    /// weighted tokens spent, and whether the answer was kept from before.
+    /// weighted tokens spent, and whether the answer was kept from before; or why it gave none
+    /// and what it is estimated to have cost (a call that timed out may still be billed).
     async fn rerank_mcp(
         &mut self,
         mcp: &mnemorph_tools::mcp::Mcp,
         model: &str,
         ask: &str,
         shortlist: &[mnemorph_tools::mcp::Spec],
-    ) -> Result<(Vec<String>, u64, bool), String> {
+    ) -> Result<(Vec<String>, u64, bool), (String, u64)> {
         use mnemorph_tools::mcp::rerank;
         let prompt = rerank::prompt(ask, shortlist);
         let key = rerank::key(model, &prompt);
@@ -1077,17 +1081,50 @@ impl Run {
             effort: None,
         };
         let mut quiet = |_: Event| {};
-        let r = tokio::time::timeout(RERANK_WAIT, self.model.complete(&request, &mut quiet))
-            .await
-            .map_err(|_| "the fast tier did not answer in time".to_owned())?
-            .map_err(|e| format!("the fast tier failed: {e}"))?;
-        let row = usage_row(
+        let Ok(answered) =
+            tokio::time::timeout(RERANK_WAIT, self.model.complete(&request, &mut quiet)).await
+        else {
+            // The provider may bill a call it never answered: the ledger holds an estimate — the
+            // whole prompt in, the whole ceiling out — marked as one.
+            let sent = rerank::SYSTEM.len() + request_text(&request).len();
+            let row = UsageRow {
+                ts: Timestamp::now(),
+                session: self.caller.session.clone(),
+                run: self.caller.run.clone(),
+                body: self.caller.body.clone(),
+                race: self.caller.race.clone(),
+                commission: self.caller.commission.clone(),
+                model: model.to_owned(),
+                provider: self.model.provider().to_owned(),
+                usage: mnemorph_ledger::Usage {
+                    input: u64::try_from(sent.div_ceil(4)).unwrap_or(u64::MAX),
+                    output: u64::from(rerank::MAX_TOKENS),
+                    cache_read: 0,
+                    cache_write: 0,
+                },
+                prefix: 0,
+                wt: 0,
+                usd: None,
+                envelope: None,
+                purpose: Some(format!("{RERANK} (timed out, estimated)")),
+            }
+            .priced(&self.prices);
+            let wt = row.wt;
+            self.spend(&row);
+            return Err((
+                "the fast tier did not answer in time; estimated".to_owned(),
+                wt,
+            ));
+        };
+        let r = answered.map_err(|e| (format!("the fast tier failed: {e}"), 0))?;
+        let mut row = usage_row(
             &r,
             &self.caller,
             self.model.provider(),
             &self.prices,
             Timestamp::now(),
         );
+        row.purpose = Some(RERANK.to_owned());
         let wt = row.wt;
         self.spend(&row);
         let names = rerank::pick(&text_of(&r.content), shortlist, mcp.settings().top_k);
@@ -3519,6 +3556,15 @@ pub fn strip_thinking(messages: &mut [Message]) -> usize {
         }
     }
     stripped
+}
+
+/// Every text block a request's messages carry, joined: what a call that never answered sent.
+fn request_text(request: &Request) -> String {
+    request
+        .messages
+        .iter()
+        .map(|m| text_of(&m.content))
+        .collect()
 }
 
 fn text_of(content: &[Block]) -> String {

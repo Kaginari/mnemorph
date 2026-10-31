@@ -104,7 +104,7 @@ impl World {
             .with_body("slime-test")
     }
 
-    fn run(&self, model: Arc<ScriptedModel>, mcp: &Arc<Mcp>) -> Run {
+    fn run(&self, model: Arc<dyn mnemorph_loop::model::Model>, mcp: &Arc<Mcp>) -> Run {
         let cx = self.cx();
         let mut tools = registry();
         tools.extend(mcp.offer(Race::Slime, &cx).tools);
@@ -241,6 +241,16 @@ fn offered(request: &mnemorph_provider::Request) -> Vec<String> {
         .collect()
 }
 
+/// The journal, its witness, its lock and its folder are the owner's alone.
+fn private(file: &Path, witness: &Path, state: &Path) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(file), 0o600);
+    assert_eq!(mode(witness), 0o600);
+    assert_eq!(mode(&state.join("journal.lock")), 0o600);
+    assert_eq!(mode(state), 0o700);
+}
+
 #[tokio::test]
 async fn every_load_and_call_is_journaled_chained_in_the_state_dir_and_an_edit_or_cut_is_found() {
     let w = World::new("chain");
@@ -295,6 +305,8 @@ async fn every_load_and_call_is_journaled_chained_in_the_state_dir_and_an_edit_o
     assert_eq!(r.terms, ["find", "issue"]);
     assert!(r.wt > 0 && r.helped && r.outcome == "ok");
     assert!(rows[3].wt > 0, "a load's price is journaled");
+    // It holds every ask's words: its files are the owner's alone, and so are its folders.
+    private(&file, &witness, &w.state());
     // What `status` shows from it: loaded against used per server, and why each tool was offered.
     let shown = mnemorph_tools::mcp::Learned::from_rows(rows.clone());
     let loaded = rows[1].wt + rows[3].wt;
@@ -385,6 +397,11 @@ async fn the_rerank_runs_past_threshold_and_margin_keeps_only_the_shortlist_and_
         .find(|r| r.model == FAST)
         .expect("the rerank's ledger row");
     assert!(cost.wt > 0);
+    assert_eq!(
+        cost.purpose.as_deref(),
+        Some("rerank"),
+        "the row says what it was for"
+    );
     assert!(
         w.warnings()
             .iter()
@@ -537,4 +554,191 @@ async fn a_hostile_description_cannot_widen_the_selection_through_the_reranker()
             .is_some_and(|t| t.contains("secret") || t.contains("slack"))),
         "{journal:?}"
     );
+}
+
+/// A model whose first call never answers — the rerank — and whose later calls are the script's.
+struct Hangs {
+    calls: std::sync::atomic::AtomicUsize,
+    then: Arc<ScriptedModel>,
+}
+
+impl mnemorph_loop::model::Model for Hangs {
+    fn provider(&self) -> &'static str {
+        "scripted"
+    }
+
+    fn complete<'a>(
+        &'a self,
+        request: &'a mnemorph_provider::Request,
+        on: &'a mut (dyn FnMut(mnemorph_provider::Event) + Send),
+    ) -> mnemorph_loop::model::Completion<'a> {
+        if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            return Box::pin(std::future::pending());
+        }
+        self.then.complete(request, on)
+    }
+}
+
+/// A rerank that never answers may still be billed: the ledger holds an estimate, marked as one,
+/// and the BM25 order stands.
+#[tokio::test(start_paused = true)]
+async fn a_timed_out_rerank_is_ledgered_as_an_estimate_and_falls_back() {
+    let w = World::new("timeout");
+    let mcp = w.hub(&[], rerank(100), &[]);
+    let then = Arc::new(ScriptedModel::new([answer("done")]));
+    let model = Arc::new(Hangs {
+        calls: std::sync::atomic::AtomicUsize::new(0),
+        then: Arc::clone(&then),
+    });
+    let mut run = w.run(model, &mcp);
+    assert_eq!(
+        ask(&mut run, "do a chore").await,
+        Ending::Answered("done".into())
+    );
+    assert_eq!(
+        offered(&then.requests()[0]),
+        ["hub__filler_0", "hub__filler_1", "hub__filler_2"]
+    );
+    let rows = w.ledger().read().unwrap().rows;
+    let est = rows
+        .iter()
+        .find(|r| r.model == FAST)
+        .expect("an estimate in the ledger");
+    assert_eq!(
+        est.purpose.as_deref(),
+        Some("rerank (timed out, estimated)")
+    );
+    assert_eq!(est.usage.output, 256, "the whole ceiling out");
+    assert!(est.usage.input > 0 && est.wt > 0, "{est:?}");
+    let journal = mcp_journal::read(&w.state()).unwrap();
+    let rr = journal.iter().find(|r| r.kind == Kind::Rerank).unwrap();
+    assert!(
+        rr.outcome
+            .starts_with("fallback: the fast tier did not answer in time"),
+        "{rr:?}"
+    );
+    assert_eq!(rr.wt, est.wt);
+}
+
+fn junk(ask: usize) -> mnemorph_tools::mcp::Row {
+    let (terms, fingerprint) = learned::terms_of("a chore");
+    mnemorph_tools::mcp::Row {
+        ts: 0,
+        ask: format!("r#{ask}"),
+        kind: Kind::Call,
+        server: "hub".into(),
+        tool: Some("hub__filler_1".into()),
+        creature: "slime-test".into(),
+        race: "slime".into(),
+        fingerprint,
+        terms,
+        wt: 1,
+        used: true,
+        outcome: "ok".into(),
+        helped: true,
+        why: None,
+    }
+}
+
+/// Past a segment's rows the live journal is sealed aside and the next opens with a seal naming
+/// the sealed head: a read takes the live segment and the sealed one's tail, the chain continuing
+/// across the cut, and a sealed segment edited, cut or swapped is found.
+#[test]
+fn the_journal_rotates_past_a_segment_and_the_seal_holds_the_cut() {
+    let w = World::new("rotate");
+    let state = w.state();
+    let journal = mcp_journal::journal(&state);
+    let file = learned::journal_file(&state);
+    let sealed = state.join("journal.sealed.jsonl");
+    let sealed_witness = state.with_file_name("world-0.witness.sealed.jsonl");
+    mcp_journal::keep(&state, &journal, &[junk(1), junk(2), junk(3)], 5).unwrap();
+    assert!(!sealed.exists(), "under the segment, nothing is sealed");
+    mcp_journal::keep(&state, &journal, &[junk(4), junk(5), junk(6)], 5).unwrap();
+    assert!(sealed.exists() && sealed_witness.exists());
+    let live = Journal::<mnemorph_tools::mcp::Row>::new(&file)
+        .read()
+        .unwrap()
+        .rows;
+    assert_eq!(live.len(), 1);
+    assert_eq!(
+        (live[0].kind, live[0].wt),
+        (Kind::Seal, 6),
+        "the seal names the sealed head's line"
+    );
+    let sealed_head = mnemorph_ledger::chain::verify(&sealed)
+        .unwrap()
+        .head
+        .unwrap();
+    assert_eq!(live[0].fingerprint, sealed_head.digest);
+    // The chain goes on in the new segment, and a read takes both, in order.
+    mcp_journal::keep(&state, &journal, &[junk(7)], 5).unwrap();
+    let rows = mcp_journal::read(&state).unwrap();
+    let asks: Vec<&str> = rows
+        .iter()
+        .filter(|r| r.kind == Kind::Call)
+        .map(|r| r.ask.as_str())
+        .collect();
+    assert_eq!(asks, ["r#1", "r#2", "r#3", "r#4", "r#5", "r#6", "r#7"]);
+    assert!(mnemorph_ledger::chain::verify(&file).unwrap().holds());
+    // Learning drops the seal; the per-ask count still holds across the cut.
+    assert_eq!(
+        mnemorph_tools::mcp::Learned::from_rows(rows).rows().len(),
+        7
+    );
+
+    let good = fs::read(&sealed).unwrap();
+    let good_witness = fs::read(&sealed_witness).unwrap();
+    // The sealed segment edited: refused.
+    fs::write(
+        &sealed,
+        String::from_utf8(good.clone())
+            .unwrap()
+            .replacen("r#2", "r#9", 1),
+    )
+    .unwrap();
+    assert!(
+        mcp_journal::read(&state)
+            .unwrap_err()
+            .contains("sealed journal")
+    );
+    // Cut, the same in it and its witness: the chain and the heads hold, the seal does not.
+    let cut = |b: &[u8]| {
+        let lines: Vec<&[u8]> = b.split_inclusive(|c| *c == b'\n').collect();
+        lines[..lines.len() - 1].concat()
+    };
+    fs::write(&sealed, cut(&good)).unwrap();
+    fs::write(&sealed_witness, cut(&good_witness)).unwrap();
+    let e = mcp_journal::read(&state).unwrap_err();
+    assert!(
+        e.contains("not the one the live journal's seal names"),
+        "{e}"
+    );
+    // Gone: refused too.
+    fs::remove_file(&sealed).unwrap();
+    fs::remove_file(&sealed_witness).unwrap();
+    assert!(mcp_journal::read(&state).is_err());
+    fs::write(&sealed, &good).unwrap();
+    fs::write(&sealed_witness, &good_witness).unwrap();
+    assert!(mcp_journal::read(&state).is_ok());
+    // A second rotation replaces the sealed pair: a read is never more than two segments.
+    for i in 8..20 {
+        mcp_journal::keep(&state, &journal, &[junk(i)], 5).unwrap();
+    }
+    let rows = mcp_journal::read(&state).unwrap();
+    assert!(rows.len() <= 2 * 6, "{}", rows.len());
+    assert_eq!(rows.last().unwrap().ask, "r#19");
+    // A segment not believed is never sealed: the evidence stays where it is.
+    let before = fs::read(&sealed).unwrap();
+    let live_bytes = fs::read(&file).unwrap();
+    fs::write(
+        &file,
+        String::from_utf8(live_bytes)
+            .unwrap()
+            .replacen("r#", "r!", 1),
+    )
+    .unwrap();
+    for i in 20..30 {
+        let _ = mcp_journal::keep(&state, &journal, &[junk(i)], 5);
+    }
+    assert_eq!(fs::read(&sealed).unwrap(), before);
 }

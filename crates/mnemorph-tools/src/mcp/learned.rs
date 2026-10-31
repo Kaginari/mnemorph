@@ -8,7 +8,7 @@
 //! the same order, every time.
 //!
 //! - **Relation.** A tool this creature (weight 1) or its race (weight ½) called and that answered
-//!   on a similar ask is lifted. Similarity is BM25 of the ask's words over each past call's ask
+//!   on a similar ask is lifted, each ask counted once per tool. Similarity is BM25 of the ask's words over each past call's ask
 //!   words, divided by the best such score, so the most similar past ask counts 1; an ask that
 //!   ended with something failing at its gate counts half. The lift is `ln(1 + Σ)`, capped at
 //!   [`RELATION_CAP`].
@@ -73,6 +73,9 @@ pub enum Kind {
     Offer,
     /// The fast tier reranked an ask's shortlist.
     Rerank,
+    /// A segment's first row after the one before was sealed: `fingerprint` is the sealed head's
+    /// digest, `wt` its line.
+    Seal,
 }
 
 /// What one door did, as the tool reports it to the loop: the loop turns it into a [`Row`].
@@ -212,6 +215,7 @@ impl Learned {
     /// chain and witness held.
     #[must_use]
     pub fn from_rows(mut rows: Vec<Row>) -> Self {
+        rows.retain(|r| r.kind != Kind::Seal);
         if rows.len() > WINDOW {
             rows.drain(..rows.len() - WINDOW);
         }
@@ -240,6 +244,12 @@ impl Learned {
             .iter()
             .filter(|r| r.kind == Kind::Call && r.outcome == "ok" && r.tool.is_some())
             .filter(|r| r.creature == who.creature || r.race == who.race)
+            // An ask counts once per tool, however many times it called it: a body cannot climb
+            // the ranking by calling one tool over and over.
+            .filter({
+                let mut seen = BTreeSet::new();
+                move |r| seen.insert((r.ask.clone(), r.tool.clone()))
+            })
             .collect();
         if !terms.is_empty() && !calls.is_empty() {
             let docs: Vec<Vec<String>> = calls.iter().map(|r| r.terms.clone()).collect();
@@ -315,7 +325,7 @@ impl Learned {
                     rerank.0 += 1;
                     rerank.1 += r.wt;
                 }
-                Kind::Offer => {}
+                Kind::Offer | Kind::Seal => {}
             }
         }
         let mut out: Vec<String> = by
