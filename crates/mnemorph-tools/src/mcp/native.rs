@@ -65,6 +65,40 @@ pub fn definition(spec: &Spec) -> Value {
     json!({"name": spec.name, "description": description(spec), "input_schema": spec.schema})
 }
 
+/// A minimal call that fits `schema`: each required property, by its first `enum` or `const`
+/// value, else the empty value of its `type` (`""`, `0`, `false`, `[]`, `{}`), else `null`.
+#[must_use]
+pub fn example(schema: &Value) -> Value {
+    let required = schema["required"].as_array().cloned().unwrap_or_default();
+    let fields = required
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|name| {
+            let p = &schema["properties"][name];
+            let kind = match &p["type"] {
+                Value::Array(kinds) => kinds.first().cloned().unwrap_or(Value::Null),
+                k => k.clone(),
+            };
+            let value = if let Some(first) = p["enum"].as_array().and_then(|e| e.first()) {
+                first.clone()
+            } else if let Some(c) = p.get("const") {
+                c.clone()
+            } else {
+                match kind.as_str() {
+                    Some("string") => json!(""),
+                    Some("integer" | "number") => json!(0),
+                    Some("boolean") => json!(false),
+                    Some("array") => json!([]),
+                    Some("object") => json!({}),
+                    _ => Value::Null,
+                }
+            };
+            (name.to_owned(), value)
+        })
+        .collect::<serde_json::Map<String, Value>>();
+    Value::Object(fields)
+}
+
 /// `text` for the life of the process, kept once however often it is asked for: a frame's names
 /// and descriptions are fixed for a run, and the same catalog gives the same strings.
 fn interned(text: &str) -> &'static str {
@@ -95,7 +129,7 @@ impl Tool for Native {
         ToolClass::Read
     }
     fn example(&self) -> Value {
-        json!({})
+        example(&self.spec.schema)
     }
     fn defer(&self) -> bool {
         self.defer

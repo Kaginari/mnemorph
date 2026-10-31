@@ -33,7 +33,7 @@ use crate::tool::{Context, Outcome, Tool};
 pub use client::Conn;
 pub use learned::{Kind, Learned, Lift, Row, Spend, Touched, Who};
 pub use levels::{CALL, OPEN, SCHEMA, SEARCH, price};
-pub use native::Native;
+pub use native::{Native, example};
 pub use rank::{Ranked, rank};
 pub use rerank::Rerank;
 
@@ -1060,7 +1060,7 @@ impl Mcp {
     pub(crate) fn open(&self, server: &str, cx: &Context) -> Outcome {
         match self
             .level1(server, cx)
-            .and_then(|t| afford(&t, "level 1", server, cx))
+            .and_then(|t| afford(price(&t), "level 1", server, cx).map(|()| t))
         {
             Ok(text) => {
                 let touched = Touched {
@@ -1085,21 +1085,23 @@ impl Mcp {
     pub(crate) fn schema(&self, name: &str, cx: &Context, deferred: &BTreeSet<String>) -> Outcome {
         let found = self.find(name, cx).and_then(|spec| {
             let text = levels::level2(&spec);
-            afford(&text, "level 2", &spec.name, cx).map(|text| (spec, text))
+            let native = deferred.contains(&spec.name);
+            // One price, of what is actually sent: a reference loads the definition the provider
+            // expands; anything else, the text.
+            let cost = if native {
+                price(&native::definition(&spec).to_string())
+            } else {
+                price(&text)
+            };
+            afford(cost, "level 2", &spec.name, cx).map(|()| (spec, text, native, cost))
         });
         match found {
-            Ok((spec, text)) => {
-                let native = deferred.contains(&spec.name);
+            Ok((spec, text, native, cost)) => {
                 let touched = Touched {
                     kind: Kind::Schema,
                     server: spec.server.clone(),
                     tool: Some(spec.name.clone()),
-                    // A reference loads the definition the provider expands, not the text.
-                    wt: if native {
-                        price(&native::definition(&spec).to_string())
-                    } else {
-                        price(&text)
-                    },
+                    wt: cost,
                     outcome: "loaded".into(),
                     references: if native {
                         vec![spec.name.clone()]
@@ -1195,9 +1197,14 @@ impl Mcp {
     /// Call one tool in scope: the shelf, the human gate by its class, the server started on its
     /// first call, and the answer escaped and capped. A call is never cheaper than its class.
     fn invoke(&self, spec: &Spec, arguments: &Value, cx: &Context) -> Outcome {
-        if let Err(refusal) = check_class(cx.race(), spec.class) {
-            return Outcome::unheld(refusal);
-        }
+        // The shelf is held by `find` — the only way here — which admits only the tools of
+        // `cx`'s race's shelf ([`Mcp::shelved`]). This is a belt, for debug builds and tests.
+        debug_assert!(
+            check_class(cx.race(), spec.class).is_ok(),
+            "find admitted {} off the {} shelf",
+            spec.name,
+            cx.race()
+        );
         if !arguments.is_object() {
             return Outcome::error(format!("the arguments to {} are an object", spec.name));
         }
@@ -1277,13 +1284,12 @@ pub fn who(cx: &Context) -> Who {
 
 /// `text`, when loading it fits what is left of `cx`'s envelope: a level's price counts against
 /// the run's budget before it is paid.
-fn afford(text: &str, level: &str, what: &str, cx: &Context) -> Result<String, String> {
-    let cost = price(text);
+fn afford(cost: u64, level: &str, what: &str, cx: &Context) -> Result<(), String> {
     match cx.budget_left() {
         Some(left) if cost > left => Err(format!(
             "{level} of `{what}` costs ~{cost} wt and your envelope has {left} wt left; nothing was loaded"
         )),
-        _ => Ok(text.to_owned()),
+        _ => Ok(()),
     }
 }
 

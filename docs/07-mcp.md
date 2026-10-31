@@ -259,7 +259,7 @@ Each run that creature makes in that session carries those of them its scope hol
 is made — so two runs may differ if a catalog became known between them, each fixed for its life — in its frame, as tools of their
 own — `<server>__<tool>`, its definition saying whose it is, its class and that the words are the
 server's — called by name, with no level loaded first, through the same scope, shelf, class and
-gate as `mcp_call`. Only tools in scope among the catalogs known when the run is made join, of a
+gate as `mcp_call`. Only tools in scope for the run's own race — on its shelf — among the catalogs known when the run is made join, of a
 server under the ceiling, within the room the ceiling leaves; `status` says which joined and why
 any did not.
 

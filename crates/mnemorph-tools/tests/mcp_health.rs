@@ -687,3 +687,149 @@ fn a_promoted_tool_off_the_shelf_is_refused_by_its_own_name() {
     let log = std::fs::read_to_string(w.root.join("log")).unwrap_or_default();
     assert!(!log.contains("call issue_find"), "{log}");
 }
+
+/// A hub a Slime may open — `issue_find` read — whose `web_search` is outward.
+fn mixed_hub(w: &World) -> Arc<Mcp> {
+    let mut hub = w.server("hub", &[Race::Slime, Race::Kijin], None);
+    hub.tools.insert("web_search".into(), ToolClass::Outward);
+    let m = w.mcp(vec![hub], Settings::default());
+    let mut cx = w.cx(Race::Slime);
+    let offer = m.offer(Race::Slime, &cx);
+    let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
+    m
+}
+
+#[test]
+fn a_slimes_habit_for_an_outward_tool_never_joins_its_frame() {
+    let w = World::new("frame-shelf", &few());
+    let m = mixed_hub(&w);
+    m.freeze_habits(Ok(habit_rows("slime-scout", "hub__web_search", 10, 10)));
+    let cx = w.cx(Race::Slime);
+    for native in [false, true] {
+        let offer = m.offer_framed(
+            Race::Slime,
+            &cx,
+            Frame {
+                native,
+                room: 1_000,
+            },
+        );
+        assert!(offer.prefix.is_empty(), "{:?}", offer.prefix);
+        assert!(
+            !names(&offer.tools)
+                .iter()
+                .any(|(n, _)| *n == "hub__web_search"),
+            "{:?}",
+            names(&offer.tools)
+        );
+        assert!(
+            offer.said[0].contains(
+                "hub__web_search stays out of slime-scout's stable prefix: it is not in scope now"
+            ),
+            "{:?}",
+            offer.said
+        );
+    }
+}
+
+#[test]
+fn a_frame_tool_off_the_callers_shelf_is_refused_by_find() {
+    // Framed for a Kijin; called from a Slime's context, whose race the server does serve.
+    let w = World::new("find-shelf", &few());
+    let m = mixed_hub(&w);
+    m.freeze_habits(Ok(habit_rows("slime-scout", "hub__web_search", 10, 10)));
+    let kx = w.cx(Race::Kijin);
+    let offer = m.offer_framed(
+        Race::Kijin,
+        &kx,
+        Frame {
+            native: false,
+            room: 1_000,
+        },
+    );
+    assert_eq!(offer.prefix, ["hub__web_search"]);
+    let mut sx = w.cx(Race::Slime);
+    let o = door(&offer.tools, "hub__web_search", &json!({"q": "x"}), &mut sx);
+    assert!(
+        o.content
+            .contains("`hub__web_search` is no MCP tool in your scope"),
+        "{}",
+        o.content
+    );
+    let log = std::fs::read_to_string(w.root.join("log")).unwrap_or_default();
+    assert!(!log.contains("call web_search"), "{log}");
+}
+
+#[test]
+fn a_native_level_two_is_refused_and_journaled_at_one_price_the_one_sent() {
+    let w = World::new("native-price", &few());
+    let m = listed_hub(&w);
+    let left = Arc::new(AtomicU64::new(u64::MAX));
+    let mut cx = w.cx(Race::Slime).with_budget_left(Arc::clone(&left));
+    let offer = m.offer_framed(
+        Race::Slime,
+        &cx,
+        Frame {
+            native: true,
+            room: 0,
+        },
+    );
+    let args = json!({"name": "hub__web_search"});
+    let o = door(&offer.tools, SCHEMA, &args, &mut cx);
+    let sent = o.meta.mcp_touched.as_ref().unwrap().wt;
+    assert_ne!(
+        sent,
+        mnemorph_tools::mcp::price(&o.content),
+        "the two prices differ here"
+    );
+    left.store(sent - 1, std::sync::atomic::Ordering::Relaxed);
+    let o = door(&offer.tools, SCHEMA, &args, &mut cx);
+    assert!(
+        o.is_error && o.content.contains(&format!("costs ~{sent} wt")),
+        "{}",
+        o.content
+    );
+    left.store(sent, std::sync::atomic::Ordering::Relaxed);
+    let o = door(&offer.tools, SCHEMA, &args, &mut cx);
+    assert!(!o.is_error, "{}", o.content);
+}
+
+#[test]
+fn a_frame_tools_example_fits_its_required_fields() {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "q": {"type": "string"},
+            "n": {"type": "integer"},
+            "mode": {"type": "string", "enum": ["fast", "slow"]},
+            "tags": {"type": ["array", "null"]},
+            "fixed": {"const": 3},
+            "opt": {"type": "string"}
+        },
+        "required": ["q", "n", "mode", "tags", "fixed"]
+    });
+    assert_eq!(
+        mnemorph_tools::mcp::example(&schema),
+        json!({"q": "", "n": 0, "mode": "fast", "tags": [], "fixed": 3})
+    );
+    assert_eq!(
+        mnemorph_tools::mcp::example(&json!({"type": "object"})),
+        json!({})
+    );
+    let w = World::new("example", &few());
+    let m = listed_hub(&w);
+    let offer = m.offer_framed(
+        Race::Slime,
+        &w.cx(Race::Slime),
+        Frame {
+            native: true,
+            room: 0,
+        },
+    );
+    let t = offer
+        .tools
+        .iter()
+        .find(|t| t.name() == "hub__web_search")
+        .unwrap();
+    assert_eq!(t.example(), json!({}), "no required field, nothing to fill");
+}
