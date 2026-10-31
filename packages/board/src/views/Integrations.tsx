@@ -50,7 +50,10 @@ command = "web-search-mcp"
 args = ["--stdio"]
 env = ["SEARCH_API_KEY"]   # passed by name
 races = ["kijin"]          # its scope: who may be offered its tools
-read_only = true`;
+class = "read"             # every tool's class; undeclared, a tool is outward
+
+[mcp.servers.search.tools.submit]
+class = "outward"          # one tool's own class wins over the server's`;
 
 const ADD_BENCH = `# ~/.config/mnemorph/config.toml
 [board]
@@ -190,7 +193,17 @@ function Config({ c }: { c: ConfigView }) {
                     </td>
                     <td>{s.races.length === 0 ? 'no race' : <Safe text={s.races.join(', ')} />}</td>
                     <td>
-                      {s.readOnly ? 'read-only' : 'outward, asked each call'}
+                      {s.class === null ? (
+                        'per tool: declared, inferred, else outward'
+                      ) : (
+                        <Safe text={s.class} />
+                      )}
+                      {s.tools.length > 0 ? (
+                        <>
+                          {' · '}
+                          <Safe text={s.tools.join(', ')} />
+                        </>
+                      ) : null}
                       {s.network ? ' · network' : ''}
                     </td>
                     <td>

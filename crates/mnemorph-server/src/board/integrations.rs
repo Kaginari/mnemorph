@@ -111,8 +111,12 @@ pub struct McpServerView {
     pub env: Vec<KeySource>,
     /// The races its tools are offered to: its scope.
     pub races: Vec<String>,
-    /// Its tools only read.
-    pub read_only: bool,
+    /// The class its tools run at, as declared: `read`, `write`, `outward` or `destructive`
+    /// for the server; `null` when none is declared, so each tool's own, an inferred one or
+    /// `outward` holds.
+    pub class: Option<String>,
+    /// The classes declared for single tools, `tool = class`.
+    pub tools: Vec<String>,
     /// Sockets allowed in its sandbox.
     pub network: bool,
     /// How long a call may take, in seconds.
@@ -120,22 +124,16 @@ pub struct McpServerView {
     pub timeout_secs: u64,
 }
 
-/// The MCP servers, and how a large catalog is offered.
+/// The MCP servers, and how many ranked tools an ask names.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct McpView {
     /// The servers.
     pub servers: Vec<McpServerView>,
-    /// Past this many tools in a race's scope, the rest are deferred.
-    #[ts(type = "number")]
-    pub defer_above: u64,
-    /// Ranked tools that ride the frame when deferred.
+    /// The tools ranked for an ask that its tail names, at level 1.
     #[ts(type = "number")]
     pub top_k: u64,
-    /// The most schema tokens a frame spends on MCP tools.
-    #[ts(type = "number")]
-    pub schema_tokens: u64,
 }
 
 /// One key of the effective configuration.
@@ -433,7 +431,8 @@ fn mcp(c: &Config, set: &dyn Fn(&str) -> bool) -> Sourced<McpView> {
                 args,
                 env: s.env.iter().map(|n| source(Some(n), set)).collect(),
                 races: s.races.iter().map(|r| r.name().to_owned()).collect(),
-                read_only: s.read_only,
+                class: s.class.map(|c| c.to_string()),
+                tools: s.tools.iter().map(|(t, c)| format!("{t} = {c}")).collect(),
                 network: s.network,
                 timeout_secs: s.timeout.as_secs(),
             }
@@ -443,9 +442,7 @@ fn mcp(c: &Config, set: &dyn Fn(&str) -> bool) -> Sourced<McpView> {
     Sourced::known(
         McpView {
             servers,
-            defer_above: n(settings.defer_above),
             top_k: n(settings.top_k),
-            schema_tokens: settings.schema_tokens,
         },
         SOURCE,
         true,

@@ -88,8 +88,8 @@ pub struct Opened {
     pub key: Option<String>,
     /// The sandbox actually in force for the session's commands, or `none — <reason>`.
     pub sandbox: String,
-    /// The MCP tools the session's body is offered, one priced line each, then the frame's
-    /// total: what `status` shows. Empty when no server serves its race.
+    /// The MCP servers the session's body may open, one level-0 line each with the price of
+    /// opening it: what `status` shows. Empty when no server may serve its race.
     pub mcp: Vec<String>,
 }
 
@@ -388,7 +388,7 @@ fn build(
         mcp,
         registry: mnemorph_world::dimension::registry(),
     });
-    let mcp_record = commissioner.mcp.as_ref().map(|m| m.state().to_path_buf());
+    let session_mcp = commissioner.mcp.clone();
     let setup = Setup {
         model: model.clone(),
         tools,
@@ -413,7 +413,7 @@ fn build(
     }
     .with_observer(observer)
     .with_gate(gate)
-    .with_mcp_record(mcp_record);
+    .with_mcp(session_mcp);
     let run = equip(
         run,
         world,
@@ -441,8 +441,9 @@ fn build(
     })
 }
 
-/// The session's MCP servers, when the human declared any, and the body's share of them put on
-/// its shelf: the priced lines for `status`, and what was refused.
+/// The session's MCP servers, when the human declared any, and their doors put on the body's
+/// shelf when any may serve its race: the level-0 lines for `status`, and what was refused. No
+/// server starts.
 #[allow(clippy::type_complexity)]
 fn mcp_share(
     config: &Config,
@@ -462,39 +463,11 @@ fn mcp_share(
         return Ok((None, Vec::new(), Vec::new()));
     }
     let mcp = mnemorph_tools::mcp::Mcp::new(settings, mnemorph_tools::mcp::state_dir(cx.world()));
-    let offer = mcp.offer(race, "", cx, &reserved(tools));
-    let lines = offer.lines();
-    let holes = offer.holes.clone();
+    let offer = mcp.offer(race, cx);
+    let lines = offer.lines;
+    let holes = offer.holes;
     tools.extend(offer.tools);
     Ok((Some(mcp), lines, holes))
-}
-
-/// Every name an MCP tool may not take: the tools already on the shelf, and every tool the loop
-/// or the act runner hands any body.
-pub(crate) fn reserved(
-    tools: &[Box<dyn mnemorph_tools::Tool>],
-) -> std::collections::BTreeSet<String> {
-    tools
-        .iter()
-        .map(|t| t.name().to_owned())
-        .chain(
-            [
-                crate::commission::COMMISSION,
-                crate::queue_tool::QUEUE,
-                crate::wear_tool::WEAR,
-                crate::verify_tool::VERIFY,
-                crate::coverage_tool::COVERAGE,
-                crate::verdict_tool::VERDICT,
-                mnemorph_config::OUTWARD,
-            ]
-            .map(str::to_owned),
-        )
-        .chain(
-            mnemorph_tools::registry()
-                .iter()
-                .map(|t| t.name().to_owned()),
-        )
-        .collect()
 }
 
 /// The session's attic at `dir`, kept within the configuration's limits.

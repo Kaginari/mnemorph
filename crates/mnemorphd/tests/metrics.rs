@@ -405,7 +405,8 @@ fn integrations(i: &Value) {
     );
     let gh = &c["mcp"]["value"]["servers"][0];
     assert_eq!(gh["races"], serde_json::json!(["kijin"]));
-    assert_eq!(gh["readOnly"], true);
+    assert_eq!(gh["class"], "read", "`read_only = true` is the read class");
+    assert_eq!(gh["tools"], serde_json::json!([]));
     assert_eq!(gh["args"][0], "--stdio");
     assert_eq!(gh["args"][2], Value::Null);
     assert_eq!(gh["args"][3], Value::Null);

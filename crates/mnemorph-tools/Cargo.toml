@@ -13,6 +13,7 @@ globset = "0.4"
 ignore = "0.4"
 mnemorph-races = { path = "../mnemorph-races" }
 mnemorph-sandbox = { path = "../mnemorph-sandbox" }
+mnemorph-wire = { path = "../mnemorph-wire" }
 regex = "1"
 rustix = { version = "1", features = ["fs", "process"] }
 serde = { version = "1", features = ["derive"] }

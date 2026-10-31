@@ -100,14 +100,16 @@ const server = (v: unknown): McpServerView | undefined => {
   const env = list(o?.env, key);
   const races = list(o?.races, (r) => (str(r) ? r : undefined));
   if (!o || !args || !env || !races || !str(o.name) || !strOrNull(o.command)) return undefined;
-  if (!bool(o.readOnly) || !bool(o.network) || !num(o.timeoutSecs)) return undefined;
+  const tools = list(o.tools, (t) => (str(t) ? t : undefined));
+  if (!strOrNull(o.class) || !tools || !bool(o.network) || !num(o.timeoutSecs)) return undefined;
   return {
     name: o.name,
     command: o.command,
     args,
     env,
     races,
-    readOnly: o.readOnly,
+    class: o.class,
+    tools,
     network: o.network,
     timeoutSecs: o.timeoutSecs,
   };
@@ -116,9 +118,7 @@ const server = (v: unknown): McpServerView | undefined => {
 const mcp = (v: unknown): McpView | undefined => {
   const o = obj(v);
   const servers = list(o?.servers, server);
-  return o && servers && num(o.deferAbove) && num(o.topK) && num(o.schemaTokens)
-    ? { servers, deferAbove: o.deferAbove, topK: o.topK, schemaTokens: o.schemaTokens }
-    : undefined;
+  return o && servers && num(o.topK) ? { servers, topK: o.topK } : undefined;
 };
 
 const setting = (v: unknown): Setting | undefined => {

@@ -2,7 +2,7 @@
 import type { McpServerView } from "./McpServerView.js";
 
 /**
- * The MCP servers, and how a large catalog is offered.
+ * The MCP servers, and how many ranked tools an ask names.
  */
 export type McpView = { 
 /**
@@ -10,14 +10,6 @@ export type McpView = {
  */
 servers: Array<McpServerView>, 
 /**
- * Past this many tools in a race's scope, the rest are deferred.
+ * The tools ranked for an ask that its tail names, at level 1.
  */
-deferAbove: number, 
-/**
- * Ranked tools that ride the frame when deferred.
- */
-topK: number, 
-/**
- * The most schema tokens a frame spends on MCP tools.
- */
-schemaTokens: number, };
+topK: number, };

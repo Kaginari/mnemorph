@@ -523,7 +523,6 @@ pub(crate) async fn order(
         slice,
         child_cx.with_body(&a.to),
         model,
-        &a.ask,
     )
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
@@ -1293,7 +1292,6 @@ fn child_run(
     slice: u64,
     cx: Context,
     model: String,
-    ask: &str,
 ) -> Run {
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
@@ -1336,10 +1334,10 @@ fn child_run(
     if creature.race.base() == mnemorph_races::Race::Kijin {
         tools.push(Box::new(mnemorph_config::OutwardTool));
     }
-    // The race's MCP share, ranked for this ask: decided now, never changed mid-run.
+    // The MCP doors when a server may serve the race: fixed now, never changed mid-run; the
+    // ask's tail carries level 0 and the tools ranked for this commission.
     if let Some(m) = &c.mcp {
-        let offer = m.offer(creature.race, ask, &cx, &crate::open::reserved(&tools));
-        tools.extend(offer.tools);
+        tools.extend(m.offer(creature.race, &cx).tools);
     }
     let setup = Setup {
         model: Arc::clone(&c.model),
@@ -1369,7 +1367,7 @@ fn child_run(
     let mut child = Run::new(body, limits, setup)
         .with_gate(gate)
         .with_manifest(mnemorph_world::minds::manifest(&c.world, roster, &name))
-        .with_mcp_record(c.mcp.as_ref().map(|m| m.state().to_path_buf()))
+        .with_mcp(c.mcp.clone())
         .with_registry(c.registry.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {

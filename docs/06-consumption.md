@@ -331,17 +331,20 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 
 ### MCP tool schemas
 
-An MCP tool's schema rides every request of a run that is offered it, so it is priced before it
-is offered ([MCP](07-mcp.md)):
+An MCP tool's schema would ride every request of a run that carried it, so none does: a run
+carries four fixed doors, and MCP reaches a body in three levels, each priced before it loads
+([MCP](07-mcp.md#three-levels-priced)):
 
-- each tool's price is its name, description and schema at four bytes a token; `mnemorph status`
-  shows it per tool, offered or deferred, and the frame's total;
-- the schemas a frame carries stay within `mcp.schema_tokens` (4,000): past it, or past
-  `mcp.defer_above` tools, the rest are deferred behind `mcp_search`, whose answer shows each
-  tool's price before the body calls it;
-- what is offered is decided when the run is made and never changes mid-run, so the schemas are
-  read from the cache at the cache-read price after the first request, and every token of them is
-  in the usage ledger's input like the rest of the frame.
+- level 0 — one line per server, with the weighted tokens of opening it — rides the first ask's
+  uncached tail, and `mnemorph status` shows the same lines;
+- level 1 — a server's tools, each with the price of its schema — and level 2 — one schema — are
+  tool results, loaded only when the body asks, at the price the level above showed: the bytes of
+  exactly that text at four a token;
+- the tools ranked for an ask are named at level 1 in its tail, so the right tool is usually in
+  view without a search turn;
+- the tools block never changes mid-run, so the doors are read from the cache at the cache-read
+  price after the first request, and every loaded level is in the usage ledger's input like any
+  other tool result.
 
 ### Reads by range
 

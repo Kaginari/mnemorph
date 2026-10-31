@@ -2208,14 +2208,10 @@ fn adopted_mind(world: &std::path::Path, name: &str, text: &str) {
     witness::record_at(&at, row).unwrap();
 }
 
-/// #48 under #231: a run's MCP tools are decided when it is made. Past the threshold the frame
-/// holds the ranked few and the two doors; a deferred tool found and called mid-run rides the
-/// conversation as tool results, so every request sends the same tools block and only appends —
-/// the prefix guard records no move. What the ask called is learned at its end.
-#[tokio::test]
-async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
-    use mnemorph_tools::mcp::{CALL, Mcp, SEARCH, Server, Settings};
-    let w = World::new("mcp-append");
+/// A fake MCP server `hub` for `w`: twelve tools, all `read`, offered to Slimes; and where its
+/// state is kept.
+fn fake_hub(w: &World) -> (Arc<mnemorph_tools::mcp::Mcp>, std::path::PathBuf) {
+    use mnemorph_tools::mcp::{Mcp, Server, Settings};
     let tools: Vec<Value> = (0..10)
         .map(|i| json!({"name": format!("filler_{i}"), "description": format!("Chore {i}")}))
         .chain([
@@ -2228,30 +2224,38 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../mnemorph-tools/tests/fixtures/fake-mcp.sh");
     let state = w.world().join("../mcp-state");
+    let mut hub = Server::new("hub", "bash", &[Race::Slime]);
+    hub.args = vec![
+        fixture.display().to_string(),
+        list.display().to_string(),
+        w.world().join("../mcp-log").display().to_string(),
+    ];
+    hub.class = Some(mnemorph_races::ToolClass::Read);
+    hub.purpose = "Issues and the web".into();
+    hub.timeout = std::time::Duration::from_secs(10);
     let mcp = Mcp::new(
         Settings {
             top_k: 2,
-            servers: vec![Server {
-                name: "hub".into(),
-                command: "bash".into(),
-                args: vec![
-                    fixture.display().to_string(),
-                    list.display().to_string(),
-                    w.world().join("../mcp-log").display().to_string(),
-                ],
-                env: Vec::new(),
-                races: vec![Race::Slime],
-                read_only: true,
-                network: false,
-                timeout: std::time::Duration::from_secs(10),
-            }],
-            ..Settings::default()
+            servers: vec![hub],
         },
         state.clone(),
     );
+    (mcp, state)
+}
+
+/// #48 under #231: a run's MCP doors are fixed when it is made. The first ask's tail names the
+/// servers at level 0; a server opened (level 1), a schema loaded (level 2) and a call ride the
+/// conversation as tool results, so every request sends the same tools block and only appends —
+/// the prefix guard records no move. A later ask's tail names the tools ranked for it, by BM25
+/// over what is now listed. What each ask called is learned at its end.
+#[tokio::test]
+async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
+    use mnemorph_tools::mcp::{CALL, OPEN, SCHEMA};
+    let w = World::new("mcp-append");
+    let (mcp, state) = fake_hub(&w);
     let model = Arc::new(ScriptedModel::new([
-        tool("t1", "hub__web_search", json!({"q": "release"})),
-        tool("t2", SEARCH, json!({"query": "find an issue"})),
+        tool("t1", OPEN, json!({"server": "hub"})),
+        tool("t2", SCHEMA, json!({"name": "hub__issue_find"})),
         tool(
             "t3",
             CALL,
@@ -2262,17 +2266,16 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
         answer("second"),
     ]));
     let mut setup = w.setup(model.clone());
-    let reserved = setup.tools.iter().map(|t| t.name().to_owned()).collect();
-    let offer = mcp.offer(Race::Slime, "search the web", &setup.cx, &reserved);
-    assert_eq!(offer.offered[0].name, "hub__web_search");
+    let offer = mcp.offer(Race::Slime, &setup.cx);
+    assert_eq!(offer.lines.len(), 1);
     setup.tools.extend(offer.tools);
-    let mut run = Run::new(body(), limits(), setup).with_mcp_record(Some(state.clone()));
+    let mut run = Run::new(body(), limits(), setup).with_mcp(Some(Arc::clone(&mcp)));
     assert_eq!(
-        ask(&mut run, "search the web, then find the issue").await,
+        ask(&mut run, "find the issue").await,
         Ending::Answered("first".into())
     );
     assert_eq!(
-        ask(&mut run, "a chore").await,
+        ask(&mut run, "a chore 3").await,
         Ending::Answered("second".into())
     );
 
@@ -2286,13 +2289,12 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
         assert_eq!(r.system, requests[0].system);
     }
     let names: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
+    for door in [OPEN, SCHEMA, CALL] {
+        assert!(names.contains(&door), "{names:?}");
+    }
     assert!(
-        names.contains(&SEARCH) && names.contains(&CALL),
-        "{names:?}"
-    );
-    assert!(
-        !names.contains(&"hub__issue_find"),
-        "a deferred tool never joins the frame"
+        !names.iter().any(|n| n.starts_with("hub__")),
+        "no MCP tool joins the frame: {names:?}"
     );
     assert!(
         moves_between(&requests).is_empty(),
@@ -2303,14 +2305,28 @@ async fn mcp_tools_found_and_called_mid_run_never_move_the_prefix() {
         !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
         "the guard recorded no prefix move"
     );
+    let first = format!("{:?}", requests[0].messages);
+    assert!(
+        first.contains("- hub — Issues and the web · not listed yet"),
+        "the first ask's tail names the server at level 0: {first}"
+    );
     let said = format!("{:?}", requests[3].messages);
     assert!(
-        said.contains("hub__issue_find — read"),
-        "the search showed the schema"
+        said.contains("hub__issue_find — read · schema ~"),
+        "level 1 was loaded"
     );
+    assert!(said.contains("level 2"), "the schema was loaded");
     assert!(said.contains("called issue_find"), "the door called it");
+    let second = format!("{:?}", requests[4].messages.last());
+    assert!(
+        second.contains("MCP tools that fit this ask") && second.contains("hub__filler_3 — read"),
+        "the later ask's tail ranks what is listed: {second}"
+    );
+    assert!(
+        !second.contains("level 0"),
+        "level 0 is said once: {second}"
+    );
     let usage = mnemorph_tools::mcp::Usage::load(&state);
-    assert_eq!(usage.tools["hub__web_search"].helped, 1);
     assert_eq!(usage.tools["hub__issue_find"].helped, 1);
     assert_eq!(usage.tools["hub__filler_3"].called, 1);
 }

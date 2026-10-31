@@ -266,14 +266,15 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("decide.cutoff.stated", Kind::Number),
     ("oni.envelopes", Kind::Envelopes),
     ("oni.envelope_days", Kind::Int),
-    ("mcp.defer_above", Kind::Int),
     ("mcp.top_k", Kind::Int),
-    ("mcp.schema_tokens", Kind::Int),
     ("mcp.servers.*.command", Kind::Str),
     ("mcp.servers.*.args", Kind::StrList),
     ("mcp.servers.*.env", Kind::StrList),
     ("mcp.servers.*.races", Kind::StrList),
     ("mcp.servers.*.read_only", Kind::Bool),
+    ("mcp.servers.*.class", Kind::Str),
+    ("mcp.servers.*.purpose", Kind::Str),
+    ("mcp.servers.*.tools.*.class", Kind::Str),
     ("mcp.servers.*.network", Kind::Bool),
     ("mcp.servers.*.timeout_secs", Kind::Int),
     ("board.bench_results", Kind::Str),
@@ -1253,11 +1254,13 @@ impl Config {
             .map(PathBuf::from)
     }
 
-    /// The MCP servers the human's own files declare, and how a large catalog is offered.
+    /// The MCP servers the human's own files declare — each tool's class among them — and how many
+    /// ranked tools an ask names.
     ///
     /// # Errors
     ///
-    /// A server with no command, an unlawful name, an unknown race, or a zero timeout.
+    /// A server with no command, an unlawful name, an unknown race or class, a class that
+    /// disagrees with `read_only`, an unlawful tool name, or a zero timeout.
     pub fn mcp(&self) -> Result<mnemorph_tools::mcp::Settings, String> {
         use mnemorph_tools::mcp::{self, Server, Settings};
         let mut names: Vec<&str> = self
@@ -1300,6 +1303,7 @@ impl Config {
                         .ok_or_else(|| format!("mcp.servers.{name}.races: `{r}` is no race"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let (class, tools) = self.mcp_classes(name)?;
             let timeout = match self.int(&at("timeout_secs")) {
                 Some(0) => return Err(format!("mcp.servers.{name}.timeout_secs: at least 1")),
                 Some(s) => std::time::Duration::from_secs(s),
@@ -1311,7 +1315,13 @@ impl Config {
                 args: list(&at("args")),
                 env: list(&at("env")),
                 races,
-                read_only: flag(&at("read_only")),
+                class,
+                tools,
+                purpose: self
+                    .get(&at("purpose"))
+                    .and_then(|l| l.value.as_str())
+                    .unwrap_or_default()
+                    .to_owned(),
                 network: flag(&at("network")),
                 timeout,
             });
@@ -1319,16 +1329,67 @@ impl Config {
         let d = Settings::default();
         Ok(Settings {
             servers,
-            defer_above: self
-                .int("mcp.defer_above")
-                .and_then(|n| usize::try_from(n).ok())
-                .unwrap_or(d.defer_above),
-            top_k: self
-                .int("mcp.top_k")
-                .and_then(|n| usize::try_from(n).ok())
-                .unwrap_or(d.top_k),
-            schema_tokens: self.int("mcp.schema_tokens").unwrap_or(d.schema_tokens),
+            top_k: match self.int("mcp.top_k") {
+                Some(0) => return Err("mcp.top_k: at least 1".into()),
+                n => n.and_then(|n| usize::try_from(n).ok()).unwrap_or(d.top_k),
+            },
         })
+    }
+
+    /// The classes the global file declares for MCP server `name`: the server's (`read_only =
+    /// true` is `read`) and each tool's.
+    fn mcp_classes(
+        &self,
+        name: &str,
+    ) -> Result<
+        (
+            Option<mnemorph_races::ToolClass>,
+            std::collections::BTreeMap<String, mnemorph_races::ToolClass>,
+        ),
+        String,
+    > {
+        use mnemorph_tools::mcp;
+        let at = |f: &str| format!("mcp.servers.{name}.{f}");
+        let flag = |key: &str| self.get(key).and_then(|l| l.value.as_bool()) == Some(true);
+        let class_at = |key: &str| -> Result<Option<mnemorph_races::ToolClass>, String> {
+            match self.get(key).and_then(|l| l.value.as_str()) {
+                None => Ok(None),
+                Some(c) => mcp::class_named(c).map(Some).ok_or_else(|| {
+                    format!(
+                        "{key}: `{c}` is no class an MCP tool may hold — read, write, outward or destructive"
+                    )
+                }),
+            }
+        };
+        let class = match (class_at(&at("class"))?, flag(&at("read_only"))) {
+            (Some(c), true) if c != mnemorph_races::ToolClass::Read => {
+                return Err(format!(
+                    "mcp.servers.{name}: `read_only = true` and `class = \"{c}\"` disagree; keep one"
+                ));
+            }
+            (Some(c), _) => Some(c),
+            (None, true) => Some(mnemorph_races::ToolClass::Read),
+            (None, false) => None,
+        };
+        let tools_at = format!("mcp.servers.{name}.tools.");
+        let mut tools = std::collections::BTreeMap::new();
+        for key in self.leaves.keys() {
+            let Some(tool) = key
+                .strip_prefix(&tools_at)
+                .and_then(|k| k.strip_suffix(".class"))
+            else {
+                continue;
+            };
+            if !mcp::lawful_tool_name(tool) {
+                return Err(format!(
+                    "{key}: `{tool}` is no tool name — letters, digits, `_` and `-`, no `__`"
+                ));
+            }
+            if let Some(c) = class_at(key)? {
+                tools.insert(tool.to_owned(), c);
+            }
+        }
+        Ok((class, tools))
     }
 
     /// The Oni envelopes the human signed (the global file alone), revoked and expired ones
