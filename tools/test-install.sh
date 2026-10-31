@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Scripts and dotfiles are written with their $ variables unexpanded.
+# shellcheck disable=SC2016
+#
 # The installer, offline: a fake release (an archive per target and SHA256SUMS) is served from a
 # local directory on loopback, and install.sh is pointed at it through MNEMORPH_RELEASE_BASE.
 # A fake `uname` on PATH plays each supported machine. The fresh install is timed against the
@@ -9,8 +12,6 @@
 # With a release archive built for this machine (tools/package-release.sh), the fresh install is
 # that real archive, run once installed; without one, every archive holds stand-in binaries.
 set -euo pipefail
-# Scripts and dotfiles are written with their \$ variables unexpanded.
-# shellcheck disable=SC2016
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 installer=$here/../install.sh
@@ -125,7 +126,7 @@ else fail "the fresh install took ${elapsed}s (the exit: under 120s)"; fi
 bins="mnemorph mnemorphd"
 case $host in *linux*) bins="$bins mnemorph-guard" ;; esac
 for b in $bins; do
-  if [ -x "$m/home/.local/bin/$b" ]; then pass "~/.local/bin/$b"; else fail "~/.local/bin/$b is missing"; fi
+  if [ -x "$m/home/.local/bin/$b" ]; then pass ".local/bin/$b in the fresh HOME"; else fail ".local/bin/$b is missing from the fresh HOME"; fi
 done
 if [ -n "$real" ]; then
   case $installed in "mnemorph "*) pass "the real build runs: $installed" ;; *) fail "the real build runs: $installed" ;; esac

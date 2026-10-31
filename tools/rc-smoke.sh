@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Dotfiles are written with their $HOME and $PATH unexpanded, as a human writes them.
+# shellcheck disable=SC2016
+#
 # The release-candidate smoke test: the BUILT binaries, run as a fresh machine's user would run
 # them, in a throwaway HOME seeded with the dotfiles a real one carries — a .gitconfig with
 # includes, aliases, a global hooks path and core.fsmonitor; ~/.config and ~/.local/state already
@@ -12,11 +15,9 @@
 # directories are compared before and after. Exit 0 only when every check passed; each failure
 # says what it saw.
 set -euo pipefail
-# Dotfiles are written with their \$HOME and \$PATH unexpanded, as a human writes them.
-# shellcheck disable=SC2016
 
 usage() { echo "usage: tools/rc-smoke.sh <bin-dir | archive.tar.gz> [version]" >&2; exit 2; }
-[ $# -ge 1 ] && [ $# -le 2 ] || usage
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then usage; fi
 input=$1
 want_version=${2:-}
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
