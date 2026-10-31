@@ -235,6 +235,8 @@ No tools.";
 
 /// The longest a drain turn may take: what is left of the clock, up to this.
 pub const DRAIN_GRACE: Duration = Duration::from_secs(120);
+/// How long the fast tier may take to rerank an ask's MCP shortlist before the BM25 order stands.
+pub const RERANK_WAIT: Duration = Duration::from_secs(15);
 /// The share of the window the stress line may never pass (percent).
 pub const CONTEXT_STRESS_PCT: u64 = 90;
 /// The stress line, in tokens, by default.
@@ -286,10 +288,16 @@ pub struct Run {
     recall_trace: Option<(String, bool, Option<String>, Option<String>)>,
     /// What this ask landed: the gate's journal heading for a change it judged.
     landed_in_ask: Option<String>,
-    /// The MCP tools this ask called: what the world's usage record learns at its end.
-    mcp_used: std::sync::Mutex<std::collections::BTreeSet<String>>,
-    /// Where the world's MCP usage record is kept, when the run is offered MCP tools.
-    mcp_record: Option<PathBuf>,
+    /// What this ask's MCP doors loaded and called, in order: what the journal keeps at its end.
+    mcp_touched: std::sync::Mutex<Vec<mnemorph_tools::mcp::Touched>>,
+    /// The MCP journal under the human's state directory, when the run is offered MCP tools.
+    mcp_journal: Option<Journal<mnemorph_tools::mcp::Row>>,
+    /// The tools this ask's tail offers, each with why.
+    mcp_offered: Vec<(mnemorph_tools::mcp::Spec, String)>,
+    /// This ask's rerank, when one was wanted: how it ended and what it cost, in weighted tokens.
+    mcp_reranked: Option<(String, u64)>,
+    /// The asks this run ranked MCP for: each ask's id in the journal.
+    mcp_asks: u64,
     /// The session's MCP servers, when the run is offered them: what each ask's tail says of
     /// them — level 0 with the first ask, the tools ranked for every ask.
     mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>,
@@ -438,8 +446,11 @@ impl Run {
             office: "ask".into(),
             recall_trace: None,
             landed_in_ask: None,
-            mcp_used: std::sync::Mutex::default(),
-            mcp_record: None,
+            mcp_touched: std::sync::Mutex::default(),
+            mcp_journal: None,
+            mcp_offered: Vec::new(),
+            mcp_reranked: None,
+            mcp_asks: 0,
             mcp: None,
             mcp_said: None,
             evolution_ledger: None,
@@ -807,22 +818,12 @@ impl Run {
         self
     }
 
-    /// Keep what this run's MCP calls came to in the usage record under `record` (an MCP
-    /// state directory); `None` keeps nothing.
-    #[must_use]
-    pub fn with_mcp_record(mut self, record: Option<PathBuf>) -> Self {
-        self.mcp_record = record;
-        self
-    }
-
     /// The session's MCP servers: the first ask's tail carries their level 0, every ask's the
-    /// tools ranked for it, and the usage record is kept in their state. The doors themselves
-    /// ride the tools the run was made with.
+    /// tools ranked for it, and the journal of loads and calls is kept in their state. The doors
+    /// themselves ride the tools the run was made with.
     #[must_use]
     pub fn with_mcp(mut self, mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>) -> Self {
-        if let Some(m) = &mcp {
-            self.mcp_record = Some(m.state().to_path_buf());
-        }
+        self.mcp_journal = mcp.as_ref().map(|m| crate::mcp_journal::journal(m.state()));
         self.mcp = mcp;
         self
     }
@@ -939,24 +940,161 @@ impl Run {
         }
     }
 
-    /// The MCP tools this ask called, counted in the world's usage record: each helped when the
-    /// ask ended answered with no failure at its gate. The harness counts; no model writes it.
+    /// What this ask did with MCP, journaled: each offer with why, the rerank, each load and
+    /// call, each helped when the ask ended answered with no failure at its gate. The harness
+    /// writes every row from what its own doors reported; no model writes one.
     fn learn_mcp(&self, ending: &Ending) {
-        let used = std::mem::take(
+        let touched = std::mem::take(
             &mut *self
-                .mcp_used
+                .mcp_touched
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
-        let Some(record) = &self.mcp_record else {
+        let Some(journal) = &self.mcp_journal else {
             return;
         };
-        let helped = matches!(ending, Ending::Answered(_)) && self.failed_in_ask.is_none();
-        if let Err(e) = mnemorph_tools::mcp::learn(record, &used, helped) {
-            self.record(&Beat::Warning {
-                text: format!("the MCP usage record could not be kept: {e}"),
-            });
+        if touched.is_empty() && self.mcp_offered.is_empty() && self.mcp_reranked.is_none() {
+            return;
         }
+        let ask = format!("{}#{}", self.caller.run, self.mcp_asks);
+        let offered: Vec<(String, String)> = self
+            .mcp_offered
+            .iter()
+            .map(|(s, why)| (s.name.clone(), why.clone()))
+            .collect();
+        let rows = crate::mcp_journal::AskRows {
+            ask: &ask,
+            creature: self.cx.body(),
+            race: self.cx.race().name(),
+            said: &self.asked,
+            helped: matches!(ending, Ending::Answered(_)) && self.failed_in_ask.is_none(),
+            ts: u64::try_from(Timestamp::now().0).unwrap_or_default(),
+        }
+        .rows(&offered, self.mcp_reranked.as_ref(), &touched);
+        for row in rows {
+            if let Err(e) = journal.append(&row) {
+                self.record(&Beat::Warning {
+                    text: format!("the MCP journal could not be kept: {e}"),
+                });
+                return;
+            }
+        }
+    }
+
+    /// Choose what this ask's tail offers of MCP: the journal read — believed only when its chain
+    /// and witness hold — then the tools in scope ranked by BM25 and what it taught, and, when the
+    /// visible catalog is large and the top scores sit close, the fast tier's rerank of the
+    /// shortlist. The rerank reorders or trims the shortlist, never widens it; any failure keeps
+    /// the BM25 order.
+    async fn choose_mcp(&mut self, ask: &str) {
+        use mnemorph_tools::mcp::{Learned, rerank};
+        self.mcp_offered.clear();
+        self.mcp_reranked = None;
+        let Some(mcp) = self.mcp.clone() else {
+            return;
+        };
+        self.mcp_asks += 1;
+        match crate::mcp_journal::read(mcp.state()) {
+            Ok(rows) => mcp.set_learned(Learned::from_rows(rows)),
+            Err(why) => {
+                mcp.set_learned(Learned::default());
+                self.record(&Beat::Warning {
+                    text: format!("MCP ranking learns nothing this ask: {why}"),
+                });
+            }
+        }
+        let (scored, catalog) = mcp.scored(self.cx.race(), ask, &self.cx);
+        let top_k = mcp.settings().top_k;
+        self.mcp_offered = scored
+            .iter()
+            .take(top_k)
+            .map(|s| (s.spec.clone(), s.why.clone()))
+            .collect();
+        let settings = &mcp.settings().rerank;
+        let points: Vec<f64> = scored.iter().map(|s| s.score).collect();
+        let Some(model) = settings
+            .wanted(catalog, &points, top_k)
+            .then(|| settings.model.clone())
+            .flatten()
+        else {
+            return;
+        };
+        let pool: Vec<&mnemorph_tools::mcp::Scored> =
+            scored.iter().take(rerank::pool(top_k)).collect();
+        let shortlist: Vec<mnemorph_tools::mcp::Spec> =
+            pool.iter().map(|s| s.spec.clone()).collect();
+        let (outcome, wt) = match self.rerank_mcp(&mcp, &model, ask, &shortlist).await {
+            Ok((names, wt, cached)) if !names.is_empty() => {
+                // Only names of the shortlist come back: each is looked up in it, never beyond.
+                self.mcp_offered = names
+                    .iter()
+                    .filter_map(|n| pool.iter().find(|s| &s.spec.name == n))
+                    .map(|s| (s.spec.clone(), format!("{} · reranked by {model}", s.why)))
+                    .collect();
+                (if cached { "cached" } else { "reranked" }.to_owned(), wt)
+            }
+            Ok((_, wt, _)) => ("fallback: it named no tool of the shortlist".to_owned(), wt),
+            Err(why) => (format!("fallback: {why}"), 0),
+        };
+        self.record(&Beat::Warning {
+            text: format!("MCP rerank by {model}: {outcome}, {wt} wt"),
+        });
+        self.mcp_reranked = Some((outcome, wt));
+    }
+
+    /// One call to the fast tier `model` over `shortlist`, the servers' words escaped in a block
+    /// marked as data, priced in the ledger like any call; its answer read only as names of the
+    /// shortlist, and kept so the same ask over the same catalog never pays twice. The names, the
+    /// weighted tokens spent, and whether the answer was kept from before.
+    async fn rerank_mcp(
+        &mut self,
+        mcp: &mnemorph_tools::mcp::Mcp,
+        model: &str,
+        ask: &str,
+        shortlist: &[mnemorph_tools::mcp::Spec],
+    ) -> Result<(Vec<String>, u64, bool), String> {
+        use mnemorph_tools::mcp::rerank;
+        let prompt = rerank::prompt(ask, shortlist);
+        let key = rerank::key(model, &prompt);
+        if let Some(names) = mcp.reranked(&key) {
+            return Ok((names, 0, true));
+        }
+        let request = Request {
+            model: model.to_owned(),
+            system: vec![Block::Text {
+                text: rerank::SYSTEM.to_owned(),
+                cache: false,
+            }],
+            tools: Vec::new(),
+            messages: vec![Message {
+                role: Role::User,
+                content: vec![Block::Text {
+                    text: prompt,
+                    cache: false,
+                }],
+            }],
+            max_tokens: rerank::MAX_TOKENS,
+            effort: None,
+        };
+        let mut quiet = |_: Event| {};
+        let r = tokio::time::timeout(RERANK_WAIT, self.model.complete(&request, &mut quiet))
+            .await
+            .map_err(|_| "the fast tier did not answer in time".to_owned())?
+            .map_err(|e| format!("the fast tier failed: {e}"))?;
+        let row = usage_row(
+            &r,
+            &self.caller,
+            self.model.provider(),
+            &self.prices,
+            Timestamp::now(),
+        );
+        let wt = row.wt;
+        self.spend(&row);
+        let names = rerank::pick(&text_of(&r.content), shortlist, mcp.settings().top_k);
+        if !names.is_empty() {
+            mcp.keep_reranked(key, names.clone());
+        }
+        Ok((names, wt, false))
     }
 
     fn end(&self, ending: Ending) -> Ending {
@@ -1108,8 +1246,7 @@ impl Run {
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
-        self.ride();
-        let text = &self.open_ask(text);
+        let text = &self.begin(text).await;
         push_user(
             &mut self.messages,
             vec![Block::Text {
@@ -2231,6 +2368,13 @@ impl Run {
         content
     }
 
+    /// Begin an ask: the run rides on, MCP is chosen for it, and the ask is opened.
+    async fn begin(&mut self, text: &str) -> String {
+        self.ride();
+        self.choose_mcp(text).await;
+        self.open_ask(text)
+    }
+
     /// Open an ask: its preface, its journal row, then the recall row that follows it.
     fn open_ask(&mut self, text: &str) -> String {
         // Stamped on the ask as the human or the dispatcher sent it, before any preface.
@@ -2274,7 +2418,7 @@ impl Run {
             None => asked,
         };
         // MCP in the uncached tail: level 0 with the first ask, then the tools ranked for this one.
-        let asked = match self.mcp_tail(text) {
+        let asked = match self.mcp_tail() {
             Some(tail) => format!("{tail}\n\n{asked}"),
             None => asked,
         };
@@ -2308,8 +2452,8 @@ impl Run {
     }
 
     /// What an ask's tail says of MCP: the level-0 block until it has been said once, then the
-    /// tools in scope ranked for `ask` by BM25 — no model, no server started.
-    fn mcp_tail(&mut self, ask: &str) -> Option<String> {
+    /// tools [`Run::choose_mcp`] chose for this ask — no server started.
+    fn mcp_tail(&mut self) -> Option<String> {
         let mcp = Arc::clone(self.mcp.as_ref()?);
         let race = self.cx.race();
         let mut parts = Vec::new();
@@ -2319,7 +2463,11 @@ impl Run {
             self.mcp_said = Some(level0.clone());
             parts.push(level0);
         }
-        parts.extend(mcp.ranked_block(race, ask, &self.cx));
+        if !self.mcp_offered.is_empty() {
+            let specs: Vec<mnemorph_tools::mcp::Spec> =
+                self.mcp_offered.iter().map(|(s, _)| s.clone()).collect();
+            parts.push(mnemorph_tools::mcp::levels::ranked_block(&specs));
+        }
         (!parts.is_empty()).then(|| parts.join("\n\n"))
     }
 
@@ -2905,11 +3053,11 @@ impl Run {
     /// Journal what the guts read from one act, with the act's instruments: the record a learned
     /// value model will train on.
     fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
-        if let Some(tool) = &o.meta.mcp {
-            self.mcp_used
+        if let Some(touched) = &o.meta.mcp_touched {
+            self.mcp_touched
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .insert(tool.clone());
+                .push((**touched).clone());
         }
         let reading = self.stress.last().clone();
         self.record(&Beat::Guts {

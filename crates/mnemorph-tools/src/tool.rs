@@ -95,6 +95,8 @@ pub struct Meta {
     /// The MCP tool the call reached, by the name a body calls it: what the world's usage record
     /// learns from.
     pub mcp: Option<String>,
+    /// What an MCP door loaded or called, for the journal the harness keeps.
+    pub mcp_touched: Option<Box<crate::mcp::Touched>>,
 }
 
 impl Outcome {

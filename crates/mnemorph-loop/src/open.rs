@@ -91,6 +91,11 @@ pub struct Opened {
     /// The MCP servers the session's body may open, one level-0 line each with the price of
     /// opening it: what `status` shows. Empty when no server may serve its race.
     pub mcp: Vec<String>,
+    /// From the MCP journal: each server's levels loaded against used and its answers' cost, the
+    /// reranks' cost, then why each tool of the last ask's shortlist was offered — `<creature>
+    /// offered <tool> — bm25 3.1 + used 4× by kijin-forge (+1.61)` — and its rerank; or why the
+    /// journal is not believed.
+    pub mcp_offered: Vec<String>,
 }
 
 /// Which run a session opens on.
@@ -358,6 +363,21 @@ fn build(
     }
     // The MCP servers the human declared: the body's share decided once, before the run is made.
     let (mcp, mcp_lines, mcp_holes) = mcp_share(config, body.race, &cx, &mut tools)?;
+    let mcp_offered =
+        mcp.as_ref()
+            .map_or_else(Vec::new, |m| match crate::mcp_journal::read(m.state()) {
+                Ok(rows) => {
+                    let learned = mnemorph_tools::mcp::Learned::from_rows(rows);
+                    learned
+                        .spend()
+                        .into_iter()
+                        .chain(learned.last_offers())
+                        .collect()
+                }
+                Err(why) => vec![format!(
+                    "the journal is not believed, so ranking learns nothing: {why}"
+                )],
+            });
     let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
     // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
     if !lanes.is_empty() {
@@ -438,6 +458,7 @@ fn build(
         // The network is opened only for an approved outward act, so the standing state is off.
         sandbox: mnemorph_tools::Sandbox::detect().status(false),
         mcp: mcp_lines,
+        mcp_offered,
     })
 }
 

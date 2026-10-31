@@ -466,6 +466,9 @@ pub fn status(opened: &Opened) -> Vec<String> {
     ];
     // Each MCP server the body may open, with the price of opening it (level 0).
     lines.extend(opened.mcp.iter().map(|l| ("mcp", l.clone())));
+    // What MCP cost per server, and why the last ask was offered each tool: from the journal the
+    // harness keeps.
+    lines.extend(opened.mcp_offered.iter().map(|l| ("mcp-why", l.clone())));
     lines.extend(opened.holes.iter().map(|h| ("hole", h.clone())));
     lines
         .into_iter()

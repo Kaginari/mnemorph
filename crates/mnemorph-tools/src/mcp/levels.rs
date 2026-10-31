@@ -262,10 +262,7 @@ impl Tool for Open {
             Ok(a) => a,
             Err(o) => return o,
         };
-        match self.0.level1(&a.server, cx) {
-            Ok(text) => Outcome::ok(text, ToolClass::Read),
-            Err(e) => Outcome::error(e),
-        }
+        self.0.open(&a.server, cx)
     }
 }
 
@@ -304,10 +301,7 @@ impl Tool for Schema {
             Ok(a) => a,
             Err(o) => return o,
         };
-        match self.0.level2(&a.name, cx) {
-            Ok(text) => Outcome::ok(text, ToolClass::Read),
-            Err(e) => Outcome::error(e),
-        }
+        self.0.schema(&a.name, cx)
     }
 }
 

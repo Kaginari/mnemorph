@@ -13,6 +13,7 @@ pub mod envelope;
 pub mod evolution;
 pub mod gate;
 pub mod incident;
+pub mod mcp_journal;
 pub mod model;
 pub mod open;
 pub mod queue_tool;

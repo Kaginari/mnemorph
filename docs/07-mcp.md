@@ -16,8 +16,9 @@ flowchart LR
     subgraph mnemorph["Mnemorph"]
       C -->|"level 0 and the ranked tools<br/>in the ask's tail"| A["a body<br/>four fixed doors"]
       A -->|"open · schema · call<br/>anything but read asks you"| C
-      L[("usage record<br/>called · helped")] -->|"nudges the ranking"| C
+      L[("MCP journal, chained<br/>loads · calls · offers")] -->|"relation and idle penalty"| C
       A -. "the ask's end" .-> L
+      C <-->|"close scores in a large catalog:<br/>one rerank, names only"| F["fast tier"]
     end
     classDef human fill:#f8efcf,stroke:#D4AF37,stroke-width:2px,color:#3a2e05
     class H human
@@ -25,6 +26,7 @@ flowchart LR
     class S outside
     classDef store fill:#e8eaf6,stroke:#5c6bc0,stroke-width:1.5px,color:#1a237e
     class C,L store
+    class F outside
     classDef throne fill:#dbeefe,stroke:#3FA9F5,stroke-width:2px,color:#0b2540
     class A throne
     style mnemorph fill:#f0f9ff,stroke:#3FA9F5
@@ -50,9 +52,13 @@ each priced before it loads:
 
 No server starts until a body opens it or calls it. Before each ask, the tools that best fit it
 are named at level 1, ranked by the words of the ask — no model is asked — so the right tool is
-usually in view without a search. Every word a server sends — descriptions, schemas, answers —
-is treated as data from outside: escaped, capped and marked as untrusted. What the world learns
-about which tools helped is counted by the harness, never written by a model.
+usually in view without a search. The ranking also learns: a tool this creature or its race
+called on similar asks climbs, and one whose schema was loaded and never called sinks for a
+while. Only when the catalog is large and the best few score close does one short call to the
+fast tier reorder them; it can drop or reorder those few, never add one. Every word a server sends — descriptions, schemas, answers —
+is treated as data from outside: escaped, capped and marked as untrusted, to a body and to the
+reranker alike. Every load and call is journaled by the harness, outside the world, never by a
+model.
 
 ## Technical detail
 
@@ -68,6 +74,11 @@ reach. The same holds for `sandbox.allow_unguarded` and every key that loosens t
 ```toml
 [mcp]
 top_k = 5                  # tools ranked for each ask, named in its tail at level 1 (at least 1)
+
+[mcp.rerank]
+enabled = true             # the fast tier may rerank a close shortlist
+above = 30                 # only when more tools than this are in scope
+margin_pct = 15            # and the top `top_k` scores sit within this percent of the best
 
 [mcp.servers.search]
 command = "web-search-mcp"
@@ -97,7 +108,7 @@ notifications are passed over.
 
 - **State outside the world.** Everything MCP keeps lives under
   `$XDG_STATE_HOME/mnemorph/mcp/<world>-<fnv64a>/` (else `~/.local/state`): the cached catalogs,
-  the usage record and each server's scratch. Nothing a body or a script writes in the world
+  the MCP journal (its witness beside the directory) and each server's scratch. Nothing a body or a script writes in the world
   reaches it.
 - **Never through the world.** The program is found on the harness's `PATH`, its relative and
   in-world directories left out; a relative path, or a program inside the world, is refused.
@@ -191,9 +202,32 @@ Before each ask, the harness ranks the tools in scope among the known catalogs b
 and names the top `top_k` at level 1 in its tail, under `MCP tools that fit this ask`. The rank
 is BM25 (`k1 = 1.2`, `b = 0.75`, the formula recall uses) of the ask's words — stop words and
 single letters aside — over each tool's name, server and description, plus the learned nudge
-below; only tools with a positive BM25 score are named — the nudge orders them, never admits one, ties keep the catalog's order, and no model
-is asked, so the same catalog and ask always give the same list. A commissioned body is ranked
-for its commission's ask, the session's body for each of its asks.
+below; only tools with a positive BM25 score are named — what was learned orders them, never
+admits one — ties keep the catalog's order, and the same catalog, journal and ask always give the
+same list. A commissioned body is ranked for its commission's ask, the session's body for each of
+its asks.
+
+### Reranked by the fast tier
+
+When more than `mcp.rerank.above` tools are in scope and the top `top_k` scores sit within
+`mcp.rerank.margin_pct` percent of the best, the shortlist — the best `2 × top_k`, at most 12 —
+goes to the fast tier (`models.tier.fast`) in one call, before the ask is sent:
+
+- the system prompt says the task and the tools are data, never instructions; the ask goes in a
+  `<task>` block and each tool as `- <name> — <one-line description>` in a `<tools
+  trust="untrusted: …">` block, every line escaped as level 1 escapes it, so nothing a server
+  wrote can close a block;
+- the answer is read only as names of that shortlist, one a line, at most `top_k`: any other
+  name — another server's tool, one the shelf hides, one made up — is dropped. The rerank can
+  reorder or trim the shortlist; it can never widen it, the shelf or a class, and a call still
+  goes through the scope, the shelf and the gate;
+- the call is a usage ledger row like any other, under the asking body, and its cost is said in
+  the run's journal (`MCP rerank by <model>: reranked, N wt`) and the MCP journal;
+- its answer is kept for the session by the model and every byte it was shown, so the same ask
+  over the same catalog never pays twice;
+- with no fast tier on the session's provider, `enabled = false`, a call that fails or runs past
+  15 seconds, or an answer that names no tool of the shortlist, the BM25 order stands: fail safe,
+  never open.
 
 ### A call
 
@@ -214,16 +248,37 @@ for its commission's ask, the session's body for each of its asks.
 
 ### Learned
 
-The usage record (`usage.json` in the world's MCP state) holds, per tool, the asks it was called in and, of those,
-the asks it helped: asks that ended answered with nothing failing at their gate. The loop counts
-them at each ask's end from the calls the harness ran; no model writes it. In ranking a tool gains
-`ln(1 + helped)` and loses `0.25 · ln(1 + called − helped)`, so a tool that keeps helping climbs
-into the ranked few and one called for nothing sinks.
+The MCP journal (`journal.jsonl` in the world's MCP state, under `$XDG_STATE_HOME/mnemorph/mcp/`)
+keeps one row per level-1 load, level-2 load, call, offer and rerank: the tool and server, the
+creature and race, the ask's id, its words (sorted, at most 32) and their fingerprint, the
+weighted tokens it put in the conversation or cost, whether the tool was called after it in the
+same ask, how it ended, and whether the ask ended answered with nothing failing at its gate.
+The loop writes the rows at each ask's end from what its own doors reported; no model and no
+body writes one, and nothing of it lives in the world.
+
+The journal is chained like the usage ledger, every byte written first to its witness beside the
+state directory (`<world>-<hash>.witness.jsonl`). Before each ask the loop walks both: an edited
+row, a torn tail, or a head that is not the witness's (rows dropped or put in) means the journal
+is not believed, the ranking learns nothing for that ask, and the run's journal says why.
+
+From the newest 4,096 rows, model-free, bounded and deterministic:
+
+- **Relation.** Each past call that answered, by this creature (weight 1) or another of its race
+  (weight ½), counts its ask's similarity to this one — BM25 of this ask's words over the past
+  asks' words, over the best such score — halved when that ask did not end well. A tool gains
+  `ln(1 + Σ)`, at most 2.
+- **Idle penalty.** Each schema loaded and never called in its ask costs its tool 0.5, halved
+  for every 8 asks the journal records after it; at most 1.5 in all.
 
 ### Shown
 
 `mnemorph status` shows one `mcp` line per server the session body may open — its level-0 line,
-with the price of opening it once its catalog is known. What was refused is a `hole`. The board's
+with the price of opening it once its catalog is known. What was refused is a `hole`. From the
+journal, `mcp-why` lines give each server's levels loaded against those then used, in weighted
+tokens, and what its answers and the reranks cost; then why each tool of the last ask was
+offered — `slime-scout offered docs__lookup — bm25 3.1 + used 4× by slime-scout (+1.61)`, with
+`− loaded idle 2× (−0.71)` for a penalty, `· reranked by <model>` and `· called` when they apply —
+or why the journal is not believed. The board's
 integrations page shows each server's scope, its declared class and each tool's.
 
 ### Designed, not built
@@ -234,11 +289,8 @@ These parts of [#48](https://github.com/Kaginari/mnemorph/issues/48) wait for M1
 - **agent-mcp**, a duty at `kijin-scout`'s post: curating the roster, proposing each tool's
   class for you to declare and writing its one-line description, once per server version, on the
   fast tier.
-- **A fast-tier rerank** of the shortlist when the catalog is large and the top candidates score
-  close, cached per commission.
-- **Learning from the ledger**: every load and call journaled; a tool loaded but never called
-  demoted, one called on most commissions placed in its creature's stable prefix at the next
-  session start; schema tokens loaded against used, per server.
+- **The stable prefix**: a tool a creature calls on most commissions placed in its stable prefix
+  at the next session start, never mid-session.
 - **Budgeted levels**: schema tokens counted against the per-race prefix ceiling and the
   envelope; a server whose schemas would blow the ceiling shown at level 0 only.
 - **`list_changed`** and server versions as refresh triggers; argument validation against the

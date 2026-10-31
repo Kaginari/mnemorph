@@ -342,6 +342,9 @@ carries four fixed doors, and MCP reaches a body in three levels, each priced be
   exactly that text at four a token;
 - the tools ranked for an ask are named at level 1 in its tail, so the right tool is usually in
   view without a search turn;
+- when the catalog is large and the top scores sit close, one fast-tier call reranks the
+  shortlist: a usage ledger row like any call, its cost said in the run's journal, and kept for
+  the session so the same ask never pays twice ([MCP](07-mcp.md#reranked-by-the-fast-tier));
 - the tools block never changes mid-run, so the doors are read from the cache at the cache-read
   price after the first request, and every loaded level is in the usage ledger's input like any
   other tool result.

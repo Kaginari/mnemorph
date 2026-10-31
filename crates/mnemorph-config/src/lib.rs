@@ -267,6 +267,9 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("oni.envelopes", Kind::Envelopes),
     ("oni.envelope_days", Kind::Int),
     ("mcp.top_k", Kind::Int),
+    ("mcp.rerank.enabled", Kind::Bool),
+    ("mcp.rerank.above", Kind::Int),
+    ("mcp.rerank.margin_pct", Kind::Int),
     ("mcp.servers.*.command", Kind::Str),
     ("mcp.servers.*.args", Kind::StrList),
     ("mcp.servers.*.env", Kind::StrList),
@@ -1333,6 +1336,46 @@ impl Config {
                 Some(0) => return Err("mcp.top_k: at least 1".into()),
                 n => n.and_then(|n| usize::try_from(n).ok()).unwrap_or(d.top_k),
             },
+            rerank: self.mcp_rerank(&d.rerank)?,
+        })
+    }
+
+    /// When the fast tier reranks an ask's MCP shortlist (`mcp.rerank.*`), and on which model:
+    /// the fast tier's, when it rides the session's default provider — the only client a run
+    /// holds — else none, and the BM25 order stands.
+    fn mcp_rerank(
+        &self,
+        d: &mnemorph_tools::mcp::Rerank,
+    ) -> Result<mnemorph_tools::mcp::Rerank, String> {
+        let margin_pct = match self.int("mcp.rerank.margin_pct") {
+            Some(m) if m > 100 => {
+                return Err("mcp.rerank.margin_pct: a percent, from 0 to 100".into());
+            }
+            Some(m) => u32::try_from(m).unwrap_or(d.margin_pct),
+            None => d.margin_pct,
+        };
+        let fast = self.tier_model(ModelTier::Fast);
+        let default_provider = self
+            .get("models.provider")
+            .and_then(|l| l.value.as_str())
+            .unwrap_or("anthropic")
+            .to_owned();
+        let model = (!fast.is_empty())
+            .then(|| self.backend(&fast).ok())
+            .flatten()
+            .filter(|b| b.provider_name == default_provider)
+            .map(|b| b.model);
+        Ok(mnemorph_tools::mcp::Rerank {
+            enabled: self
+                .get("mcp.rerank.enabled")
+                .and_then(|l| l.value.as_bool())
+                .unwrap_or(d.enabled),
+            above: self
+                .int("mcp.rerank.above")
+                .and_then(|n| usize::try_from(n).ok())
+                .unwrap_or(d.above),
+            margin_pct,
+            model,
         })
     }
 

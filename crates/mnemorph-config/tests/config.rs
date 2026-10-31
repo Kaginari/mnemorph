@@ -1215,6 +1215,51 @@ fn an_mcp_tools_class_is_declared_in_the_global_file() {
     }
 }
 
+/// The MCP rerank rides the fast tier on the session's provider; its trigger is the human's, from
+/// the global file; a fast tier on another provider, or none, leaves the BM25 order.
+#[test]
+fn the_mcp_rerank_rides_the_fast_tier_from_the_global_file() {
+    let g = Ground::new("mcp-rerank");
+    let c = g.load().unwrap();
+    let r = c.mcp().unwrap().rerank;
+    assert_eq!(
+        r,
+        mnemorph_tools::mcp::Rerank {
+            model: Some("claude-haiku-5-5".into()),
+            ..mnemorph_tools::mcp::Rerank::default()
+        }
+    );
+    g.global(
+        "[mcp.rerank]
+above = 8
+margin_pct = 30
+",
+    )
+    .local(
+        "[mcp.rerank]
+above = 0
+enabled = false
+",
+    );
+    let c = g.load().unwrap();
+    let r = c.mcp().unwrap().rerank;
+    assert_eq!(
+        (r.above, r.margin_pct, r.enabled),
+        (8, 30, true),
+        "the local file is a hole"
+    );
+    assert!(c.holes().iter().any(|h| h.key == "mcp.rerank.above"));
+    // A fast tier on a provider the session's client does not reach: no rerank.
+    let g = Ground::new("mcp-rerank-other");
+    g.global(
+        "[models.tier]\nfast = \"vllm:qwen3\"\n\n[providers.vllm]\nkind = \"openai\"\nbase_url = \"http://localhost:8000\"\n",
+    );
+    assert_eq!(g.load().unwrap().mcp().unwrap().rerank.model, None);
+    let g = Ground::new("mcp-rerank-bad");
+    g.global("[mcp.rerank]\nmargin_pct = 101\n");
+    assert!(g.load().unwrap().mcp().unwrap_err().contains("a percent"));
+}
+
 #[test]
 fn the_read_range_rule_defaults_to_400_lines_and_0_turns_it_off() {
     let g = Ground::new("range-over");
