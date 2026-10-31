@@ -33,10 +33,14 @@ pub use commission::{COMMISSION, CommissionTool, Commissioner};
 pub use coverage_tool::{COVERAGE, CoverageTool};
 pub use decisions::{BENCH_POINT, Decisions, bench_ask, bench_read, decision_usage, decisions};
 pub use gate::{Author, EndGate, GateVerdict, Tree, Verdict, snapshot};
+/// The configuration's layers, origins and holes, for a reader that shows them (the board).
+pub use mnemorph_config as config;
 /// The configuration, for a client that opens a session from it.
 pub use mnemorph_config::{Config, Paths};
 pub use mnemorph_provider::Event as StreamEvent;
 pub use mnemorph_provider::OPAQUE_PREFIX;
+/// The shipped price table, for a reader that shows what a model costs.
+pub use mnemorph_provider::anthropic_prices;
 pub use mnemorph_races::ToolClass;
 /// The plan a gate approval binds to.
 pub use mnemorph_tools::Fingerprint as GateFingerprint;

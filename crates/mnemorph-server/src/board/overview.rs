@@ -42,7 +42,7 @@ pub struct Sourced<T> {
 }
 
 impl<T> Sourced<T> {
-    fn known(value: T, source: impl Into<String>, trusted: bool) -> Self {
+    pub(super) fn known(value: T, source: impl Into<String>, trusted: bool) -> Self {
         Self {
             value: Some(value),
             source: source.into(),
@@ -51,7 +51,11 @@ impl<T> Sourced<T> {
         }
     }
 
-    fn unknown(source: impl Into<String>, trusted: bool, why: impl Into<String>) -> Self {
+    pub(super) fn unknown(
+        source: impl Into<String>,
+        trusted: bool,
+        why: impl Into<String>,
+    ) -> Self {
         Self {
             value: None,
             source: source.into(),
@@ -60,7 +64,7 @@ impl<T> Sourced<T> {
         }
     }
 
-    fn with(mut self, why: impl Into<String>) -> Self {
+    pub(super) fn with(mut self, why: impl Into<String>) -> Self {
         self.why = Some(why.into());
         self
     }
@@ -439,8 +443,26 @@ fn gate(path: &Path) -> Sourced<Gate> {
     }
 }
 
+/// One meter, as `mnemorphd meters --json` shows it: no report — no fold, or a fold of none — is no
+/// count, never a zero.
+pub(super) fn meter(name: &str, rate: Option<meters::Rate>) -> Meter {
+    let rate = rate.filter(|x| x.n > 0);
+    let (lo, hi) = rate.and_then(|x| x.interval()).unzip();
+    Meter {
+        meter: name.to_owned(),
+        successes: rate.map(|x| x.successes),
+        n: rate.map(|x| x.n),
+        value: rate.and_then(|x| x.value()),
+        lo,
+        hi,
+    }
+}
+
 /// Every living creature's meters, as `mnemorphd meters --json` shows them.
-fn meters_of(path: &Path, snap: Result<&Snapshot, &str>) -> Sourced<Vec<CreatureMeters>> {
+pub(super) fn meters_of(
+    path: &Path,
+    snap: Result<&Snapshot, &str>,
+) -> Sourced<Vec<CreatureMeters>> {
     const SOURCE: &str = "the roster's creatures (in the world) over the challenge records' folds";
     let copy = match snap {
         Ok(s) => s.path(),
@@ -456,23 +478,7 @@ fn meters_of(path: &Path, snap: Result<&Snapshot, &str>) -> Sourced<Vec<Creature
         .map(|m| CreatureMeters {
             creature: m.name,
             race: m.race.name().to_owned(),
-            meters: m
-                .readings
-                .iter()
-                .map(|r| {
-                    // No report — no fold, or a fold of none — is no count, never a zero.
-                    let rate = r.rate.filter(|x| x.n > 0);
-                    let (lo, hi) = rate.and_then(|x| x.interval()).unzip();
-                    Meter {
-                        meter: r.meter.to_owned(),
-                        successes: rate.map(|x| x.successes),
-                        n: rate.map(|x| x.n),
-                        value: rate.and_then(|x| x.value()),
-                        lo,
-                        hi,
-                    }
-                })
-                .collect(),
+            meters: m.readings.iter().map(|r| meter(r.meter, r.rate)).collect(),
         })
         .collect();
     Sourced::known(all, SOURCE, false)

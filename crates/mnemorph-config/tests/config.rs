@@ -1230,3 +1230,30 @@ fn the_local_file_cannot_widen_what_a_session_may_do() {
     // What does not widen anything stays the local file's.
     assert_eq!(c.stress("relieve_at"), Some(6));
 }
+
+#[test]
+fn the_bench_results_the_board_reads_come_only_from_the_global_file() {
+    let g = Ground::new("bench-results");
+    assert_eq!(g.load().unwrap().bench_results(), None, "none configured");
+    g.tracked("[board]\nbench_results = \"/etc\"\n")
+        .local("[board]\nbench_results = \"/root\"\n");
+    let c = g.load().unwrap();
+    assert_eq!(
+        c.bench_results(),
+        None,
+        "a world's file never points the board"
+    );
+    assert_eq!(
+        c.holes()
+            .iter()
+            .filter(|h| h.key == "board.bench_results")
+            .count(),
+        2
+    );
+    g.global("[board]\nbench_results = \"/home/h/bench/results\"\n");
+    assert_eq!(
+        g.load().unwrap().bench_results(),
+        Some(PathBuf::from("/home/h/bench/results"))
+    );
+    assert!(mnemorph_config::global_only("board.bench_results"));
+}
