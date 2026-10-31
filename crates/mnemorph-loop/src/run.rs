@@ -290,6 +290,11 @@ pub struct Run {
     mcp_used: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// Where the world's MCP usage record is kept, when the run is offered MCP tools.
     mcp_record: Option<PathBuf>,
+    /// The session's MCP servers, when the run is offered them: what each ask's tail says of
+    /// them — level 0 with the first ask, the tools ranked for every ask.
+    mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>,
+    /// The level-0 block as the first ask said it: a compaction keeps it at the head.
+    mcp_said: Option<String>,
     /// The evolution ledger this run's asks are stamped on: the world's own under the state
     /// directory (`None`), or the one given.
     evolution_ledger: Option<PathBuf>,
@@ -435,6 +440,8 @@ impl Run {
             landed_in_ask: None,
             mcp_used: std::sync::Mutex::default(),
             mcp_record: None,
+            mcp: None,
+            mcp_said: None,
             evolution_ledger: None,
             evolving: std::sync::Mutex::new(None),
             opening: None,
@@ -805,6 +812,18 @@ impl Run {
     #[must_use]
     pub fn with_mcp_record(mut self, record: Option<PathBuf>) -> Self {
         self.mcp_record = record;
+        self
+    }
+
+    /// The session's MCP servers: the first ask's tail carries their level 0, every ask's the
+    /// tools ranked for it, and the usage record is kept in their state. The doors themselves
+    /// ride the tools the run was made with.
+    #[must_use]
+    pub fn with_mcp(mut self, mcp: Option<Arc<mnemorph_tools::mcp::Mcp>>) -> Self {
+        if let Some(m) = &mcp {
+            self.mcp_record = Some(m.state().to_path_buf());
+        }
+        self.mcp = mcp;
         self
     }
 
@@ -2254,6 +2273,11 @@ impl Run {
             }
             None => asked,
         };
+        // MCP in the uncached tail: level 0 with the first ask, then the tools ranked for this one.
+        let asked = match self.mcp_tail(text) {
+            Some(tail) => format!("{tail}\n\n{asked}"),
+            None => asked,
+        };
         // A fresh session's first ask opens with what earlier sessions learned.
         let asked = match self.opening.take() {
             Some(opening) => format!(
@@ -2281,6 +2305,22 @@ impl Run {
                 recalled.join("\n")
             )
         }
+    }
+
+    /// What an ask's tail says of MCP: the level-0 block until it has been said once, then the
+    /// tools in scope ranked for `ask` by BM25 — no model, no server started.
+    fn mcp_tail(&mut self, ask: &str) -> Option<String> {
+        let mcp = Arc::clone(self.mcp.as_ref()?);
+        let race = self.cx.race();
+        let mut parts = Vec::new();
+        if self.mcp_said.is_none()
+            && let Some(level0) = mcp.level0(race, &self.cx)
+        {
+            self.mcp_said = Some(level0.clone());
+            parts.push(level0);
+        }
+        parts.extend(mcp.ranked_block(race, ask, &self.cx));
+        (!parts.is_empty()).then(|| parts.join("\n\n"))
     }
 
     /// The `@ONTO` lines for the paths an ask concerns — a commissioned body's soil, and every
@@ -3104,11 +3144,14 @@ impl Run {
         let from = tail_from(&self.messages, KEEP_BYTES);
         let tail = self.messages.len() - from;
         let before: usize = self.messages.iter().map(message_bytes).sum();
-        // The head: the ask as journaled, with the Minds' manifest when this ask did not carry it.
-        let head = match &self.manifest_said {
-            Some(m) if !self.ask_said.contains(m.as_str()) => format!("{m}\n\n{}", self.ask_said),
-            _ => self.ask_said.clone(),
-        };
+        // The head: the ask as journaled, with the Minds' manifest and MCP's level 0 when this ask
+        // did not carry them.
+        let mut head = self.ask_said.clone();
+        for said in [&self.mcp_said, &self.manifest_said].into_iter().flatten() {
+            if !head.contains(said.as_str()) {
+                head = format!("{said}\n\n{head}");
+            }
+        }
         self.messages = compacted(&head, &summary, &self.messages[from..]);
         let after: usize = self.messages.iter().map(message_bytes).sum();
         // The context the next request carries, scaled by what the compaction took out; the

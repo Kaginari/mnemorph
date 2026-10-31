@@ -11,11 +11,11 @@ config:
     wrappingWidth: 360
 ---
 flowchart LR
-    H["your global config"] -->|"servers, races,<br/>read_only, network"| C
-    S[("MCP server<br/>in the sandbox")] <-->|"listed once,<br/>cached on disk"| C["MCP client<br/>scope · rank · price"]
+    H["your global config"] -->|"servers, races,<br/>classes, network"| C
+    S[("MCP server<br/>in the sandbox")] <-->|"listed on first open,<br/>cached on disk"| C["MCP client<br/>class · scope · rank · price"]
     subgraph mnemorph["Mnemorph"]
-      C -->|"the race's share,<br/>decided at run start"| A["a body<br/>its frame"]
-      A -->|"a call · outward asks you"| C
+      C -->|"level 0 and the ranked tools<br/>in the ask's tail"| A["a body<br/>four fixed doors"]
+      A -->|"open · schema · call<br/>anything but read asks you"| C
       L[("usage record<br/>called · helped")] -->|"nudges the ranking"| C
       A -. "the ask's end" .-> L
     end
@@ -34,18 +34,25 @@ flowchart LR
 
 An MCP server is a program that offers tools. Mnemorph starts only the servers you declare in your
 global configuration, inside the sandbox, and shows each body only the tools of the servers you
-named for its race.
+named for its race that its shelf can use.
 
-A server always sends every one of its tool definitions. Mnemorph lists each server once, keeps
-the list on disk, and decides which tools a body sees when its run starts:
+Every tool has a class — read, write, outward or destructive — that you declare for the tool or
+its server; a tool nobody declared is outward, so it reaches only Kijin and Oni and asks you
+before each call. Most MCP traffic leaves the machine, so most of it is Kijin ground.
 
-- a few tools: all of them;
-- many tools: the handful that best fit the ask, plus a search door and a call door for the rest.
+A server always sends every one of its tool definitions, so Mnemorph shows them in three levels,
+each priced before it loads:
 
-Every tool has a price in tokens, shown in `mnemorph status`. Every answer from a server is
-treated as data from outside: escaped, capped and marked as untrusted. A tool that is not marked
-read-only asks you before each call. What the world learns about which tools helped is counted by
-the harness, never written by a model.
+- **level 0**, with the body's first ask: one line per server — its name, what it is for, how many
+  tools it has, and what opening it costs;
+- **level 1**, when the body opens a server: its tools' names, classes and one-line descriptions;
+- **level 2**, when the body needs one tool: its full description and schema.
+
+No server starts until a body opens it or calls it. Before each ask, the tools that best fit it
+are named at level 1, ranked by the words of the ask — no model is asked — so the right tool is
+usually in view without a search. Every word a server sends — descriptions, schemas, answers —
+is treated as data from outside: escaped, capped and marked as untrusted. What the world learns
+about which tools helped is counted by the harness, never written by a model.
 
 ## Technical detail
 
@@ -60,22 +67,26 @@ reach. The same holds for `sandbox.allow_unguarded` and every key that loosens t
 
 ```toml
 [mcp]
-defer_above = 8        # past this many tools in a race's scope, defer the rest
-top_k = 5              # ranked tools that ride the frame when deferred
-schema_tokens = 4000   # the most schema tokens a frame spends on MCP tools
+top_k = 5                  # tools ranked for each ask, named in its tail at level 1
 
 [mcp.servers.search]
 command = "web-search-mcp"
 args = ["--stdio"]
 env = ["SEARCH_API_KEY"]   # passed by name; every other secret is scrubbed
-races = ["kijin"]          # who may be offered its tools; none by default
-read_only = true           # its tools run at `read`, with no question
+races = ["kijin", "slime"] # who may be offered its tools; none by default
+purpose = "Web search"     # its level-0 line
+class = "outward"          # every tool's class, unless the tool declares its own
 network = true             # sockets allowed in its sandbox
 timeout_secs = 30
+
+[mcp.servers.search.tools.lookup]
+class = "read"             # this tool runs at `read`: a Slime may use it, with no question
 ```
 
-A server's name is lower-case letters, digits and dashes. An unknown race is an error, never a
-silent widening or narrowing.
+A server's name is lower-case letters, digits and dashes. An unknown race, a class other than
+`read`, `write`, `outward` or `destructive`, or a tool name with `__` is an error, never a silent
+widening or narrowing. `read_only = true` is `class = "read"`; set together with another class,
+the two disagree, and that is an error too.
 
 ### The client
 
@@ -105,68 +116,91 @@ notifications are passed over.
   writer thread, so one that stops reading blocks nothing but itself. A dead, silent or flooding
   server is an error that names it, never a hang. A server that fails a call is dropped and
   started again at the next one.
-- **Cached and lazy.** The catalog is listed once a session and cached, keyed by the server's
-  identity (command, arguments, passed variables, network) and trusted for 24 hours. A session
-  that reads a fresh cache starts no server until one of its tools is called.
+- **Cached and lazy.** A server's catalog is listed the first time a body opens it (level 1) or
+  needs one of its tools (level 2 or a call), and cached under the state directory, keyed by the
+  server's identity (command, arguments, passed variables, network) and trusted for 24 hours.
+  The server that was listed keeps running for the calls that follow. Level 0, the ranking and a
+  search read only the catalogs already known, so a session starts no server until a body opens
+  one or calls it, and a session that reads a fresh cache starts none until a call.
 
-### Normalised and priced
+### Normalised and classed
 
 Each listed tool becomes a spec once:
 
 - its name is `<server>__<tool>`; a tool whose own name holds `__` or anything but letters,
   digits, `_` and `-`, or that makes the name longer than 64, is refused (it could pass as
-  another server's);
+  another server's), and so is a second tool of the same name;
 - its description loses its control characters and keeps 1,024 characters;
 - its schema is an object schema (`$schema` dropped), every key and string without control
   characters; one past 32 KB is refused;
-- its price is name, description and schema at four bytes a token, the estimate the Minds are
-  priced by.
+- its class is, in order: the class your configuration declares for the tool; the one it
+  declares for the server; one inferred; else `outward`. A server's own annotations are its
+  word, never yours, so only two are taken: `destructiveHint` makes the tool `destructive`
+  (believing it only costs more), and `readOnlyHint` makes it `read` only on a server with no
+  sockets under a kernel guard — there the sandbox keeps the claim, since the server cannot
+  write the world or reach outside. Run unguarded, or with `network = true`, the hint is
+  ignored.
 
-### Scoped by race
+Every refusal is a hole, said at level 1 and in `mnemorph status` once the catalog is known.
 
-A server's tools are offered to a race only when both hold:
+### Scoped by race and class
 
-- the race is named in its `races` (an ascended form through its base: `kijin` serves an Oni);
-- the tools' class is on the race's shelf. A `read_only` server's tools are `read`; any other
-  server's are `outward`, so they reach only Kijin and Oni, whatever `races` says. Selection
+A body sees a tool only when both hold:
+
+- its server names the body's race in `races` (an ascended form through its base: `kijin`
+  serves an Oni);
+- the tool's class is on the race's shelf. An `outward` or `destructive` tool reaches only Kijin
+  and Oni, whatever `races` says; a `read` or `write` one reaches any race named. Selection
   never widens a shelf.
 
-Out-of-scope tools are never rendered, not even in a search.
+Before a catalog is known, a server is shown to a race only when some class its tools could be
+given — declared, inferable or the default — is on the race's shelf. A tool off the shelf is
+never rendered: not at any level, not in a search, not in the ranking, and a door asked for it
+by name answers that no such tool is in scope.
 
-### Offered once, at run start
+### Three levels, priced
 
 The tools block is built once, when a run is made, and sent byte-identical for its whole life
-([consumption](06-consumption.md#cache-first-prompt-layout)). MCP keeps that rule:
+([consumption](06-consumption.md#cache-first-prompt-layout)). A run any server may serve carries
+four doors, all `read` themselves, and no MCP tool joins the frame:
 
-- **A small scope** — at most `defer_above` tools, within `schema_tokens` — rides the frame
-  whole.
-- **A larger one** is ranked for the ask: each query word a tool's name, server or description
-  holds scores its rarity across the catalog (`ln(1 + n/df)`), plus the learned nudge below.
-  The top `top_k` that fit within `schema_tokens` ride the frame. Beside them ride two doors:
-  - `mcp_search` (`read`): the best five tools in scope for a query, each with its class, price
-    and full schema, descriptions and schemas escaped as server words — a tool result, appended
-    like any other;
-  - `mcp_call` (`read` itself; the tool it reaches keeps its own class): calls any tool in scope
-    by name.
+| Door | Loads | Starts a server |
+|---|---|---|
+| `mcp_open` `{server}` | level 1: the server's tools on the shelf, each `<server>__<tool> — <class> · schema ~N wt — <one line>` | when its catalog is not known |
+| `mcp_schema` `{name}` | level 2: one tool's full description and schema | when its catalog is not known |
+| `mcp_call` `{name, arguments}` | the call | when the server is not running |
+| `mcp_search` `{query}` | the known catalogs in scope ranked for the query, at level 1, and the servers not listed yet | never |
 
-  A deferred tool's schema is loaded only when the body asks, and never becomes a tool
-  definition: the frame does not change mid-run. A commissioned body is ranked for its
-  commission's ask; the session's own body, whose run is made before its first ask, by what the
-  world learned.
-- **No server adds a tool mid-run.** The catalog a run sees is the one listed when it was made;
-  a server's later list reaches the next session.
-- **No name shadows another.** A tool whose name is already on the body's shelf, or is any tool
-  the harness hands any body (`read`, `index`, `bash`, `commission`, `outward`, the two doors and
-  the rest), is refused and named in a hole; a server listing a name twice keeps the first.
+Level 0 rides the first ask's uncached tail, beside the Minds' manifest, one line per server in
+scope: `- <server> — <purpose> · <n> tools · open ~N wt`, or `not listed yet` before its catalog
+is known. A compaction keeps it at the head. Each price is the weighted tokens of exactly the
+text the next level loads — its bytes at four a token, as uncached input — so a body knows what
+opening a server or loading a schema costs before it pays.
+
+Loaded levels are tool results, appended like any other: the frame never changes mid-run, and a
+server cannot add a tool mid-run — a changed catalog reaches the next listing.
+
+### Ranked by the ask
+
+Before each ask, the harness ranks the tools in scope among the known catalogs by the ask's text
+and names the top `top_k` at level 1 in its tail, under `MCP tools that fit this ask`. The rank
+is BM25 (`k1 = 1.2`, `b = 0.75`, the formula recall uses) of the ask's words — stop words and
+single letters aside — over each tool's name, server and description, plus the learned nudge
+below; only tools with a positive score are named, ties keep the catalog's order, and no model
+is asked, so the same catalog and ask always give the same list. A commissioned body is ranked
+for its commission's ask, the session's body for each of its asks.
 
 ### A call
 
-1. The shelf: the tool's class must be on the calling race's shelf.
+1. The scope and the shelf: the tool must be in scope, and its class on the calling race's shelf.
 2. The arguments must be an object of at most 64 KB; larger, nothing is asked or sent.
-3. An `outward` tool asks the human gate, naming the server and the tool, then every argument,
-   one a line and indented, cleaned of control characters and never cut, so no padding can hide
-   a payload; a denial runs nothing and the server never sees the call.
-4. The server starts on its first call, inside the sandbox.
+3. Any tool but a `read` one asks the human gate at its own class — `write`, `outward` or
+   `destructive`, never the door's — naming the server and the tool, why its class is what it
+   is, then every argument, one a line and indented, cleaned of control characters and never
+   cut, so no padding can hide a payload; a denial runs nothing and the server never sees the
+   call. The call's journal row carries the tool's class: an MCP call is never cheaper than its
+   class.
+4. The server starts on its first call when it is not running, inside the sandbox.
 5. The answer's text items are joined; any other item is said as `[<type> content omitted]`.
    Control characters are dropped, the text is capped at 16 KB (the rest counted), `&`, `<` and
    `>` are escaped, and the whole is wrapped in
@@ -179,27 +213,33 @@ The usage record (`usage.json` in the world's MCP state) holds, per tool, the as
 the asks it helped: asks that ended answered with nothing failing at their gate. The loop counts
 them at each ask's end from the calls the harness ran; no model writes it. In ranking a tool gains
 `ln(1 + helped)` and loses `0.25 · ln(1 + called − helped)`, so a tool that keeps helping climbs
-into the frame and one called for nothing sinks.
+into the ranked few and one called for nothing sinks.
 
 ### Shown
 
-`mnemorph status` shows one `mcp` line per tool in the session body's scope — name, class, price,
-offered or deferred — then the frame's total in schema tokens. What was refused is a `hole`.
+`mnemorph status` shows one `mcp` line per server the session body may open — its level-0 line,
+with the price of opening it once its catalog is known. What was refused is a `hole`. The board's
+integrations page shows each server's scope, its declared class and each tool's.
 
 ### Designed, not built
 
 These parts of [#48](https://github.com/Kaginari/mnemorph/issues/48) wait for M13
 ([roadmap](roadmap.md)):
 
-- **agent-mcp**, a duty at `kijin-scout`'s post: curating the roster, classing each tool on its
-  own (read · write · outward · destructive) and writing its one-line description, once per
-  server version, on the fast tier.
+- **agent-mcp**, a duty at `kijin-scout`'s post: curating the roster, proposing each tool's
+  class for you to declare and writing its one-line description, once per server version, on the
+  fast tier.
 - **A fast-tier rerank** of the shortlist when the catalog is large and the top candidates score
   close, cached per commission.
+- **Learning from the ledger**: every load and call journaled; a tool loaded but never called
+  demoted, one called on most commissions placed in its creature's stable prefix at the next
+  session start; schema tokens loaded against used, per server.
+- **Budgeted levels**: schema tokens counted against the per-race prefix ceiling and the
+  envelope; a server whose schemas would blow the ceiling shown at level 0 only.
 - **`list_changed`** and server versions as refresh triggers; argument validation against the
-  schema before a call; the three priced levels (server line, tool line, schema).
+  schema before a call.
 - **`outward-read`**: a class you mark in config for network lookups that need no prompt
-  (`read_only = true` on the server is that choice).
+  (`class = "read"` on the tool or the server is that choice).
 - **`mnemorph mcp serve --toolbox`**: the same selection served to Claude Code, OpenCode or any MCP
   client, for their own servers.
 - **The M13 benchmark** against maki: spec tokens shown, tokens loaded on demand, session start

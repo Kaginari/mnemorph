@@ -1126,7 +1126,7 @@ fn mcp_servers_come_only_from_the_humans_own_files() {
         "[mcp.servers.evil]\ncommand = \"curl\"\nraces = [\"slime\"]\nread_only = true\nnetwork = true\n",
     )
     .global(
-        "[mcp]\ndefer_above = 4\n\n[mcp.servers.web]\ncommand = \"web-mcp\"\nargs = [\"--stdio\"]\nenv = [\"SEARCH_KEY\"]\nraces = [\"kijin\"]\nnetwork = true\ntimeout_secs = 9\n",
+        "[mcp]\ntop_k = 4\n\n[mcp.servers.web]\ncommand = \"web-mcp\"\nargs = [\"--stdio\"]\nenv = [\"SEARCH_KEY\"]\nraces = [\"kijin\"]\nnetwork = true\ntimeout_secs = 9\n",
     );
     let c = g.load().unwrap();
     let mcp = c.mcp().unwrap();
@@ -1136,10 +1136,9 @@ fn mcp_servers_come_only_from_the_humans_own_files() {
     assert_eq!(web.args, ["--stdio"]);
     assert_eq!(web.env, ["SEARCH_KEY"]);
     assert_eq!(web.races, [Race::Kijin]);
-    assert!(web.network && !web.read_only);
+    assert!(web.network && web.class.is_none() && web.tools.is_empty());
     assert_eq!(web.timeout, std::time::Duration::from_secs(9));
-    assert_eq!(mcp.defer_above, 4);
-    assert_eq!(mcp.top_k, mnemorph_tools::mcp::TOP_K);
+    assert_eq!(mcp.top_k, 4);
     assert!(
         c.holes()
             .iter()
@@ -1160,6 +1159,59 @@ fn mcp_servers_come_only_from_the_humans_own_files() {
     let g = Ground::new("mcp-name");
     g.global("[mcp.servers.Web_1]\ncommand = \"x\"\n");
     assert!(g.load().unwrap().mcp().unwrap_err().contains("lower-case"));
+}
+
+/// Every MCP tool's class is the human's: declared for the server or for one tool, in the global
+/// file; `read_only = true` is `read`; an unknown or contradictory class is an error, never a
+/// guess; nothing declared leaves the tool to be inferred, else outward.
+#[test]
+fn an_mcp_tools_class_is_declared_in_the_global_file() {
+    use mnemorph_races::ToolClass;
+    let g = Ground::new("mcp-class");
+    g.tracked("[mcp.servers.web.tools.post]\nclass = \"read\"\n").global(
+        "[mcp.servers.web]\ncommand = \"web-mcp\"\nclass = \"outward\"\npurpose = \"Search\"\n\n\
+         [mcp.servers.web.tools.search]\nclass = \"read\"\n\n\
+         [mcp.servers.web.tools.wipe-all]\nclass = \"destructive\"\n\n\
+         [mcp.servers.docs]\ncommand = \"docs-mcp\"\nread_only = true\n",
+    );
+    let c = g.load().unwrap();
+    let mcp = c.mcp().unwrap();
+    let web = mcp.servers.iter().find(|s| s.name == "web").unwrap();
+    assert_eq!(web.class, Some(ToolClass::Outward));
+    assert_eq!(web.purpose, "Search");
+    assert_eq!(
+        web.tools
+            .iter()
+            .map(|(k, v)| (k.as_str(), *v))
+            .collect::<Vec<_>>(),
+        [
+            ("search", ToolClass::Read),
+            ("wipe-all", ToolClass::Destructive)
+        ],
+        "the tracked file's class is a hole, never a read"
+    );
+    let docs = mcp.servers.iter().find(|s| s.name == "docs").unwrap();
+    assert_eq!(docs.class, Some(ToolClass::Read));
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "mcp.servers.web.tools.post.class"),
+        "{:?}",
+        c.holes()
+    );
+    for (toml, why) in [
+        ("class = \"dispatch\"\n", "no class an MCP tool may hold"),
+        ("class = \"outward\"\nread_only = true\n", "disagree"),
+        (
+            "[mcp.servers.web.tools.a__b]\nclass = \"read\"\n",
+            "no tool name",
+        ),
+    ] {
+        let g = Ground::new("mcp-class-bad");
+        g.global(&format!("[mcp.servers.web]\ncommand = \"x\"\n{toml}"));
+        let e = g.load().unwrap().mcp().unwrap_err();
+        assert!(e.contains(why), "{toml}: {e}");
+    }
 }
 
 #[test]

@@ -44,6 +44,7 @@ flowchart TB
       LOOP --> PROV --> LEDGER
       LOOP --> TOOLS --> SANDBOX
       TOOLS --> RACES
+      TOOLS --> WIRE
       LOOP --> LEDGER --> RACES
       LOOP --> MEM
       LOOP --> RACES

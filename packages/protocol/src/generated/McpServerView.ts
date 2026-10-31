@@ -26,9 +26,15 @@ env: Array<KeySource>,
  */
 races: Array<string>, 
 /**
- * Its tools only read.
+ * The class its tools run at, as declared: `read`, `write`, `outward` or `destructive`
+ * for the server; `null` when none is declared, so each tool's own, an inferred one or
+ * `outward` holds.
  */
-readOnly: boolean, 
+class: string | null, 
+/**
+ * The classes declared for single tools, `tool = class`.
+ */
+tools: Array<string>, 
 /**
  * Sockets allowed in its sandbox.
  */

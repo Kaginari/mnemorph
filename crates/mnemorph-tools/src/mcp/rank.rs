@@ -1,5 +1,5 @@
-//! Ranking the MCP catalog for an ask: lexical relevance over names and descriptions, nudged by
-//! what the world learned from its own landed asks. No model ranks, and none writes the record.
+//! Ranking the MCP catalog for an ask: BM25 over names and descriptions, nudged by what the
+//! world learned from its own landed asks. No model ranks, and none writes the record.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -84,20 +84,34 @@ pub fn learn(state: &Path, used: &BTreeSet<String>, helped: bool) -> std::io::Re
     std::fs::rename(tmp, file)
 }
 
-/// The words of a text, lower-cased, split on anything not a letter or a digit.
+/// Words that say nothing of a tool: a commission's glue, never matched.
+const STOP: &[&str] = &[
+    "a", "an", "and", "any", "are", "as", "at", "be", "by", "can", "do", "for", "from", "has",
+    "have", "how", "if", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "their",
+    "then", "this", "to", "was", "we", "what", "when", "which", "will", "with", "you", "your",
+];
+
+/// The words of a text, lower-cased, split on anything not a letter or a digit, the stop words
+/// and single letters aside.
 fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() > 1)
+        .filter(|w| w.chars().count() > 1 || w.chars().all(|c| c.is_ascii_digit()))
         .map(str::to_lowercase)
+        .filter(|w| !STOP.contains(&w.as_str()))
         .collect()
 }
 
-/// `specs` ordered best first for `query`: each query word a tool's name or description holds
-/// scores its rarity across the catalog (`ln(1 + n / df)`), plus the learned boost; ties keep
-/// the catalog's own order, so the result is deterministic.
+/// BM25's term saturation.
+const K1: f64 = 1.2;
+/// BM25's length normalisation.
+const B: f64 = 0.75;
+
+/// `specs` ordered best first for `query`: BM25 of the query's words over each tool's name,
+/// server and description (`k1 = 1.2`, `b = 0.75`, the formula recall uses), plus the learned
+/// boost. No model ranks; ties keep the catalog's own order, so the result is deterministic.
 #[must_use]
 pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec, f64)> {
-    let docs: Vec<BTreeSet<String>> = specs
+    let docs: Vec<Vec<String>> = specs
         .iter()
         .map(|s| {
             words(&s.tool)
@@ -113,19 +127,29 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec,
         .iter()
         .map(|w| (w, docs.iter().filter(|d| d.contains(w)).count()))
         .collect();
-    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_precision_loss, reason = "catalogs are small")]
     let n = specs.len() as f64;
+    #[allow(clippy::cast_precision_loss, reason = "catalogs are small")]
+    let avg = (docs.iter().map(Vec::len).sum::<usize>() as f64 / n.max(1.0)).max(1.0);
     let mut scored: Vec<(usize, f64)> = docs
         .iter()
         .enumerate()
         .map(|(i, doc)| {
+            #[allow(clippy::cast_precision_loss, reason = "descriptions are capped")]
+            let len = doc.len() as f64;
             let lexical: f64 = query
                 .iter()
-                .filter(|w| doc.contains(*w))
                 .map(|w| {
-                    #[allow(clippy::cast_precision_loss)]
+                    let tf = doc.iter().filter(|d| *d == w).count();
+                    if tf == 0 {
+                        return 0.0;
+                    }
+                    #[allow(clippy::cast_precision_loss, reason = "descriptions are capped")]
+                    let tf = tf as f64;
+                    #[allow(clippy::cast_precision_loss, reason = "catalogs are small")]
                     let df = df[w] as f64;
-                    (n / df).ln_1p()
+                    let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln();
+                    idf * tf * (K1 + 1.0) / (tf + K1 * (1.0 - B + B * len / avg))
                 })
                 .sum();
             (i, lexical + usage.boost(&specs[i].name))

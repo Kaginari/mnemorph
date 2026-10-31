@@ -120,7 +120,7 @@ test('the integrations page: key sources never values, holes, MCP scope, origins
   expect(text).toContain('hidden: not a variable name');
   expect(text).toContain('providers.openrouter.api_key');
   expect(text).toContain('kijin');
-  expect(text).toContain('read-only');
+  expect(text).toContain('read · submit = outward · network');
   expect(text).toContain('global file only');
   expect(text).toContain('7878');
   expect(text).toContain('How to add an MCP server');

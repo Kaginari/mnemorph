@@ -1703,6 +1703,7 @@ dependencies = [
  "ignore",
  "mnemorph-races",
  "mnemorph-sandbox",
+ "mnemorph-wire",
  "proptest",
  "regex",
  "rustix",
