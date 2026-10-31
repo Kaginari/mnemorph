@@ -225,6 +225,7 @@ fn with(w: &World, primary: Option<SystemOne>, llm: &Arc<Llm>) -> Decisions {
                 provider: "anthropic".into(),
                 model: "claude-haiku-5-5".into(),
             },
+            unavailable: None,
         }),
         cutoffs: Cutoffs::default(),
         journal: w.decisions_journal(),
@@ -443,9 +444,9 @@ fn the_bench_question_reads_the_tail_where_runners_print_their_summary() {
 
 const JEFF: &str = "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n";
 
-/// A config builds the run's decisions only when the human turned them on and named a
-/// classifier; then the classifier first, the LLM through the run's own provider as its fallback,
-/// and the classifier's key from the environment.
+/// A config builds the run's decisions only when the human turned them on; then the classifier
+/// first when one is named, the LLM through the run's own provider as its fallback, and the
+/// classifier's key from the environment.
 #[test]
 fn decisions_are_built_from_the_humans_configuration() {
     let w = World::new("config");
@@ -459,15 +460,22 @@ fn decisions_are_built_from_the_humans_configuration() {
     let model: Arc<ScriptedModel> = Arc::new(ScriptedModel::new([]));
     let none = |_: &str| None;
 
-    // Off by default; on without a classifier, still off — no LLM is asked in its place.
-    for text in ["", "[decide]\nenabled = true\nbench = true\nroute = true\n"] {
-        assert!(
-            decisions(&load(text), &world, model.clone(), none)
-                .unwrap()
-                .is_none(),
-            "{text}"
-        );
-    }
+    // Off by default.
+    assert!(
+        decisions(&load(""), &world, model.clone(), none)
+            .unwrap()
+            .is_none()
+    );
+    // On without a classifier: the LLM alone decides.
+    let d = decisions(
+        &load("[decide]\nenabled = true\n"),
+        &world,
+        model.clone(),
+        none,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(d.bench && d.decider.primary.is_none() && d.decider.unavailable.is_none());
     // A classifier named but the feature not turned on: off.
     let named = format!("{JEFF}[decide]\nvia = \"jeff\"\nmodel = \"jeff-latest\"\n");
     assert!(
@@ -513,10 +521,139 @@ fn decisions_are_built_from_the_humans_configuration() {
         "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\n\
          key_env = \"TYPESAFE_API_KEY\"\n[decide]\nenabled = true\nvia = \"jev\"\nmodel = \"jev-latest\"\n",
     );
-    let err = decisions(&jev, &world, model.clone(), none).err().unwrap();
-    assert!(err.contains("TYPESAFE_API_KEY is not set"), "{err}");
+    // Jev's key unset: no start-up error; the LLM answers, saying why.
+    let d = decisions(&jev, &world, model.clone(), none)
+        .unwrap()
+        .unwrap();
+    assert!(d.decider.primary.is_none());
+    assert_eq!(
+        d.decider.unavailable.as_deref(),
+        Some("jev: its key variable TYPESAFE_API_KEY is not set")
+    );
     let key = |v: &str| (v == "TYPESAFE_API_KEY").then(|| "k".to_owned());
-    assert!(decisions(&jev, &world, model, key).unwrap().is_some());
+    let d = decisions(&jev, &world, model.clone(), key)
+        .unwrap()
+        .unwrap();
+    assert!(d.decider.primary.is_some() && d.decider.unavailable.is_none());
+
+    // A typo is not a missing Jev: a provider nobody defined, or one of another kind, stays an
+    // error.
+    for (text, says) in [
+        (
+            "[decide]\nenabled = true\nvia = \"jevv\"\nmodel = \"jev-latest\"\n",
+            "no provider has that name",
+        ),
+        (
+            "[providers.oai]\nkind = \"openai\"\nbase_url = \"https://x.invalid\"\n\
+             [decide]\nenabled = true\nvia = \"oai\"\nmodel = \"m\"\n",
+            "decisions need `kind = \"systemone\"`",
+        ),
+    ] {
+        let err = decisions(&load(text), &world, model.clone(), none)
+            .err()
+            .unwrap();
+        assert!(err.contains(says), "{err}");
+    }
+}
+
+/// The run's decisions as the configuration builds them, journaled where the test reads them; the
+/// LLM is `llm`, a scripted model of its own, so its answers never mix with the body's turns.
+fn configured(w: &World, text: &str, llm: Arc<ScriptedModel>) -> Decisions {
+    let global = w.root.join("global.toml");
+    fs::write(&global, text).unwrap();
+    let config =
+        mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(global, &w.world()))
+            .unwrap();
+    Decisions {
+        journal: w.decisions_journal(),
+        ..decisions(&config, &w.world(), llm, |_: &str| None)
+            .unwrap()
+            .unwrap()
+    }
+}
+
+/// Lesson: with no `decide.via`, a run used to go without decisions, so a missing Jev meant every
+/// piped bench stayed muted. Switched on alone, decisions are the LLM's: every answer is stated,
+/// held to the stated cut-off, and a sure green finishes the run.
+#[tokio::test]
+async fn switched_on_with_no_classifier_the_llm_answers_every_decision() {
+    let w = World::new("llm-only");
+    let llm = Arc::new(ScriptedModel::new((0..9).map(|_| stated_green(0.99))));
+    let mut run = w.run(piped_runs(true)).with_decisions(configured(
+        &w,
+        "[decide]\nenabled = true\n",
+        llm.clone(),
+    ));
+    let e = ask(&mut run).await;
+    assert!(matches!(&e, Ending::Answered(_)), "{e:?}");
+    assert!(
+        llm.requests().iter().all(|r| r.model == "claude-haiku-5-5"),
+        "decide.llm, the fast tier's model, is asked"
+    );
+    let rows = w.decisions_journal().read().unwrap().rows;
+    assert_eq!(rows.len(), 9);
+    assert!(
+        rows.iter()
+            .all(|r| r.basis == "stated" && r.provider == "scripted" && r.fell_back.is_none()),
+        "{rows:?}"
+    );
+}
+
+/// Lesson: Jev named but its key unset used to stop the session at start-up. Now the LLM answers
+/// and each journal row names the fallback and why, so the human sees Jev was never asked.
+#[tokio::test]
+async fn jev_without_its_key_falls_back_to_the_llm_and_the_journal_says_why() {
+    let w = World::new("jev-no-key");
+    let llm = Arc::new(ScriptedModel::new((0..9).map(|_| stated_green(0.99))));
+    let text = "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\n\
+                key_env = \"TYPESAFE_API_KEY\"\n\
+                [decide]\nenabled = true\nvia = \"jev\"\nmodel = \"jev-latest\"\n";
+    let mut run = w
+        .run(piped_runs(true))
+        .with_decisions(configured(&w, text, llm.clone()));
+    let e = ask(&mut run).await;
+    assert!(matches!(&e, Ending::Answered(_)), "{e:?}");
+    let rows = w.decisions_journal().read().unwrap().rows;
+    assert_eq!(rows.len(), 9);
+    for r in &rows {
+        assert_eq!(
+            (r.basis.as_str(), r.provider.as_str()),
+            ("stated", "scripted")
+        );
+        assert_eq!(
+            r.fell_back.as_deref(),
+            Some("jev: its key variable TYPESAFE_API_KEY is not set")
+        );
+    }
+}
+
+/// Switched off, nothing is decided: no decider is built, so a piped bench stays muted and stalls.
+#[tokio::test]
+async fn switched_off_no_decision_is_made() {
+    let w = World::new("off");
+    let global = w.root.join("global.toml");
+    fs::write(
+        &global,
+        "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\n\
+         [decide]\nenabled = false\nvia = \"jev\"\nmodel = \"jev-latest\"\n",
+    )
+    .unwrap();
+    let config =
+        mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(global, &w.world()))
+            .unwrap();
+    let llm: Arc<ScriptedModel> = Arc::new(ScriptedModel::new([]));
+    assert!(
+        decisions(&config, &w.world(), llm, |_: &str| Some("k".into()))
+            .unwrap()
+            .is_none()
+    );
+    let mut run = w.run(piped_runs(false));
+    let e = ask(&mut run).await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: bench"),
+        "{e:?}"
+    );
+    assert_eq!(w.decisions_journal().read().unwrap().rows, Vec::new());
 }
 
 /// A run the shell saw fail is never read: a decider that would say green is not asked, and the

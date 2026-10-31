@@ -1634,8 +1634,9 @@ an empty list or table never overrides a lower layer:
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
   `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
   decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
-  `decide.cutoff.*` and `decide.route` loosen decisions (where their state goes, how sure they must be, which model does the work and what it
-  costs), so they are honoured only from the global file; from
+  every other `decide.*` key loosen decisions (whether they are made, where their state goes,
+  which model answers, whether a muted bench may be read, how sure they must be, which model does
+  the work and what it costs), so they are honoured only from the global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere.
   So is `board.*` (`board.bench_results`, the directory of bench result rows the board shows):
@@ -1707,19 +1708,21 @@ an empty list or table never overrides a lower layer:
   `openai` (any OpenAI-compatible server) or `systemone` (a classifier: TypeSafe's Jev, or a
   jeff server on your own machine).
 - **Decisions** (`decide.*`) are a feature the human switches on and off (`decide.enabled`, off by
-  default), and only a classifier makes them: `decide.via` names a provider of
-  `kind = "systemone"` — TypeSafe's Jev, a jeff server, or any server that speaks the same
-  protocol. With none named the feature stays off, whatever else the section says, and the load
-  reports why. When the classifier fails, the LLM `decide.llm` (the fast tier's model by default)
-  answers in its place. `decide.bench` (on with decisions) and `decide.route` (off until asked)
-  switch each point. A decision
+  default). Jev first: `decide.via` names a provider of `kind = "systemone"` — TypeSafe's Jev
+  (`base_url = "https://api.typesafe.ai"`, `decide.model = "jev-latest"`), the default to
+  configure; a jeff server on your own machine (`jeff-latest`); or any server that speaks the
+  same protocol. The LLM `decide.llm` (the fast tier's model by default) answers when no System
+  One is there: none named, its key variable not set (each decision's row names the fallback and
+  why, where a missing key would otherwise stop the session), or a call that fails. A
+  `decide.via` naming no provider, or a provider of another kind, is a typo, and an error.
+  `decide.bench` (on with decisions) and `decide.route` (off until asked) switch each point. A decision
   is only acted on above its cut-off, and the cut-off depends on who answered:
   `decide.cutoff.measured` for a System One answer, `decide.cutoff.stated`, stricter, for an
   LLM's, each from 0 to 1. `decide.via` must name a provider of `kind = "systemone"` and come
   with `decide.model`, the name that provider answers to (`jev-latest` at TypeSafe, `jeff-latest`
-  at a jeff server). Only the human's own files set `decide.via` or a cut-off: a cloned repository
-  can neither send its state to one of the human's providers nor lower the bar (see *System One
-  decisions* below).
+  at a jeff server). Only the human's global file sets any `decide.*` key: a cloned repository or
+  the world's local file can neither switch decisions on, send their state to one of the human's
+  providers, pick the model that answers, nor lower the bar (see *System One decisions* below).
 
 ```toml
 # ~/.config/mnemorph/config.toml
@@ -1752,15 +1755,16 @@ dark-elf = "anthropic/claude-opus-5.5"    # …or one per race
 [models.office.orc]
 judge = "vllm:qwen3-coder"         # …or per race and office, through another backend
 
-[providers.jeff]                   # System One on this machine; or TypeSafe's Jev:
-kind = "systemone"                 # base_url = "https://api.typesafe.ai"
-base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
+[providers.jev]                    # System One: TypeSafe's Jev, the default to configure;
+kind = "systemone"                 # or jeff on this machine:
+base_url = "https://api.typesafe.ai" # base_url = "http://127.0.0.1:8765", no key_env
+key_env = "TYPESAFE_API_KEY"
 
 [decide]
 enabled = true                     # the switch; off by default
-via = "jeff"                       # the classifier; without one, decisions stay off
-model = "jeff-latest"              # required with via; Jev's is "jev-latest"
-llm = "claude-haiku-5-5"           # answers when the classifier fails; the fast tier's model by default
+via = "jev"                        # asked first; without one, or without its key, the LLM answers
+model = "jev-latest"               # required with via; jeff's is "jeff-latest"
+llm = "claude-haiku-5-5"           # answers when no System One is there; the fast tier's model by default
 bench = true                       # read a piped test run's output (on with decisions)
 route = true                       # Metis: route commissions within their office's band (off until asked)
 
@@ -1861,10 +1865,12 @@ config:
   theme: neutral
 ---
 flowchart LR
-    Q["a decision point<br/>state + typed questions"] --> V{"decide.enabled<br/>and a classifier?"}
-    V -- yes --> S["the classifier<br/>Jev · jeff · any System One server"]
+    Q["a decision point<br/>state + typed questions"] --> V{"decide.enabled?"}
     V -- no --> OFF["no decision:<br/>the point keeps its default"]
-    S -- fails --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
+    V -- yes --> J{"a System One<br/>named, its key set?"}
+    J -- yes --> S["Jev first<br/>or jeff · any System One server"]
+    J -- no --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
+    S -- fails --> L
     S --> M["basis: measured"]
     L --> T["basis: stated"]
     M & T --> D["Decision<br/>answers · source · basis · fell_back"]
@@ -1917,15 +1923,19 @@ flowchart LR
   is priced at $0.042 per million tokens and its output is free, but TypeSafe publishes no cache
   prices, so it stays out of the price tables (never guessed) and its rows count in weighted
   tokens with `usd` null.
+- **Jev first, then the LLM.** Jev is the principal source; the LLM answers only when no System
+  One answer is there. With no `decide.via`, every answer is the LLM's, stated. With one named
+  whose key variable is not set, it is never asked: the LLM answers and each row's `fell_back`
+  says why. A `decide.via` that names no provider, or one of another kind, is an error at start.
 - **Containment.** A System One provider is a provider: only the human's own files define one,
-  and only they set `decide.enabled` or `decide.via`. Until the human switches decisions on and
-  names a classifier, no decision is made at all.
+  and only the global file sets any `decide.*` key. Until the human switches decisions on, no
+  decision is made at all.
 - **Decision points.** Each reads `Decision::sure` and journals its decision and outcome rows.
   **`bench.outcome` is attached to the loop:** a run built with
   `decisions(config, world, model, env)` reads a piped test run's output, so a sure green or red
   counts in the tally as seen (*the bench tally*, [the loop](03-loop.md)). It is on with decisions
-  unless `decide.bench = false`; when the classifier fails, the fallback asks `decide.llm` through
-  the run's own provider. What leaves for the decider is the command and the last 12 000
+  unless `decide.bench = false`; when no System One answers, the fallback asks `decide.llm`
+  through the run's own provider. What leaves for the decider is the command and the last 12 000
   bytes of its output; test output can print anything, so a provider outside the machine sees
   what the tests print. It is honoured once a binary builds runs from the configuration (`mnemorph`,
   M6). **`model.route` is Metis** (`decide.route = true`, off by default, the human's files

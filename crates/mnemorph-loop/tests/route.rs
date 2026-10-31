@@ -119,6 +119,7 @@ fn deciders(
                 provider: "anthropic".into(),
                 model: "claude-haiku-5-5".into(),
             },
+            unavailable: None,
         }),
         cutoffs: Cutoffs::default(),
         journal: ground.journal(),
@@ -473,6 +474,7 @@ async fn an_unsure_stated_or_failed_route_keeps_the_default_tier() {
                 provider: "anthropic".into(),
                 model: "claude-haiku-5-5".into(),
             },
+            unavailable: None,
         }),
         ..dec
     };

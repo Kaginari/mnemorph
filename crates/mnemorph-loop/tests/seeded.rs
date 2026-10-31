@@ -119,6 +119,7 @@ impl World {
             stress_tokens: None,
             verify_secs: None,
             weights: None,
+            steps: mnemorph_loop::commission::RaceSteps::default(),
             busy: std::sync::Mutex::default(),
             observer: None,
             council: mnemorph_loop::council::Thresholds::default(),

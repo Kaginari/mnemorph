@@ -104,7 +104,7 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40); the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
+| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
@@ -266,8 +266,10 @@ however much landed between them: the body that ran one bench 63 times in twenty
 run piped, is the reason. A run built with decisions (`decisions()`, `Run::with_decisions`) and `decide.bench` on reads
 a piped run's output instead of muting it — only when the shell saw it finish with a zero exit: a
 non-zero exit or a kill at the deadline is never read, so no printed summary turns a seen failure
-green. Decisions are a feature the human switches on (`decide.enabled`), and only a classifier
-named by `decide.via` makes them: with none, they stay off, and no LLM reads a bench in its place. The decider answers green, red or unknown, and a sure green or red counts in the
+green. Decisions are a feature the human switches on (`decide.enabled`). Jev answers first, the
+System One provider `decide.via` names (or jeff, on your own machine); when none is named, its key
+variable is not set or it fails, the LLM `decide.llm` answers in its place, its basis stated and
+held to the stated cut-off. The decider answers green, red or unknown, and a sure green or red counts in the
 tally as if the exit status had been seen. A read moves only the tally: a read red is not a failed
 act, so the guts and escalation are untouched. An unsure answer, a failed decision, output the
 shell cut short, stdout or stderr (its summary is in the part dropped), an Esc during the command or the decision,

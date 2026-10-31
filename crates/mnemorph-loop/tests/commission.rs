@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use mnemorph_ledger::Journal;
+use mnemorph_loop::commission::RaceSteps;
 use mnemorph_loop::{
     Beat, Body, CommissionTool, Commissioner, Ending, Limits, Run, ScriptedModel, Setup,
 };
@@ -69,12 +70,12 @@ impl World {
 
     /// As [`World::rimuru`], with or without an attic to put strays back from.
     fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
-        self.rimuru_full(model, attic, budget, None, 0)
+        self.rimuru_full(model, attic, budget, None, 0, RaceSteps::default())
     }
 
     /// As [`World::rimuru`], over any model: one that answers from what it is shown.
     fn rimuru_dyn(&self, model: Arc<dyn mnemorph_loop::Model>) -> Run {
-        self.rimuru_full(model, true, None, None, 0)
+        self.rimuru_full(model, true, None, None, 0, RaceSteps::default())
     }
 
     /// As [`World::rimuru_with`], each court's model chosen by `router`.
@@ -85,6 +86,7 @@ impl World {
         budget: Option<u64>,
         router: Option<mnemorph_loop::commission::Router>,
         slice_floor: u64,
+        steps: RaceSteps,
     ) -> Run {
         let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
@@ -111,6 +113,7 @@ impl World {
             stress_tokens: None,
             verify_secs: None,
             weights: None,
+            steps,
             busy: std::sync::Mutex::default(),
             observer: None,
             council: mnemorph_loop::council::Thresholds::default(),
@@ -280,6 +283,67 @@ async fn a_refused_order_names_its_route_and_a_stray_is_put_back() {
     assert!(
         !w.0.join("src/done.txt").exists(),
         "a failed landing is put back whole"
+    );
+}
+
+/// A body's steps come from the human's `steps.<race>`, carried by the commissioner to every
+/// body it commissions: a Slime given one step stops on it, not on the race law's forty.
+#[tokio::test]
+async fn a_commissioned_body_takes_the_configured_steps() {
+    let w = World::new("race-steps");
+    fs::write(w.0.join("steps.toml"), "[steps]\nslime = 1\n").unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("steps.toml"),
+        &w.0.join("nowhere"),
+    ))
+    .unwrap();
+    let steps = RaceSteps::from_config(&config);
+    assert_eq!(steps.of(Race::Slime), 1);
+    assert_eq!(
+        steps.of(Race::Orc),
+        Race::Orc.steps(),
+        "an unset race keeps the law"
+    );
+    let mut script = vec![
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        // A Slime on the law's forty steps would take this second act; on one, it never asks.
+        ScriptedModel::tool(
+            "w2",
+            "write",
+            json!({"path": "src/more.txt", "content": "more\n"}),
+        ),
+    ];
+    // Whatever the bodies above make of the checkpoint, they have answers to give.
+    script.extend((0..8).map(|_| ScriptedModel::text("@S DONE\n@E")));
+    let model = Arc::new(ScriptedModel::new(script));
+    let mut run = w.rimuru_full(model.clone(), true, None, None, 0, steps);
+    let _ = run.ask("leave a done marker", &mut |_| {}).await;
+    let loop_dir = w.0.join(".mnemorph/instruments/loop");
+    let slime = fs::read_dir(&loop_dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("slime-s"))
+        })
+        .expect("the Slime's run was journaled");
+    let journal = fs::read_to_string(&slime).unwrap();
+    assert!(
+        journal.contains("checkpoint: steps: 1 taken"),
+        "the Slime stopped on its configured step: {journal}"
+    );
+    assert!(
+        !w.0.join("src/more.txt").exists(),
+        "no act past the configured steps"
     );
 }
 
@@ -1537,7 +1601,14 @@ async fn an_office_chooses_the_courts_model() {
         ),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_full(model.clone(), true, None, Some(router), 0);
+    let mut run = w.rimuru_full(
+        model.clone(),
+        true,
+        None,
+        Some(router),
+        0,
+        RaceSteps::default(),
+    );
     run.ask("go", &mut |_| {}).await;
     let requests = model.requests();
     assert_eq!(
@@ -1691,6 +1762,7 @@ async fn a_slice_is_at_least_one_call() {
         Some(1_000_000),
         None,
         mnemorph_loop::commission::SLICE_FLOOR,
+        RaceSteps::default(),
     );
     run.ask("go", &mut |_| {}).await;
     let result = &w.results()[0];
