@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use mnemorph_ledger::{Journal, Prices, UsageRow};
 use mnemorph_provider::Caller;
-use mnemorph_races::ToolClass;
+use mnemorph_races::{Race, ToolClass};
 use mnemorph_tools::{Context, Outcome, Tool, ignored, registry};
 use mnemorph_wire::{DEFAULT_CAP, Report};
 use mnemorph_world::{Ask, Hop, Owner, Roster, Rule, dispatch, explain, soil};
@@ -76,6 +76,34 @@ struct CommissionArgs {
     office: Option<String>,
 }
 
+/// Each race's steps for a commissioned body, read once from the configuration when the session
+/// opens: the human's `steps.<race>`, else the race law's ([`Race::steps`]). The default is the
+/// law for every race.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RaceSteps(std::collections::BTreeMap<&'static str, u32>);
+
+impl RaceSteps {
+    /// Every race's steps as `config` sets them.
+    #[must_use]
+    pub fn from_config(config: &mnemorph_config::Config) -> Self {
+        Self(
+            Race::ALL
+                .iter()
+                .map(|r| (r.name(), config.race_steps(*r)))
+                .collect(),
+        )
+    }
+
+    /// The steps of a body of `race`: the configured ones, else the race law's.
+    #[must_use]
+    pub fn of(&self, race: Race) -> u32 {
+        self.0
+            .get(race.name())
+            .copied()
+            .unwrap_or_else(|| race.steps())
+    }
+}
+
 /// What every commission of one session shares: the world, the model, where spend and beats are
 /// written, the human's caps and stress line, and the seats that hold a live court.
 pub struct Commissioner {
@@ -100,6 +128,8 @@ pub struct Commissioner {
     pub verify_secs: Option<u64>,
     /// Recall's weights from the human's configuration, when one was read.
     pub weights: Option<mnemorph_memory::Weights>,
+    /// Each race's steps for a commissioned body: the human's `steps.<race>`, else the law's.
+    pub steps: RaceSteps,
     /// Seats with a live court: one court per seat.
     pub busy: std::sync::Mutex<std::collections::BTreeSet<String>>,
     /// Who watches the session: every commissioned body's beats reach it, labelled.
@@ -1297,6 +1327,7 @@ fn child_run(
     let creature = &roster.creatures[&name];
     let run_id = format!("{name}-{}", stamp());
     let mut limits = Limits::for_race(creature.race);
+    limits.steps = c.steps.of(creature.race);
     limits.budget_wt = (slice != u64::MAX).then_some(slice);
     if let Some(stress) = c.stress_tokens {
         limits.stress_tokens = stress;

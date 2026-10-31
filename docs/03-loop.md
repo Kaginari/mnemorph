@@ -104,7 +104,7 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40); the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
+| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body working solo — no Elf to dispatch to — gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |

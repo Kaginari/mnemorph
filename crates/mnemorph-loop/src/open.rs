@@ -346,7 +346,7 @@ fn build(
             .push_str(&crate::commission::cards_below(world, &roster, &body.name));
     }
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
-    limits.steps = session_steps(config, &lanes, limits.steps);
+    limits.steps = session_steps(config, &lanes, config.race_steps(body.race));
     if let Some(dir) = attic {
         cx = cx.with_attic(attic_of(config, dir, world)?);
     }
@@ -397,6 +397,7 @@ fn build(
         stress_tokens: Some(config.context_stress_tokens()),
         verify_secs: Some(config.verify_secs()),
         weights: Some(crate::solo::recall_weights(config)),
+        steps: crate::commission::RaceSteps::from_config(config),
         busy: std::sync::Mutex::default(),
         observer: Some(Arc::clone(&observer)),
         queue: Some(mnemorph_world::Queue::of(cx.world())),

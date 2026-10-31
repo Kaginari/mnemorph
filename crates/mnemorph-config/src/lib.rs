@@ -232,6 +232,17 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.context_tokens", Kind::Int),
     ("tools.read.range_over", Kind::Int),
     ("steps.solo", Kind::Int),
+    ("steps.rimuru", Kind::Int),
+    ("steps.elf", Kind::Int),
+    ("steps.orc", Kind::Int),
+    ("steps.slime", Kind::Int),
+    ("steps.kijin", Kind::Int),
+    ("steps.dark-elf", Kind::Int),
+    ("steps.high-elf", Kind::Int),
+    ("steps.high-orc", Kind::Int),
+    ("steps.named-slime", Kind::Int),
+    ("steps.oni", Kind::Int),
+    ("steps.arch-dark-elf", Kind::Int),
     ("recall.meaning", Kind::Number),
     ("recall.relation", Kind::Number),
     ("recall.salience", Kind::Number),
@@ -997,6 +1008,18 @@ impl Config {
             .and_then(|n| u32::try_from(n).ok())
             .filter(|n| *n > 0)
             .unwrap_or(SOLO_STEPS)
+    }
+
+    /// The steps a body of `race` may take in one commission: the human's `steps.<race>` (the
+    /// race's name, `steps.named-slime` for a Named Slime), else the race law's
+    /// ([`Race::steps`]). Passed down whole and never split, like the law's; zero is not a
+    /// budget and falls back to the law.
+    #[must_use]
+    pub fn race_steps(&self, race: Race) -> u32 {
+        self.int(&format!("steps.{}", race.name()))
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .unwrap_or_else(|| race.steps())
     }
 
     /// Evolution applies its plans itself, or proposes them.
