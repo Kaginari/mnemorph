@@ -118,6 +118,22 @@ def ledger(world):
     return calls, wt, usd, below
 
 
+def law_beats(world):
+    """Every `law` beat the run's journals wrote, the session's and each body's: what a report
+    checks the arm against, and a resume would show in."""
+    loop = world / ".mnemorph" / "instruments" / "loop"
+    beats = []
+    for journal in sorted(loop.glob("*.jsonl")) if loop.exists() else []:
+        for line in journal.read_text().splitlines():
+            try:
+                beat = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(beat, dict) and beat.get("beat") == "law":
+                beats.append({"on": beat.get("on"), "resumed": bool(beat.get("resumed"))})
+    return beats
+
+
 def escalations(world):
     loop = world / ".mnemorph" / "instruments" / "loop"
     n = 0
@@ -143,7 +159,7 @@ def read_json(stdout):
             result = event
         elif kind == "turnEnded" and event.get("body") == "rimuru":
             endings.append(event.get("ending") or "")
-        elif kind == "toolResult" and event.get("refused") in report.RULES:
+        elif kind == "toolResult" and event.get("refused") in report.SHOWN:
             refusals[event["refused"]] = refusals.get(event["refused"], 0) + 1
     return result, endings, refusals
 
@@ -194,6 +210,7 @@ def run_one(task, mode, model, secret, timeout, keep=False, law="on"):
         "law": law,
         # The law as the run itself said it; None when it wrote no result line.
         "law_said": said.get("law") if said else None,
+        "law_beats": law_beats(world),
         "passed": verify(task, world), "exit": code, "ending": ended.replace(secret, "[key]"),
         "turns": [e.replace(secret, "[key]") for e in endings],
         "refusals": refusals,

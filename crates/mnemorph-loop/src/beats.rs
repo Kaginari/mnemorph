@@ -136,11 +136,15 @@ pub enum Beat {
         model: String,
     },
     /// Whether the run's fixed prompt carries the world's law, cards, manifests and opening
-    /// ([`crate::Law`]): said once, before its first request — what a report reads an arm by.
+    /// ([`crate::Law`]): said before the first request of every opening of the run — the last
+    /// one holds from there. A run whose law beats disagree mixed arms, and a report refuses it.
     /// Journaled for the record, never fed back to the model; a resume never reads it back.
     Law {
         /// The world's words were said.
         on: bool,
+        /// Said by a resume, which always holds the law: the run before it may not have.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        resumed: bool,
     },
     /// How the run ended.
     End {

@@ -452,3 +452,56 @@ async fn a_probe_never_refuses_and_finished_locks_go() {
         "a session that asked nothing leaves no lock"
     );
 }
+
+/// A resume always holds the law: a `--no-law` run picked up later journals a second law beat,
+/// on and marked resumed, so a report sees that the run mixed arms.
+#[tokio::test]
+async fn a_resumed_law_off_run_says_it_mixed_arms() {
+    let w = World::new("law-mixed");
+    w.config(Some(1));
+    let attic = w.root.join("attic");
+    let model = Arc::new(ScriptedModel::new([write("w0", "broken\n")]));
+    let mut opened = mnemorph_loop::open::open_with_law(
+        &w.world(),
+        &w.loaded(),
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        mnemorph_loop::Law::Off,
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    let ending = opened
+        .session
+        .run()
+        .ask("make out.txt say fixed", &mut |_| {})
+        .await;
+    assert!(matches!(ending, Ending::Checkpoint { .. }), "{ending:?}");
+    let run = opened.run_id.clone();
+    drop(opened);
+    w.config(None);
+    let model = Arc::new(ScriptedModel::new([
+        write("w1", "fixed\n"),
+        ScriptedModel::text("Fixed."),
+    ]));
+    let mut opened = w.resume(&model, "scripted-model", &run).unwrap();
+    assert_eq!(opened.law, mnemorph_loop::Law::On);
+    opened.session.run().ask("go on", &mut |_| {}).await;
+    let said: Vec<(bool, bool)> = w
+        .beats(&run)
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Law { on, resumed } => Some((on, resumed)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [(false, false), (true, true)],
+        "the last one holds from the resume"
+    );
+}

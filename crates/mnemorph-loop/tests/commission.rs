@@ -2213,7 +2213,7 @@ async fn chain_under(name: &str, law: mnemorph_loop::Law) -> (Arc<ScriptedModel>
         if path.extension().is_some_and(|e| e == "jsonl") {
             let rows = Journal::<Beat>::new(path).read().unwrap().rows;
             said.extend(rows.iter().filter_map(|b| match b {
-                Beat::Law { on } => Some(*on),
+                Beat::Law { on, .. } => Some(*on),
                 _ => None,
             }));
         }

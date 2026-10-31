@@ -1262,8 +1262,10 @@ impl Run {
     fn ride(&mut self) {
         if !self.law.1 {
             self.law.1 = true;
+            // A run that opens on a conversation already held is a resumed one.
             self.record(&Beat::Law {
                 on: self.law.0.on(),
+                resumed: !self.messages.is_empty(),
             });
         }
         if self.rode.as_deref() != Some(self.body.model.as_str()) {

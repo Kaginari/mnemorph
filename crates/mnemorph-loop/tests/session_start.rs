@@ -274,7 +274,7 @@ async fn a_world_s_configuration_cannot_turn_the_law_off() {
     assert!(
         beats
             .iter()
-            .any(|b| matches!(b, mnemorph_loop::Beat::Law { on: true })),
+            .any(|b| matches!(b, mnemorph_loop::Beat::Law { on: true, .. })),
         "{beats:?}"
     );
     let _ = fs::remove_dir_all(&w);

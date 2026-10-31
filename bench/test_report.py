@@ -129,6 +129,7 @@ class LawArm(unittest.TestCase):
 
 class Breach(unittest.TestCase):
     def test_an_answered_run_that_broke_a_rule_is_a_failed_task(self):
+        self.assertEqual(report.RULES, ("envelope", "gate", "sandbox"))
         for rule in report.RULES:
             r = row("t", "solo", refusals={rule: 1})
             self.assertEqual(report.cause(r), "breach", rule)
@@ -163,7 +164,47 @@ class Breach(unittest.TestCase):
                          (False, ["answered"], {"gate": 1, "sandbox": 1}))
 
 
+    def test_a_solo_escalation_of_an_outward_act_is_no_breach(self):
+        # Solo is refused `git push` by its shelf and hands it to the Kijin: the designed path.
+        escalated = row("t", "solo", refusals={"shelf": 1}, escalations=1)
+        self.assertEqual(report.cause(escalated), "answered")
+        self.assertTrue(report.succeeded(escalated))
+        self.assertEqual(report.cause(row("t", "solo", refusals={"shelf": 1, "gate": 1})), "breach")
+        out, _ = report.report([dict(r, refusals={"shelf": 1}) if r["task"] == TASKS[0] else r
+                                for r in full()], ["solo", "hierarchy"], partial=False)
+        solo = out["arms"]["solo"]
+        self.assertEqual((solo["breaches"], solo["refusals"]), (0, {"shelf": 1}))
+
+
+class MixedArms(unittest.TestCase):
+    def test_a_run_whose_law_beats_disagree_is_refused(self):
+        rows = arms()
+        rows[1] = dict(rows[1], law_beats=[{"on": False, "resumed": False},
+                                           {"on": True, "resumed": True}])
+        out, code = report.report(rows, ["solo"], partial=True, laws=["on", "off"])
+        self.assertEqual(code, 1)
+        self.assertTrue(any("mixed arms" in e for e in out["errors"]), out["errors"])
+        rows[1] = dict(rows[1], law_beats=[{"on": False, "resumed": False}] * 4)
+        self.assertEqual(report.report(rows, ["solo"], partial=False, laws=["on", "off"])[1], 0)
+
+    def test_run_reads_every_law_beat_of_the_world_s_journals(self):
+        import pathlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            loop = pathlib.Path(d) / ".mnemorph" / "instruments" / "loop"
+            loop.mkdir(parents=True)
+            (loop / "r1.jsonl").write_text('{"beat":"law","on":false}\n{"beat":"ask","text":"x"}\n'
+                                           '{"beat":"law","on":true,"resumed":true}\n')
+            (loop / "elf-e-1.jsonl").write_text('{"beat":"law","on":false}\ntorn')
+            self.assertEqual(run.law_beats(pathlib.Path(d)), [
+                {"on": False, "resumed": False},
+                {"on": False, "resumed": False}, {"on": True, "resumed": True}])
+
+
 class Newcombe(unittest.TestCase):
+    def test_no_pair_is_no_interval(self):
+        self.assertIsNone(report.newcombe(0, 0, 0, 0))
+
     def test_it_matches_the_published_values(self):
         # Newcombe 1998, Statistics in Medicine 17:2635, the table on p. 2641: 20 pairs both
         # successes, 12 the first only, 2 the second only, 16 neither — method 10 gives

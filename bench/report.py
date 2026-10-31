@@ -43,7 +43,10 @@ def expected_tasks():
 # from the `mnemorph: <ending>` line the CLI writes to stderr for any ending but `answered`.
 HARNESS = {"escalated", "checkpoint", "gate", "refused", "breach", "never delegated"}
 # The rules a run's acts meet: one that refused an act is a breach, however the run ended.
-RULES = ("envelope", "gate", "sandbox", "shelf")
+RULES = ("envelope", "gate", "sandbox")
+# A shelf refusal is shown, never judged: in solo, an outward act the shelf refuses is the
+# designed escalation to the Kijin, and the journal does not tie each refusal to its escalation.
+SHOWN = RULES + ("shelf",)
 LAWS = ("on", "off")
 # A hang outlives the core's own one-hour clock, which ends slow work as a checkpoint: the bench
 # kills only what stalled, at 65 minutes.
@@ -66,7 +69,7 @@ def law(r):
 
 def breaches(r):
     """How many of the run's acts a rule refused — the envelope, the human gate, the sandbox's
-    guard, the race's shelf — as `mnemorph run --json` named them."""
+    guard — as `mnemorph run --json` named them. The race's shelf is not among them."""
     return sum((r.get("refusals") or {}).get(k, 0) for k in RULES)
 
 
@@ -124,6 +127,13 @@ def matrix(rows, tasks, modes, laws=("on",)):
             errors.append("mislabelled arm: %s %s law %s, but the run said law %s"
                           % (key + ("on" if said else "off",)))
             continue
+        # Every law beat its journals wrote — the session's and each body's — must be its arm's;
+        # a resumed one means the run mixed arms.
+        beats = r.get("law_beats") or []
+        if any(b.get("resumed") or b.get("on") != (law(r) == "on") for b in beats):
+            errors.append("mixed arms: %s %s law %s, but its journals said %s"
+                          % (key + (beats,)))
+            continue
         if key not in want:
             errors.append("extra run: %s %s law %s" % key)
         elif key in cells:
@@ -162,6 +172,8 @@ def newcombe(both, first_only, second_only, neither, z=Z95):
     n / 2 (zero when a margin is empty). p1 is the first arm's success, p2 the second's."""
     a, b, c, d = both, first_only, second_only, neither
     n = a + b + c + d
+    if not n:
+        return None
     p1, p2 = (a + b) / n, (a + c) / n
     l1, u1 = wilson(a + b, n, z)
     l2, u2 = wilson(a + c, n, z)
@@ -187,7 +199,7 @@ def arm(cells, tasks, mode, lw="on"):
         "unanswered": sum(bool(r["passed"]) and not succeeded(r) for r in rs),
         # Runs a rule refused an act of, however they ended, and the refusals by rule.
         "breaches": sum(breaches(r) > 0 for r in rs),
-        "refusals": {k: n for k in RULES
+        "refusals": {k: n for k in SHOWN
                      if (n := sum((r.get("refusals") or {}).get(k, 0) for r in rs))},
         "failed_by": dict(sorted(Counter(cause(r) for r in rs if not succeeded(r)).items())),
         "median_calls": med("calls"),

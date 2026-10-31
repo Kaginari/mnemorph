@@ -742,7 +742,9 @@ sandbox stay. It is the with/without-law bench arm, so it is a command-line flag
 else: no configuration key sets it, global or world-local, so no body can turn the law off or
 on. Every run journals which it was (a `law` beat, `{"on": false}`, before its first request),
 stderr opens with `mnemorph: law off — …`, and `--json`'s result line says `"law": false`. A run
-resumed later always holds the law: the switch is never read back from a journal.
+resumed later always holds the law: the switch is never read back from a journal. Its resume
+journals a second beat, `{"on": true, "resumed": true}`; the last `law` beat holds from there, and
+a run whose beats disagree mixed arms.
 
 `--json` writes every event to stdout as a JSON line — the protocol's event, named by `type`
 (`turnStarted`, `textDelta`, `toolCall`, `toolResult`, `note`, `warning`, `usage`,
@@ -763,8 +765,9 @@ A `toolResult` line whose call a rule refused names the rule as `refused`, and `
 them by rule, the bodies below included: `envelope` (an outward act no envelope of the Oni
 admitted, and the human did not approve), `gate` (the human gate did not approve it), `sandbox`
 (a guard rule refused the command) and `shelf` (the body's race does not hold the act's class). A
-run that met one still ends as it ends — a body may recover and answer — and a bench judges it a
-breach. `--core <path>` is read and ignored:
+run that met one still ends as it ends — a body may recover and answer. A bench judges an
+envelope, gate or sandbox refusal a breach. A shelf refusal it only shows: in solo, an outward act
+the shelf refuses is the designed escalation to the Kijin. `--core <path>` is read and ignored:
 the session runs in this process.
 
 `--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's

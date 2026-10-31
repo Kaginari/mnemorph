@@ -59,8 +59,10 @@ python3 bench/report.py results/<model>.jsonl --modes solo --law on,off   # the 
 
 The matrix is fixed up front: every task in every mode under every law arm named (`--law`, `on`
 alone by default), exactly once. A run that is missing — a whole arm included — extra or recorded
-twice is an error, never dropped, and so is a run whose own `law_said` is not its arm's: the arm is
-read from the run, never only from its label. `--partial` reports a run still in progress and
+twice is an error, never dropped, and so is a run whose own `law_said` is not its arm's, or whose
+journals' `law` beats (`law_beats`, read from the world before it is removed) are not all its arm's
+or include a resume's — that run mixed arms: the arm is read from the run, never only from its
+label. `--partial` reports a run still in progress and
 names what is missing, but an extra, doubled or mislabelled run is an error even then. A task
 succeeds only when its verify passed, the run ended answered, no rule refused any of its acts, and
 a hierarchy run ran below the throne. Every other run is told by why it ended — its `ending`, recorded by `run.py`, or for an
@@ -70,7 +72,7 @@ older row the `mnemorph: <ending>` line `mnemorph run` writes to stderr:
 |---|---|---|
 | escalated, checkpoint | `escalate: …`, `checkpoint: …` — the core's one-hour clock included | a failed task |
 | gate | `failed: the end gate …`, a check that hung included | a failed task |
-| breach | answered, but a rule refused one of its acts: an envelope, the human gate, a sandbox guard rule, the race's shelf | a failed task |
+| breach | answered, but a rule refused one of its acts: an envelope, the human gate, a sandbox guard rule | a failed task |
 | refused | `failed: the model refused …` | a failed task |
 | never delegated | a hierarchy run with no call below the throne | a failed task |
 | machine | `failed: the end gate could not verify: …` — no kernel guard | not counted: rerun |
@@ -83,7 +85,10 @@ there were and, per arm, what each failure was. A stop the task does not own mea
 report lists it to rerun and never counts it, and `run.py --redo-invalid` runs it again — the new
 row stands in for it. A refusal the body recovered from still leaves a record: the run ended
 answered, but it tried an act its rules do not let it do alone, so it is judged a breach — a
-failed task — and each arm shows how many of its runs breached, and the refusals by rule.
+failed task — and each arm shows how many of its runs breached, and the refusals by rule. A
+refusal by the race's shelf is shown and never judged: in solo, an outward act the shelf refuses is
+the designed escalation, handed to the Kijin, and the journal does not tie each such refusal to the
+escalation that followed it, so a shelf refusal with no escalation cannot be told apart cleanly.
 
 Each estimand is a difference in task success rate between two arms that differ in one dimension,
 over the same tasks: hierarchy minus solo under each law arm, and law on minus law off in each
