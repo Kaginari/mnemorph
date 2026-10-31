@@ -81,9 +81,9 @@ main() {
   # HTTPS (TLS 1.2 or later), redirects included. Plain HTTP only to this machine's loopback, and
   # file: only for a local path — a test's release, or a mirror on disk.
   case $base in
-    https://*) scheme=https ;;
-    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | "http://[::1]" | "http://[::1]"[:/]*) scheme=http ;;
-    file:///*) scheme=file ;;
+    https://*) scheme='https' ;;
+    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | "http://[::1]" | "http://[::1]"[:/]*) scheme='http' ;;
+    file:///*) scheme='file' ;;
     *) die "MNEMORPH_RELEASE_BASE must be https://, http:// on loopback, or file:///: refusing $base" ;;
   esac
   if command -v curl >/dev/null 2>&1; then
