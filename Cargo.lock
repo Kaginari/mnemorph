@@ -1759,6 +1759,7 @@ dependencies = [
  "mnemorph-races",
  "mnemorph-sandbox",
  "mnemorph-wire",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",

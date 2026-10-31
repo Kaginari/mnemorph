@@ -124,7 +124,10 @@ prints the same fold as one object. The board's metrics are this fold.
 under `.mnemorph/tmp/evolution/<id>/` — each file there at the world path it replaces or creates
 (a Mind, a creature doc) — over exactly the file set named: `--file` for each file it replaces,
 `--create` for each it creates (whose destination must not exist) and `--remove` for each it
-removes; a staged file not named, a named file not staged, or a link refuses the plan. It is
+removes; a staged file not named, a named file not staged, or a link refuses the plan.
+`--proven-on` names each task the plan was proven on, by its ask's text — fingerprinted as the
+runs are: trimmed, whitespace collapsed, lowercased, SHA-256 — or by that 64-digit digest; such a
+task is never held out, for this swap or another. It is
 shown and `y` asked for at the terminal: the soil under `.mnemorph/` is hashed before and after, a diff other than
 exactly the named files puts the world back, and a swap row (the id, every file with its SHA-256
 before and after, the build) goes to the evolution ledger under the state directory. From then
@@ -2078,7 +2081,8 @@ fn evolution(args: &[String]) -> ExitCode {
             "--file" => value("--file").map(|v| set.replaces.push(v)),
             "--create" => value("--create").map(|v| set.creates.push(v)),
             "--remove" => value("--remove").map(|v| set.removes.push(v)),
-            "--proven-on" => value("--proven-on").map(|v| proven.push(v)),
+            "--proven-on" => value("--proven-on")
+                .map(|v| proven.push(mnemorph_server::world::evolution::task_of(&v))),
             "--arm" => value("--arm").and_then(|v| {
                 arm = match v.as_str() {
                     "mutate" => Arm::Mutate,

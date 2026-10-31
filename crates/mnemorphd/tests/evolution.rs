@@ -325,3 +325,111 @@ fn judge_runs_what_waits_then_proposes_by_the_rule() {
         "{stdout}"
     );
 }
+
+/// Through the binary end to end: `--proven-on` takes the task's text and fingerprints it as the
+/// runs are; a task the plan was proven on, a held-out task used before and a task in two splits
+/// are each refused by `judge`, and the proven task is never stamped.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
+    use mnemorph_server::world::evolution::{Swap, fingerprint};
+    let f = Fixture::new("splits");
+    let stage = |id: &str, path: &str, text: &str| {
+        let at = f.world.join(".mnemorph/tmp/evolution").join(id).join(path);
+        fs::create_dir_all(at.parent().unwrap()).unwrap();
+        fs::write(at, text).unwrap();
+    };
+    let swap_of = |id: &str| -> Swap {
+        journal_at(&f.ledger())
+            .read()
+            .unwrap()
+            .rows
+            .into_iter()
+            .find_map(|r| match r {
+                mnemorph_server::world::evolution::EvolutionRow::Swap(s) if s.id == id => Some(s),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let record = |s: &Swap, body: &str, ask: &str| {
+        Stamp {
+            ledger: f.ledger(),
+            swap: s.clone(),
+            body: body.into(),
+            ask: ask.into(),
+            state: s.after_state(),
+            control: false,
+        }
+        .record(&f.world, Facts::default())
+        .unwrap();
+    };
+    let judged = |id: &str| {
+        let out = f.run(&["evolution", "judge", id]);
+        assert_eq!(out.status.code(), Some(1), "{:?}", text(&out));
+        text(&out).0
+    };
+    let sly = ".mnemorph/slime/sly/README.md";
+    let glim = ".mnemorph/dark-elf/glim/README.md";
+    stage("a", MIND, "# Careful\n\nWrite once.\n");
+    let out = f.at_tty(
+        &[
+            "evolution",
+            "swap",
+            "a",
+            "--creature",
+            "sly",
+            "--file",
+            MIND,
+            "--proven-on",
+            "Fix the parser",
+        ],
+        "y\n",
+    );
+    assert!(
+        text(&out).0.contains("swapped a under build"),
+        "{:?}",
+        text(&out)
+    );
+    let a = swap_of("a");
+    assert_eq!(a.proven_on, vec![fingerprint("fix the parser")]);
+    assert!(stamp_for(&f.world, &f.ledger(), "sly", "  FIX the   parser ").is_none());
+    record(&a, "sly", "a held task");
+    record(&a, "sly", "fix THE parser");
+    assert!(judged("a").contains("the plan was proven on it"));
+    // A held-out task another swap's window used first.
+    stage("b", glim, "# glim\n\nanew\n");
+    let out = f.at_tty(
+        &[
+            "evolution",
+            "swap",
+            "b",
+            "--creature",
+            "glim",
+            "--file",
+            glim,
+        ],
+        "y\n",
+    );
+    assert!(text(&out).0.contains("swapped b"), "{:?}", text(&out));
+    record(&swap_of("b"), "glim", "A  held task");
+    assert!(judged("b").contains("a held-out task already used"));
+    // A task in two splits: swap a was proven on it, swap c would hold it out.
+    stage("c", sly, "# sly\n\nanew\n");
+    let out = f.at_tty(
+        &[
+            "evolution",
+            "swap",
+            "c",
+            "--creature",
+            "sly",
+            "--body",
+            "nova",
+            "--file",
+            sly,
+        ],
+        "y\n",
+    );
+    assert!(text(&out).0.contains("swapped c"), "{:?}", text(&out));
+    record(&swap_of("c"), "nova", "Fix the parser");
+    assert!(judged("c").contains("in two splits"));
+}

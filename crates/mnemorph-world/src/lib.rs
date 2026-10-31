@@ -8,6 +8,7 @@ pub use mnemorph_memory as memory;
 pub use mnemorph_races as races;
 
 pub mod answers;
+mod beneath;
 pub mod chains;
 pub mod challenge;
 pub mod dimension;
