@@ -342,6 +342,7 @@ fn decider(primary: Option<SystemOne>, llm: &Arc<Llm>) -> Decider {
             provider: "anthropic".into(),
             model: "claude-haiku-5-5".into(),
         },
+        unavailable: None,
     }
 }
 
@@ -375,6 +376,24 @@ async fn without_a_system_one_the_llm_answers_and_says_its_probabilities_are_sta
     );
     assert_eq!(d.answer("genre").unwrap().choice(), "fiction");
     assert!((d.answer("positive").unwrap().probability("true") - 0.9).abs() < 1e-9);
+}
+
+/// A System One the configuration names but cannot reach (its key variable unset) is never
+/// asked: the LLM answers, and every decision names why.
+#[tokio::test]
+async fn an_unavailable_system_one_is_never_asked_and_each_decision_says_why() {
+    let llm = Llm::new(vec![Ok(tool_answer())]);
+    let decider = Decider {
+        unavailable: Some("jev: its key variable TYPESAFE_API_KEY is not set".into()),
+        ..decider(None, &llm)
+    };
+    let d = decider.decide(&review()).await.unwrap();
+    assert_eq!(d.source.provider, "anthropic");
+    assert_eq!(d.source.basis, Basis::Stated);
+    assert_eq!(
+        d.fell_back.as_deref(),
+        Some("jev: its key variable TYPESAFE_API_KEY is not set")
+    );
 }
 
 #[tokio::test]

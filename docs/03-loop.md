@@ -266,8 +266,10 @@ however much landed between them: the body that ran one bench 63 times in twenty
 run piped, is the reason. A run built with decisions (`decisions()`, `Run::with_decisions`) and `decide.bench` on reads
 a piped run's output instead of muting it — only when the shell saw it finish with a zero exit: a
 non-zero exit or a kill at the deadline is never read, so no printed summary turns a seen failure
-green. Decisions are a feature the human switches on (`decide.enabled`), and only a classifier
-named by `decide.via` makes them: with none, they stay off, and no LLM reads a bench in its place. The decider answers green, red or unknown, and a sure green or red counts in the
+green. Decisions are a feature the human switches on (`decide.enabled`). Jev answers first, the
+System One provider `decide.via` names (or jeff, on your own machine); when none is named, its key
+variable is not set or it fails, the LLM `decide.llm` answers in its place, its basis stated and
+held to the stated cut-off. The decider answers green, red or unknown, and a sure green or red counts in the
 tally as if the exit status had been seen. A read moves only the tally: a read red is not a failed
 act, so the guts and escalation are untouched. An unsure answer, a failed decision, output the
 shell cut short, stdout or stderr (its summary is in the part dropped), an Esc during the command or the decision,

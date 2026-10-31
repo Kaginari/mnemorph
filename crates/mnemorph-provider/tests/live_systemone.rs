@@ -46,6 +46,7 @@ async fn one_real_decision() {
             provider: "none".into(),
             model: "none".into(),
         },
+        unavailable: None,
     };
     let ask = Ask {
         state:

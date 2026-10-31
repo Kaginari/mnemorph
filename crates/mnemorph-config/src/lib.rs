@@ -170,7 +170,8 @@ const MCP_RESTARTS_CEILING: u64 = 10;
 const MCP_PREFIX_ASKS_FLOOR: u64 = 10;
 
 /// Whether only the human's global file may set `key`: everything that loosens the gate, an MCP
-/// server, a provider (where a key is sent), every spending cap and what the board reads. The
+/// server, a provider (where a key is sent), every spending cap, every decision setting (who
+/// decides, how sure it must be) and what the board reads. The
 /// local file lives inside the world, where whatever runs there may write it.
 #[must_use]
 pub fn global_only(key: &str) -> bool {
@@ -197,6 +198,9 @@ const LOOSENING: &[&str] = &[
     "budget.month",
     "decide.enabled",
     "decide.via",
+    "decide.model",
+    "decide.llm",
+    "decide.bench",
     "decide.cutoff.measured",
     "decide.cutoff.stated",
     "decide.route",
@@ -460,20 +464,20 @@ pub struct Backend {
     pub model: String,
 }
 
-/// How decisions are made: by the classifier `via`, when the human switched decisions on and named
-/// one; the LLM `llm` answers only when that classifier fails.
+/// How decisions are made, once the human switched them on: by the System One provider `via`
+/// first (Jev, or a jeff server), and by the LLM `llm` when none is named, its key is not set, or
+/// it fails.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decide {
-    /// Whether decisions are on: the human turned them on (`decide.enabled`) **and** named a
-    /// classifier to make them (`decide.via`). Without a classifier the feature is off, whatever
-    /// else the section says.
+    /// Whether decisions are on: the human turned them on (`decide.enabled`), off by default.
     pub enabled: bool,
     /// The System One provider tried first (`kind = "systemone"`), when one is configured.
     pub via: Option<String>,
     /// The model to ask at `via` (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server);
     /// empty when there is no `via`.
     pub model: String,
-    /// The LLM that answers when the classifier fails.
+    /// The LLM that answers when no System One is there: none named, its key not set, or it
+    /// failed. Its answers are stated, held to `cutoff_stated`.
     pub llm: String,
     /// Whether Metis routes a commission to a tier by how demanding it is (`decide.route`): off
     /// unless the human turns it on, since it changes which model does the work.
@@ -636,7 +640,6 @@ impl Config {
             )?;
         }
         config.validate()?;
-        config.decisions_need_a_classifier();
         Ok(config)
     }
 
@@ -731,25 +734,6 @@ impl Config {
             );
         }
         Ok(())
-    }
-
-    /// Decisions turned on with no classifier named stay off, and the human is told why.
-    fn decisions_need_a_classifier(&mut self) {
-        let on = self
-            .get("decide.enabled")
-            .filter(|l| l.value.as_bool() == Some(true));
-        if let Some(leaf) = on
-            && self.get("decide.via").is_none()
-        {
-            let origin = leaf.origin.clone();
-            self.holes.push(Hole {
-                key: "decide.enabled".into(),
-                origin,
-                why: "decisions need a classifier: name one with decide.via (a provider of kind \
-                      \"systemone\", such as TypeSafe's Jev or a jeff server); until then they stay off"
-                    .into(),
-            });
-        }
     }
 
     /// The budget caps, the race models and the default backend, checked.
@@ -1234,7 +1218,7 @@ impl Config {
             Ok(v)
         };
         let flag = |key: &str| self.get(key).and_then(|l| l.value.as_bool());
-        let enabled = flag("decide.enabled").unwrap_or(false) && via.is_some();
+        let enabled = flag("decide.enabled").unwrap_or(false);
         let bench = enabled && flag("decide.bench").unwrap_or(true);
         let route = enabled && flag("decide.route").unwrap_or(false);
         Ok(Decide {
