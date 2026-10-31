@@ -447,7 +447,10 @@ fn every_call_is_gated_by_its_tools_class() {
 
 #[test]
 fn each_levels_price_is_shown_first_and_is_the_bytes_it_loads() {
-    let w = World::new("prices", &many());
+    // Twelve tools and one refused: its hole is part of level 1, so of its price.
+    let mut tools = many();
+    tools.as_array_mut().unwrap().push(tool("bad__name", "x"));
+    let w = World::new("prices", &tools);
     let mut s = w.server("hub", &[Race::Kijin], None);
     s.purpose = "Issues and the web".into();
     let m = w.mcp(vec![s]);
@@ -463,6 +466,7 @@ fn each_levels_price_is_shown_first_and_is_the_bytes_it_loads() {
     );
     let level1 = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
     assert!(!level1.is_error, "{}", level1.content);
+    assert!(level1.content.contains("Refused:"), "{}", level1.content);
     // Now listed: level 0 states the price of exactly the level 1 just loaded.
     let line = &m.level0_lines(Race::Kijin, &cx)[0];
     assert!(
@@ -584,7 +588,12 @@ fn the_ask_ranks_the_known_tools_by_bm25_deterministically() {
             .map(|i| format!("hub__filler_{i}"))
             .collect::<Vec<_>>()
     );
-    // A rarer word weighs more: `number 3` puts that chore first.
+    // A rarer word weighs more: one tool says `pages`, ten say `chore`, at the same length.
+    assert_eq!(
+        names_of(m.ranked(Race::Kijin, "chore pages", &cx))[0],
+        "hub__web_search"
+    );
+    // A number is a word: `number 3` puts that chore first.
     assert_eq!(
         names_of(m.ranked(Race::Kijin, "chore number 3", &cx))[0],
         "hub__filler_3"
