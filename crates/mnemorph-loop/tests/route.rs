@@ -453,6 +453,8 @@ async fn an_unsure_stated_or_failed_route_keeps_the_default_tier() {
             cache_read: 0,
             cache_write: 0,
         },
+        reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     });
     let (_, dec) = deciders(

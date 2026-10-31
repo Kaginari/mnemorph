@@ -117,7 +117,9 @@ from its witness under the state directory, trusted while its chain holds, else 
 own copy and said to be untrusted: calls,
 weighted tokens and dollars, in total and by race, model, body, day and session, the cache hit
 rate and the unpriced calls. Dollars cover the priced calls only: a group with no priced call
-reads `unpriced`, never $0, and every total says how many calls its dollars leave out. `--json`
+reads `unpriced`, never $0, and every total says how many calls its dollars leave out. Where a
+provider reported its own cost (OpenRouter's `usage.cost`), the group also says
+`provider-reported $… (n calls)` beside the estimate, over those calls only. `--json`
 prints the same fold as one object. The board's metrics are this fold.
 
 `evolution` is the human's door to a creature's evolution. `swap <id>` swaps in the plan staged
@@ -1900,6 +1902,20 @@ fn dollars(t: &mnemorph_server::world::ledger::Totals) -> String {
     }
 }
 
+/// What the providers themselves reported the calls cost, beside Mnemorph's estimate:
+/// ` · provider-reported $0.0000 (3 calls)`, or nothing when no call carried a report.
+fn reported(t: &mnemorph_server::world::ledger::Totals) -> String {
+    if t.reported == 0 {
+        return String::new();
+    }
+    format!(
+        " · provider-reported ${:.4} ({} call{})",
+        t.reported_usd,
+        t.reported,
+        if t.reported == 1 { "" } else { "s" }
+    )
+}
+
 /// A fold's totals as JSON: what the board's metrics carry for the same group.
 fn totals_json(t: &mnemorph_server::world::ledger::Totals) -> serde_json::Value {
     use mnemorph_server::world::spend;
@@ -1912,6 +1928,8 @@ fn totals_json(t: &mnemorph_server::world::ledger::Totals) -> serde_json::Value 
         "cacheWrite": t.usage.cache_write,
         "usd": spend::usd(t),
         "unpriced": t.unpriced,
+        "reportedUsd": (t.reported > 0).then_some(t.reported_usd),
+        "reported": t.reported,
         "cacheHit": spend::cache_hit(t),
     })
 }
@@ -1930,9 +1948,10 @@ fn usage_lines(
     };
     let t = &r.total;
     lines.push(format!(
-        "usage {}: {} · {} wt · {} calls · cache hit {}",
+        "usage {}: {}{} · {} wt · {} calls · cache hit {}",
         window.word(),
         dollars(t),
+        reported(t),
         t.wt,
         t.calls,
         hit(t)
@@ -1944,9 +1963,10 @@ fn usage_lines(
         lines.push(format!("by {title}"));
         for (k, t) in m {
             lines.push(format!(
-                "  {}: {} · {} wt · {} calls",
+                "  {}: {}{} · {} wt · {} calls",
                 safe(k),
                 dollars(t),
+                reported(t),
                 t.wt,
                 t.calls
             ));

@@ -1634,6 +1634,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "mnemorph-ledger",
+ "mnemorph-wire",
  "reqwest",
  "serde",
  "serde_json",

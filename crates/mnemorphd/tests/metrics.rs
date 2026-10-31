@@ -43,6 +43,8 @@ fn usage(ts: i64, session: &str, race: &str, wt: u64, usd: Option<f64>) -> Usage
         prefix: 0,
         wt,
         usd,
+        reported_cost: None,
+        estimated: false,
         envelope: None,
         purpose: None,
     }
@@ -319,6 +321,39 @@ fn the_metrics_total_what_the_cli_totals() {
     assert!(bad.starts_with("HTTP/1.1 400"), "{bad}");
     let none = get(&host, &cookie, "/api/metrics?world=nope");
     assert!(none.starts_with("HTTP/1.1 404"), "{none}");
+}
+
+/// A provider's own reported cost is shown beside Mnemorph's estimate, over the calls that carried
+/// one; a group with none says nothing of it.
+#[test]
+fn usage_shows_the_provider_reported_cost_beside_the_estimate() {
+    let h = Home::new("reported");
+    let now = Timestamp::now().0;
+    let ledger = Journal::<UsageRow>::chained(h.world.join(".mnemorph/instruments/usage.jsonl"));
+    for (race, usd, reported) in [
+        ("orc", Some(0.10), Some(0.12)),
+        ("orc", None, Some(0.0)),
+        ("slime", Some(0.03), None),
+    ] {
+        let row = UsageRow {
+            reported_cost: reported,
+            ..usage(now - 60, "s1", race, 100, usd)
+        };
+        ledger.append(&row).unwrap();
+    }
+    let world = h.world.to_str().unwrap().to_owned();
+    let text = h.run(&["usage", "--world", &world]);
+    assert!(
+        text.starts_with(
+            "usage 7d: $0.1300 (1 unpriced) · provider-reported $0.1200 (2 calls) · 300 wt"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("  slime: $0.0300 · 100 wt"), "{text}");
+    let out: Value = serde_json::from_str(&h.run(&["usage", "--world", &world, "--json"])).unwrap();
+    assert_eq!(out["total"]["reported"], 2, "{out}");
+    assert!((out["total"]["reportedUsd"].as_f64().unwrap() - 0.12).abs() < 1e-9);
+    assert_eq!(out["races"]["slime"]["reportedUsd"], Value::Null);
 }
 
 fn bench_dir(root: &Path) -> PathBuf {

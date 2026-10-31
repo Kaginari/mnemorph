@@ -152,7 +152,7 @@ pub fn fold(rows: &[UsageRow], window: Window, now: Timestamp) -> Reading {
         .cloned()
         .collect();
     let total = held.iter().fold(Totals::default(), |mut t, r| {
-        add(&mut t, r);
+        t.add(r);
         t
     });
     let mut spans: BTreeMap<&str, (Timestamp, Timestamp)> = BTreeMap::new();
@@ -213,18 +213,6 @@ pub fn fold(rows: &[UsageRow], window: Window, now: Timestamp) -> Reading {
         models: fold_by(&held, Key::Model),
         burn,
         first_call,
-    }
-}
-
-/// `t` with the call `r` added, as the ledger's fold adds one.
-fn add(t: &mut Totals, r: &UsageRow) {
-    t.calls += 1;
-    t.usage = t.usage + r.usage;
-    t.wt += r.wt;
-    t.prefix += r.prefix;
-    match r.usd {
-        Some(usd) => t.usd += usd,
-        None => t.unpriced += 1,
     }
 }
 
@@ -361,6 +349,8 @@ mod tests {
             prefix: 0,
             wt,
             usd,
+            reported_cost: None,
+            estimated: false,
             envelope: None,
             purpose: None,
         }

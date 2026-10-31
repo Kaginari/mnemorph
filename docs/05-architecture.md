@@ -42,6 +42,7 @@ flowchart TB
       CONFIG --> LEDGER
       LOOP --> WORLD --> RACES
       LOOP --> PROV --> LEDGER
+      PROV --> WIRE
       LOOP --> TOOLS --> SANDBOX
       TOOLS --> RACES
       TOOLS --> WIRE
@@ -1776,21 +1777,41 @@ holding `sk-or-` or `Bearer`; a test checks every cassette stays that way.
 
 OpenRouter is recorded from free models (`:free`, cost 0): a text answer and a tool round trip
 (`nvidia/nemotron-3.5-lightning:free`), a reasoning turn with its `reasoning_details`
-(`dots-studio/dots-3-note-preview:free`), and a refusal whose `code` is a number (an unknown model
-id). To record again, by hand:
+(`dots-studio/dots-3-note-preview:free`), and three refusals whose `code` is a number: an unknown
+model id (400), a prompt over the context of `liquid/lfm-2.5-2.6b:free` (400, refused before any
+byte streams), and an upstream rate limit on `google/gemma-4-26b-a4b-it:free` (429, its reason in
+`error.metadata.raw`, which the error's message joins). Every recorded answer's `usage.cost` is
+replayed into the usage row's `reportedCost`.
+
+Ollama is recorded from a local server (`qwen2.5:0.5b`, `tests/live_ollama.rs`): a text
+answer with usage asked for — sent in a last chunk with no choices, after the finish — the same ask
+without `stream_options`, which carries no usage at all, a tool call, streamed whole in one chunk
+(id, name and complete arguments), and an unknown model (a 404 whose `type` is `not_found_error`).
+The recorder also scrubs Ollama's `chatcmpl-…` ids to `chatcmpl-recorded` and every number of its
+`timings` to `0`. An answer whose stream carried no usage is `usage_known: false` and warned as
+such; its tokens are estimated at their worst (every byte sent as input, every byte answered as
+output, about four bytes a token), charged to the envelope and the budget, and ledgered
+`estimated` and unpriced — never a free call.
+
+To record again, by hand:
 
 ```sh
 MNEMORPH_LIVE=1 MNEMORPH_RECORD=$PWD/crates/mnemorph-provider/tests/cassettes \
   OPENROUTER_API_KEY=… [MNEMORPH_LIVE_OR_MODEL=<id>:free] \
   cargo nextest run -p mnemorph-provider --run-ignored only --no-capture live_openrouter
 git add -A && git grep -nE 'sk-or-v1-[0-9a-f]+'   # must print nothing before a commit
+MNEMORPH_LIVE_OLLAMA=1 MNEMORPH_RECORD=$PWD/crates/mnemorph-provider/tests/cassettes \
+  [MNEMORPH_OLLAMA_URL=http://127.0.0.1:11434] [MNEMORPH_OLLAMA_MODEL=qwen2.5:0.5b] \
+  cargo nextest run -p mnemorph-provider --run-ignored only --no-capture live_ollama
 ```
 
 The hand-written streams in `tests/openai.rs` and `tests/review.rs` cover what no recording
 holds: a mid-stream error (`finish_reason: "error"` or an `error` chunk after a 200), which no
-legitimate request provokes, and Gemini's `extra_content.google.thought_signature`, which needs a
-Gemini model (none is free). Anthropic, vLLM and Ollama have no cassette: they need a key or a
-local server.
+cheap request provokes — an over-long prompt and an upstream rate limit are refused with a status
+before the stream, and an invalid tool schema is accepted — and Gemini's
+`extra_content.google.thought_signature`, which needs a Gemini model (none is free; the free Gemma
+models are served by Google AI Studio but are not Gemini). Anthropic and vLLM have no cassette:
+they need a key or a local server.
 
 ### Lifecycles, explored whole
 
