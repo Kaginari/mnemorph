@@ -7,6 +7,7 @@ pub use mnemorph_memory as memory;
 /// The race law, for the readers that show it (the board's race cards).
 pub use mnemorph_races as races;
 
+pub mod answers;
 pub mod chains;
 pub mod challenge;
 pub mod dimension;

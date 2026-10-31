@@ -11,4 +11,9 @@ allow: boolean,
 /**
  * Why not, for the body.
  */
-reason?: string | null, };
+reason?: string | null, 
+/**
+ * On the board: the digest of the act as shown, as `gate/ask` carried it. An allow that
+ * names another, or none, is refused; the core itself reads no digest.
+ */
+digest?: string, };

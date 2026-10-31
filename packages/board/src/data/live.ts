@@ -8,11 +8,12 @@
  * the replay wait for it, and the SDK drops any event already seen by its `seq`, so a reconnect
  * after a drop — which replays from the last `seq` — never shows a message twice.
  *
- * The chat answers no ask: approving is the approval card's, a component of its own (#278). An
- * ask stays waiting — shown, never approved here — until it is answered there, Esc denies it with
- * the turn, or its time runs out and the core denies it.
+ * The chat answers asks only through the approval card (`ui/Approval.tsx`): it acknowledges a
+ * card it shows (`seen`) and sends the human's answer (`answer`), and hears what the board made
+ * of it — refused (`board/refused`, the ask still waiting) or gone (`board/askGone`, answered
+ * here, elsewhere, withdrawn or past its time). The gate handler itself answers nothing.
  */
-import type { GateRequest, Hello, Role } from '@mnemorph/protocol';
+import type { GateReply, GateRequest, Hello, Role } from '@mnemorph/protocol';
 import { type Arrived, Client, ws } from '@mnemorph/sdk/browser';
 import { useEffect, useRef, useState } from 'react';
 import { Chat, type ChatView } from './chat.ts';
@@ -40,6 +41,10 @@ export interface LiveState {
   closed?: string | undefined;
   /** What the last act was refused for, if it was. */
   refused?: string | undefined;
+  /** The last answer to an ask the board refused: the ask still waits. */
+  askRefused?: { id: string; why: string } | undefined;
+  /** The last ask that left, why, and whether this tab answered it. */
+  gone?: { id: string; why: string; here: boolean } | undefined;
   /** The opening replay is done: what follows is live. */
   replayed: boolean;
 }
@@ -55,6 +60,10 @@ export interface Live extends LiveState {
   takeOver(): Promise<void>;
   /** End the chat: its child leaves. */
   end(): Promise<void>;
+  /** The approval card for ask `id` is on screen, showing the act whose digest is `digest`. */
+  seen(id: string, digest: string): Promise<void>;
+  /** The human's answer to ask `id`, from the approval card. */
+  answer(id: string, reply: GateReply): void;
 }
 
 /** The chat's socket, on this page's own host. */
@@ -77,6 +86,8 @@ export function useLive(id: string): Live {
     replayed: false,
   });
   const client = useRef<Client | undefined>(undefined);
+  /** The asks this tab answered: an ask that leaves after one was answered here. */
+  const mine = useRef(new Set<string>());
 
   useEffect(() => {
     const transport = ws({ url: socketUrl(id), csrf });
@@ -102,7 +113,7 @@ export function useLive(id: string): Live {
         }
       });
     };
-    // An ask is shown, never answered by the chat: the approval card (#278) answers it.
+    // The gate handler answers nothing: the approval card answers, through `answer`.
     c.onGate(() => new Promise(() => {}));
     c.on((e) => {
       if (!chat) early.push(e);
@@ -124,7 +135,16 @@ export function useLive(id: string): Live {
         set((s) => ({ ...s, controlled: n.params.controlled === true }));
       } else if (n.method === 'board/refused') {
         const why = typeof n.params.why === 'string' ? n.params.why : 'refused';
-        set((s) => ({ ...s, refused: why }));
+        const aid = typeof n.params.id === 'string' ? n.params.id : undefined;
+        if (aid?.startsWith('gate-')) {
+          mine.current.delete(aid);
+          set((s) => ({ ...s, askRefused: { id: aid, why } }));
+        } else set((s) => ({ ...s, refused: why }));
+      } else if (n.method === 'board/askGone') {
+        const aid = String(n.params.id);
+        const why = typeof n.params.why === 'string' ? n.params.why : 'gone';
+        const here = mine.current.delete(aid);
+        set((s) => ({ ...s, gone: { id: aid, why, here } }));
       } else if (n.method === 'board/ended') {
         const why = typeof n.params.why === 'string' ? n.params.why : 'the chat ended';
         set((s) => ({ ...s, closed: why }));
@@ -176,5 +196,17 @@ export function useLive(id: string): Live {
     interrupt: () => act((c) => c.interrupt()),
     takeOver: () => act((c) => c.takeOver()),
     end: () => act((c) => c.shutdown()),
+    seen: async (aid, digest) => {
+      const c = client.current;
+      if (!c) throw new Error('not connected');
+      await c.seen(aid, digest);
+    },
+    answer: (aid, reply) => {
+      const c = client.current;
+      if (!c) return;
+      mine.current.add(aid);
+      setState((s) => ({ ...s, askRefused: undefined }));
+      c.answer(aid, reply);
+    },
   };
 }

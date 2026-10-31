@@ -2,7 +2,7 @@
  * The chat, on the built page under the board server's CSP, against a fake bridge: the
  * transcript in the TUI's grammar (screenshots at phone and desktop, both themes, contrast and
  * labels), hostile text inert, a reconnect that replays without duplicating, an observer that
- * cannot send, a waiting ask shown with no approve control, Esc, the queue, a past run read-only
+ * cannot send, Esc, the queue, a past run read-only
  * and resumed, and 2,000 messages scrolled in a window.
  */
 import { fileURLToPath } from 'node:url';
@@ -126,40 +126,6 @@ for (const theme of ['dark', 'light'] as const) {
       expect(await lowContrast(page)).toEqual([]);
       expect(await unlabelled(page)).toEqual([]);
       expect(await violations(page)).toEqual([]);
-    });
-
-    test('a waiting ask: the banner, and no approve control', async ({ page }, info) => {
-      const b = new Bridge();
-      b.emit('turnStarted', { text: 'tidy the wire' });
-      await openChat(page, b);
-      await expect(page.locator('.msg-user')).toHaveCount(1);
-      b.say({
-        jsonrpc: '2.0',
-        id: 'gate-1',
-        method: 'gate/ask',
-        params: {
-          body: 'orc-wire',
-          race: 'orc',
-          class: 'write',
-          act: "sed -i 's/a/b/' crates/wire/src/lib.rs",
-          why: ['writes a file in its zone'],
-          outside: [],
-          leftMs: 581_000,
-        },
-      });
-      const banner = page.locator('.ask-banner');
-      await expect(banner).toContainText('Waiting for your approval');
-      await expect(banner).toContainText("sed -i 's/a/b/' crates/wire/src/lib.rs");
-      await expect(banner).toContainText('approval card');
-      await expect(banner).toContainText('9:41');
-      await expect(banner.getByRole('button')).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /approve|allow|^yes/i })).toHaveCount(0);
-      await expect(page.locator('.activity')).toContainText('Waiting for approval…');
-      await page.screenshot({ path: screen(`${info.project.name}-${theme}-ask`) });
-      expect(await lowContrast(page)).toEqual([]);
-      // The page answered nothing: the ask waits.
-      await page.waitForTimeout(300);
-      expect(b.sent.filter((m) => m.id === 'gate-1')).toEqual([]);
     });
   });
 }

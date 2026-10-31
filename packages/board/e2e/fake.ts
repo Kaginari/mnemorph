@@ -4,6 +4,7 @@
  * `seq`, `session/prompt|send|interrupt`, `board/takeOver`, roles and asks — so the page runs
  * against the protocol without a server.
  */
+import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
 import { FIXTURE_NOW, fixtureWorlds } from '../src/data/fixtures.ts';
 
@@ -92,6 +93,14 @@ export class Bridge {
         ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }));
       const refuse = (message: string) =>
         ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32011, message } }));
+      if (m.method === undefined && typeof m.id === 'string' && m.id.startsWith('gate-')) {
+        // An answer: the ask is gone.
+        return this.say({
+          jsonrpc: '2.0',
+          method: 'board/askGone',
+          params: { id: m.id, why: 'answered' },
+        });
+      }
       switch (m.method) {
         case 'initialize':
           return answer(hello);
@@ -104,6 +113,9 @@ export class Bridge {
             more: false,
           });
         }
+        case 'board/seen':
+          if (this.role !== 'controller') return refuse('this tab observes: take over to answer');
+          return answer({});
         case 'board/takeOver':
           this.role = 'controller';
           answer({});
@@ -289,4 +301,50 @@ export function richTurn(b: Bridge) {
     unverified: [],
   });
   b.emit('turnEnded', { ending: 'answered' });
+}
+
+/** An ask's fields, as the board's `shown` sends them. */
+export interface AskFields {
+  body: string;
+  race: string;
+  class: string;
+  act: string;
+  why: string[];
+  outside: string[];
+  plan?: string | null;
+  /** The board's verdict on its size: too large to approve from the web. */
+  tooLarge?: boolean;
+}
+
+/** The board's digest of ask `id` as shown (`Shown::digest`). */
+export function digestOf(id: string, a: AskFields): string {
+  const h = createHash('sha256');
+  const field = (s: string) => {
+    const b = Buffer.from(s, 'utf8');
+    h.update(`${b.length}:`);
+    h.update(b);
+    h.update('\n');
+  };
+  h.update('mnemorph.ask.v1\n');
+  for (const s of [id, a.body, a.race, a.class, a.act]) field(s);
+  for (const l of [a.why, a.outside]) {
+    h.update(`${l.length}\n`);
+    for (const s of l) field(s);
+  }
+  if (a.plan === undefined || a.plan === null) h.update('-\n');
+  else {
+    h.update('+');
+    field(a.plan);
+  }
+  return h.digest('hex');
+}
+
+/** `gate/ask` for `id`, its digest computed as the board does. */
+export function askLine(id: string, a: AskFields, leftMs = 581_000) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    method: 'gate/ask',
+    params: { ...a, leftMs, digest: digestOf(id, a) },
+  };
 }

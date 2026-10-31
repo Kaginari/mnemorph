@@ -149,6 +149,22 @@ export class Client {
     this.transport.close();
   }
 
+  /** On a board chat: this tab's approval card for ask `id` is on screen, showing the act whose
+   * digest is `digest`. The board takes an allow only from the tab that acknowledged the card,
+   * at least 300 ms after it did; control moving asks for the acknowledgement again. */
+  async seen(id: string, digest: string): Promise<void> {
+    await this.request('board/seen', { id, digest });
+  }
+
+  /** Answer ask `id` with `reply` now, outside the gate handler: the board's approval card's way.
+   * The ask stays listed until the board says it is gone (`board/askGone`): a refused answer
+   * (`board/refused`) leaves it waiting. */
+  answer(id: string, reply: GateReply): void {
+    if (this.closedWhy !== undefined) return;
+    this.answering.delete(id);
+    this.transport.send(JSON.stringify({ jsonrpc: '2.0', id, result: reply }));
+  }
+
   /** Close this end without asking: the core's input ends, and a core that does not leave is
    * stopped. */
   close(): void {

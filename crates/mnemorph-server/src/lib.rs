@@ -237,6 +237,8 @@ impl Gate for ClientGate {
                 .collect(),
             plan: ask.fingerprint.as_ref().map(GateFingerprint::short),
             left_ms: None,
+            digest: None,
+            too_large: None,
         };
         core.send(&json!({"jsonrpc": "2.0", "id": format!("gate-{id}"), "method": "gate/ask", "params": request}));
         let answer = rx
