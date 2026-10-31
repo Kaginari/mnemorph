@@ -1353,6 +1353,21 @@ impl Drop for Seat {
     }
 }
 
+/// The child's limits: its race's, with the race's step budget, its slice as its budget (none
+/// when the slice is unbounded), and the human's stress line and weights where set.
+fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
+    let mut limits = Limits::for_race(race);
+    limits.steps = c.steps.of(race);
+    limits.budget_wt = (slice != u64::MAX).then_some(slice);
+    if let Some(stress) = c.stress_tokens {
+        limits.stress_tokens = stress;
+    }
+    if let Some(weights) = c.weights {
+        limits.weights = weights;
+    }
+    limits
+}
+
 /// The child body for `to`: its prompt, its tools over its own soil, its slice as its budget,
 /// the human's caps and stress line, its gate, and the commission tool when its race dispatches.
 // The order's parts, each read once here: bundling them would only move the list.
