@@ -307,3 +307,26 @@ async fn live_openrouter_unknown_model() {
     eprintln!("{err:?}");
     recorder.save("openrouter-error");
 }
+
+/// A prompt over a small free model's context (`liquid/lfm-2.5-2.6b:free`, 65 536 tokens),
+/// refused before any byte streams: a 400 with a numeric `code`, never a mid-stream error.
+#[tokio::test]
+#[ignore = "calls OpenRouter: run with MNEMORPH_LIVE=1 and OPENROUTER_API_KEY"]
+async fn live_openrouter_context_overflow() {
+    let Some((client, _, recorder)) = client() else {
+        return;
+    };
+    let mut req = ask(
+        "liquid/lfm-2.5-2.6b:free",
+        &format!("{}Reply ready.", "hello ".repeat(90_000)),
+        vec![],
+    );
+    req.max_tokens = 64;
+    let mut on = |_: Event| {};
+    let err = client
+        .complete(&req, &mut on)
+        .await
+        .expect_err("an over-long prompt is refused");
+    eprintln!("{err:?}");
+    recorder.save("openrouter-context");
+}

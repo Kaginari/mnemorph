@@ -178,5 +178,14 @@ pub(crate) fn api_error(body: &[u8]) -> (String, String) {
         || String::from_utf8_lossy(&body[..body.len().min(500)]).into_owned(),
         str::to_owned,
     );
+    // OpenRouter's own message for an upstream failure is only "Provider returned error"; the
+    // upstream's reason is in `metadata.raw`, and joins it.
+    let message = match e["metadata"]["raw"].as_str().map(str::trim) {
+        Some(raw) if !raw.is_empty() => {
+            let cut = raw.char_indices().nth(500).map_or(raw.len(), |(at, _)| at);
+            format!("{message}: {}", &raw[..cut])
+        }
+        _ => message,
+    };
     (kind, message)
 }

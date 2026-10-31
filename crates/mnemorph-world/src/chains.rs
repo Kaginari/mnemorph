@@ -368,6 +368,7 @@ mod tests {
             prefix: 0,
             wt: n,
             usd: None,
+            reported_cost: None,
             envelope: None,
             purpose: None,
         }

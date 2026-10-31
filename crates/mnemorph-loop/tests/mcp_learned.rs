@@ -174,6 +174,7 @@ fn reply(model: &str, text: &str, input: u64) -> Result<Response, Error> {
             cache_read: 0,
             cache_write: 0,
         },
+        reported_cost: None,
         warnings: vec![],
     })
 }
@@ -199,6 +200,7 @@ fn tool(id: &str, name: &str, input: Value) -> Result<Response, Error> {
             cache_read: 0,
             cache_write: 0,
         },
+        reported_cost: None,
         warnings: vec![],
     })
 }

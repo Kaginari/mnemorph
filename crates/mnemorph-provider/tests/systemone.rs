@@ -309,6 +309,7 @@ fn says(content: Vec<Block>, stop: StopReason) -> Response {
             cache_read: 0,
             cache_write: 0,
         },
+        reported_cost: None,
         warnings: Vec::new(),
     }
 }

@@ -20,13 +20,29 @@ const TOOL_CALL: &str = include_str!("cassettes/openrouter-tool-0.sse");
 const TOOL_ANSWER: &str = include_str!("cassettes/openrouter-tool-1.sse");
 const REASONING: &str = include_str!("cassettes/openrouter-reasoning-0.sse");
 const ERROR: &str = include_str!("cassettes/openrouter-error-0.json");
-const ALL: [&str; 5] = [TEXT, TOOL_CALL, TOOL_ANSWER, REASONING, ERROR];
-const NAMED: [(&str, &str); 5] = [
+// An over-long prompt, refused before any byte streamed: a 400 status, never a mid-stream error.
+const CONTEXT: &str = include_str!("cassettes/openrouter-context-0.json");
+// A free model's shared upstream pool, exhausted: met while probing `google/gemma-4-26b-a4b-it:free`
+// for a thought signature by hand, its `user_id` scrubbed as the recorder scrubs it. It cannot be
+// provoked on demand, so no live test records it again.
+const RATE_LIMIT: &str = include_str!("cassettes/openrouter-ratelimit-0.json");
+const ALL: [&str; 7] = [
+    TEXT,
+    TOOL_CALL,
+    TOOL_ANSWER,
+    REASONING,
+    ERROR,
+    CONTEXT,
+    RATE_LIMIT,
+];
+const NAMED: [(&str, &str); 7] = [
     ("openrouter-text-0.sse", TEXT),
     ("openrouter-tool-0.sse", TOOL_CALL),
     ("openrouter-tool-1.sse", TOOL_ANSWER),
     ("openrouter-reasoning-0.sse", REASONING),
     ("openrouter-error-0.json", ERROR),
+    ("openrouter-context-0.json", CONTEXT),
+    ("openrouter-ratelimit-0.json", RATE_LIMIT),
 ];
 
 fn request() -> Request {
@@ -124,6 +140,10 @@ async fn a_recorded_text_answer() {
         "{kinds:?}"
     );
     let u = recorded_usage(TEXT);
+    // OpenRouter's own charge, a number of dollars (`0` on a free model), kept beside the usage.
+    assert!(u["cost"].is_number(), "{u}");
+    assert_eq!(r.reported_cost, u["cost"].as_f64());
+    assert_eq!(r.reported_cost, Some(0.0));
     assert_eq!(
         r.usage,
         Usage {
@@ -277,6 +297,102 @@ async fn a_recorded_refusal() {
         }
     );
     assert_eq!(script.sent().len(), 1, "a refusal is not retried");
+}
+
+/// Every recorded answer's reported cost reaches the ledger's row, beside the estimate.
+#[tokio::test(start_paused = true)]
+async fn every_recorded_answer_reports_its_cost_to_the_row() {
+    for cassette in [TEXT, TOOL_CALL, TOOL_ANSWER, REASONING] {
+        let (r, _) = replay(cassette).await;
+        let cost = recorded_usage(cassette)["cost"].as_f64();
+        assert!(cost.is_some(), "the recording carries usage.cost");
+        let row = mnemorph_provider::usage_row(
+            &r,
+            &mnemorph_provider::Caller {
+                session: "s".into(),
+                run: "r".into(),
+                body: "b".into(),
+                race: "slime".into(),
+                commission: None,
+                prefix: 0,
+            },
+            "openrouter",
+            &mnemorph_ledger::Prices::default(),
+            mnemorph_ledger::Timestamp(0),
+        );
+        assert_eq!(row.reported_cost, cost);
+    }
+}
+
+/// A prompt over the model's context is refused before the stream: a 400, its message the
+/// server's, not retried.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_context_overflow() {
+    let script = Arc::new(Scripted::new([Reply::status(400, CONTEXT, &[])]));
+    let client = OpenAiCompatible::new(
+        script.clone(),
+        "https://openrouter.ai/api",
+        Some("k".into()),
+        Policy::default(),
+    );
+    let mut on = |_: Event| {};
+    let err = client
+        .complete(&request(), &mut on)
+        .await
+        .expect_err("the recorded refusal");
+    let Error::Api {
+        status: 400,
+        kind,
+        message,
+    } = &err
+    else {
+        panic!("{err:?}");
+    };
+    assert_eq!(kind, "400");
+    assert!(
+        message.contains("maximum context length is 65536"),
+        "{message}"
+    );
+    assert_eq!(script.sent().len(), 1, "an over-long prompt is not retried");
+}
+
+/// An upstream rate limit: OpenRouter's message says only "Provider returned error", the reason
+/// is the upstream's `metadata.raw`, joined to it; a 429 is retried.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_upstream_rate_limit() {
+    let script = Arc::new(Scripted::new([
+        Reply::status(429, RATE_LIMIT, &[]),
+        Reply::status(429, RATE_LIMIT, &[]),
+    ]));
+    let client = OpenAiCompatible::new(
+        script.clone(),
+        "https://openrouter.ai/api",
+        Some("k".into()),
+        Policy {
+            max_retries: 1,
+            ..Policy::default()
+        },
+    );
+    let mut on = |_: Event| {};
+    let err = client
+        .complete(&request(), &mut on)
+        .await
+        .expect_err("the recorded rate limit");
+    let Error::Api {
+        status: 429,
+        kind,
+        message,
+    } = &err
+    else {
+        panic!("{err:?}");
+    };
+    assert_eq!(kind, "429");
+    assert!(
+        message.starts_with("Provider returned error: google/gemma-4-26b-a4b-it:free is temporarily rate-limited upstream"),
+        "{message}"
+    );
+    assert!(err.retryable());
+    assert_eq!(script.sent().len(), 2, "a 429 is retried");
 }
 
 #[test]

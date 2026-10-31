@@ -90,6 +90,7 @@ pub fn usage_row(
         prefix: caller.prefix,
         wt: 0,
         usd: None,
+        reported_cost: response.reported_cost,
         envelope: None,
         purpose: None,
     }

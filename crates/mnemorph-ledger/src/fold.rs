@@ -34,6 +34,10 @@ pub struct Totals {
     pub unpriced: u64,
     /// Tokens of the fixed per-session prefix.
     pub prefix: u64,
+    /// US dollars the providers themselves reported, over the calls that carried a report.
+    pub reported_usd: f64,
+    /// Calls that carried a provider-reported cost: `reported_usd` covers only them.
+    pub reported: u64,
 }
 
 impl Totals {
@@ -62,7 +66,8 @@ impl Totals {
         }
     }
 
-    fn add(&mut self, r: &UsageRow) {
+    /// `r` added to the totals.
+    pub fn add(&mut self, r: &UsageRow) {
         self.calls += 1;
         self.usage = self.usage + r.usage;
         self.wt += r.wt;
@@ -70,6 +75,10 @@ impl Totals {
         match r.usd {
             Some(usd) => self.usd += usd,
             None => self.unpriced += 1,
+        }
+        if let Some(cost) = r.reported_cost {
+            self.reported_usd += cost;
+            self.reported += 1;
         }
     }
 }

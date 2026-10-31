@@ -99,6 +99,7 @@ fn reply(content: Block, stop: StopReason) -> Result<Response, Error> {
             cache_read: 0,
             cache_write: 0,
         },
+        reported_cost: None,
         warnings: vec![],
     })
 }

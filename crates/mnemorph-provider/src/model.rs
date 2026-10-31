@@ -182,6 +182,9 @@ pub struct Response {
     pub stop_details: Option<serde_json::Value>,
     /// Tokens, by class.
     pub usage: Usage,
+    /// US dollars as the provider itself reported them (OpenRouter's `usage.cost`); `None` when
+    /// it reports none. The ledger keeps it beside its own estimate, never in place of it.
+    pub reported_cost: Option<f64>,
     /// Things the ledger should know that are not errors (e.g. a usage class Mnemorph does not
     /// price).
     pub warnings: Vec<String>,

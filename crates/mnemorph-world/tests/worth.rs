@@ -80,6 +80,7 @@ fn a_card_counts_the_body_and_every_body_below_it() {
         prefix: 0,
         wt,
         usd: None,
+        reported_cost: None,
         envelope: None,
         purpose: None,
     };

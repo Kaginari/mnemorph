@@ -124,6 +124,7 @@ fn tool(id: &str, name: &str, input: Value) -> Result<Response, Error> {
         stop: StopReason::ToolUse,
         stop_details: None,
         usage: usage(),
+        reported_cost: None,
         warnings: vec![],
     })
 }
@@ -139,6 +140,7 @@ fn answer(text: &str) -> Result<Response, Error> {
         stop: StopReason::EndTurn,
         stop_details: None,
         usage: usage(),
+        reported_cost: None,
         warnings: vec![],
     })
 }
@@ -202,6 +204,7 @@ fn stated_green(p: f64) -> Result<Response, Error> {
         stop: StopReason::ToolUse,
         stop_details: None,
         usage: usage(),
+        reported_cost: None,
         warnings: vec![],
     })
 }

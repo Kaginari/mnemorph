@@ -248,6 +248,7 @@ pub(crate) struct Chat {
     calls: Vec<(Option<u64>, Call)>,
     stop: Option<StopReason>,
     usage: Usage,
+    reported_cost: Option<f64>,
 }
 
 impl Assembler for Chat {
@@ -285,6 +286,8 @@ impl Assembler for Chat {
                 cache_read: cached,
                 cache_write: written,
             };
+            // OpenRouter adds what it charged, in dollars: a number, `0` on a free model.
+            self.reported_cost = u["cost"].as_f64();
         }
         let Some(choice) = v["choices"].as_array().and_then(|c| c.first()) else {
             return Ok(None);
@@ -461,6 +464,7 @@ impl Chat {
             stop,
             stop_details: None,
             usage: self.usage,
+            reported_cost: self.reported_cost.take(),
             warnings,
         }
     }

@@ -1776,8 +1776,11 @@ holding `sk-or-` or `Bearer`; a test checks every cassette stays that way.
 
 OpenRouter is recorded from free models (`:free`, cost 0): a text answer and a tool round trip
 (`nvidia/nemotron-3.5-lightning:free`), a reasoning turn with its `reasoning_details`
-(`dots-studio/dots-3-note-preview:free`), and a refusal whose `code` is a number (an unknown model
-id). To record again, by hand:
+(`dots-studio/dots-3-note-preview:free`), and three refusals whose `code` is a number: an unknown
+model id (400), a prompt over the context of `liquid/lfm-2.5-2.6b:free` (400, refused before any
+byte streams), and an upstream rate limit on `google/gemma-4-26b-a4b-it:free` (429, its reason in
+`error.metadata.raw`, which the error's message joins). Every recorded answer's `usage.cost` is
+replayed into the usage row's `reportedCost`. To record again, by hand:
 
 ```sh
 MNEMORPH_LIVE=1 MNEMORPH_RECORD=$PWD/crates/mnemorph-provider/tests/cassettes \
@@ -1788,8 +1791,10 @@ git add -A && git grep -nE 'sk-or-v1-[0-9a-f]+'   # must print nothing before a 
 
 The hand-written streams in `tests/openai.rs` and `tests/review.rs` cover what no recording
 holds: a mid-stream error (`finish_reason: "error"` or an `error` chunk after a 200), which no
-legitimate request provokes, and Gemini's `extra_content.google.thought_signature`, which needs a
-Gemini model (none is free). Anthropic, vLLM and Ollama have no cassette: they need a key or a
+cheap request provokes — an over-long prompt and an upstream rate limit are refused with a status
+before the stream, and an invalid tool schema is accepted — and Gemini's
+`extra_content.google.thought_signature`, which needs a Gemini model (none is free; the free Gemma
+models are served by Google AI Studio but are not Gemini). Anthropic, vLLM and Ollama have no cassette: they need a key or a
 local server.
 
 ### Lifecycles, explored whole

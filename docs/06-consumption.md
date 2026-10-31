@@ -75,6 +75,11 @@ tables do not know, so its `wt` still reaches the meters and the budget:
  "envelope":{"left":54888,"of":60000}}
 ```
 
+When the provider reports what it charged for the call — OpenRouter's `usage.cost`, a number of
+dollars, `0` on a free model — the row keeps it as `reportedCost`, beside `usd`, Mnemorph's own
+estimate from its price tables; neither replaces the other. A provider that reports none leaves
+the field out.
+
 A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
 fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is
 ledgered at its worst case; a body's turn carries none.
@@ -384,7 +389,9 @@ read's, and the files it outlines count as what the ask read.
 `mnemorphd usage [--window 7d|28d|all] [--json]` prints the same folds in the terminal — by race,
 model, body, day and session — and the board's metrics are that fold ([the board's
 metrics](05-architecture.md#metrics-and-integrations)). A group with no priced call reads
-`unpriced`, never $0.
+`unpriced`, never $0. A group with calls that carried a provider's own cost also reads
+`provider-reported $… (n calls)`, summed over those calls only (`reportedUsd` and `reported` in
+`--json`).
 
 ### Building Mnemorph within your plan
 

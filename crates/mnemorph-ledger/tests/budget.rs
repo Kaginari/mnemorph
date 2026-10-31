@@ -187,6 +187,7 @@ fn row(
         prefix,
         wt: wt(usage, 5.0),
         usd,
+        reported_cost: None,
         envelope: None,
         purpose: None,
     }

@@ -110,6 +110,7 @@ fn answer(text: &str) -> Result<Response, Error> {
         stop: StopReason::EndTurn,
         stop_details: None,
         usage: usage(100),
+        reported_cost: None,
         warnings: vec![],
     })
 }
@@ -130,6 +131,7 @@ fn tool_with(id: &str, name: &str, input: Value, usage: Usage) -> Result<Respons
         stop: StopReason::ToolUse,
         stop_details: None,
         usage,
+        reported_cost: None,
         warnings: vec![],
     })
 }
@@ -501,6 +503,7 @@ async fn a_refusal_fails_the_run() {
         stop: StopReason::Refusal,
         stop_details: Some(json!({"category": "cyber"})),
         usage: usage(10),
+        reported_cost: None,
         warnings: vec![],
     });
     let mut run = w.run(Arc::new(ScriptedModel::new([refused])), limits());
@@ -679,6 +682,7 @@ fn reply(content: Vec<Block>, stop: StopReason) -> Result<Response, Error> {
         stop,
         stop_details: None,
         usage: usage(100),
+        reported_cost: None,
         warnings: vec![],
     })
 }
