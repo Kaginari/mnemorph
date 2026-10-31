@@ -91,6 +91,7 @@ pub fn usage_row(
         wt: 0,
         usd: None,
         envelope: None,
+        purpose: None,
     }
     .priced(prices)
 }

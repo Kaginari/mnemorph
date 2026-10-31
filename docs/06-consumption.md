@@ -75,6 +75,10 @@ tables do not know, so its `wt` still reaches the meters and the budget:
  "envelope":{"left":54888,"of":60000}}
 ```
 
+A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
+fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is
+ledgered at its worst case; a body's turn carries none.
+
 `prefix` is the part of the input that was the fixed per-session prompt (law, race card,
 creature card, manifests): the cost every turn carries before it does any work, folded on its own
 line (`prefixShare`) so a growing law shows up as a number, not a feeling. The journal is
@@ -342,6 +346,9 @@ carries four fixed doors, and MCP reaches a body in three levels, each priced be
   exactly that text at four a token;
 - the tools ranked for an ask are named at level 1 in its tail, so the right tool is usually in
   view without a search turn;
+- when the catalog is large and the top scores sit close, one fast-tier call reranks the
+  shortlist: a usage ledger row like any call, its cost said in the run's journal, and kept for
+  the session so the same ask never pays twice ([MCP](07-mcp.md#reranked-by-the-fast-tier));
 - the tools block never changes mid-run, so the doors are read from the cache at the cache-read
   price after the first request, and every loaded level is in the usage ledger's input like any
   other tool result.

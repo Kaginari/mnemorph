@@ -12,8 +12,10 @@
 //! mid-run; every word a server sends is escaped, capped and marked as data.
 
 pub mod client;
+pub mod learned;
 pub mod levels;
 pub mod rank;
+pub mod rerank;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -28,8 +30,10 @@ use sha2::{Digest as _, Sha256};
 use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool};
 pub use client::Conn;
+pub use learned::{Kind, Learned, Lift, Row, Touched, Who};
 pub use levels::{CALL, OPEN, SCHEMA, SEARCH, price};
-pub use rank::{Ranked, Tally, Usage, learn, rank};
+pub use rank::{Ranked, rank};
+pub use rerank::Rerank;
 
 /// How many ranked tools the ask's tail names at level 1, unless the configuration says.
 pub const TOP_K: usize = 5;
@@ -50,7 +54,7 @@ pub const PURPOSE_CHARS: usize = 160;
 /// The most bytes of arguments a call sends: past it the call is refused before anything is asked.
 pub const MAX_ARGS: usize = 64 * 1024;
 
-/// Where a world's MCP state lives — the cached catalogs, the usage record, each server's scratch
+/// Where a world's MCP state lives — the cached catalogs, the journal, each server's scratch
 /// and working directory: `$XDG_STATE_HOME/mnemorph/mcp/<world>-<fnv64a>/`, else under
 /// `~/.local/state`, else the temporary directory. Outside the world, so nothing a body or a
 /// repository's script writes there reaches it.
@@ -60,6 +64,15 @@ pub fn state_dir(world: &Path) -> PathBuf {
         .unwrap_or_else(std::env::temp_dir)
         .join("mnemorph/mcp")
         .join(crate::tripwire::world_key(world))
+}
+
+/// Every folder of a world's MCP state is the owner's alone: each one created is `0700`.
+pub(crate) fn private_dir(dir: &Path) -> std::io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(dir)
 }
 
 /// The class a configuration names: `read`, `write`, `outward` or `destructive` — the classes an
@@ -237,13 +250,16 @@ pub fn lawful_tool_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// The MCP settings: the servers and how many ranked tools an ask names.
+/// The MCP settings: the servers, how many ranked tools an ask names, and when the fast tier
+/// reranks them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     /// The servers.
     pub servers: Vec<Server>,
     /// The ranked tools the ask's tail names at level 1.
     pub top_k: usize,
+    /// The rerank's trigger and model.
+    pub rerank: Rerank,
 }
 
 impl Default for Settings {
@@ -251,6 +267,7 @@ impl Default for Settings {
         Self {
             servers: Vec::new(),
             top_k: TOP_K,
+            rerank: Rerank::default(),
         }
     }
 }
@@ -338,6 +355,10 @@ pub struct Mcp {
     /// server starts, lists or answers — so one slow server never waits on another, and two
     /// bodies opening the same server start it once.
     conns: Mutex<BTreeMap<String, Slot>>,
+    /// What the journal taught, as the harness last read it with its chain and witness holding.
+    learned: Mutex<Arc<Learned>>,
+    /// Each rerank's answer, by [`rerank::key`]: the same ask never pays twice.
+    reranked: Mutex<BTreeMap<String, Vec<String>>>,
 }
 
 impl std::fmt::Debug for Mcp {
@@ -378,6 +399,8 @@ impl Mcp {
             state,
             listings: Mutex::new(BTreeMap::new()),
             conns: Mutex::new(BTreeMap::new()),
+            learned: Mutex::new(Arc::new(Learned::default())),
+            reranked: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -387,10 +410,40 @@ impl Mcp {
         &self.settings
     }
 
-    /// Where this world's MCP state lives: the usage record the loop learns into.
+    /// Where this world's MCP state lives: the journal the loop keeps there.
     #[must_use]
     pub fn state(&self) -> &Path {
         &self.state
+    }
+
+    /// Learn from `learned`: rows the harness read from the journal, its chain and witness
+    /// holding. Only the harness calls this; no door does.
+    pub fn set_learned(&self, learned: Learned) {
+        *self.learned.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(learned);
+    }
+
+    /// What the journal taught, as last read.
+    #[must_use]
+    pub fn learned(&self) -> Arc<Learned> {
+        Arc::clone(&self.learned.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// A rerank's kept answer under `key`.
+    #[must_use]
+    pub fn reranked(&self, key: &str) -> Option<Vec<String>> {
+        self.reranked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(key)
+            .cloned()
+    }
+
+    /// Keep a rerank's answer under `key`.
+    pub fn keep_reranked(&self, key: String, names: Vec<String>) {
+        self.reranked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, names);
     }
 
     /// Whether the server `name` is running.
@@ -468,7 +521,7 @@ impl Mcp {
         };
         let file = catalog_file(&self.state, &server.name);
         if let Some(dir) = file.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            let _ = private_dir(dir);
         }
         // Written aside then renamed: a torn write never reads as a catalog.
         let tmp = file.with_extension("json.tmp");
@@ -563,19 +616,34 @@ impl Mcp {
         (specs, unlisted)
     }
 
-    /// The tools in scope ranked for `ask`, best first, at most `top_k`, each matching some word of
-    /// it: BM25 over the known catalogs and the learned nudge, no model and no server started.
-    /// The nudge orders, never admits: a tool that helped before is not named for an ask it does
-    /// not match.
+    /// The tools in scope ranked for `ask`, best first, each matching some word of it, with why;
+    /// and how many tools are in scope. BM25 over the known catalogs plus what the journal taught
+    /// of `cx`'s creature and race; no model and no server started. The lift orders, never
+    /// admits: a tool used before is not named for an ask it does not match.
     #[must_use]
-    pub fn ranked(&self, race: Race, ask: &str, cx: &Context) -> Vec<Spec> {
+    pub fn scored(&self, race: Race, ask: &str, cx: &Context) -> (Vec<Scored>, usize) {
         let (scope, _) = self.known_scope(race, cx);
-        let usage = Usage::load(&self.state);
-        rank(&scope, ask, &usage)
+        let learned = self.learned();
+        let scored = rank(&scope, ask, &learned, &who(cx))
             .into_iter()
             .filter(|r| r.lexical > 0.0)
+            .map(|r| Scored {
+                why: r.why(),
+                score: r.score,
+                spec: r.spec.clone(),
+            })
+            .collect();
+        (scored, scope.len())
+    }
+
+    /// The tools in scope ranked for `ask`, best first, at most `top_k` ([`Mcp::scored`]).
+    #[must_use]
+    pub fn ranked(&self, race: Race, ask: &str, cx: &Context) -> Vec<Spec> {
+        self.scored(race, ask, cx)
+            .0
+            .into_iter()
             .take(self.settings.top_k)
-            .map(|r| r.spec.clone())
+            .map(|s| s.spec)
             .collect()
     }
 
@@ -608,6 +676,45 @@ impl Mcp {
             &Self::shelved(&listing, race),
             &listing.holes,
         ))
+    }
+
+    /// [`Mcp::level1`] as the door gives it: the text, with what it loaded for the journal.
+    pub(crate) fn open(&self, server: &str, cx: &Context) -> Outcome {
+        match self.level1(server, cx) {
+            Ok(text) => {
+                let touched = Touched {
+                    kind: Kind::Open,
+                    server: server.to_owned(),
+                    tool: None,
+                    wt: price(&text),
+                    outcome: "loaded".into(),
+                };
+                let mut o = Outcome::ok(text, ToolClass::Read);
+                o.meta.mcp_touched = Some(Box::new(touched));
+                o
+            }
+            Err(e) => Outcome::error(e),
+        }
+    }
+
+    /// [`Mcp::level2`] as the door gives it: the text, with what it loaded for the journal.
+    pub(crate) fn schema(&self, name: &str, cx: &Context) -> Outcome {
+        match self.find(name, cx) {
+            Ok(spec) => {
+                let text = levels::level2(&spec);
+                let touched = Touched {
+                    kind: Kind::Schema,
+                    server: spec.server.clone(),
+                    tool: Some(spec.name.clone()),
+                    wt: price(&text),
+                    outcome: "loaded".into(),
+                };
+                let mut o = Outcome::ok(text, ToolClass::Read);
+                o.meta.mcp_touched = Some(Box::new(touched));
+                o
+            }
+            Err(e) => Outcome::error(e),
+        }
     }
 
     /// The tool `name` (`<server>__<tool>`) when it is in `cx`'s scope; its server is listed when
@@ -645,8 +752,7 @@ impl Mcp {
     #[must_use]
     pub fn search(&self, query: &str, cx: &Context) -> String {
         let (scope, unlisted) = self.known_scope(cx.race(), cx);
-        let usage = Usage::load(&self.state);
-        let found: Vec<Spec> = rank(&scope, query, &usage)
+        let found: Vec<Spec> = rank(&scope, query, &self.learned(), &who(cx))
             .into_iter()
             .filter(|r| r.lexical > 0.0)
             .take(levels::SHOWN)
@@ -659,7 +765,26 @@ impl Mcp {
     /// but a read, the server started on demand, and the answer escaped and capped.
     pub fn call(&self, name: &str, arguments: &Value, cx: &Context) -> Outcome {
         match self.find(name, cx) {
-            Ok(spec) => self.invoke(&spec, arguments, cx),
+            Ok(spec) => {
+                let mut o = self.invoke(&spec, arguments, cx);
+                let outcome = if o.meta.denied {
+                    "denied"
+                } else if o.meta.unheld.is_some() {
+                    "unheld"
+                } else if o.is_error {
+                    "error"
+                } else {
+                    "ok"
+                };
+                o.meta.mcp_touched = Some(Box::new(Touched {
+                    kind: Kind::Call,
+                    server: spec.server.clone(),
+                    tool: Some(spec.name.clone()),
+                    wt: price(&o.content),
+                    outcome: outcome.into(),
+                }));
+                o
+            }
             Err(e) => Outcome::error(e),
         }
     }
@@ -724,6 +849,26 @@ impl Mcp {
             }
             None => Outcome::error(format!("MCP server `{}` is not running", server.name)),
         }
+    }
+}
+
+/// One tool ranked for an ask: the tool, its score and why.
+#[derive(Debug, Clone)]
+pub struct Scored {
+    /// The tool.
+    pub spec: Spec,
+    /// What it is ordered by.
+    pub score: f64,
+    /// Why, for the human: `bm25 3.1 + used 4× by kijin-forge (+1.61)`.
+    pub why: String,
+}
+
+/// Who `cx` works for: its body and race, as the journal names them.
+#[must_use]
+pub fn who(cx: &Context) -> Who {
+    Who {
+        creature: cx.body().to_owned(),
+        race: cx.race().name().to_owned(),
     }
 }
 

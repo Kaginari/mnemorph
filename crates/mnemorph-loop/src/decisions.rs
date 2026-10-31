@@ -56,6 +56,7 @@ pub fn decision_usage(decision: &Decision, caller: &Caller, prices: &Prices) -> 
         wt: 0,
         usd: None,
         envelope: None,
+        purpose: None,
     }
     .priced(prices)
 }

@@ -81,6 +81,7 @@ fn a_card_counts_the_body_and_every_body_below_it() {
         wt,
         usd: None,
         envelope: None,
+        purpose: None,
     };
     let ledger = Journal::<UsageRow>::new(w.join(USAGE));
     ledger.append(&row("slime-s", 100)).unwrap();

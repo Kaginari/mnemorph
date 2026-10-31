@@ -92,9 +92,11 @@ pub struct Meta {
     pub denied: bool,
     /// The shelf refused the act: the class the body's race does not hold.
     pub unheld: Option<ToolClass>,
-    /// The MCP tool the call reached, by the name a body calls it: what the world's usage record
-    /// learns from.
+    /// The MCP tool the call reached, by the name a body calls it; the journal learns from
+    /// [`Meta::mcp_touched`].
     pub mcp: Option<String>,
+    /// What an MCP door loaded or called, for the journal the harness keeps.
+    pub mcp_touched: Option<Box<crate::mcp::Touched>>,
 }
 
 impl Outcome {

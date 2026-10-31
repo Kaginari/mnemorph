@@ -140,7 +140,7 @@ impl Conn {
         let dirs = search_path(harness_path.as_ref(), cx.world());
         let program = resolve(&server.command, &dirs, cx.world())
             .map_err(|e| format!("MCP server `{name}` did not start: {e}"))?;
-        std::fs::create_dir_all(scratch)
+        super::private_dir(scratch)
             .map_err(|e| format!("MCP server `{name}`: its scratch could not be made: {e}"))?;
         let policy = policy(server, cx, scratch);
         let args: Vec<&str> = server.args.iter().map(String::as_str).collect();

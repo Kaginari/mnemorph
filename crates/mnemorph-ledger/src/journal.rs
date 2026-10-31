@@ -123,10 +123,10 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         line.push(b'\n');
         let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
         if let Some(dir) = dir {
-            std::fs::create_dir_all(dir)?;
+            private_dir(dir)?;
         }
         let created = !self.path.exists();
-        let mut file = OpenOptions::new()
+        let mut file = private_file()
             .create(true)
             .read(true)
             .append(true)
@@ -156,22 +156,22 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         let body = serde_json::to_vec(row).map_err(io::Error::other)?;
         let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
         if let Some(dir) = dir {
-            std::fs::create_dir_all(dir)?;
+            private_dir(dir)?;
         }
         // The witness first, then the journal: the tripwire reads both under the witness's lock.
         let witness = match &self.witness {
             Some(w) => {
                 if let Some(d) = w.parent() {
-                    std::fs::create_dir_all(d)?;
+                    private_dir(d)?;
                 }
-                let f = OpenOptions::new().create(true).append(true).open(w)?;
+                let f = private_file().create(true).append(true).open(w)?;
                 f.lock()?;
                 Some(f)
             }
             None => None,
         };
         let created = !self.path.exists();
-        let file = OpenOptions::new()
+        let file = private_file()
             .create(true)
             .read(true)
             .append(true)
@@ -288,13 +288,34 @@ pub fn parse<T: DeserializeOwned>(reader: impl io::BufRead) -> io::Result<ReadBa
     Ok(back)
 }
 
+/// A journal's folders are the owner's alone: each one created is `0700`.
+///
+/// # Errors
+///
+/// A folder cannot be created.
+pub fn private_dir(dir: &Path) -> io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(dir)
+}
+
+/// A journal's files are the owner's alone: each one created is `0600`.
+fn private_file() -> OpenOptions {
+    let mut o = OpenOptions::new();
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+    o
+}
+
 /// `bytes` appended to `mirror` in one write and synced; a torn last line there is closed first.
 fn mirror_bytes(mirror: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::{Read as _, Seek, SeekFrom};
     if let Some(d) = mirror.parent().filter(|d| !d.as_os_str().is_empty()) {
-        std::fs::create_dir_all(d)?;
+        private_dir(d)?;
     }
-    let mut f = OpenOptions::new()
+    let mut f = private_file()
         .create(true)
         .read(true)
         .append(true)
@@ -343,6 +364,41 @@ mod tests {
     struct Row {
         n: u32,
         text: String,
+    }
+
+    /// A journal holds what its rows say — an MCP journal every ask's words — so every file and
+    /// folder it makes is its owner's alone: the journal, its witness and its mirror, plain or
+    /// chained.
+    #[cfg(unix)]
+    #[test]
+    fn every_file_and_folder_a_journal_makes_is_private() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let at = |p: &str| dir.path().join(p);
+        let row = Row {
+            n: 1,
+            text: "words".into(),
+        };
+        Journal::<Row>::chained(at("a/b/chained.jsonl"))
+            .witnessed_at(at("w/x/witness.jsonl"))
+            .mirrored_to(at("m/y/mirror.jsonl"))
+            .append(&row)
+            .unwrap();
+        Journal::<Row>::new(at("p/q/plain.jsonl"))
+            .append(&row)
+            .unwrap();
+        let mode = |p: &str| std::fs::metadata(at(p)).unwrap().permissions().mode() & 0o777;
+        for file in [
+            "a/b/chained.jsonl",
+            "w/x/witness.jsonl",
+            "m/y/mirror.jsonl",
+            "p/q/plain.jsonl",
+        ] {
+            assert_eq!(mode(file), 0o600, "{file}");
+        }
+        for folder in ["a", "a/b", "w", "w/x", "m", "m/y", "p", "p/q"] {
+            assert_eq!(mode(folder), 0o700, "{folder}");
+        }
     }
 
     #[test]

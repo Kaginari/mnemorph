@@ -49,6 +49,7 @@ fn usage(session: &str, wt: u64, usd: Option<f64>) -> UsageRow {
         wt,
         usd,
         envelope: None,
+        purpose: None,
     }
 }
 

@@ -2237,6 +2237,7 @@ fn fake_hub(w: &World) -> (Arc<mnemorph_tools::mcp::Mcp>, std::path::PathBuf) {
         Settings {
             top_k: 2,
             servers: vec![hub],
+            ..Settings::default()
         },
         state.clone(),
     );
@@ -2250,7 +2251,7 @@ fn fake_hub(w: &World) -> (Arc<mnemorph_tools::mcp::Mcp>, std::path::PathBuf) {
 /// over what is now listed. What each ask called is learned at its end.
 #[tokio::test]
 async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
-    use mnemorph_tools::mcp::{CALL, OPEN, SCHEMA};
+    use mnemorph_tools::mcp::{CALL, Kind, OPEN, SCHEMA};
     let w = World::new("mcp-append");
     let (mcp, state) = fake_hub(&w);
     let model = Arc::new(ScriptedModel::new([
@@ -2326,7 +2327,25 @@ async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
         !second.contains("level 0"),
         "level 0 is said once: {second}"
     );
-    let usage = mnemorph_tools::mcp::Usage::load(&state);
-    assert_eq!(usage.tools["hub__issue_find"].helped, 1);
-    assert_eq!(usage.tools["hub__filler_3"].called, 1);
+    // Each load and call is journaled under the state directory, chained and witnessed.
+    let rows = mnemorph_loop::mcp_journal::read(&state).unwrap();
+    let did = |kind, tool: Option<&str>| {
+        rows.iter()
+            .find(|r| r.kind == kind && r.tool.as_deref() == tool)
+            .unwrap_or_else(|| panic!("{kind:?} {tool:?} in {rows:?}"))
+    };
+    let open = did(Kind::Open, None);
+    assert!(open.used && open.helped && open.race == "slime");
+    assert!(did(Kind::Schema, Some("hub__issue_find")).used);
+    assert_eq!(did(Kind::Call, Some("hub__issue_find")).outcome, "ok");
+    assert!(
+        did(Kind::Call, Some("hub__filler_3"))
+            .terms
+            .contains(&"chore".to_owned())
+    );
+    let offer = did(Kind::Offer, Some("hub__filler_3"));
+    assert!(
+        offer.used && offer.why.as_deref().unwrap().starts_with("bm25 "),
+        "{offer:?}"
+    );
 }
