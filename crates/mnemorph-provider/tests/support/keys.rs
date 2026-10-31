@@ -4,7 +4,7 @@
 
 use serde_json::Value;
 
-/// Every key of OpenRouter's chunks, usage, cost and error bodies seen so far.
+/// Every key of OpenRouter's and Ollama's chunks, usage, cost, timings and error bodies seen so far.
 pub const KNOWN: &[&str] = &[
     "arguments",
     "audio_tokens",
@@ -34,6 +34,15 @@ pub const KNOWN: &[&str] = &[
     "name",
     "native_finish_reason",
     "object",
+    "param",
+    "predicted_ms",
+    "predicted_n",
+    "predicted_per_second",
+    "predicted_per_token_ms",
+    "prompt_ms",
+    "prompt_n",
+    "prompt_per_second",
+    "prompt_per_token_ms",
     "prompt_tokens",
     "prompt_tokens_details",
     "provider",
@@ -46,7 +55,9 @@ pub const KNOWN: &[&str] = &[
     "remedy_hint",
     "role",
     "service_tier",
+    "system_fingerprint",
     "text",
+    "timings",
     "tool_calls",
     "total_tokens",
     "type",

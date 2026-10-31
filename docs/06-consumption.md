@@ -78,7 +78,9 @@ tables do not know, so its `wt` still reaches the meters and the budget:
 When the provider reports what it charged for the call — OpenRouter's `usage.cost`, a number of
 dollars, `0` on a free model — the row keeps it as `reportedCost`, beside `usd`, Mnemorph's own
 estimate from its price tables; neither replaces the other. A provider that reports none leaves
-the field out.
+the field out. A server that reports no usage at all (Ollama when `stream_options` is not sent) leaves
+the call's tokens unknown: the row reads `usd` null, unpriced, never a free call, and the answer
+carries a warning saying so.
 
 A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
 fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is

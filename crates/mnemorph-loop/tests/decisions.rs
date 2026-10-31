@@ -125,6 +125,7 @@ fn tool(id: &str, name: &str, input: Value) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(),
         reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     })
 }
@@ -141,6 +142,7 @@ fn answer(text: &str) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(),
         reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     })
 }
@@ -205,6 +207,7 @@ fn stated_green(p: f64) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(),
         reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     })
 }

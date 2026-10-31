@@ -4,127 +4,19 @@
 //! `MNEMORPH_RECORD=tests/cassettes` saves each run's bodies, scrubbed, as the cassettes
 //! `tests/cassettes.rs` replays.
 
-use std::future::Future;
-use std::io;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use bytes::Bytes;
-use futures_util::StreamExt;
 use mnemorph_provider::{
-    Block, Event, HttpRequest, HttpResponse, HttpTransport, Message, OpenAiCompatible, Policy,
-    Request, Role, StopReason, Tool, Transport,
+    Block, Event, HttpTransport, Message, OpenAiCompatible, Policy, Request, Role, StopReason, Tool,
 };
 use serde_json::json;
 
 #[path = "support/keys.rs"]
 mod keys;
+#[path = "support/recorder.rs"]
+mod recorder;
 
-/// Wraps the real transport and keeps each response body, so a run can be saved as a cassette
-/// (`MNEMORPH_RECORD=<dir>`). Only bodies are kept, never headers: the key travels in a request
-/// header, and the response headers carry request ids.
-struct Recorder {
-    inner: HttpTransport,
-    bodies: Mutex<Vec<Vec<u8>>>,
-}
-
-impl Transport for Recorder {
-    fn send(
-        &self,
-        request: HttpRequest,
-    ) -> Pin<Box<dyn Future<Output = io::Result<HttpResponse>> + Send + '_>> {
-        Box::pin(async move {
-            let response = self.inner.send(request).await?;
-            let chunks: Vec<io::Result<Bytes>> = response.body.collect().await;
-            let mut body = Vec::new();
-            for chunk in chunks.iter().flatten() {
-                body.extend_from_slice(chunk);
-            }
-            self.bodies.lock().expect("lock").push(body);
-            Ok(HttpResponse {
-                status: response.status,
-                headers: response.headers,
-                body: Box::pin(futures_util::stream::iter(chunks)),
-            })
-        })
-    }
-}
-
-impl Recorder {
-    /// Saves the bodies as `<dir>/<name>-<n>.sse` (`.json` for an error body), scrubbed.
-    fn save(&self, name: &str) {
-        let Ok(dir) = std::env::var("MNEMORPH_RECORD") else {
-            return;
-        };
-        for (n, body) in self.bodies.lock().expect("lock").iter().enumerate() {
-            let scrubbed = scrub(&String::from_utf8_lossy(body));
-            let unknown = keys::unknown(&scrubbed);
-            assert!(
-                unknown.is_empty(),
-                "{name}-{n}: not written, outside the allowlist in tests/support/keys.rs: {unknown:?}"
-            );
-            let ext = if scrubbed.trim_start().starts_with('{') {
-                "json"
-            } else {
-                "sse"
-            };
-            std::fs::write(format!("{dir}/{name}-{n}.{ext}"), scrubbed).expect("write cassette");
-        }
-    }
-}
-
-/// Replaces what differs between runs or names a call with stable placeholders: generation ids
-/// (`gen-recorded`), tool call ids (`call-recorded-<n>`, in order of appearance), the account's
-/// `user_id` (`user-recorded`) and `created` timestamps (`0`). A body holding anything like a credential is never written.
-fn scrub(text: &str) -> String {
-    const ID: &str = "\"id\":\"";
-    const CREATED: &str = "\"created\":";
-    const USER: &str = "\"user_id\":\"";
-    let mut out = String::with_capacity(text.len());
-    let mut calls: Vec<String> = Vec::new();
-    let mut rest = text;
-    loop {
-        let next = [ID, CREATED, USER]
-            .into_iter()
-            .filter_map(|key| rest.find(key).map(|at| (at, key)))
-            .min();
-        let Some((at, key)) = next else { break };
-        let start = at + key.len();
-        out.push_str(&rest[..start]);
-        let tail = &rest[start..];
-        if key == ID {
-            let end = tail.find('"').unwrap_or(tail.len());
-            let value = &tail[..end];
-            if value.starts_with("gen-") {
-                out.push_str("gen-recorded");
-            } else {
-                let n = calls.iter().position(|c| c == value).unwrap_or_else(|| {
-                    calls.push(value.to_owned());
-                    calls.len() - 1
-                });
-                out.push_str("call-recorded-");
-                out.push_str(&n.to_string());
-            }
-            rest = &tail[end..];
-        } else if key == USER {
-            let end = tail.find('"').unwrap_or(tail.len());
-            out.push_str("user-recorded");
-            rest = &tail[end..];
-        } else {
-            let end = tail
-                .find(|ch: char| !ch.is_ascii_digit())
-                .unwrap_or(tail.len());
-            out.push('0');
-            rest = &tail[end..];
-        }
-    }
-    out.push_str(rest);
-    assert!(
-        !out.contains("sk-or-") && !out.contains("Bearer"),
-        "a recorded body holds a credential: not written"
-    );
-    out
-}
+use recorder::Recorder;
 
 fn client() -> Option<(OpenAiCompatible, String, Arc<Recorder>)> {
     if std::env::var("MNEMORPH_LIVE").as_deref() != Ok("1") {

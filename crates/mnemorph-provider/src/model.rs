@@ -185,6 +185,9 @@ pub struct Response {
     /// US dollars as the provider itself reported them (OpenRouter's `usage.cost`); `None` when
     /// it reports none. The ledger keeps it beside its own estimate, never in place of it.
     pub reported_cost: Option<f64>,
+    /// Whether the provider reported the call's usage. When it did not, `usage` is zero only as
+    /// a placeholder: the tokens are unknown, and the call is ledgered unpriced.
+    pub usage_known: bool,
     /// Things the ledger should know that are not errors (e.g. a usage class Mnemorph does not
     /// price).
     pub warnings: Vec<String>,

@@ -380,6 +380,7 @@ fn a_ratio_that_is_not_five_is_read() {
             cache_write: 0,
         },
         reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     };
     let caller = Caller {

@@ -1,5 +1,6 @@
-//! Real responses, recorded from OpenRouter's free models (`tests/live_openrouter.rs` with
-//! `MNEMORPH_RECORD`), scrubbed, and replayed here: no key, no network, every run.
+//! Real responses, recorded from OpenRouter's free models (`tests/live_openrouter.rs`) and a local
+//! Ollama (`tests/live_ollama.rs`) with `MNEMORPH_RECORD`, scrubbed, and replayed here: no key, no
+//! network, every run.
 
 use std::sync::Arc;
 
@@ -26,7 +27,12 @@ const CONTEXT: &str = include_str!("cassettes/openrouter-context-0.json");
 // for a thought signature by hand, its `user_id` scrubbed as the recorder scrubs it. It cannot be
 // provoked on demand, so no live test records it again.
 const RATE_LIMIT: &str = include_str!("cassettes/openrouter-ratelimit-0.json");
-const ALL: [&str; 7] = [
+// Ollama (`qwen2.5:0.5b`, v0.40): usage asked for, usage not asked for, a tool call, an unknown model.
+const OLLAMA_TEXT: &str = include_str!("cassettes/ollama-text-0.sse");
+const OLLAMA_NO_USAGE: &str = include_str!("cassettes/ollama-nousage-0.sse");
+const OLLAMA_TOOL: &str = include_str!("cassettes/ollama-tool-0.sse");
+const OLLAMA_ERROR: &str = include_str!("cassettes/ollama-error-0.json");
+const ALL: [&str; 11] = [
     TEXT,
     TOOL_CALL,
     TOOL_ANSWER,
@@ -34,8 +40,16 @@ const ALL: [&str; 7] = [
     ERROR,
     CONTEXT,
     RATE_LIMIT,
+    OLLAMA_TEXT,
+    OLLAMA_NO_USAGE,
+    OLLAMA_TOOL,
+    OLLAMA_ERROR,
 ];
-const NAMED: [(&str, &str); 7] = [
+const NAMED: [(&str, &str); 11] = [
+    ("ollama-text-0.sse", OLLAMA_TEXT),
+    ("ollama-nousage-0.sse", OLLAMA_NO_USAGE),
+    ("ollama-tool-0.sse", OLLAMA_TOOL),
+    ("ollama-error-0.json", OLLAMA_ERROR),
     ("openrouter-text-0.sse", TEXT),
     ("openrouter-tool-0.sse", TOOL_CALL),
     ("openrouter-tool-1.sse", TOOL_ANSWER),
@@ -395,6 +409,146 @@ async fn a_recorded_upstream_rate_limit() {
     assert_eq!(script.sent().len(), 2, "a 429 is retried");
 }
 
+async fn replay_ollama(cassette: &str) -> (mnemorph_provider::Response, Vec<Event>) {
+    let script = Arc::new(Scripted::new([Reply::ok(cassette)]));
+    let client = OpenAiCompatible::new(script, "http://127.0.0.1:11434", None, Policy::default());
+    let mut events = Vec::new();
+    let mut on = |e: Event| events.push(e);
+    let mut req = request();
+    req.model = "qwen2.5:0.5b".into();
+    let r = client
+        .complete(&req, &mut on)
+        .await
+        .expect("a recorded answer replays");
+    (r, events)
+}
+
+fn ollama_row(r: &mnemorph_provider::Response) -> mnemorph_ledger::UsageRow {
+    let prices = mnemorph_ledger::Prices::parse(
+        "[models.\"qwen2.5:0.5b\"]\ninput = 1.0\noutput = 1.0\ncache-read = 1.0\ncache-write = 1.0",
+    )
+    .unwrap();
+    mnemorph_provider::usage_row(
+        r,
+        &mnemorph_provider::Caller {
+            session: "s".into(),
+            run: "r".into(),
+            body: "b".into(),
+            race: "slime".into(),
+            commission: None,
+            prefix: 0,
+        },
+        "ollama",
+        &prices,
+        mnemorph_ledger::Timestamp(0),
+    )
+}
+
+/// Ollama sends usage only when `stream_options.include_usage` asks for it: in a last chunk with
+/// no choices, after the finish; its cached tokens are split out like any server's.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_ollama_answer_with_usage() {
+    let (r, events) = replay_ollama(OLLAMA_TEXT).await;
+    assert_eq!(r.stop, StopReason::EndTurn);
+    assert!(
+        events.iter().all(|e| matches!(e, Event::Text(_))),
+        "{events:?}"
+    );
+    let u = recorded_usage(OLLAMA_TEXT);
+    let cached = u["prompt_tokens_details"]["cached_tokens"]
+        .as_u64()
+        .unwrap();
+    assert!(r.usage_known);
+    assert_eq!(
+        r.usage,
+        Usage {
+            input: u["prompt_tokens"].as_u64().unwrap() - cached,
+            output: u["completion_tokens"].as_u64().unwrap(),
+            cache_read: cached,
+            cache_write: 0,
+        }
+    );
+    assert_eq!(r.reported_cost, None, "Ollama reports no cost");
+    assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    let row = ollama_row(&r);
+    assert!(row.usd.is_some() && row.wt > 0, "{row:?}");
+    assert_eq!(row.reported_cost, None);
+}
+
+/// Without `stream_options` Ollama sends no usage at all: the tokens are unknown, said so, and the
+/// call is ledgered unpriced — never as a free call.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_ollama_answer_without_usage() {
+    assert!(!OLLAMA_NO_USAGE.contains("\"usage\""));
+    let (r, _) = replay_ollama(OLLAMA_NO_USAGE).await;
+    assert_eq!(r.stop, StopReason::EndTurn);
+    assert!(!r.usage_known);
+    assert_eq!(r.warnings, [mnemorph_provider::NO_USAGE]);
+    let row = ollama_row(&r);
+    assert_eq!(row.usd, None, "unknown tokens are unpriced, never $0");
+}
+
+/// Ollama streams a tool call whole, in one chunk: its id, name and complete arguments.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_ollama_tool_call() {
+    let calls = OLLAMA_TOOL.matches("\"tool_calls\":[").count();
+    assert_eq!(calls, 1, "one fragment carries the whole call");
+    let (r, events) = replay_ollama(OLLAMA_TOOL).await;
+    assert_eq!(r.stop, StopReason::ToolUse);
+    let (id, input) = r
+        .content
+        .iter()
+        .find_map(|b| match b {
+            Block::ToolUse { id, name, input } if name == "read_file" => {
+                Some((id.clone(), input.clone()))
+            }
+            _ => None,
+        })
+        .expect("the recorded call");
+    assert_eq!(id, "call-recorded-0");
+    assert_eq!(input["path"], "NOTES.md");
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert_eq!(
+        events[0],
+        Event::ToolStart {
+            id: id.clone(),
+            name: "read_file".into()
+        }
+    );
+    assert!(
+        matches!(&events[1], Event::ToolInput { id: at, json } if *at == id && serde_json::from_str::<Value>(json).unwrap() == input),
+        "the arguments arrive whole: {events:?}"
+    );
+    assert!(r.usage_known && r.usage.output > 0);
+}
+
+/// An unknown model: a 404 whose `type` names it, the cue for a fallback chain, not a retry.
+#[tokio::test(start_paused = true)]
+async fn a_recorded_ollama_unknown_model() {
+    let script = Arc::new(Scripted::new([Reply::status(404, OLLAMA_ERROR, &[])]));
+    let client = OpenAiCompatible::new(
+        script.clone(),
+        "http://127.0.0.1:11434",
+        None,
+        Policy::default(),
+    );
+    let mut on = |_: Event| {};
+    let err = client
+        .complete(&request(), &mut on)
+        .await
+        .expect_err("the recorded refusal");
+    assert_eq!(
+        err,
+        Error::Api {
+            status: 404,
+            kind: "not_found_error".into(),
+            message: "model 'mnemorph-no-such-model' not found".into(),
+        }
+    );
+    assert!(err.model_not_found());
+    assert_eq!(script.sent().len(), 1, "an unknown model is not retried");
+}
+
 #[test]
 fn the_recordings_hold_no_secret() {
     for cassette in ALL {
@@ -410,9 +564,12 @@ fn the_recordings_hold_no_secret() {
 fn the_recordings_are_scrubbed() {
     for cassette in ALL {
         for (key, kept) in [
-            ("\"id\":\"", ["gen-recorded\"", "call-recorded-"]),
-            ("\"created\":", ["0,", "0}"]),
-            ("\"user_id\":\"", ["user-recorded\"", "user-recorded\""]),
+            (
+                "\"id\":\"",
+                &["gen-recorded\"", "chatcmpl-recorded\"", "call-recorded-"][..],
+            ),
+            ("\"created\":", &["0,", "0}"][..]),
+            ("\"user_id\":\"", &["user-recorded\""][..]),
         ] {
             for (at, _) in cassette.match_indices(key) {
                 let value = &cassette[at + key.len()..];

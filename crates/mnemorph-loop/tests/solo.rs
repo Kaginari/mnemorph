@@ -100,6 +100,7 @@ fn reply(content: Block, stop: StopReason) -> Result<Response, Error> {
             cache_write: 0,
         },
         reported_cost: None,
+        usage_known: true,
         warnings: vec![],
     })
 }
