@@ -270,6 +270,37 @@ fn the_gate_asks_the_client_and_its_denial_reaches_the_body() {
     );
 }
 
+/// Two answers to one ask — the board's and another front end's, racing — reach the core: the
+/// first wins, and the second is no answer to anything.
+#[test]
+fn the_first_answer_to_an_ask_wins() {
+    let config = format!("{UNGUARDED}[gate]\nask_rules = [\"in-place-edit\"]\n");
+    let mut c = Client::start(
+        "gate-race",
+        &config,
+        vec![
+            ScriptedModel::tool("t1", "bash", json!({"command": "sed -i s/a/b/ notes.txt"})),
+            ScriptedModel::text("I will not."),
+        ],
+    );
+    let id = c.request("initialize", &json!({}));
+    c.response(id);
+    c.request("session/prompt", &json!({"text": "change a to b"}));
+    let mut seen = Vec::new();
+    let ask = c.until(&mut seen, |l| method(l) == "gate/ask");
+    c.send(
+        &json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"allow": false, "reason": "first"}}),
+    );
+    c.send(&json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"allow": true}}));
+    let result = c.until(&mut seen, |l| method(l) == "event/toolResult");
+    assert_eq!(result["params"]["isError"], true, "{result}");
+    c.until(&mut seen, |l| method(l) == "event/turnEnded");
+    assert_eq!(
+        std::fs::read_to_string(c.root.join("world/notes.txt")).unwrap(),
+        "a\n"
+    );
+}
+
 /// Lines sent while a turn runs wait their turn and are taken strictly in order.
 #[test]
 fn lines_sent_during_a_turn_are_queued_in_order() {

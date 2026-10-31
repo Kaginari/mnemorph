@@ -9,6 +9,7 @@
 //! - `value`: the Dark Elf's challenge records — findings, verdicts, seal proposals, waivers;
 //! - `evolution`: the evolution ledger;
 //! - `gate`: the end gate's verdicts ([`crate::verdicts`]);
+//! - `answers`: the human's answers to the gate given on the board ([`crate::answers`]);
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
 //!   ([`crate::minds::witness`]);
 //! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
@@ -31,7 +32,7 @@ use crate::worth::USAGE;
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value`, `evolution`, `gate`, `minds`, `uses`, `revocations` or
+    /// Its name: `usage`, `value`, `evolution`, `gate`, `answers`, `minds`, `uses`, `revocations` or
     /// `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
@@ -39,7 +40,7 @@ pub struct Chained {
 }
 
 /// The chained journals of `world`: the usage ledger, and with a home to keep them under, the
-/// value, evolution and gate journals, the Minds' witness, the envelopes' uses and revocations, and each Kijin post's
+/// value, evolution and gate journals, the board's answers, the Minds' witness, the envelopes' uses and revocations, and each Kijin post's
 /// witness that is kept or was anchored.
 #[must_use]
 pub fn journals(world: &Path) -> Vec<Chained> {
@@ -59,6 +60,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         ("value", "challenges"),
         ("evolution", "evolution"),
         ("gate", "gate"),
+        ("answers", crate::answers::KIND),
         ("minds", "minds"),
     ] {
         // The Minds' witness names the world by its real path ([`crate::minds::witness`]).
@@ -502,6 +504,7 @@ mod tests {
                 "value",
                 "evolution",
                 "gate",
+                "answers",
                 "minds",
                 "uses",
                 "revocations"

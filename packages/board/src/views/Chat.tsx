@@ -3,13 +3,14 @@
  * waiting, the composer — or a past one, read-only from its run journal, with a resume when it
  * stopped. The session's vitals, files and bodies go to the side pane.
  */
-import type { BoardWorld, GateRequest, Hello } from '@mnemorph/protocol';
+import type { BoardWorld, Hello } from '@mnemorph/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chat, type ChatView, type Entry } from '../data/chat.ts';
 import { type Chats, startChat, useRun } from '../data/chats.ts';
-import { type Live, useLive, type Waiting } from '../data/live.ts';
+import { type Live, useLive } from '../data/live.ts';
 import { format } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
+import { Approval } from '../ui/Approval.tsx';
 import { Empty } from '../ui/Empty.tsx';
 import { Mark } from '../ui/Mark.tsx';
 import { EntryView, elapsed, opensAnswer, Streaming, useOpen } from '../ui/Transcript.tsx';
@@ -116,46 +117,6 @@ function ActivityStrip({
         {controller ? ' · esc to stop' : ''}
       </span>
     </output>
-  );
-}
-
-/** The minutes and seconds an ask has left: `9:41`. */
-function left(ms: number): string {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-/** The core denies an ask after this long when the board says nothing of its time. */
-const GATE_WAIT_MS = 10 * 60 * 1000;
-
-/** The asks waiting, shown — never approved here: approving is the approval card's, a component
- * of its own (#278). */
-function AskBanner({ asks }: { asks: Waiting[] }) {
-  const now = useTicker(asks.length > 0);
-  const first = asks[0];
-  if (!first) return null;
-  const a: GateRequest = first.ask;
-  const remaining = (a.leftMs ?? GATE_WAIT_MS) - (now - first.seen);
-  return (
-    <section className="ask-banner" aria-labelledby="ask-title" role="alert">
-      <h2 className="ask-title" id="ask-title">
-        <Mark tone="gold" glyph="◆">
-          Waiting for your approval
-        </Mark>
-        <span className="ask-who">
-          <Safe text={a.body} /> · <Safe text={a.class} />
-        </span>
-        {asks.length > 1 && <span className="ask-more">{asks.length - 1} more waiting</span>}
-      </h2>
-      <pre className="ask-act mono">
-        <Safe text={a.act} lines />
-      </pre>
-      <p className="ask-note">
-        This banner approves nothing: approving is the approval card's (issue 278). Esc stops the
-        turn and denies it; left alone, it is denied in{' '}
-        <span className="mono">{left(remaining)}</span>.
-      </p>
-    </section>
   );
 }
 
@@ -406,7 +367,7 @@ export function LiveChat({
         <Toasts entries={view?.entries ?? []} />
       </div>
       <div className="chat-foot">
-        <AskBanner asks={live.asks} />
+        <Approval live={live} />
         {view && <ActivityStrip view={view} asks={live.asks.length} controller={controller} />}
         <Composer live={live} />
       </div>

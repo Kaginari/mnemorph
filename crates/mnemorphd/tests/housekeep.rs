@@ -57,7 +57,15 @@ fn verify_says_each_chain_and_anchors_its_head() {
         text.contains("usage (") && text.contains(&format!("OK, head {d2} at line 2")),
         "{text}"
     );
-    for name in ["value", "evolution", "gate", "minds", "uses", "revocations"] {
+    for name in [
+        "value",
+        "evolution",
+        "gate",
+        "answers",
+        "minds",
+        "uses",
+        "revocations",
+    ] {
         assert!(text.contains(&format!("{name} (")), "{name}: {text}");
     }
     assert!(text.contains("anchored in log.md: ### ["), "{text}");
