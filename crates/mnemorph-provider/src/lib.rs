@@ -24,7 +24,7 @@ mod sse;
 mod systemone;
 mod transport;
 
-pub use anthropic::{API_VERSION, Anthropic, MAX_BREAKPOINTS, encode};
+pub use anthropic::{API_VERSION, Anthropic, MAX_BREAKPOINTS, defers, encode};
 pub use decide::{
     ANSWER_TOOL, Basis, Complete, Completion, Cutoffs, Decider, Decision, Fallback, Primary,
     Source, answer_schema, llm_answers, llm_request,

@@ -16,6 +16,29 @@ pub const API_VERSION: &str = "2026-10-21";
 /// The most prompt-cache breakpoints one request may carry.
 pub const MAX_BREAKPOINTS: usize = 4;
 
+/// Whether `model` takes native deferred tools (`defer_loading`, expanded from a
+/// `tool_reference`): the models Anthropic's tool-search documentation lists — Claude Opus and
+/// Sonnet from 4.5, Haiku from 4.5, and every later family. Claude Opus 4.1 and earlier, and any id
+/// not known here, do not: their MCP levels stay client-side.
+#[must_use]
+pub fn defers(model: &str) -> bool {
+    const FAMILIES: [&str; 11] = [
+        "claude-fable-",
+        "claude-mythos-",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-5",
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-6",
+    ];
+    let model = model.strip_prefix("anthropic/").unwrap_or(model);
+    FAMILIES.iter().any(|f| model.starts_with(f)) || model.starts_with("claude-haiku-4-5")
+}
+
 /// A client for the Anthropic Messages API.
 pub struct Anthropic {
     transport: Arc<dyn Transport>,
@@ -98,11 +121,20 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
         );
     }
     if !request.tools.is_empty() {
+        if request.tools.iter().all(|t| t.defer) {
+            return Err(Error::Invalid(
+                "every tool is deferred; at least one must load up front".into(),
+            ));
+        }
         let tools = request.tools.iter().map(|t| {
             // Streamed as generated: a long input (a file's contents) arrives in pieces, never as a
             // silent gap that the stall wait would read as a dead stream.
             let mut tool = json!({"name": t.name, "description": t.description, "input_schema": t.input_schema, "eager_input_streaming": true});
-            if t.cache {
+            if t.defer {
+                // Out of the context — and so of the cached prefix — until a tool result names it.
+                // A deferred tool may not carry a breakpoint: the API refuses the pair.
+                tool["defer_loading"] = json!(true);
+            } else if t.cache {
                 tool["cache_control"] = json!({"type": "ephemeral"});
             }
             tool
@@ -180,7 +212,20 @@ fn block(b: &Block) -> Value {
             content,
             is_error,
             cache,
+            references,
         } => {
+            // A result that loads deferred tools is their references alone: the API expands each
+            // into its definition, inline, and the cached prefix never moves.
+            let content = if references.is_empty() {
+                json!(content)
+            } else {
+                Value::Array(
+                    references
+                        .iter()
+                        .map(|name| json!({"type": "tool_reference", "tool_name": name}))
+                        .collect(),
+                )
+            };
             let mut v =
                 json!({"type": "tool_result", "tool_use_id": tool_use_id, "content": content});
             if *is_error {

@@ -32,6 +32,11 @@ pub trait Tool: Send + Sync {
     fn class(&self) -> ToolClass;
     /// A valid call, kept beside the schema so the two cannot drift.
     fn example(&self) -> Value;
+    /// Whether its definition is deferred: sent, but out of the model's context until a tool
+    /// result references it — a provider without native deferral leaves it out.
+    fn defer(&self) -> bool {
+        false
+    }
     /// Run it.
     fn run(&self, args: Value, cx: &mut Context) -> Outcome;
 }
@@ -95,8 +100,20 @@ pub struct Meta {
     /// The MCP tool the call reached, by the name a body calls it; the journal learns from
     /// [`Meta::mcp_touched`].
     pub mcp: Option<String>,
-    /// What an MCP door loaded or called, for the journal the harness keeps.
+    /// What an MCP door loaded or called, for the journal the harness keeps — and the deferred
+    /// tools a level 2 loads as references ([`crate::mcp::Touched::references`]).
     pub mcp_touched: Option<Box<crate::mcp::Touched>>,
+}
+
+impl Meta {
+    /// The deferred tools this result loads, by name: on a native provider the result is their
+    /// references, expanded by the provider out of the cached prefix.
+    #[must_use]
+    pub fn references(&self) -> &[String] {
+        self.mcp_touched
+            .as_ref()
+            .map_or(&[][..], |t| t.references.as_slice())
+    }
 }
 
 impl Outcome {
@@ -175,6 +192,9 @@ pub struct Context {
     pub(crate) skeletons: HashMap<u64, crate::index::Skeleton>,
     /// Lines over which a read must name its range (`tools.read.range_over`); 0 never asks.
     range_over: usize,
+    /// What is left of the run's envelope, in weighted tokens, kept by the run as it spends;
+    /// [`u64::MAX`] when it has none. A priced load past it is refused.
+    budget_left: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl std::fmt::Debug for Context {
@@ -238,7 +258,23 @@ impl Context {
             seen: HashMap::new(),
             skeletons: HashMap::new(),
             range_over: files::RANGE_OVER,
+            budget_left: Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX)),
         }
+    }
+
+    /// Keep what is left of the run's envelope in `left` ([`u64::MAX`] for none): the run that
+    /// spends writes it, a priced load reads it.
+    #[must_use]
+    pub fn with_budget_left(mut self, left: Arc<std::sync::atomic::AtomicU64>) -> Self {
+        self.budget_left = left;
+        self
+    }
+
+    /// What is left of the run's envelope, in weighted tokens; `None` when it has none.
+    #[must_use]
+    pub fn budget_left(&self) -> Option<u64> {
+        let left = self.budget_left.load(std::sync::atomic::Ordering::Relaxed);
+        (left != u64::MAX).then_some(left)
     }
 
     /// Ask for a range when a read names none on a file over `lines` lines (or over

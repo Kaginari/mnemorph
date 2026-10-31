@@ -18,6 +18,13 @@ pub trait Model: Send + Sync {
     /// The provider's name, for the ledger (`anthropic`, `openrouter`, `scripted`).
     fn provider(&self) -> &str;
 
+    /// Whether this provider takes native deferred tools for `model`: then MCP's level 2 is a
+    /// reference to a deferred definition, out of the cached prefix. None does by default.
+    fn defers(&self, model: &str) -> bool {
+        let _ = model;
+        false
+    }
+
     /// Send `request`; report shown text and tool starts to `on` as they arrive.
     fn complete<'a>(
         &'a self,
@@ -32,6 +39,10 @@ pub struct AnthropicModel(pub Anthropic);
 impl Model for AnthropicModel {
     fn provider(&self) -> &'static str {
         "anthropic"
+    }
+
+    fn defers(&self, model: &str) -> bool {
+        mnemorph_provider::defers(model)
     }
 
     fn complete<'a>(

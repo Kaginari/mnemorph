@@ -208,6 +208,7 @@ async fn live_openrouter_tool_round_trip() {
         description: "Read a file of the project and return its contents.".into(),
         input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
         cache: false,
+        defer: false,
     };
     let mut req = ask(
         &model,
@@ -241,6 +242,7 @@ async fn live_openrouter_tool_round_trip() {
             content: "Mnemorph is a harness.".into(),
             is_error: false,
             cache: false,
+            references: Vec::new(),
         }],
     });
     let second = client

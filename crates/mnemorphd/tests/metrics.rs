@@ -527,3 +527,63 @@ fn the_usage_witness_is_read_and_trusted_over_the_worlds_copy() {
     assert_eq!(m["usage"]["trusted"], true, "{}", m["usage"]);
     same(&cli["total"], &m["usage"]["value"]["total"], "witness");
 }
+
+/// `<world's name>-<fnv64a of its path>`: where a world's MCP state lives under the state directory.
+fn world_key(world: &Path) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in world.as_os_str().as_encoded_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    let name = world.file_name().unwrap().to_string_lossy().into_owned();
+    format!("{name}-{h:016x}")
+}
+
+#[test]
+fn usage_shows_each_mcp_servers_schema_loaded_against_used() {
+    let h = Home::new("mcp-usage");
+    let state = h.root.join("state/mnemorph/mcp").join(world_key(&h.world));
+    std::fs::create_dir_all(&state).unwrap();
+    let mut witness = state.file_name().unwrap().to_os_string();
+    witness.push(".witness.jsonl");
+    let journal = Journal::<Value>::chained(state.join("journal.jsonl"))
+        .witnessed_at(state.with_file_name(witness));
+    let row = |kind: &str, tool: &str, wt: u64, used: bool| {
+        serde_json::json!({
+            "ts": 0, "ask": "r#1", "kind": kind, "server": "hub", "tool": tool,
+            "creature": "slime-a", "race": "slime", "fingerprint": "0000000000000000",
+            "terms": ["find"], "wt": wt, "used": used, "outcome": "ok", "helped": true
+        })
+    };
+    for r in [
+        row("schema", "hub__find", 120, true),
+        row("schema", "hub__idle", 80, false),
+        row("call", "hub__find", 40, true),
+    ] {
+        journal.append(&r).unwrap();
+    }
+    let world = h.world.to_str().unwrap().to_owned();
+    let out: Value = serde_json::from_str(&h.run(&["usage", "--world", &world, "--json"])).unwrap();
+    assert_eq!(out["mcp"]["trusted"], true, "{out}");
+    assert_eq!(
+        out["mcp"]["servers"]["hub"],
+        serde_json::json!({"schemaLoadedWt": 200, "schemaUsedWt": 120, "answersWt": 40})
+    );
+    let text = h.run(&["usage", "--world", &world]);
+    assert!(
+        text.contains("  hub: 200 wt of schema loaded, 120 wt of it used; 40 wt of answers"),
+        "{text}"
+    );
+    // An edited row: the journal is not believed, and usage says so rather than a number.
+    let file = state.join("journal.jsonl");
+    let edited = std::fs::read_to_string(&file)
+        .unwrap()
+        .replacen("\"wt\":120", "\"wt\":1", 1);
+    std::fs::write(&file, edited).unwrap();
+    let out: Value = serde_json::from_str(&h.run(&["usage", "--world", &world, "--json"])).unwrap();
+    assert_eq!(out["mcp"]["trusted"], false, "{out}");
+    assert!(
+        h.run(&["usage", "--world", &world])
+            .contains("mcp: the journal is not believed")
+    );
+}

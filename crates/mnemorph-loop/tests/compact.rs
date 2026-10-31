@@ -271,12 +271,14 @@ fn folding_keeps_meaning_and_the_recent_results() {
                     content: big.clone(),
                     is_error: false,
                     cache: false,
+                    references: Vec::new(),
                 },
                 Block::ToolResult {
                     tool_use_id: "small".into(),
                     content: "ok".into(),
                     is_error: false,
                     cache: false,
+                    references: Vec::new(),
                 },
             ],
         });

@@ -362,7 +362,9 @@ fn build(
         tools.push(Box::new(crate::queue_tool::QueueTool));
     }
     // The MCP servers the human declared: the body's share decided once, before the run is made.
-    let (mcp, mcp_lines, mcp_holes) = mcp_share(config, body.race, &cx, &mut tools)?;
+    let native = model.defers(model_id);
+    let (mcp, mcp_lines, mcp_holes) =
+        mcp_share(config, (body.race, &body.system, native), &cx, &mut tools)?;
     let mcp_offered =
         mcp.as_ref()
             .map_or_else(Vec::new, |m| match crate::mcp_journal::read(m.state()) {
@@ -463,12 +465,15 @@ fn build(
 }
 
 /// The session's MCP servers, when the human declared any, and their doors put on the body's
-/// shelf when any may serve its race: the level-0 lines for `status`, and what was refused. No
-/// server starts.
+/// shelf when any may serve its race: the level-0 lines for `status`, and what was refused. The
+/// session starts here, so each creature's habitual tools are chosen now, from the journal as it
+/// holds now, and stay chosen while the session lives; the body's own are framed with its doors —
+/// and, on a provider with native deferred tools, the rest of its scope deferred. No server
+/// starts.
 #[allow(clippy::type_complexity)]
 fn mcp_share(
     config: &Config,
-    race: mnemorph_races::Race,
+    (race, system, native): (mnemorph_races::Race, &str, bool),
     cx: &mnemorph_tools::Context,
     tools: &mut Vec<Box<dyn mnemorph_tools::Tool>>,
 ) -> Result<
@@ -484,8 +489,10 @@ fn mcp_share(
         return Ok((None, Vec::new(), Vec::new()));
     }
     let mcp = mnemorph_tools::mcp::Mcp::new(settings, mnemorph_tools::mcp::state_dir(cx.world()));
-    let offer = mcp.offer(race, cx);
-    let lines = offer.lines;
+    mcp.freeze_habits(crate::mcp_journal::read(mcp.state()));
+    let frame = crate::mcp_journal::frame(&mcp, race, cx, system, tools, native);
+    let offer = mcp.offer_framed(race, cx, frame);
+    let lines = offer.lines.into_iter().chain(offer.said).collect();
     let holes = offer.holes;
     tools.extend(offer.tools);
     Ok((Some(mcp), lines, holes))

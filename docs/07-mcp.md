@@ -55,7 +55,11 @@ are named at level 1, ranked by the words of the ask — no model is asked — s
 usually in view without a search. The ranking also learns: a tool this creature or its race
 called on similar asks climbs, and one whose schema was loaded and never called sinks for a
 while. Only when the catalog is large and the best few score close does one short call to the
-fast tier reorder them; it can drop or reorder those few, never add one. Every word a server sends — descriptions, schemas, answers —
+fast tier reorder them; it can drop or reorder those few, never add one. A tool a creature calls
+on most of its asks is placed in its stable prefix, chosen when a session starts, never during
+one. A server whose schemas would outgrow the race's prefix ceiling stays at level 0. On
+Anthropic, a schema loads as a native deferred tool, out of the cached prefix. A server that
+hangs or dies becomes a hole naming it, never a wait. Every word a server sends — descriptions, schemas, answers —
 is treated as data from outside: escaped, capped and marked as untrusted, to a body and to the
 reranker alike. Every load and call is journaled by the harness, outside the world, never by a
 model.
@@ -80,6 +84,20 @@ enabled = true             # the fast tier may rerank a close shortlist
 above = 30                 # only when more tools than this are in scope
 margin_pct = 15            # and the top `top_k` scores sit within this percent of the best
 
+[mcp.timeouts]             # each step's wait, for every server (at least 1 s each)
+start_secs = 30            # to start and shake hands
+list_secs = 30             # to list its tools
+call_secs = 60             # to answer one call
+
+[mcp.restarts]
+max = 3                    # restarts of a failed server in one session (0 to 10)
+backoff_secs = 2           # the first wait; each later one twice the last, at most 60 s
+
+[mcp.prefix]               # a creature's stable prefix
+asks = 10                  # chosen over its last N asks (at least 10)
+share_pct = 60             # from the tools it called on at least this share of them
+tools = 3                  # at most this many
+
 [mcp.servers.search]
 command = "web-search-mcp"
 args = ["--stdio"]
@@ -88,7 +106,7 @@ races = ["kijin", "slime"] # who may be offered its tools; none by default
 purpose = "Web search"     # its level-0 line
 class = "outward"          # every tool's class, unless the tool declares its own
 network = true             # sockets allowed in its sandbox
-timeout_secs = 30
+timeout_secs = 30          # this server's wait for each of its steps, over `mcp.timeouts`
 
 [mcp.servers.search.tools.lookup]
 class = "read"             # this tool runs at `read`: a Slime may use it, with no question
@@ -120,13 +138,21 @@ notifications are passed over.
   environment is the harness's with secrets scrubbed, plus the variables its `env` names. On
   Linux the guard has the kernel kill it when the thread that started it ends, and dropping a
   server kills its process group, so none outlives the harness.
-- **Bounded.** Every answer waits at most the server's timeout. A line longer than 4 MB cuts the
-  server off; at most 8 lines wait between it and the client, so a server writing faster waits
-  on its own pipe; more than 256 messages that answer nothing while a request waits cut it off as
-  flooding. A server listing more than 128 tools is refused whole. Messages to it go through a
-  writer thread, so one that stops reading blocks nothing but itself. A dead, silent or flooding
-  server is an error that names it, never a hang. A server that fails a call is dropped and
-  started again at the next one.
+- **Bounded.** Each step waits at most its own timeout: the start and handshake
+  `mcp.timeouts.start_secs`, a listing `list_secs`, a call `call_secs` — or the server's
+  `timeout_secs` for all three. A line longer than 4 MB cuts the server off; at most 8 lines wait
+  between it and the client, so a server writing faster waits on its own pipe; more than 256
+  messages that answer nothing while a request waits cut it off as flooding. A server listing
+  more than 128 tools is refused whole. Messages to it go through a writer thread, so one that
+  stops reading blocks nothing but itself.
+- **Healthy, or a hole.** A server that goes silent past its timeout, closes, floods or stops
+  reading is dropped — its process group killed — and the door that asked answers at once with
+  an error naming it and the step, never a hang. A refusal the server answered (`bad arguments`)
+  is not a failure: it keeps running. A failed server is started again only after its backoff —
+  `mcp.restarts.backoff_secs`, doubled after each later failure, at most 60 seconds — and at most
+  `mcp.restarts.max` times a session; until the backoff runs out a door says when it may start
+  again, and past the last restart the server is a hole for the rest of the session. Its level-0
+  line says `down` or `a hole this session`, with why.
 - **Cached and lazy.** A server's catalog is listed the first time a body opens it (level 1) or
   needs one of its tools (level 2 or a call), and cached under the state directory, keyed by the
   server's identity (command, arguments, passed variables, network) and trusted for 24 hours.
@@ -144,8 +170,13 @@ Each listed tool becomes a spec once:
   digits, `_` and `-`, or that makes the name longer than 64, is refused (it could pass as
   another server's), and so is a second tool of the same name;
 - its description loses its control characters and keeps 1,024 characters;
-- its schema is an object schema (`$schema` dropped), every key and string without control
-  characters; one past 32 KB is refused;
+- its schema is normalised once, the same for every provider: an object schema, every key and
+  string without control characters; at every schema position — the root, each property, each
+  item, each branch of `anyOf`, `oneOf` and `allOf`, each `$defs` entry — the annotations a call
+  never needs (`$schema`, `$id`, `$comment`, `title`, `examples`, `example`) dropped and a
+  description trimmed to 512 characters, an empty one dropped. A property's own name is never
+  touched, and `$ref` and `$defs` stay as written. The keys come out sorted, so a schema gives
+  the same bytes every time; one past 32 KB once normalised is refused;
 - its class is, in order: the class your configuration declares for the tool; the one it
   declares for the server; one inferred; else `outward`. A server's own annotations are its
   word, never yours, so only two are taken: `destructiveHint` makes the tool `destructive`
@@ -195,6 +226,64 @@ opening a server or loading a schema costs before it pays.
 
 Loaded levels are tool results, appended like any other: the frame never changes mid-run, and a
 server cannot add a tool mid-run — a changed catalog reaches the next listing.
+
+### Budgeted
+
+Each race's cached prefix — its system prompt and its tools' definitions, at four bytes a token
+— has a ceiling: 4,000 tokens for the throne and a Slime (what CI holds the solo prefix under,
+#43), 5,000 for an Orc or a Dark Elf, 6,000 for an Elf, 8,000 for a Kijin, an ascended form as
+its base. MCP schemas count against it twice:
+
+- **A server past the ceiling is level 0 only.** When the schemas of a server's tools on the
+  race's shelf — their level-2 prices together — pass the race's whole ceiling, the server shows
+  only its level-0 line, ending `level 0 only:` and why, with both numbers. It opens to nothing:
+  `mcp_open`, `mcp_schema` and `mcp_call` answer with the same reason, the ranking and a search
+  never name its tools, and none joins a frame. A race with a higher ceiling may still open it.
+- **The stable prefix fits in what is left.** The tools promoted into a creature's frame
+  (below) fit, together, in the ceiling less the frame the run already has — its prompt, its own
+  tools and the four doors.
+
+A level's price also counts against the run's envelope: a level 1 or 2 whose price passes what
+the run has left of its budget is refused before anything loads — `costs ~N wt and your
+envelope has M wt left` — and nothing is journaled as loaded.
+
+### The stable prefix
+
+A tool a creature calls on most of its asks belongs up front. When a session starts, the harness
+reads the MCP journal — believed only when its chain and witness hold — once, and for each
+creature takes its last `mcp.prefix.asks` asks (10, never fewer): every tool it called, and that
+answered, on at least `share_pct` percent of them (60), at most `tools` of them (3), most called
+first, ties by name. A creature with fewer asks journaled has none.
+
+Each run that creature makes in that session carries those tools in its frame, as tools of their
+own — `<server>__<tool>`, its definition saying whose it is, its class and that the words are the
+server's — called by name, with no level loaded first, through the same scope, shelf, class and
+gate as `mcp_call`. Only tools in scope among the catalogs known when the run is made join, of a
+server under the ceiling, within the room the ceiling leaves; `status` says which joined and why
+any did not.
+
+The choice is made once: the journal changing mid-session changes no frame — the request only
+grows ([consumption](06-consumption.md#cache-first-prompt-layout)) — and the next session
+chooses again. Nothing read from the world counts: the journal lives under the state directory,
+and a journal that is not believed promotes nothing, saying why.
+
+### Native deferred tools
+
+On Anthropic, for the models its tool-search documentation lists (Claude Opus and Sonnet from
+4.5, Haiku from 4.5, and the later families), level 2 is native. Every tool in scope among the
+known catalogs, but those of the stable prefix, joins the run's frame with `defer_loading: true`:
+its definition is sent, but the API keeps it out of the context — and out of the cached prefix —
+until a tool result references it. `mcp_schema` on such a tool answers with a `tool_reference`
+to it alone, and the API expands the definition inline; the body then calls the tool by its own
+name. The tools block keeps its one cache breakpoint on the last tool loaded up front, since a
+deferred tool may not carry one. The search stays Mnemorph's own (`mcp_search` and the ranking):
+no server-side search tool is sent.
+
+Every other provider, and every other model, runs the same three levels client-side: no tool is
+deferred, and level 2 is text. A request for a provider without native deferral leaves a deferred
+tool out and sends a reference's text instead, so a run that falls back to another model keeps
+working through the doors. A run's journal keeps each result's references, so a resumed
+conversation references them again.
 
 ### Ranked by the ask
 
@@ -252,7 +341,8 @@ goes to the fast tier (`models.tier.fast`) in one call, before the ask is sent:
 ### Learned
 
 The MCP journal (`journal.jsonl` in the world's MCP state, under `$XDG_STATE_HOME/mnemorph/mcp/`)
-keeps one row per level-1 load, level-2 load, call, offer and rerank: the tool and server, the
+keeps one row per level-1 load, level-2 load, call, offer and rerank, and one more as each ask
+ends, whatever it did with MCP — what habits are counted over: the tool and server, the
 creature and race, the ask's id, its words (sorted, at most 32) and their fingerprint, the
 weighted tokens it put in the conversation or cost, whether the tool was called after it in the
 same ask, how it ended, and whether the ask ended answered with nothing failing at its gate.
@@ -286,12 +376,16 @@ From the newest 4,096 rows, model-free, bounded and deterministic:
 ### Shown
 
 `mnemorph status` shows one `mcp` line per server the session body may open — its level-0 line,
-with the price of opening it once its catalog is known. What was refused is a `hole`. From the
-journal, `mcp-why` lines give each server's levels loaded against those then used, in weighted
-tokens, and what its answers and the reranks cost; then why each tool of the last ask was
+with the price of opening it once its catalog is known — then which tools joined its stable
+prefix and why any habitual one did not. What was refused is a `hole`. From the
+journal, `mcp-why` lines give each server's schema loaded against what of it was then used, in
+weighted tokens, and what its answers and the reranks cost; then why each tool of the last ask was
 offered — `slime-scout offered docs__lookup — bm25 3.1 + used 4× by slime-scout (+1.61)`, with
 `− loaded idle 2× (−0.71)` for a penalty, `· reranked by <model>` and `· called` when they apply —
-or why the journal is not believed. The board's
+or why the journal is not believed. `mnemorphd usage` says the same per server under `mcp schema,
+by server`, and `usage --json` carries it as `mcp.servers.<name>` — `schemaLoadedWt`,
+`schemaUsedWt`, `answersWt` — with `mcp.reranks` and `mcp.trusted` (false, with `why`, for a
+journal not believed). The board's
 integrations page shows each server's scope, its declared class and each tool's.
 
 ### Designed, not built
@@ -302,10 +396,6 @@ These parts of [#48](https://github.com/Kaginari/mnemorph/issues/48) wait for M1
 - **agent-mcp**, a duty at `kijin-scout`'s post: curating the roster, proposing each tool's
   class for you to declare and writing its one-line description, once per server version, on the
   fast tier.
-- **The stable prefix**: a tool a creature calls on most commissions placed in its stable prefix
-  at the next session start, never mid-session.
-- **Budgeted levels**: schema tokens counted against the per-race prefix ceiling and the
-  envelope; a server whose schemas would blow the ceiling shown at level 0 only.
 - **`list_changed`** and server versions as refresh triggers; argument validation against the
   schema before a call.
 - **`mnemorph mcp serve --toolbox`**: the same selection served to Claude Code, OpenCode or any MCP

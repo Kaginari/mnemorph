@@ -77,12 +77,13 @@ impl World {
         ];
         hub.class = Some(ToolClass::Read);
         hub.tools = classes.iter().map(|(t, c)| ((*t).to_owned(), *c)).collect();
-        hub.timeout = std::time::Duration::from_secs(10);
+        hub.timeout = Some(std::time::Duration::from_secs(10));
         let mcp = Mcp::new(
             Settings {
                 top_k: 3,
                 servers: vec![hub],
                 rerank,
+                ..Settings::default()
             },
             self.state(),
         );
@@ -294,6 +295,8 @@ async fn every_load_and_call_is_journaled_chained_in_the_state_dir_and_an_edit_o
             (Kind::Schema, Some("hub__issue_find"), true),
             (Kind::Call, Some("hub__issue_find"), true),
             (Kind::Schema, Some("hub__web_search"), false),
+            // Every ask ends with one row, whatever it did: what habits are counted over.
+            (Kind::Ask, None, false),
         ]
     );
     let r = &rows[2];
@@ -313,7 +316,7 @@ async fn every_load_and_call_is_journaled_chained_in_the_state_dir_and_an_edit_o
     assert_eq!(
         shown.spend(),
         [format!(
-            "hub: {loaded} wt of levels loaded, {} wt of them used; {} wt of answers",
+            "hub: {loaded} wt of schema loaded, {} wt of it used; {} wt of answers",
             rows[1].wt, rows[2].wt
         )]
     );

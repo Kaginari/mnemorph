@@ -434,7 +434,7 @@ fn mcp(c: &Config, set: &dyn Fn(&str) -> bool) -> Sourced<McpView> {
                 class: s.class.map(|c| c.to_string()),
                 tools: s.tools.iter().map(|(t, c)| format!("{t} = {c}")).collect(),
                 network: s.network,
-                timeout_secs: s.timeout.as_secs(),
+                timeout_secs: settings.timeouts_for(s).call.as_secs(),
             }
         })
         .collect();

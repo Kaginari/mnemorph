@@ -14,6 +14,7 @@
 pub mod client;
 pub mod learned;
 pub mod levels;
+mod native;
 pub mod rank;
 pub mod rerank;
 
@@ -21,7 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use mnemorph_races::{Race, ToolClass, check_class};
 use serde_json::{Value, json};
@@ -30,15 +31,35 @@ use sha2::{Digest as _, Sha256};
 use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool};
 pub use client::Conn;
-pub use learned::{Kind, Learned, Lift, Row, Touched, Who};
+pub use learned::{Kind, Learned, Lift, Row, Spend, Touched, Who};
 pub use levels::{CALL, OPEN, SCHEMA, SEARCH, price};
+pub use native::Native;
 pub use rank::{Ranked, rank};
 pub use rerank::Rerank;
 
 /// How many ranked tools the ask's tail names at level 1, unless the configuration says.
 pub const TOP_K: usize = 5;
-/// How long a server may take to answer, unless its configuration says.
-pub const TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a server may take to start and shake hands, unless the configuration says.
+pub const START_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a server may take to list its tools, unless the configuration says.
+pub const LIST_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a server may take to answer a call, unless the configuration says.
+pub const CALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// How many times a failed server is started again in one session, unless the configuration
+/// says: past it the server is a hole until the next session.
+pub const RESTARTS: u32 = 3;
+/// The wait before a failed server's first restart, doubled for each later one.
+pub const BACKOFF: Duration = Duration::from_secs(2);
+/// The longest wait between restarts.
+pub const BACKOFF_CAP: Duration = Duration::from_secs(60);
+/// How many of a creature's last asks the stable prefix is chosen over, at least.
+pub const PREFIX_ASKS: usize = 10;
+/// The share of those asks, in percent, a tool must have been called on to join the prefix.
+pub const PREFIX_SHARE_PCT: u32 = 60;
+/// The most MCP tools one creature's stable prefix holds.
+pub const PREFIX_TOOLS: usize = 3;
+/// The longest description a schema keeps for one of its properties, in characters.
+pub const SCHEMA_DESCRIPTION: usize = 512;
 /// How long a listed catalog is trusted before the server is listed again.
 pub const CATALOG_TTL: Duration = Duration::from_hours(24);
 /// The most bytes of a server's answer a body reads.
@@ -137,8 +158,9 @@ pub struct Server {
     pub purpose: String,
     /// Sockets allowed in its sandbox.
     pub network: bool,
-    /// How long it may take to answer.
-    pub timeout: Duration,
+    /// How long it may take to start, list and answer, when its configuration says: one wait
+    /// for all three, over the settings' own.
+    pub timeout: Option<Duration>,
 }
 
 impl Server {
@@ -155,7 +177,7 @@ impl Server {
             tools: BTreeMap::new(),
             purpose: String::new(),
             network: false,
-            timeout: TIMEOUT,
+            timeout: None,
         }
     }
 
@@ -250,8 +272,70 @@ pub fn lawful_tool_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// The MCP settings: the servers, how many ranked tools an ask names, and when the fast tier
-/// reranks them.
+/// How long a server may take at each step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timeouts {
+    /// To start and shake hands.
+    pub start: Duration,
+    /// To list its tools.
+    pub list: Duration,
+    /// To answer a call.
+    pub call: Duration,
+}
+
+impl Default for Timeouts {
+    fn default() -> Self {
+        Self {
+            start: START_TIMEOUT,
+            list: LIST_TIMEOUT,
+            call: CALL_TIMEOUT,
+        }
+    }
+}
+
+/// How a failed server is started again: at most `max` times a session, the first after
+/// `backoff`, each later one after twice the wait before, at most [`BACKOFF_CAP`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Restarts {
+    /// The most restarts in one session.
+    pub max: u32,
+    /// The first wait.
+    pub backoff: Duration,
+}
+
+impl Default for Restarts {
+    fn default() -> Self {
+        Self {
+            max: RESTARTS,
+            backoff: BACKOFF,
+        }
+    }
+}
+
+/// When a creature's habitual tool joins its stable prefix: called on at least `share_pct`
+/// percent of its last `asks` asks, at most `tools` of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Prefix {
+    /// The asks looked at; at least [`PREFIX_ASKS`].
+    pub asks: usize,
+    /// The share of them, in percent.
+    pub share_pct: u32,
+    /// The most tools promoted.
+    pub tools: usize,
+}
+
+impl Default for Prefix {
+    fn default() -> Self {
+        Self {
+            asks: PREFIX_ASKS,
+            share_pct: PREFIX_SHARE_PCT,
+            tools: PREFIX_TOOLS,
+        }
+    }
+}
+
+/// The MCP settings: the servers, how many ranked tools an ask names, when the fast tier
+/// reranks them, how long a server may take, how it is restarted, and what joins a stable prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     /// The servers.
@@ -260,6 +344,12 @@ pub struct Settings {
     pub top_k: usize,
     /// The rerank's trigger and model.
     pub rerank: Rerank,
+    /// How long a server may take, unless its own `timeout` says.
+    pub timeouts: Timeouts,
+    /// How a failed server is started again.
+    pub restarts: Restarts,
+    /// What joins a creature's stable prefix.
+    pub prefix: Prefix,
 }
 
 impl Default for Settings {
@@ -268,7 +358,22 @@ impl Default for Settings {
             servers: Vec::new(),
             top_k: TOP_K,
             rerank: Rerank::default(),
+            timeouts: Timeouts::default(),
+            restarts: Restarts::default(),
+            prefix: Prefix::default(),
         }
+    }
+}
+
+impl Settings {
+    /// How long `server` may take at each step: its own wait for all three when it declares one.
+    #[must_use]
+    pub fn timeouts_for(&self, server: &Server) -> Timeouts {
+        server.timeout.map_or(self.timeouts, |t| Timeouts {
+            start: t,
+            list: t,
+            call: t,
+        })
     }
 }
 
@@ -293,8 +398,14 @@ pub struct Spec {
 }
 
 impl Spec {
-    /// A tool from a server's `tools/list` entry, or why it is refused.
-    fn of(server: &Server, raw: &Value, guarded: bool) -> Result<Self, String> {
+    /// A tool from a server's `tools/list` entry, normalised once — its name checked, its
+    /// description cleaned and capped, its schema normalised ([`normalised_schema`]) and capped —
+    /// and classed with the session's guard; or why it is refused.
+    ///
+    /// # Errors
+    ///
+    /// A name that is not lawful or too long, or a schema past [`MAX_SCHEMA`].
+    pub fn of(server: &Server, raw: &Value, guarded: bool) -> Result<Self, String> {
         let tool = raw["name"].as_str().unwrap_or_default();
         let name = format!("{}__{tool}", server.name);
         if !lawful_tool_name(tool) || name.len() > 64 {
@@ -305,15 +416,7 @@ impl Spec {
                 mnemorph_wire::shown(&clean(&tool.chars().take(80).collect::<String>()))
             ));
         }
-        let mut schema = match raw.get("inputSchema") {
-            Some(Value::Object(o)) => Value::Object(o.clone()),
-            _ => json!({"type": "object"}),
-        };
-        if let Some(o) = schema.as_object_mut() {
-            o.remove("$schema");
-            o.insert("type".into(), json!("object"));
-        }
-        clean_strings(&mut schema);
+        let schema = normalised_schema(raw.get("inputSchema"));
         let bytes = schema.to_string().len();
         if bytes > MAX_SCHEMA {
             return Err(format!(
@@ -359,6 +462,9 @@ pub struct Mcp {
     learned: Mutex<Arc<Learned>>,
     /// Each rerank's answer, by [`rerank::key`]: the same ask never pays twice.
     reranked: Mutex<BTreeMap<String, Vec<String>>>,
+    /// Each creature's habitual tools, chosen once at the session's start from the journal as it
+    /// held then — or why the journal was not believed — and never changed while it lives.
+    habits: Mutex<Option<Habits>>,
 }
 
 impl std::fmt::Debug for Mcp {
@@ -369,17 +475,47 @@ impl std::fmt::Debug for Mcp {
     }
 }
 
-/// A server's running connection, when it runs.
-type Slot = Arc<Mutex<Option<Conn>>>;
+/// Each creature's habitual tools by name, or why the journal was not believed.
+type Habits = Result<BTreeMap<String, Vec<String>>, String>;
+
+/// A server's slot: its connection and health.
+type Slot = Arc<Mutex<Health>>;
+
+/// A server's connection and health this session: the connection, when it runs; how many times
+/// it failed; when it may be started again; why it last failed.
+#[derive(Debug, Default)]
+struct Health {
+    conn: Option<Conn>,
+    failures: u32,
+    retry_at: Option<Instant>,
+    last: Option<String>,
+}
+
+/// What a run's frame may hold of MCP, decided once, when the run is made.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Frame {
+    /// The run's provider takes native deferred tools for its model: level 2 is then a reference
+    /// to a deferred definition, never text in the conversation.
+    pub native: bool,
+    /// What the race's prefix ceiling leaves above the run's own frame, in tokens: the promoted
+    /// tools' definitions must fit in it together.
+    pub room: u64,
+}
 
 /// What one run is offered.
 pub struct Offer {
-    /// The four doors, when any server may serve the race; none otherwise.
+    /// The four doors, when any server may serve the race, then the tools of the creature's
+    /// stable prefix, then — on a native provider — every other tool in scope, deferred; none
+    /// when no server may serve the race.
     pub tools: Vec<Box<dyn Tool>>,
     /// The level-0 lines, one per server in scope, each with its price to open.
     pub lines: Vec<String>,
     /// What was refused in the catalogs already known.
     pub holes: Vec<String>,
+    /// The tools promoted into the creature's stable prefix, by name.
+    pub prefix: Vec<String>,
+    /// Why a habitual tool was not promoted, or why none could be.
+    pub said: Vec<String>,
 }
 
 /// Whether `cx` runs its commands under the Linux kernel guard — seccomp with no sockets, the
@@ -401,7 +537,34 @@ impl Mcp {
             conns: Mutex::new(BTreeMap::new()),
             learned: Mutex::new(Arc::new(Learned::default())),
             reranked: Mutex::new(BTreeMap::new()),
+            habits: Mutex::new(None),
         })
+    }
+
+    /// Choose each creature's habitual tools from `rows` — the journal as the harness read it at
+    /// the session's start, or why it was not believed — once: a later call changes nothing, so
+    /// a prefix never moves while the session lives. Whether this call chose them.
+    pub fn freeze_habits(&self, rows: Result<Vec<Row>, String>) -> bool {
+        let mut habits = self.habits.lock().unwrap_or_else(PoisonError::into_inner);
+        if habits.is_some() {
+            return false;
+        }
+        *habits = Some(rows.map(|r| Learned::from_rows(r).habits(&self.settings.prefix)));
+        true
+    }
+
+    /// `creature`'s habitual tools as chosen at the session's start, best first; none before
+    /// they are chosen.
+    ///
+    /// # Errors
+    ///
+    /// Why the journal was not believed when they were chosen.
+    pub fn habits(&self, creature: &str) -> Result<Vec<String>, String> {
+        match &*self.habits.lock().unwrap_or_else(PoisonError::into_inner) {
+            None => Ok(Vec::new()),
+            Some(Err(why)) => Err(why.clone()),
+            Some(Ok(by)) => Ok(by.get(creature).cloned().unwrap_or_default()),
+        }
     }
 
     /// The settings.
@@ -455,7 +618,100 @@ impl Mcp {
             .unwrap_or_else(PoisonError::into_inner)
             .get(name)
             .cloned();
-        slot.is_some_and(|s| s.lock().unwrap_or_else(PoisonError::into_inner).is_some())
+        slot.is_some_and(|s| {
+            s.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .conn
+                .is_some()
+        })
+    }
+
+    /// Whether the server `name` failed past its restarts this session: a hole until the next.
+    #[must_use]
+    pub fn dead(&self, name: &str) -> bool {
+        self.health_note(name).is_some_and(|(dead, _)| dead)
+    }
+
+    /// How server `name` stands, when it failed and does not run: whether it is past its
+    /// restarts, and why it last failed. A server busy answering is not looked at.
+    fn health_note(&self, name: &str) -> Option<(bool, String)> {
+        let slot = self
+            .conns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(name)
+            .cloned()?;
+        let h = slot.try_lock().ok()?;
+        (h.conn.is_none() && h.failures > 0).then(|| {
+            (
+                h.failures > self.settings.restarts.max,
+                h.last.clone().unwrap_or_default(),
+            )
+        })
+    }
+
+    /// `server` running in `health`: started now when it is not, within its start timeout —
+    /// unless it failed past its restarts this session, or the wait since its last failure has
+    /// not run out. Either is a hole naming it, said at once: never a wait, never a hang.
+    fn running<'a>(
+        &self,
+        server: &Server,
+        cx: &Context,
+        health: &'a mut Health,
+    ) -> Result<&'a mut Conn, String> {
+        if health.conn.is_none() {
+            let restarts = self.settings.restarts;
+            let last = health.last.clone().unwrap_or_default();
+            if health.failures > restarts.max {
+                return Err(format!(
+                    "MCP server `{}` is a hole for this session: it failed {} times, past its {} restarts; the last: {last}",
+                    server.name, health.failures, restarts.max
+                ));
+            }
+            if let Some(at) = health.retry_at {
+                let wait = at.saturating_duration_since(Instant::now());
+                if !wait.is_zero() {
+                    return Err(format!(
+                        "MCP server `{}` is down: it failed {} of {} allowed times and starts again in {}s at the earliest; the last: {last}",
+                        server.name,
+                        health.failures,
+                        restarts.max + 1,
+                        wait.as_secs().max(1)
+                    ));
+                }
+            }
+            match Conn::start(
+                server,
+                cx,
+                &self.scratch(&server.name),
+                self.settings.timeouts_for(server),
+            ) {
+                Ok(c) => health.conn = Some(c),
+                Err(e) => {
+                    self.failed(health, &e);
+                    return Err(e);
+                }
+            }
+        }
+        health
+            .conn
+            .as_mut()
+            .ok_or_else(|| format!("MCP server `{}` is not running", server.name))
+    }
+
+    /// A server failed: dropped — its process group killed — counted, and not started again
+    /// before its backoff runs out: the first wait the settings', each later one twice the one
+    /// before, at most [`BACKOFF_CAP`].
+    fn failed(&self, health: &mut Health, why: &str) {
+        health.conn = None;
+        health.failures = health.failures.saturating_add(1);
+        let first = self.settings.restarts.backoff;
+        let doublings = health.failures.saturating_sub(1).min(16);
+        let wait = first
+            .saturating_mul(1 << doublings)
+            .min(BACKOFF_CAP.max(first));
+        health.retry_at = Some(Instant::now() + wait);
+        health.last = Some(why.to_owned());
     }
 
     /// The slot of server `name`, made empty when it has none.
@@ -502,22 +758,17 @@ impl Mcp {
             return Ok(l);
         }
         let slot = self.slot(&server.name);
-        let mut conn = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut health = slot.lock().unwrap_or_else(PoisonError::into_inner);
         // Another body may have listed it while this one waited on the slot.
         if let Some(l) = self.known(server, guarded) {
             return Ok(l);
         }
-        if conn.is_none() {
-            *conn = Some(Conn::start(server, cx, &self.scratch(&server.name))?);
-        }
-        let listed = conn.as_mut().map(Conn::list);
-        let raw = match listed {
-            Some(Ok(raw)) => raw,
-            Some(Err(e)) => {
-                *conn = None;
+        let raw = match self.running(server, cx, &mut health)?.list() {
+            Ok(raw) => raw,
+            Err(e) => {
+                self.failed(&mut health, &e);
                 return Err(e);
             }
-            None => return Err(format!("MCP server `{}` is not running", server.name)),
         };
         let file = catalog_file(&self.state, &server.name);
         if let Some(dir) = file.parent() {
@@ -552,16 +803,35 @@ impl Mcp {
             .collect()
     }
 
-    /// What a run of `race` is offered, decided once, when the run is made: the four doors when
-    /// any server may serve it, and the level-0 lines. No server starts.
+    /// What a run of `race` is offered with no frame of its own: the four doors and the level-0
+    /// lines, every level client-side ([`Mcp::offer_framed`]).
     #[must_use]
     pub fn offer(self: &Arc<Self>, race: Race, cx: &Context) -> Offer {
+        self.offer_framed(race, cx, Frame::default())
+    }
+
+    /// What a run of `race` is offered, decided once, when the run is made, and never changed
+    /// while it lives — the request only grows:
+    ///
+    /// - the four doors, when any server may serve it, and the level-0 lines;
+    /// - the stable prefix: `cx`'s creature's habitual tools as chosen at the session's start
+    ///   ([`Mcp::freeze_habits`]), each in scope, on the shelf, of a server under the ceiling, and
+    ///   all their definitions together within `frame.room`;
+    /// - on a native provider (`frame.native`), every other tool in scope among the known
+    ///   catalogs, deferred: its definition sent but out of the context until level 2 references
+    ///   it.
+    ///
+    /// No server starts.
+    #[must_use]
+    pub fn offer_framed(self: &Arc<Self>, race: Race, cx: &Context, frame: Frame) -> Offer {
         let guarded = guarded(cx);
         if self.serving(race, guarded).next().is_none() {
             return Offer {
                 tools: Vec::new(),
                 lines: Vec::new(),
                 holes: Vec::new(),
+                prefix: Vec::new(),
+                said: Vec::new(),
             };
         }
         let holes = self
@@ -569,11 +839,90 @@ impl Mcp {
             .filter_map(|s| self.known(s, guarded))
             .flat_map(|l| l.holes)
             .collect();
+        let (scope, _) = self.known_scope(race, cx);
+        let (promoted, said) = self.promoted(&scope, cx.body(), frame.room);
+        let prefix: Vec<String> = promoted.iter().map(|s| s.name.clone()).collect();
+        let deferred: Vec<Spec> = if frame.native {
+            scope
+                .into_iter()
+                .filter(|s| !prefix.contains(&s.name))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let names: BTreeSet<String> = deferred.iter().map(|s| s.name.clone()).collect();
+        let mut tools = levels::doors(self, Arc::new(names));
+        tools.extend(
+            promoted
+                .into_iter()
+                .map(|s| Native::boxed(Arc::clone(self), s, false)),
+        );
+        tools.extend(
+            deferred
+                .into_iter()
+                .map(|s| Native::boxed(Arc::clone(self), s, true)),
+        );
         Offer {
-            tools: levels::doors(self),
+            tools,
             lines: self.level0_lines(race, cx),
             holes,
+            prefix,
+            said,
         }
+    }
+
+    /// The tools of `creature`'s stable prefix among `scope`, best first, their definitions
+    /// together within `room` tokens; and why a habitual tool was left out, or why none could be.
+    fn promoted(&self, scope: &[Spec], creature: &str, room: u64) -> (Vec<Spec>, Vec<String>) {
+        let habits = match self.habits(creature) {
+            Ok(h) => h,
+            Err(why) => {
+                return (
+                    Vec::new(),
+                    vec![format!(
+                        "no MCP tool joins {creature}'s stable prefix: the journal was not believed at the session's start — {why}"
+                    )],
+                );
+            }
+        };
+        let mut used = 0u64;
+        let mut kept = Vec::new();
+        let mut said = Vec::new();
+        for name in habits {
+            let Some(spec) = scope.iter().find(|s| s.name == name) else {
+                said.push(format!(
+                    "{name} stays out of {creature}'s stable prefix: it is not in scope now"
+                ));
+                continue;
+            };
+            let cost = price(&native::definition(spec).to_string());
+            if used + cost > room {
+                said.push(format!(
+                    "{name} stays out of {creature}'s stable prefix: its definition ~{cost} wt passes the {} wt the prefix ceiling leaves",
+                    room.saturating_sub(used)
+                ));
+                continue;
+            }
+            used += cost;
+            said.push(format!(
+                "{name} joins {creature}'s stable prefix: called on most of its asks (~{cost} wt)"
+            ));
+            kept.push(spec.clone());
+        }
+        (kept, said)
+    }
+
+    /// Why server `s` is level 0 only for `race`, when it is: its tools on the shelf, their
+    /// schemas together, pass the race's prefix ceiling.
+    fn over_ceiling(s: &Server, shelved: &[Spec], race: Race) -> Option<String> {
+        let all: u64 = shelved.iter().map(|t| price(&levels::level2(t))).sum();
+        let ceiling = race.prefix_ceiling();
+        (all > ceiling).then(|| {
+            format!(
+                "MCP server `{}` is level 0 only for a {race}: its schemas together cost ~{all} wt, past the {race} prefix ceiling of {ceiling} wt",
+                s.name
+            )
+        })
     }
 
     /// Level 0: one line per server `race` may open — its name, its purpose, its tool count and
@@ -583,13 +932,30 @@ impl Mcp {
     pub fn level0_lines(&self, race: Race, cx: &Context) -> Vec<String> {
         let guarded = guarded(cx);
         self.serving(race, guarded)
-            .filter_map(|s| match self.known(s, guarded) {
-                Some(l) => {
-                    let shelved = Self::shelved(&l, race);
-                    (!shelved.is_empty())
-                        .then(|| levels::server_line(s, Some((&shelved, &l.holes))))
+            .filter_map(|s| {
+                let mut line = match self.known(s, guarded) {
+                    Some(l) => {
+                        let shelved = Self::shelved(&l, race);
+                        if shelved.is_empty() {
+                            return None;
+                        }
+                        let line = levels::server_line(s, Some((&shelved, &l.holes)));
+                        match Self::over_ceiling(s, &shelved, race) {
+                            Some(why) => format!("{line} · level 0 only: {why}"),
+                            None => line,
+                        }
+                    }
+                    None => levels::server_line(s, None),
+                };
+                if let Some((dead, why)) = self.health_note(&s.name) {
+                    let state = if dead { "a hole this session" } else { "down" };
+                    let _ = write!(
+                        line,
+                        " · {state}: {}",
+                        levels::one_line(&why, 2 * LINE_CHARS)
+                    );
                 }
-                None => Some(levels::server_line(s, None)),
+                Some(line)
             })
             .collect()
     }
@@ -609,7 +975,13 @@ impl Mcp {
         let mut unlisted = Vec::new();
         for s in self.serving(race, guarded) {
             match self.known(s, guarded) {
-                Some(l) => specs.extend(Self::shelved(&l, race)),
+                Some(l) => {
+                    let shelved = Self::shelved(&l, race);
+                    // A server past the ceiling is level 0 only: never ranked, searched or framed.
+                    if Self::over_ceiling(s, &shelved, race).is_none() {
+                        specs.extend(shelved);
+                    }
+                }
                 None => unlisted.push(s.name.clone()),
             }
         }
@@ -671,16 +1043,19 @@ impl Mcp {
             ));
         };
         let listing = self.load(s, cx)?;
-        Ok(levels::level1(
-            s,
-            &Self::shelved(&listing, race),
-            &listing.holes,
-        ))
+        let shelved = Self::shelved(&listing, race);
+        if let Some(why) = Self::over_ceiling(s, &shelved, race) {
+            return Err(why);
+        }
+        Ok(levels::level1(s, &shelved, &listing.holes))
     }
 
     /// [`Mcp::level1`] as the door gives it: the text, with what it loaded for the journal.
     pub(crate) fn open(&self, server: &str, cx: &Context) -> Outcome {
-        match self.level1(server, cx) {
+        match self
+            .level1(server, cx)
+            .and_then(|t| afford(&t, "level 1", server, cx))
+        {
             Ok(text) => {
                 let touched = Touched {
                     kind: Kind::Open,
@@ -688,6 +1063,7 @@ impl Mcp {
                     tool: None,
                     wt: price(&text),
                     outcome: "loaded".into(),
+                    references: Vec::new(),
                 };
                 let mut o = Outcome::ok(text, ToolClass::Read);
                 o.meta.mcp_touched = Some(Box::new(touched));
@@ -698,16 +1074,26 @@ impl Mcp {
     }
 
     /// [`Mcp::level2`] as the door gives it: the text, with what it loaded for the journal.
-    pub(crate) fn schema(&self, name: &str, cx: &Context) -> Outcome {
-        match self.find(name, cx) {
-            Ok(spec) => {
-                let text = levels::level2(&spec);
+    /// On a native run, a tool its frame defers is loaded as a reference to its definition: the
+    /// text stays the answer any other provider is sent.
+    pub(crate) fn schema(&self, name: &str, cx: &Context, deferred: &BTreeSet<String>) -> Outcome {
+        let found = self.find(name, cx).and_then(|spec| {
+            let text = levels::level2(&spec);
+            afford(&text, "level 2", &spec.name, cx).map(|text| (spec, text))
+        });
+        match found {
+            Ok((spec, text)) => {
                 let touched = Touched {
                     kind: Kind::Schema,
                     server: spec.server.clone(),
                     tool: Some(spec.name.clone()),
                     wt: price(&text),
                     outcome: "loaded".into(),
+                    references: if deferred.contains(&spec.name) {
+                        vec![spec.name.clone()]
+                    } else {
+                        Vec::new()
+                    },
                 };
                 let mut o = Outcome::ok(text, ToolClass::Read);
                 o.meta.mcp_touched = Some(Box::new(touched));
@@ -732,7 +1118,11 @@ impl Mcp {
             .server_for(server, race, guarded(cx))
             .ok_or_else(missing)?;
         let listing = self.load(s, cx)?;
-        Self::shelved(&listing, race)
+        let shelved = Self::shelved(&listing, race);
+        if let Some(why) = Self::over_ceiling(s, &shelved, race) {
+            return Err(why);
+        }
+        shelved
             .into_iter()
             .find(|t| t.name == name)
             .ok_or_else(missing)
@@ -782,6 +1172,7 @@ impl Mcp {
                     tool: Some(spec.name.clone()),
                     wt: price(&o.content),
                     outcome: outcome.into(),
+                    references: Vec::new(),
                 }));
                 o
             }
@@ -827,27 +1218,27 @@ impl Mcp {
             }
         }
         let slot = self.slot(&server.name);
-        let mut conn = slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if conn.is_none() {
-            match Conn::start(server, cx, &self.scratch(&server.name)) {
-                Ok(c) => *conn = Some(c),
-                Err(e) => return Outcome::error(e),
-            }
-        }
-        let called = conn.as_mut().map(|c| c.call(&spec.tool, arguments));
+        let mut health = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        let conn = match self.running(server, cx, &mut health) {
+            Ok(c) => c,
+            Err(e) => return Outcome::error(e),
+        };
+        let called = conn.call(&spec.tool, arguments);
+        let alive = conn.alive();
         match called {
-            Some(Ok((text, is_error))) => {
+            Ok((text, is_error)) => {
                 let mut o = Outcome::ok(wrap(spec, &text), spec.class);
                 o.is_error = is_error;
                 o.meta.mcp = Some(spec.name.clone());
                 o
             }
-            Some(Err(e)) => {
-                // A failed server is dropped: the next call starts it again.
-                *conn = None;
+            // A server that refused the call answered: it stays. One that went silent, closed or
+            // flooded is dropped, counted, and started again only within its restarts.
+            Err(e) if alive => Outcome::error(e),
+            Err(e) => {
+                self.failed(&mut health, &e);
                 Outcome::error(e)
             }
-            None => Outcome::error(format!("MCP server `{}` is not running", server.name)),
         }
     }
 }
@@ -869,6 +1260,18 @@ pub fn who(cx: &Context) -> Who {
     Who {
         creature: cx.body().to_owned(),
         race: cx.race().name().to_owned(),
+    }
+}
+
+/// `text`, when loading it fits what is left of `cx`'s envelope: a level's price counts against
+/// the run's budget before it is paid.
+fn afford(text: &str, level: &str, what: &str, cx: &Context) -> Result<String, String> {
+    let cost = price(text);
+    match cx.budget_left() {
+        Some(left) if cost > left => Err(format!(
+            "{level} of `{what}` costs ~{cost} wt and your envelope has {left} wt left; nothing was loaded"
+        )),
+        _ => Ok(text.to_owned()),
     }
 }
 
@@ -939,6 +1342,90 @@ fn cached(file: &Path, id: &str) -> Option<Vec<Value>> {
 #[must_use]
 pub fn catalog_file(state: &Path, server: &str) -> PathBuf {
     state.join("catalog").join(format!("{server}.json"))
+}
+
+/// Keywords a model never needs to call a tool, dropped wherever a schema sits: annotations for
+/// people and validators, never for the call.
+const UNUSED: [&str; 6] = ["$schema", "$id", "$comment", "examples", "example", "title"];
+
+/// A tool's input schema as every provider is sent it, normalised once: an object schema; every
+/// key and string without control characters; at every schema position — the root, each
+/// property, each item, each branch of `anyOf`, `oneOf` and `allOf`, each `$defs` entry — the
+/// [`UNUSED`] keywords dropped and a description trimmed to [`SCHEMA_DESCRIPTION`] characters, an
+/// empty one dropped. A property's own name is never touched: a property called `title` stays.
+/// `$ref` and `$defs` are kept as written; the keys come out sorted, so the same schema always
+/// gives the same bytes.
+#[must_use]
+pub fn normalised_schema(raw: Option<&Value>) -> Value {
+    let mut schema = match raw {
+        Some(Value::Object(o)) => Value::Object(o.clone()),
+        _ => json!({"type": "object"}),
+    };
+    clean_strings(&mut schema);
+    tidy(&mut schema);
+    if let Some(o) = schema.as_object_mut() {
+        o.insert("type".into(), json!("object"));
+    }
+    schema
+}
+
+/// One schema position tidied, and every schema position under it.
+fn tidy(schema: &mut Value) {
+    let Value::Object(o) = schema else { return };
+    for k in UNUSED {
+        o.remove(k);
+    }
+    let description = o.get("description").and_then(Value::as_str).map(|d| {
+        d.trim()
+            .chars()
+            .take(SCHEMA_DESCRIPTION)
+            .collect::<String>()
+    });
+    match description {
+        Some(d) if d.is_empty() => {
+            o.remove("description");
+        }
+        Some(d) => {
+            o.insert("description".into(), Value::String(d));
+        }
+        None => {}
+    }
+    // Maps of name to schema: each schema tidied, each name kept.
+    for key in [
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+    ] {
+        if let Some(Value::Object(m)) = o.get_mut(key) {
+            m.values_mut().for_each(tidy);
+        }
+    }
+    // One schema, or a list of them.
+    for key in [
+        "items",
+        "additionalProperties",
+        "additionalItems",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "contains",
+        "propertyNames",
+        "not",
+        "if",
+        "then",
+        "else",
+        "anyOf",
+        "oneOf",
+        "allOf",
+        "prefixItems",
+    ] {
+        match o.get_mut(key) {
+            Some(Value::Array(a)) => a.iter_mut().for_each(tidy),
+            Some(v @ Value::Object(_)) => tidy(v),
+            _ => {}
+        }
+    }
 }
 
 /// Every string of a schema — keys and values — without control characters.

@@ -56,6 +56,7 @@ fn request() -> Request {
             description: "read a file".into(),
             input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
             cache: true,
+            defer: false,
         }],
         messages: vec![Message {
             role: Role::User,

@@ -354,6 +354,7 @@ pub fn events(beats: &[Beat]) -> Vec<Event> {
                 tool_use_id,
                 content,
                 is_error,
+                ..
             } => {
                 let (content, cut) = cut(content, RESULT_BYTES);
                 out.push(Event::ToolResult {

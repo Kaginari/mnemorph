@@ -113,11 +113,18 @@ pub fn encode_chat(request: &Request) -> Value {
     if request.breakpoints() > 0 && marks_cache(&request.model) {
         body.insert("cache_control".into(), json!({"type": "ephemeral"}));
     }
-    if !request.tools.is_empty() {
-        let tools = request.tools.iter().map(|t| {
+    // A deferred tool has no native form here: it is left out, and the body reaches it through
+    // the client-side levels — a result's references fall back to its text.
+    let tools: Vec<Value> = request
+        .tools
+        .iter()
+        .filter(|t| !t.defer)
+        .map(|t| {
             json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}})
-        });
-        body.insert("tools".into(), Value::Array(tools.collect()));
+        })
+        .collect();
+    if !tools.is_empty() {
+        body.insert("tools".into(), Value::Array(tools));
     }
     Value::Object(body)
 }

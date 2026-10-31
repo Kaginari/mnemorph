@@ -44,6 +44,10 @@ pub enum Block {
         is_error: bool,
         /// A cache breakpoint ends here.
         cache: bool,
+        /// Deferred tools this result loads, by name: on a provider with native deferred tools
+        /// the result is these references — the provider expands each into its definition, out of
+        /// the cached prefix — and `content` is what any other provider is sent instead.
+        references: Vec<String>,
     },
     /// A block the harness must carry back exactly as it came — thinking blocks above all, whose
     /// signature binds them to the conversation. Never edited, never rebuilt.
@@ -68,8 +72,13 @@ pub struct Tool {
     pub description: String,
     /// Its arguments, as JSON Schema.
     pub input_schema: Value,
-    /// A cache breakpoint ends here (put it on the last tool: the tools tier is cached first).
+    /// A cache breakpoint ends here (put it on the last tool that is not deferred: the tools
+    /// tier is cached first).
     pub cache: bool,
+    /// Deferred: its definition is sent but stays out of the model's context until a tool result
+    /// references it (Anthropic's `defer_loading`). A provider without native deferral leaves a
+    /// deferred tool out of the request.
+    pub defer: bool,
 }
 
 /// How hard the model thinks.
