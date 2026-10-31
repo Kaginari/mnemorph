@@ -14,6 +14,7 @@ describe('the router', () => {
     ['#/w/a/s/r-17', { name: 'session', world: 'a', session: 'r-17' }],
     ['#/w/a%20b/s/x%2Fy', { name: 'session', world: 'a b', session: 'x/y' }],
     ['#/w/a/r/r1-2', { name: 'run', world: 'a', run: 'r1-2' }],
+    ['#/w/a/bodies/queue', { name: 'section', world: 'a', section: 'bodies', tab: 'queue' }],
   ])('reads %j', (hash, route) => expect(parse(hash)).toEqual(route));
 
   it.each([
@@ -25,6 +26,8 @@ describe('the router', () => {
     '#/w/a/r',
     '#/w/a/nope',
     '#/w/a/memory/extra',
+    '#/w/a/memory/queue',
+    '#/w/a/bodies/nope',
     '#/metrics/extra',
     '#/w/%E0%A4%A/s/x',
     '#/w/a/s/b/c/d',
@@ -40,5 +43,6 @@ describe('the router', () => {
     { name: 'section', world: 'x/1', section: 'ontology' },
     { name: 'session', world: 'w?#', session: 's p' },
     { name: 'run', world: 'w', run: 'r1-2' },
+    { name: 'section', world: 'w', section: 'bodies', tab: 'timeline' },
   ])('formats %j and reads it back', (route) => expect(parse(format(route))).toEqual(route));
 });

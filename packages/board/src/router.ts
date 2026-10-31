@@ -9,10 +9,14 @@ import { useEffect, useState } from 'react';
 export const WORLD_SECTIONS = ['bodies', 'memory', 'ontology', 'journal'] as const;
 export type WorldSection = (typeof WORLD_SECTIONS)[number];
 
+/** The tabs of the bodies page: `#/w/<world>/bodies/<tab>`. */
+export const BODIES_TABS = ['colony', 'races', 'queue', 'timeline'] as const;
+export type BodiesTab = (typeof BODIES_TABS)[number];
+
 export type Route =
   | { name: 'worlds' }
   | { name: 'world'; world: string }
-  | { name: 'section'; world: string; section: WorldSection }
+  | { name: 'section'; world: string; section: WorldSection; tab?: BodiesTab }
   | { name: 'session'; world: string; session: string }
   | { name: 'run'; world: string; run: string }
   | { name: 'metrics' }
@@ -58,6 +62,9 @@ export function parse(hash: string): Route {
     const run = c === undefined ? undefined : decode(c);
     return run === undefined ? unknown : { name: 'run', world, run };
   }
+  if (b === 'bodies' && c !== undefined && (BODIES_TABS as readonly string[]).includes(c)) {
+    return { name: 'section', world, section: 'bodies', tab: c as BodiesTab };
+  }
   if (c === undefined && (WORLD_SECTIONS as readonly string[]).includes(b)) {
     return { name: 'section', world, section: b as WorldSection };
   }
@@ -73,7 +80,9 @@ export function format(route: Route): string {
     case 'world':
       return w(route.world);
     case 'section':
-      return `${w(route.world)}/${route.section}`;
+      return route.tab
+        ? `${w(route.world)}/${route.section}/${route.tab}`
+        : `${w(route.world)}/${route.section}`;
     case 'session':
       return `${w(route.world)}/s/${encodeURIComponent(route.session)}`;
     case 'run':

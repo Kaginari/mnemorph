@@ -246,6 +246,11 @@ embeds a placeholder page saying so, and serves the API all the same.
 | `POST /api/w/<id>/memory/<note>/wake` | `{"seen"}`: a note the gate retired, woken as `mnemorphd memory wake`; `BoardDone {done}` |
 | `GET /api/w/<id>/facts` | `BoardFacts`: the counts of each status, a page of facts — `?status=settled\|agreed\|single\|contested\|countered`, `?offset=`, `?limit=` — `onto check`'s findings, the paths' owners and the verdicts a settle may cite |
 | `POST /api/w/<id>/facts/<fact>/settle` | `{"seen", "verdict": <n>}` or `{"seen", "statement": "…"}`: the fact settled on that proof, `by: human (board)`; no proof, or both, is refused (400); `BoardDone {done}` |
+| `GET /api/w/<id>/bodies` | `BoardBodies`: every creature its docs describe — race, lane, `Reports to`, post or speciality, ground, live state, the Minds it wears with their standing, its latest acts — the roster's problems and loops, the throne's state, and every race of the compiled law with its card's art; each part with its source — see *The bodies, queue and journal pages* below |
+| `GET /api/w/<id>/queue` | `BoardQueue`: the shared queue folded as `mnemorphd q list --all` folds it — the open orders (held, claimed) by rank then arrival, then the closed (done, dropped) — each marked witnessed or not, with the counts |
+| `GET /api/w/<id>/timeline` | `BoardTimeline`: commissions (the bodies' run journals) and the gate's verdicts, newest first — `?kind=commission\|verdict`, `?body=`, `?offset=`, `?limit=` (50, at most 500) |
+| `GET /api/w/<id>/journal` | `BoardJournal`: `log.md`'s entries, newest first, with a table of contents — `?q=` (at most 200 characters, any case), `?offset=`, `?limit=` (20, at most 100) |
+| `GET /art/cards/<race>.webp` | a race's card, embedded by its exact name like the page's other assets (no session needed), whether or not the page was built |
 | `GET /api/metrics` | `BoardMetrics` for `?world=<id>` or `all` (the default) over `?window=7d\|28d\|all` (`7d` by default; another word is 400): the usage ledgers' fold, the meters, the Dark Elf's scores and the bench — see *Metrics and integrations* below |
 | `GET /api/integrations` | `BoardIntegrations`, read-only and redacted: the global file alone, or `?world=<id>`'s files layered over it — see *Metrics and integrations* below |
 | `WS /ws/board` | the push channel, subprotocol `mnemorph.board.v1` beside the CSRF entry; the server alone speaks — see *The watcher* below |
@@ -407,6 +412,63 @@ the human's own statement (1 to
 1,000 characters), filed as `the human's word (board): <statement>`. A verdict that failed, landed
 elsewhere, or does not exist is refused (422).
 
+#### The bodies, queue and journal pages
+
+All four read a world in-process with the CLI's own functions, and say where each part was read.
+The roster comes from the creature docs, copied first as the overview copies (regular files only,
+capped) with the Minds under `.mnemorph/minds/`: a body can write its doc, so the roster is shown
+and grants nothing. A Mind's standing — adopted, unadopted, changed, retired, unverified, or named
+but absent — is the witness's under the state directory, held to its anchor (the anchor's fallback
+in `log.md` read from the file's guarded end): trusted. The race law is compiled in: trusted.
+
+**Bodies.** Each creature carries its race and lane (its base race), the creature its doc says it
+reports to, its post (a Kijin's, from its name) or speciality (a Dark Elf's), the paths its doc
+claims, its verify lines counted, its Minds — those its doc names, then the shared ones — and its
+latest six acts. Its live state reads its latest commission: *working* when the journal has no end,
+was written in the last 15 minutes and a session is live in the world (a board chat, or a run lock
+held); *cut* when it has no end and nothing runs it, or does not read; *idle* when it ended;
+*not commissioned yet*; *retired* by its doc. The throne is live while a session is. The roster's
+problems and the creatures whose chain loops are listed.
+
+**The colony net** is drawn from a model kept apart from its drawing (`src/data/colony.ts`):
+one lane per base race in the law's order — the throne, Elf, Orc, Slime, Kijin, Dark Elf, an
+ascended form in its base race's lane — and one edge per `Reports to`; a body whose doc names no
+one and whose race reports to the throne hangs from it, and the throne is drawn for the session when
+no doc describes it. An edge that would close a loop, or names no body, is left out and said under
+the net, so the drawing is always a forest. Within a lane, bodies sit in their commanders' order,
+then by name. Every node carries its words — name, race, post or speciality, live state — as its
+label and on its face, never colour alone; it is a button, and opens the body card: the race's
+card art, the body's facts, the law of its race, its Minds and its acts.
+
+**Race cards** show every race of the law, born in the world or not: whom it reports to and
+commands, its shelf, soil and gate, its steps, budget share and model tier, its headline meter's
+bars, an ascended form's rise, probation and fall bars (`mnemorph_races::law_bars`), and a Kijin's
+posts or a Dark Elf's specialities. The art is the cards of `assets/cards/` cut to WebP
+(`tools/board-art.sh`, about 40 KB a card), embedded by exact name; the page loads only an `art`
+of the plain form `/art/cards/<race>.webp`.
+
+**The queue** is `.mnemorph/shared/queue.jsonl`, copied as a regular file under the cap and folded
+by the queue's own fold; an order the witness under the state directory holds exactly so is
+*witnessed*, one it does not — a line no harness or human wrote — is marked *not witnessed*.
+
+**The timeline** lists commissions — each body's run journal, `<body>-<hex nanos>-<n>.jsonl`,
+its start read from the name, its first ask, its last gate word and its ending (the newest 500
+journals, 4 MiB each, 64 MiB in all, each opened only as a regular file) — and the end gate's
+verdicts from its chained journal, numbered as a settle cites them. A commission is in-world, a
+verdict trusted. It filters by kind and body, and pages.
+
+**The journal** is `log.md`'s last 4 MiB (the page says when older entries are left), opened only
+as a regular file, cut into its `### [<time>] <body> — <title>` entries, each entry's text cut at
+16,000 characters and said so. The page searches it (heading and text, any case), lists the
+matching entries as a table of contents that jumps to each, and renders each entry through the
+board's inert Markdown subset: raw HTML stays text, links are allowlisted, images never load.
+
+<img src="../assets/board/desktop-dark-bodies.png" width="640" alt="The colony net, dark: race lanes, the chain of command, each body labelled with its race and live state; a body card with its race art, law, Minds and acts"> <img src="../assets/board/phone-dark-queue.png" width="180" alt="The queue at phone width, dark: orders by state, an unwitnessed one marked">
+
+<img src="../assets/board/desktop-light-races.png" width="640" alt="The race cards, light: each race's art and its law">
+
+<img src="../assets/board/desktop-light-timeline.png" width="640" alt="The timeline, light: commissions and verdicts, newest first, with their sources"> <img src="../assets/board/phone-light-journal.png" width="180" alt="The journal at phone width, light: the search, the entries' contents, an entry rendered">
+
 #### Metrics and integrations
 
 **Metrics** are the CLI's folds, in-process. The usage ledgers — each world's witness under the
@@ -463,7 +525,8 @@ the theme is the browser's own choice, in Settings.
 The watcher looks only while a board socket is open: every 250 ms while a session is live in some
 world (a board chat, or a run lock held), else every 2 s. Each look takes every world's signature
 — the size and write time of `log.md`, the usage ledger, each run journal and lock, the memory
-tiers (one level deep), and the challenge records and gate verdicts under the state directory —
+tiers (one level deep), the shared queue, and the challenge records, gate verdicts and queue
+witness under the state directory —
 within a budget of 2,000 entries a world (files stat'ed, directory entries read, locks probed).
 A world past its budget is *slowed*: looked at every 10 s, and its overview's `updates` says
 "too many entries: updates slowed". Looking fast, a world whose signature moved is told once it

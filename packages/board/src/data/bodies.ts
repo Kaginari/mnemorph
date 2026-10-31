@@ -168,7 +168,9 @@ function race(v: unknown): RaceLaw | undefined {
   });
   const posts = rows(o.posts, (r) => {
     const x = obj(r);
-    return x && str(x.creature) && strs(x.acts) ? { creature: x.creature, acts: x.acts } : undefined;
+    return x && str(x.creature) && strs(x.acts)
+      ? { creature: x.creature, acts: x.acts }
+      : undefined;
   });
   const specialities = rows(o.specialities, (r) => {
     const x = obj(r);
