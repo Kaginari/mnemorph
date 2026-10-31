@@ -95,6 +95,7 @@ const STOP: &[&str] = &[
 /// and single letters aside.
 fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
         .filter(|w| w.chars().count() > 1 || w.chars().all(|c| c.is_ascii_digit()))
         .map(str::to_lowercase)
         .filter(|w| !STOP.contains(&w.as_str()))
@@ -110,7 +111,7 @@ const B: f64 = 0.75;
 /// server and description (`k1 = 1.2`, `b = 0.75`, the formula recall uses), plus the learned
 /// boost. No model ranks; ties keep the catalog's own order, so the result is deterministic.
 #[must_use]
-pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec, f64)> {
+pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<Ranked<'a>> {
     let docs: Vec<Vec<String>> = specs
         .iter()
         .map(|s| {
@@ -131,7 +132,7 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec,
     let n = specs.len() as f64;
     #[allow(clippy::cast_precision_loss, reason = "catalogs are small")]
     let avg = (docs.iter().map(Vec::len).sum::<usize>() as f64 / n.max(1.0)).max(1.0);
-    let mut scored: Vec<(usize, f64)> = docs
+    let mut scored: Vec<(usize, f64, f64)> = docs
         .iter()
         .enumerate()
         .map(|(i, doc)| {
@@ -152,9 +153,27 @@ pub fn rank<'a>(specs: &'a [Spec], query: &str, usage: &Usage) -> Vec<(&'a Spec,
                     idf * tf * (K1 + 1.0) / (tf + K1 * (1.0 - B + B * len / avg))
                 })
                 .sum();
-            (i, lexical + usage.boost(&specs[i].name))
+            (i, lexical, lexical + usage.boost(&specs[i].name))
         })
         .collect();
-    scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-    scored.into_iter().map(|(i, s)| (&specs[i], s)).collect()
+    scored.sort_by(|a, b| b.2.total_cmp(&a.2).then(a.0.cmp(&b.0)));
+    scored
+        .into_iter()
+        .map(|(i, lexical, score)| Ranked {
+            spec: &specs[i],
+            lexical,
+            score,
+        })
+        .collect()
+}
+
+/// One ranked tool.
+#[derive(Debug, Clone, Copy)]
+pub struct Ranked<'a> {
+    /// The tool.
+    pub spec: &'a Spec,
+    /// Its BM25 score for the query alone: above zero when it matches a word of it.
+    pub lexical: f64,
+    /// What it is ordered by: the BM25 score and the learned boost.
+    pub score: f64,
 }

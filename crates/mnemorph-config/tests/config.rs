@@ -1206,6 +1206,7 @@ fn an_mcp_tools_class_is_declared_in_the_global_file() {
             "[mcp.servers.web.tools.a__b]\nclass = \"read\"\n",
             "no tool name",
         ),
+        ("[mcp]\ntop_k = 0\n", "at least 1"),
     ] {
         let g = Ground::new("mcp-class-bad");
         g.global(&format!("[mcp.servers.web]\ncommand = \"x\"\n{toml}"));

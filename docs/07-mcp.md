@@ -37,8 +37,8 @@ global configuration, inside the sandbox, and shows each body only the tools of 
 named for its race that its shelf can use.
 
 Every tool has a class — read, write, outward or destructive — that you declare for the tool or
-its server; a tool nobody declared is outward, so it reaches only Kijin and Oni and asks you
-before each call. Most MCP traffic leaves the machine, so most of it is Kijin ground.
+its server; a tool nobody declared is outward — unless the sandbox proves it a read — so it reaches
+only Kijin and Oni and asks you before each call. Most MCP traffic leaves the machine, so most of it is Kijin ground.
 
 A server always sends every one of its tool definitions, so Mnemorph shows them in three levels,
 each priced before it loads:
@@ -67,7 +67,7 @@ reach. The same holds for `sandbox.allow_unguarded` and every key that loosens t
 
 ```toml
 [mcp]
-top_k = 5                  # tools ranked for each ask, named in its tail at level 1
+top_k = 5                  # tools ranked for each ask, named in its tail at level 1 (at least 1)
 
 [mcp.servers.search]
 command = "web-search-mcp"
@@ -119,7 +119,9 @@ notifications are passed over.
 - **Cached and lazy.** A server's catalog is listed the first time a body opens it (level 1) or
   needs one of its tools (level 2 or a call), and cached under the state directory, keyed by the
   server's identity (command, arguments, passed variables, network) and trusted for 24 hours.
-  The server that was listed keeps running for the calls that follow. Level 0, the ranking and a
+  The server that was listed keeps running for the calls that follow; each server has its own
+  slot, so one slow server never holds another's calls, and two bodies opening one server start
+  it once. The cache is written aside and renamed, so a torn write is never read as a catalog. Level 0, the ranking and a
   search read only the catalogs already known, so a session starts no server until a body opens
   one or calls it, and a session that reads a fresh cache starts none until a call.
 
@@ -141,7 +143,8 @@ Each listed tool becomes a spec once:
   write the world or reach outside. Run unguarded, or with `network = true`, the hint is
   ignored.
 
-Every refusal is a hole, said at level 1 and in `mnemorph status` once the catalog is known.
+Every refusal is a hole, said at level 1 and in `mnemorph status` once the catalog is known; so is
+a class your configuration declares for a tool the server does not list.
 
 ### Scoped by race and class
 
@@ -186,7 +189,7 @@ Before each ask, the harness ranks the tools in scope among the known catalogs b
 and names the top `top_k` at level 1 in its tail, under `MCP tools that fit this ask`. The rank
 is BM25 (`k1 = 1.2`, `b = 0.75`, the formula recall uses) of the ask's words — stop words and
 single letters aside — over each tool's name, server and description, plus the learned nudge
-below; only tools with a positive score are named, ties keep the catalog's order, and no model
+below; only tools with a positive BM25 score are named — the nudge orders them, never admits one, ties keep the catalog's order, and no model
 is asked, so the same catalog and ask always give the same list. A commissioned body is ranked
 for its commission's ask, the session's body for each of its asks.
 
@@ -238,8 +241,6 @@ These parts of [#48](https://github.com/Kaginari/mnemorph/issues/48) wait for M1
   envelope; a server whose schemas would blow the ceiling shown at level 0 only.
 - **`list_changed`** and server versions as refresh triggers; argument validation against the
   schema before a call.
-- **`outward-read`**: a class you mark in config for network lookups that need no prompt
-  (`class = "read"` on the tool or the server is that choice).
 - **`mnemorph mcp serve --toolbox`**: the same selection served to Claude Code, OpenCode or any MCP
   client, for their own servers.
 - **The M13 benchmark** against maki: spec tokens shown, tokens loaded on demand, session start

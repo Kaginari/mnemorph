@@ -1329,10 +1329,10 @@ impl Config {
         let d = Settings::default();
         Ok(Settings {
             servers,
-            top_k: self
-                .int("mcp.top_k")
-                .and_then(|n| usize::try_from(n).ok())
-                .unwrap_or(d.top_k),
+            top_k: match self.int("mcp.top_k") {
+                Some(0) => return Err("mcp.top_k: at least 1".into()),
+                n => n.and_then(|n| usize::try_from(n).ok()).unwrap_or(d.top_k),
+            },
         })
     }
 

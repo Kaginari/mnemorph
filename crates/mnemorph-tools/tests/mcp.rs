@@ -616,20 +616,33 @@ fn the_ask_ranks_the_known_tools_by_bm25_deterministically() {
 
 #[test]
 fn what_helped_landed_asks_climbs_the_ranking() {
-    let w = World::new("learn", &many());
+    let mut tools = many();
+    // Punctuation is no word: a description ending in `.` matches no ask ending in one.
+    tools
+        .as_array_mut()
+        .unwrap()
+        .push(tool("fetch", "Fetch one URL."));
+    let w = World::new("learn", &tools);
     let m = w.mcp(vec![w.server("hub", &[Race::Kijin], None)]);
     let mut cx = w.cx(Race::Kijin, approve());
     let offer = m.offer(Race::Kijin, &cx);
     let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
     let top = || m.ranked(Race::Kijin, "do a chore", &cx)[0].name.clone();
     assert_eq!(top(), "hub__filler_0");
-    let used: BTreeSet<String> = ["hub__issue_create".to_owned()].into();
+    let used: BTreeSet<String> =
+        ["hub__filler_7".to_owned(), "hub__issue_create".to_owned()].into();
     mcp::learn(&w.state, &used, true).unwrap();
     mcp::learn(&w.state, &used, true).unwrap();
-    assert_eq!(
-        top(),
-        "hub__issue_create",
-        "what helped two landed asks rises"
+    assert_eq!(top(), "hub__filler_7", "what helped two landed asks rises");
+    // The nudge orders, never admits: a tool that helped is not named for an ask it misses.
+    assert!(
+        !m.ranked(Race::Kijin, "do a chore", &cx)
+            .iter()
+            .any(|t| t.name == "hub__issue_create")
+    );
+    assert!(
+        m.ranked_block(Race::Kijin, "compile the kernel.", &cx)
+            .is_none()
     );
     let idle: BTreeSet<String> = ["hub__filler_0".to_owned()].into();
     for _ in 0..3 {

@@ -29,7 +29,7 @@ use crate::gate::{Answer, Ask};
 use crate::tool::{Context, Outcome, Tool};
 pub use client::Conn;
 pub use levels::{CALL, OPEN, SCHEMA, SEARCH, price};
-pub use rank::{Tally, Usage, learn, rank};
+pub use rank::{Ranked, Tally, Usage, learn, rank};
 
 /// How many ranked tools the ask's tail names at level 1, unless the configuration says.
 pub const TOP_K: usize = 5;
@@ -285,7 +285,7 @@ impl Spec {
                 "MCP server `{}`: a tool named `{}` is refused — names are letters, digits, `_` \
                  and `-`, no `__`, at most 64 with the server's prefix",
                 server.name,
-                mnemorph_wire::shown(&clean(&tool.chars().take(80).collect::<String>()))
+                clean(&tool.chars().take(80).collect::<String>())
             ));
         }
         let mut schema = match raw.get("inputSchema") {
@@ -334,7 +334,10 @@ pub struct Mcp {
     settings: Settings,
     state: PathBuf,
     listings: Mutex<BTreeMap<String, Listing>>,
-    conns: Mutex<BTreeMap<String, Conn>>,
+    /// One slot per server: the map is locked only to find a slot, and a slot is held while its
+    /// server starts, lists or answers — so one slow server never waits on another, and two
+    /// bodies opening the same server start it once.
+    conns: Mutex<BTreeMap<String, Slot>>,
 }
 
 impl std::fmt::Debug for Mcp {
@@ -344,6 +347,9 @@ impl std::fmt::Debug for Mcp {
             .finish_non_exhaustive()
     }
 }
+
+/// A server's running connection, when it runs.
+type Slot = Arc<Mutex<Option<Conn>>>;
 
 /// What one run is offered.
 pub struct Offer {
@@ -388,10 +394,24 @@ impl Mcp {
     /// Whether the server `name` is running.
     #[must_use]
     pub fn started(&self, name: &str) -> bool {
-        self.conns
+        let slot = self
+            .conns
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .contains_key(name)
+            .get(name)
+            .cloned();
+        slot.is_some_and(|s| s.lock().unwrap_or_else(PoisonError::into_inner).is_some())
+    }
+
+    /// The slot of server `name`, made empty when it has none.
+    fn slot(&self, name: &str) -> Slot {
+        Arc::clone(
+            self.conns
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(name.to_owned())
+                .or_default(),
+        )
     }
 
     fn scratch(&self, server: &str) -> PathBuf {
@@ -407,7 +427,7 @@ impl Mcp {
     }
 
     /// `server`'s catalog when it is known — listed this session, or fresh in the cache — with
-    /// no server started.
+    /// no server started. Its classes are inferred once, with the session's guard.
     fn known(&self, server: &Server, guarded: bool) -> Option<Listing> {
         let mut listings = self.listings.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(l) = listings.get(&server.name) {
@@ -426,20 +446,34 @@ impl Mcp {
         if let Some(l) = self.known(server, guarded) {
             return Ok(l);
         }
-        let mut conn = Conn::start(server, cx, &self.scratch(&server.name))?;
-        let raw = conn.list()?;
-        self.conns
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(server.name.clone(), conn);
+        let slot = self.slot(&server.name);
+        let mut conn = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        // Another body may have listed it while this one waited on the slot.
+        if let Some(l) = self.known(server, guarded) {
+            return Ok(l);
+        }
+        if conn.is_none() {
+            *conn = Some(Conn::start(server, cx, &self.scratch(&server.name))?);
+        }
+        let listed = conn.as_mut().map(Conn::list);
+        let raw = match listed {
+            Some(Ok(raw)) => raw,
+            Some(Err(e)) => {
+                *conn = None;
+                return Err(e);
+            }
+            None => return Err(format!("MCP server `{}` is not running", server.name)),
+        };
         let file = catalog_file(&self.state, &server.name);
         if let Some(dir) = file.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        let _ = std::fs::write(
-            &file,
-            json!({"identity": server.identity(), "tools": raw}).to_string(),
-        );
+        // Written aside then renamed: a torn write never reads as a catalog.
+        let tmp = file.with_extension("json.tmp");
+        let body = json!({"identity": server.identity(), "tools": raw}).to_string();
+        if std::fs::write(&tmp, body).is_ok() {
+            let _ = std::fs::rename(&tmp, &file);
+        }
         let listing = normalise(server, &raw, guarded);
         self.listings
             .lock()
@@ -527,17 +561,19 @@ impl Mcp {
         (specs, unlisted)
     }
 
-    /// The tools in scope ranked for `ask`, best first, at most `top_k`, each with some match:
-    /// BM25 over the known catalogs and the learned nudge, no model and no server started.
+    /// The tools in scope ranked for `ask`, best first, at most `top_k`, each matching some word of
+    /// it: BM25 over the known catalogs and the learned nudge, no model and no server started.
+    /// The nudge orders, never admits: a tool that helped before is not named for an ask it does
+    /// not match.
     #[must_use]
     pub fn ranked(&self, race: Race, ask: &str, cx: &Context) -> Vec<Spec> {
         let (scope, _) = self.known_scope(race, cx);
         let usage = Usage::load(&self.state);
         rank(&scope, ask, &usage)
             .into_iter()
-            .filter(|(_, score)| *score > 0.0)
+            .filter(|r| r.lexical > 0.0)
             .take(self.settings.top_k)
-            .map(|(s, _)| s.clone())
+            .map(|r| r.spec.clone())
             .collect()
     }
 
@@ -610,9 +646,9 @@ impl Mcp {
         let usage = Usage::load(&self.state);
         let found: Vec<Spec> = rank(&scope, query, &usage)
             .into_iter()
-            .filter(|(_, score)| *score > 0.0)
+            .filter(|r| r.lexical > 0.0)
             .take(levels::SHOWN)
-            .map(|(s, _)| s.clone())
+            .map(|r| r.spec.clone())
             .collect();
         levels::search(query, &found, &unlisted)
     }
@@ -663,18 +699,15 @@ impl Mcp {
                 return o;
             }
         }
-        let mut conns = self.conns.lock().unwrap_or_else(PoisonError::into_inner);
-        if !conns.contains_key(&server.name) {
+        let slot = self.slot(&server.name);
+        let mut conn = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        if conn.is_none() {
             match Conn::start(server, cx, &self.scratch(&server.name)) {
-                Ok(c) => {
-                    conns.insert(server.name.clone(), c);
-                }
+                Ok(c) => *conn = Some(c),
                 Err(e) => return Outcome::error(e),
             }
         }
-        let called = conns
-            .get_mut(&server.name)
-            .map(|c| c.call(&spec.tool, arguments));
+        let called = conn.as_mut().map(|c| c.call(&spec.tool, arguments));
         match called {
             Some(Ok((text, is_error))) => {
                 let mut o = Outcome::ok(wrap(spec, &text), spec.class);
@@ -684,7 +717,7 @@ impl Mcp {
             }
             Some(Err(e)) => {
                 // A failed server is dropped: the next call starts it again.
-                conns.remove(&server.name);
+                *conn = None;
                 Outcome::error(e)
             }
             None => Outcome::error(format!("MCP server `{}` is not running", server.name)),
@@ -727,6 +760,15 @@ fn normalise(server: &Server, raw: &[Value], guarded: bool) -> Listing {
                 server.name, s.tool
             )),
             Err(e) => listing.holes.push(e),
+        }
+    }
+    // A class declared for a tool the server never lists is most likely a typo: said, not lost.
+    for declared in server.tools.keys() {
+        if !listing.specs.iter().any(|s| &s.tool == declared) {
+            listing.holes.push(format!(
+                "MCP server `{}` lists no tool `{declared}`, though your configuration classes it",
+                server.name
+            ));
         }
     }
     listing
