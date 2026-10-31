@@ -827,10 +827,10 @@ fn routing_is_off_until_the_human_turns_it_on() {
 const CLASSIFIER: &str =
     "[providers.jeff]\nkind = \"systemone\"\nbase_url = \"http://127.0.0.1:8765\"\n";
 
-/// Decisions are a feature the human switches on, and only a classifier can make them: on with
-/// none named, they stay off and the human is told; switched off, a named one is not asked.
+/// Decisions are a feature the human switches on: on with no classifier named, the LLM answers
+/// them (no hole: the switch is taken); switched off, a named classifier is not asked.
 #[test]
-fn decisions_need_the_switch_and_a_classifier() {
+fn decisions_need_the_switch_and_take_a_classifier_when_named() {
     let g = Ground::new("decide-switch");
     let d = g.load().unwrap().decide().unwrap();
     assert!(!d.enabled && !d.bench && !d.route, "off by default");
@@ -839,13 +839,11 @@ fn decisions_need_the_switch_and_a_classifier() {
     let c = g.load().unwrap();
     let d = c.decide().unwrap();
     assert!(
-        !d.enabled && !d.bench && !d.route,
-        "no classifier, no decisions"
+        d.enabled && d.bench && d.route && d.via.is_none(),
+        "no classifier: the LLM decides"
     );
     assert!(
-        c.holes()
-            .iter()
-            .any(|h| h.key == "decide.enabled" && h.why.contains("need a classifier")),
+        !c.holes().iter().any(|h| h.key == "decide.enabled"),
         "{:?}",
         c.holes()
     );

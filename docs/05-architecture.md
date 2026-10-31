@@ -1690,11 +1690,12 @@ an empty list or table never overrides a lower layer:
   `openai` (any OpenAI-compatible server) or `systemone` (a classifier: TypeSafe's Jev, or a
   jeff server on your own machine).
 - **Decisions** (`decide.*`) are a feature the human switches on and off (`decide.enabled`, off by
-  default), and only a classifier makes them: `decide.via` names a provider of
-  `kind = "systemone"` — TypeSafe's Jev, a jeff server, or any server that speaks the same
-  protocol. With none named the feature stays off, whatever else the section says, and the load
-  reports why. When the classifier fails, the LLM `decide.llm` (the fast tier's model by default)
-  answers in its place. `decide.bench` (on with decisions) and `decide.route` (off until asked)
+  default). A classifier answers them first: `decide.via` names a provider of
+  `kind = "systemone"` — TypeSafe's Jev (the one to configure), a jeff server on your own machine,
+  or any server that speaks the same protocol. The LLM `decide.llm` (the fast tier's model by
+  default) answers in its place when none is named, when its key variable is not set — each such
+  decision names why in its `fell_back` — and when it fails. A `decide.via` naming no provider, or
+  one of another kind, is still an error: that is a typo, not a missing classifier. `decide.bench` (on with decisions) and `decide.route` (off until asked)
   switch each point. A decision
   is only acted on above its cut-off, and the cut-off depends on who answered:
   `decide.cutoff.measured` for a System One answer, `decide.cutoff.stated`, stricter, for an
@@ -1735,15 +1736,16 @@ dark-elf = "anthropic/claude-opus-5.5"    # …or one per race
 [models.office.orc]
 judge = "vllm:qwen3-coder"         # …or per race and office, through another backend
 
-[providers.jeff]                   # System One on this machine; or TypeSafe's Jev:
-kind = "systemone"                 # base_url = "https://api.typesafe.ai"
-base_url = "http://127.0.0.1:8765" # key_env = "TYPESAFE_API_KEY"
+[providers.jev]                    # System One: TypeSafe's Jev; or a jeff server on this machine:
+kind = "systemone"                 # base_url = "http://127.0.0.1:8765", no key
+base_url = "https://api.typesafe.ai"
+key_env = "TYPESAFE_API_KEY"
 
 [decide]
 enabled = true                     # the switch; off by default
-via = "jeff"                       # the classifier; without one, decisions stay off
-model = "jeff-latest"              # required with via; Jev's is "jev-latest"
-llm = "claude-haiku-5-5"           # answers when the classifier fails; the fast tier's model by default
+via = "jev"                        # the classifier; without one, or its key, the LLM decides
+model = "jev-latest"               # required with via; a jeff server's is "jeff-latest"
+llm = "claude-haiku-5-5"           # answers when no classifier can; the fast tier's model by default
 bench = true                       # read a piped test run's output (on with decisions)
 route = true                       # Metis: route commissions within their office's band (off until asked)
 
@@ -1824,10 +1826,12 @@ config:
   theme: neutral
 ---
 flowchart LR
-    Q["a decision point<br/>state + typed questions"] --> V{"decide.enabled<br/>and a classifier?"}
-    V -- yes --> S["the classifier<br/>Jev · jeff · any System One server"]
+        Q["a decision point<br/>state + typed questions"] --> V{"decide.enabled?"}
     V -- no --> OFF["no decision:<br/>the point keeps its default"]
-    S -- fails --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
+    V -- yes --> W{"a classifier<br/>with its key?"}
+    W -- yes --> S["the classifier<br/>Jev · jeff · any System One server"]
+    W -- "no: fell_back says why" --> L["the LLM decide.llm<br/>answer tool, schema-bound"]
+    S -- fails --> L
     S --> M["basis: measured"]
     L --> T["basis: stated"]
     M & T --> D["Decision<br/>answers · source · basis · fell_back"]

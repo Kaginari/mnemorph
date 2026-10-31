@@ -449,20 +449,20 @@ pub struct Backend {
     pub model: String,
 }
 
-/// How decisions are made: by the classifier `via`, when the human switched decisions on and named
-/// one; the LLM `llm` answers only when that classifier fails.
+/// How decisions are made, once the human switched them on: by the classifier `via` first (Jev,
+/// or a jeff server), and by the LLM `llm` when no classifier is named, its key is not set, or it
+/// fails.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decide {
-    /// Whether decisions are on: the human turned them on (`decide.enabled`) **and** named a
-    /// classifier to make them (`decide.via`). Without a classifier the feature is off, whatever
-    /// else the section says.
+    /// Whether decisions are on: the human turned them on (`decide.enabled`). With no classifier
+    /// named (`decide.via`), the LLM answers every one, held to the stated cut-off.
     pub enabled: bool,
     /// The System One provider tried first (`kind = "systemone"`), when one is configured.
     pub via: Option<String>,
     /// The model to ask at `via` (`jev-latest` at TypeSafe, `jeff-latest` at a jeff server);
     /// empty when there is no `via`.
     pub model: String,
-    /// The LLM that answers when the classifier fails.
+    /// The LLM that answers when there is no classifier, or it cannot be asked or fails.
     pub llm: String,
     /// Whether Metis routes a commission to a tier by how demanding it is (`decide.route`): off
     /// unless the human turns it on, since it changes which model does the work.
@@ -625,7 +625,6 @@ impl Config {
             )?;
         }
         config.validate()?;
-        config.decisions_need_a_classifier();
         Ok(config)
     }
 
@@ -720,25 +719,6 @@ impl Config {
             );
         }
         Ok(())
-    }
-
-    /// Decisions turned on with no classifier named stay off, and the human is told why.
-    fn decisions_need_a_classifier(&mut self) {
-        let on = self
-            .get("decide.enabled")
-            .filter(|l| l.value.as_bool() == Some(true));
-        if let Some(leaf) = on
-            && self.get("decide.via").is_none()
-        {
-            let origin = leaf.origin.clone();
-            self.holes.push(Hole {
-                key: "decide.enabled".into(),
-                origin,
-                why: "decisions need a classifier: name one with decide.via (a provider of kind \
-                      \"systemone\", such as TypeSafe's Jev or a jeff server); until then they stay off"
-                    .into(),
-            });
-        }
     }
 
     /// The budget caps, the race models and the default backend, checked.
@@ -1211,7 +1191,7 @@ impl Config {
             Ok(v)
         };
         let flag = |key: &str| self.get(key).and_then(|l| l.value.as_bool());
-        let enabled = flag("decide.enabled").unwrap_or(false) && via.is_some();
+        let enabled = flag("decide.enabled").unwrap_or(false);
         let bench = enabled && flag("decide.bench").unwrap_or(true);
         let route = enabled && flag("decide.route").unwrap_or(false);
         Ok(Decide {

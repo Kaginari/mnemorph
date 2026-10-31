@@ -41,6 +41,7 @@ async fn one_real_decision() {
             provider: "live".into(),
             model,
         }),
+        unavailable: None,
         fallback: Fallback {
             client: Arc::new(Unreachable),
             provider: "none".into(),

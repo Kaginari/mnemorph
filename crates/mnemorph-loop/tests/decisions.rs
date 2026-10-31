@@ -214,6 +214,7 @@ fn with(w: &World, primary: Option<SystemOne>, llm: &Arc<Llm>) -> Decisions {
                 provider: "jeff".into(),
                 model: "jeff-latest".into(),
             }),
+            unavailable: None,
             fallback: Fallback {
                 client: llm.clone(),
                 provider: "anthropic".into(),
@@ -453,15 +454,24 @@ fn decisions_are_built_from_the_humans_configuration() {
     let model: Arc<ScriptedModel> = Arc::new(ScriptedModel::new([]));
     let none = |_: &str| None;
 
-    // Off by default; on without a classifier, still off — no LLM is asked in its place.
-    for text in ["", "[decide]\nenabled = true\nbench = true\nroute = true\n"] {
-        assert!(
-            decisions(&load(text), &world, model.clone(), none)
-                .unwrap()
-                .is_none(),
-            "{text}"
-        );
-    }
+    // Off by default.
+    assert!(
+        decisions(&load(""), &world, model.clone(), none)
+            .unwrap()
+            .is_none()
+    );
+    // On with no classifier named: the LLM answers every decision, and none says it fell back.
+    let d = decisions(
+        &load("[decide]\nenabled = true\nroute = true\n"),
+        &world,
+        model.clone(),
+        none,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(d.bench && d.route);
+    assert!(d.decider.primary.is_none() && d.decider.unavailable.is_none());
+    assert_eq!(d.decider.fallback.model, "claude-haiku-5-5");
     // A classifier named but the feature not turned on: off.
     let named = format!("{JEFF}[decide]\nvia = \"jeff\"\nmodel = \"jeff-latest\"\n");
     assert!(
@@ -507,10 +517,70 @@ fn decisions_are_built_from_the_humans_configuration() {
         "[providers.jev]\nkind = \"systemone\"\nbase_url = \"https://api.typesafe.ai\"\n\
          key_env = \"TYPESAFE_API_KEY\"\n[decide]\nenabled = true\nvia = \"jev\"\nmodel = \"jev-latest\"\n",
     );
-    let err = decisions(&jev, &world, model.clone(), none).err().unwrap();
-    assert!(err.contains("TYPESAFE_API_KEY is not set"), "{err}");
+    // Jev named without its key: a missing classifier, not an error. The LLM answers, and says why.
+    let d = decisions(&jev, &world, model.clone(), none)
+        .unwrap()
+        .unwrap();
+    assert!(d.decider.primary.is_none());
+    let why = d.decider.unavailable.as_deref().unwrap();
+    assert!(
+        why.contains("jev") && why.contains("TYPESAFE_API_KEY is not set"),
+        "{why}"
+    );
     let key = |v: &str| (v == "TYPESAFE_API_KEY").then(|| "k".to_owned());
-    assert!(decisions(&jev, &world, model, key).unwrap().is_some());
+    let d = decisions(&jev, &world, model.clone(), key)
+        .unwrap()
+        .unwrap();
+    assert_eq!(d.decider.primary.as_ref().unwrap().provider, "jev");
+    assert!(d.decider.unavailable.is_none());
+
+    // A `via` naming no provider, or one of another kind, is a typo: still an error.
+    let typo = load("[decide]\nenabled = true\nvia = \"jve\"\nmodel = \"jev-latest\"\n");
+    let err = decisions(&typo, &world, model.clone(), none).err().unwrap();
+    assert!(err.contains("no provider has that name"), "{err}");
+    let wrong = load("[decide]\nenabled = true\nvia = \"anthropic\"\nmodel = \"m\"\n");
+    let err = decisions(&wrong, &world, model, none).err().unwrap();
+    assert!(err.contains("kind = \"systemone\""), "{err}");
+}
+
+/// Jev configured but its key not set on this machine: the LLM reads every piped bench in its
+/// place, held to the stated cut-off, and each journal row names the fallback and why.
+#[tokio::test]
+async fn without_jevs_key_the_llm_decides_and_the_journal_says_why() {
+    let w = World::new("no-key");
+    let llm = Arc::new(Llm::default());
+    llm.replies
+        .lock()
+        .unwrap()
+        .extend((0..9).map(|_| stated_green(0.95)));
+    let mut d = with(&w, None, &llm);
+    d.decider = Arc::new(Decider {
+        primary: None,
+        unavailable: Some("jev: its key variable TYPESAFE_API_KEY is not set".into()),
+        fallback: Fallback {
+            client: llm.clone(),
+            provider: "anthropic".into(),
+            model: "claude-haiku-5-5".into(),
+        },
+    });
+    let mut run = w.run(piped_runs(true)).with_decisions(d);
+    let e = ask(&mut run).await;
+    assert!(matches!(&e, Ending::Answered(_)), "{e:?}");
+    assert_eq!(*llm.asked.lock().unwrap(), 9, "one decision per piped run");
+    let rows = w.decisions_journal().read().unwrap().rows;
+    assert_eq!(rows.len(), 9);
+    for r in &rows {
+        assert_eq!(
+            (r.basis.as_str(), r.provider.as_str()),
+            ("stated", "anthropic")
+        );
+        assert!(
+            r.fell_back
+                .as_deref()
+                .is_some_and(|why| why.contains("TYPESAFE_API_KEY is not set")),
+            "{r:?}"
+        );
+    }
 }
 
 /// A run the shell saw fail is never read: a decider that would say green is not asked, and the

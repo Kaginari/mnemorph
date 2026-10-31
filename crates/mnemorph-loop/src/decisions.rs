@@ -74,15 +74,17 @@ impl Complete for Own {
     }
 }
 
-/// The run's decisions from the configuration: `decide.via`'s System One provider first, its key
-/// read from the environment variable it names (`env`); then `decide.llm` through the run's own
-/// `model`, when it fails. `None` when decisions are off — not switched on (`decide.enabled`), no
-/// classifier named, or every point off (`decide.bench`, `decide.route`).
+/// The run's decisions from the configuration: `decide.via`'s System One provider first (Jev, or
+/// a jeff server), its key read from the environment variable it names (`env`); then
+/// `decide.llm` through the run's own `model` — for every decision when no classifier is named,
+/// in its place when its key variable is not set (each decision then says why, as `fell_back`),
+/// and when it fails. `None` when decisions are off: not switched on (`decide.enabled`), or every
+/// point off (`decide.bench`, `decide.route`).
 ///
 /// # Errors
 ///
-/// The `decide` settings are invalid, `decide.via`'s key variable is not set, or the TLS stack
-/// cannot start.
+/// The `decide` settings are invalid — `decide.via` naming no provider or one of another kind is
+/// a typo, not a missing classifier — or the TLS stack cannot start.
 pub fn decisions(
     config: &mnemorph_config::Config,
     world: &Path,
@@ -93,25 +95,35 @@ pub fn decisions(
     if !d.bench && !d.route {
         return Ok(None);
     }
+    let mut unavailable = None;
     let primary = match &d.via {
         None => None,
         Some(name) => {
             let p = config.providers().remove(name).ok_or_else(|| {
                 format!("decide.via names `{name}`, and no provider has that name")
             })?;
-            let key = match &p.key_env {
-                None => None,
-                Some(var) => Some(env(var).ok_or_else(|| {
-                    format!("decide.via names `{name}`, whose key variable {var} is not set")
-                })?),
-            };
-            let policy = SystemOne::policy();
-            let transport = HttpTransport::new(policy.connect).map_err(|e| e.to_string())?;
-            Some(Primary {
-                client: SystemOne::new(Arc::new(transport), &p.base_url, key, policy),
-                provider: name.clone(),
-                model: d.model.clone(),
-            })
+            match p.key_env.as_deref().map(|var| (var, env(var))) {
+                // A missing key is a missing classifier, not a typo: the LLM answers in its place.
+                Some((var, None)) => {
+                    unavailable = Some(format!("{name}: its key variable {var} is not set"));
+                    None
+                }
+                key => {
+                    let policy = SystemOne::policy();
+                    let transport =
+                        HttpTransport::new(policy.connect).map_err(|e| e.to_string())?;
+                    Some(Primary {
+                        client: SystemOne::new(
+                            Arc::new(transport),
+                            &p.base_url,
+                            key.and_then(|(_, k)| k),
+                            policy,
+                        ),
+                        provider: name.clone(),
+                        model: d.model.clone(),
+                    })
+                }
+            }
         }
     };
     let fallback = Fallback {
@@ -120,7 +132,11 @@ pub fn decisions(
         model: d.llm,
     };
     Ok(Some(Decisions {
-        decider: Arc::new(Decider { primary, fallback }),
+        decider: Arc::new(Decider {
+            primary,
+            unavailable,
+            fallback,
+        }),
         cutoffs: Cutoffs {
             measured: d.cutoff_measured,
             stated: d.cutoff_stated,

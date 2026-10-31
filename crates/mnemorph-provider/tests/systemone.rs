@@ -335,6 +335,7 @@ fn decider(primary: Option<SystemOne>, llm: &Arc<Llm>) -> Decider {
             provider: "jev".into(),
             model: "jev-latest".into(),
         }),
+        unavailable: None,
         fallback: Fallback {
             client: llm.clone(),
             provider: "anthropic".into(),
@@ -373,6 +374,21 @@ async fn without_a_system_one_the_llm_answers_and_says_its_probabilities_are_sta
     );
     assert_eq!(d.answer("genre").unwrap().choice(), "fiction");
     assert!((d.answer("positive").unwrap().probability("true") - 0.9).abs() < 1e-9);
+}
+
+/// A System One provider configured but not askable (its key unset): the LLM answers, stated,
+/// and the decision carries why, as a failure would.
+#[tokio::test]
+async fn an_unavailable_system_one_is_named_in_every_llm_answer() {
+    let llm = Llm::new(vec![Ok(tool_answer())]);
+    let mut d = decider(None, &llm);
+    d.unavailable = Some("jev: its key variable TYPESAFE_API_KEY is not set".into());
+    let decision = d.decide(&review()).await.unwrap();
+    assert_eq!(decision.source.basis, Basis::Stated);
+    assert_eq!(
+        decision.fell_back.as_deref(),
+        Some("jev: its key variable TYPESAFE_API_KEY is not set")
+    );
 }
 
 #[tokio::test]

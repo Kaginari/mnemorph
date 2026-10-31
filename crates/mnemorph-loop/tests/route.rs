@@ -114,6 +114,7 @@ fn deciders(
     let dec = Decisions {
         decider: Arc::new(Decider {
             primary,
+            unavailable: None,
             fallback: Fallback {
                 client: Arc::new(llm),
                 provider: "anthropic".into(),
@@ -466,6 +467,7 @@ async fn an_unsure_stated_or_failed_route_keeps_the_default_tier() {
     let dec = Decisions {
         decider: Arc::new(Decider {
             primary: None,
+            unavailable: None,
             fallback: Fallback {
                 client: Arc::clone(&dec.decider.fallback.client),
                 provider: "anthropic".into(),
