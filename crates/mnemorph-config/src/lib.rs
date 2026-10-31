@@ -164,6 +164,10 @@ pub const MIN_NET_WINS: u32 = 2;
 
 /// The most `tools.read.range_over` may be: past it, the rule never asks.
 const RANGE_OVER_CEILING: i64 = 1_000_000;
+/// The most restarts `mcp.restarts.max` may allow a server in one session.
+const MCP_RESTARTS_CEILING: u64 = 10;
+/// The fewest asks `mcp.prefix.asks` may choose a stable prefix over: fewer is a guess.
+const MCP_PREFIX_ASKS_FLOOR: u64 = 10;
 
 /// Whether only the human's global file may set `key`: everything that loosens the gate, an MCP
 /// server, a provider (where a key is sent), every spending cap and what the board reads. The
@@ -270,6 +274,14 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("mcp.rerank.enabled", Kind::Bool),
     ("mcp.rerank.above", Kind::Int),
     ("mcp.rerank.margin_pct", Kind::Int),
+    ("mcp.timeouts.start_secs", Kind::Int),
+    ("mcp.timeouts.list_secs", Kind::Int),
+    ("mcp.timeouts.call_secs", Kind::Int),
+    ("mcp.restarts.max", Kind::Int),
+    ("mcp.restarts.backoff_secs", Kind::Int),
+    ("mcp.prefix.asks", Kind::Int),
+    ("mcp.prefix.share_pct", Kind::Int),
+    ("mcp.prefix.tools", Kind::Int),
     ("mcp.servers.*.command", Kind::Str),
     ("mcp.servers.*.args", Kind::StrList),
     ("mcp.servers.*.env", Kind::StrList),
@@ -1309,8 +1321,8 @@ impl Config {
             let (class, tools) = self.mcp_classes(name)?;
             let timeout = match self.int(&at("timeout_secs")) {
                 Some(0) => return Err(format!("mcp.servers.{name}.timeout_secs: at least 1")),
-                Some(s) => std::time::Duration::from_secs(s),
-                None => mcp::TIMEOUT,
+                Some(s) => Some(std::time::Duration::from_secs(s)),
+                None => None,
             };
             servers.push(Server {
                 name: name.to_owned(),
@@ -1337,7 +1349,73 @@ impl Config {
                 n => n.and_then(|n| usize::try_from(n).ok()).unwrap_or(d.top_k),
             },
             rerank: self.mcp_rerank(&d.rerank)?,
+            timeouts: mnemorph_tools::mcp::Timeouts {
+                start: self.mcp_secs("mcp.timeouts.start_secs", d.timeouts.start)?,
+                list: self.mcp_secs("mcp.timeouts.list_secs", d.timeouts.list)?,
+                call: self.mcp_secs("mcp.timeouts.call_secs", d.timeouts.call)?,
+            },
+            restarts: self.mcp_restarts(d.restarts)?,
+            prefix: self.mcp_prefix(d.prefix)?,
         })
+    }
+
+    /// How a failed MCP server is started again (`mcp.restarts.*`).
+    fn mcp_restarts(
+        &self,
+        d: mnemorph_tools::mcp::Restarts,
+    ) -> Result<mnemorph_tools::mcp::Restarts, String> {
+        Ok(mnemorph_tools::mcp::Restarts {
+            max: match self.int("mcp.restarts.max") {
+                Some(n) if n > MCP_RESTARTS_CEILING => {
+                    return Err(format!(
+                        "mcp.restarts.max: a count of restarts from 0 to {MCP_RESTARTS_CEILING}"
+                    ));
+                }
+                Some(n) => u32::try_from(n).unwrap_or(d.max),
+                None => d.max,
+            },
+            backoff: self.mcp_secs("mcp.restarts.backoff_secs", d.backoff)?,
+        })
+    }
+
+    /// What joins a creature's stable prefix (`mcp.prefix.*`).
+    fn mcp_prefix(
+        &self,
+        d: mnemorph_tools::mcp::Prefix,
+    ) -> Result<mnemorph_tools::mcp::Prefix, String> {
+        Ok(mnemorph_tools::mcp::Prefix {
+            asks: match self.int("mcp.prefix.asks") {
+                Some(n) if n < MCP_PREFIX_ASKS_FLOOR => {
+                    return Err(format!(
+                        "mcp.prefix.asks: at least {MCP_PREFIX_ASKS_FLOOR} asks"
+                    ));
+                }
+                n => n.and_then(|n| usize::try_from(n).ok()).unwrap_or(d.asks),
+            },
+            share_pct: match self.int("mcp.prefix.share_pct") {
+                Some(n) if !(1..=100).contains(&n) => {
+                    return Err("mcp.prefix.share_pct: a percent, from 1 to 100".into());
+                }
+                n => n.and_then(|n| u32::try_from(n).ok()).unwrap_or(d.share_pct),
+            },
+            tools: self
+                .int("mcp.prefix.tools")
+                .and_then(|n| usize::try_from(n).ok())
+                .unwrap_or(d.tools),
+        })
+    }
+
+    /// A wait of whole seconds under `key`, at least one, else `default`.
+    fn mcp_secs(
+        &self,
+        key: &str,
+        default: std::time::Duration,
+    ) -> Result<std::time::Duration, String> {
+        match self.int(key) {
+            Some(0) => Err(format!("{key}: at least 1 second")),
+            Some(s) => Ok(std::time::Duration::from_secs(s)),
+            None => Ok(default),
+        }
     }
 
     /// When the fast tier reranks an ask's MCP shortlist (`mcp.rerank.*`), and on which model:

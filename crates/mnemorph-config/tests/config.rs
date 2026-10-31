@@ -1137,7 +1137,7 @@ fn mcp_servers_come_only_from_the_humans_own_files() {
     assert_eq!(web.env, ["SEARCH_KEY"]);
     assert_eq!(web.races, [Race::Kijin]);
     assert!(web.network && web.class.is_none() && web.tools.is_empty());
-    assert_eq!(web.timeout, std::time::Duration::from_secs(9));
+    assert_eq!(web.timeout, Some(std::time::Duration::from_secs(9)));
     assert_eq!(mcp.top_k, 4);
     assert!(
         c.holes()
@@ -1265,6 +1265,78 @@ enabled = false
         let e = g.load().unwrap_err();
         assert!(e.contains(&format!("mcp.rerank.{key} is integer")), "{e}");
     }
+}
+
+#[test]
+fn mcp_waits_restarts_and_the_stable_prefix_come_from_the_global_file() {
+    use mnemorph_tools::mcp::{Prefix, Restarts, Timeouts};
+    let g = Ground::new("mcp-health");
+    let s = g.load().unwrap().mcp().unwrap();
+    assert_eq!(
+        (s.timeouts, s.restarts, s.prefix),
+        (Timeouts::default(), Restarts::default(), Prefix::default())
+    );
+    g.global(
+        "[mcp.timeouts]\nstart_secs = 5\nlist_secs = 6\ncall_secs = 90\n\n[mcp.restarts]\nmax = 1\nbackoff_secs = 4\n\n[mcp.prefix]\nasks = 20\nshare_pct = 75\ntools = 2\n",
+    )
+    .local("[mcp.restarts]\nmax = 9\n");
+    let c = g.load().unwrap();
+    let s = c.mcp().unwrap();
+    let secs = std::time::Duration::from_secs;
+    assert_eq!(
+        s.timeouts,
+        Timeouts {
+            start: secs(5),
+            list: secs(6),
+            call: secs(90)
+        }
+    );
+    assert_eq!(
+        s.restarts,
+        Restarts {
+            max: 1,
+            backoff: secs(4)
+        },
+        "the local file is a hole"
+    );
+    assert!(c.holes().iter().any(|h| h.key == "mcp.restarts.max"));
+    assert_eq!(
+        s.prefix,
+        Prefix {
+            asks: 20,
+            share_pct: 75,
+            tools: 2
+        }
+    );
+    for (toml, why) in [
+        (
+            "[mcp.timeouts]\ncall_secs = 0\n",
+            "mcp.timeouts.call_secs: at least 1 second",
+        ),
+        (
+            "[mcp.restarts]\nmax = 11\n",
+            "mcp.restarts.max: a count of restarts from 0 to 10",
+        ),
+        (
+            "[mcp.prefix]\nasks = 9\n",
+            "mcp.prefix.asks: at least 10 asks",
+        ),
+        (
+            "[mcp.prefix]\nshare_pct = 0\n",
+            "mcp.prefix.share_pct: a percent, from 1 to 100",
+        ),
+    ] {
+        let g = Ground::new("mcp-health-bad");
+        g.global(toml);
+        let e = g.load().unwrap().mcp().unwrap_err();
+        assert!(e.contains(why), "{e}");
+    }
+    // A server's own wait is all three of its steps.
+    let g = Ground::new("mcp-health-server");
+    g.global("[mcp.servers.web]\ncommand = \"web\"\ntimeout_secs = 7\n");
+    let s = g.load().unwrap().mcp().unwrap();
+    let t = s.timeouts_for(&s.servers[0]);
+    assert_eq!((t.start, t.list, t.call), (secs(7), secs(7), secs(7)));
 }
 
 #[test]

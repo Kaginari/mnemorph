@@ -38,6 +38,7 @@ fn request() -> Request {
             description: "read a file".into(),
             input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
             cache: true,
+            defer: false,
         }],
         messages: vec![
             Message {
@@ -70,6 +71,7 @@ fn request() -> Request {
                         content: "fn main() {}".into(),
                         is_error: false,
                         cache: true,
+                        references: Vec::new(),
                     },
                     Block::Text {
                         text: "and now?".into(),

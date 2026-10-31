@@ -29,6 +29,9 @@ pub enum Beat {
         content: String,
         /// Whether it failed.
         is_error: bool,
+        /// The deferred tools it loaded, by name: a resumed conversation references them again.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        references: Vec<String>,
     },
     /// A note the loop added to the conversation (a guts warning, a salvage instruction).
     Note {
@@ -148,8 +151,13 @@ pub fn block_json(b: &Block) -> Value {
             content,
             is_error,
             cache,
+            references,
         } => {
-            json!({"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": is_error, "cache": cache})
+            let mut v = json!({"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": is_error, "cache": cache});
+            if !references.is_empty() {
+                v["references"] = json!(references);
+            }
+            v
         }
         Block::Opaque(v) => json!({"type": "opaque", "value": v}),
     }
@@ -175,6 +183,15 @@ pub fn json_block(v: &Value) -> Option<Block> {
             content: s("content")?,
             is_error: b("is_error"),
             cache: b("cache"),
+            references: v
+                .get("references")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|n| n.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default(),
         },
         "opaque" => Block::Opaque(v.get("value")?.clone()),
         _ => return None,
@@ -200,6 +217,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 content: "the run stopped before this call answered; it may not have run — ask again if it is still needed".into(),
                 is_error: true,
                 cache: false,
+                references: Vec::new(),
             })
             .collect();
         push_user(messages, content);
@@ -238,6 +256,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                 tool_use_id,
                 content,
                 is_error,
+                references,
             } => {
                 pending.retain(|id| id != tool_use_id);
                 push_user(
@@ -247,6 +266,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
                         content: content.clone(),
                         is_error: *is_error,
                         cache: false,
+                        references: references.clone(),
                     }],
                 );
             }

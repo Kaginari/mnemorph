@@ -73,6 +73,9 @@ pub enum Kind {
     Offer,
     /// The fast tier reranked an ask's shortlist.
     Rerank,
+    /// An ask a run offered MCP ended, whatever it did with MCP: what a creature's habits are
+    /// counted over.
+    Ask,
     /// A segment's first row after the one before was sealed: `fingerprint` is the sealed head's
     /// digest, `wt` its line.
     Seal,
@@ -91,6 +94,8 @@ pub struct Touched {
     pub wt: u64,
     /// How it ended: `loaded`, `ok`, `error`, `denied` or `unheld`.
     pub outcome: String,
+    /// The deferred tools it loaded as references, by name: a level 2 on a native run.
+    pub references: Vec<String>,
 }
 
 /// One journal row.
@@ -204,6 +209,20 @@ impl Lift {
     }
 }
 
+/// Each server's [`Spend`], by name, and the reranks' count and weighted tokens.
+pub type SpendReport = (BTreeMap<String, Spend>, (usize, u64));
+
+/// What one server's levels and answers cost, in weighted tokens.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Spend {
+    /// Schema its levels 1 and 2 loaded.
+    pub loaded: u64,
+    /// Of it, the levels whose tools were then called.
+    pub used: u64,
+    /// What its calls' answers put in the conversation.
+    pub answers: u64,
+}
+
 /// The rows the learning reads, as they held.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Learned {
@@ -304,40 +323,99 @@ impl Learned {
         out
     }
 
-    /// Per server, the weighted tokens its levels 1 and 2 loaded against those whose tools were
-    /// then called, and what its calls' answers and the reranks cost: a server whose catalog
-    /// costs more than it earns shows up as a number.
+    /// Per server, the weighted tokens of schema its levels 1 and 2 loaded, of them those whose
+    /// tools were then called, and what its calls' answers cost; then the reranks' count and
+    /// cost.
     #[must_use]
-    pub fn spend(&self) -> Vec<String> {
-        let mut by: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
+    pub fn spend_by_server(&self) -> SpendReport {
+        let mut by: BTreeMap<String, Spend> = BTreeMap::new();
         let mut rerank = (0usize, 0u64);
         for r in &self.rows {
             match r.kind {
                 Kind::Open | Kind::Schema => {
-                    let e = by.entry(&r.server).or_default();
-                    e.0 += r.wt;
+                    let e = by.entry(r.server.clone()).or_default();
+                    e.loaded += r.wt;
                     if r.used {
-                        e.1 += r.wt;
+                        e.used += r.wt;
                     }
                 }
-                Kind::Call => by.entry(&r.server).or_default().2 += r.wt,
+                Kind::Call => by.entry(r.server.clone()).or_default().answers += r.wt,
                 Kind::Rerank => {
                     rerank.0 += 1;
                     rerank.1 += r.wt;
                 }
-                Kind::Offer | Kind::Seal => {}
+                Kind::Offer | Kind::Seal | Kind::Ask => {}
             }
         }
+        (by, rerank)
+    }
+
+    /// [`Learned::spend_by_server`] as `status` says it: a server whose catalog costs more than it
+    /// earns shows up as a number.
+    #[must_use]
+    pub fn spend(&self) -> Vec<String> {
+        let (by, rerank) = self.spend_by_server();
         let mut out: Vec<String> = by
             .into_iter()
-            .map(|(server, (loaded, used, calls))| {
+            .map(|(server, s)| {
                 format!(
-                    "{server}: {loaded} wt of levels loaded, {used} wt of them used; {calls} wt of answers"
+                    "{server}: {} wt of schema loaded, {} wt of it used; {} wt of answers",
+                    s.loaded, s.used, s.answers
                 )
             })
             .collect();
         if rerank.0 > 0 {
             out.push(format!("rerank: {} calls, {} wt", rerank.0, rerank.1));
+        }
+        out
+    }
+
+    /// Each creature's habitual tools, best first: called, and answered, on at least
+    /// `rule.share_pct` percent of its last `rule.asks` asks (never fewer than
+    /// [`super::PREFIX_ASKS`]) — each ask counted once per tool — at most `rule.tools` of them. A
+    /// creature with fewer asks journaled has none. Ties break by name.
+    #[must_use]
+    pub fn habits(&self, rule: &super::Prefix) -> BTreeMap<String, Vec<String>> {
+        let n = rule.asks.max(super::PREFIX_ASKS);
+        let mut asks: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for r in self.rows.iter().filter(|r| r.kind == Kind::Ask) {
+            let list = asks.entry(&r.creature).or_default();
+            if !list.contains(&r.ask.as_str()) {
+                list.push(&r.ask);
+            }
+        }
+        let mut out = BTreeMap::new();
+        for (creature, list) in asks {
+            if list.len() < n {
+                continue;
+            }
+            let last: BTreeSet<&str> = list[list.len() - n..].iter().copied().collect();
+            let mut seen = BTreeSet::new();
+            let mut count: BTreeMap<&str, usize> = BTreeMap::new();
+            for r in &self.rows {
+                if r.kind == Kind::Call
+                    && r.outcome == "ok"
+                    && r.creature == creature
+                    && last.contains(r.ask.as_str())
+                    && let Some(tool) = &r.tool
+                    && seen.insert((r.ask.as_str(), tool.as_str()))
+                {
+                    *count.entry(tool).or_default() += 1;
+                }
+            }
+            let mut habitual: Vec<(&str, usize)> = count
+                .into_iter()
+                .filter(|(_, c)| c * 100 >= n * rule.share_pct as usize)
+                .collect();
+            habitual.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+            let tools: Vec<String> = habitual
+                .into_iter()
+                .take(rule.tools)
+                .map(|(t, _)| t.to_owned())
+                .collect();
+            if !tools.is_empty() {
+                out.insert(creature.to_owned(), tools);
+            }
         }
         out
     }

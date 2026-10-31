@@ -1987,6 +1987,33 @@ fn usage_lines(
     lines
 }
 
+/// `usage`'s MCP lines, escaped: each server's schema loaded against used and its answers' cost,
+/// from the MCP journal under the state directory — or why it is not believed. Nothing when no
+/// MCP was ever journaled.
+fn mcp_lines(mcp: &Result<mnemorph_server::mcp_journal::SpendReport, String>) -> Vec<String> {
+    let safe = mnemorph_server::challenge::safe;
+    match mcp {
+        Ok((servers, _)) if servers.is_empty() => Vec::new(),
+        Ok((servers, (calls, wt))) => {
+            let mut lines = vec!["mcp schema, by server".to_owned()];
+            for (name, s) in servers {
+                lines.push(format!(
+                    "  {}: {} wt of schema loaded, {} wt of it used; {} wt of answers",
+                    safe(name),
+                    s.loaded,
+                    s.used,
+                    s.answers
+                ));
+            }
+            if *calls > 0 {
+                lines.push(format!("  rerank: {calls} calls, {wt} wt"));
+            }
+            lines
+        }
+        Err(why) => vec![format!("mcp: the journal is not believed: {}", safe(why))],
+    }
+}
+
 /// `usage [--window 7d|28d|all] [--world <dir>] [--json]`: the usage ledger's fold.
 fn usage(args: &[String]) -> ExitCode {
     use mnemorph_server::world::spend::{self, Window};
@@ -2023,7 +2050,23 @@ fn usage(args: &[String]) -> ExitCode {
                 .map(|(k, t)| (k.clone(), totals_json(t)))
                 .collect::<serde_json::Map<String, serde_json::Value>>()
         };
+    let mcp = mnemorph_server::mcp_journal::spend(&world);
     if json {
+        let mcp_json = match &mcp {
+            Ok((servers, (calls, wt))) => serde_json::json!({
+                "trusted": true,
+                "servers": servers
+                    .iter()
+                    .map(|(name, s)| (name.clone(), serde_json::json!({
+                        "schemaLoadedWt": s.loaded,
+                        "schemaUsedWt": s.used,
+                        "answersWt": s.answers,
+                    })))
+                    .collect::<serde_json::Map<String, serde_json::Value>>(),
+                "reranks": {"calls": calls, "wt": wt},
+            }),
+            Err(why) => serde_json::json!({"trusted": false, "why": why}),
+        };
         let sessions: serde_json::Map<String, serde_json::Value> = r
             .sessions
             .iter()
@@ -2045,11 +2088,15 @@ fn usage(args: &[String]) -> ExitCode {
                 "source": ledger.path.display().to_string(),
                 "trusted": ledger.trusted,
                 "why": ledger.why,
+                "mcp": mcp_json,
             })
         );
         return ExitCode::SUCCESS;
     }
     for line in usage_lines(&r, &ledger) {
+        println!("{line}");
+    }
+    for line in mcp_lines(&mcp) {
         println!("{line}");
     }
     ExitCode::SUCCESS

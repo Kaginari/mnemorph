@@ -8,6 +8,7 @@
 //! (each hidden, bidi or format character as `\u{…}`), a schema through the same rule but for its
 //! own backslashes and newlines, and `&`, `<`, `>` are escaped so nothing closes an envelope.
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -49,7 +50,7 @@ pub fn one_line(text: &str, max: usize) -> String {
 }
 
 /// A server's words over several lines: each line as [`one_line`] shows it, uncapped.
-fn many_lines(text: &str) -> String {
+pub(super) fn many_lines(text: &str) -> String {
     text.lines()
         .map(|l| escape(&shown(&l.replace('\t', " "))))
         .collect::<Vec<_>>()
@@ -216,11 +217,12 @@ pub fn search(query: &str, found: &[Spec], unlisted: &[String]) -> String {
     out
 }
 
-/// The four doors a run in scope carries, fixed for its whole life.
-pub(super) fn doors(mcp: &Arc<Mcp>) -> Vec<Box<dyn Tool>> {
+/// The four doors a run in scope carries, fixed for its whole life; `deferred` names the tools its
+/// frame defers, whose level 2 is a reference.
+pub(super) fn doors(mcp: &Arc<Mcp>, deferred: Arc<BTreeSet<String>>) -> Vec<Box<dyn Tool>> {
     vec![
         Box::new(Open(Arc::clone(mcp))),
-        Box::new(Schema(Arc::clone(mcp))),
+        Box::new(Schema(Arc::clone(mcp), deferred)),
         Box::new(Call(Arc::clone(mcp))),
         Box::new(Search(Arc::clone(mcp))),
     ]
@@ -272,7 +274,7 @@ struct NameArgs {
     name: String,
 }
 
-struct Schema(Arc<Mcp>);
+struct Schema(Arc<Mcp>, Arc<BTreeSet<String>>);
 
 impl Tool for Schema {
     fn name(&self) -> &'static str {
@@ -301,7 +303,7 @@ impl Tool for Schema {
             Ok(a) => a,
             Err(o) => return o,
         };
-        self.0.schema(&a.name, cx)
+        self.0.schema(&a.name, cx, &self.1)
     }
 }
 

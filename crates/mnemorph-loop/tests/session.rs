@@ -197,6 +197,7 @@ fn the_validator_names_what_is_broken() {
             content: "r".into(),
             is_error: false,
             cache: false,
+            references: Vec::new(),
         }],
     };
     assert!(validate(&[user("hi"), call.clone(), result("a")]).is_ok());
@@ -233,6 +234,7 @@ fn the_validator_names_what_is_broken() {
                 content: "r".into(),
                 is_error: false,
                 cache: false,
+                references: Vec::new(),
             },
         ],
     };

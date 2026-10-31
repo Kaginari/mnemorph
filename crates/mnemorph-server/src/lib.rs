@@ -22,6 +22,8 @@ pub use mnemorph_loop::git;
 pub use mnemorph_loop::harden_self;
 /// The human's door to the Kijin's incidents.
 pub use mnemorph_loop::incident;
+/// The MCP journal, for `usage` to say what each server's schema cost against what was used.
+pub use mnemorph_loop::mcp_journal;
 /// The wire, for the commands that speak it without a session (`check`).
 pub use mnemorph_loop::wire;
 /// The world, for the commands that read it without a session (`onto owner`).
@@ -312,6 +314,7 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             tool_use_id,
             content,
             is_error,
+            ..
         } => {
             let mut end = content.len().min(RESULT_BYTES);
             while !content.is_char_boundary(end) {

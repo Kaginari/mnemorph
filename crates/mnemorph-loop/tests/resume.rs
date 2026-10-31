@@ -279,6 +279,7 @@ fn plain(m: &Message) -> Vec<Block> {
                 content: content.clone(),
                 is_error: *is_error,
                 cache: false,
+                references: Vec::new(),
             },
             other => other.clone(),
         })

@@ -22,7 +22,7 @@ use mnemorph_sandbox::Policy;
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde_json::{Value, json};
 
-use super::Server;
+use super::{Server, Timeouts};
 use crate::tool::Context;
 
 /// The protocol version the client speaks.
@@ -40,6 +40,14 @@ pub const QUEUED_LINES: usize = 8;
 /// the server is cut off as flooding.
 pub const MAX_NOISE: usize = 256;
 
+/// Why a request failed: the server is gone, or it answered with a refusal.
+enum Fault {
+    /// Silent past its timeout, closed, flooding or no longer reading.
+    Dead(String),
+    /// It answered the request with an error.
+    Refused(String),
+}
+
 /// A running server.
 pub struct Conn {
     server: String,
@@ -47,7 +55,10 @@ pub struct Conn {
     to_server: SyncSender<Vec<u8>>,
     lines: Receiver<Vec<u8>>,
     next: u64,
-    timeout: Duration,
+    timeouts: Timeouts,
+    /// Whether the server still answers: false once it went silent, closed, flooded or stopped
+    /// reading — then it is dropped. A refusal it answered leaves it alive.
+    alive: bool,
 }
 
 impl std::fmt::Debug for Conn {
@@ -120,13 +131,19 @@ pub fn resolve(command: &str, dirs: &[PathBuf], world: &Path) -> Result<PathBuf,
 }
 
 impl Conn {
-    /// Start `server` in the sandbox of `cx`, working in `scratch`, and shake hands.
+    /// Start `server` in the sandbox of `cx`, working in `scratch`, and shake hands within
+    /// `timeouts.start`; its lists wait at most `timeouts.list`, its calls `timeouts.call`.
     ///
     /// # Errors
     ///
     /// No kernel guard and no human permission to run unguarded; the program is not the human's
     /// or did not start; the handshake failed or timed out.
-    pub fn start(server: &Server, cx: &Context, scratch: &Path) -> Result<Self, String> {
+    pub fn start(
+        server: &Server,
+        cx: &Context,
+        scratch: &Path,
+        timeouts: Timeouts,
+    ) -> Result<Self, String> {
         let name = &server.name;
         if let mnemorph_sandbox::Sandbox::None(reason) = cx.sandbox()
             && !cx.allows_unguarded()
@@ -187,9 +204,11 @@ impl Conn {
             to_server: writer(stdin),
             lines: lines(stdout),
             next: 0,
-            timeout: server.timeout,
+            timeouts,
+            alive: true,
         };
         conn.request(
+            timeouts.start,
             "initialize",
             &json!({
                 "protocolVersion": PROTOCOL,
@@ -214,7 +233,7 @@ impl Conn {
             let params = cursor
                 .as_ref()
                 .map_or_else(|| json!({}), |c| json!({"cursor": c}));
-            let page = self.request("tools/list", &params)?;
+            let page = self.request(self.timeouts.list, "tools/list", &params)?;
             let Some(listed) = page["tools"].as_array() else {
                 return Err(format!(
                     "MCP server `{}`: tools/list held no tools",
@@ -242,7 +261,11 @@ impl Conn {
     ///
     /// The server failed, timed out or answered no result.
     pub fn call(&mut self, tool: &str, arguments: &Value) -> Result<(String, bool), String> {
-        let result = self.request("tools/call", &json!({"name": tool, "arguments": arguments}))?;
+        let result = self.request(
+            self.timeouts.call,
+            "tools/call",
+            &json!({"name": tool, "arguments": arguments}),
+        )?;
         let mut text = String::new();
         for item in result["content"].as_array().into_iter().flatten() {
             if !text.is_empty() {
@@ -261,30 +284,49 @@ impl Conn {
         Ok((text, result["isError"].as_bool().unwrap_or(false)))
     }
 
-    /// Send a request and wait for its answer; anything else the server says meanwhile is
-    /// passed over, at most [`MAX_NOISE`] messages.
-    fn request(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+    /// Whether the server still answers: a request it went silent on, closed during or flooded
+    /// leaves it dead; one it refused leaves it alive.
+    #[must_use]
+    pub fn alive(&self) -> bool {
+        self.alive
+    }
+
+    /// Send a request and wait at most `within` for its answer; anything else the server says
+    /// meanwhile is passed over, at most [`MAX_NOISE`] messages. Every failure but a refusal the
+    /// server answered marks it dead.
+    fn request(&mut self, within: Duration, method: &str, params: &Value) -> Result<Value, String> {
+        let answered = self.exchange(within, method, params);
+        if let Err(Fault::Dead(_)) = &answered {
+            self.alive = false;
+        }
+        answered.map_err(|f| match f {
+            Fault::Dead(e) | Fault::Refused(e) => e,
+        })
+    }
+
+    fn exchange(&mut self, within: Duration, method: &str, params: &Value) -> Result<Value, Fault> {
         self.next += 1;
         let id = self.next;
-        self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))?;
-        let until = Instant::now() + self.timeout;
+        self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))
+            .map_err(Fault::Dead)?;
+        let until = Instant::now() + within;
         let mut noise = 0usize;
         loop {
             let left = until.saturating_duration_since(Instant::now());
             let line = match self.lines.recv_timeout(left) {
                 Ok(line) => line,
                 Err(RecvTimeoutError::Timeout) => {
-                    return Err(format!(
-                        "MCP server `{}` did not answer {method} within {}s",
+                    return Err(Fault::Dead(format!(
+                        "MCP server `{}` did not answer {method} within {}",
                         self.server,
-                        self.timeout.as_secs()
-                    ));
+                        seconds(within)
+                    )));
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    return Err(format!(
+                    return Err(Fault::Dead(format!(
                         "MCP server `{}` closed before answering {method}",
                         self.server
-                    ));
+                    )));
                 }
             };
             let msg = serde_json::from_slice::<Value>(&line).ok();
@@ -293,10 +335,10 @@ impl Conn {
             else {
                 noise += 1;
                 if noise > MAX_NOISE {
-                    return Err(format!(
+                    return Err(Fault::Dead(format!(
                         "MCP server `{}` sent more than {MAX_NOISE} messages without answering {method}; it is cut off",
                         self.server
-                    ));
+                    )));
                 }
                 continue;
             };
@@ -307,11 +349,11 @@ impl Conn {
                     .chars()
                     .take(300)
                     .collect();
-                return Err(format!(
+                return Err(Fault::Refused(format!(
                     "MCP server `{}` refused {method}: {}",
                     self.server,
                     super::clean(&said)
-                ));
+                )));
             }
             return Ok(msg["result"].clone());
         }
@@ -336,6 +378,15 @@ impl Drop for Conn {
     fn drop(&mut self) {
         kill(&self.child);
         let _ = self.child.wait();
+    }
+}
+
+/// A wait as a human reads it: whole seconds, or milliseconds under one.
+fn seconds(d: Duration) -> String {
+    if d >= Duration::from_secs(1) {
+        format!("{}s", d.as_secs())
+    } else {
+        format!("{}ms", d.as_millis())
     }
 }
 
