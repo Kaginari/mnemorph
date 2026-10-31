@@ -201,6 +201,9 @@ pub struct Decider {
     pub primary: Option<Primary>,
     /// Asked when there is no primary or it failed.
     pub fallback: Fallback,
+    /// Why a configured System One provider could not be asked at all (its key variable unset):
+    /// every answer the fallback gives then carries it as its `fell_back`.
+    pub unavailable: Option<String>,
 }
 
 impl Decider {
@@ -212,7 +215,7 @@ impl Decider {
     pub async fn decide(&self, ask: &Ask) -> Result<Decision, Error> {
         ask.check()?;
         let started = Instant::now();
-        let mut fell_back = None;
+        let mut fell_back = self.unavailable.clone();
         if let Some(p) = &self.primary {
             match p.client.decide(&p.model, ask).await {
                 Ok(reply) => {
