@@ -3,7 +3,7 @@ name: rc-smoke
 # The release-candidate smoke test, as a release would run it: release binaries, packaged as the
 # release packages them, run in a fresh HOME with realistic dotfiles, then installed by
 # install.sh from a local fake release, offline and timed. On pull requests that touch the
-# release's files, every night on main, and by hand. It publishes nothing.
+# release's files, every week (Monday) on main, and by hand. It publishes nothing.
 on:
   pull_request:
     paths:
@@ -19,7 +19,7 @@ on:
       - rust-toolchain.toml
       - crates/mnemorph-sandbox/**
   schedule:
-    - cron: "23 3 * * *"
+    - cron: "23 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -36,14 +36,14 @@ jobs:
     env:
       TARGET: x86_64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: shellcheck the release scripts
         run: shellcheck install.sh tools/rc-smoke.sh tools/test-install.sh tools/package-release.sh
       - name: install.sh is POSIX sh (dash)
         run: dash -n install.sh
       - name: Rust toolchain (from rust-toolchain.toml)
         run: rustup toolchain install && rustup show active-toolchain
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: release
       # The board is left unbuilt here (mnemorphd then serves a page saying so): the release

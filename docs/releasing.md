@@ -60,8 +60,10 @@ One archive per target, `mnemorph-<target>.tar.gz`, holding `mnemorph-<version>-
 
 1. On `main`, green: set `[workspace.package] version` in `Cargo.toml` to `X.Y.Z` (and let
    `cargo check` refresh `Cargo.lock`), rename `## [Unreleased]` in `CHANGELOG.md` to
-   `## [X.Y.Z] - YYYY-MM-DD`, open a new empty `## [Unreleased]` above it, and update the
-   `[Unreleased]` and `[X.Y.Z]` links at the bottom. Land that as a pull request.
+   `## [X.Y.Z] - YYYY-MM-DD`, open a new empty `## [Unreleased]` above it, point the
+   `[Unreleased]` link at the bottom to `…/compare/vX.Y.Z...main`, and add
+   `[X.Y.Z]: https://github.com/Kaginari/mnemorph/releases/tag/vX.Y.Z` beside it. Land that as a
+   pull request.
 2. Run `just rc-smoke` locally: the same smoke test, on a release build.
 3. Tag the merged commit and push the tag: `git tag -a vX.Y.Z -m "Mnemorph X.Y.Z"` then
    `git push origin vX.Y.Z`.
@@ -101,18 +103,30 @@ can check an archive with `gh attestation verify mnemorph-<target>.tar.gz --repo
 |---|---|---|
 | `just rc-smoke [artifact]` (`tools/rc-smoke.sh`) | by hand; the `rc-smoke` workflow; the release workflow | the built binaries answer `--version` (the expected version), `status`, a headless `run` that lands through the end gate, and `mnemorphd board --help`, in a fresh lived-in HOME, against a scripted provider on loopback — and leave the real HOME, other programs' files, the user's git hooks and the world's history untouched |
 | `just install-test` (`tools/test-install.sh`) | `just check`, on Linux and macOS | `install.sh` installs each supported machine's archive from a fake release served on loopback, under two minutes, without touching a profile; it refuses a tampered archive, a missing `SHA256SUMS`, a missing line, a missing release, an unsupported OS or architecture |
-| the `rc-smoke` workflow | pull requests touching the release's files, nightly, by hand | shellcheck and `dash -n` on the scripts; a release build packaged, smoke-tested and installed |
+| the `rc-smoke` workflow | pull requests touching the release's files, weekly, by hand | shellcheck and `dash -n` on the scripts; a release build packaged, smoke-tested and installed |
 
 ### The installer
 
-`install.sh` is POSIX `sh`. It maps `uname` to a target (an Apple Silicon shell under Rosetta
-gets the native build), downloads `SHA256SUMS` and the archive over HTTPS only, and refuses to
-unpack unless the archive's line is present and matches. It copies the binaries into
+`install.sh` is POSIX `sh`, all of it inside one function called on its last line with stdin
+from `/dev/null`, so a download cut short runs nothing. It maps `uname` to a target (an Apple
+Silicon shell under Rosetta gets the native build), checks the version is `x.y.z`, `vx.y.z` or
+`latest` before it goes into a URL, downloads `SHA256SUMS` and the archive over HTTPS with TLS 1.2
+or later (curl, else wget), and refuses to unpack unless the archive's line is present and
+matches, and unless every member stays beneath the unpack directory: no absolute name, no `..`,
+no symbolic or hard link. It copies the binaries into
 `~/.local/bin` (or `--dir`, or `MNEMORPH_INSTALL_DIR`), each beside and renamed over the old one,
 runs `mnemorph --version`, and prints the `export PATH=…` line when the directory is not on PATH:
 it needs no sudo and edits no profile. `--version` (or `MNEMORPH_VERSION`) picks a release;
-`MNEMORPH_RELEASE_BASE` points it at a mirror or a test's local server, and only then are plain
-HTTP and `file:` allowed.
+`MNEMORPH_RELEASE_BASE` points it at a mirror or a test's local server: it must be `https://`,
+plain `http://` only to `127.0.0.1`, `localhost` or `[::1]`, or `file:///` (with curl); anything
+else is refused.
+
+### Not tested yet
+
+The macOS archives are built and packaged but not smoke-tested: only the Linux archives run
+`tools/rc-smoke.sh` and `tools/test-install.sh` before the draft. The installer's macOS paths are
+covered by `just install-test`, which `just check` runs on macOS, with stand-in binaries. Try a
+macOS archive by hand on a Mac before publishing.
 
 ### Not shipped
 

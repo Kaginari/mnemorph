@@ -81,6 +81,10 @@ It downloads the release's archive for this machine, refuses it unless it matche
 choose). It needs no sudo and edits no shell profile: when the directory is not on PATH, it
 prints the line to add.
 
+Once a release carries build provenance ([releasing](docs/releasing.md#provenance-signing)), an
+archive can also be checked against the workflow that built it:
+`gh attestation verify mnemorph-<target>.tar.gz --repo Kaginari/mnemorph`.
+
 **By hand**, from [the releases](https://github.com/Kaginari/mnemorph/releases): download
 `mnemorph-<target>.tar.gz` and `SHA256SUMS`, check, unpack, and put the binaries side by side on
 PATH:

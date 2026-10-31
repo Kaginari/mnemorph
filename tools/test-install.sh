@@ -76,6 +76,34 @@ cp -R "$rel/download/v$version" "$rel/download/v7.7.7"
 rm "$rel/download/v7.7.7/SHA256SUMS"
 cp -R "$rel/download/v$version" "$rel/download/v8.8.8"
 : > "$rel/download/v8.8.8/SHA256SUMS"
+# Archives that try to leave their directory, each under a true checksum: a `..` member, an
+# absolute one, a symbolic link and a hard link.
+python3 -I -c '
+import hashlib, io, os, sys, tarfile
+t = "x86_64-unknown-linux-gnu"
+def member(tf, name, kind=tarfile.REGTYPE, link=""):
+    info = tarfile.TarInfo(name)
+    info.type, info.linkname, info.mode = kind, link, 0o755
+    data = b"#!/bin/sh\necho crafted\n"
+    info.size = len(data) if kind == tarfile.REGTYPE else 0
+    tf.addfile(info, io.BytesIO(data) if kind == tarfile.REGTYPE else None)
+bad = {
+    "5.5.1": ("../crafted", tarfile.REGTYPE, ""),
+    "5.5.2": (sys.argv[2] + "/crafted-absolute", tarfile.REGTYPE, ""),
+    "5.5.3": ("d/mnemorph-guard", tarfile.SYMTYPE, "/etc/passwd"),
+    "5.5.4": ("d/README.md", tarfile.LNKTYPE, "d/mnemorph"),
+}
+for v, (name, kind, link) in bad.items():
+    out = os.path.join(sys.argv[1], "v" + v)
+    os.makedirs(out)
+    path = os.path.join(out, "mnemorph-" + t + ".tar.gz")
+    with tarfile.open(path, "w:gz") as tf:
+        member(tf, "d/mnemorph")
+        member(tf, "d/mnemorphd")
+        member(tf, name, kind, link)
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    open(os.path.join(out, "SHA256SUMS"), "w").write(digest + "  mnemorph-" + t + ".tar.gz\n")
+' "$rel/download" "$tmp"
 
 # ---- served from that directory on loopback ------------------------------------------------------
 python3 -c '
@@ -103,7 +131,7 @@ machine() { # name, os, arch
 }
 install_on() { # machine dir, then installer arguments; MNEMORPH_* from the caller's environment
   local m=$1; shift
-  env -i "HOME=$m/home" "PATH=$m/fakebin:/usr/bin:/bin" "MNEMORPH_RELEASE_BASE=$base" \
+  env -i "HOME=$m/home" "PATH=${MACHINE_PATH:-$m/fakebin:/usr/bin:/bin}" "MNEMORPH_RELEASE_BASE=${RELEASE_BASE:-$base}" \
     ${MNEMORPH_VERSION:+"MNEMORPH_VERSION=$MNEMORPH_VERSION"} \
     ${MNEMORPH_INSTALL_DIR:+"MNEMORPH_INSTALL_DIR=$MNEMORPH_INSTALL_DIR"} \
     sh "$installer" "$@" > "$m/out" 2>&1
@@ -181,6 +209,52 @@ refused "a missing SHA256SUMS" "no SHA256SUMS" 7.7.7 Linux x86_64
 refused "a SHA256SUMS without the archive's line" "has no line for" 8.8.8 Linux x86_64
 refused "a release that does not exist" "no SHA256SUMS" 9.9.9 Linux x86_64
 refused "an unsupported OS" "no release for FreeBSD" - FreeBSD x86_64
+refused "an archive with a .. member" "outside its directory" 5.5.1 Linux x86_64
+refused "an archive with an absolute member" "outside its directory" 5.5.2 Linux x86_64
+refused "an archive with a symbolic link" "symbolic or hard link" 5.5.3 Linux x86_64
+refused "an archive with a hard link" "symbolic or hard link" 5.5.4 Linux x86_64
+if [ -n "$(find "$tmp" -name 'crafted*' -print -quit)" ]; then fail "a crafted member was written"
+else pass "no crafted member was written"; fi
+refused "a version with shell in it" "is not a version" '1.0.0;id' Linux x86_64
+refused "a version that walks up" "is not a version" '../../etc' Linux x86_64
+refused "a version with two parts" "is not a version" '1.0' Linux x86_64
+RELEASE_BASE=http://example.invalid/releases refused "plain HTTP off loopback" "must be https://" - Linux x86_64
+RELEASE_BASE=http://127.0.0.1.example.invalid refused "a loopback look-alike" "must be https://" - Linux x86_64
+RELEASE_BASE=ftp://127.0.0.1/releases refused "another scheme" "must be https://" - Linux x86_64
+
+# ---- a download cut short runs nothing -----------------------------------------------------------
+m=$(machine truncated Linux x86_64)
+half=$(( $(wc -c < "$installer") / 2 ))
+head -c "$half" "$installer" | env -i "HOME=$m/home" "PATH=$m/fakebin:/usr/bin:/bin" \
+  "MNEMORPH_RELEASE_BASE=$base" sh > "$m/out" 2>&1 || true
+if [ ! -e "$m/home/.local" ] && ! grep -q 'mnemorph-install: installing' "$m/out"; then
+  pass "half the installer, piped to sh, runs nothing"
+else fail "half the installer ran: $(cat "$m/out")"; fi
+
+# ---- wget, when there is no curl: HTTPS only, TLS 1.2 or later ----------------------------------
+# A PATH holding only what the installer needs, curl left out, and a wget stub that records its
+# arguments and serves an https:// base from the loopback release.
+m=$(machine wget Linux x86_64)
+mkdir -p "$m/tools"
+for c in sh awk grep tr cut sha256sum shasum tar gzip find head dirname mkdir mktemp cp chmod mv rm sed id cat; do
+  if p=$(command -v "$c" 2>/dev/null); then ln -s "$p" "$m/tools/$c"; fi
+done
+real_curl=$(command -v curl)
+{
+  echo '#!/bin/sh'
+  echo "echo \"\$*\" >> '$m/wget.args'"
+  echo 'out= url='
+  echo 'while [ $# -gt 0 ]; do case $1 in -O) out=$2; shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac; done'
+  echo "exec '$real_curl' -fsS -o \"\$out\" '$base'\"\${url#https://releases.test}\""
+} > "$m/fakebin/wget"
+chmod +x "$m/fakebin/wget"
+if MACHINE_PATH=$m/fakebin:$m/tools RELEASE_BASE=https://releases.test install_on "$m" \
+  && [ -x "$m/home/.local/bin/mnemorph" ]; then
+  pass "wget installs when there is no curl"
+else fail "wget installs: $(cat "$m/out")"; fi
+if [ "$(grep -c -- '--https-only --secure-protocol=TLSv1_2' "$m/wget.args" 2>/dev/null)" = 2 ]; then
+  pass "wget is held to HTTPS and TLS 1.2 on both fetches"
+else fail "wget's arguments: $(cat "$m/wget.args" 2>/dev/null)"; fi
 refused "an unsupported architecture" "no release for architecture riscv64" - Linux riscv64
 
 echo
