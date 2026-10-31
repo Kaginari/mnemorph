@@ -13,7 +13,9 @@
 //!   counts, whatever it is stamped with.
 //! - **The held-out tasks.** A window's task is used once: never one the plan was proven on before
 //!   the swap, and never one any earlier run row carries — stamped or not, of this swap or another
-//!   — but this swap's own controls. Tasks are told apart by fingerprint.
+//!   — but this swap's own controls. Nor is it one any earlier swap was proven on: a task in two
+//!   splits, proving one plan and holding out another, is refused. Tasks are told apart by
+//!   fingerprint.
 //! - **The control.** Every window task is also run without the change, after the swap, by the
 //!   same body — a do-nothing fixture, stamped as the control. Paired by task, the evolution is
 //!   kept only on at least `min_net_wins` net wins (tasks it landed and the control did not, less
@@ -398,6 +400,8 @@ pub enum Refusal {
     Leaked(String),
     /// A held-out task used before: twice in the window, or first by another swap's window.
     Reused(String),
+    /// A window task an earlier swap, named second, was proven on: a task in two splits.
+    TwoSplits(String, String),
     /// The swap's row carries no build stamp: no run's build can match it, so its window would
     /// never fill.
     Unstamped(String),
@@ -439,6 +443,10 @@ impl fmt::Display for Refusal {
             ),
             Refusal::Leaked(t) => write!(f, "task {t}: the plan was proven on it before the swap"),
             Refusal::Reused(t) => write!(f, "task {t}: a held-out task already used"),
+            Refusal::TwoSplits(t, by) => write!(
+                f,
+                "task {t}: in two splits — swap {by} was proven on it, so it is held out by none"
+            ),
             Refusal::Unstamped(id) => write!(
                 f,
                 "swap {id}: its row carries no build, so no run can be counted in its window"
@@ -624,6 +632,9 @@ fn window_of<'a>(ledger: &'a Ledger, id: &str) -> Result<Window<'a>, Refusal> {
         if proven.contains(r.task.as_str()) {
             return Err(Refusal::Leaked(r.task.clone()));
         }
+        if let Some(by) = proven_by(ledger, &r.task, e.at) {
+            return Err(Refusal::TwoSplits(r.task.clone(), by.id.clone()));
+        }
         // Any earlier run of the task, stamped or not, but this swap's own controls.
         let elsewhere = runs_of(ledger).any(|(o, other)| {
             o.at < e.at
@@ -694,6 +705,23 @@ pub fn open_for<'a>(ledger: &'a Ledger, body: &str) -> Option<&'a Swap> {
 #[must_use]
 pub fn seen(ledger: &Ledger, fingerprint: &str) -> bool {
     runs_of(ledger).any(|(_, r)| r.task == fingerprint)
+}
+
+/// Whether any swap row of the ledger names the task `fingerprint` among the tasks its plan was
+/// proven on: a proving task is never held out, for that swap or any other.
+#[must_use]
+pub fn proven(ledger: &Ledger, fingerprint: &str) -> bool {
+    proven_by(ledger, fingerprint, u64::MAX).is_some()
+}
+
+/// The first swap before line `before` whose plan was proven on the task `fingerprint`.
+fn proven_by<'a>(ledger: &'a Ledger, fingerprint: &str, before: u64) -> Option<&'a Swap> {
+    ledger.entries.iter().find_map(|e| match &e.row {
+        EvolutionRow::Swap(s) if e.at < before && s.proven_on.iter().any(|p| p == fingerprint) => {
+            Some(s)
+        }
+        _ => None,
+    })
 }
 
 fn judged(ledger: &Ledger, id: &str, min_net_wins: u32) -> Result<Judgement, Refusal> {

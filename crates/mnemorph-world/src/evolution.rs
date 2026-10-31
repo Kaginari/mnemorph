@@ -10,6 +10,10 @@
 //!   beside the ledger for the controls ([`restore_before`]), and one `swap` row names every file
 //!   with its digest before and after and the build. A plan whose diff is not exactly its named
 //!   files is put back and writes no row.
+//! - **The staged plan** ([`staged`]). The plan staged under `.mnemorph/tmp/evolution/<id>/` must
+//!   hold exactly the file set the human names: a staged file not named, a named file not staged,
+//!   or anything there but a regular file refuses it. A file the plan creates must not already
+//!   exist, and no folder on a named path may be a link: the world is the bodies' to write.
 //! - **The runs** ([`stamp_for`], [`Stamp::record`]). Each ask of a body a swap names, while its
 //!   window is open, is stamped with the swap's id, the build, the task's fingerprint (the SHA-256
 //!   of the ask) and the named files' state as the run found and left them, and appended as a
@@ -148,6 +152,146 @@ pub struct Staged {
     pub path: String,
     /// Its bytes after the swap; `None` when the swap removes it.
     pub after: Option<Vec<u8>>,
+    /// The plan creates it: its destination must not exist. Otherwise the file it replaces or
+    /// removes must.
+    pub creates: bool,
+}
+
+/// The file set the human names for a staged plan: the files it replaces, those it creates and
+/// those it removes, each by world path.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FileSet {
+    /// Files the plan rewrites: each exists in the world and is staged.
+    pub replaces: Vec<String>,
+    /// Files the plan creates: each is staged, and must not exist in the world.
+    pub creates: Vec<String>,
+    /// Files the plan removes: never staged.
+    pub removes: Vec<String>,
+}
+
+/// Where a plan is staged in `world`: `.mnemorph/tmp/evolution/<id>/`.
+#[must_use]
+pub fn staging(world: &Path, id: &str) -> PathBuf {
+    world.join(".mnemorph/tmp/evolution").join(id)
+}
+
+/// The plan `id` staged in `world`, read against the file set the human named: every file under
+/// its staging folder at the world path it replaces or creates, plus each file it removes. The
+/// staging folder must hold exactly the named files to replace and create — a staged file not
+/// named is extra, a named file not staged is missing — and nothing but folders and regular
+/// files; no link on the way to it or under it is followed.
+///
+/// # Errors
+///
+/// The id is malformed, the staging folder holds more or less than the file set, a link or
+/// another kind of file, or it cannot be read.
+pub fn staged(world: &Path, id: &str, set: &FileSet) -> Result<Vec<Staged>, String> {
+    fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Result<(), String> {
+        let shown = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
+        let entries = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for e in entries {
+            let e = e.map_err(|e| format!("{}: {e}", dir.display()))?;
+            let path = e.path();
+            let kind = fs::symlink_metadata(&path)
+                .map_err(|e| format!("{}: {e}", shown(&path)))?
+                .file_type();
+            if kind.is_dir() {
+                walk(root, &path, out)?;
+            } else if kind.is_file() {
+                let rel = path
+                    .strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
+                out.insert(rel, bytes);
+            } else {
+                return Err(format!(
+                    "{}: staged, and not a regular file: a staged plan holds files alone",
+                    shown(&path)
+                ));
+            }
+        }
+        Ok(())
+    }
+    valid_id(id)?;
+    let dir = staging(world, id);
+    no_link_on_the_way(world, &dir)?;
+    let mut found = BTreeMap::new();
+    match fs::symlink_metadata(&dir) {
+        Ok(m) if m.is_dir() => walk(&dir, &dir, &mut found)?,
+        Ok(_) => return Err(format!("{}: the staging is no folder", dir.display())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{}: {e}", dir.display())),
+    }
+    let named: std::collections::BTreeSet<&str> = set
+        .replaces
+        .iter()
+        .chain(&set.creates)
+        .map(String::as_str)
+        .collect();
+    if let Some(extra) = found.keys().find(|p| !named.contains(p.as_str())) {
+        return Err(format!(
+            "{extra}: staged, and not in the plan's file set: an extra file"
+        ));
+    }
+    if let Some(missing) = named.iter().find(|p| !found.contains_key(**p)) {
+        return Err(format!(
+            "{missing}: in the plan's file set, and not staged: a missing file"
+        ));
+    }
+    let mut out: Vec<Staged> = set
+        .replaces
+        .iter()
+        .map(|p| (p, false))
+        .chain(set.creates.iter().map(|p| (p, true)))
+        .map(|(p, creates)| Staged {
+            path: p.clone(),
+            after: found.get(p).cloned(),
+            creates,
+        })
+        .collect();
+    out.extend(set.removes.iter().map(|p| Staged {
+        path: p.clone(),
+        after: None,
+        creates: false,
+    }));
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+/// Refuses when any folder from `world` down to `to`, `to` itself included, is a link or no
+/// folder: a body could point one out of the world.
+fn no_link_on_the_way(world: &Path, to: &Path) -> Result<(), String> {
+    let rel = to.strip_prefix(world).map_err(|e| e.to_string())?;
+    let mut at = world.to_path_buf();
+    for part in rel.components() {
+        at.push(part);
+        match fs::symlink_metadata(&at) {
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err(format!(
+                    "{}: a link on a plan's path; a swap follows none",
+                    rel_of(world, &at)
+                ));
+            }
+            Ok(m) if !m.is_dir() && at != to => {
+                return Err(format!(
+                    "{}: a file where a plan's path needs a folder",
+                    rel_of(world, &at)
+                ));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(format!("{}: {e}", rel_of(world, &at))),
+        }
+    }
+    Ok(())
+}
+
+fn rel_of(world: &Path, at: &Path) -> String {
+    at.strip_prefix(world).unwrap_or(at).display().to_string()
 }
 
 /// An evolution the human accepted, to be swapped in.
@@ -242,6 +386,33 @@ pub fn restore_before(ledger: &Path, swap: &Swap, root: &Path) -> io::Result<()>
     Ok(())
 }
 
+/// Each file of `plan` against the world before it: no link on its way, a file it creates absent,
+/// a file it replaces or removes present.
+fn destinations(
+    world: &Path,
+    plan: &Plan,
+    before: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    for f in &plan.files {
+        let at = world.join(&f.path);
+        no_link_on_the_way(world, &at)?;
+        let exists = before.contains_key(&f.path) || fs::symlink_metadata(&at).is_ok();
+        if f.creates && exists {
+            return Err(format!(
+                "{}: the plan creates it, and the destination already exists",
+                f.path
+            ));
+        }
+        if !f.creates && !exists {
+            return Err(format!(
+                "{}: the plan replaces or removes it, and it does not exist",
+                f.path
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Swaps `plan` into `world` and writes its `swap` row to the world's evolution ledger.
 ///
 /// # Errors
@@ -294,6 +465,7 @@ pub fn swap_at(world: &Path, ledger: &Journal<EvolutionRow>, plan: &Plan) -> Res
         ));
     }
     let before = soil(world).map_err(|e| format!("the soil cannot be read: {e}"))?;
+    destinations(world, plan, &before)?;
     let kept = kept_before(ledger.path(), &plan.id);
     if kept.exists() {
         return Err(format!("{} already exists", kept.display()));
@@ -435,8 +607,8 @@ pub struct Facts {
 
 /// The stamp for an ask of `body` in `world`, over the ledger at `ledger`: `None` when no swap's
 /// window is open for the body, the swap was made by another build (its window could never fill
-/// under this one), the ask's task is already on the ledger or is one the plan was proven on (it
-/// could not be held out), or the ledger cannot be read — then the run is no evolution's to judge.
+/// under this one), the ask's task is already on the ledger or is one any swap's plan was proven
+/// on (it could not be held out), or the ledger cannot be read — then the run is no evolution's to judge.
 #[must_use]
 pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<Stamp> {
     let read = read_ledger(ledger).ok()?;
@@ -445,7 +617,7 @@ pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<S
         return None;
     }
     let fp = fingerprint(ask);
-    if evolution::seen(&read, &fp) || swap.proven_on.contains(&fp) {
+    if evolution::seen(&read, &fp) || evolution::proven(&read, &fp) {
         return None;
     }
     let state = evolution::state_now(world, swap).ok()?;

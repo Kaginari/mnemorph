@@ -604,3 +604,83 @@ fn an_unstamped_swap_is_refused() {
         "{j}"
     );
 }
+
+/// A mutation whose own new verify lines pass on every task it was proven on, stamped with its id
+/// before the swap, is not landed by them: after the swap it does no better than doing nothing, so
+/// it rolls back. And the post-swap window alone decides the other way too: a plan that failed
+/// every proving run but beats doing nothing after the swap is kept.
+#[test]
+fn a_mutation_that_passes_only_its_own_verify_lines_is_not_landed() {
+    let s = swap("e1");
+    let proving = |pass: bool| -> Vec<EvolutionRow> {
+        (0..EVOLUTION_WINDOW)
+            .map(|i| run(&s, &format!("staged-{i}"), false, pass))
+            .collect()
+    };
+    let mut rows = proving(true);
+    rows.push(EvolutionRow::Swap(s.clone()));
+    rows.extend(window(
+        &s,
+        &[false; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    let Judgement::Rollback(lines) = judged(&rows, "e1") else {
+        panic!("{}", judged(&rows, "e1"));
+    };
+    assert!(
+        lines[0].to_string().starts_with("rollback: netWins 0 < 2"),
+        "{}",
+        lines[0]
+    );
+    let mut rows = proving(false);
+    rows.push(EvolutionRow::Swap(s.clone()));
+    rows.extend(window(
+        &s,
+        &[true; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    assert!(
+        matches!(judged(&rows, "e1"), Judgement::Keep(_)),
+        "{}",
+        judged(&rows, "e1")
+    );
+}
+
+/// A task in two splits — one plan proven on it, another holding it out — is held out by none.
+#[test]
+fn a_task_in_two_splits_is_refused() {
+    let s = swap("e1");
+    let earlier = Swap {
+        id: "e0".into(),
+        proven_on: vec!["held-4".into()],
+        ..swap("e0")
+    };
+    let mut rows = vec![
+        EvolutionRow::Swap(earlier.clone()),
+        EvolutionRow::Swap(s.clone()),
+    ];
+    rows.extend(window(
+        &s,
+        &[true; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    assert_eq!(
+        judged(&rows, "e1"),
+        Judgement::Refused(Refusal::TwoSplits("held-4".into(), "e0".into()))
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("evolution.jsonl");
+    ledger(&path, &rows);
+    let read = evolution::read(&path, None).unwrap();
+    assert!(evolution::proven(&read, "held-4"));
+    assert!(!evolution::proven(&read, "held-5"));
+    // A swap proven on it only after the window's run does not reach back.
+    let mut later = vec![EvolutionRow::Swap(s.clone())];
+    later.extend(window(
+        &s,
+        &[true; EVOLUTION_WINDOW],
+        &[false; EVOLUTION_WINDOW],
+    ));
+    later.push(EvolutionRow::Swap(earlier));
+    assert!(matches!(judged(&later, "e1"), Judgement::Keep(_)));
+}

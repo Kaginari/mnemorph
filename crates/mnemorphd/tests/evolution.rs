@@ -131,6 +131,7 @@ impl Fixture {
                 files: vec![Staged {
                     path: MIND.into(),
                     after: Some(b"# Careful\n\nWrite once.\n".to_vec()),
+                    creates: false,
                 }],
                 proven_on: Vec::new(),
             },
@@ -232,7 +233,19 @@ fn a_swap_is_asked_at_the_terminal_and_never_a_bodys() {
     fs::create_dir_all(staged.parent().unwrap()).unwrap();
     fs::write(&staged, "# Careful\n\nWrite once.\n").unwrap();
     let before = fs::read(f.world.join(MIND)).unwrap();
+    // The staging must hold exactly the file set named: an unnamed staged file is extra.
     let out = f.run(&["evolution", "swap", "careful-1", "--creature", "sly"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out).1.contains("an extra file"), "{}", text(&out).1);
+    let out = f.run(&[
+        "evolution",
+        "swap",
+        "careful-1",
+        "--creature",
+        "sly",
+        "--file",
+        MIND,
+    ]);
     let (stdout, err) = text(&out);
     assert_eq!(out.status.code(), Some(2), "{stdout}{err}");
     assert!(stdout.contains(MIND), "the plan is shown first: {stdout}");
@@ -254,7 +267,15 @@ fn a_swap_is_asked_at_the_terminal_and_never_a_bodys() {
 #[cfg(target_os = "linux")]
 fn swapped_at_tty(f: &Fixture) {
     let out = f.at_tty(
-        &["evolution", "swap", "careful-1", "--creature", "sly"],
+        &[
+            "evolution",
+            "swap",
+            "careful-1",
+            "--creature",
+            "sly",
+            "--file",
+            MIND,
+        ],
         "y\n",
     );
     let (stdout, err) = text(&out);

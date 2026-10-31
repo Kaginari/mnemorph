@@ -35,7 +35,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd meters [--world <dir>] [--json]
        mnemorphd usage [--window 7d|28d|all] [--world <dir>] [--json]
        mnemorphd evolution swap <id> --creature <name> [--arm mutate|split|rebirth]
-                 [--body <name>]... [--remove <path>]... [--proven-on <task>]...
+                 [--file <path>]... [--create <path>]... [--remove <path>]...
+                 [--body <name>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd mind list [--world <dir>]
@@ -120,9 +121,11 @@ reads `unpriced`, never $0, and every total says how many calls its dollars leav
 prints the same fold as one object. The board's metrics are this fold.
 
 `evolution` is the human's door to a creature's evolution. `swap <id>` swaps in the plan staged
-under `.mnemorph/tmp/evolution/<id>/` — each file there at the world path it replaces (a Mind,
-a creature doc), and `--remove` for each file it removes — after showing it and asking for `y`
-at the terminal: the soil under `.mnemorph/` is hashed before and after, a diff other than
+under `.mnemorph/tmp/evolution/<id>/` — each file there at the world path it replaces or creates
+(a Mind, a creature doc) — over exactly the file set named: `--file` for each file it replaces,
+`--create` for each it creates (whose destination must not exist) and `--remove` for each it
+removes; a staged file not named, a named file not staged, or a link refuses the plan. It is
+shown and `y` asked for at the terminal: the soil under `.mnemorph/` is hashed before and after, a diff other than
 exactly the named files puts the world back, and a swap row (the id, every file with its SHA-256
 before and after, the build) goes to the evolution ledger under the state directory. From then
 on, each ask of its bodies (`--body`, the creature unless named) is stamped and appended as a run
@@ -2051,14 +2054,15 @@ fn usage(args: &[String]) -> ExitCode {
 
 /// `evolution swap|judge`: the human swaps an accepted plan in, or judges a swap.
 fn evolution(args: &[String]) -> ExitCode {
-    use mnemorph_server::world::evolution::{Arm, Plan, Staged};
+    use mnemorph_server::world::evolution::{Arm, Plan};
     if let Ok(body) = std::env::var("MNEMORPH_BODY") {
         return refused(&format!(
             "{body} runs this: an evolution is the human's to swap in and judge, never a body's"
         ));
     }
     let (mut world, mut creature, mut arm) = (None, None, Arm::Mutate);
-    let (mut bodies, mut removes, mut proven) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut bodies, mut proven) = (Vec::new(), Vec::new());
+    let mut set = mnemorph_server::world::evolution::FileSet::default();
     let mut words = Vec::new();
     let mut it = args.iter();
     while let Some(w) = it.next() {
@@ -2071,7 +2075,9 @@ fn evolution(args: &[String]) -> ExitCode {
             "--world" => value("--world").map(|v| world = Some(PathBuf::from(v))),
             "--creature" => value("--creature").map(|v| creature = Some(v)),
             "--body" => value("--body").map(|v| bodies.push(v)),
-            "--remove" => value("--remove").map(|v| removes.push(v)),
+            "--file" => value("--file").map(|v| set.replaces.push(v)),
+            "--create" => value("--create").map(|v| set.creates.push(v)),
+            "--remove" => value("--remove").map(|v| set.removes.push(v)),
             "--proven-on" => value("--proven-on").map(|v| proven.push(v)),
             "--arm" => value("--arm").and_then(|v| {
                 arm = match v.as_str() {
@@ -2104,12 +2110,10 @@ fn evolution(args: &[String]) -> ExitCode {
             let Some(creature) = creature else {
                 return refused(&"a swap names its creature: --creature <name>");
             };
-            let staged = world.join(".mnemorph/tmp/evolution").join(id);
-            let mut files = match staged_files(&staged) {
+            let files = match mnemorph_server::world::evolution::staged(&world, id, &set) {
                 Ok(f) => f,
                 Err(e) => return refused(&e),
             };
-            files.extend(removes.into_iter().map(|path| Staged { path, after: None }));
             if bodies.is_empty() {
                 bodies.push(creature.clone());
             }
@@ -2259,10 +2263,13 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
         safe(&plan.bodies.join(", "))
     );
     for f in &plan.files {
-        let what = f
-            .after
-            .as_ref()
-            .map_or_else(|| "removed".to_owned(), |b| format!("{} bytes", b.len()));
+        let what = f.after.as_ref().map_or_else(
+            || "removed".to_owned(),
+            |b| {
+                let verb = if f.creates { "created" } else { "replaced" };
+                format!("{verb}, {} bytes", b.len())
+            },
+        );
         println!("  {} — {what}", safe(&f.path));
     }
     match at_terminal(&format!("swap {} in?", plan.id)) {
@@ -2330,44 +2337,6 @@ fn judge_swap(world: &Path, id: &str) -> ExitCode {
         }
         Err(e) => refused(&e),
     }
-}
-
-/// The plan staged under `dir`: every file there, at the world path it replaces.
-fn staged_files(dir: &Path) -> Result<Vec<mnemorph_server::world::evolution::Staged>, String> {
-    fn walk(
-        root: &Path,
-        dir: &Path,
-        out: &mut Vec<mnemorph_server::world::evolution::Staged>,
-    ) -> std::io::Result<()> {
-        for e in std::fs::read_dir(dir)? {
-            let e = e?;
-            let kind = e.file_type()?;
-            if kind.is_dir() {
-                walk(root, &e.path(), out)?;
-            } else if kind.is_file() {
-                let rel = e.path();
-                let rel = rel.strip_prefix(root).map_err(std::io::Error::other)?;
-                let path = rel
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                out.push(mnemorph_server::world::evolution::Staged {
-                    path,
-                    after: Some(std::fs::read(e.path())?),
-                });
-            }
-        }
-        Ok(())
-    }
-    let mut out = Vec::new();
-    match walk(dir, dir, &mut out) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(format!("{}: {e}", dir.display())),
-    }
-    out.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(out)
 }
 
 /// `path` made absolute against `cwd` and read segment by segment, without touching the disk:
