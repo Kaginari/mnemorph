@@ -173,9 +173,9 @@ Each listed tool becomes a spec once:
 - its schema is normalised once, the same for every provider: an object schema, every key and
   string without control characters; at every schema position — the root, each property, each
   item, each branch of `anyOf`, `oneOf` and `allOf`, each `$defs` entry — the annotations a call
-  never needs (`$schema`, `$id`, `$comment`, `title`, `examples`, `example`) dropped and a
+  never needs (`$schema`, `$comment`, `title`, `examples`, `example`) dropped and a
   description trimmed to 512 characters, an empty one dropped. A property's own name is never
-  touched, and `$ref` and `$defs` stay as written. The keys come out sorted, so a schema gives
+  touched, and `$id`, `$ref` and `$defs` stay as written. The keys come out sorted, so a schema gives
   the same bytes every time; one past 32 KB once normalised is refused;
 - its class is, in order: the class your configuration declares for the tool; the one it
   declares for the server; one inferred; else `outward`. A server's own annotations are its
@@ -255,7 +255,8 @@ creature takes its last `mcp.prefix.asks` asks (10, never fewer): every tool it 
 answered, on at least `share_pct` percent of them (60), at most `tools` of them (3), most called
 first, ties by name. A creature with fewer asks journaled has none.
 
-Each run that creature makes in that session carries those tools in its frame, as tools of their
+Each run that creature makes in that session carries those of them its scope holds when the run
+is made — so two runs may differ if a catalog became known between them, each fixed for its life — in its frame, as tools of their
 own — `<server>__<tool>`, its definition saying whose it is, its class and that the words are the
 server's — called by name, with no level loaded first, through the same scope, shelf, class and
 gate as `mcp_call`. Only tools in scope among the catalogs known when the run is made join, of a
@@ -282,8 +283,9 @@ no server-side search tool is sent.
 Every other provider, and every other model, runs the same three levels client-side: no tool is
 deferred, and level 2 is text. A request for a provider without native deferral leaves a deferred
 tool out and sends a reference's text instead, so a run that falls back to another model keeps
-working through the doors. A run's journal keeps each result's references, so a resumed
-conversation references them again.
+working through the doors; so does an Anthropic model the documentation does not list, if a run
+switches to one. A run's journal keeps each result's references, so a resumed conversation
+references them again — only those its new frame still defers; any other falls back to its text.
 
 ### Ranked by the ask
 

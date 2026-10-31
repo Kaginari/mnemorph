@@ -763,8 +763,14 @@ impl Mcp {
         if let Some(l) = self.known(server, guarded) {
             return Ok(l);
         }
-        let raw = match self.running(server, cx, &mut health)?.list() {
+        let conn = self.running(server, cx, &mut health)?;
+        let listed = conn.list();
+        let alive = conn.alive();
+        let raw = match listed {
             Ok(raw) => raw,
+            // A list the server answered — refused, or past the tool cap — leaves it running; one
+            // it went silent on, closed or flooded drops it and counts.
+            Err(e) if alive => return Err(e),
             Err(e) => {
                 self.failed(&mut health, &e);
                 return Err(e);
@@ -1083,13 +1089,19 @@ impl Mcp {
         });
         match found {
             Ok((spec, text)) => {
+                let native = deferred.contains(&spec.name);
                 let touched = Touched {
                     kind: Kind::Schema,
                     server: spec.server.clone(),
                     tool: Some(spec.name.clone()),
-                    wt: price(&text),
+                    // A reference loads the definition the provider expands, not the text.
+                    wt: if native {
+                        price(&native::definition(&spec).to_string())
+                    } else {
+                        price(&text)
+                    },
                     outcome: "loaded".into(),
-                    references: if deferred.contains(&spec.name) {
+                    references: if native {
                         vec![spec.name.clone()]
                     } else {
                         Vec::new()
@@ -1346,7 +1358,8 @@ pub fn catalog_file(state: &Path, server: &str) -> PathBuf {
 
 /// Keywords a model never needs to call a tool, dropped wherever a schema sits: annotations for
 /// people and validators, never for the call.
-const UNUSED: [&str; 6] = ["$schema", "$id", "$comment", "examples", "example", "title"];
+/// `$id` stays: a `$ref` may name it.
+const UNUSED: [&str; 5] = ["$schema", "$comment", "examples", "example", "title"];
 
 /// A tool's input schema as every provider is sent it, normalised once: an object schema; every
 /// key and string without control characters; at every schema position — the root, each

@@ -203,6 +203,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn each_race_has_a_prefix_ceiling_and_an_ascended_form_keeps_its_bases() {
+        let ceilings: Vec<u64> = Race::ALL.iter().map(|r| r.prefix_ceiling()).collect();
+        assert_eq!(&ceilings[..6], [4_000, 6_000, 5_000, 4_000, 8_000, 5_000]);
+        for r in Race::ALL {
+            assert_eq!(r.prefix_ceiling(), r.base().prefix_ceiling());
+        }
+    }
+
+    #[test]
     fn names_round_trip() {
         for r in Race::ALL {
             assert_eq!(Race::from_name(r.name()), Some(r));

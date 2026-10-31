@@ -696,3 +696,108 @@ async fn an_untrusted_journal_or_one_written_in_the_world_promotes_nothing() {
     assert!(offer.prefix.is_empty());
     assert!(offer.said.is_empty(), "{:?}", offer.said);
 }
+
+#[test]
+fn an_anthropic_model_without_native_deferral_is_sent_none() {
+    let mut req = request(provider_tools(&specs(), true));
+    req.model = "claude-opus-4-1".into();
+    req.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![Block::ToolUse {
+            id: "t1".into(),
+            name: "mcp_schema".into(),
+            input: json!({"name": "git-hub2__ping"}),
+        }],
+    });
+    req.messages.push(Message {
+        role: Role::User,
+        content: vec![Block::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "level 2 text".into(),
+            is_error: false,
+            cache: false,
+            references: vec!["git-hub2__ping".into()],
+        }],
+    });
+    let sent = wire(&encode(&req).unwrap());
+    let tools = sent["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 1, "only the tool loaded up front");
+    assert!(tools.iter().all(|t| t.get("defer_loading").is_none()));
+    assert_eq!(
+        sent["messages"][2]["content"][0]["content"],
+        json!("level 2 text")
+    );
+}
+
+#[tokio::test]
+async fn a_resumed_run_references_only_what_its_frame_still_defers() {
+    let w = World::new("resume-refs");
+    let mcp = w.session();
+    let script = Arc::new(Scripted::new([
+        Reply::ok(&tool_use(
+            "t1",
+            "mcp_schema",
+            &json!({"name": "hub__web_search"}),
+        )),
+        Reply::ok(&text("done")),
+    ]));
+    let model = Arc::new(AnthropicModel(Anthropic::new(
+        script,
+        "https://api.example",
+        "sk-test".into(),
+        Policy::default(),
+    )));
+    let mut run = w.run(model, &mcp, "claude-sonnet-5-5");
+    let _ = ask(&mut run, "search the web").await;
+    let refs = |messages: &[Message]| -> Vec<String> {
+        messages
+            .iter()
+            .flat_map(|m| &m.content)
+            .flat_map(|b| match b {
+                Block::ToolResult { references, .. } => references.clone(),
+                _ => Vec::new(),
+            })
+            .collect()
+    };
+    let resumed = |model_id: &str, native: bool| {
+        let cx = w.cx();
+        let mut tools = registry();
+        let frame = mcp_journal::frame(&mcp, Race::Slime, &cx, "s", &tools, native);
+        tools.extend(mcp.offer_framed(Race::Slime, &cx, frame).tools);
+        Run::resume(
+            Body {
+                name: "slime-test".into(),
+                race: Race::Slime,
+                model: model_id.into(),
+                system: "s".into(),
+            },
+            Limits::for_race(Race::Slime),
+            Setup {
+                model: Arc::new(ScriptedModel::new([])),
+                tools,
+                cx,
+                journal: Journal::new(w.root.join("run.jsonl")),
+                ledger: None,
+                prices: anthropic_prices().unwrap(),
+                caller: Caller {
+                    session: "s".into(),
+                    run: "r".into(),
+                    body: "slime-test".into(),
+                    race: "slime".into(),
+                    commission: None,
+                    prefix: 0,
+                },
+            },
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        refs(resumed("claude-sonnet-5-5", true).messages()),
+        ["hub__web_search"]
+    );
+    assert_eq!(
+        refs(resumed("m", false).messages()),
+        Vec::<String>::new(),
+        "a frame that defers nothing keeps no reference"
+    );
+}

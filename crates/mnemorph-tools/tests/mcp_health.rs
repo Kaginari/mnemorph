@@ -585,6 +585,7 @@ fn a_schema_is_normalised_once_and_a_propertys_own_name_is_never_touched() {
     assert_eq!(
         n,
         json!({
+            "$id": "x",
             "type": "object",
             "description": "padded",
             "properties": {
@@ -605,4 +606,84 @@ fn a_schema_is_normalised_once_and_a_propertys_own_name_is_never_touched() {
         "normalising twice changes nothing"
     );
     assert_eq!(normalised_schema(None), json!({"type": "object"}));
+}
+
+#[test]
+fn a_refused_listing_keeps_the_server_running() {
+    let w = World::new("refused-list", &few());
+    let m = w.mcp(
+        vec![w.server("shy", &[Race::Slime], Some("refuse-list"))],
+        quick(),
+    );
+    let mut cx = w.cx(Race::Slime);
+    let offer = m.offer(Race::Slime, &cx);
+    for _ in 0..5 {
+        let o = door(&offer.tools, OPEN, &json!({"server": "shy"}), &mut cx);
+        assert!(
+            o.content.contains("refused tools/list: not now"),
+            "{}",
+            o.content
+        );
+    }
+    assert!(
+        m.started("shy") && !m.dead("shy"),
+        "an answer is no failure"
+    );
+    assert_eq!(w.starts(), 1);
+}
+
+#[test]
+fn a_promoted_write_tool_still_asks_the_human_and_a_denial_runs_nothing() {
+    let w = World::new("promoted-gate", &few());
+    let mut hub = w.server("hub", &[Race::Slime], None);
+    hub.class = Some(ToolClass::Write);
+    let m = w.mcp(vec![hub], Settings::default());
+    // NoHuman denies every act that asks.
+    let mut cx = w.cx(Race::Slime);
+    let offer = m.offer(Race::Slime, &cx);
+    let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
+    m.freeze_habits(Ok(habit_rows("slime-scout", "hub__issue_find", 10, 10)));
+    let offer = m.offer_framed(
+        Race::Slime,
+        &cx,
+        Frame {
+            native: false,
+            room: 1_000,
+        },
+    );
+    assert_eq!(offer.prefix, ["hub__issue_find"]);
+    let o = door(&offer.tools, "hub__issue_find", &json!({"q": "x"}), &mut cx);
+    assert!(o.meta.denied, "{}", o.content);
+    let log = std::fs::read_to_string(w.root.join("log")).unwrap_or_default();
+    assert!(
+        !log.contains("call issue_find"),
+        "the server never saw it: {log}"
+    );
+}
+
+#[test]
+fn a_promoted_tool_off_the_shelf_is_refused_by_its_own_name() {
+    // Promoted for a Kijin's frame; a Slime's context calling it is held to its own shelf.
+    let w = World::new("promoted-shelf", &few());
+    let mut hub = w.server("hub", &[Race::Kijin, Race::Slime], None);
+    hub.class = Some(ToolClass::Outward);
+    let m = w.mcp(vec![hub], Settings::default());
+    let mut kx = w.cx(Race::Kijin);
+    let offer = m.offer(Race::Kijin, &kx);
+    let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut kx);
+    m.freeze_habits(Ok(habit_rows("slime-scout", "hub__issue_find", 10, 10)));
+    let offer = m.offer_framed(
+        Race::Kijin,
+        &kx,
+        Frame {
+            native: false,
+            room: 1_000,
+        },
+    );
+    assert_eq!(offer.prefix, ["hub__issue_find"]);
+    let mut sx = w.cx(Race::Slime);
+    let o = door(&offer.tools, "hub__issue_find", &json!({"q": "x"}), &mut sx);
+    assert!(o.is_error, "{}", o.content);
+    let log = std::fs::read_to_string(w.root.join("log")).unwrap_or_default();
+    assert!(!log.contains("call issue_find"), "{log}");
 }

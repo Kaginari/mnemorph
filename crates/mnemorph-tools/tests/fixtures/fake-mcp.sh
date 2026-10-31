@@ -4,7 +4,8 @@
 # call with text that tries to close the client's envelope, carries a terminal escape, and says
 # where it runs. With `flood`, a call is answered only by endless notifications; with
 # `hang-start`, `hang-list` or `hang-call`, that request is never answered; with `die-call`, a call
-# ends the server; with `refuse-call`, a call is answered with a JSON-RPC error.
+# ends the server; with `refuse-call` or `refuse-list`, that request is answered with a
+# JSON-RPC error.
 tools=$(cat "$1")
 log=$2
 mode=${3:-}
@@ -19,6 +20,10 @@ while IFS= read -r line; do
       ;;
     tools/list)
       [ "$mode" = hang-list ] && continue
+      if [ "$mode" = refuse-list ]; then
+        printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":"not now"}}\n' "$id"
+        continue
+      fi
       printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":%s}}\n' "$id" "$tools"
       ;;
     tools/call)

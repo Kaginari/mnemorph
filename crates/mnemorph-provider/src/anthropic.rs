@@ -19,7 +19,8 @@ pub const MAX_BREAKPOINTS: usize = 4;
 /// Whether `model` takes native deferred tools (`defer_loading`, expanded from a
 /// `tool_reference`): the models Anthropic's tool-search documentation lists — Claude Opus and
 /// Sonnet from 4.5, Haiku from 4.5, and every later family. Claude Opus 4.1 and earlier, and any id
-/// not known here, do not: their MCP levels stay client-side.
+/// not known here, do not: their MCP levels stay client-side. The list is the documentation's,
+/// enumerated: a new model not on it runs client-side until it is added.
 #[must_use]
 pub fn defers(model: &str) -> bool {
     const FAMILIES: [&str; 11] = [
@@ -117,16 +118,24 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
     if !request.system.is_empty() {
         body.insert(
             "system".into(),
-            Value::Array(request.system.iter().map(block).collect()),
+            Value::Array(request.system.iter().map(|b| block(b, true)).collect()),
         );
     }
-    if !request.tools.is_empty() {
-        if request.tools.iter().all(|t| t.defer) {
+    // A model without native deferral — a run that switched to one mid-session keeps its frame —
+    // is sent no deferred tool and a reference's text, as any other provider is.
+    let native = defers(&request.model);
+    let sent: Vec<&crate::model::Tool> = request
+        .tools
+        .iter()
+        .filter(|t| native || !t.defer)
+        .collect();
+    if !sent.is_empty() {
+        if sent.iter().all(|t| t.defer) {
             return Err(Error::Invalid(
                 "every tool is deferred; at least one must load up front".into(),
             ));
         }
-        let tools = request.tools.iter().map(|t| {
+        let tools = sent.iter().map(|t| {
             // Streamed as generated: a long input (a file's contents) arrives in pieces, never as a
             // silent gap that the stall wait would read as a dead stream.
             let mut tool = json!({"name": t.name, "description": t.description, "input_schema": t.input_schema, "eager_input_streaming": true});
@@ -143,7 +152,13 @@ pub fn encode(request: &Request) -> Result<Value, Error> {
     }
     body.insert(
         "messages".into(),
-        Value::Array(request.messages.iter().map(message).collect()),
+        Value::Array(
+            request
+                .messages
+                .iter()
+                .map(|m| message(m, native))
+                .collect(),
+        ),
     );
     if let Some(effort) = request.effort {
         body.insert("output_config".into(), json!({"effort": effort.word()}));
@@ -179,7 +194,7 @@ fn check_system_messages(messages: &[Message]) -> Result<(), Error> {
     Ok(())
 }
 
-fn message(m: &Message) -> Value {
+fn message(m: &Message, native: bool) -> Value {
     let role = match m.role {
         Role::User => "user",
         Role::Assistant => "assistant",
@@ -190,12 +205,12 @@ fn message(m: &Message) -> Value {
         .content
         .iter()
         .filter(|b| !matches!(b, Block::Opaque(v) if v["type"].as_str().is_some_and(|t| t.starts_with(crate::openai::OPAQUE_PREFIX))))
-        .map(block)
+        .map(|b| block(b, native))
         .collect();
     json!({"role": role, "content": content})
 }
 
-fn block(b: &Block) -> Value {
+fn block(b: &Block, native: bool) -> Value {
     let cached = |mut v: Value, cache: bool| {
         if cache {
             v["cache_control"] = json!({"type": "ephemeral"});
@@ -216,7 +231,7 @@ fn block(b: &Block) -> Value {
         } => {
             // A result that loads deferred tools is their references alone: the API expands each
             // into its definition, inline, and the cached prefix never moves.
-            let content = if references.is_empty() {
+            let content = if references.is_empty() || !native {
                 json!(content)
             } else {
                 Value::Array(

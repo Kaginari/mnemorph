@@ -711,6 +711,21 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // A reference stands only for a tool this frame still defers: a catalog that shrank, a
+        // server now past its ceiling or a shelf that changed would make the provider refuse it.
+        let deferred: std::collections::BTreeSet<&str> = run
+            .tools
+            .iter()
+            .filter(|t| t.defer())
+            .map(|t| t.name())
+            .collect();
+        for m in &mut run.messages {
+            for b in &mut m.content {
+                if let Block::ToolResult { references, .. } = b {
+                    references.retain(|r| deferred.contains(r.as_str()));
+                }
+            }
+        }
         // A run that drained before its stop never drains again: its notes are already kept.
         run.drains = u32::try_from(
             beats
