@@ -1269,7 +1269,7 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
+        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\nslime = 80\nnamed-slime = 90\norc = 0\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
     )
     .unwrap();
     // Letting a rule ask loosens the gate: the global file alone says it.
@@ -1308,6 +1308,18 @@ fn the_configuration_reaches_the_run() {
     .unwrap();
     assert_eq!(bare.solo_steps(), mnemorph_config::SOLO_STEPS);
     assert_eq!(mnemorph_config::SOLO_STEPS, 30 + 30 + 40);
+    // A race's steps: the human's `steps.<race>`, else the race law's; zero is no budget.
+    assert_eq!(config.race_steps(Race::Slime), 80);
+    assert_eq!(config.race_steps(Race::NamedSlime), 90);
+    assert_eq!(
+        config.race_steps(Race::Orc),
+        Race::Orc.steps(),
+        "zero keeps the law"
+    );
+    assert_eq!(config.race_steps(Race::Elf), Race::Elf.steps());
+    for race in Race::ALL {
+        assert_eq!(bare.race_steps(race), race.steps(), "{race:?}");
+    }
     // Its steps can be spent: the stall guard waits for them, never stopping it at 40.
     let mut stress = mnemorph_loop::Stress::for_steps(100);
     for turn in 1..=100 {
