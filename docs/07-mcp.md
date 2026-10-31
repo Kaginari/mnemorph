@@ -139,9 +139,11 @@ Each listed tool becomes a spec once:
   declares for the server; one inferred; else `outward`. A server's own annotations are its
   word, never yours, so only two are taken: `destructiveHint` makes the tool `destructive`
   (believing it only costs more), and `readOnlyHint` makes it `read` only on a server with no
-  sockets under a kernel guard — there the sandbox keeps the claim, since the server cannot
-  write the world or reach outside. Run unguarded, or with `network = true`, the hint is
-  ignored.
+  sockets under the Linux guard — seccomp with no `socket()`, the world read-only, landlock or
+  no start — where the sandbox keeps the claim, since the server cannot write the world or reach
+  outside. Under any other sandbox (macOS's Seatbelt profile included, not yet verified beyond
+  CI), run unguarded, or with `network = true`, the hint is ignored and the tool stays outward.
+  A refused tool's name is shown escaped in every hole.
 
 Every refusal is a hole, said at level 1 and in `mnemorph status` once the catalog is known; so is
 a class your configuration declares for a tool the server does not list.

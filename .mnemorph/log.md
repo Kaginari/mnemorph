@@ -6597,3 +6597,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** BM25 drops empty tokens, so punctuation matches nothing; the ranked block and a search admit only a positive BM25 score, with the usage nudge ordering them; each server has its own connection slot, so a slow call holds only its server and two bodies opening one server start it once; the catalog cache is written aside and renamed; a class declared for a tool the server never lists is a hole; `mcp.top_k = 0` is refused; a hole's tool name is escaped once. Doc 07.
 - **Tests:** an ask ending in `.` names nothing against a description ending in `.`; a tool that helped is not named for an ask it misses; `top_k = 0` refused. Each new guard disabled in turn fails its test.
 - **Learned:** splitting on every non-alphanumeric yields empty strings between separators, and an "all digits" test is true of the empty string.
+
+### [2026-10-31T12:40:00+01:00] rimuru — #48, Fable's second review: a read hint trusted only under the Linux guard, refused names escaped in every hole
+- **Done:** `readOnlyHint` lowers a class to `read` only under `Sandbox::Guard` (seccomp, landlock, no sockets); Seatbelt and unguarded keep it outward. A refused tool's name goes through `shown` in the hole `status` prints, and level 1 escapes the hole once. Doc 07.
+- **Tests:** a `readOnlyHint` tool under Seatbelt stays outward and reaches no Slime; a bidi tool name is escaped in level 1 and in the run's holes. Each guard disabled fails its test.
+- **Learned:** "any sandbox but none" is not "a sandbox proven to keep the claim": trust the one the tests verify.

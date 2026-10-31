@@ -83,7 +83,7 @@ pub enum Classed {
     /// The configuration declares it for the tool's server.
     Server,
     /// Inferred: a `destructiveHint` taken at its word (it only costs more), or a
-    /// `readOnlyHint` on a server the kernel guard holds without sockets.
+    /// `readOnlyHint` on a server the Linux guard holds without sockets.
     Inferred,
     /// Nothing declared it and nothing could be inferred: `outward`.
     Default,
@@ -149,7 +149,7 @@ impl Server {
     /// The class `tool` runs at, and where it came from: declared for the tool, else for the
     /// server, else inferred, else `outward`. A server's own hints are untrusted: one may only
     /// make a call dearer (`destructiveHint`), or claim a read the sandbox enforces anyway — no
-    /// sockets, the world read-only, under a kernel guard (`guarded`).
+    /// sockets, the world read-only, under the Linux guard (`guarded`).
     #[must_use]
     pub fn class_of(&self, tool: &str, raw: &Value, guarded: bool) -> (ToolClass, Classed) {
         if let Some(c) = self.tools.get(tool) {
@@ -285,7 +285,7 @@ impl Spec {
                 "MCP server `{}`: a tool named `{}` is refused — names are letters, digits, `_` \
                  and `-`, no `__`, at most 64 with the server's prefix",
                 server.name,
-                clean(&tool.chars().take(80).collect::<String>())
+                mnemorph_wire::shown(&clean(&tool.chars().take(80).collect::<String>()))
             ));
         }
         let mut schema = match raw.get("inputSchema") {
@@ -361,9 +361,11 @@ pub struct Offer {
     pub holes: Vec<String>,
 }
 
-/// Whether `cx` runs its commands under a kernel guard.
+/// Whether `cx` runs its commands under the Linux kernel guard — seccomp with no sockets, the
+/// world read-only, landlock or no start — the only sandbox proven to keep a server's claim
+/// that it only reads. Under any other (Seatbelt included) a `readOnlyHint` lowers nothing.
 fn guarded(cx: &Context) -> bool {
-    !matches!(cx.sandbox(), mnemorph_sandbox::Sandbox::None(_))
+    matches!(cx.sandbox(), mnemorph_sandbox::Sandbox::Guard(_))
 }
 
 impl Mcp {

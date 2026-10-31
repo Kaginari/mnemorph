@@ -766,6 +766,59 @@ fn hostile_descriptions_and_schemas_are_escaped_and_capped() {
 }
 
 #[test]
+fn a_readonly_hint_under_any_sandbox_but_the_linux_guard_stays_outward() {
+    let tools = json!([{"name": "lookup", "description": "Looks up",
+        "annotations": {"readOnlyHint": true}, "inputSchema": {"type": "object"}}]);
+    let w = World::new("seatbelt", &tools);
+    let servers = || vec![w.server("hub", &[Race::Kijin, Race::Slime], None)];
+    // Listed once unguarded, so the Seatbelt session reads the cache and starts nothing.
+    let mut cx = w.cx(Race::Kijin, approve());
+    let first = w.mcp(servers());
+    let offer = first.offer(Race::Kijin, &cx);
+    let _ = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
+    let m = w.mcp(servers());
+    let mut cx = Context::new(Race::Kijin, &w.dir, &["."])
+        .with_sandbox(Sandbox::Seatbelt(PathBuf::from("/usr/bin/sandbox-exec")))
+        .with_gate(approve());
+    let offer = m.offer(Race::Kijin, &cx);
+    let o = door(&offer.tools, OPEN, &json!({"server": "hub"}), &mut cx);
+    assert!(
+        o.content.contains("hub__lookup — outward (default)"),
+        "{}",
+        o.content
+    );
+    assert_eq!(w.starts(), 1, "read from the cache");
+    let slime = Context::new(Race::Slime, &w.dir, &["."])
+        .with_sandbox(Sandbox::Seatbelt(PathBuf::from("/usr/bin/sandbox-exec")));
+    assert!(
+        m.offer(Race::Slime, &slime).tools.is_empty(),
+        "no read to infer for a Slime"
+    );
+}
+
+#[test]
+fn a_refused_tools_name_is_shown_escaped_in_every_hole() {
+    let w = World::new(
+        "hole-bidi",
+        &json!([tool("evil\u{202e}gnp", "x"), tool("ok", "y")]),
+    );
+    let m = w.mcp(vec![w.server("fs", &[Race::Kijin], Some(ToolClass::Read))]);
+    let mut cx = w.cx(Race::Kijin, approve());
+    let offer = m.offer(Race::Kijin, &cx);
+    let level1 = door(&offer.tools, OPEN, &json!({"server": "fs"}), &mut cx).content;
+    assert!(
+        level1.contains("`evil\\u{202e}gnp` is refused"),
+        "escaped once: {level1}"
+    );
+    let holes = m.offer(Race::Kijin, &cx).holes;
+    assert!(
+        holes.iter().any(|h| h.contains("evil\\u{202e}gnp")),
+        "{holes:?}"
+    );
+    assert!(!holes.iter().any(|h| h.contains('\u{202e}')), "{holes:?}");
+}
+
+#[test]
 fn a_bad_tool_name_is_refused() {
     let w = World::new(
         "names",

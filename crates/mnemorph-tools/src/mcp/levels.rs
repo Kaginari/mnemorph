@@ -154,7 +154,13 @@ pub fn level1(s: &Server, tools: &[Spec], holes: &[String]) -> String {
         out.push_str(
             &holes
                 .iter()
-                .map(|h| format!("- {}", one_line(h, 2 * LINE_CHARS)))
+                // A hole is the harness's words with the server's already shown: escaped once.
+                .map(|h| {
+                    format!(
+                        "- {}",
+                        escape(&h.chars().take(2 * LINE_CHARS).collect::<String>())
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
