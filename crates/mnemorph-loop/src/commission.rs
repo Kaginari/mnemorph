@@ -244,21 +244,6 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
     system
 }
 
-/// A commissioned body's limits: its race's, its steps, its slice, and the human's stress line and recall
-/// weights when the configuration set them.
-fn child_limits(c: &Commissioner, race: mnemorph_races::Race, slice: u64) -> Limits {
-    let mut limits = Limits::for_race(race);
-    limits.steps = c.steps.of(race);
-    limits.budget_wt = (slice != u64::MAX).then_some(slice);
-    if let Some(stress) = c.stress_tokens {
-        limits.stress_tokens = stress;
-    }
-    if let Some(weights) = c.weights {
-        limits.weights = weights;
-    }
-    limits
-}
-
 /// The Minds' manifest a commissioned body is told with its first ask; none, law off. The run is
 /// told which it is with [`Run::with_law`].
 fn manifest_for(c: &Commissioner, roster: &Roster, name: &str) -> Option<String> {
