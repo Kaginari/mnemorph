@@ -138,9 +138,13 @@ fn file(h: &mut DefaultHasher, path: &Path, budget: &mut usize) -> bool {
 }
 
 /// Every entry of `at`, in name order, folded into `h` within `budget` (each entry read spends
-/// one); `deep` follows one level of subdirectories, never a link. `false` when the budget ran out.
+/// one); `deep` follows one level of subdirectories, never a link — nor is `at` itself read when it
+/// is a link. `false` when the budget ran out.
 fn dir(h: &mut DefaultHasher, at: &Path, deep: bool, budget: &mut usize) -> bool {
-    let Ok(rd) = std::fs::read_dir(at) else {
+    // A body can write the world: a link where a directory should be is never followed, and
+    // reads as no directory at all.
+    let real = std::fs::symlink_metadata(at).is_ok_and(|m| m.file_type().is_dir());
+    let Some(Ok(rd)) = real.then(|| std::fs::read_dir(at)) else {
         0u8.hash(h);
         return true;
     };
@@ -612,6 +616,25 @@ mod tests {
         }
         std::fs::remove_dir_all(&root).unwrap();
         assert_ne!(sig(&root), last, "gone");
+    }
+
+    #[test]
+    fn a_linked_directory_is_not_watched() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(outside.join("orc-x")).unwrap();
+        let world = root.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        std::os::unix::fs::symlink(&outside, world.join(".mnemorph/orc")).unwrap();
+        let sig = |w: &Path| signature(w, &mut BUDGET.clone()).0;
+        let before = sig(&world);
+        std::fs::write(outside.join("orc-x/README.md"), "# orc-x\n").unwrap();
+        std::fs::write(outside.join("more.md"), "x").unwrap();
+        assert_eq!(
+            sig(&world),
+            before,
+            "a change behind a link moved the signature"
+        );
     }
 
     #[test]

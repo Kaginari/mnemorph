@@ -8,7 +8,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { type Command, type CommandKind, marked, rank } from '../data/commands.ts';
 import { Safe } from '../safe/Safe.tsx';
-import { onCard, trapTab } from './modal.ts';
+import { cardUp, onCard, trapTab } from './modal.ts';
 
 const GLYPH: Record<CommandKind, string> = {
   page: '▤',
@@ -32,7 +32,10 @@ export function CommandPalette({ all, onClose }: { all: readonly Command[]; onCl
   useEffect(() => {
     const was = document.activeElement as HTMLElement | null;
     input.current?.focus();
-    return () => was?.focus?.();
+    // Never back behind an approval card: the card keeps the focus.
+    return () => {
+      if (!cardUp()) was?.focus?.();
+    };
   }, []);
   useEffect(() => onCard(onClose), [onClose]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new query starts at the top

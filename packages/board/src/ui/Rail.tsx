@@ -293,7 +293,7 @@ export function Rail({
         <span className="rail-search-text">
           Search<span className="sr-only">: jump to a world, a page, a chat or a run</span>
         </span>
-        <kbd>{mod() === '⌘' ? '⌘K' : 'Ctrl K'}</kbd>
+        <kbd>{mod() === '⌘' ? '⌘K' : 'Ctrl+K'}</kbd>
       </button>
       <div className="rail-scroll">
         {here === undefined ? (

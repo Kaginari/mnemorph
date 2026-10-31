@@ -7,8 +7,9 @@
  *   acknowledgement. Input before that is ignored. Losing visibility disarms it; regaining it
  *   arms it again {@link ARM_MS} later.
  * - **Disarming.** Any key that is not a pick, Enter, Esc, a scroll or a focus move — and any
- *   paste — clears the choice and arms the card again {@link ARM_MS} later, so a word typed into
- *   it never ends in an answer. Enter decides only {@link CONFIRM_MS} after its pick, and never in
+ *   paste, any held (repeating) key, and any key but a scroll or a focus move before the card is
+ *   armed — clears the choice and arms the card again {@link ARM_MS} later, so a word typed into
+ *   it, or a key held through its arrival, never ends in an answer. Enter decides only {@link CONFIRM_MS} after its pick, and never in
  *   the task that picked: a `y` and an Enter that come together are typing, and disarm it.
  * - **Reading.** Yes is refused until every row of the act has been on screen, in order: a row
  *   counts only once every row before it has.
@@ -262,10 +263,16 @@ export class Card {
     return this.choice === 1 ? { kind: 'deny' } : { kind: 'reason' };
   }
 
-  /** A key pressed at `at`, in task `task`. */
-  key(key: string, at: number, task: number): Decision {
+  /**
+   * A key pressed at `at`, in task `task`; `repeat` when it is held. A held key picks and confirms
+   * nothing and disarms; so does any key but a scroll or a focus move before the card is armed.
+   */
+  key(key: string, at: number, task: number, repeat = false): Decision {
     if (key === 'Escape') return { kind: 'deny' };
-    if (!this.armed(at)) return { kind: 'none' };
+    if (repeat || !this.armed(at)) {
+      if (repeat || !MOVES.has(key)) this.disarm(at);
+      return { kind: 'none' };
+    }
     const p = PICKS[key];
     if (p !== undefined) {
       this.pick(p, at, task);

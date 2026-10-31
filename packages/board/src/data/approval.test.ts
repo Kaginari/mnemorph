@@ -62,12 +62,41 @@ describe('the card', () => {
     c.acked(true, 0);
     expect(c.key('y', ARM_MS - 1, 1)).toEqual({ kind: 'none' });
     expect(c.choice).toBeUndefined();
-    expect(c.armed(ARM_MS)).toBe(true);
+    // A key before arming disarms: the card arms again ARM_MS after it.
+    expect(c.armed(ARM_MS)).toBe(false);
+    expect(c.armed(2 * ARM_MS - 1)).toBe(true);
     c.visible(false, 400);
     expect(c.armed(10_000)).toBe(false);
     c.visible(true, 1000);
     expect(c.armed(1000 + ARM_MS - 1)).toBe(false);
     expect(c.armed(1000 + ARM_MS)).toBe(true);
+  });
+
+  it('a scroll or focus key before arming leaves it arming on time', () => {
+    const c = new Card(1);
+    c.rowSeen(0);
+    c.visible(true, 0);
+    c.acked(true, 0);
+    for (const k of ['ArrowDown', 'PageDown', 'Tab']) c.key(k, 100, 1);
+    expect(c.armed(ARM_MS)).toBe(true);
+  });
+
+  it('a key held through the card picks and confirms nothing, and disarms it', () => {
+    const c = new Card(1);
+    c.rowSeen(0);
+    c.visible(true, 0);
+    c.acked(true, 0);
+    // A held y repeating once the card is armed picks nothing.
+    expect(c.key('y', 400, 1, true)).toEqual({ kind: 'none' });
+    expect(c.choice).toBeUndefined();
+    expect(c.armed(400)).toBe(false);
+    // A real pick, then a held Enter: no answer, and the pick is cleared.
+    c.key('y', 800, 2);
+    expect(c.key('Enter', 1000, 3, true)).toEqual({ kind: 'none' });
+    expect(c.choice).toBeUndefined();
+    expect(c.armed(1000)).toBe(false);
+    // Esc still denies, held or not.
+    expect(c.key('Escape', 1001, 4, true)).toEqual({ kind: 'deny' });
   });
 
   it('approves on y, then Enter in another task past the confirmation', () => {

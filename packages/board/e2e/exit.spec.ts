@@ -73,6 +73,20 @@ for (const theme of ['dark', 'light'] as const) {
         page.screenshot({ path: screen(`exit-${info.project.name}-${theme}-${name}`) });
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
+      // The page's visibility, as the test sets it: hidden, the card cannot arm.
+      await page.addInitScript(() => {
+        const w = window as { __hidden?: boolean };
+        w.__hidden = false;
+        Object.defineProperty(document, 'visibilityState', {
+          get: () => (w.__hidden ? 'hidden' : 'visible'),
+        });
+        document.hasFocus = () => !w.__hidden;
+      });
+      const hide = (hidden: boolean) =>
+        page.evaluate((h) => {
+          (window as { __hidden?: boolean }).__hidden = h;
+          document.dispatchEvent(new Event('visibilitychange'));
+        }, hidden);
       await page.addInitScript(() => {
         const seen: string[] = [];
         (window as { __csp?: string[] }).__csp = seen;
@@ -126,12 +140,18 @@ for (const theme of ['dark', 'light'] as const) {
       const box = page.getByRole('textbox');
       await expect(box).toBeEnabled({ timeout: 30_000 });
       await box.fill('change a to b in the notes');
+      // The page is hidden while the ask arrives: the card waits unarmed.
+      await hide(true);
       await box.press('Enter');
       const card = page.getByRole('alertdialog');
       await expect(card).toBeVisible({ timeout: 30_000 });
       await expect(card).toContainText('sed -i s/a/b/ notes.txt');
       // A key before the card is armed answers nothing; Yes is never where the focus starts.
+      await expect(card).toHaveAttribute('data-armed', 'false');
       await page.keyboard.press('Enter');
+      await page.keyboard.press('1');
+      await expect(card).toHaveAttribute('data-armed', 'false');
+      await hide(false);
       await expect(card).toBeVisible();
       const yes = card.getByRole('button', { name: /Yes, run it once/ });
       await expect(yes).not.toBeFocused();
@@ -150,6 +170,8 @@ for (const theme of ['dark', 'light'] as const) {
         timeout: 30_000,
       });
       expect(readFileSync(join(worldDir, 'notes.txt'), 'utf8')).toBe('b\n');
+      // Run once: one bash card, one edit.
+      await expect(page.locator('.tool-name', { hasText: 'bash' })).toHaveCount(1);
       await shot('chat');
 
       // The metrics tab moved without a reload: the chat's calls, unpriced, never $0.

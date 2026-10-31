@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { shortcuts } from '../data/shortcuts.ts';
-import { onCard, trapTab } from './modal.ts';
+import { cardUp, onCard, trapTab } from './modal.ts';
 
 export function ShortcutMap({ onClose }: { onClose: () => void }) {
   const box = useRef<HTMLDivElement>(null);
@@ -13,7 +13,9 @@ export function ShortcutMap({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const was = document.activeElement as HTMLElement | null;
     close.current?.focus();
-    return () => was?.focus?.();
+    return () => {
+      if (!cardUp()) was?.focus?.();
+    };
   }, []);
   useEffect(() => onCard(onClose), [onClose]);
   const onKey = (e: React.KeyboardEvent) => {
