@@ -8,6 +8,7 @@ import { type Chats, useChats } from './data/chats.ts';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
+import { shown } from './safe/shown.ts';
 import { type Choice, useTheme } from './theme.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
@@ -191,7 +192,8 @@ export function App() {
     return () => window.removeEventListener('keydown', on);
   }, []);
   useEffect(() => {
-    document.title = `${name} · Mnemorph`;
+    // The name is a world's own text, or a decoded address: escaped, never a live bidi mark.
+    document.title = `${shown(name)} · Mnemorph`;
   }, [name]);
 
   const togglePane = () =>

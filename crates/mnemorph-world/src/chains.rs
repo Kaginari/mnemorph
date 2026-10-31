@@ -88,7 +88,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         let path = post_witness_in(state, world, post);
         let logged_too = || {
             logged(
-                &std::fs::read_to_string(world.join(LOG)).unwrap_or_default(),
+                &crate::regular::text(&world.join(LOG)).unwrap_or_default(),
                 post.creature(),
             )
         };
@@ -187,7 +187,7 @@ pub fn verify(world: &Path) -> Vec<Reading> {
 #[must_use]
 pub fn anchor_of(world: &Path, name: &str) -> Option<Head> {
     anchor_with(world, name, || {
-        std::fs::read_to_string(world.join(LOG)).unwrap_or_default()
+        crate::regular::text(&world.join(LOG)).unwrap_or_default()
     })
 }
 

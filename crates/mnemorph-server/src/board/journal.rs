@@ -271,6 +271,7 @@ fn matches(e: &JournalEntry, q: &str) -> bool {
 ///
 /// `log.md` is not a regular file, or cannot be read.
 pub fn journal(world: &Path, filter: &Filter) -> Result<BoardJournal, String> {
+    super::snapshot::parents_plain(world, Path::new(LOG))?;
     let read = tail(&world.join(LOG), JOURNAL_BYTES).map_err(|e| format!("{LOG}: {e}"))?;
     let (text, older, bytes) = match read {
         Some((t, o, b)) => (t, o, Some(b)),

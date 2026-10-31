@@ -96,8 +96,48 @@ fn scratch() -> Result<PathBuf, String> {
     Ok(root)
 }
 
+/// `Ok` when every directory on the way from `world` down to `rel`'s file is a plain directory —
+/// no link among them, which would lead a read outside the world — or the way ends early, the
+/// file absent. The file itself is the reader's to check (`regular` opens it without following).
+///
+/// # Errors
+///
+/// The first step that is a link or no directory, or a path that is not plainly inside the world.
+pub fn parents_plain(world: &Path, rel: &Path) -> Result<(), String> {
+    let parts: Vec<std::path::Component> = rel.components().collect();
+    let mut at = world.to_path_buf();
+    for (i, c) in parts.iter().enumerate() {
+        let std::path::Component::Normal(name) = c else {
+            return Err(format!("{}: not a path inside the world", rel.display()));
+        };
+        if i + 1 == parts.len() {
+            break;
+        }
+        at.push(name);
+        match std::fs::symlink_metadata(&at) {
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err(format!(
+                    "{}: a link on the way, not followed",
+                    at.strip_prefix(world).unwrap_or(&at).display()
+                ));
+            }
+            Ok(m) if !m.is_dir() => {
+                return Err(format!(
+                    "{}: not a directory",
+                    at.strip_prefix(world).unwrap_or(&at).display()
+                ));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(format!("{}: {e}", rel.display())),
+        }
+    }
+    Ok(())
+}
+
 /// Copy the regular file `rel` of `world` into `into`, within the budget.
 fn copy(world: &Path, into: &Path, rel: &Path, budget: &mut Budget) -> Result<(), String> {
+    parents_plain(world, rel)?;
     let said = |e: Unread| format!("{}: {e}", rel.display());
     let Some(bytes) =
         regular::read(&world.join(rel), FILE_CAP.min(budget.bytes)).map_err(|e| match e {
@@ -333,5 +373,25 @@ mod tests {
         }
         let e = take(w.path()).unwrap_err();
         assert!(e.contains("too many entries"), "{e}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_among_the_parents_is_refused() {
+        let w = tempfile::tempdir().unwrap();
+        let out = tempfile::tempdir().unwrap();
+        std::fs::write(out.path().join("queue.jsonl"), "{}\n").unwrap();
+        std::fs::create_dir_all(w.path().join(".mnemorph")).unwrap();
+        std::os::unix::fs::symlink(out.path(), w.path().join(".mnemorph/shared")).unwrap();
+        let rel = Path::new(".mnemorph/shared/queue.jsonl");
+        let e = parents_plain(w.path(), rel).unwrap_err();
+        assert!(e.contains("a link on the way"), "{e}");
+        let e = file(w.path(), ".mnemorph/shared/queue.jsonl").unwrap_err();
+        assert!(e.contains("a link on the way"), "{e}");
+        assert!(parents_plain(w.path(), Path::new(".mnemorph/none/x")).is_ok());
+        assert!(parents_plain(w.path(), Path::new("../x")).is_err());
+        std::fs::write(w.path().join("plain"), "").unwrap();
+        let e = parents_plain(w.path(), Path::new("plain/x")).unwrap_err();
+        assert!(e.contains("not a directory"), "{e}");
     }
 }

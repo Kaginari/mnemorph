@@ -270,13 +270,15 @@ function BodyCard({
             {b.post && (
               <span>
                 {' '}
-                · post <Safe text={b.post} />
+                · post <Safe text={b.post} />{' '}
+                <span className="panel-note">(by its doc's name, in-world)</span>
               </span>
             )}
             {b.speciality && (
               <span>
                 {' '}
-                · speciality <Safe text={b.speciality} />
+                · speciality <Safe text={b.speciality} />{' '}
+                <span className="panel-note">(by its doc's name, in-world)</span>
               </span>
             )}
           </p>
@@ -319,6 +321,9 @@ function BodyCard({
         </details>
       )}
       <h3 className="panel-title">Minds</h3>
+      <p className="panel-note">
+        Standing from the witness; each Mind's line and shared mark are its doc's, in-world.
+      </p>
       {b.minds.length === 0 ? (
         <p className="panel-note">It wears no Mind.</p>
       ) : (
@@ -625,7 +630,11 @@ function QueueTab({ w }: { w: BoardWorld }) {
           />
           <Source
             what="witness"
-            p={{ source: q.witness ?? 'no witness', trusted: true, why: q.witness_why }}
+            p={{
+              source: q.witness ?? 'no witness',
+              trusted: q.witness !== null,
+              why: q.witness_why,
+            }}
           />
         </>
       )}

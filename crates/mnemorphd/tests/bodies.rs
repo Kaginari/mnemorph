@@ -299,6 +299,8 @@ fn the_colony_is_the_rosters_with_its_minds_live_states_and_acts() {
     );
     assert_eq!(page["minds"]["trusted"], true);
     assert_eq!(page["roster"]["trusted"], false);
+    // The acts block is no more trusted than its least: each act carries its own flag.
+    assert_eq!(page["acts"]["trusted"], false);
     assert_eq!(body(&page, "kijin-forge")["post"], "forge");
     assert_eq!(body(&page, "dark-elf-supply")["speciality"], "supply");
 
@@ -319,6 +321,7 @@ fn the_colony_is_the_rosters_with_its_minds_live_states_and_acts() {
         (&json!("verdict"), &json!(true))
     );
     assert_eq!(acts[1]["kind"], "commission");
+    assert_eq!(acts[1]["trusted"], false);
     assert_eq!(acts[1]["ask"], "read @W lines into Report.Wrote");
     assert_eq!(acts[1]["verdict"], "PASS");
 
@@ -560,4 +563,29 @@ fn the_race_art_is_served_by_its_exact_name() {
             &res[..60.min(res.len())]
         );
     }
+}
+
+#[test]
+fn a_directory_link_on_the_way_reads_nothing_outside_the_world() {
+    let mut home = Home::new("dirlink");
+    // Outside the world: a queue and a journal a body would have the board read.
+    let outside = home.root.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    let order = json!({"id": "outside00001", "rev": 1, "state": "held", "by": "human", "rank": 0, "ask": "from outside"});
+    std::fs::write(outside.join("queue.jsonl"), format!("{order}\n")).unwrap();
+    std::fs::write(outside.join("log.md"), "### [t] x — from outside\n").unwrap();
+    std::os::unix::fs::symlink(&outside, home.world.join(".mnemorph/shared")).unwrap();
+    let (host, cookie) = home.serve();
+    let res = Home::raw(&host, &cookie, &format!("/api/w/{}/queue", home.id()));
+    assert!(res.starts_with("HTTP/1.1 503"), "{res}");
+    assert!(res.contains("a link on the way"), "{res}");
+    assert!(!res.contains("from outside"), "{res}");
+    // The whole .mnemorph a link: the journal is refused too.
+    let mut other = Home::new("dirlink-log");
+    std::fs::remove_dir_all(other.world.join(".mnemorph")).unwrap();
+    std::os::unix::fs::symlink(&outside, other.world.join(".mnemorph")).unwrap();
+    let (host, cookie) = other.serve();
+    let res = Home::raw(&host, &cookie, &format!("/api/w/{}/journal", other.id()));
+    assert!(res.starts_with("HTTP/1.1 503"), "{res}");
+    assert!(!res.contains("from outside"), "{res}");
 }

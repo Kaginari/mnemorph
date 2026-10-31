@@ -24,7 +24,7 @@ use ts_rs::TS;
 
 use super::journal;
 use super::snapshot;
-use super::timeline::{self, Commission, CommissionState, TimelineEntry, TimelineKind};
+use super::timeline::{self, Commission, CommissionState, TimelineEntry};
 
 /// The most acts a body's card lists.
 pub const ACTS: usize = 6;
@@ -643,6 +643,9 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
     let snap = snapshot::bodies(world)?;
     let roster = Roster::load(snap.path());
     let log = || {
+        if snapshot::parents_plain(world, Path::new(LOG)).is_err() {
+            return String::new();
+        }
         journal::tail(&world.join(LOG), journal::JOURNAL_BYTES)
             .ok()
             .flatten()
@@ -686,7 +689,6 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
     let count = |r: Race| {
         u32::try_from(roster.living().filter(|c| c.race == r).count()).unwrap_or(u32::MAX)
     };
-    let verdicts = all.iter().any(|e| e.kind == TimelineKind::Verdict);
     Ok(BoardBodies {
         problems: roster.problems.iter().take(PROBLEMS).cloned().collect(),
         loops: roster.loops(),
@@ -695,11 +697,16 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
         roster: prov(
             ".mnemorph/<race>/<seat>/README.md (in the world)",
             false,
-            Some("a body can write its doc: shown, granting nothing".into()),
+            Some(
+                "a body can write its doc: shown, granting nothing — a Kijin's post and a Dark \
+                 Elf's speciality are read from the name its doc gives, not from a witness"
+                    .into(),
+            ),
         ),
         minds: prov(
-            "the Minds' witness under the state directory",
-            true,
+            "the Minds' witness under the state directory (a Mind's about and shared mark are \
+             its doc's, in the world)",
+            at.is_some() && survey.error.is_none(),
             survey.error.clone().or_else(|| {
                 at.is_none()
                     .then(|| "no home: the witness cannot be read, no Mind loads".to_owned())
@@ -712,8 +719,8 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
         ),
         acts: prov(
             "the run journals (in the world) and the gate's verdict journal (state directory)",
-            verdicts,
-            None,
+            false,
+            Some("each act carries its own flag: only a verdict is trusted".into()),
         ),
         law: prov("the race law, compiled into mnemorphd", true, None),
         bodies,

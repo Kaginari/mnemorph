@@ -5,7 +5,7 @@
  * the same escapes as `<Safe>` (hidden characters shown), never markup.
  */
 import { type Colony, NODE_H, NODE_W, STATE_WORDS } from '../data/colony.ts';
-import { runs } from '../safe/shown.ts';
+import { runs, shown } from '../safe/shown.ts';
 
 /** `text` for an SVG `<text>`: hidden characters escaped and set apart, cut to `max`. */
 export function SvgSafe({ text, max = 22 }: { text: string; max?: number }) {
@@ -106,7 +106,7 @@ export function ColonyNet({
               data-name={n.name}
               role="button"
               tabIndex={0}
-              aria-label={n.label}
+              aria-label={shown(n.label)}
               aria-pressed={selected === n.name}
               transform={`translate(${n.x - NODE_W / 2} ${n.y - NODE_H / 2})`}
               onClick={pick}
@@ -117,7 +117,7 @@ export function ColonyNet({
                 }
               }}
             >
-              <title>{n.label}</title>
+              <title>{shown(n.label)}</title>
               <rect width={NODE_W} height={NODE_H} rx={6} className="colony-box" />
               <rect width={5} height={NODE_H} rx={2} className="colony-swatch" />
               <text x={14} y={19} className="colony-name mark-label">
