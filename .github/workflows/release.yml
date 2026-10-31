@@ -48,7 +48,7 @@ jobs:
           # changelog's link definitions so its [#n] references resolve.
           awk -v h="## [$version] - " 'index($0,h)==1{p=1;next} p&&(/^## \[/||/^\[[^]]+\]: /){exit} p' CHANGELOG.md > notes.md
           grep -E '^\[#[0-9]+\]: ' CHANGELOG.md >> notes.md || true
-          [ -n "$(grep -v '^[[:space:]]*$' notes.md)" ] || { echo "::error::the $version section is empty"; exit 1; }
+          grep -q '[^[:space:]]' notes.md || { echo "::error::the $version section is empty"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
@@ -137,7 +137,7 @@ jobs:
       - name: SHA256SUMS
         run: |
           cd dist
-          [ "$(ls mnemorph-*.tar.gz | wc -l)" -eq 4 ] || { ls -l; echo "::error::wanted four archives"; exit 1; }
+          [ "$(find . -maxdepth 1 -name 'mnemorph-*.tar.gz' | wc -l)" -eq 4 ] || { ls -l; echo "::error::wanted four archives"; exit 1; }
           sha256sum mnemorph-*.tar.gz > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/upload-artifact@v4
