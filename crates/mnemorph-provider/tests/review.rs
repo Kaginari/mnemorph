@@ -428,6 +428,58 @@ async fn chat(client: &OpenAiCompatible, req: &Request) -> (Result<Response, Err
     (r, events)
 }
 
+/// A reported cost is kept only when it is a finite number of dollars, zero or more.
+#[tokio::test(start_paused = true)]
+async fn only_a_sane_reported_cost_is_kept() {
+    for (cost, kept) in [
+        (json!(0.25), Some(0.25)),
+        (json!(0), Some(0.0)),
+        (json!(-1.5), None),
+        (json!("0.1"), None),
+        (Value::Null, None),
+    ] {
+        let body = chunks(&[
+            json!({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+            json!({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1, "cost": cost}}),
+        ]);
+        let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+        let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
+        assert_eq!(r.unwrap().reported_cost, kept, "{cost}");
+    }
+    // A number too large for a double reads as no number at all: the chunk does not parse into
+    // one, so it can never be kept as infinite.
+    let huge = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":1,\"cost\":1e999}}\n\ndata: [DONE]\n\n";
+    let script = Arc::new(Scripted::new([Reply::ok(huge)]));
+    let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
+    assert!(r.map_or(true, |r| r.reported_cost.is_none_or(f64::is_finite)));
+}
+
+/// An upstream's `metadata.raw` is its own text: joined on one line, every escape sequence,
+/// direction override and invisible character escaped, never passed through.
+#[tokio::test(start_paused = true)]
+async fn an_upstream_reason_is_escaped() {
+    let hostile = json!({"error": {"message": "Provider returned error", "code": 502,
+        "metadata": {"raw": "busy\u{1b}[2J\u{1b}]0;owned\u{7}\nline two \u{202e}evil\u{2066}\u{200b}"}}})
+    .to_string();
+    let script = Arc::new(Scripted::new([Reply::status(400, &hostile, &[])]));
+    let err = chat(&openai(&script), &request(vec![user("a")]))
+        .await
+        .0
+        .unwrap_err();
+    let Error::Api { message, .. } = &err else {
+        panic!("{err:?}");
+    };
+    for c in ['\u{1b}', '\u{7}', '\n', '\u{202e}', '\u{2066}', '\u{200b}'] {
+        assert!(!message.contains(c), "{c:?} passed through: {message:?}");
+    }
+    assert!(
+        message.starts_with("Provider returned error: busy\\u{1b}[2J"),
+        "{message}"
+    );
+    assert!(message.contains("\\u{202e}evil"), "{message}");
+    assert!(!err.to_string().contains('\u{1b}'));
+}
+
 #[tokio::test(start_paused = true)]
 async fn an_error_finish_is_retried_never_an_answer() {
     let errored = chunks(&[json!({"choices": [{"delta": {}, "finish_reason": "error"}]})]);
@@ -645,6 +697,8 @@ fn operator_notes_and_consecutive_tool_results() {
     );
 }
 
+/// A server without usage still answers; its tokens are the client's estimate from the bytes it
+/// sent and was answered, never zero.
 #[tokio::test(start_paused = true)]
 async fn a_server_without_usage_still_answers() {
     let ollama =
@@ -654,7 +708,17 @@ async fn a_server_without_usage_still_answers() {
         .await
         .0
         .unwrap();
-    assert_eq!(r.usage, Usage::default());
+    assert!(!r.usage_known);
+    let sent = script.sent()[0].body.len();
+    assert_eq!(
+        r.usage,
+        Usage {
+            input: u64::try_from(sent.div_ceil(4)).unwrap(),
+            output: 1,
+            cache_read: 0,
+            cache_write: 0,
+        }
+    );
 }
 
 #[tokio::test(start_paused = true)]

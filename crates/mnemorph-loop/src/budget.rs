@@ -73,6 +73,7 @@ mod tests {
             wt,
             usd: None,
             reported_cost: None,
+            estimated: false,
             envelope: None,
             purpose: None,
         }

@@ -16,8 +16,7 @@ use crate::transport::Transport;
 pub const MALFORMED: &str = "__malformed_arguments";
 
 /// The warning of an answer whose stream carried no usage.
-pub const NO_USAGE: &str =
-    "the server reported no usage: the call's tokens are unknown and it is unpriced";
+pub const NO_USAGE: &str = "the server reported no usage: the call's tokens are estimated from its bytes, charged to the envelope and the budget, and it is unpriced";
 
 /// Opaque blocks this client produces carry a type with this prefix; it replays them, and every
 /// other provider leaves them out.
@@ -65,7 +64,7 @@ impl OpenAiCompatible {
         if let Some(key) = &self.key {
             headers.push(("authorization".to_owned(), format!("Bearer {key}")));
         }
-        drive::<Chat>(
+        let mut r = drive::<Chat>(
             self.transport.as_ref(),
             &self.policy,
             &self.url,
@@ -73,7 +72,11 @@ impl OpenAiCompatible {
             &body,
             on,
         )
-        .await
+        .await?;
+        if !r.usage_known {
+            r.usage = estimate(body.len(), &r.content);
+        }
+        Ok(r)
     }
 }
 
@@ -131,6 +134,28 @@ pub fn encode_chat(request: &Request) -> Value {
         body.insert("tools".into(), Value::Array(tools));
     }
     Value::Object(body)
+}
+
+/// A call's usage when the server reported none, at its worst: every byte sent as uncached input
+/// and every byte answered (text, reasoning, tool calls) as output, about four bytes a token,
+/// rounded up — so the envelope and the budget are charged, never a free call.
+fn estimate(sent: usize, content: &[Block]) -> Usage {
+    let answered: usize = content
+        .iter()
+        .map(|b| match b {
+            Block::Text { text, .. } => text.len(),
+            Block::ToolUse { name, input, .. } => name.len() + input.to_string().len(),
+            Block::Opaque(v) => v.to_string().len(),
+            Block::ToolResult { .. } => 0,
+        })
+        .sum();
+    let tokens = |bytes: usize| u64::try_from(bytes.div_ceil(4)).unwrap_or(u64::MAX).max(1);
+    Usage {
+        input: tokens(sent),
+        output: tokens(answered),
+        cache_read: 0,
+        cache_write: 0,
+    }
 }
 
 /// Whether a chat-completions model caches only what is marked: Claude, by any gateway's name.
@@ -293,7 +318,8 @@ impl Assembler for Chat {
                 cache_write: written,
             };
             // OpenRouter adds what it charged, in dollars: a number, `0` on a free model.
-            self.reported_cost = u["cost"].as_f64();
+            // Anything but a finite, non-negative number is no report.
+            self.reported_cost = u["cost"].as_f64().filter(|c| c.is_finite() && *c >= 0.0);
         }
         let Some(choice) = v["choices"].as_array().and_then(|c| c.first()) else {
             return Ok(None);
@@ -429,7 +455,7 @@ impl Chat {
             .unwrap_or_else(|| StopReason::Other(String::new()));
         let mut warnings = Vec::new();
         // A server that ignores `stream_options` sends no usage: the tokens are unknown, never
-        // zero, and the call is ledgered unpriced.
+        // zero — the client estimates them from the bytes — and the call is ledgered unpriced.
         if !self.usage_seen {
             warnings.push(NO_USAGE.to_owned());
         }

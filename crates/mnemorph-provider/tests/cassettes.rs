@@ -27,7 +27,7 @@ const CONTEXT: &str = include_str!("cassettes/openrouter-context-0.json");
 // for a thought signature by hand, its `user_id` scrubbed as the recorder scrubs it. It cannot be
 // provoked on demand, so no live test records it again.
 const RATE_LIMIT: &str = include_str!("cassettes/openrouter-ratelimit-0.json");
-// Ollama (`qwen2.5:0.5b`, v0.40): usage asked for, usage not asked for, a tool call, an unknown model.
+// Ollama (`qwen2.5:0.5b`): usage asked for, usage not asked for, a tool call, an unknown model.
 const OLLAMA_TEXT: &str = include_str!("cassettes/ollama-text-0.sse");
 const OLLAMA_NO_USAGE: &str = include_str!("cassettes/ollama-nousage-0.sse");
 const OLLAMA_TOOL: &str = include_str!("cassettes/ollama-tool-0.sse");
@@ -484,8 +484,28 @@ async fn a_recorded_ollama_answer_without_usage() {
     assert_eq!(r.stop, StopReason::EndTurn);
     assert!(!r.usage_known);
     assert_eq!(r.warnings, [mnemorph_provider::NO_USAGE]);
+    // The estimate, at its worst: every byte sent as input, every byte answered as output.
+    let text: usize = r
+        .content
+        .iter()
+        .map(|b| match b {
+            Block::Text { text, .. } => text.len(),
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(
+        r.usage.output,
+        u64::try_from(text.div_ceil(4)).unwrap().max(1)
+    );
+    assert!(
+        r.usage.input > 0 && r.usage.cache_read == 0,
+        "{:?}",
+        r.usage
+    );
     let row = ollama_row(&r);
     assert_eq!(row.usd, None, "unknown tokens are unpriced, never $0");
+    assert!(row.estimated);
+    assert!(row.wt > 0, "the estimate is charged: {row:?}");
 }
 
 /// Ollama streams a tool call whole, in one chunk: its id, name and complete arguments.

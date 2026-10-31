@@ -44,6 +44,7 @@ fn usage(ts: i64, session: &str, race: &str, wt: u64, usd: Option<f64>) -> Usage
         wt,
         usd,
         reported_cost: None,
+        estimated: false,
         envelope: None,
         purpose: None,
     }

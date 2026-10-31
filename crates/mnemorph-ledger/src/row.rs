@@ -49,6 +49,10 @@ pub struct UsageRow {
     /// kept beside Mnemorph's own estimate in `usd`; absent when the provider reports none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reported_cost: Option<f64>,
+    /// The tokens are the client's estimate, not the provider's count: it reported no usage.
+    /// `wt` weighs the estimate; `usd` is null.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimated: bool,
     /// The envelope after the call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub envelope: Option<EnvelopeReading>,
@@ -92,6 +96,7 @@ mod tests {
             wt: 0,
             usd: None,
             reported_cost: Some(0.000_42),
+            estimated: false,
             envelope: Some(EnvelopeReading {
                 left: 54_888,
                 of: 60_000,

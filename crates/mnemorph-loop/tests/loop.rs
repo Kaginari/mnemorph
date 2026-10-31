@@ -495,6 +495,102 @@ async fn the_budget_checkpoints() {
     );
 }
 
+/// A provider that reports no usage is charged its estimate: the row says so, unpriced, its weight
+/// spent against the run, and the budget stops the next call.
+#[tokio::test]
+async fn an_estimated_turn_is_charged_and_budgets_stop_it() {
+    let w = World::new("estimated");
+    let estimated = |r: Result<Response, Error>| {
+        r.map(|r| Response {
+            usage_known: false,
+            warnings: vec![mnemorph_provider::NO_USAGE.into()],
+            ..r
+        })
+    };
+    let model = Arc::new(ScriptedModel::new([
+        estimated(tool("t1", "glob", json!({"pattern": "*"}))),
+        answer("never"),
+    ]));
+    let mut run = w.run(
+        model.clone(),
+        Limits {
+            budget_wt: Some(1),
+            ..limits()
+        },
+    );
+    let e = ask(&mut run, "spend").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("budget")),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 1, "no call past the budget");
+    assert!(run.spent_wt() > 0, "the estimate is spent");
+    let rows = w.ledger().read().unwrap().rows;
+    assert_eq!(rows.len(), 1);
+    assert!(
+        rows[0].estimated && rows[0].usd.is_none() && rows[0].wt > 0,
+        "{:?}",
+        rows[0]
+    );
+    let warned = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .iter()
+        .any(|b| matches!(b, Beat::Warning { text } if text == mnemorph_provider::NO_USAGE));
+    assert!(warned, "the estimate is said");
+}
+
+/// An upstream's error text reaches the run's ending and its journal escaped, never as written.
+#[tokio::test]
+async fn an_upstream_error_reaches_the_journal_escaped() {
+    let w = World::new("hostile-error");
+    let hostile = json!({"error": {"message": "Provider returned error", "code": 400,
+        "metadata": {"raw": "no\u{1b}[2J\u{202e}txt.exe\u{2069}"}}})
+    .to_string();
+    let transport = Arc::new(mnemorph_provider::Scripted::new([
+        mnemorph_provider::Reply::status(400, &hostile, &[]),
+    ]));
+    let client = mnemorph_provider::OpenAiCompatible::new(
+        transport,
+        "https://openrouter.ai/api",
+        None,
+        mnemorph_provider::Policy::default(),
+    );
+    let mut on = |_: mnemorph_provider::Event| {};
+    let request = mnemorph_provider::Request {
+        model: "m".into(),
+        system: vec![],
+        tools: vec![],
+        messages: vec![],
+        max_tokens: 1,
+        effort: None,
+    };
+    let err = client.complete(&request, &mut on).await.unwrap_err();
+    let mut run = w.run(Arc::new(ScriptedModel::new([Err(err)])), limits());
+    let e = ask(&mut run, "x").await;
+    assert!(
+        matches!(&e, Ending::Failed(why) if why.contains("\\u{202e}")),
+        "{e:?}"
+    );
+    let journal = fs::read_to_string(w.root.join("run.jsonl")).unwrap();
+    assert!(journal.contains("Provider returned error"), "{journal}");
+    for c in ['\u{1b}', '\u{202e}', '\u{2069}'] {
+        assert!(!journal.contains(c), "{c:?} reached the journal");
+    }
+    // The JSON of the journal never decodes back to the raw characters either.
+    let decoded: Vec<Value> = journal
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let text = serde_json::to_string(&decoded).unwrap();
+    assert!(
+        !text.contains("\\u001b") && !text.contains('\u{202e}'),
+        "{text}"
+    );
+}
+
 #[tokio::test]
 async fn a_refusal_fails_the_run() {
     let w = World::new("refusal");

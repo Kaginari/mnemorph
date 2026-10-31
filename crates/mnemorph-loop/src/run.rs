@@ -1146,6 +1146,7 @@ impl Run {
                 wt: 0,
                 usd: None,
                 reported_cost: None,
+                estimated: false,
                 envelope: None,
                 purpose: Some(format!("{RERANK} (timed out, estimated)")),
             }

@@ -68,7 +68,8 @@ pub struct Caller {
     pub prefix: u64,
 }
 
-/// The ledger's row for one answered call, priced — unpriced when the provider reported no usage.
+/// The ledger's row for one answered call, priced — estimated and unpriced when the provider
+/// reported no usage.
 #[must_use]
 pub fn usage_row(
     response: &Response,
@@ -91,13 +92,16 @@ pub fn usage_row(
         wt: 0,
         usd: None,
         reported_cost: response.reported_cost,
+        estimated: false,
         envelope: None,
         purpose: None,
     }
     .priced(prices);
-    // Unknown tokens are never priced as none: the call reads unpriced.
+    // Estimated tokens are weighed, so the envelope and the budget are charged, but never
+    // priced: the call reads unpriced, and says it is an estimate.
     if !response.usage_known {
         row.usd = None;
+        row.estimated = true;
     }
     row
 }

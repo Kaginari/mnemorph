@@ -42,6 +42,7 @@ flowchart TB
       CONFIG --> LEDGER
       LOOP --> WORLD --> RACES
       LOOP --> PROV --> LEDGER
+      PROV --> WIRE
       LOOP --> TOOLS --> SANDBOX
       TOOLS --> RACES
       TOOLS --> WIRE
@@ -1782,13 +1783,15 @@ byte streams), and an upstream rate limit on `google/gemma-4-26b-a4b-it:free` (4
 `error.metadata.raw`, which the error's message joins). Every recorded answer's `usage.cost` is
 replayed into the usage row's `reportedCost`.
 
-Ollama is recorded from a local server (v0.40, `qwen2.5:0.5b`, `tests/live_ollama.rs`): a text
+Ollama is recorded from a local server (`qwen2.5:0.5b`, `tests/live_ollama.rs`): a text
 answer with usage asked for — sent in a last chunk with no choices, after the finish — the same ask
 without `stream_options`, which carries no usage at all, a tool call, streamed whole in one chunk
 (id, name and complete arguments), and an unknown model (a 404 whose `type` is `not_found_error`).
 The recorder also scrubs Ollama's `chatcmpl-…` ids to `chatcmpl-recorded` and every number of its
-`timings` to `0`. An answer whose stream carried no usage is `usage_known: false`, warned as such,
-and ledgered unpriced: its tokens are unknown, never a free call.
+`timings` to `0`. An answer whose stream carried no usage is `usage_known: false` and warned as
+such; its tokens are estimated at their worst (every byte sent as input, every byte answered as
+output, about four bytes a token), charged to the envelope and the budget, and ledgered
+`estimated` and unpriced — never a free call.
 
 To record again, by hand:
 

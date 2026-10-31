@@ -179,11 +179,14 @@ pub(crate) fn api_error(body: &[u8]) -> (String, String) {
         str::to_owned,
     );
     // OpenRouter's own message for an upstream failure is only "Provider returned error"; the
-    // upstream's reason is in `metadata.raw`, and joins it.
+    // upstream's reason is in `metadata.raw`, and joins it — on one line, every character a human
+    // could not see for what it is escaped: it is the upstream's text, and reaches endings and
+    // journals as it is.
     let message = match e["metadata"]["raw"].as_str().map(str::trim) {
         Some(raw) if !raw.is_empty() => {
             let cut = raw.char_indices().nth(500).map_or(raw.len(), |(at, _)| at);
-            format!("{message}: {}", &raw[..cut])
+            let raw = mnemorph_wire::one_line(&raw[..cut]);
+            format!("{message}: {}", mnemorph_wire::shown(&raw))
         }
         _ => message,
     };
