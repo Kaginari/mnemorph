@@ -5,6 +5,7 @@
 import type { BoardRun, BoardSession, BoardWorld } from '@mnemorph/protocol';
 import { useState } from 'react';
 import { type Chats, startChat } from '../data/chats.ts';
+import { mod } from '../data/shortcuts.ts';
 import type { Load } from '../data/worlds.ts';
 import { format, type Route, type WorldSection, worldOf } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
@@ -25,6 +26,30 @@ export const SECTIONS: readonly [WorldSection, string, string][] = [
   ['ontology', '◇', 'Ontology'],
   ['journal', '▤', 'Journal'],
 ];
+
+/**
+ * The rail's keys: ↓ and ↑ move between its links and buttons, Home and End to the first and the
+ * last. Tab still walks the page as ever.
+ */
+function railKeys(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+  const items = [
+    ...e.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+  ].filter((el) => el.offsetParent !== null);
+  if (items.length === 0) return;
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  const next =
+    e.key === 'Home'
+      ? 0
+      : e.key === 'End'
+        ? items.length - 1
+        : e.key === 'ArrowDown'
+          ? (i + 1) % items.length
+          : (i - 1 + items.length) % items.length;
+  e.preventDefault();
+  items[next]?.focus();
+}
 
 const THEME_GLYPH: Record<Choice, string> = { auto: '◐', light: '☀', dark: '☾' };
 
@@ -86,7 +111,7 @@ function ChatList({
   chats: Chats;
   now: number;
 }) {
-  if (!chats.ready) return <p className="rail-note">Reading chats…</p>;
+  if (!chats.ready) return <p className="rail-note">Loading chats…</p>;
   const liveRuns = new Set(chats.live.map((s) => s.run));
   const past = chats.runs.filter((r) => !liveRuns.has(r.id));
   if (chats.live.length === 0 && past.length === 0) {
@@ -181,7 +206,7 @@ function NewChat({ world, chats, disabled }: { world: string; chats: Chats; disa
 }
 
 function Worlds({ load, route, now }: { load: Load; route: Route; now: number }) {
-  if (load.state === 'loading') return <p className="rail-note">Reading worlds…</p>;
+  if (load.state === 'loading') return <p className="rail-note">Loading worlds…</p>;
   if (load.state === 'failed') {
     return (
       <p className="rail-note">
@@ -191,7 +216,13 @@ function Worlds({ load, route, now }: { load: Load; route: Route; now: number })
       </p>
     );
   }
-  if (load.data.worlds.length === 0) return <p className="rail-note">No worlds yet.</p>;
+  if (load.data.worlds.length === 0) {
+    return (
+      <p className="rail-note">
+        No worlds yet: <code className="mono">mnemorphd board add &lt;dir&gt;</code>
+      </p>
+    );
+  }
   const here = worldOf(route);
   return (
     <>
@@ -230,6 +261,7 @@ export function Rail({
   theme,
   onTheme,
   chats,
+  onSearch,
 }: {
   ref: React.Ref<HTMLElement>;
   inert: boolean;
@@ -239,6 +271,7 @@ export function Rail({
   theme: Choice;
   onTheme: (c: Choice) => void;
   chats: Chats;
+  onSearch: () => void;
 }) {
   const here = worldOf(route);
   const world =
@@ -246,15 +279,22 @@ export function Rail({
       ? load.data.worlds.find((w) => w.id === here)
       : undefined;
   return (
-    <nav ref={ref} inert={inert} className="rail" id="rail" aria-label="Board">
+    <nav ref={ref} inert={inert} className="rail" id="rail" aria-label="Board" onKeyDown={railKeys}>
       <div className="rail-head">
         <Wordmark />
       </div>
-      <div className="rail-search" title="Search arrives with the command palette">
+      <button
+        type="button"
+        className="rail-search"
+        onClick={onSearch}
+        aria-keyshortcuts="Control+K Meta+K"
+      >
         <span aria-hidden="true">⌕</span>
-        <span className="rail-search-text">Search</span>
-        <kbd>⌘K</kbd>
-      </div>
+        <span className="rail-search-text">
+          Search<span className="sr-only">: jump to a world, a page, a chat or a run</span>
+        </span>
+        <kbd>{mod() === '⌘' ? '⌘K' : 'Ctrl K'}</kbd>
+      </button>
       <div className="rail-scroll">
         {here === undefined ? (
           <section className="rail-section" aria-labelledby="rail-worlds">

@@ -3,15 +3,21 @@
  * phone width the rail and the pane as drawers over the centre.
  */
 import type { BoardWorld } from '@mnemorph/protocol';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { type Chats, useChats } from './data/chats.ts';
+import { commands } from './data/commands.ts';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
 import { shown } from './safe/shown.ts';
 import { type Choice, useTheme } from './theme.ts';
+import { Announcer } from './ui/Announcer.tsx';
+import { CommandPalette } from './ui/CommandPalette.tsx';
+import { cardUp, dialogUp, typing } from './ui/modal.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
+import { ShortcutMap } from './ui/ShortcutMap.tsx';
 import { BodiesView } from './views/Bodies.tsx';
 import { LiveChat, PastChat, type Side } from './views/Chat.tsx';
 import { IntegrationsView } from './views/Integrations.tsx';
@@ -154,6 +160,34 @@ function title(route: Route, world: BoardWorld | undefined): string {
   }
 }
 
+/** Which of the board's own dialogs is open: the palette, the shortcut map, or neither. */
+type Open = 'palette' | 'shortcuts' | undefined;
+
+/**
+ * The board's shortcuts: ⌘K or Ctrl+K the palette, `?` the map. Neither opens while an approval
+ * card (or any other dialog) holds the page, and no key here answers anything.
+ */
+function useShortcuts(setOpen: (o: Open | ((was: Open) => Open)) => void) {
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || cardUp()) return;
+      const palette = (e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey) && !e.altKey;
+      if (palette) {
+        e.preventDefault();
+        setOpen((was) => (was === 'palette' ? undefined : dialogUp() ? was : 'palette'));
+        return;
+      }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)) {
+        if (dialogUp()) return;
+        e.preventDefault();
+        setOpen('shortcuts');
+      }
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [setOpen]);
+}
+
 export function App() {
   const route = useRoute();
   const load = useWorlds();
@@ -178,13 +212,21 @@ export function App() {
   const chats = useChats(here);
   const [side, setSide] = useState<Side | undefined>(undefined);
   const onSide = useCallback((s: Side | undefined) => setSide(s), []);
+  const [open, setOpen] = useState<Open>(undefined);
+  const closeDialog = useCallback(() => setOpen(undefined), []);
+  useShortcuts(setOpen);
+  const all = useMemo(
+    () => commands(load.state === 'ready' ? load.data.worlds : [], here, chats.live, chats.runs),
+    [load, here, chats.live, chats.runs],
+  );
+  const mainRef = useRef<HTMLElement>(null);
 
   // A drawer closes when the page moves; Esc closes either.
   // biome-ignore lint/correctness/useExhaustiveDependencies: closes on every route change
   useEffect(() => setRail(false), [route]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       setRail(false);
       if (window.matchMedia(PHONE).matches) setPane(false);
     };
@@ -213,6 +255,15 @@ export function App() {
       data-rail={rail ? 'open' : 'closed'}
       data-pane={pane ? 'open' : 'closed'}
     >
+      <button
+        type="button"
+        className="skip"
+        onClick={() => {
+          mainRef.current?.focus();
+        }}
+      >
+        Skip to the content
+      </button>
       <Rail
         ref={railRef}
         inert={phone && !rail}
@@ -222,6 +273,9 @@ export function App() {
         theme={theme}
         onTheme={setTheme}
         chats={chats}
+        onSearch={() => {
+          if (!cardUp()) setOpen('palette');
+        }}
       />
       <button
         type="button"
@@ -251,6 +305,17 @@ export function App() {
           </span>
           <button
             type="button"
+            className="icon-button topbar-search"
+            aria-label="Search: jump to a world, a page, a chat or a run"
+            aria-keyshortcuts="Control+K Meta+K"
+            onClick={() => {
+              if (!cardUp()) setOpen('palette');
+            }}
+          >
+            ⌕
+          </button>
+          <button
+            type="button"
             ref={paneButtonRef}
             className="icon-button"
             aria-label={pane ? 'Hide the side pane' : 'Show the side pane'}
@@ -262,6 +327,10 @@ export function App() {
           </button>
         </header>
         <main
+          ref={mainRef}
+          id="main"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: the centre scrolls; the keys scroll it
+          tabIndex={0}
           className={
             route.name === 'session' || route.name === 'run'
               ? 'centre-main centre-chat'
@@ -290,6 +359,9 @@ export function App() {
       >
         <Pane route={route} load={load} world={world} now={now} side={side} />
       </aside>
+      {open === 'palette' && <CommandPalette all={all} onClose={closeDialog} />}
+      {open === 'shortcuts' && <ShortcutMap onClose={closeDialog} />}
+      {createPortal(<Announcer />, document.body)}
     </div>
   );
 }

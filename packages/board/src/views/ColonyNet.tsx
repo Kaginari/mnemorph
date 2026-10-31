@@ -96,6 +96,7 @@ export function ColonyNet({
         {c.nodes.map((n) => {
           const s = STATE_WORDS[n.state];
           const pick = () => onPick(n.name);
+          const sub = `${s.glyph} ${n.synthetic ? 'the throne' : n.title} · ${s.words}`;
           return (
             // biome-ignore lint/a11y/useSemanticElements: an SVG group cannot be a <button>
             <g
@@ -106,7 +107,7 @@ export function ColonyNet({
               data-name={n.name}
               role="button"
               tabIndex={0}
-              aria-label={shown(n.label)}
+              aria-label={`${shown(n.name)} ${shown(sub)} — ${shown(n.label)}`}
               aria-pressed={selected === n.name}
               transform={`translate(${n.x - NODE_W / 2} ${n.y - NODE_H / 2})`}
               onClick={pick}
@@ -124,7 +125,7 @@ export function ColonyNet({
                 <SvgSafe text={n.name} />
               </text>
               <text x={14} y={36} className="colony-sub">
-                {s.glyph} {n.synthetic ? 'the throne' : n.title} · {s.words}
+                {sub}
               </text>
             </g>
           );

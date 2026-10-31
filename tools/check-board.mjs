@@ -1,8 +1,9 @@
 // The board's own lint, beside Biome: colours come from @mnemorph/theme's tokens only (no raw
 // hex, rgb(), hsl() or other colour literal in packages/board), and no HTML is ever written as a
 // string (dangerouslySetInnerHTML, innerHTML, outerHTML, insertAdjacentHTML, setHTMLUnsafe,
-// srcdoc, document.write), nor code (eval, new Function). Scans .ts, .tsx, .js, .mjs, .css, .html.
-// Fails with every offence, file:line.
+// srcdoc, document.write), nor code (eval, new Function), nor a regular expression built at run
+// time (RegExp): what is typed is matched by a linear scan, never compiled. Scans .ts, .tsx,
+// .js, .mjs, .css, .html. Fails with every offence, file:line.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +25,7 @@ const RULES = [
   [/\bdocument\.write(?:ln)?\b/, 'HTML from a string: render text nodes'],
   [/\bnew\s+Function\b/, 'code from a string: never'],
   [/(?<![\w$])eval\s*\(/, 'code from a string: never'],
+  [/\bRegExp\s*\(/, 'a regular expression built at run time: match by a scan'],
 ];
 
 /** Comments out, line numbers kept: a rule's own explanation is not an offence. */

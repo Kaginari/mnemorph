@@ -16,7 +16,7 @@ import { GatePill, money, Unknown, When } from './facts.tsx';
 
 /** The overview's line under a world: standing, challenges, gate, cost — or why it is not here. */
 function Facts({ load, now }: { load: OverviewLoad; now: number }) {
-  if (load.state === 'loading') return <span className="world-card-note">reading…</span>;
+  if (load.state === 'loading') return <span className="world-card-note">loading…</span>;
   const o = load.data;
   if (!o) {
     return (
@@ -94,7 +94,7 @@ function Status({ w, load }: { w: BoardWorld; load: OverviewLoad }) {
       : {
           glyph: '◌',
           tone: 'muted' as const,
-          label: load.state === 'loading' ? 'reading' : 'unknown',
+          label: load.state === 'loading' ? 'loading' : 'unknown',
         };
   return (
     <Mark tone={s.tone} glyph={s.glyph}>
@@ -165,7 +165,7 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
         </p>
       )}
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading worlds…">
+        <Empty glyph="⣾" title="Loading worlds…">
           Asking the board server for the worlds on this machine.
         </Empty>
       )}
@@ -179,8 +179,13 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
       )}
       {load.state === 'ready' && load.data.worlds.length === 0 && (
         <Empty glyph="◈" title="No worlds yet">
-          Open a session with <code className="mono">mnemorph</code> in a directory, and it appears
-          here.
+          <p>
+            Open a session with <code className="mono">mnemorph</code> in a directory and it appears
+            here — or add one by hand:
+          </p>
+          <p>
+            <code className="mono">mnemorphd board add &lt;dir&gt;</code>
+          </p>
         </Empty>
       )}
       {load.state === 'ready' && load.data.worlds.length > 0 && (

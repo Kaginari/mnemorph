@@ -119,7 +119,7 @@ export function JournalView({ w }: { w: BoardWorld }) {
         )}
       </form>
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the journal…">
+        <Empty glyph="⣾" title="Loading the journal…">
           Asking the board server for log.md.
         </Empty>
       )}

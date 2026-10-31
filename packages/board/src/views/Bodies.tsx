@@ -102,7 +102,7 @@ export function Source({ what, p }: { what: string; p: Provenance }) {
 function Failed<T>({ load, what }: { load: KnowledgeLoad<T>; what: string }) {
   if (load.state === 'loading') {
     return (
-      <Empty glyph="⣾" title={`Reading the ${what}…`}>
+      <Empty glyph="⣾" title={`Loading the ${what}…`}>
         Asking the board server.
       </Empty>
     );

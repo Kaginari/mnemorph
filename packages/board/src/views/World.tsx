@@ -278,7 +278,7 @@ export function WorldView({ w, now }: { w: BoardWorld; now: number }) {
         </p>
       ) : null}
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the overview…">
+        <Empty glyph="⣾" title="Loading the overview…">
           Asking the board server what this world holds.
         </Empty>
       )}

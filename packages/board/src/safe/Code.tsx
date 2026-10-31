@@ -117,7 +117,11 @@ export function Code({ lang, text }: { lang: string; text: string }) {
           <Safe text={lang} />
         </figcaption>
       )}
-      <pre className="code-body">
+      <pre
+        className="code-body"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a wide block scrolls with the keys too
+        tabIndex={0}
+      >
         {rows.map((row, n) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: lines never reorder
           <span key={n} className="code-line">

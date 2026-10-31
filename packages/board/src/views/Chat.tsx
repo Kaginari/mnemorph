@@ -10,6 +10,7 @@ import { type Chats, startChat, useRun } from '../data/chats.ts';
 import { type Live, useLive } from '../data/live.ts';
 import { format } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
+import { announce } from '../ui/Announcer.tsx';
 import { Approval } from '../ui/Approval.tsx';
 import { Empty } from '../ui/Empty.tsx';
 import { Mark } from '../ui/Mark.tsx';
@@ -102,12 +103,15 @@ function ActivityStrip({
 }) {
   const now = useTicker(view.busy, 120);
   if (!view.busy) return null;
-  const frame = SPIN[Math.floor(now / 120) % SPIN.length];
+  // Reduced motion: the spinner holds still.
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const frame = still ? SPIN[0] : SPIN[Math.floor(now / 120) % SPIN.length];
   const parts = [phase(view, asks)];
   if (view.since !== undefined) parts.push(elapsed(now - view.since));
   parts.push(`${tokens(view.turnTokens)} tok`);
   return (
-    <output className="activity" aria-live="polite">
+    // Not a live region: it ticks. The chat's announcements say what changed, once.
+    <output className="activity" aria-live="off">
       <span className="activity-spin" aria-hidden="true">
         {frame}
       </span>
@@ -118,6 +122,43 @@ function ActivityStrip({
       </span>
     </output>
   );
+}
+
+/**
+ * What a screen reader is told of a live chat, once each: an answer when a turn ends, an ask when
+ * one arrives at the gate. What was already there when the chat opened (a replay) is not said.
+ */
+function useAnnouncements(view: ChatView | undefined, asks: Live['asks']) {
+  const heard = useRef<{ answers: number; asks: Set<string> } | undefined>(undefined);
+  const busy = view?.busy ?? false;
+  useEffect(() => {
+    if (!view) return;
+    const answers = view.entries.filter((e) => e.kind === 'assistant');
+    if (heard.current === undefined) {
+      heard.current = { answers: answers.length, asks: new Set(asks.map((a) => a.id)) };
+      return;
+    }
+    if (!busy && answers.length > heard.current.answers) {
+      const fresh = answers
+        .slice(heard.current.answers)
+        .map((e) => (e.kind === 'assistant' ? e.text : ''))
+        .join(' ');
+      announce(`Answered: ${fresh}`);
+    }
+    if (!busy) heard.current.answers = answers.length;
+  }, [view, busy, asks]);
+  useEffect(() => {
+    const h = heard.current;
+    if (!h) return;
+    for (const a of asks) {
+      if (h.asks.has(a.id)) continue;
+      h.asks.add(a.id);
+      announce(
+        `An ask waits at the gate: ${a.ask.class} by ${a.ask.body}. The approval card is open.`,
+        true,
+      );
+    }
+  }, [asks]);
 }
 
 /** The end gate's verdicts as toasts, as they arrive live — a replayed one is only a line. */
@@ -310,6 +351,7 @@ export function LiveChat({
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
   }, [busy, controller, interrupt]);
+  useAnnouncements(view, live.asks);
   const [glyph, tone, word] = chip(live);
   const me = hello?.body ?? '';
   return (
@@ -463,7 +505,7 @@ export function PastChat({
       <div className="chat-body">
         {load.state === 'loading' && (
           <div className="chat-empty">
-            <Empty glyph="◌" title="Reading the run's journal…" />
+            <Empty glyph="◌" title="Loading the run's journal…" />
           </div>
         )}
         {load.state === 'failed' && (

@@ -367,7 +367,7 @@ test('a world overview says each source, and unknown where it is', async ({ page
 
   await page.goto(`/#/w/${LIVE.id}`);
   await expect(panel('Meters')).toContainText('precision 0.90 (18/20, 95% 0.70–0.97)');
-  await expect(panel('Meters')).toContainText('gateRight no reports');
+  await expect(panel('Meters')).toContainText('gateRight silent — no report yet');
   await expect(page.getByText('Waiting for you: 1 gate ask')).toBeVisible();
 });
 

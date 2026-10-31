@@ -80,3 +80,67 @@ test('the tab title escapes a hidden character from the address or a world', asy
   expect(document.title).not.toContain('\u202e');
   expect(document.title).toContain('\\u{202e}');
 });
+
+const key = (k: string, more: KeyboardEventInit = {}) =>
+  act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...more }));
+  });
+
+const palette = () => document.querySelector('[aria-label="Command palette"]');
+
+test('Ctrl+K opens the palette and Esc closes it; ? opens the shortcut map', async () => {
+  await mount('#/');
+  await key('k', { ctrlKey: true });
+  expect(palette()).not.toBeNull();
+  expect(document.activeElement?.getAttribute('role')).toBe('combobox');
+  await act(async () => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+  });
+  expect(palette()).toBeNull();
+  await key('?');
+  expect(document.body.textContent).toContain('Keyboard shortcuts');
+  expect(document.body.textContent).toContain('No shortcut approves anything');
+});
+
+test('the palette never opens while an approval card is up, and closes when one arrives', async () => {
+  await mount('#/');
+  const card = document.createElement('div');
+  card.className = 'approval-backdrop';
+  document.body.append(card);
+  await key('k', { ctrlKey: true });
+  await key('?');
+  expect(palette()).toBeNull();
+  expect(document.body.textContent).not.toContain('Keyboard shortcuts');
+  card.remove();
+
+  await key('k', { metaKey: true });
+  expect(palette()).not.toBeNull();
+  await act(async () => {
+    document.body.append(card);
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  expect(palette()).toBeNull();
+  card.remove();
+});
+
+test('the palette lists only addresses: picking one moves the page', async () => {
+  await mount('#/');
+  await key('k', { ctrlKey: true });
+  const input = document.querySelector<HTMLInputElement>('[role="combobox"]');
+  if (!input) throw new Error('no input');
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    set?.call(input, 'metrics');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const first = document.querySelector('[role="option"]');
+  expect(first?.textContent).toContain('Metrics');
+  expect(document.querySelectorAll('[role="option"] button, [role="option"] a').length).toBe(0);
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  expect(window.location.hash).toBe('#/metrics');
+  expect(palette()).toBeNull();
+});
