@@ -129,7 +129,7 @@ mnemorph/
 | logs | the run's journal, JSONL under `.mnemorph/instruments/loop/` | the journal is an instrument |
 | tests | nextest, proptest; Ratatui's test backend; vitest; Playwright for the board (M12) | every rung testable alone |
 | TS tooling | Node 22, pnpm workspaces, Biome | Node is already the platform Claude Code runs on |
-| distribution | GitHub release binaries of `mnemorph` and `mnemorphd`, a curl installer; `cargo install --path` from a checkout | one plain binary for people and for servers. The name `mnemorph` on crates.io is taken: the published names are settled in phase D |
+| distribution | GitHub release archives per target — `mnemorph`, `mnemorphd` and, on Linux, `mnemorph-guard` — with `SHA256SUMS`; `install.sh`, which refuses an archive that does not match; `cargo install --path` from a checkout ([releasing](releasing.md)) | one plain binary for people and for servers. The name `mnemorph` on crates.io is taken: the published names are settled in phase D |
 
 ### The terminal UI
 

@@ -1,0 +1,61 @@
+name: rc-smoke
+
+# The release-candidate smoke test, as a release would run it: release binaries, packaged as the
+# release packages them, run in a fresh HOME with realistic dotfiles, then installed by
+# install.sh from a local fake release, offline and timed. On pull requests that touch the
+# release's files, every night on main, and by hand. It publishes nothing.
+on:
+  pull_request:
+    paths:
+      - install.sh
+      - tools/rc-smoke.sh
+      - tools/rc-fake-provider.py
+      - tools/test-install.sh
+      - tools/package-release.sh
+      - .github/workflows/release.yml
+      - .github/workflows/rc-smoke.yml
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/mnemorph-sandbox/**
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck the release scripts
+        run: shellcheck install.sh tools/rc-smoke.sh tools/test-install.sh tools/package-release.sh
+      - name: install.sh is POSIX sh (dash)
+        run: dash -n install.sh
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+      # The board is left unbuilt here (mnemorphd then serves a page saying so): the release
+      # workflow builds it, and the board's own job tests it.
+      - name: Build the release binaries
+        run: cargo build --release --locked -p mnemorph-tui -p mnemorphd -p mnemorph-sandbox --bins
+      - name: Package as the release does
+        run: |
+          version=$(awk -F'"' '/^version *=/{print $2; exit}' Cargo.toml)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          tools/package-release.sh target/release "$TARGET" "$version" dist
+      - name: The release-candidate smoke test, on the archive in a fresh HOME
+        run: tools/rc-smoke.sh "dist/mnemorph-$TARGET.tar.gz" "$VERSION"
+      - name: The installer, on the archive, offline and timed
+        run: tools/test-install.sh "dist/mnemorph-$TARGET.tar.gz"

@@ -1,0 +1,202 @@
+name: release
+
+# A release is cut by pushing a tag `vX.Y.Z` (docs/releasing.md). This workflow never runs on a
+# pull request or a branch push. It builds the binaries for every target, packages them,
+# smoke-tests the built Linux archives in a fresh HOME, writes SHA256SUMS and opens a DRAFT
+# release: nothing is public until a maintainer reviews the draft and publishes it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing tag to draft a release for (vX.Y.Z)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  prepare:
+    # The tag, the workspace's version and the changelog agree, or nothing is built.
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: The tag, Cargo.toml's version and a dated changelog section agree
+        id: check
+        run: |
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
+            || { echo "::error::$TAG is not a vX.Y.Z tag"; exit 1; }
+          version=${TAG#v}
+          cargo_version=$(awk '/^\[workspace.package\]/{p=1;next} /^\[/{p=0} p&&/^version *=/{gsub(/[" ]/,"",$0);split($0,a,"=");print a[2];exit}' Cargo.toml)
+          [ "$cargo_version" = "$version" ] \
+            || { echo "::error::Cargo.toml's workspace version is $cargo_version, the tag is $TAG"; exit 1; }
+          grep -Eq "^## \[$version\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no dated '## [$version] - YYYY-MM-DD' section"; exit 1; }
+          # The section's body, up to the next version header, is the draft's notes, with the
+          # changelog's link definitions so its [#n] references resolve.
+          awk -v h="## [$version] - " 'index($0,h)==1{p=1;next} p&&(/^## \[/||/^\[[^]]+\]: /){exit} p' CHANGELOG.md > notes.md
+          grep -E '^\[#[0-9]+\]: ' CHANGELOG.md >> notes.md || true
+          [ -n "$(grep -v '^[[:space:]]*$' notes.md)" ] || { echo "::error::the $version section is empty"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: notes.md
+
+  board:
+    # The board is embedded in mnemorphd when it is compiled: built once, used by every target.
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mnemorph/board build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: board-dist
+          path: packages/board/dist
+
+  build:
+    needs: [prepare, board]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The older Ubuntu sets the glibc floor the Linux builds run on.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
+          - { target: aarch64-apple-darwin, os: macos-14, smoke: false }
+          # Cross-built on Apple Silicon: no Intel runner is needed.
+          - { target: x86_64-apple-darwin, os: macos-14, smoke: false }
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Rust toolchain (from rust-toolchain.toml) and the target
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install
+          rustup target add "$TARGET"
+          rustup show active-toolchain
+      - uses: actions/download-artifact@v4
+        with:
+          name: board-dist
+          path: packages/board/dist
+      - name: Build the release binaries
+        run: cargo build --release --locked --target "$TARGET" -p mnemorph-tui -p mnemorphd -p mnemorph-sandbox --bins
+      - name: Package
+        run: tools/package-release.sh "target/$TARGET/release" "$TARGET" "$VERSION" dist
+      - name: The release-candidate smoke test, on the built archive in a fresh HOME
+        if: matrix.smoke
+        run: tools/rc-smoke.sh "dist/mnemorph-$TARGET.tar.gz" "$VERSION"
+      - name: The installer, on the built archive, offline and timed
+        if: matrix.smoke
+        run: tools/test-install.sh "dist/mnemorph-$TARGET.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.target }}
+          path: dist/mnemorph-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        run: |
+          cd dist
+          [ "$(ls mnemorph-*.tar.gz | wc -l)" -eq 4 ] || { ls -l; echo "::error::wanted four archives"; exit 1; }
+          sha256sum mnemorph-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/
+
+  # ---- SIGNING: build provenance, OFF until a maintainer turns it on ---------------------------
+  # Keyless (Sigstore through GitHub's OIDC): no key and no secret. It needs this job's
+  # `id-token: write` and `attestations: write`, granted here alone. To turn it on, set the
+  # repository variable MNEMORPH_ATTEST to `true` (Settings → Secrets and variables → Actions →
+  # Variables). Users then verify an archive with
+  # `gh attestation verify mnemorph-<target>.tar.gz --repo Kaginari/mnemorph`.
+  attest:
+    needs: checksums
+    if: vars.MNEMORPH_ATTEST == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/mnemorph-*.tar.gz
+            dist/SHA256SUMS
+
+  draft:
+    # A draft only: a maintainer reviews it, then publishes it by hand.
+    needs: [prepare, checksums, attest]
+    if: ${{ !cancelled() && needs.checksums.result == 'success' && (needs.attest.result == 'success' || needs.attest.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+          path: .
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::a release for $TAG already exists: delete the draft to redraft it"
+            exit 1
+          fi
+          prerelease=()
+          case $VERSION in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag "${prerelease[@]}" \
+            --title "Mnemorph $VERSION" --notes-file notes.md \
+            dist/mnemorph-*.tar.gz dist/SHA256SUMS

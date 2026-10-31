@@ -32,6 +32,7 @@ protections, memory, ontology, bodies and metrics, live. Start with [the book](d
 | [Ontology](docs/09-ontology.md) | who owns each path, facts with who said them |
 | [Lessons](docs/lessons.md) | what isekai taught, each one a test or a rule |
 | [Roadmap](docs/roadmap.md) | the book, then M0–M14, rung by rung |
+| [Releasing](docs/releasing.md) | how a version is tagged, built, smoke-tested, drafted and published |
 
 ## Set up a machine
 
@@ -52,7 +53,8 @@ just docs-dev  # read the book as a website while writing it
 
 ### Install `mnemorph`
 
-Mnemorph ships two Rust binaries over the same core. Install both.
+Mnemorph ships two Rust binaries over the same core — and, on Linux, `mnemorph-guard`, the kernel
+guard every command runs through, found beside `mnemorph`. Install them together.
 
 | Binary | For | Use it to |
 |---|---|---|
@@ -67,14 +69,41 @@ sessions, gate and events. The world's
 upkeep commands live with the server because they read and change the world's records directly,
 without a session. Both share the same crates, so a rule enforced in one is enforced in the other.
 
+**With the installer** (Linux x86_64 and arm64, macOS Apple Silicon and Intel):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Kaginari/mnemorph/main/install.sh | sh
+sh install.sh --version 1.0.0 --dir ~/bin    # a given release, somewhere else
+```
+
+It downloads the release's archive for this machine, refuses it unless it matches the release's
+`SHA256SUMS`, and puts the binaries in `~/.local/bin` (`MNEMORPH_INSTALL_DIR` or `--dir` to
+choose). It needs no sudo and edits no shell profile: when the directory is not on PATH, it
+prints the line to add.
+
+**By hand**, from [the releases](https://github.com/Kaginari/mnemorph/releases): download
+`mnemorph-<target>.tar.gz` and `SHA256SUMS`, check, unpack, and put the binaries side by side on
+PATH:
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS     # macOS: shasum -a 256 -c --ignore-missing SHA256SUMS
+tar -xzf mnemorph-x86_64-unknown-linux-gnu.tar.gz
+cp mnemorph-*/mnemorph mnemorph-*/mnemorphd mnemorph-*/mnemorph-guard ~/.local/bin/   # no guard on macOS
+```
+
+**From source**, in a checkout:
+
 ```sh
 cargo install --path crates/mnemorph-tui      # mnemorph, into ~/.cargo/bin
+cargo install --path crates/mnemorph-sandbox  # mnemorph-guard, beside it (Linux)
 pnpm install --frozen-lockfile && pnpm --filter @mnemorph/board build   # the board, built into…
 cargo install --path crates/mnemorphd         # mnemorphd: the server, the board and the admin commands
 ```
 
 `mnemorphd` embeds the board as it finds it built in `packages/board/dist` when it is compiled;
-compiled without it, it serves a page saying so, and its API.
+compiled without it, it serves a page saying so, and its API. On Linux, `mnemorph` without
+`mnemorph-guard` beside it runs no command, and `mnemorph status` says so. How a release is cut,
+tested and published: [releasing](docs/releasing.md); what changed: [the changelog](CHANGELOG.md).
 
 Name a provider and a model once, for every world, in `~/.config/mnemorph/config.toml`
 (`$XDG_CONFIG_HOME/mnemorph/config.toml`). A world's `.mnemorph/config.local.toml` overrides it,
