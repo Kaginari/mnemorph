@@ -660,7 +660,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "the local file lives inside the world, where a body or a repository's script can write it; this key widens the sandbox, the gate, a spending cap or where a key is sent, so it is honoured only from your global file".into(),
+                    why: "the local file lives inside the world, where a body or a repository's script can write it; this key widens the sandbox, the gate, a spending cap, where a key is sent or who decides, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -717,7 +717,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "loosens the human gate, so it is honoured only from your global file"
+                    why: "loosens the human gate or who decides, so it is honoured only from your global file"
                         .into(),
                 });
                 continue;

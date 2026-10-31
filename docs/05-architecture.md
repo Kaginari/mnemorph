@@ -1618,7 +1618,7 @@ an empty list or table never overrides a lower layer:
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
   `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
   decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
-  every other `decide.*` key loosen decisions (whether they are made, where their state goes,
+  and every other `decide.*` key loosen decisions (whether they are made, where their state goes,
   which model answers, whether a muted bench may be read, how sure they must be, which model does
   the work and what it costs), so they are honoured only from the global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
@@ -1697,7 +1697,7 @@ an empty list or table never overrides a lower layer:
   configure; a jeff server on your own machine (`jeff-latest`); or any server that speaks the
   same protocol. The LLM `decide.llm` (the fast tier's model by default) answers when no System
   One is there: none named, its key variable not set (each decision's row names the fallback and
-  why, where a missing key would otherwise stop the session), or a call that fails. A
+  why), or a call that fails. A
   `decide.via` naming no provider, or a provider of another kind, is a typo, and an error.
   `decide.bench` (on with decisions) and `decide.route` (off until asked) switch each point. A decision
   is only acted on above its cut-off, and the cut-off depends on who answered:
