@@ -122,7 +122,7 @@ for (const theme of ['dark', 'light'] as const) {
 test('the journal searches, and its contents jump to an entry', async ({ page }) => {
   await open(page, `${base}/journal`);
   await page.getByRole('searchbox').fill('quoting');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.locator('.journal-entry')).toHaveCount(1);
   await page.getByRole('button', { name: 'Clear' }).click();
   await expect(page.locator('.journal-entry')).toHaveCount(3);

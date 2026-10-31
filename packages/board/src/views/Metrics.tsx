@@ -307,7 +307,7 @@ function BenchTable({ m }: { m: BoardMetrics }) {
     <Panel title="Bench" s={m.bench} wide>
       {b && !b.configured ? (
         <p className="panel-note">
-          No bench results configured. Name their directory in your global file:{' '}
+          Not configured. Name the bench results' directory in your global file:{' '}
           <code className="mono">[board] bench_results = "~/kaginari/bench/results"</code>
         </p>
       ) : b && b.rows.length === 0 ? (
@@ -406,7 +406,7 @@ export function MetricsView({ load }: { load: Load }) {
         </div>
       </header>
       {m.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the ledgers…">
+        <Empty glyph="⣾" title="Loading the ledgers…">
           Folding the usage ledgers, the meters and the scores.
         </Empty>
       )}

@@ -568,13 +568,15 @@ the theme is the browser's own choice, in Settings.
 The watcher looks only while a board socket is open: every 250 ms while a session is live in some
 world (a board chat, or a run lock held), else every 2 s. Each look takes every world's signature
 — the size and write time of `log.md`, the usage ledger, each run journal and lock, the memory
-tiers (one level deep), the shared queue, and the challenge records, gate verdicts and queue
-witness under the state directory —
-within a budget of 2,000 entries a world (files stat'ed, directory entries read, locks probed).
+tiers (one level deep), the shared queue, the facts journal, the creature docs
+(`.mnemorph/<race>/<name>/README.md`), and the challenge records, gate verdicts and queue witness
+under the state directory — within a budget of 2,000 entries a world (files stat'ed, directory entries read, locks probed).
 A world past its budget is *slowed*: looked at every 10 s, and its overview's `updates` says
 "too many entries: updates slowed". Looking fast, a world whose signature moved is told once it
 holds still for a look, or 600 ms after it began moving at the latest, so a burst of writes is
-one push; looking slow, it is told at once. A world first seen is remembered, not told. The list
+one push; looking slow, it is told at once. A world first seen is remembered, not told — but the
+first look after the watcher rested (no socket was open) tells every tab `worlds/changed`, so a
+write between a tab's first read and that look is never lost. The list
 of worlds is read again only when the registry or the human's list is written. Each change goes
 to every board socket as JSON-RPC 2.0 without an id: `world/changed {"id"}`, or `worlds/changed`
 when the list moved. Polling needs no platform's notification API and a world cannot exhaust a
@@ -1021,12 +1023,68 @@ address, so a link, a reload or the back button lands where it was:
 | `#/` | every world, live first, then by latest activity |
 | `#/w/<world>` | a world |
 | `#/w/<world>/<bodies\|memory\|ontology\|journal>` | a section of it |
-| `#/w/<world>/s/<session>` | a session |
+| `#/w/<world>/bodies/<colony\|races\|queue\|timeline>` | a tab of the bodies page |
+| `#/w/<world>/s/<session>` | a live chat |
+| `#/w/<world>/r/<run>` | a past run, read-only |
 | `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
 
 Segments are URI-encoded, and `parse(format(r))` gives every route back. Any other address, a
 world the board does not know, and a view whose data is not served yet each say so in an empty
 state, never a blank pane.
+
+**Pages.** Every page the board has, and what it says when it has nothing to show:
+
+| Page | Shows | Empty, loading, silent |
+|---|---|---|
+| Worlds `#/` | each world's row: status, latest session, memory standing, challenges, gate, spend | *No worlds yet*, with the command that adds one (`mnemorphd board add <dir>`); *Loading worlds…* |
+| A world `#/w/<world>` | its overview in panels, each with its source | *unknown* with its reason; a missing world keeps its page |
+| A chat `#/w/<world>/s/<session>`, a past run `…/r/<run>` | the transcript in the terminal's grammar, the composer, the approval card | *A new chat*; *Connecting…*; *This chat is not live* |
+| Bodies `#/w/<world>/bodies` | the colony net, race cards, the queue, the timeline | *No body here yet*; *No order here*; *Nothing on the timeline* |
+| Memory, Ontology | notes by creature, scope and standing; facts by status, with confirm, wake and settle | *No note here*; *No contested fact* |
+| Journal | `log.md`'s entries and their contents | *No journal yet* |
+| Metrics `#/metrics` | spend, tokens, cache, burn, meters, sessions, scores, bench | a meter with no call reads *silent since …*, never 0; the bench *Not configured*, with the line to add |
+| Integrations, Settings | providers, key sources, MCP servers, the effective configuration; the theme | *Not configured* where the global file names nothing |
+
+Every page loads the same way — *Loading …* in the centre, never a blank pane — and a reread that
+fails keeps what was shown, said to be stale.
+
+**The command palette** (⌘K on a Mac, Ctrl+K elsewhere, or *Search* in the rail and, at phone
+width, in the top bar) jumps to a page, a world or one of its sections and tabs, or a live chat or
+past run of the world the page is in. It is a modal dialog: the focus starts in its box and stays
+in the dialog, ↑ and ↓ move the active match, Enter goes, Esc or a click beside it closes it and
+the focus returns where it was. The match (`src/data/commands.ts`) is one pass over each
+candidate, in order and case-insensitive, word starts and runs scoring up — linear, and never a
+regular expression built from what was typed (`tools/check-board.mjs` refuses `RegExp(` in the
+board). A command only changes the address: no palette action answers, approves or acts on
+anything. While an approval card is up the palette cannot open, and one that is open closes when a
+card arrives.
+
+**The shortcut map** (`?`, outside a text field) lists every shortcut the board has
+(`src/data/shortcuts.ts`): the palette, the map, Esc for a dialog, the menu or the phone's pane,
+the rail's arrows, the palette's keys, a chat's Enter, Shift+Enter and Esc (stop the turn, the
+controlling tab only), and Enter or Space on a colony node. No shortcut approves anything; an
+approval card takes only its own answers, on the card, once it is armed.
+
+**Focus and assistive technology.** The shell is landmarks — the rail a `nav`, the centre a
+`main`, the pane an `aside` — with a *Skip to the content* button first in the tab order. Every
+control is labelled and every focus ring visible. In the rail, ↓ and ↑ move between its links and
+buttons, Home and End to the first and last. Two live regions, polite and assertive, outside the
+page the card makes inert, tell a screen reader once what happened: a chat's answer when a turn
+ends, and an ask arriving at the gate; the ticking activity strip is not one. A scrolling block —
+the centre, a code block, the shortcut list — takes the focus, so the keys scroll it. With
+reduced motion asked for, nothing animates: no transition, spinner or slide. Below 760 px the rail
+collapses behind the menu button and the pane is a drawer.
+
+**Security, in short** (the board server and the chat bridge above hold the detail): the daemon
+binds loopback only and refuses any other address; remote use is an SSH port-forward,
+`ssh -L 7878:127.0.0.1:7878 <host>`, then the printed URL opened on the near machine — the explicit
+opt-in. The printed key works once and becomes an `HttpOnly; SameSite=Strict` cookie; every
+request passes the Host, Origin and fetch-site checks, every mutation and socket the CSRF token,
+and every response carries the strict CSP. Only the cookie-holding browser's controlling tab
+answers an ask, through the card's protections, checked again by the server (the digest of what
+was shown, one answer per ask, the arming floor). Nothing read from inside a world grants trust:
+model, tool and world text is rendered inert, links are allowlisted, images never load, and secrets
+appear only as their source.
 
 **Metrics and integrations.** `#/metrics` filters by world (every world by default) and window
 (`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls` —
@@ -1115,8 +1173,8 @@ it.
 `tools/check-board.mjs` fails on a raw colour in the board (a hex literal or a colour function
 such as `rgb()`), on HTML written from a string (`dangerouslySetInnerHTML`, `innerHTML`,
 `outerHTML`, `insertAdjacentHTML`, `setHTMLUnsafe`, `srcdoc`, `document.write`) and on code from a
-string (`eval`, `new Function`), in every `.ts`, `.tsx`, `.js`, `.mjs`, `.css` and `.html` file;
-it runs with `pnpm lint`. Vitest covers the
+string (`eval`, `new Function`) and on a regular expression built at run time (`RegExp(`), in every
+`.ts`, `.tsx`, `.js`, `.mjs`, `.css` and `.html` file; it runs with `pnpm lint`. Vitest covers the
 router, the worlds' parsing, the theme, the safe text against the shared vectors and hostile
 links, the lint itself, and a colour-vision audit (`src/palette.ts`: the Machado 2009 simulation
 of protanopia, deuteranopia and tritanopia, OKLab distance): each status keeps its own glyph and
@@ -1128,8 +1186,19 @@ the board server's own CSP and headers, and any `securitypolicyviolation` fails 
 screenshots of the worlds, a
 session, the settings and the open drawer; every visible text node at WCAG AA (4.5:1, 3:1 for
 large text) against its composited background; a label on every coloured node; deep links and
-the back button; the drawers, their focus and the inert folded rail; the theme across a reload; hostile names that stay text. The
-screenshots are kept as CI's `board-e2e` artifact.
+the back button; the drawers, their focus and the inert folded rail; the theme across a reload; hostile names that stay text.
+`e2e/a11y.spec.ts` runs axe (`@axe-core/playwright`, the WCAG 2.2 A and AA rules and best
+practice) on every page, the empty and loading states, an open chat, an approval card, the palette
+and the shortcut map, in both themes at both widths, failing on any serious or critical
+violation; it also checks the palette's keys and focus trap, that it never opens over a card, the
+rail's arrows, the live regions and reduced motion. **The M12 exit** is `e2e/exit.spec.ts`, on the
+real server, bridge and core (the `board_e2e` example over two fresh worlds and a scripted model),
+at both widths in both themes: both worlds served on loopback; a chat whose act waits at the human
+gate, where a key before arming answers nothing, Yes is never the first focus, neither the palette
+nor the map opens over the card, and Yes runs the act once; the metrics tab, opened before the
+chat, showing its calls unpriced without a reload; a note, a fact and a creature doc landed while
+the memory, ontology and bodies pages watch, each shown live. The screenshots are kept as CI's
+`board-e2e` artifact.
 
 ### Storage: files are the truth
 

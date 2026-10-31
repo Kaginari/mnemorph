@@ -338,7 +338,7 @@ export function MemoryView({ w }: { w: BoardWorld }) {
         </p>
       )}
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the memory…">
+        <Empty glyph="⣾" title="Loading the memory…">
           Asking the board server what this world remembers.
         </Empty>
       )}

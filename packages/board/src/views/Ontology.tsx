@@ -432,7 +432,7 @@ export function OntologyView({ w }: { w: BoardWorld }) {
         </p>
       )}
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the ontology…">
+        <Empty glyph="⣾" title="Loading the ontology…">
           Asking the board server what this world holds as fact.
         </Empty>
       )}

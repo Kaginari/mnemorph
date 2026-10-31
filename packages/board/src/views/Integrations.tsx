@@ -154,7 +154,9 @@ function Config({ c }: { c: ConfigView }) {
             <Unknown why={c.mcp.why} /> — <Safe text={c.mcp.why ?? ''} />
           </p>
         ) : c.mcp.value.servers.length === 0 ? (
-          <p className="panel-note">No MCP server is declared in your global file.</p>
+          <p className="panel-note">
+            Not configured: no MCP server is declared in your global file.
+          </p>
         ) : (
           <div className="table-scroll">
             <table className="table">
@@ -304,7 +306,7 @@ export function IntegrationsView({ theme }: { theme: Choice }) {
         edit your global file.
       </p>
       {load.state === 'loading' && (
-        <Empty glyph="⣾" title="Reading the configuration…">
+        <Empty glyph="⣾" title="Loading the configuration…">
           Asking the board server.
         </Empty>
       )}

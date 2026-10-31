@@ -75,7 +75,7 @@ export function tokens(wt: number): string {
   return `${(wt / 1_000_000).toFixed(2)}M`;
 }
 
-/** A rate with its count and 95% interval, as `mnemorphd meters` says it; none, "no reports". */
+/** A rate with its count and 95% interval, as `mnemorphd meters` says it; none, "silent — no report yet". */
 export function rate(m: {
   successes: number | null;
   n: number | null;
@@ -83,7 +83,7 @@ export function rate(m: {
   lo: number | null;
   hi: number | null;
 }): string {
-  if (m.n === null || m.successes === null || m.value === null) return 'no reports';
+  if (m.n === null || m.successes === null || m.value === null) return 'silent — no report yet';
   const interval =
     m.lo !== null && m.hi !== null ? `, 95% ${m.lo.toFixed(2)}–${m.hi.toFixed(2)}` : '';
   return `${m.value.toFixed(2)} (${m.successes}/${m.n}${interval})`;

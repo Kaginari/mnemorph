@@ -71,7 +71,7 @@ jobs:
       - name: Chromium's system libraries (the browser is cached)
         if: steps.browsers.outputs.cache-hit == 'true'
         run: pnpm --filter @mnemorph/board exec playwright install-deps chromium
-      - name: Screenshots, contrast, labels, router, drawers, hostile text, chats
+      - name: Screenshots, contrast, labels, axe, router, drawers, palette, hostile text, chats, approvals, the M12 exit
         run: pnpm --filter @mnemorph/board e2e
       - uses: actions/upload-artifact@v4
         if: always()

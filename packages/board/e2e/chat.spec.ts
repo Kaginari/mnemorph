@@ -297,7 +297,7 @@ test('a past run reads from its journal, read-only, and resumes', async ({ page 
   await expect(page.locator('.composer-closed')).toContainText('read-only');
   await expect(page.getByRole('textbox')).toHaveCount(0);
   await page.getByRole('button', { name: 'Resume' }).click();
-  await expect(page).toHaveURL(new RegExp(`#/w/${LIVE.id}/s/${CHAT}$`));
+  await expect(page).toHaveURL((u) => u.hash === `#/w/${LIVE.id}/s/${CHAT}`);
   expect(resumed).toEqual({ resume: PAST });
   await expect(page.getByRole('textbox')).toBeEnabled();
 });

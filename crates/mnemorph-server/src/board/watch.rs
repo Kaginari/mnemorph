@@ -5,8 +5,9 @@
 //! The watcher polls, and only while a tab listens: every [`FAST`] while a session is live in some
 //! world (a board chat, or a run lock held), else every [`SLOW`]. Each look takes every world's
 //! signature — the size and write time of `log.md`, the run journals and their locks, the memory
-//! tiers and the usage ledger in the world, and of the challenge records and gate verdicts under
-//! the state directory — within a budget of [`BUDGET`] entries a world. A world past it is
+//! tiers, the facts journal, the creature docs and the usage ledger in the world, and of the
+//! challenge records and gate verdicts under the state directory — within a budget of [`BUDGET`]
+//! entries a world. A world past it is
 //! *slowed*: looked at every [`SLOWED`], and its overview says so. While looking fast, a world
 //! whose signature moved is told once it holds still for a look (a burst of writes is one push),
 //! or after [`SETTLE`] at the latest; looking slow, it is told at once. The list of worlds is read
@@ -28,8 +29,10 @@ use axum::response::Response;
 use serde_json::json;
 use tokio::sync::broadcast;
 
+use mnemorph_loop::world::facts::FACTS;
 use mnemorph_loop::world::log::LOG;
 use mnemorph_loop::world::queue::{QUEUE, witness_of};
+use mnemorph_loop::world::races::Race;
 use mnemorph_loop::world::{challenge, verdicts, worth::USAGE};
 
 use super::{Board, guard, refuse};
@@ -135,9 +138,13 @@ fn file(h: &mut DefaultHasher, path: &Path, budget: &mut usize) -> bool {
 }
 
 /// Every entry of `at`, in name order, folded into `h` within `budget` (each entry read spends
-/// one); `deep` follows one level of subdirectories, never a link. `false` when the budget ran out.
+/// one); `deep` follows one level of subdirectories, never a link — nor is `at` itself read when it
+/// is a link. `false` when the budget ran out.
 fn dir(h: &mut DefaultHasher, at: &Path, deep: bool, budget: &mut usize) -> bool {
-    let Ok(rd) = std::fs::read_dir(at) else {
+    // A body can write the world: a link where a directory should be is never followed, and
+    // reads as no directory at all.
+    let real = std::fs::symlink_metadata(at).is_ok_and(|m| m.file_type().is_dir());
+    let Some(Ok(rd)) = real.then(|| std::fs::read_dir(at)) else {
         0u8.hash(h);
         return true;
     };
@@ -179,7 +186,18 @@ pub fn signature(world: &Path, budget: &mut usize) -> (u64, bool) {
             budget,
         )
         && dir(&mut h, &world.join(".mnemorph/memory"), true, budget)
-        && file(&mut h, &world.join(QUEUE), budget);
+        && file(&mut h, &world.join(QUEUE), budget)
+        && file(&mut h, &world.join(FACTS), budget);
+    // The creature docs, `.mnemorph/<race>/<name>/README.md`: the colony the bodies page draws.
+    for race in Race::ALL {
+        whole = whole
+            && dir(
+                &mut h,
+                &world.join(".mnemorph").join(race.name()),
+                true,
+                budget,
+            );
+    }
     for trusted in [
         verdicts::verdicts_of(world),
         challenge::records_of(world),
@@ -279,16 +297,22 @@ impl Watcher {
 }
 
 /// Watch `board`'s worlds until the runtime stops, telling each change on its channel — looking
-/// only while a tab listens, fast while a session is live, slow otherwise.
+/// only while a tab listens, fast while a session is live, slow otherwise. The first look after
+/// the watcher rested tells `worlds/changed`: a write between a tab's first read and that look is
+/// never lost.
 pub async fn watch(board: Arc<Board>) {
     let mut w = Some(Watcher::default());
     let mut pause = SLOW;
+    // A fresh watcher's first look only remembers: what moved between a tab's first read and that
+    // look would be told to no one, so that look tells every tab to read again, once.
+    let mut fresh = true;
     loop {
         tokio::time::sleep(pause).await;
         if board.sockets.load(Ordering::SeqCst) == 0 {
             // No one listens: nothing is looked at, and what was seen is forgotten — a tab that
             // comes reads the overview fresh.
             w = Some(Watcher::default());
+            fresh = true;
             pause = SLOW;
             continue;
         }
@@ -315,7 +339,12 @@ pub async fn watch(board: Arc<Board>) {
         let chats = !board.bridge().list().sessions.is_empty();
         pause = if look.live || chats { FAST } else { SLOW };
         *board.slowed.lock().unwrap_or_else(PoisonError::into_inner) = look.slowed;
-        for c in look.changes {
+        let changes = if std::mem::take(&mut fresh) {
+            vec![Change::Worlds]
+        } else {
+            look.changes
+        };
+        for c in changes {
             // No tab listening is no error.
             let _ = board.changes.send(c);
         }
@@ -574,6 +603,9 @@ mod tests {
             (".mnemorph/instruments/loop/r1-2.jsonl", "{}"),
             (".mnemorph/memory/creature/slime.jsonl", "{}"),
             (".mnemorph/memory/shared/notes.jsonl", "{}"),
+            (FACTS, "{}"),
+            (".mnemorph/orc/orc-a/README.md", "# orc-a\n"),
+            (".mnemorph/slime/slime-a/README.md", "# slime-a\n"),
         ] {
             let at = root.join(path);
             std::fs::create_dir_all(at.parent().unwrap()).unwrap();
@@ -584,6 +616,25 @@ mod tests {
         }
         std::fs::remove_dir_all(&root).unwrap();
         assert_ne!(sig(&root), last, "gone");
+    }
+
+    #[test]
+    fn a_linked_directory_is_not_watched() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(outside.join("orc-x")).unwrap();
+        let world = root.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        std::os::unix::fs::symlink(&outside, world.join(".mnemorph/orc")).unwrap();
+        let sig = |w: &Path| signature(w, &mut BUDGET.clone()).0;
+        let before = sig(&world);
+        std::fs::write(outside.join("orc-x/README.md"), "# orc-x\n").unwrap();
+        std::fs::write(outside.join("more.md"), "x").unwrap();
+        assert_eq!(
+            sig(&world),
+            before,
+            "a change behind a link moved the signature"
+        );
     }
 
     #[test]

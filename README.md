@@ -6,7 +6,7 @@
 
 An agent harness grown from [isekai](https://github.com/Kaginari/isekai): the nine natures and
 the wire, rebuilt as a Rust core with a Rust terminal app — `mnemorph` — plus a TypeScript SDK
-for the web board to come. Races are compiled in — what each one may do, whom it answers to, how
+and a web board. Races are compiled in — what each one may do, whom it answers to, how
 it is scored and how it ascends is code, not configuration.
 
 **Status:** M0–M6 and M8 are built — the wire and the races, the ledger, the providers, the tools,
@@ -15,7 +15,8 @@ the terminal app, memory and the toolbox. M7, the world, runs with two items ope
 decisions and the paired solo-versus-hierarchy measurement). M9, the Kijin, has its typed outward
 acts, fingerprints, receipts, the act runner, closure and the typed pull request — a branch and
 its pull request under one approval; its exit is met against a stub forge, a live run remains. M10's Dark Elf specialities, their routing and the wire's finding fields
-are compiled; the board is M12. Start with [the book](docs/README.md); the plan is the
+are compiled. M12's board serves every world on loopback — chats, approvals under the terminal's
+protections, memory, ontology, bodies and metrics, live. Start with [the book](docs/README.md); the plan is the
 [roadmap](docs/roadmap.md) and its [milestones](https://github.com/Kaginari/mnemorph/milestones).
 
 | Read | For |
@@ -109,6 +110,18 @@ mnemorphd board                     # the board on 127.0.0.1:7878: open the URL 
 for a session cookie. It listens on loopback only — from another machine, forward the same port:
 `ssh -L 7878:127.0.0.1:7878 <host>`, then open the printed URL. A second `mnemorphd board` prints
 the running board's URL, with the key waiting now ([the board server](docs/05-architecture.md#the-board-server)).
+
+The board is every world on the machine in one page: its worlds, chats in the terminal's grammar,
+the approval card with the terminal's protections, memory, ontology, bodies and metrics, live.
+⌘K (Ctrl+K) jumps anywhere; `?` lists every shortcut ([the board](docs/05-architecture.md#the-board)).
+
+| | Dark | Light |
+|---|---|---|
+| Worlds | <img src="docs/img/board/worlds-dark.png" width="400" alt="The worlds page, dark: each world's status, memory standing, gate and spend"> | <img src="docs/img/board/worlds-light.png" width="400" alt="The worlds page, light"> |
+| Chat | <img src="docs/img/board/chat-dark.png" width="400" alt="A chat, dark: tool cards, a numbered diff, the end gate's verdict, the session pane"> | <img src="docs/img/board/chat-light.png" width="400" alt="A chat, light"> |
+| Approval | <img src="docs/img/board/approval-dark.png" width="400" alt="An approval card, dark: the act whole with every hidden character escaped, Yes disabled until read"> | <img src="docs/img/board/approval-light.png" width="400" alt="An approval card, light"> |
+| Metrics | <img src="docs/img/board/metrics-dark.png" width="400" alt="The metrics page, dark: totals, spend per day by race, cache hit, burn"> | <img src="docs/img/board/metrics-light.png" width="400" alt="The metrics page, light"> |
+| Phone | <img src="docs/img/board/phone-chat-dark.png" width="160" alt="A chat at phone width, dark: the rail behind the menu"> | <img src="docs/img/board/phone-chat-light.png" width="160" alt="A chat at phone width, light"> |
 
 `mnemorph run` goes through the same session and end gate as the app, and exits 0 only when the
 answer landed; it denies every act that needs your approval unless you pass `--gate-tty`

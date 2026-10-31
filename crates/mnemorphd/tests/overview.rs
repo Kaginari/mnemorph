@@ -404,10 +404,16 @@ fn a_log_write_reaches_the_tab_within_a_second() {
     )
     .unwrap();
     drop(log);
-    let told = frame(&mut s).expect("told within a second");
+    // The first look after the watcher rested told every tab to read again: past that, the write.
+    let v: Value = loop {
+        let told = frame(&mut s).expect("told within a second");
+        let v: Value = serde_json::from_str(&told).unwrap();
+        if v["method"] != "worlds/changed" {
+            break v;
+        }
+    };
     assert!(wrote.elapsed() < Duration::from_secs(1));
     let id = mnemorph_server::world::dimension::world_id(&h.world);
-    let v: Value = serde_json::from_str(&told).unwrap();
     assert_eq!(v["method"], "world/changed");
     assert_eq!(v["params"]["id"], id);
 

@@ -164,7 +164,7 @@ export function SessionPane({ side }: { side: Side | undefined }) {
       </Block>
       <Block title="memory">
         {memory === undefined ? (
-          <p className="pane-note">reading…</p>
+          <p className="pane-note">loading…</p>
         ) : memory === null ? (
           <p className="pane-note">not read: the world's overview does not say</p>
         ) : (

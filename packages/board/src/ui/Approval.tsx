@@ -353,7 +353,8 @@ function ApprovalCard({ live, waiting, more }: { live: Live; waiting: Waiting; m
     // A key the page's own script made is no human's.
     if (!e.nativeEvent.isTrusted) return;
     if (!controller && e.key !== 'Escape') return;
-    decide(card.key(e.key, e.timeStamp, thisTask()));
+    // A held key picks nothing: it disarms the card.
+    decide(card.key(e.key, e.timeStamp, thisTask(), e.repeat));
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
