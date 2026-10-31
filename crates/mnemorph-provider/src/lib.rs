@@ -31,7 +31,7 @@ pub use decide::{
 };
 pub use error::{Error, Wait};
 pub use model::{Block, Effort, Event, Message, Request, Response, Role, StopReason, Tool};
-pub use openai::{MALFORMED, OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
+pub use openai::{MALFORMED, NO_USAGE, OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use systemone::{
@@ -68,7 +68,8 @@ pub struct Caller {
     pub prefix: u64,
 }
 
-/// The ledger's row for one answered call, priced.
+/// The ledger's row for one answered call, priced — estimated and unpriced when the provider
+/// reported no usage.
 #[must_use]
 pub fn usage_row(
     response: &Response,
@@ -77,7 +78,7 @@ pub fn usage_row(
     prices: &Prices,
     ts: Timestamp,
 ) -> UsageRow {
-    UsageRow {
+    let mut row = UsageRow {
         ts,
         session: caller.session.clone(),
         run: caller.run.clone(),
@@ -90,8 +91,17 @@ pub fn usage_row(
         prefix: caller.prefix,
         wt: 0,
         usd: None,
+        reported_cost: response.reported_cost,
+        estimated: false,
         envelope: None,
         purpose: None,
     }
-    .priced(prices)
+    .priced(prices);
+    // Estimated tokens are weighed, so the envelope and the budget are charged, but never
+    // priced: the call reads unpriced, and says it is an estimate.
+    if !response.usage_known {
+        row.usd = None;
+        row.estimated = true;
+    }
+    row
 }

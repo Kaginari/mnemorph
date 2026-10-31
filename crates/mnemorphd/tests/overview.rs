@@ -48,6 +48,8 @@ fn usage(session: &str, wt: u64, usd: Option<f64>) -> UsageRow {
         prefix: 0,
         wt,
         usd,
+        reported_cost: None,
+        estimated: false,
         envelope: None,
         purpose: None,
     }

@@ -45,6 +45,14 @@ pub struct UsageRow {
     pub wt: u64,
     /// US dollars, or `null` when the model is unpriced — never a made-up zero.
     pub usd: Option<f64>,
+    /// US dollars as the provider itself reported them for the call (OpenRouter's `usage.cost`),
+    /// kept beside Mnemorph's own estimate in `usd`; absent when the provider reports none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported_cost: Option<f64>,
+    /// The tokens are the client's estimate, not the provider's count: it reported no usage.
+    /// `wt` weighs the estimate; `usd` is null.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimated: bool,
     /// The envelope after the call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub envelope: Option<EnvelopeReading>,
@@ -87,6 +95,8 @@ mod tests {
             prefix: 3900,
             wt: 0,
             usd: None,
+            reported_cost: Some(0.000_42),
+            estimated: false,
             envelope: Some(EnvelopeReading {
                 left: 54_888,
                 of: 60_000,
@@ -114,6 +124,7 @@ mod tests {
             "prefix",
             "wt",
             "usd",
+            "reportedCost",
             "envelope",
         ] {
             assert!(json.get(key).is_some(), "{key} missing in {json}");
@@ -121,6 +132,17 @@ mod tests {
         assert_eq!(json["usd"], serde_json::Value::Null, "unpriced is null");
         let back: UsageRow = serde_json::from_value(json).unwrap();
         assert_eq!(back, row());
+        // A row from before the field, or from a provider that reports no cost, reads as none.
+        let mut old = serde_json::to_value(row()).unwrap();
+        old.as_object_mut().unwrap().remove("reportedCost");
+        let back: UsageRow = serde_json::from_value(old.clone()).unwrap();
+        assert_eq!(back.reported_cost, None);
+        assert!(
+            serde_json::to_value(back)
+                .unwrap()
+                .get("reportedCost")
+                .is_none()
+        );
     }
 
     #[test]

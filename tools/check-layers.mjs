@@ -13,7 +13,7 @@ const ALLOWED = {
   'mnemorph-proving': ['mnemorph-wire', 'mnemorph-races'],
   'mnemorph-tools': ['mnemorph-races', 'mnemorph-sandbox', 'mnemorph-wire'],
   'mnemorph-config': ['mnemorph-races', 'mnemorph-tools', 'mnemorph-ledger'],
-  'mnemorph-provider': ['mnemorph-ledger'],
+  'mnemorph-provider': ['mnemorph-ledger', 'mnemorph-wire'],
   'mnemorph-world': [
     'mnemorph-wire',
     'mnemorph-races',

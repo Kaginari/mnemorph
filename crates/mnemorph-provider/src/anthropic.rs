@@ -457,6 +457,8 @@ impl Assembly {
             stop,
             stop_details: self.stop_details.take(),
             usage: self.usage,
+            reported_cost: None,
+            usage_known: true,
             warnings: std::mem::take(&mut self.warnings),
         }
     }

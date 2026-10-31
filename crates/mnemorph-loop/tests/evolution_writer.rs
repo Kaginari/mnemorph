@@ -426,6 +426,8 @@ async fn a_spent_cap_runs_no_control() {
             prefix: 0,
             wt: 50,
             usd: None,
+            reported_cost: None,
+            estimated: false,
             envelope: None,
             purpose: None,
         })

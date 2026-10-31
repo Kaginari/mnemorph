@@ -55,6 +55,8 @@ pub fn decision_usage(decision: &Decision, caller: &Caller, prices: &Prices) -> 
         prefix: 0,
         wt: 0,
         usd: None,
+        reported_cost: None,
+        estimated: false,
         envelope: None,
         purpose: None,
     }
