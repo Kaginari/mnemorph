@@ -351,7 +351,13 @@ carries four fixed doors, and MCP reaches a body in three levels, each priced be
   the session so the same ask never pays twice ([MCP](07-mcp.md#reranked-by-the-fast-tier));
 - the tools block never changes mid-run, so the doors are read from the cache at the cache-read
   price after the first request, and every loaded level is in the usage ledger's input like any
-  other tool result.
+  other tool result;
+- a creature's habitual tools — chosen once, when the session starts, from the MCP journal — ride
+  its frame up front, within what the race's prefix ceiling leaves; a server whose schemas
+  together pass the ceiling stays at level 0, and a level whose price passes the run's envelope
+  is refused before it loads ([MCP](07-mcp.md#budgeted));
+- on Anthropic, every other tool in scope is a native deferred tool: sent, but out of the context
+  and the cached prefix until level 2 references it ([MCP](07-mcp.md#native-deferred-tools)).
 
 ### Reads by range
 

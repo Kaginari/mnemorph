@@ -339,6 +339,8 @@ pub struct Run {
     /// The fingerprints of the last request — its frame, then its messages: the next request
     /// only appends to them, unless a documented reshaping moved them.
     sent: Vec<u64>,
+    /// What is left of the run's envelope, as its tools read it: written as it spends.
+    budget_left: Arc<std::sync::atomic::AtomicU64>,
     /// Why the next request may rewrite what the last one sent: a fold or a compaction, said in
     /// the prefix beat when the prefix moves.
     reshaped: Option<&'static str>,
@@ -419,12 +421,18 @@ impl Run {
     pub fn new(body: Body, limits: Limits, setup: Setup) -> Self {
         let interrupt = Arc::new(Interrupt::default());
         let frame = frame(&body.system, &setup.tools);
+        let budget_left = Arc::new(std::sync::atomic::AtomicU64::new(
+            limits.budget_wt.map_or(u64::MAX, |b| b.min(u64::MAX - 1)),
+        ));
         Self {
             body,
             limits,
             model: setup.model,
             tools: setup.tools,
-            cx: setup.cx.with_cancel(Arc::clone(&interrupt.fired)),
+            cx: setup
+                .cx
+                .with_cancel(Arc::clone(&interrupt.fired))
+                .with_budget_left(Arc::clone(&budget_left)),
             journal: setup.journal,
             ledger: setup.ledger,
             prices: setup.prices,
@@ -468,6 +476,7 @@ impl Run {
             passed: None,
             frame,
             sent: Vec::new(),
+            budget_left,
             reshaped: None,
             updates: Vec::new(),
             stripped: None,
@@ -702,6 +711,21 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // A reference stands only for a tool this frame still defers: a catalog that shrank, a
+        // server now past its ceiling or a shelf that changed would make the provider refuse it.
+        let deferred: std::collections::BTreeSet<&str> = run
+            .tools
+            .iter()
+            .filter(|t| t.defer())
+            .map(|t| t.name())
+            .collect();
+        for m in &mut run.messages {
+            for b in &mut m.content {
+                if let Block::ToolResult { references, .. } = b {
+                    references.retain(|r| deferred.contains(r.as_str()));
+                }
+            }
+        }
         // A run that drained before its stop never drains again: its notes are already kept.
         run.drains = u32::try_from(
             beats
@@ -882,9 +906,20 @@ impl Run {
         &mut self.cx
     }
 
+    /// What is left of the envelope, written where the run's tools read it: a priced load past
+    /// it is refused.
+    fn sync_budget(&self) {
+        let left = self.limits.budget_wt.map_or(u64::MAX, |b| {
+            b.saturating_sub(self.spent_wt).min(u64::MAX - 1)
+        });
+        self.budget_left
+            .store(left, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Count a call's spend: the run's meter, the observer, the usage ledger.
     fn spend(&mut self, row: &mnemorph_ledger::UsageRow) {
         self.spent_wt = self.spent_wt.saturating_add(row.wt);
+        self.sync_budget();
         if let Some(see) = &self.observer {
             see(&Seen::Usage {
                 usage: row.usage,
@@ -955,7 +990,8 @@ impl Run {
         let Some(journal) = &self.mcp_journal else {
             return;
         };
-        if touched.is_empty() && self.mcp_offered.is_empty() && self.mcp_reranked.is_none() {
+        // An ask that never chose — a run with no MCP — has nothing to count.
+        if self.mcp_asks == 0 {
             return;
         }
         let ask = format!("{}#{}", self.caller.run, self.mcp_asks);
@@ -964,15 +1000,18 @@ impl Run {
             .iter()
             .map(|(s, why)| (s.name.clone(), why.clone()))
             .collect();
-        let rows = crate::mcp_journal::AskRows {
+        let shape = crate::mcp_journal::AskRows {
             ask: &ask,
             creature: self.cx.body(),
             race: self.cx.race().name(),
             said: &self.asked,
             helped: matches!(ending, Ending::Answered(_)) && self.failed_in_ask.is_none(),
             ts: u64::try_from(Timestamp::now().0).unwrap_or_default(),
-        }
-        .rows(&offered, self.mcp_reranked.as_ref(), &touched);
+        };
+        let mut rows = shape.rows(&offered, self.mcp_reranked.as_ref(), &touched);
+        // Every ask counts once, whatever it did with MCP: what a creature's habits — its stable
+        // prefix at the next session — are measured over.
+        rows.push(shape.ended());
         let state = self.mcp.as_ref().map(|m| m.state().to_path_buf());
         let kept = state.map_or(Ok(()), |state| {
             crate::mcp_journal::keep(&state, journal, &rows, crate::mcp_journal::SEGMENT)
@@ -996,6 +1035,7 @@ impl Run {
         let Some(mcp) = self.mcp.clone() else {
             return;
         };
+        self.sync_budget();
         self.mcp_asks += 1;
         match crate::mcp_journal::read(mcp.state()) {
             Ok(rows) => mcp.set_learned(Learned::from_rows(rows)),
@@ -2309,6 +2349,7 @@ impl Run {
             && let Some(more) = self.topup_wt.take()
         {
             self.limits.budget_wt = Some(budget.saturating_add(more));
+            self.sync_budget();
             self.nudge(&format!(
                 "Your slice ran out; your dispatcher had set aside {more} wt more for you, given now. There is no further top-up: finish, or report what is left."
             ));
@@ -3127,12 +3168,14 @@ impl Run {
                     tool_use_id: id.clone(),
                     content: content.clone(),
                     is_error: true,
+                    references: Vec::new(),
                 });
                 results.push(Block::ToolResult {
                     tool_use_id: id,
                     content,
                     is_error: true,
                     cache: false,
+                    references: Vec::new(),
                 });
                 continue;
             }
@@ -3149,6 +3192,7 @@ impl Run {
                 tool_use_id: id.clone(),
                 content: o.content.clone(),
                 is_error: o.is_error,
+                references: o.meta.references().to_vec(),
             });
             let command = (name == "bash")
                 .then(|| serde_json::from_str::<serde_json::Value>(&input).ok())
@@ -3187,6 +3231,7 @@ impl Run {
                 content: o.content,
                 is_error: o.is_error,
                 cache: false,
+                references: o.meta.references().to_vec(),
             });
         }
         push_user(&mut self.messages, results);
@@ -3490,9 +3535,10 @@ pub const OMITTED: &str = "(reasoning omitted)";
 pub const UPDATE: &str = "[context update]";
 
 /// The session's frame: the system prompt and the tools as every request sends them, the last
-/// tool carrying the tools' breakpoint.
+/// tool that is not deferred carrying the tools' breakpoint — a deferred tool may not carry one,
+/// and stays out of the cached prefix.
 fn frame(system: &str, tools: &[Box<dyn Tool>]) -> (Vec<Block>, Vec<ToolSpec>) {
-    let count = tools.len();
+    let last = tools.iter().rposition(|t| !t.defer());
     let specs = tools
         .iter()
         .enumerate()
@@ -3500,7 +3546,8 @@ fn frame(system: &str, tools: &[Box<dyn Tool>]) -> (Vec<Block>, Vec<ToolSpec>) {
             name: t.name().to_owned(),
             description: t.description().to_owned(),
             input_schema: t.schema(),
-            cache: i + 1 == count,
+            cache: Some(i) == last,
+            defer: t.defer(),
         })
         .collect();
     (

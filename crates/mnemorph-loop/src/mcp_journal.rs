@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 use mnemorph_ledger::{Journal, chain, private_dir};
 use mnemorph_tools::mcp::{Kind, Row, Touched, learned};
 
+pub use mnemorph_tools::mcp::learned::SpendReport;
+
 /// The rows of a live segment past which it is sealed and a new one opened.
 pub const SEGMENT: usize = 2048;
 
@@ -202,6 +204,29 @@ pub struct AskRows<'a> {
 }
 
 impl AskRows<'_> {
+    /// The row that says the ask ended, written for every ask a run offered MCP: what a
+    /// creature's habits are counted over.
+    #[must_use]
+    pub fn ended(&self) -> Row {
+        let (terms, fingerprint) = learned::terms_of(self.said);
+        Row {
+            ts: self.ts,
+            ask: self.ask.to_owned(),
+            kind: Kind::Ask,
+            server: String::new(),
+            tool: None,
+            creature: self.creature.to_owned(),
+            race: self.race.to_owned(),
+            fingerprint,
+            terms,
+            wt: 0,
+            used: false,
+            outcome: "ended".into(),
+            helped: self.helped,
+            why: None,
+        }
+    }
+
     /// The rows: the offers (each tool and why) and the rerank first, then what the doors did.
     #[must_use]
     pub fn rows(
@@ -260,4 +285,49 @@ impl AskRows<'_> {
         }
         rows
     }
+}
+
+/// The tokens of a run's frame — its system prompt and its tools' definitions — at four bytes a
+/// token: what the race's prefix ceiling is measured against (#43).
+#[must_use]
+pub fn frame_tokens(system: &str, tools: &[Box<dyn mnemorph_tools::Tool>]) -> u64 {
+    let defs: Vec<serde_json::Value> = tools
+        .iter()
+        .filter(|t| !t.defer())
+        .map(|t| serde_json::json!({"name": t.name(), "description": t.description(), "input_schema": t.schema()}))
+        .collect();
+    let bytes = system.len() + serde_json::to_string(&defs).map_or(0, |j| j.len());
+    u64::try_from(bytes.div_ceil(4)).unwrap_or(u64::MAX)
+}
+
+/// What a run of `race` may hold of MCP in its frame, decided once, when the run is made: native
+/// deferred tools when its provider takes them for `model_id`, and the room its race's prefix
+/// ceiling leaves above `system`, `tools` and the four doors — what the stable prefix's tools must
+/// fit in together.
+#[must_use]
+pub fn frame(
+    mcp: &std::sync::Arc<mnemorph_tools::mcp::Mcp>,
+    race: mnemorph_races::Race,
+    cx: &mnemorph_tools::Context,
+    system: &str,
+    tools: &[Box<dyn mnemorph_tools::Tool>],
+    native: bool,
+) -> mnemorph_tools::mcp::Frame {
+    let doors = mcp.offer(race, cx).tools;
+    let own = frame_tokens(system, tools) + frame_tokens("", &doors);
+    mnemorph_tools::mcp::Frame {
+        native,
+        room: race.prefix_ceiling().saturating_sub(own),
+    }
+}
+
+/// What `world`'s MCP journal says each server's schema cost against what was used, and what
+/// its answers and the reranks cost — read only when its chain and witness hold.
+///
+/// # Errors
+///
+/// Why the journal is not believed.
+pub fn spend(world: &Path) -> Result<SpendReport, String> {
+    let rows = read(&mnemorph_tools::mcp::state_dir(world))?;
+    Ok(mnemorph_tools::mcp::Learned::from_rows(rows).spend_by_server())
 }

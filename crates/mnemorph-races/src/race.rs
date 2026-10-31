@@ -163,6 +163,21 @@ impl Race {
         }
     }
 
+    /// The ceiling on a body's cached prefix — its system prompt and its tools' definitions — in
+    /// tokens at four bytes a token: what CI holds the solo prefix under (#43), and what MCP tool
+    /// schemas count against. The throne and a Slime keep the leanest prefix; a Kijin, whose shelf
+    /// holds the outside's tools, the largest.
+    #[must_use]
+    pub fn prefix_ceiling(self) -> u64 {
+        match self.base() {
+            Race::Kijin => 8_000,
+            Race::Elf => 6_000,
+            Race::Orc | Race::DarkElf => 5_000,
+            // The throne and a Slime.
+            _ => 4_000,
+        }
+    }
+
     /// The largest share, in percent, of what its parent has left when it carves, that a body of
     /// this race may be given. A ceiling, never a default; the throne holds the whole session.
     #[must_use]
@@ -186,6 +201,15 @@ impl fmt::Display for Race {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_race_has_a_prefix_ceiling_and_an_ascended_form_keeps_its_bases() {
+        let ceilings: Vec<u64> = Race::ALL.iter().map(|r| r.prefix_ceiling()).collect();
+        assert_eq!(&ceilings[..6], [4_000, 6_000, 5_000, 4_000, 8_000, 5_000]);
+        for r in Race::ALL {
+            assert_eq!(r.prefix_ceiling(), r.base().prefix_ceiling());
+        }
+    }
 
     #[test]
     fn names_round_trip() {

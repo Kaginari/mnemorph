@@ -1096,7 +1096,7 @@ fn benches_are_known_by_their_command() {
 /// #43: the cached prefix — the system prompt and the tool JSON — has a ceiling, checked in CI.
 #[test]
 fn the_solo_prefix_stays_under_its_ceiling() {
-    const CEILING_TOKENS: usize = 4000;
+    let ceiling_tokens = usize::try_from(mnemorph_races::Race::Rimuru.prefix_ceiling()).unwrap();
     let w = World::new("prefix-ceiling");
     // The prompt carries the world's law: the ceiling holds with this repository's own.
     let law = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.mnemorph/law.md");
@@ -1114,13 +1114,14 @@ fn the_solo_prefix_stays_under_its_ceiling() {
             description: t.description().into(),
             input_schema: t.schema(),
             cache: false,
+            defer: false,
         })
         .collect();
     let bytes = body.system.len() + serde_json::to_string(&tools.iter().map(|t| json!({"name": t.name, "description": t.description, "input_schema": t.input_schema})).collect::<Vec<_>>()).unwrap().len();
     let tokens = bytes / 4;
-    eprintln!("solo prefix: {bytes} bytes ≈ {tokens} tokens (ceiling {CEILING_TOKENS})");
+    eprintln!("solo prefix: {bytes} bytes ≈ {tokens} tokens (ceiling {ceiling_tokens})");
     assert!(
-        tokens <= CEILING_TOKENS,
+        tokens <= ceiling_tokens,
         "the solo prefix grew to ≈{tokens} tokens"
     );
 }
@@ -2232,7 +2233,7 @@ fn fake_hub(w: &World) -> (Arc<mnemorph_tools::mcp::Mcp>, std::path::PathBuf) {
     ];
     hub.class = Some(mnemorph_races::ToolClass::Read);
     hub.purpose = "Issues and the web".into();
-    hub.timeout = std::time::Duration::from_secs(10);
+    hub.timeout = Some(std::time::Duration::from_secs(10));
     let mcp = Mcp::new(
         Settings {
             top_k: 2,

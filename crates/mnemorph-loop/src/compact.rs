@@ -21,7 +21,7 @@ pub fn fold(messages: &[Message], upto: usize) -> Vec<Message> {
                 .content
                 .iter()
                 .map(|b| match b {
-                    Block::ToolResult { tool_use_id, content, is_error, cache } if content.len() > 200 => Block::ToolResult {
+                    Block::ToolResult { tool_use_id, content, is_error, cache, references } if content.len() > 200 => Block::ToolResult {
                         tool_use_id: tool_use_id.clone(),
                         content: format!(
                             "[folded: {} lines of earlier output — call the tool again if you need it]",
@@ -29,6 +29,8 @@ pub fn fold(messages: &[Message], upto: usize) -> Vec<Message> {
                         ),
                         is_error: *is_error,
                         cache: *cache,
+                        // A deferred tool once loaded stays loaded: its reference is kept.
+                        references: references.clone(),
                     },
                     other => other.clone(),
                 })

@@ -208,6 +208,7 @@ fn tools_stream_their_input() {
         description: "write a file".into(),
         input_schema: json!({"type": "object"}),
         cache: false,
+        defer: false,
     });
     assert_eq!(
         encode(&req).unwrap()["tools"][0]["eager_input_streaming"],
@@ -595,12 +596,14 @@ fn operator_notes_and_consecutive_tool_results() {
                     content: "1".into(),
                     is_error: false,
                     cache: false,
+                    references: Vec::new(),
                 },
                 Block::ToolResult {
                     tool_use_id: "y".into(),
                     content: "boom".into(),
                     is_error: true,
                     cache: false,
+                    references: Vec::new(),
                 },
                 Block::Text {
                     text: "next?".into(),

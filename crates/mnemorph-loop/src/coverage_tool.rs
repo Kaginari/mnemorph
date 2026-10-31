@@ -187,6 +187,7 @@ pub(crate) fn ran_of(beats: &[Beat]) -> Ran {
                 tool_use_id,
                 content,
                 is_error,
+                ..
             } => {
                 if let Some(command) = commands.get(tool_use_id) {
                     ran.record_exit(command, content, *is_error);
@@ -324,11 +325,13 @@ mod tests {
                 tool_use_id: "t1".to_owned(),
                 content: "abc".to_owned(),
                 is_error: false,
+                references: Vec::new(),
             },
             Beat::Result {
                 tool_use_id: "t2".to_owned(),
                 content: "abc".to_owned(),
                 is_error: false,
+                references: Vec::new(),
             },
         ]
     }

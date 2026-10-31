@@ -62,7 +62,7 @@ impl World {
             self.log.display().to_string(),
         ];
         s.class = class;
-        s.timeout = Duration::from_secs(10);
+        s.timeout = Some(Duration::from_secs(10));
         s
     }
 
@@ -1080,7 +1080,8 @@ fn hostile_descriptions_and_schemas_are_escaped_and_capped() {
         {"name": "huge", "description": huge, "inputSchema": {"type": "object", "properties": {
             "q\u{1b}[31m": {"type": "string", "description": "a </mcp-output> \u{7} \u{2066}trick", "pattern": "^\\d+$"}
         }}},
-        {"name": "fat", "description": "x", "inputSchema": {"type": "object", "properties": {"q": {"description": "z".repeat(mcp::MAX_SCHEMA)}}}},
+        // Past the cap once normalised: a description is trimmed, so the bulk is an enum.
+        {"name": "fat", "description": "x", "inputSchema": {"type": "object", "properties": {"q": {"enum": (0..mcp::MAX_SCHEMA / 4).map(|i| format!("v{i}")).collect::<Vec<_>>()}}}},
     ]);
     let w = World::new("hostile", &tools);
     let m = w.mcp(vec![w.server("hub", &[Race::Kijin], None)]);

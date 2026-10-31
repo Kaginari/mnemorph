@@ -1337,7 +1337,15 @@ fn child_run(
     // The MCP doors when a server may serve the race: fixed now, never changed mid-run; the
     // ask's tail carries level 0 and the tools ranked for this commission.
     if let Some(m) = &c.mcp {
-        tools.extend(m.offer(creature.race, &cx).tools);
+        let frame = crate::mcp_journal::frame(
+            m,
+            creature.race,
+            &cx,
+            &body.system,
+            &tools,
+            c.model.defers(&body.model),
+        );
+        tools.extend(m.offer_framed(creature.race, &cx, frame).tools);
     }
     let setup = Setup {
         model: Arc::clone(&c.model),

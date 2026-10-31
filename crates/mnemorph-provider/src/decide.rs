@@ -322,6 +322,7 @@ pub fn llm_request(model: &str, ask: &Ask, tag: &str) -> Request {
             description: "Give the answer to every question.".to_owned(),
             input_schema: answer_schema(ask),
             cache: false,
+            defer: false,
         }],
         messages: vec![Message {
             role: Role::User,

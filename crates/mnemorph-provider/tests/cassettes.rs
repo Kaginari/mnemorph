@@ -181,6 +181,7 @@ async fn a_recorded_tool_round_trip() {
             content: "Tempest is a harness.".into(),
             is_error: false,
             cache: false,
+            references: Vec::new(),
         }],
     });
     let body = encode_chat(&next);
