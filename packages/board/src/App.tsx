@@ -8,11 +8,14 @@ import { type Chats, useChats } from './data/chats.ts';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
+import { shown } from './safe/shown.ts';
 import { type Choice, useTheme } from './theme.ts';
 import { Pane } from './ui/Pane.tsx';
 import { Rail } from './ui/Rail.tsx';
+import { BodiesView } from './views/Bodies.tsx';
 import { LiveChat, PastChat, type Side } from './views/Chat.tsx';
 import { IntegrationsView } from './views/Integrations.tsx';
+import { JournalView } from './views/Journal.tsx';
 import { MemoryView } from './views/Memory.tsx';
 import { MetricsView } from './views/Metrics.tsx';
 import { OntologyView } from './views/Ontology.tsx';
@@ -109,6 +112,12 @@ function Centre({
   }
   if (load.state !== 'ready') return <WorldsView load={load} now={now} />;
   if (!world) return <NoWorld id={route.world} />;
+  if (route.name === 'section' && route.section === 'bodies') {
+    return <BodiesView key={world.id} w={world} tab={route.tab} />;
+  }
+  if (route.name === 'section' && route.section === 'journal') {
+    return <JournalView key={world.id} w={world} />;
+  }
   if (route.name === 'section' && route.section === 'memory') {
     return <MemoryView key={world.id} w={world} />;
   }
@@ -183,7 +192,8 @@ export function App() {
     return () => window.removeEventListener('keydown', on);
   }, []);
   useEffect(() => {
-    document.title = `${name} · Mnemorph`;
+    // The name is a world's own text, or a decoded address: escaped, never a live bidi mark.
+    document.title = `${shown(name)} · Mnemorph`;
   }, [name]);
 
   const togglePane = () =>

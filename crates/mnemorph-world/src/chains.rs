@@ -86,7 +86,17 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     let anchors = state_file_in(state, world, "anchors");
     for post in Post::ALL {
         let path = post_witness_in(state, world, post);
-        if path.exists() || anchored(world, &anchors, post.creature()).is_some() {
+        let logged_too = || {
+            logged(
+                &crate::regular::text(&world.join(LOG)).unwrap_or_default(),
+                post.creature(),
+            )
+        };
+        if path.exists()
+            || anchored(&anchors, post.creature())
+                .or_else(logged_too)
+                .is_some()
+        {
             out.push(Chained {
                 name: post.creature(),
                 path,
@@ -176,37 +186,34 @@ pub fn verify(world: &Path) -> Vec<Reading> {
 /// `log.md`'s; `None` when none was anchored yet.
 #[must_use]
 pub fn anchor_of(world: &Path, name: &str) -> Option<Head> {
+    anchor_with(world, name, || {
+        crate::regular::text(&world.join(LOG)).unwrap_or_default()
+    })
+}
+
+/// [`anchor_of`], `log.md`'s text given by `log` — read only when the state directory holds no
+/// anchor for `name` — for a reader that takes the world's files through its own guarded copy
+/// (the board).
+#[must_use]
+pub fn anchor_with(world: &Path, name: &str, log: impl FnOnce() -> String) -> Option<Head> {
     match kept_at(world) {
-        Some(kept) => anchored(world, &kept, name),
-        None => logged(
-            &std::fs::read_to_string(world.join(LOG)).unwrap_or_default(),
-            name,
-        ),
+        Some(kept) => anchored(&kept, name).or_else(|| logged(&log(), name)),
+        None => logged(&log(), name),
     }
 }
 
-/// The newest head of the journal `name` anchored in `kept` or, failing that, in `world`'s
-/// `log.md`.
-fn anchored(world: &Path, kept: &Path, name: &str) -> Option<Head> {
-    Journal::<Kept>::new(kept)
-        .read()
-        .ok()
-        .and_then(|r| {
-            r.rows
-                .into_iter()
-                .rev()
-                .find(|k| k.journal == name)
-                .map(|k| Head {
-                    digest: k.digest,
-                    line: k.line,
-                })
-        })
-        .or_else(|| {
-            logged(
-                &std::fs::read_to_string(world.join(LOG)).unwrap_or_default(),
-                name,
-            )
-        })
+/// The newest head of the journal `name` anchored in `kept`.
+fn anchored(kept: &Path, name: &str) -> Option<Head> {
+    Journal::<Kept>::new(kept).read().ok().and_then(|r| {
+        r.rows
+            .into_iter()
+            .rev()
+            .find(|k| k.journal == name)
+            .map(|k| Head {
+                digest: k.digest,
+                line: k.line,
+            })
+    })
 }
 
 /// [`verify`], the anchors kept at `kept`.

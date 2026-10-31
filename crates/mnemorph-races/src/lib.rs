@@ -22,7 +22,7 @@ pub use shelf::{
 };
 pub use speciality::{AttackClass, Speciality, glob, route, route_with};
 pub use value::{
-    Band, DECLINE_COOLDOWN_RUNS, FallReading, GateWord, Meter, Outcome, RECOVER_REPORTS, Rate,
-    Recent, Said, Signals, Z95, explain_fall, explain_rise, falls, fold_reports, meter, recovers,
-    rerise, rises, score, wilson,
+    Band, DECLINE_COOLDOWN_RUNS, FallReading, GateWord, LawBar, Meter, Outcome, RECOVER_REPORTS,
+    Rate, Recent, Said, Signals, Z95, explain_fall, explain_rise, falls, fold_reports, law_bars,
+    meter, meter_bars, recovers, rerise, rises, score, wilson,
 };

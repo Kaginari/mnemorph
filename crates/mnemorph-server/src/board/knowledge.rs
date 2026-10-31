@@ -18,7 +18,7 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{Board, WorldState, facts, memory, refuse};
+use super::{Board, WorldState, bodies, facts, journal, memory, orders, refuse, timeline};
 
 /// The largest body an act reads.
 pub const ACT_BYTES: usize = 4096;
@@ -258,6 +258,73 @@ pub async fn settle(
     blocking(move || {
         let path = present(&board, &world)?;
         facts::settle(&path, &fact, &seen, &proof).map(|done| BoardDone { done })
+    })
+    .await
+}
+
+/// `GET /api/w/<id>/bodies`: [`bodies::BoardBodies`], the colony and the race law.
+pub async fn get_bodies(
+    State(board): State<Arc<Board>>,
+    UrlPath(world): UrlPath<String>,
+) -> Response {
+    blocking(move || {
+        let path = present(&board, &world)?;
+        let chats = board
+            .bridge
+            .list()
+            .sessions
+            .iter()
+            .filter(|s| s.world == world)
+            .count();
+        bodies::bodies(&path, u32::try_from(chats).unwrap_or(u32::MAX))
+            .map_err(|e| (503, format!("the world's bodies cannot be read: {e}")))
+    })
+    .await
+}
+
+/// `GET /api/w/<id>/queue`: [`orders::BoardQueue`], the shared work queue.
+pub async fn get_queue(
+    State(board): State<Arc<Board>>,
+    UrlPath(world): UrlPath<String>,
+) -> Response {
+    blocking(move || {
+        let path = present(&board, &world)?;
+        orders::queue(&path).map_err(|e| (503, format!("the world's queue cannot be read: {e}")))
+    })
+    .await
+}
+
+/// `GET /api/w/<id>/timeline[?kind=&body=&offset=&limit=]`: [`timeline::BoardTimeline`].
+pub async fn get_timeline(
+    State(board): State<Arc<Board>>,
+    UrlPath(world): UrlPath<String>,
+    uri: Uri,
+) -> Response {
+    let filter = match timeline::Filter::parse(uri.query()) {
+        Ok(f) => f,
+        Err(e) => return refuse(StatusCode::BAD_REQUEST, &e),
+    };
+    blocking(move || {
+        let path = present(&board, &world)?;
+        Ok(timeline::timeline(&path, &filter))
+    })
+    .await
+}
+
+/// `GET /api/w/<id>/journal[?q=&offset=&limit=]`: [`journal::BoardJournal`], `log.md`.
+pub async fn get_journal(
+    State(board): State<Arc<Board>>,
+    UrlPath(world): UrlPath<String>,
+    uri: Uri,
+) -> Response {
+    let filter = match journal::Filter::parse(uri.query()) {
+        Ok(f) => f,
+        Err(e) => return refuse(StatusCode::BAD_REQUEST, &e),
+    };
+    blocking(move || {
+        let path = present(&board, &world)?;
+        journal::journal(&path, &filter)
+            .map_err(|e| (503, format!("the world's journal cannot be read: {e}")))
     })
     .await
 }

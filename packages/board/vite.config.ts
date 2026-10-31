@@ -1,10 +1,14 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
+import { fixtureBodies, fixtureQueue, journalOf, timelineOf } from './src/data/bodiesFixtures.ts';
 import { fixtureOverviews, fixtureWorlds } from './src/data/fixtures.ts';
 import { factsOf, fixtureMemory } from './src/data/knowledgeFixtures.ts';
 
-/** In `vite dev` only, `/api/worlds`, `/api/w/<id>` and its memory and facts answer with the fixtures. */
+/**
+ * In `vite dev` only, `/api/worlds`, `/api/w/<id>` and its memory, facts, bodies, queue, timeline
+ * and journal answer with the fixtures.
+ */
 function fixtures(): Plugin {
   return {
     name: 'mnemorph-board-fixtures',
@@ -24,6 +28,18 @@ function fixtures(): Plugin {
               page === 'memory' ? fixtureMemory : factsOf(url.searchParams.get('status')),
             ),
           );
+          return;
+        }
+        const more: Record<string, () => unknown> = {
+          bodies: () => fixtureBodies,
+          queue: () => fixtureQueue,
+          timeline: () => timelineOf(url.searchParams.get('kind'), url.searchParams.get('body')),
+          journal: () => journalOf(url.searchParams.get('q')),
+        };
+        const answer = page === undefined ? undefined : more[page];
+        if (answer) {
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(answer()));
           return;
         }
         if (page !== undefined) return next();

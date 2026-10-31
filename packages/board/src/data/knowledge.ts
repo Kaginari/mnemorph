@@ -297,7 +297,7 @@ async function read<T>(
  * `path` of world `id`, read on mount, when `query` changes, when `again` moves, and each time the
  * push channel names the world. A failed reread keeps what was shown.
  */
-function useKnowledge<T>(
+export function useKnowledge<T>(
   id: string,
   path: string,
   parse: (b: unknown) => T | undefined,

@@ -890,3 +890,79 @@ fn the_interval_never_moves_a_bar() {
     assert!(lo * 100.0 < 90.0);
     assert!(rises(Race::NamedSlime, &s));
 }
+
+#[test]
+fn the_law_bars_are_the_bars_the_decisions_read() {
+    use mnemorph_races::{Kind, Op, Scale, explain_rise, law_bars, meter_bars};
+    for race in Race::ALL {
+        let bars = law_bars(race);
+        if !race.is_ascended() {
+            assert!(bars.is_empty(), "{race} has no bars of its own");
+            continue;
+        }
+        // The rise bars are explain_rise's, in its order, at its thresholds.
+        let rise: Vec<_> = bars.iter().filter(|b| b.kind == Kind::Rise).collect();
+        let explained = explain_rise(race, &Signals::default());
+        assert_eq!(rise.len(), explained.len(), "{race}");
+        for (b, e) in rise.iter().zip(&explained) {
+            assert_eq!(
+                (b.meter, b.op, b.threshold, b.scale),
+                (e.meter, e.op, e.threshold, e.scale)
+            );
+        }
+        // Rise bars first, then the fall bar, then the events.
+        let kinds: Vec<Kind> = bars.iter().map(|b| b.kind).collect();
+        let mut sorted = kinds.clone();
+        sorted.sort_by_key(|k| match k {
+            Kind::Rise => 0,
+            Kind::Probation => 1,
+            _ => 2,
+        });
+        assert_eq!(kinds, sorted, "{race}");
+        for b in bars.iter().filter(|b| b.kind == Kind::Fall) {
+            assert_eq!((b.op, b.threshold, b.scale), (Op::Gt, 0.0, Scale::Count));
+        }
+    }
+    let probation = |r: Race| {
+        law_bars(r)
+            .into_iter()
+            .find(|b| b.kind == Kind::Probation)
+            .map(|b| (b.meter, b.threshold))
+    };
+    assert_eq!(probation(Race::HighElf), Some(("planLandRate", 70.0)));
+    assert_eq!(probation(Race::HighOrc), Some(("gateRight", 75.0)));
+    assert_eq!(probation(Race::NamedSlime), Some(("landRate", 75.0)));
+    assert_eq!(probation(Race::ArchDarkElf), Some(("precision", 70.0)));
+    assert_eq!(probation(Race::Oni), None);
+    assert_eq!(
+        law_bars(Race::Oni)
+            .iter()
+            .filter(|b| b.kind == Kind::Fall)
+            .count(),
+        2
+    );
+    // The headline meter's bars are the ones meter() bands by.
+    for race in Race::ALL {
+        let (label, ok, warn) = meter_bars(race);
+        let at = |v: f64| {
+            let s = Signals {
+                reports: 20,
+                findings: 20,
+                outward_acts: 20,
+                ask_done_rate: v,
+                plan_land_rate: v,
+                land_rate: v,
+                gate_right: v,
+                outward_clean_rate: v,
+                upheld_rate: v,
+                ..Signals::default()
+            };
+            meter(race, &s)
+        };
+        assert_eq!(at(ok).label, label);
+        assert_eq!(at(ok).band, Band::Ok, "{race}");
+        assert_eq!(at(ok - 0.01).band, Band::Warn, "{race}");
+        assert_eq!(at(warn).band, Band::Warn, "{race}");
+        assert_eq!(at(warn - 0.01).band, Band::Low, "{race}");
+    }
+}

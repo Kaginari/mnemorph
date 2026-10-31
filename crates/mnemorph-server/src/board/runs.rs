@@ -24,7 +24,7 @@ use crate::protocol::{Event, RESULT_BYTES};
 pub const LISTED: usize = 100;
 
 /// The most directory entries a listing looks at.
-const ENTRIES: usize = 5000;
+pub(crate) const ENTRIES: usize = 5000;
 
 /// The largest journal a listing reads to summarise; a larger one is listed unsummarised.
 pub const SUMMARY_BYTES: u64 = 4 << 20;
@@ -113,7 +113,7 @@ fn count(n: usize) -> u32 {
 
 /// The world's journals directory, if it is there and no part of it under the world is a
 /// symlink.
-fn journals_dir(world: &Path) -> Option<PathBuf> {
+pub(crate) fn journals_dir(world: &Path) -> Option<PathBuf> {
     let dir = journals(world);
     let rel = dir.strip_prefix(world).ok()?;
     let mut at = world.to_path_buf();
@@ -129,7 +129,7 @@ fn journals_dir(world: &Path) -> Option<PathBuf> {
 
 /// The bytes of the plain file at `path`, if it holds at most `cap`: the world's shared reader
 /// (a link not followed, a pipe not waited on, the handle checked).
-fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
+pub(crate) fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
     match regular::read(path, cap) {
         Ok(Some(b)) => Ok(b),
         Ok(None) => Err("not read: it is gone".into()),
@@ -139,7 +139,7 @@ fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
 }
 
 /// The journal's beats, and the numbers of the lines that do not read.
-fn beats(bytes: &[u8]) -> (Vec<Beat>, Vec<u32>) {
+pub(crate) fn beats(bytes: &[u8]) -> (Vec<Beat>, Vec<u32>) {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
     for (i, line) in bytes.split(|&b| b == b'\n').enumerate() {
@@ -184,7 +184,7 @@ fn standing(beats: &[Beat]) -> (RunState, String) {
 }
 
 /// `s` on one line, cut to `chars` characters.
-fn one_line(s: &str, chars: usize) -> String {
+pub(crate) fn one_line(s: &str, chars: usize) -> String {
     let line = s.split_whitespace().collect::<Vec<_>>().join(" ");
     match line.char_indices().nth(chars) {
         Some((at, _)) => format!("{}…", &line[..at]),
@@ -193,7 +193,7 @@ fn one_line(s: &str, chars: usize) -> String {
 }
 
 /// RFC 3339 in UTC, to the second.
-fn rfc3339(at: SystemTime) -> String {
+pub(crate) fn rfc3339(at: SystemTime) -> String {
     let secs = at
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));

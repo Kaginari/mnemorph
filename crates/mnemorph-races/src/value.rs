@@ -192,16 +192,31 @@ impl fmt::Display for Meter {
     }
 }
 
+/// A race's headline meter as the law sets it: what it measures, and its ok and warn bars,
+/// percentages. An ascended form is measured as its base race.
+#[must_use]
+pub fn meter_bars(race: Race) -> (&'static str, f64, f64) {
+    match race.base() {
+        Race::Elf => ("Plans landed", 80.0, 50.0),
+        Race::Orc => ("Gate right", 90.0, 70.0),
+        Race::Slime => ("Landed", 80.0, 50.0),
+        Race::Kijin => ("Outward clean", 90.0, 70.0),
+        Race::DarkElf => ("Upheld", 80.0, 50.0),
+        _ => ("Asks done", 80.0, 50.0),
+    }
+}
+
 /// The race's meter over `s`.
 #[must_use]
 pub fn meter(race: Race, s: &Signals) -> Meter {
-    let (label, value, ok, warn) = match race.base() {
-        Race::Elf => ("Plans landed", s.plan_land_rate, 80.0, 50.0),
-        Race::Orc => ("Gate right", s.gate_right, 90.0, 70.0),
-        Race::Slime => ("Landed", s.land_rate, 80.0, 50.0),
-        Race::Kijin => ("Outward clean", s.outward_clean_rate, 90.0, 70.0),
-        Race::DarkElf => ("Upheld", s.upheld_rate, 80.0, 50.0),
-        _ => ("Asks done", s.ask_done_rate, 80.0, 50.0),
+    let (label, ok, warn) = meter_bars(race);
+    let value = match race.base() {
+        Race::Elf => s.plan_land_rate,
+        Race::Orc => s.gate_right,
+        Race::Slime => s.land_rate,
+        Race::Kijin => s.outward_clean_rate,
+        Race::DarkElf => s.upheld_rate,
+        _ => s.ask_done_rate,
     };
     let record = match race.base() {
         Race::DarkElf => s.findings,
@@ -300,6 +315,44 @@ impl Bar {
             to: None,
         }
     }
+}
+
+/// One bar of the race law, unread: a meter held against a threshold, as a card shows it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LawBar {
+    /// What it decides: a rise (every rise bar must hold), probation (a rate under its fall bar),
+    /// or a fall at once (an event).
+    pub kind: Kind,
+    /// The meter, as the ledger names it.
+    pub meter: &'static str,
+    /// Whether the meter is a rate or a count.
+    pub scale: Scale,
+    /// How the reading is held against the threshold.
+    pub op: Op,
+    /// The threshold: a percentage for a rate, a count for a count.
+    pub threshold: f64,
+}
+
+impl Bar {
+    fn law(&self, kind: Kind) -> LawBar {
+        LawBar {
+            kind,
+            meter: self.meter,
+            scale: self.scale,
+            op: self.op,
+            threshold: self.threshold,
+        }
+    }
+}
+
+/// Every bar the law holds the ascended form `risen` to: its rise bars, its fall bar into
+/// probation, then the events that end it at once. Empty for a base race and the throne.
+#[must_use]
+pub fn law_bars(risen: Race) -> Vec<LawBar> {
+    let rise = rise_bars(risen).into_iter().map(|b| b.law(Kind::Rise));
+    let fall = fall_bar(risen).map(|b| b.law(Kind::Probation));
+    let events = event_bars(risen).into_iter().map(|b| b.law(Kind::Fall));
+    rise.chain(fall).chain(events).collect()
 }
 
 /// The record a rise needs: outward acts for an Oni, reports or findings for the others.

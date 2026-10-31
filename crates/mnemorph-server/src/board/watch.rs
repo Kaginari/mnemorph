@@ -29,6 +29,7 @@ use serde_json::json;
 use tokio::sync::broadcast;
 
 use mnemorph_loop::world::log::LOG;
+use mnemorph_loop::world::queue::{QUEUE, witness_of};
 use mnemorph_loop::world::{challenge, verdicts, worth::USAGE};
 
 use super::{Board, guard, refuse};
@@ -177,10 +178,15 @@ pub fn signature(world: &Path, budget: &mut usize) -> (u64, bool) {
             false,
             budget,
         )
-        && dir(&mut h, &world.join(".mnemorph/memory"), true, budget);
-    for trusted in [verdicts::verdicts_of(world), challenge::records_of(world)]
-        .into_iter()
-        .flatten()
+        && dir(&mut h, &world.join(".mnemorph/memory"), true, budget)
+        && file(&mut h, &world.join(QUEUE), budget);
+    for trusted in [
+        verdicts::verdicts_of(world),
+        challenge::records_of(world),
+        witness_of(world),
+    ]
+    .into_iter()
+    .flatten()
     {
         whole = whole && file(&mut h, &trusted, budget);
     }

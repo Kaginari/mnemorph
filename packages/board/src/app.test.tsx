@@ -74,3 +74,9 @@ test('a server that fails is said to', async () => {
   expect(host.textContent).toContain('The worlds could not be read');
   expect(host.textContent).toContain('503');
 });
+
+test('the tab title escapes a hidden character from the address or a world', async () => {
+  await mount('#/w/%E2%80%AEevil');
+  expect(document.title).not.toContain('\u202e');
+  expect(document.title).toContain('\\u{202e}');
+});
