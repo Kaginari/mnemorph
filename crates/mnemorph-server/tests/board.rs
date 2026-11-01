@@ -814,6 +814,55 @@ async fn the_opened_key_works_once_and_briefly() {
     assert_eq!(trade(&board, &late).await, StatusCode::UNAUTHORIZED);
 }
 
+/// The key in a launcher page.
+fn key_in(page: &str) -> String {
+    let at = page.find("#k=").unwrap() + 3;
+    page[at..at + 64].to_owned()
+}
+
+#[tokio::test]
+async fn the_browser_is_opened_on_a_file_never_a_key_on_a_command_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let (board, _) = living(Lifetimes::default());
+    let printed = key_of(&board.url());
+    let file = board.launch(dir.path()).unwrap();
+    assert!(file.starts_with(dir.path()));
+    let page = std::fs::read_to_string(&file).unwrap();
+    let key = key_in(&page);
+    assert_ne!(key, printed, "a key of its own");
+    assert!(page.contains(&format!(
+        "http-equiv=\"refresh\" content=\"0;url=http://{HOST}/#k={key}\""
+    )));
+    assert!(
+        page.contains(&format!("<a href=\"http://{HOST}/#k={key}\">")),
+        "a link too"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+    // The opener's whole command line: the program and the file, never the key.
+    let cmd = mnemorph_server::board::opener(&file);
+    let mut argv: Vec<String> = vec![cmd.get_program().to_string_lossy().into_owned()];
+    argv.extend(cmd.get_args().map(|a| a.to_string_lossy().into_owned()));
+    assert_eq!(argv.len(), 2, "{argv:?}");
+    assert_eq!(argv[1], file.to_string_lossy());
+    assert!(argv.iter().all(|a| !a.contains(&key)), "{argv:?}");
+
+    // Spent, its file goes; a second launcher replaces the first.
+    assert_eq!(trade(&board, &key).await, StatusCode::OK);
+    assert!(!file.exists(), "spent: removed");
+    let first = board.launch(dir.path()).unwrap();
+    let second = board.launch(dir.path()).unwrap();
+    assert!(!first.exists() && second.exists());
+    // Dead past its minute, it goes too.
+    board.pass(MIN);
+    board.refresh().unwrap();
+    assert!(!second.exists(), "dead: removed");
+}
+
 #[tokio::test]
 async fn a_session_ends_idle_or_old() {
     let worlds = |board: &Arc<Board>, cookie: &str| {

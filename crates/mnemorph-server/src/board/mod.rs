@@ -207,6 +207,9 @@ pub struct Board {
     slowed: Mutex<std::collections::BTreeSet<String>>,
     /// The human's global configuration file; `None` reads it where every reader resolves it.
     global: Mutex<Option<PathBuf>>,
+    /// The launcher file holding the open key, while one waits: removed once the key is spent or
+    /// dies.
+    launcher: Mutex<Option<PathBuf>>,
 }
 
 /// A fresh secret: 32 random bytes, in hex.
@@ -403,6 +406,7 @@ impl Board {
             sockets: AtomicUsize::new(0),
             slowed: Mutex::new(std::collections::BTreeSet::new()),
             global: Mutex::new(None),
+            launcher: Mutex::new(None),
         }))
     }
 
@@ -513,6 +517,55 @@ impl Board {
         Ok(format!("http://{}/#k={key}", self.host))
     }
 
+    /// A launcher for the browser: a fresh open key ([`Board::open_url`]) in a page under `dir`
+    /// (the `0700` state directory), `open-<random>.html`, `0600`, that refreshes to the board —
+    /// so the key is on no command line. It replaces any earlier launcher, and is removed once the
+    /// key is spent or past [`Lifetimes::open`].
+    ///
+    /// # Errors
+    ///
+    /// The random source fails, or the file cannot be written.
+    pub fn launch(&self, dir: &std::path::Path) -> Result<PathBuf, String> {
+        use std::io::Write as _;
+        let url = self.open_url()?;
+        let name = secret()?;
+        let file = dir.join(format!("open-{}.html", &name[..16]));
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            o.mode(0o600);
+        }
+        let mut f = o
+            .open(&file)
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+        f.write_all(launcher_page(&url).as_bytes())
+            .and_then(|()| f.sync_all())
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+        let was = self
+            .launcher
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .replace(file.clone());
+        if let Some(old) = was {
+            let _ = std::fs::remove_file(old);
+        }
+        Ok(file)
+    }
+
+    /// Remove the launcher file, if one waits.
+    fn unlaunch(&self) {
+        let was = self
+            .launcher
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(file) = was {
+            let _ = std::fs::remove_file(file);
+        }
+    }
+
     /// Put a fresh key in place of a printed one past [`Lifetimes::key`], and tell `on_key`;
     /// end the sessions past their lifetimes and drop an open key past its own.
     ///
@@ -544,6 +597,7 @@ impl Board {
             .is_some_and(|(_, at)| self.since(*at) >= l.open)
         {
             keys.open = None;
+            self.unlaunch();
         }
         keys.sessions
             .retain(|s| self.since(s.began) < l.absolute && self.since(s.used) < l.idle);
@@ -564,6 +618,7 @@ impl Board {
             }
             if opened {
                 keys.open = None;
+                self.unlaunch();
             }
             keys.pending = fresh;
             keys.minted = self.now();
@@ -1097,29 +1152,50 @@ async fn asset(method: Method, uri: Uri) -> Response {
     }
 }
 
-/// Open `url` in the browser: `open` on macOS, `xdg-open` elsewhere, waited on off the caller's
-/// thread.
-///
-/// # Errors
-///
-/// The opener cannot be started.
-pub fn browse(url: &str) -> Result<(), String> {
-    let opener = if cfg!(target_os = "macos") {
+/// The command that opens `target` in the browser: `open` on macOS, `xdg-open` elsewhere, with
+/// `target` its one argument. A key never is: a command line is readable by every local user
+/// while it runs, so the board opens a launcher file ([`Board::launch`]) that holds it.
+#[must_use]
+pub fn opener(target: &std::path::Path) -> std::process::Command {
+    let program = if cfg!(target_os = "macos") {
         "open"
     } else {
         "xdg-open"
     };
-    let mut child = std::process::Command::new(opener)
-        .arg(url)
+    let mut cmd = std::process::Command::new(program);
+    cmd.arg(target)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| format!("{opener}: {e}"))?;
+        .stderr(std::process::Stdio::null());
+    cmd
+}
+
+/// Open the launcher `file` in the browser ([`opener`]), waited on off the caller's thread.
+///
+/// # Errors
+///
+/// The opener cannot be started.
+pub fn browse(file: &std::path::Path) -> Result<(), String> {
+    let mut cmd = opener(file);
+    let name = cmd.get_program().to_string_lossy().into_owned();
+    let mut child = cmd.spawn().map_err(|e| format!("{name}: {e}"))?;
     std::thread::spawn(move || {
         let _ = child.wait();
     });
     Ok(())
+}
+
+/// The launcher page: a refresh to `url`, with a link for a browser that will not follow it.
+fn launcher_page(url: &str) -> String {
+    format!(
+        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\
+         <meta name=\"referrer\" content=\"no-referrer\">\
+         <meta http-equiv=\"refresh\" content=\"0;url={url}\">\
+         <title>Opening the Mnemorph board</title></head>\
+         <body><p>Opening the Mnemorph board\u{2026} If nothing happens, \
+         <a href=\"{url}\">open it here</a>. This link works once, within a minute.</p>\
+         </body></html>\n"
+    )
 }
 
 /// Whether the real board was embedded at build time, not the placeholder page.
@@ -1192,7 +1268,12 @@ pub fn run_at(
         // A socket that cannot be bound (a state directory past the socket path's length, say)
         // leaves the board serving, unstoppable but by a signal: said, never fatal.
         let control = match dir.map(control::bind) {
-            Some(Ok(l)) => Some(tokio::spawn(control::serve(l, Arc::clone(board), asked))),
+            Some(Ok(bound)) => Some(tokio::spawn(control::serve(
+                bound,
+                dir.map(std::path::Path::to_path_buf).unwrap_or_default(),
+                Arc::clone(board),
+                asked,
+            ))),
             Some(Err(e)) => {
                 eprintln!("mnemorphd board: no control socket ({e}); Ctrl-C or SIGTERM stops it");
                 None
@@ -1211,9 +1292,10 @@ pub fn run_at(
         if let Some(c) = control {
             c.abort();
             if let Some(d) = dir {
-                let _ = std::fs::remove_file(control::socket(d));
+                control::unbind(d);
             }
         }
+        board.unlaunch();
         // Every chat's child asked to leave, then its group killed: none outlives the board.
         board.bridge.end_all("the board stopped").await;
         let _ = stop.send(true);

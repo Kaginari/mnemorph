@@ -7,7 +7,8 @@
 //! running one —
 //! never one found on `PATH` or in the world —, in its own process group, so it outlives the app
 //! and a Ctrl-C at the terminal never reaches it. Its output goes to
-//! `$XDG_STATE_HOME/mnemorph/board.log`, which never holds a key either. `mnemorphd board stop`
+//! `$XDG_STATE_HOME/mnemorph/board.log`, which never holds a key either. It inherits the app's
+//! environment, the human's own shell, as a board they start by hand does. `mnemorphd board stop`
 //! stops it.
 
 use std::ffi::OsStr;
@@ -187,6 +188,9 @@ fn start(
     if let Some(state) = dir.parent() {
         cmd.env("XDG_STATE_HOME", state);
     }
+    // The board inherits this app's environment whole: the human's own shell, as when they run
+    // `mnemorphd board` themselves — its chats need the provider key it names. Each chat's child
+    // it starts gets only the allowlist the bridge passes, never this environment whole.
     cmd.envs(env.iter().copied())
         .env_remove("MNEMORPH_BODY")
         .stdin(Stdio::null())

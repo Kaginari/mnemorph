@@ -314,13 +314,20 @@ mod autostart {
             while !at.exists() && began.elapsed() < Duration::from_secs(10) {
                 std::thread::sleep(Duration::from_millis(50));
             }
-            let opened = std::fs::read_to_string(&at).unwrap();
-            let opened = opened.trim();
+            // The opener was handed a launcher file, never a key; the file holds a fresh one.
+            let argv = std::fs::read_to_string(&at).unwrap();
+            let argv = argv.trim();
+            assert!(!keyed(argv), "a key on the opener's command line: {argv}");
+            let file = PathBuf::from(argv);
+            assert!(file.starts_with(state(&h)), "{argv}");
+            let page = std::fs::read_to_string(&file).unwrap();
+            let at = page.find("#k=").unwrap() + 3;
+            let key = &page[at..at + 64];
             assert!(
-                opened.starts_with(&format!("{}/#k=", running.base)),
-                "{opened}"
+                page.contains(&format!("{}/#k={key}", running.base)),
+                "{page}"
             );
-            assert_ne!(opened, printed.trim(), "a fresh key, never the printed one");
+            assert!(!printed.contains(key), "a fresh key, never the printed one");
         } else {
             assert!(second.contains("the browser did not open"), "{second}");
             assert!(second.contains("no board built in"), "{second}");
@@ -337,6 +344,53 @@ mod autostart {
             out.trim().starts_with(&format!("{}/#k=", running.base)),
             "{out}"
         );
+    }
+
+    #[test]
+    fn the_control_socket_answers_only_its_nonce() {
+        let h = Home::new("autostart-nonce");
+        let _stop = Stop(state(&h));
+        ensure(&h, false, None);
+        let dir = state(&h);
+        let running = control::ping(&dir).unwrap();
+        // The nonce is the human's alone: a private file beside the socket.
+        let nonce_file = dir.join(control::NONCE);
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(&nonce_file).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        // Without it, or with another, `open`, `stop` and `ping` are refused, and nothing happens.
+        for line in [
+            "open".to_owned(),
+            "stop".to_owned(),
+            "ping".to_owned(),
+            format!("{} open", "0".repeat(64)),
+            format!("{} stop", "0".repeat(64)),
+            String::new(),
+        ] {
+            assert_eq!(
+                control::ask_raw(&dir, &line).unwrap(),
+                "refused",
+                "{line:?}"
+            );
+        }
+        assert!(!h.root.join("opened").exists(), "no browser was opened");
+        assert_eq!(
+            control::ping(&dir).unwrap().pid,
+            running.pid,
+            "still running"
+        );
+        // With it, the human's own commands work.
+        let nonce = std::fs::read_to_string(&nonce_file).unwrap();
+        assert!(
+            control::ask_raw(&dir, &format!("{nonce} ping"))
+                .unwrap()
+                .starts_with("ok ")
+        );
+        let (code, _, err) = h.run(&["board", "stop"], None);
+        assert_eq!(code, Some(0), "{err}");
+        assert!(!nonce_file.exists(), "the nonce goes with the board");
     }
 
     #[test]

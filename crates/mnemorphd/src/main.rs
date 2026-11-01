@@ -155,9 +155,10 @@ loading, `unretire <name>` takes that back. Each shows the Mind and asks for `y`
 for another machine, forward the port over SSH). It prints `http://127.0.0.1:<port>/#k=<key>`:
 the key works once, traded by the page for a session cookie, and a new one waits after it. One
 board runs per machine: a second launch prints the running board's URL, with the key waiting now,
-and exits. `--open` also opens the board in the browser (the URL passes through the opener's
-command line, so it carries a key of its own, valid once and for a minute; it is refused when
-no board is built in). An untraded key is replaced after 10 minutes, and a second launch prints
+and exits. `--open` also opens the board in the browser, through a launcher file in the state
+directory (`open-<random>.html`, `0600`) that holds a key of its own, valid once and for a minute,
+so no key is on the opener's command line; the file goes once the key is spent or dead. It is
+refused when no board is built in. An untraded key is replaced after 10 minutes, and a second launch prints
 the new one; a session ends after 12 idle hours, or 7 days. The worlds are those a session opened in (`$XDG_STATE_HOME/mnemorph/worlds.jsonl`)
 and those added by hand: `board add <dir>` lists a world, `board forget <dir>` stops listing one
 until it is added again or a session opens in it. A body never runs any of them.
@@ -537,7 +538,7 @@ fn serve_board(args: &[String], registry: PathBuf, hand: PathBuf) -> ExitCode {
             "open the URL above — its key works once. Ctrl-C or `mnemorphd board stop` stops it."
         }
     );
-    if open && let Err(e) = open_board(&served) {
+    if open && let Err(e) = open_board(&served, dir) {
         return fail(&e);
     }
     let out = board::run_at(listeners, &served, Some(dir));
@@ -548,11 +549,12 @@ fn serve_board(args: &[String], registry: PathBuf, hand: PathBuf) -> ExitCode {
     }
 }
 
-/// Open the board in the browser. The browser gets a key of its own, spent on arrival or dead
-/// within the minute: an opener's command line is readable by every local user while it runs.
-fn open_board(served: &mnemorph_server::board::Board) -> Result<(), String> {
-    let url = served.open_url()?;
-    if let Err(e) = mnemorph_server::board::browse(&url) {
+/// Open the board in the browser, through a launcher file under `dir` that holds a key of its own,
+/// spent on arrival or dead within the minute: an opener's command line is readable by every local
+/// user while it runs, so the key is never on it.
+fn open_board(served: &mnemorph_server::board::Board, dir: &Path) -> Result<(), String> {
+    let file = served.launch(dir)?;
+    if let Err(e) = mnemorph_server::board::browse(&file) {
         let _ = writeln!(std::io::stderr(), "mnemorphd board: {e}");
     }
     Ok(())
