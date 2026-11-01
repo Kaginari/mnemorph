@@ -203,11 +203,16 @@ runs `board`, `board add`, `board forget`, `board prune` or `board stop` (`MNEMO
 refused).
 
 **The control socket.** The board that holds the lock also answers `board.sock` beside it, a Unix
-socket made `0600` in the `0700` state directory. Each connection asks one line and reads one:
-`ping` (`ok <pid> http://127.0.0.1:<port>`), `open` (the board opens the browser itself, on a key
-of its own as `--open` does) and `stop`. The board answers only a peer of its own uid, and an
-asker speaks only to a socket its own uid owns, so `mnemorphd board stop` stops this user's board
-under this state directory and nothing else; no key crosses the socket. A second
+socket made `0600` in the `0700` state directory, and writes a fresh nonce to `board.ctl` beside
+it (`0600`) at its start. Each connection asks one line and reads one, the nonce first: `ping`
+(`ok <pid> http://127.0.0.1:<port>`), `open` (the board opens the browser itself, on a launcher
+file as `--open` does) and `stop`. A body runs as the human's uid, and one with the network may
+connect to a pathname socket, so the uid is not the guard: the board compares the nonce in
+constant time and answers `refused` to any line without it, and a body's sandbox reads no state
+directory, so it never has it. An asker speaks only to a socket and a nonce file its own uid owns;
+the board replaces only a socket left in its place, and refuses anything else there. No key
+crosses the socket. `mnemorphd board stop` stops this user's board under this state directory and
+nothing else. A second
 `mnemorphd board --open` asks the running board to open the browser this way. `--background`
 prints no URL: the board started with the terminal app runs so, and its log holds no key.
 
@@ -224,7 +229,8 @@ port = 7777        # the port a board started this way listens on; 7878 unless s
 A running board is reused, never a second: the control socket answers, or the lock refuses a
 second claim. With none running, the app starts `mnemorphd board --background` — the `mnemorphd`
 beside the running `mnemorph`, never one found on `PATH` or in the world — in its own process
-group, its output to `$XDG_STATE_HOME/mnemorph/board.log` (`0600`, begun again past 1 MiB). The
+group, with the app's environment (the human's own shell, as when they start it by hand; each of
+its chats' children still gets only the bridge's allowlist), its output to `$XDG_STATE_HOME/mnemorph/board.log` (`0600`, begun again past 1 MiB). The
 world is put on the board if it is not there yet. With `board.open`, the board opens the browser
 on a fresh one-time link, never a printed one. The app shows one line, `board:
 http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorphd board` for a
@@ -267,8 +273,13 @@ which cannot set a header, sends it as a `Sec-WebSocket-Protocol` entry `mnemorp
 
 Every secret is short-lived. A printed key not traded within 10 minutes is replaced, and the new
 URL kept in `board.url` for a second launch to print. `--open` hands the browser a key of its own,
-valid once and for 60 seconds, because the opener's command line is readable by every local user
-— and by a body's sandbox, which reads `/proc` — while it runs; it is refused when no board is built
+valid once and for 60 seconds, and never on a command line, which every local user — and a body's
+sandbox, which reads `/proc` — may read while it runs: the board writes a launcher page,
+`open-<random>.html` (`0600`) in the state directory, a `<meta http-equiv="refresh">` to
+`http://127.0.0.1:<port>/#k=<key>` with a link for a browser that does not follow it, and hands
+the opener (`xdg-open`, `open`) that file's path. The file is removed once its key is spent, or
+dies (checked every 30 seconds), or the board stops. Chromium follows the refresh from `file://`
+to loopback; a browser that does not shows the link. `--open` is refused when no board is built
 in, since no page would spend the key. A session ends after 12 idle hours, or 7 days after it
 began.
 
