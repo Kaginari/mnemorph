@@ -281,7 +281,8 @@ fn status_counts_the_last_runs_guts_classes() {
     use mnemorph_server::world::ledger::{Build, Timestamp};
     let w = empty_world("guts");
     let state = w.join("state");
-    let path = state_file(&state, &w, "guts");
+    // `status` names the world by its real path: macOS's temp directory is behind a link.
+    let path = state_file(&state, &w.canonicalize().unwrap(), "guts");
     let j = journal_at(&path);
     for (run, classes) in [
         ("r0", vec![Class::Positive]),
