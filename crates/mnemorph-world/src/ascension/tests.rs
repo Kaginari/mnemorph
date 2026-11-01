@@ -153,7 +153,10 @@ fn an_input_no_journal_carries_proposes_nothing() {
     let s = propose(&rows, &[adopted("gor", Race::Orc)]);
     assert!(s.proposals.is_empty());
     assert_eq!(s.unknown, vec![("gor".to_owned(), "slimeHealth")]);
-    assert_eq!(propose(&[], &[adopted("gor", Race::Orc)]), Survey::default());
+    assert_eq!(
+        propose(&[], &[adopted("gor", Race::Orc)]),
+        Survey::default()
+    );
 }
 
 /// A Named Slime risen at `T0 + 20h`, and its rows to then.

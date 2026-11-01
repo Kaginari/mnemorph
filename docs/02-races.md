@@ -1203,8 +1203,8 @@ probation; if it does not recover, a fall is proposed, and you apply that too. N
 the record and the doc carry over both ways. A rise or a fall is written where the race is trusted
 — the creatures' witness, by `mnemorphd roster rise <creature>` or `roster fall <creature>` at the
 terminal ([applying a rise or a fall](#applying-a-rise-or-a-fall)) — and the card is set to match;
-a card that only says the new race runs at the lower one. `mnemorphd roster set-race <creature>
-<race>` stays the human's own word, outside any proposal.
+a card that only says the new race runs at the lower one. The human's own word, outside any
+proposal, stays `mnemorphd roster set-race <creature> <race>`.
 
 **Technical detail.** The bars are evaluated over the report ledger's 28-day window at every
 read of it; the bars themselves are compiled (`rises`, `falls`, `recovers`), and nothing learned
@@ -1508,8 +1508,8 @@ Rules that hold for every ascension:
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
 - Each rise and fall is a row in the creatures' witness naming its proposal and the digest of the
   readings that caused it; probation is read from the reports, never written.
-- A creature can be named down by the human at any time (`mnemorphd roster set-race <creature>
-  <race>`), proposal or none.
+- A creature can be named down by the human at any time, proposal or none:
+  `mnemorphd roster set-race <creature> <race>`.
 
 ### Evolution — the other way to change
 
