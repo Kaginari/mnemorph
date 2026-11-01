@@ -335,17 +335,33 @@ pub fn provider_keys(global: &Path, world: &Path) -> Vec<String> {
     .unwrap_or_default()
 }
 
-/// The board's clock: the system's, moved on by a test.
+/// The board's clock: the system's, moved on by a test, or stopped by one.
 #[derive(Clone, Default)]
-pub(crate) struct Clock(Arc<Mutex<Duration>>);
+pub(crate) struct Clock(Arc<Mutex<Hands>>);
+
+/// What a test did to the clock: how far it moved it on, and the instant it stopped it at.
+#[derive(Default)]
+struct Hands {
+    passed: Duration,
+    stopped: Option<Instant>,
+}
 
 impl Clock {
     pub(crate) fn now(&self) -> Instant {
-        Instant::now() + *lock(&self.0)
+        let hands = lock(&self.0);
+        hands.stopped.unwrap_or_else(Instant::now) + hands.passed
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn pass(&self, by: Duration) {
-        *lock(&self.0) += by;
+        lock(&self.0).passed += by;
+    }
+
+    /// Stop the system's time: from here on only [`Clock::pass`] moves the clock.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn stop(&self) {
+        let mut hands = lock(&self.0);
+        hands.stopped.get_or_insert_with(Instant::now);
     }
 }
 

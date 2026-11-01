@@ -1,10 +1,13 @@
 //! `mnemorphd onto owner`: each path's owner, the rule and the claim, read from the docs with no
 //! key and no session.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::process::Command;
 
 fn onto(args: &[&str], cwd: &std::path::Path) -> (bool, String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(args)
         .current_dir(cwd)
         .env_remove("ANTHROPIC_API_KEY")
@@ -156,7 +159,7 @@ fn the_queue_door() {
     assert!(ok && out.contains("\tclaimed\t"), "{out}");
     let (ok, out, _) = q(&["list"]);
     assert!(ok && out.lines().count() == 1, "{out}");
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(["q", "close", "nope"])
         .env("XDG_STATE_HOME", state())
         .current_dir(&dir)
@@ -174,7 +177,7 @@ fn a_bodys_command_reads_the_queue_but_never_moves_it() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".mnemorph")).unwrap();
     let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
             .args(args)
             .current_dir(&dir)
             .env("MNEMORPH_BODY", "slime-s")
@@ -201,7 +204,7 @@ fn housekeep_refuses_a_body_and_reads_a_whole_roster() {
     )
     .unwrap();
     let run = |body: Option<&str>| {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        let mut c = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"));
         c.args(["housekeep", "--heal"]).current_dir(&dir);
         if let Some(b) = body {
             c.env("MNEMORPH_BODY", b);

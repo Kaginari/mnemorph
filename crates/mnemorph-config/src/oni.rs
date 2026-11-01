@@ -74,10 +74,7 @@ impl fmt::Display for Admitted {
 
 /// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
 fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))
+    mnemorph_tools::dirs::state_home()
 }
 
 /// Where envelope uses are counted for every world: `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl`.

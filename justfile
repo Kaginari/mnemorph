@@ -24,14 +24,19 @@ rust:
     cargo clippy --workspace --all-targets -- -D warnings
     # The protocol's TypeScript is regenerated whole, so a type removed from the Rust goes too.
     rm -rf packages/protocol/src/generated
-    cargo nextest run --workspace --no-tests=pass
+    # Under a sentinel home: a test that writes to the home it was started under fails the check.
+    tools/test-env.sh cargo nextest run --workspace --no-tests=pass
     cargo deny check
+
+# Tests under a sentinel home, never the developer's: `just test-isolated -p mnemorph-tui`.
+test-isolated *args:
+    tools/test-env.sh cargo nextest run {{args}}
 
 # The race law is covered whole: every region of mnemorph-races runs under its tests.
 law:
     # Old profile data merges into a new run and can read a covered function as missed.
     cargo llvm-cov clean --workspace
-    cargo llvm-cov -p mnemorph-races --fail-under-regions 100 --summary-only
+    tools/test-env.sh cargo llvm-cov -p mnemorph-races --fail-under-regions 100 --summary-only
 
 # TypeScript: Biome and the board's own lint (tokens only, no HTML from strings), types, tests,
 # and the board's build. Its Playwright suite is `just board-e2e` (CI runs it on Linux).
@@ -57,6 +62,9 @@ board-e2e:
 # Every crate depends only on lower layers (docs/05-architecture.md).
 layers:
     node tools/check-layers.mjs
+    # The shipped binaries are built without the board's test seams.
+    if cargo tree -p mnemorphd -p mnemorph-tui -e normal,build -f '{p} {f}' | grep -q 'test-support'; then \
+        echo "a shipped binary is built with the test-support feature"; exit 1; fi
 
 # The bench, with no model: its report's rules, and every task real and answer-free.
 bench:

@@ -241,6 +241,14 @@ fn rig(name: &str, limits: Limits) -> Rig {
         ("AWS_PROFILE", "prod".to_owned()),
         ("SSH_AUTH_SOCK", "/tmp/ssh-x/agent".to_owned()),
         ("LANG", "C".to_owned()),
+        // The child's home and state are the rig's, never the human's running the tests.
+        ("HOME", root.display().to_string()),
+        ("XDG_STATE_HOME", root.join("state").display().to_string()),
+        ("XDG_CONFIG_HOME", root.join("config").display().to_string()),
+        ("XDG_DATA_HOME", root.join("data").display().to_string()),
+        ("XDG_CACHE_HOME", root.join("cache").display().to_string()),
+        ("XDG_RUNTIME_DIR", root.join("run").display().to_string()),
+        ("MNEMORPH_ISOLATED", "1".to_owned()),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_owned(), v))
@@ -278,6 +286,9 @@ fn rig(name: &str, limits: Limits) -> Rig {
         limits,
     )
     .unwrap();
+    // The board's clock moves only when a test moves it: a floor or a lifetime is an exact
+    // instant, never the scheduler's jitter.
+    board.stop_clock();
     let l = listeners.into_iter().next().unwrap();
     l.set_nonblocking(true).unwrap();
     let l = tokio::net::TcpListener::from_std(l).unwrap();
@@ -648,7 +659,10 @@ async fn a_waiting_ask_survives_a_reload_and_the_reloaded_tab_answers_it() {
     assert_eq!(first["id"], "gate-1");
     assert_eq!(first["params"]["act"], "rm -rf build");
     let left = first["params"]["leftMs"].as_u64().unwrap();
-    assert!(left > 590_000 && left <= 600_000, "{left}");
+    assert_eq!(
+        left, 600_000,
+        "the clock is stopped: the whole wait is left"
+    );
     drop(tab);
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -659,10 +673,7 @@ async fn a_waiting_ask_survives_a_reload_and_the_reloaded_tab_answers_it() {
     let again = seen.last().unwrap();
     assert_eq!(again["id"], "gate-1");
     let left = again["params"]["leftMs"].as_u64().unwrap();
-    assert!(
-        left <= 570_000 && left > 560_000,
-        "time left counts down: {left}"
-    );
+    assert_eq!(left, 570_000, "time left counts down by the 30 s passed");
     tab.seen(7, again).await;
     r.board.pass(Duration::from_millis(300));
     tab.answer(again, true, &again["params"]["digest"]).await;
@@ -1185,7 +1196,7 @@ async fn an_allow_before_the_render_ack_or_too_soon_after_it_is_refused() {
     tab.seen(2, &ask).await;
     tab.answer(&ask, true, digest).await;
     assert!(tab.refused().await.contains("too fast"));
-    // Real time passes too, a few milliseconds: 250 on the board's clock stays short of 300.
+    // 250 ms on the board's stopped clock: short of 300, however long the runner takes.
     r.board.pass(Duration::from_millis(250));
     tab.answer(&ask, true, digest).await;
     assert!(tab.refused().await.contains("too fast"));

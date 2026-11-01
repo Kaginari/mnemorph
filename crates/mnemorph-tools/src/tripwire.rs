@@ -395,10 +395,7 @@ pub fn kijin_witness(world: &Path, post: &str) -> Option<PathBuf> {
 
 /// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
 pub(crate) fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))
+    mnemorph_sandbox::dirs::state_home()
 }
 
 /// `<world's name>-<fnv64a of its path>`.

@@ -492,9 +492,18 @@ impl Board {
 
     /// Move the board's clock on by `by`, as if that much time had passed: for a test of the
     /// lifetimes that need not sleep through them.
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn pass(&self, by: Duration) {
         self.clock.pass(by);
+    }
+
+    /// Stop the board's clock: from here on only [`Board::pass`] moves it, so a test of a
+    /// lifetime or a floor names exact instants, never the scheduler's jitter.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn stop_clock(&self) {
+        self.clock.stop();
     }
 
     /// The live chats.

@@ -3,6 +3,9 @@
 //! each order marked witnessed or not; the timeline is the run journals' commissions and the gate's
 //! verdicts; the journal is `log.md`'s entries, capped; the race art is served by its exact name.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -150,7 +153,7 @@ impl Home {
     }
 
     fn cmd(&self, args: &[&str]) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        let mut c = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"));
         c.args(args)
             .current_dir(&self.root)
             .env_remove("MNEMORPH_BODY")

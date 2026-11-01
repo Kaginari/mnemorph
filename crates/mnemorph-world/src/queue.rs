@@ -50,10 +50,7 @@ pub(crate) fn state_file_in(state: &Path, world: &Path, kind: &str) -> PathBuf {
 
 /// The human's state directory: `$XDG_STATE_HOME` when absolute, else `~/.local/state`.
 pub(crate) fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))
+    mnemorph_sandbox::dirs::state_home()
 }
 
 /// The human, as a mover: they stand over every body.

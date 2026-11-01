@@ -3,11 +3,14 @@
 //! its children — reads the key from the file the human's global file names, and sends it to the
 //! provider. No output of the child, nor any hole it reports, carries the key's bytes.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -104,7 +107,7 @@ fn provider() -> (String, mpsc::Receiver<String>) {
 
 /// The child, as the board starts it: in the world, its environment cleared and made anew.
 fn spawn(g: &Ground, env: &[(String, String)]) -> std::process::Child {
-    Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .arg("--world")
         .arg(g.at("world"))
         .current_dir(g.at("world"))
@@ -261,7 +264,7 @@ fn http(addr: &str, request: &str) -> String {
 /// The board, served on a free port over the fake home, logged in: it, its address and cookie.
 fn board(g: &Ground) -> (std::process::Child, String, String) {
     let cmd = |args: &[&str]| {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        let mut c = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"));
         c.args(args)
             .current_dir(g.at(""))
             .env_clear()
