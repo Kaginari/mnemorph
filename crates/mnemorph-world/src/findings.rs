@@ -277,13 +277,46 @@ fn unowned(roster: &Roster, tracked: &[String], out: &mut Vec<Finding>) {
     }
 }
 
-/// The facts' findings: `contested-fact` (medium), a fact read stale because its evidence moved
-/// (`stale-fact`, low), a free fact that landed beside similar ones with no label from the
-/// parent (`untriaged-fact`, low).
+/// The facts' findings: trusted facts that cannot be read (`facts-unavailable`, high), what the
+/// in-world copy says beyond them (`untrusted-fact`, high, one per fact), a settle dropped on
+/// import that no one has given again (`unproven-settle`, low), `contested-fact` (medium), a fact
+/// read stale because its evidence moved (`stale-fact`, low), a free fact that landed beside
+/// similar ones with no label from the parent (`untriaged-fact`, low). The first three stand on
+/// the in-world copy alone, so no landing elsewhere is held by what a stranger wrote there.
 #[must_use]
 pub fn fact_findings(facts: &crate::facts::Facts, world: &std::path::Path) -> Vec<Finding> {
-    use crate::facts::Status;
+    use crate::facts::{FACTS, Status};
     let mut out = Vec::new();
+    let on_the_copy = |code, severity, message: String| Finding {
+        code,
+        severity,
+        at: FACTS.into(),
+        paths: vec![FACTS.into()],
+        creatures: Vec::new(),
+        message,
+    };
+    if let Some(why) = &facts.unavailable {
+        out.push(on_the_copy(
+            "facts-unavailable",
+            Severity::High,
+            format!("no fact stands, settled or not: {why}"),
+        ));
+    }
+    for u in &facts.untrusted {
+        out.push(on_the_copy("untrusted-fact", Severity::High, u.message()));
+    }
+    for id in &facts.unproven {
+        if facts.facts.get(id).is_some_and(|f| !f.settled) {
+            out.push(on_the_copy(
+                "unproven-settle",
+                Severity::Low,
+                format!(
+                    "#{id} read settled in the in-world file it was imported from, which cannot be \
+                     proven: `mnemorphd onto settle #{id}` settles it again"
+                ),
+            ));
+        }
+    }
     for f in facts.live() {
         let mut push = |code, severity, message: String| {
             out.push(Finding {

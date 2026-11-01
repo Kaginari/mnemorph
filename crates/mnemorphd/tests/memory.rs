@@ -111,47 +111,90 @@ fn a_retired_note_is_listed_and_the_human_wakes_it() {
     let _ = fs::remove_dir_all(&world);
 }
 
-/// The human settles a contested fact; a body is never let do it, and an unknown id is refused.
+/// The human settles a contested fact, shown and asked at the terminal: a body is never let do
+/// it, piped input is no answer, `n` settles nothing, an unknown id is refused, and `y` files the
+/// settle in the trusted facts under the state directory.
 #[test]
-fn the_human_settles_a_fact_and_a_body_cannot() {
+fn the_human_settles_a_fact_at_the_terminal_and_a_body_cannot() {
     use mnemorph_server::world::Facts;
     use mnemorph_server::world::facts::{Event, from_unsaid};
-    let world = std::env::temp_dir().join(format!("mnemorph-onto-settle-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&world);
+    let root = std::env::temp_dir().join(format!("mnemorph-onto-settle-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let world = root.join("world");
+    let state = root.join("state");
     fs::create_dir_all(world.join("src")).unwrap();
     let said = from_unsaid("src/ build=cargo test", "slime-a", None).unwrap();
     let Event::Support { id, .. } = &said else {
         panic!("{said:?}");
     };
     let id = id.clone();
-    Facts::record(&world, &said).unwrap();
+    Facts::record_in(Some(&state), &world, &said).unwrap();
     let w = world.to_str().unwrap();
     let bin = env!("CARGO_BIN_EXE_mnemorphd");
-    let body = Command::new(bin)
-        .args(["onto", "settle", &id, "--world", w])
-        .env("MNEMORPH_BODY", "slime-a")
-        .output()
-        .unwrap();
+    let detached = |args: &[&str], body: Option<&str>| {
+        let mut c = if cfg!(target_os = "linux") {
+            let mut c = Command::new("setsid");
+            c.args(["-w", bin]);
+            c
+        } else {
+            Command::new(bin)
+        };
+        c.args(args)
+            .env("XDG_STATE_HOME", &state)
+            .env_remove("MNEMORPH_BODY")
+            .stdin(std::process::Stdio::null());
+        if let Some(b) = body {
+            c.env("MNEMORPH_BODY", b);
+        }
+        c.output().unwrap()
+    };
+    let settled = || Facts::load_in(Some(&state), &world).facts[&id].settled;
+    let body = detached(&["onto", "settle", &id, "--world", w], Some("slime-a"));
     assert_eq!(body.status.code(), Some(2));
-    let unknown = Command::new(bin)
-        .args(["onto", "settle", "nope", "--world", w])
-        .env_remove("MNEMORPH_BODY")
-        .output()
-        .unwrap();
+    let unknown = detached(&["onto", "settle", "nope", "--world", w], None);
     assert_eq!(unknown.status.code(), Some(2));
-    let human = Command::new(bin)
-        .args(["onto", "settle", &format!("#{id}"), "--world", w])
-        .env_remove("MNEMORPH_BODY")
-        .output()
-        .unwrap();
+    let piped = detached(&["onto", "settle", &id, "--world", w], None);
+    assert_eq!(piped.status.code(), Some(2));
     assert!(
-        human.status.success(),
-        "{}",
-        String::from_utf8_lossy(&human.stderr)
+        String::from_utf8_lossy(&piped.stderr).contains("terminal"),
+        "{piped:?}"
     );
-    let f = &Facts::load(&world).facts[&id];
-    assert!(f.settled);
-    let _ = fs::remove_dir_all(&world);
+    assert!(!settled(), "no terminal, no settle");
+    #[cfg(target_os = "linux")]
+    {
+        use std::io::Write as _;
+        let at_tty = |input: &str| {
+            let line = format!("{bin} onto settle '#{id}' --world '{w}'");
+            let mut child = Command::new("script")
+                .args(["-qec", &line, "/dev/null"])
+                .env("XDG_STATE_HOME", &state)
+                .env_remove("MNEMORPH_BODY")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut stdin = child.stdin.take().unwrap();
+            // Typed once the question is up: the terminal reads it, not the pipe.
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = stdin.write_all(input.as_bytes());
+            drop(stdin);
+            child.wait_with_output().unwrap()
+        };
+        let no = at_tty("n\n");
+        assert!(
+            String::from_utf8_lossy(&no.stdout).contains("build=cargo test"),
+            "the fact is shown: {no:?}"
+        );
+        assert!(!settled(), "`n` settles nothing: {no:?}");
+        let yes = at_tty("y\n");
+        assert!(
+            String::from_utf8_lossy(&yes.stdout).contains(&format!("settled #{id}")),
+            "{yes:?}"
+        );
+        assert!(settled(), "{yes:?}");
+    }
+    let _ = fs::remove_dir_all(&root);
 }
 
 /// A proposed claim is listed with its vouch; the human confirms it, and it is grounded and

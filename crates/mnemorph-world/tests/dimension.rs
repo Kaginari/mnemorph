@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use mnemorph_world::dimension::{
     MANIFEST, Manifest, Proposal, Relation, STALE_AFTER, Sighting, glue, known, load_sightings,
-    proposals, register_at, relate, sight, sightings_file, sightings_of, stale_findings, unrelate,
-    world_id,
+    proposals, register_at, relate_at, relations_file, sight, sightings_file, sightings_of,
+    stale_findings, unrelate_at, untrusted_relations, world_id,
 };
 
 struct Dim {
@@ -219,8 +219,8 @@ fn a_relation_is_proposed_only_when_named_twice_and_written_only_by_the_human() 
         "{\n  \"dependencies\": {\n    \"b\": \"file:../../b\"\n  }\n}\n",
     );
     commit(&a);
-    let m = Manifest::load(&a).unwrap();
     let r = d.registry();
+    let m = Manifest::trusted(Some(&r), &a).unwrap();
     let next_session = || register_at(&r, &a, None).unwrap();
 
     sight(&a, &d.registry(), "elf-a", "Cargo.toml").unwrap();
@@ -259,20 +259,66 @@ fn a_relation_is_proposed_only_when_named_twice_and_written_only_by_the_human() 
     // Proposing wrote nothing.
     assert!(!a.join(MANIFEST).exists());
 
-    // The human's yes writes it; then it is stated, no longer proposed.
-    assert!(relate(&a, &b, "depends-on").unwrap());
-    assert!(!relate(&a, &b, "depends-on").unwrap());
-    let m = Manifest::load(&a).unwrap();
+    // The human's yes writes it, outside the world, its in-world copy after; then it is stated,
+    // no longer proposed.
+    assert!(relate_at(&r, &a, &b, "depends-on").unwrap());
+    assert!(!relate_at(&r, &a, &b, "depends-on").unwrap());
+    let m = Manifest::trusted(Some(&r), &a).unwrap();
     assert!(m.states_id(&bid, "depends-on"));
     assert_eq!(proposals(&load_sightings(&r, &a), &m, 1), vec![]);
+    assert!(!relations_file(&r, &a).starts_with(&a));
+    assert_eq!(
+        Manifest::read_file(&a).unwrap(),
+        m,
+        "the copy reads as the trusted relations"
+    );
 
     // Revoked, it is gone, and named twice it is proposed again, never rewritten by itself.
-    assert!(unrelate(&a, &b, "depends-on").unwrap());
-    assert!(!unrelate(&a, &b, "depends-on").unwrap());
-    let m = Manifest::load(&a).unwrap();
+    assert!(unrelate_at(&r, &a, &b, "depends-on").unwrap());
+    assert!(!unrelate_at(&r, &a, &b, "depends-on").unwrap());
+    let m = Manifest::trusted(Some(&r), &a).unwrap();
     assert_eq!(m.relations, vec![]);
     assert_eq!(proposals(&load_sightings(&r, &a), &m, 2).len(), 1);
-    assert_eq!(Manifest::load(&a).unwrap().relations, vec![]);
+    assert_eq!(Manifest::read_file(&a).unwrap().relations, vec![]);
+}
+
+/// The in-world `dimension.toml` is a copy: a relation or an inverse it states that the trusted
+/// relations do not — a commit's, a clone's, a body's — states nothing, and is flagged as a
+/// proposal the human's `onto relate` accepts.
+#[test]
+fn a_relation_only_the_in_world_copy_states_is_a_proposal_never_a_relation() {
+    let d = Dim::new();
+    let r = d.registry();
+    let a = d.world("a");
+    let b = d.world("b");
+    write(
+        &a.join(MANIFEST),
+        &format!(
+            "[inverse]\nships = \"shipped-by\"\n\n[[relation]]\nworld = \"{}\"\ntype = \"deploys\"\n",
+            b.display()
+        ),
+    );
+    let trusted = Manifest::trusted(Some(&r), &a).unwrap();
+    assert_eq!(trusted, Manifest::default());
+    assert!(!trusted.states(&b.display().to_string(), "deploys"));
+    let f = untrusted_relations(&a, &trusted);
+    assert_eq!(f.len(), 2, "{f:?}");
+    assert!(
+        f.iter()
+            .all(|f| f.code == "untrusted-relation" && !f.severity.blocks())
+    );
+    assert!(f[0].message.contains("mnemorphd onto relate"), "{f:?}");
+    // The human's yes states it, and the flag goes.
+    assert!(relate_at(&r, &a, &b, "deploys").unwrap());
+    let trusted = Manifest::trusted(Some(&r), &a).unwrap();
+    assert!(trusted.states(&b.display().to_string(), "deploys"));
+    assert_eq!(untrusted_relations(&a, &trusted), vec![]);
+    // A trusted journal edited by hand does not read: never fewer relations, never more.
+    let journal = relations_file(&r, &a);
+    let text = fs::read_to_string(&journal).unwrap();
+    fs::write(&journal, text.replace("deploys", "watches")).unwrap();
+    let e = Manifest::trusted(Some(&r), &a).unwrap_err();
+    assert!(e.contains("do not verify"), "{e}");
 }
 
 #[test]
@@ -352,14 +398,9 @@ fn a_learned_relation_unseen_for_thirty_sessions_is_proposed_for_removal() {
     assert!(!f[0].severity.blocks());
 }
 
-fn state(world: &Path, other: &Path, kind: &str) {
-    let mut m = Manifest::load(world).unwrap();
-    m.relations.push(Relation {
-        world: other.display().to_string(),
-        kind: kind.into(),
-        remote: None,
-    });
-    m.save(world).unwrap();
+/// `kind` towards `other` stated for `world`, as the human's `onto relate` states it.
+fn state(d: &Dim, world: &Path, other: &Path, kind: &str) {
+    assert!(relate_at(&d.registry(), world, other, kind).unwrap());
 }
 
 #[test]
@@ -370,18 +411,18 @@ fn two_manifests_glue_on_what_they_share_and_obstruct_on_nothing() {
     let c = d.world("c");
     let e = d.world("e");
     // a deploys b; b says it is deployed by a: glued.
-    state(&a, &b, "deploys");
-    state(&b, &a, "deployed-by");
+    state(&d, &a, &b, "deploys");
+    state(&d, &b, &a, "deployed-by");
     // a reads secrets from c; c says it deploys a: nothing in common.
-    state(&a, &c, "reads-secrets-from");
-    state(&c, &a, "deploys");
+    state(&d, &a, &c, "reads-secrets-from");
+    state(&d, &c, &a, "deploys");
     // e alone says something of a: one-sided, lawful.
-    state(&e, &a, "watches");
+    state(&d, &e, &a, "watches");
     let before: Vec<String> = [&b, &c, &e]
         .iter()
         .map(|w| fs::read_to_string(w.join(MANIFEST)).unwrap())
         .collect();
-    let (glues, findings) = glue(&a, &known(&d.registry())).unwrap();
+    let (glues, findings) = glue(&a, &known(&d.registry()), Some(&d.registry())).unwrap();
     let of = |w: &Path| {
         glues
             .iter()
@@ -413,36 +454,39 @@ fn a_neighbours_bad_manifest_is_reported_and_never_fails_this_worlds_check() {
     let b = d.world("b");
     let f = d.world("f");
     let h = d.world("h");
-    state(&a, &b, "deploys");
-    // A kind no CLI would write, a FIFO no read should wait on, a file past the cap.
-    write(
-        &b.join(MANIFEST),
-        &format!(
-            "[[relation]]\nworld = \"{}\"\ntype = \"x\\u001b[2J\"\n",
-            a.display()
-        ),
-    );
-    let fifo = f.join(MANIFEST);
+    state(&d, &a, &b, "deploys");
+    state(&d, &b, &a, "deploys");
+    state(&d, &f, &a, "watches");
+    // b's relations edited by hand, f's cut with a line that is no row; h's in-world copy is a
+    // FIFO no read should wait on, and is never read for a relation anyway.
+    let rb = relations_file(&d.registry(), &b);
+    let text = fs::read_to_string(&rb).unwrap();
+    fs::write(&rb, text.replace("deploys", "x\\u001b[2J")).unwrap();
+    let rf = relations_file(&d.registry(), &f);
+    let mut text = fs::read_to_string(&rf).unwrap();
+    text.push_str("not a row\n");
+    fs::write(&rf, text).unwrap();
+    fs::remove_file(h.join(MANIFEST)).ok();
     assert!(
         std::process::Command::new("mkfifo")
-            .arg(&fifo)
+            .arg(h.join(MANIFEST))
             .status()
             .unwrap()
             .success()
     );
-    write(&h.join(MANIFEST), &"#".repeat(70 * 1024));
-    let (glues, findings) = glue(&a, &known(&d.registry())).unwrap();
+    let (glues, findings) = glue(&a, &known(&d.registry()), Some(&d.registry())).unwrap();
     let codes: Vec<&str> = findings.iter().map(|f| f.code).collect();
-    assert_eq!(codes, vec!["unreadable-neighbour"; 3], "{findings:?}");
+    assert_eq!(codes, vec!["unreadable-neighbour"; 2], "{findings:?}");
     assert!(findings.iter().all(|f| !f.severity.blocks()));
     assert!(findings.iter().all(|f| !f.message.contains('\u{1b}')));
-    // b's relation is read as one-sided from a's own manifest; nothing obstructs.
+    // b's relation is read as one-sided from a's own; nothing obstructs.
     assert_eq!(glues.len(), 1);
     assert_eq!(glues[0].ours, vec!["deploys".to_owned()]);
-    // This world's own bad kind is refused on load.
+    // This world's own copy with a bad kind does not read, and the trusted relations still do.
     write(
         &a.join(MANIFEST),
         "[[relation]]\nworld = \"/b\"\ntype = \"Deploys Everything\"\n",
     );
-    assert!(Manifest::load(&a).is_err());
+    assert!(Manifest::read_file(&a).is_err());
+    assert!(Manifest::trusted(Some(&d.registry()), &a).is_ok());
 }

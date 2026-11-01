@@ -82,6 +82,30 @@ pub fn by_build<'a>(
     rows.iter().filter(move |r| &r.build == build)
 }
 
+/// How a verdict names a check the human pinned ([`crate::pins::Pinned::source`]).
+pub const HUMAN_PIN: &str = "the human's pin";
+
+/// The newest verdict among `rows` that proves a fact about `about`, with its number from 1: a
+/// `PASS` that checked something — not `unchecked` — on at least one line the human pinned, of a
+/// landing that changed `about` or a path under it. An Orc's own pins prove nothing of a fact its
+/// verdict would settle.
+#[must_use]
+pub fn proving<'a>(rows: &'a [VerdictRow], about: &str) -> Option<(usize, &'a VerdictRow)> {
+    let about = crate::facts::fact_path(about).filter(|a| !a.is_empty() && a != ".")?;
+    rows.iter().enumerate().rev().find_map(|(i, r)| {
+        let landed = r
+            .changed
+            .iter()
+            .filter_map(|c| crate::facts::fact_path(c))
+            .any(|c| c == about || c.starts_with(&format!("{about}/")));
+        (r.verdict == "PASS"
+            && !r.unchecked
+            && r.verified_by.iter().any(|v| v == HUMAN_PIN)
+            && landed)
+            .then_some((i + 1, r))
+    })
+}
+
 /// Appends `row` to `world`'s gate verdicts, stamped with this binary's build. Nothing is written
 /// with no home.
 ///

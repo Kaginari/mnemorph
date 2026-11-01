@@ -4,17 +4,17 @@
 //! and who owns each path a fact is about. And the human's act on a fact: **settle**, with a proof
 //! — a passing end-gate verdict that landed on the fact's path, or the human's own statement.
 //!
-//! The facts journal and the creature docs are read from a capped copy of the world
+//! The facts are the trusted ones the harness keeps under the human's state directory, chained
+//! (`mnemorph_world::facts`); the world's own copy of them is never read here but to flag what it
+//! says beyond them. The creature docs are read from a capped copy of the world
 //! ([`super::snapshot`]); the check's other reads open only regular files under a cap
-//! (`mnemorph_world::regular`). All of it lives inside the world, so it is shown and grants
-//! nothing — but for the gate's verdicts, which the harness keeps under the state directory,
-//! chained, and which alone may prove a settle besides the human.
+//! (`mnemorph_world::regular`). The gate's verdicts, which the harness keeps under the state
+//! directory, chained, alone may prove a settle besides the human.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
 use mnemorph_loop::world::facts::{Event, FACTS, Fact};
-use mnemorph_loop::world::ledger::Journal;
 use mnemorph_loop::world::{FactStatus, Facts, Owner, Roster, explain, onto_check, verdicts};
 use serde::Serialize;
 use ts_rs::TS;
@@ -363,12 +363,12 @@ fn passing(world: &Path) -> Vec<ProofVerdict> {
         .collect()
 }
 
-/// The facts of the copy at `path`, and every event of their journal.
-fn read(path: &Path) -> Result<(Facts, Vec<Event>), String> {
-    let back = Journal::<Event>::new(path.join(FACTS))
-        .read()
-        .map_err(|e| format!("{FACTS}: {e}"))?;
-    Ok((Facts::fold(&back.rows), back.rows))
+/// The trusted facts of `world`, and every event of their journal. Facts that cannot be read are
+/// an empty ontology, with the check's `facts-unavailable` finding saying why.
+fn read(world: &Path) -> (Facts, Vec<Event>) {
+    let facts = Facts::load(world);
+    let events = facts.events.clone();
+    (facts, events)
 }
 
 /// The ontology of the world at `world`, filtered and paged by `filter`.
@@ -379,7 +379,7 @@ fn read(path: &Path) -> Result<(Facts, Vec<Event>), String> {
 /// relations does not read.
 pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
     let snap = snapshot::ontology(world)?;
-    let (facts, events) = read(snap.path())?;
+    let (facts, events) = read(world);
     let roster = Roster::load(snap.path());
     let tracked = crate::tracked(world);
     let git = tracked.is_some();
@@ -440,7 +440,9 @@ pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
         owners: paths.into_iter().map(|p| owner(&roster, p)).collect(),
         verdicts: passing(world),
         git,
-        source: format!("{FACTS} (as `mnemorphd onto check` reads it)"),
+        source: "the trusted facts under the human's state directory (as `mnemorphd onto check` \
+                 reads them)"
+            .to_owned(),
     })
 }
 
@@ -489,9 +491,10 @@ pub fn settle(
     seen_as: &str,
     proof: &Proof,
 ) -> Result<String, (u16, String)> {
-    let snap = snapshot::ontology(world).map_err(|e| (503, e))?;
-    let (facts, _) = read(snap.path()).map_err(|e| (503, e))?;
-    drop(snap);
+    let (facts, _) = read(world);
+    if let Some(why) = &facts.unavailable {
+        return Err((503, why.clone()));
+    }
     let Some(f) = facts.live().find(|f| f.id == id) else {
         return Err((404, format!("no fact `#{id}` in this world's ontology")));
     };
