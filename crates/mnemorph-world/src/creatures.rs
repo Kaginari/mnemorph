@@ -993,7 +993,7 @@ mod tests {
         .unwrap();
         let held = view(&state, &w);
         assert_eq!(held.creatures["slime-s"].race, Race::Slime);
-        assert!(held.creatures["slime-s"].domain.is_empty());
+        assert_eq!(held.creatures["slime-s"].domain, Vec::<String>::new());
     }
 
     /// The report fold's meters key by the trusted race: a Slime whose card says Orc is metered
