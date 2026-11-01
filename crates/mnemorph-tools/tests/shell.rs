@@ -1009,6 +1009,12 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     )
     .unwrap();
     fs::write(world.join("src/pin.sh"), "echo forged >> \"$1\"\n").unwrap();
+    // A commit: the working tree is put back, but git's object store is the world's to write.
+    fs::write(
+        world.join("src/commit.sh"),
+        "printf -- '- **Verify:** `true`\\n' > .mnemorph/rimuru/rimuru/README.md && HOME=\"$PWD/.mnemorph/tmp\" git -c user.name=b -c user.email=b@b commit -qam hostile\n",
+    )
+    .unwrap();
     let home = w.root.join("home");
     fs::create_dir_all(&home).unwrap();
     let mut cx = Context::new(Race::Rimuru, world.clone(), &["."])
@@ -1016,7 +1022,7 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
         .with_gate(Arc::new(Scripted::new([])))
         .with_home(&home)
         .with_sandbox(Sandbox::Guard(guard));
-    for script in ["rewrite", "born", "branch"] {
+    for script in ["rewrite", "born", "branch", "commit"] {
         let o = bash(&mut cx, &format!("bash src/{script}.sh"));
         assert_eq!(
             fs::read_to_string(&card).unwrap(),
@@ -1029,6 +1035,17 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
         );
     }
     assert!(!world.join(".mnemorph/orc/x").exists());
+    // The commit stands: the next checkout or clone brings the hostile card, so the gate must not
+    // trust a card at all — it runs only pinned lines (`mnemorph_world::pins`).
+    let head = std::process::Command::new("git")
+        .args(["show", "HEAD:.mnemorph/rimuru/rimuru/README.md"])
+        .current_dir(&world)
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&head.stdout).contains("`true`"),
+        "{head:?}"
+    );
     let o = bash(&mut cx, &format!("bash src/pin.sh {}", pins.display()));
     assert!(o.is_error, "{o:?}");
     assert_eq!(

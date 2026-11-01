@@ -230,8 +230,11 @@ An Orc codes its Slime's verify line — the test before the change, which the d
 before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
 at most 300 characters, no control character, on the doc of a living Slime that reports to it.
 The harness adds that line after the doc's last field — never in place of a line someone else
-set, and once — writing a new file renamed over the doc, never through a link, and journals it;
-no body's file tools write a creature's doc, so no body rewrites its own checks. And a check
+set, and once — writing a new file renamed over the doc, never through a link, pins it and
+journals it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
+pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
+word on its own Slime, kept by the harness under the human's state directory, where no body
+writes. And a check
 never writes: the end gate fails a landing whose verify run changed the tree beyond what git
 ignores, so no verify line lands work past the gate's judgement.
 
