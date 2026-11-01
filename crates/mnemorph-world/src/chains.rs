@@ -13,6 +13,8 @@
 //! - `answers`: the human's answers to the gate given on the board ([`crate::answers`]);
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
 //!   ([`crate::minds::witness`]);
+//! - `facts`: the trusted territory facts ([`crate::facts`]);
+//! - `relations`: the relations between worlds the human stated ([`crate::dimension`]);
 //! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
 //! - `kijin-<post>`: each Kijin post's witness, the trusted copy of its journal.
 //!
@@ -33,8 +35,8 @@ use crate::worth::USAGE;
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `uses`, `revocations` or
-    /// `kijin-<post>`.
+    /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `facts`,
+    /// `relations`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
@@ -74,6 +76,16 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
             path: state_file_in(state, real.as_deref().unwrap_or(world), kind),
         });
     }
+    // The trusted facts and relations name the world by its real path ([`crate::facts`],
+    // [`crate::dimension`]).
+    out.push(Chained {
+        name: crate::facts::KIND,
+        path: crate::facts::trusted_in(state, world),
+    });
+    out.push(Chained {
+        name: crate::dimension::RELATIONS,
+        path: crate::dimension::relations_in(state, world),
+    });
     let oni = state.join("mnemorph/oni");
     out.push(Chained {
         name: "uses",
@@ -202,6 +214,17 @@ pub fn anchor_with(world: &Path, name: &str, log: impl FnOnce() -> String) -> Op
         Some(kept) => anchored(&kept, name).or_else(|| logged(&log(), name)),
         None => logged(&log(), name),
     }
+}
+
+/// [`anchor_of`], the human's state directory at `state`.
+#[must_use]
+pub fn anchor_under(state: &Path, world: &Path, name: &str) -> Option<Head> {
+    anchored(&state_file_in(state, world, "anchors"), name).or_else(|| {
+        logged(
+            &crate::regular::text(&world.join(LOG)).unwrap_or_default(),
+            name,
+        )
+    })
 }
 
 /// The newest head of the journal `name` anchored in `kept`.
@@ -519,6 +542,8 @@ mod tests {
                 "guts",
                 "answers",
                 "minds",
+                "facts",
+                "relations",
                 "uses",
                 "revocations"
             ]

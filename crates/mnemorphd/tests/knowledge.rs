@@ -145,10 +145,17 @@ impl Home {
             support("fsettled", "src/a.rs", "a builds", "slime-a", None),
             json!({"event": "settle", "id": "fsettled", "by": "orc-o", "proof": "orc-o's verdict: settle #fsettled"}),
         ];
-        let dir = self.world.join(".mnemorph/ontology");
-        std::fs::create_dir_all(&dir).unwrap();
-        let lines: Vec<String> = events.iter().map(Value::to_string).collect();
-        std::fs::write(dir.join("facts.jsonl"), lines.join("\n") + "\n").unwrap();
+        // The trusted facts, as the harness keeps them under the state directory: the world's own
+        // copy is never read for them.
+        let world = self.world.canonicalize().unwrap();
+        let trusted = mnemorph_server::world::ledger::Journal::<Value>::chained(state_file(
+            &self.state(),
+            &world,
+            "facts",
+        ));
+        for e in &events {
+            trusted.append(e).unwrap();
+        }
         let gate = journal_at(state_file(&self.state(), &self.world, "gate"));
         for (verdict, changed) in [("FAIL, handed back", "src/a.rs"), ("PASS", "src/a.rs")] {
             gate.append(&VerdictRow {
@@ -330,9 +337,18 @@ fn note<'a>(page: &'a Value, id: &str, scope: &str) -> &'a Value {
 /// The events of a tier's file, as JSON.
 fn events(world: &Path, rel: &str) -> Vec<Value> {
     std::fs::read_to_string(world.join(rel))
-        .unwrap()
+        .unwrap_or_default()
         .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+        .map(|l| {
+            let mut v: Value = serde_json::from_str(l).unwrap();
+            // A chained row's links are the chain's, not the event's.
+            if let Some(o) = v.as_object_mut() {
+                for k in ["prev", "genesis", "torn", "digest"] {
+                    o.remove(k);
+                }
+            }
+            v
+        })
         .collect()
 }
 
@@ -794,7 +810,8 @@ fn a_link_in_the_world_is_refused_at_once_and_said() {
     std::fs::remove_file(&tier).unwrap();
     std::os::unix::fs::symlink("/dev/zero", &tier).unwrap();
     let facts = h.world.join(".mnemorph/ontology/facts.jsonl");
-    std::fs::remove_file(&facts).unwrap();
+    let _ = std::fs::remove_file(&facts);
+    std::fs::create_dir_all(facts.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink("/dev/zero", &facts).unwrap();
     let (host, cookie, csrf) = h.serve();
     for (path, file) in [("memory", "slime-b.jsonl"), ("facts", "facts.jsonl")] {

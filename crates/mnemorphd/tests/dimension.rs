@@ -38,9 +38,18 @@ impl Dim {
         w
     }
 
+    /// Run with no controlling terminal (a session of its own, on Linux): no question is ever
+    /// answered by whoever runs the tests.
     fn run(&self, args: &[&str], body: Option<&str>) -> (Option<i32>, String, String) {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        let mut c = if cfg!(target_os = "linux") {
+            let mut c = Command::new("setsid");
+            c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
+            c
+        } else {
+            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        };
         c.args(args)
+            .stdin(std::process::Stdio::null())
             .current_dir(&self.root)
             .env_remove("ANTHROPIC_API_KEY")
             .env_remove("MNEMORPH_BODY")
@@ -185,7 +194,24 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
 
     // A body never says yes, nor reads where other worlds live.
     for args in [
-        &["onto", "relate", s(&b), "depends-on", "--world", s(&a)][..],
+        &[
+            "onto",
+            "relate",
+            s(&b),
+            "depends-on",
+            "--yes",
+            "--world",
+            s(&a),
+        ][..],
+        &[
+            "onto",
+            "inverse",
+            "depends-on",
+            "used-by",
+            "--yes",
+            "--world",
+            s(&a),
+        ],
         &["onto", "relations", "--world", s(&a)],
         &["onto", "check", "--dimension", "--world", s(&a)],
     ] {
@@ -196,8 +222,24 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     }
     assert!(!a.join(MANIFEST).exists());
 
-    let (code, out, err) = d.run(
+    // Piped input is no human's yes: nothing is written.
+    let (code, _, err) = d.run(
         &["onto", "relate", s(&b), "depends-on", "--world", s(&a)],
+        None,
+    );
+    assert_eq!(code, Some(2), "{err}");
+    assert!(err.contains("terminal"), "{err}");
+    assert!(!a.join(MANIFEST).exists());
+    let (code, out, err) = d.run(
+        &[
+            "onto",
+            "relate",
+            s(&b),
+            "depends-on",
+            "--yes",
+            "--world",
+            s(&a),
+        ],
         None,
     );
     assert_eq!(code, Some(0), "{err}");
@@ -209,12 +251,28 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     );
     assert!(!out.contains("proposed:"), "{out}");
 
-    // b states something of a that cannot hold beside it: an obstruction, reported.
+    // b's in-world copy saying something of a is no relation of b's: nothing obstructs.
     fs::write(
         b.join(MANIFEST),
         format!("[[relation]]\nworld = \"{}\"\ntype = \"deploys\"\n", s(&a)),
     )
     .unwrap();
+    let (_, out, _) = d.run(&["onto", "check", "--dimension", "--world", s(&a)], None);
+    assert!(!out.contains("dimension-obstruction"), "{out}");
+    // b states, by the human, something of a that cannot hold beside it: an obstruction, reported.
+    let (code, _, err) = d.run(
+        &[
+            "onto",
+            "relate",
+            s(&a),
+            "deploys",
+            "--yes",
+            "--world",
+            s(&b),
+        ],
+        None,
+    );
+    assert_eq!(code, Some(0), "{err}");
     let (code, out, _) = d.run(&["onto", "check", "--dimension", "--world", s(&a)], None);
     assert_eq!(code, Some(1), "{out}");
     assert!(
@@ -226,26 +284,41 @@ fn a_relation_named_twice_is_proposed_written_by_the_human_and_revoked() {
     let (_, out, _) = d.run(&["onto", "check", "--world", s(&a)], None);
     assert!(!out.contains("dimension-obstruction"), "{out}");
     // Once b agrees, the pair glues.
-    fs::write(
-        b.join(MANIFEST),
-        format!(
-            "[[relation]]\nworld = \"{}\"\ntype = \"depended-on-by\"\n",
-            s(&a)
-        ),
-    )
-    .unwrap();
+    for (verb, kind) in [("unrelate", "deploys"), ("relate", "depended-on-by")] {
+        let (code, _, err) = d.run(
+            &["onto", verb, s(&a), kind, "--yes", "--world", s(&b)],
+            None,
+        );
+        assert_eq!(code, Some(0), "{err}");
+    }
     let (_, out, _) = d.run(&["onto", "check", "--dimension", "--world", s(&a)], None);
     assert!(!out.contains("dimension-obstruction"), "{out}");
     assert!(out.contains("glued depends-on"), "{out}");
 
     let (code, out, _) = d.run(
-        &["onto", "unrelate", s(&b), "depends-on", "--world", s(&a)],
+        &[
+            "onto",
+            "unrelate",
+            s(&b),
+            "depends-on",
+            "--yes",
+            "--world",
+            s(&a),
+        ],
         None,
     );
     assert_eq!(code, Some(0));
     assert!(out.starts_with("revoked"), "{out}");
     let (code, _, _) = d.run(
-        &["onto", "unrelate", s(&b), "depends-on", "--world", s(&a)],
+        &[
+            "onto",
+            "unrelate",
+            s(&b),
+            "depends-on",
+            "--yes",
+            "--world",
+            s(&a),
+        ],
         None,
     );
     assert_eq!(code, Some(2));

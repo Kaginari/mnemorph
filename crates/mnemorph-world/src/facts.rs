@@ -1,18 +1,40 @@
 //! Territory facts: what creatures learned about a path, each with who said it and on what
 //! evidence, kept as append-only events and folded into a status no one has to vote on.
+//!
+//! The events that count are kept by the harness outside the world, at
+//! `$XDG_STATE_HOME/mnemorph/facts/<world>-<fnv64a>.jsonl` (the world named by its real path),
+//! chained by hash ([`mnemorph_ledger::chain`]) and anchored as `facts` with the world's other
+//! chained journals ([`crate::chains`]). Their writers are the harness — a body's `@U territory`
+//! facts, a parent's labels, an Orc's `@V settle` — and the human's settle; never a body's
+//! command. The world's `.mnemorph/ontology/facts.jsonl` is a copy written after each event for
+//! readers, and is never read for trust: a commit or a clone brings whatever a stranger wrote
+//! there, so a settle, a status or a voice it holds that the trusted journal does not is ignored
+//! and flagged (`untrusted-fact`). A trusted journal that does not walk whole leaves the facts
+//! unavailable, never settled. The first read of a world with no trusted journal imports its
+//! in-world facts once, each as one unproven voice, unsettled.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use mnemorph_ledger::Journal;
+use mnemorph_ledger::chain::{self, Head};
 use mnemorph_memory::text::{bm25, words};
 use mnemorph_wire::fnv64a;
 use serde::{Deserialize, Serialize};
 
 use crate::own::normal;
 
-/// Where the events live: harness soil.
+/// The in-world copy of the events, for readers: harness soil, never read for trust.
 pub const FACTS: &str = ".mnemorph/ontology/facts.jsonl";
+
+/// The trusted journal's kind under the state directory, and its name among the world's chains.
+pub const KIND: &str = "facts";
+
+/// The voice an imported fact is said in: the in-world file's, whose authors cannot be proven.
+pub const IMPORTED: &str = "imported";
+
+/// The largest in-world copy read back to compare with the trusted journal.
+const MIRROR_CAP: u64 = 16 << 20;
 
 /// The tolerance on the losing side: one dissenter in three.
 const TOLERANCE: f64 = 0.35;
@@ -88,6 +110,14 @@ pub enum Event {
         /// The proof.
         proof: String,
     },
+    /// The in-world facts imported once into a trusted journal that had none: each fact as one
+    /// unproven voice, unsettled — their authors and settles cannot be proven.
+    Import {
+        /// The facts the in-world file read settled, whose settle was dropped.
+        settles: Vec<String>,
+        /// How many in-world events were read.
+        read: usize,
+    },
     /// The parent's triage of a new free fact.
     Label {
         /// The new fact.
@@ -160,6 +190,8 @@ pub struct Fact {
     pub reasons: BTreeMap<String, String>,
     /// The order of its last settle, if settled.
     pub settled_at: Option<usize>,
+    /// Who settled it last, and on what proof.
+    pub settled_by: Option<(String, String)>,
     /// The order of its last support.
     pub last_support: usize,
 }
@@ -389,27 +421,353 @@ fn under(a: &str, b: &str) -> bool {
 pub struct Facts {
     /// Every fact, by id.
     pub facts: BTreeMap<String, Fact>,
+    /// The trusted events they were folded from, in order.
+    pub events: Vec<Event>,
+    /// Why the facts cannot be read, when they cannot: the trusted journal does not walk whole,
+    /// or there is no home to keep it under. No fact then stands, settled or not.
+    pub unavailable: Option<String>,
+    /// What the in-world copy says that the trusted journal does not: ignored, and flagged.
+    pub untrusted: Vec<Untrusted>,
+    /// The facts the in-world file read settled when it was imported: their settles were dropped,
+    /// unproven, and the human may settle them again.
+    pub unproven: BTreeSet<String>,
+}
+
+/// A fact the in-world copy reads with more standing than the trusted journal gives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Untrusted {
+    /// Its id.
+    pub id: String,
+    /// The path it is about.
+    pub about: String,
+    /// Its text.
+    pub text: String,
+    /// The status the in-world copy reads.
+    pub said: Status,
+    /// Who the in-world copy says settled it.
+    pub settled_by: Option<String>,
+    /// Its status in the trusted journal; `None` when it holds no such fact.
+    pub trusted: Option<Status>,
+}
+
+impl Untrusted {
+    /// The mismatch, in words.
+    #[must_use]
+    pub fn message(&self) -> String {
+        let by = self
+            .settled_by
+            .as_ref()
+            .map(|b| format!(" by `{}`", b.escape_debug()))
+            .unwrap_or_default();
+        let trusted = self.trusted.map_or_else(
+            || "holds no such fact".to_owned(),
+            |t| format!("reads it {}", t.word()),
+        );
+        format!(
+            "#{} `{}`: the in-world {FACTS} reads it {}{by}, the trusted journal {trusted} — the \
+             in-world file is a copy, never trusted",
+            self.id,
+            self.text.escape_debug(),
+            self.said.word(),
+        )
+    }
+}
+
+/// Where `world`'s trusted facts are kept: `$XDG_STATE_HOME/mnemorph/facts/<world>-<fnv64a>.jsonl`,
+/// else under `~/.local/state`; `None` with no home.
+#[must_use]
+pub fn trusted_of(world: &Path) -> Option<PathBuf> {
+    Some(trusted_in(&crate::queue::state_dir()?, world))
+}
+
+/// [`trusted_of`], the human's state directory at `state`. The world is named by its real path,
+/// so every spelling of it finds one journal.
+#[must_use]
+pub fn trusted_in(state: &Path, world: &Path) -> PathBuf {
+    let real = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    crate::queue::state_file_in(state, &real, KIND)
+}
+
+/// The trusted events at `path`, its chain walked first and held to `anchor`: a journal that does
+/// not walk whole is an error, never read as fewer facts.
+fn trusted_events(path: &Path, anchor: Option<&Head>) -> Result<Vec<Event>, String> {
+    let report = chain::verify_against(path, anchor)
+        .map_err(|e| format!("the trusted facts cannot be read: {e}"))?;
+    if !report.holds() {
+        return Err(format!("the trusted facts do not verify: {report}"));
+    }
+    let back = Journal::<Event>::chained(path)
+        .read()
+        .map_err(|e| format!("the trusted facts cannot be read: {e}"))?;
+    if let Some(line) = back.skipped.first() {
+        return Err(format!(
+            "the trusted facts do not verify: line {line} does not read"
+        ));
+    }
+    Ok(back.rows)
+}
+
+/// The events the in-world copy holds, read through no link and under a cap; none when it cannot
+/// be read. Every line that reads as an event counts, chained or not: whatever it says is a
+/// stranger's until the trusted journal says it too, and nothing a stranger wrote is let off for
+/// breaking a chain.
+fn mirrored(world: &Path) -> Vec<Event> {
+    let Ok(Some(bytes)) = crate::beneath::read(world, FACTS, MIRROR_CAP) else {
+        return Vec::new();
+    };
+    bytes
+        .split(|b| *b == b'\n')
+        .filter_map(|line| serde_json::from_slice(&chain::body(line)).ok())
+        .collect()
+}
+
+/// The in-world `events` as they are imported: each fact said once, by [`IMPORTED`], with its
+/// anchor, under the id its path and text hash to; no counter, label or settle — none can be
+/// proven — and an [`Event::Import`] naming the facts that read settled.
+fn imported(events: &[Event]) -> Vec<Event> {
+    let said = Facts::fold(events);
+    let mut out: Vec<Event> = Vec::new();
+    let mut seen = BTreeSet::new();
+    for e in events {
+        if let Event::Support {
+            about,
+            text,
+            source,
+            ..
+        } = e
+        {
+            let Some(path) = fact_path(about) else {
+                continue;
+            };
+            let text = fact_text(text);
+            let id = fact_id(&path, &text);
+            if text.is_empty() || !seen.insert(id.clone()) {
+                continue;
+            }
+            out.push(Event::Support {
+                id,
+                about: path,
+                text,
+                by: IMPORTED.to_owned(),
+                source: source.clone(),
+            });
+        }
+    }
+    out.push(Event::Import {
+        settles: said
+            .facts
+            .values()
+            .filter(|f| f.settled)
+            .map(|f| f.id.clone())
+            .collect(),
+        read: events.len(),
+    });
+    out
+}
+
+/// What the in-world copy `said` reads with more standing than `trusted` gives: a fact it reads
+/// settled that the trusted journal does not, one it reads agreed that is a single voice there,
+/// or one the trusted journal does not hold at all.
+fn untrusted(trusted: &Facts, said: &Facts) -> Vec<Untrusted> {
+    said.live()
+        .filter_map(|f| {
+            let s = f.status();
+            let t = trusted
+                .facts
+                .get(&f.id)
+                .filter(|t| t.merged_into.is_none())
+                .map(Fact::status);
+            let more = match t {
+                None => true,
+                Some(t) => {
+                    (s == Status::Settled && t != Status::Settled)
+                        || (s == Status::Agreed && t == Status::Single)
+                }
+            };
+            more.then(|| Untrusted {
+                id: f.id.clone(),
+                about: f.about.clone(),
+                text: f.text.clone(),
+                said: s,
+                settled_by: f
+                    .settled_by
+                    .as_ref()
+                    .filter(|_| s == Status::Settled)
+                    .map(|(b, _)| b.clone()),
+                trusted: t,
+            })
+        })
+        .collect()
+}
+
+/// Every write to the trusted facts is refused inside a body's command (`MNEMORPH_BODY` is set
+/// there), and the sandbox keeps the state directory out of every command's reach besides.
+fn refuse_a_body() -> std::io::Result<()> {
+    match std::env::var_os("MNEMORPH_BODY") {
+        Some(body) => Err(std::io::Error::other(format!(
+            "{} runs this: facts are filed by the harness and settled by the human or an Orc's \
+             verdict, never by a body's command",
+            body.to_string_lossy()
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// The in-world copy written again from the trusted journal at `path`, whole, through no link and
+/// under the journal's lock, so it reads as the trusted journal does. A copy that cannot be
+/// written is said on stderr: it grants nothing either way.
+fn mirror(world: &Path, path: &Path) {
+    let copied = (|| -> std::io::Result<()> {
+        let file = std::fs::File::open(path)?;
+        file.lock()?;
+        let bytes = std::fs::read(path)?;
+        crate::beneath::write(world, FACTS, &bytes, false)
+    })();
+    if let Err(e) = copied {
+        eprintln!("mnemorph: the in-world copy of the facts could not be written: {e}");
+    }
+}
+
+/// The trusted journal at `path` begun from the in-world `events`, once: written whole beside it
+/// and linked into place only where nothing stands, so two first readers import once.
+fn import(world: &Path, path: &Path, events: &[Event]) -> std::io::Result<Vec<Event>> {
+    refuse_a_body()?;
+    let rows = imported(events);
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    mnemorph_ledger::private_dir(dir)?;
+    let fresh = dir.join(format!(
+        ".{}.import-{}",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&fresh);
+    let j = Journal::<Event>::chained(&fresh);
+    let linked = rows
+        .iter()
+        .try_for_each(|r| j.append(r))
+        .and_then(|()| std::fs::hard_link(&fresh, path));
+    let _ = std::fs::remove_file(&fresh);
+    match linked {
+        Ok(()) => {}
+        // Another reader imported first: its journal stands.
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return trusted_events(path, None).map_err(std::io::Error::other);
+        }
+        Err(e) => return Err(e),
+    }
+    mirror(world, path);
+    let settles = match rows.last() {
+        Some(Event::Import { settles, .. }) => settles.clone(),
+        _ => Vec::new(),
+    };
+    let mut lines = vec![(
+        "Imported".to_owned(),
+        format!(
+            "{} in-world events of {FACTS} into the trusted journal under the human's state \
+             directory, each fact as one unproven voice, unsettled",
+            events.len()
+        ),
+    )];
+    if !settles.is_empty() {
+        lines.push((
+            "Re-settle".to_owned(),
+            format!(
+                "the in-world file read {} settled, which cannot be proven: settle what matters \
+                 again with `mnemorphd onto settle <id>`",
+                settles
+                    .iter()
+                    .map(|id| format!("#{id}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
+    }
+    if let Err(e) = crate::log::append(
+        world,
+        &crate::log::Entry {
+            body: "harness".to_owned(),
+            title: "facts: the in-world journal imported, unsettled".to_owned(),
+            lines,
+        },
+    ) {
+        eprintln!("mnemorph: the facts' import could not be journaled: {e}");
+    }
+    Ok(rows)
 }
 
 impl Facts {
-    /// Read the world's facts journal and fold it.
-    #[must_use]
-    pub fn load(world: &Path) -> Facts {
-        let events = Journal::<Event>::new(world.join(FACTS))
-            .read()
-            .map(|r| r.rows)
-            .unwrap_or_default();
-        Facts::fold(&events)
+    /// The facts of a world that cannot be read, and why.
+    fn unavailable(why: String) -> Facts {
+        Facts {
+            unavailable: Some(why),
+            ..Facts::default()
+        }
     }
 
-    /// Append one event to the world's facts journal. A fact it leaves contested that was not
-    /// before marks for review every claim in memory resting on it, and what rests on those.
+    /// Read the world's trusted facts and fold them, beside what its in-world copy says beyond
+    /// them.
+    #[must_use]
+    pub fn load(world: &Path) -> Facts {
+        Facts::load_in(crate::queue::state_dir().as_deref(), world)
+    }
+
+    /// [`Facts::load`], the human's state directory at `state` (`None`: no home). A world with no
+    /// trusted journal, none ever anchored, imports its in-world facts once; one whose journal
+    /// does not walk whole reads unavailable.
+    #[must_use]
+    pub fn load_in(state: Option<&Path>, world: &Path) -> Facts {
+        let Some(state) = state else {
+            return Facts::unavailable(
+                "no home: the trusted facts are kept under the human's state directory".into(),
+            );
+        };
+        let mut said = mirrored(world);
+        let path = trusted_in(state, world);
+        let anchor = crate::chains::anchor_under(state, world, KIND);
+        let events = if !path.exists() && anchor.is_none() && !said.is_empty() {
+            // Where the import cannot be written — a sandboxed reader — it is read as written.
+            match import(world, &path, &said) {
+                Ok(events) => {
+                    said = mirrored(world);
+                    events
+                }
+                Err(_) => imported(&said),
+            }
+        } else {
+            match trusted_events(&path, anchor.as_ref()) {
+                Ok(events) => events,
+                Err(why) => return Facts::unavailable(why),
+            }
+        };
+        let mut facts = Facts::fold(&events);
+        facts.untrusted = untrusted(&facts, &Facts::fold(&said));
+        facts
+    }
+
+    /// Append one event to the world's trusted facts, then write its in-world copy again. A fact
+    /// it leaves contested that was not before marks for review every claim in memory resting on
+    /// it, and what rests on those.
     ///
     /// # Errors
     ///
-    /// The journal cannot be written. Memory that cannot be marked is said on stderr: the fact
-    /// is filed either way.
+    /// A body asks, there is no home, the facts are unavailable, or the journal cannot be written.
+    /// Memory that cannot be marked is said on stderr: the fact is filed either way.
     pub fn record(world: &Path, event: &Event) -> std::io::Result<()> {
+        Facts::record_in(crate::queue::state_dir().as_deref(), world, event)
+    }
+
+    /// [`Facts::record`], the human's state directory at `state`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Facts::record`].
+    pub fn record_in(state: Option<&Path>, world: &Path, event: &Event) -> std::io::Result<()> {
+        refuse_a_body()?;
+        let Some(state) = state else {
+            return Err(std::io::Error::other(
+                "no home: the trusted facts are kept under the human's state directory",
+            ));
+        };
         let contested = |f: &Facts| -> BTreeSet<String> {
             f.facts
                 .values()
@@ -417,9 +775,15 @@ impl Facts {
                 .map(|x| x.id.clone())
                 .collect()
         };
-        let before = contested(&Facts::load(world));
-        Journal::<Event>::new(world.join(FACTS)).append(event)?;
-        for id in contested(&Facts::load(world)).difference(&before) {
+        let loaded = Facts::load_in(Some(state), world);
+        if let Some(why) = loaded.unavailable {
+            return Err(std::io::Error::other(why));
+        }
+        let before = contested(&loaded);
+        let path = trusted_in(state, world);
+        Journal::<Event>::chained(&path).append(event)?;
+        mirror(world, &path);
+        for id in contested(&Facts::load_in(Some(state), world)).difference(&before) {
             if let Err(e) = mnemorph_memory::invalidate(
                 world,
                 mnemorph_memory::Moved::Fact(id),
@@ -433,8 +797,8 @@ impl Facts {
 
     /// Settle the fact `id` — `#<id>` or `<id>` — by `by`, citing `proof`: the human's act
     /// (`mnemorphd onto settle`, the board's settle), the one besides an Orc's verdict that
-    /// settles; recency never does. Refused when the world's ontology holds no such fact, or when
-    /// it no longer says what the human read: `seen_as` is its `mnemorph_memory::seen` digest,
+    /// settles; recency never does. Refused when the trusted facts hold no such fact, or when it
+    /// no longer says what the human read: `seen_as` is its `mnemorph_memory::seen` digest,
     /// checked against the fact read afresh right before the write. Returns the id settled.
     ///
     /// # Errors
@@ -447,8 +811,35 @@ impl Facts {
         proof: &str,
         seen_as: &str,
     ) -> Result<String, String> {
+        Facts::settle_in(
+            crate::queue::state_dir().as_deref(),
+            world,
+            id,
+            by,
+            proof,
+            seen_as,
+        )
+    }
+
+    /// [`Facts::settle`], the human's state directory at `state`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Facts::settle`].
+    pub fn settle_in(
+        state: Option<&Path>,
+        world: &Path,
+        id: &str,
+        by: &str,
+        proof: &str,
+        seen_as: &str,
+    ) -> Result<String, String> {
         let id = id.trim_start_matches('#');
-        let Some(fact) = Facts::load(world).facts.remove(id) else {
+        let mut facts = Facts::load_in(state, world);
+        if let Some(why) = facts.unavailable {
+            return Err(why);
+        }
+        let Some(fact) = facts.facts.remove(id) else {
             return Err(format!("no fact `#{id}` in this world's ontology"));
         };
         // Read afresh right before the write: a fact rewritten since the human read it is refused.
@@ -460,7 +851,7 @@ impl Facts {
             by: by.to_owned(),
             proof: proof.to_owned(),
         };
-        Facts::record(world, &event)
+        Facts::record_in(state, world, &event)
             .map(|()| id.to_owned())
             .map_err(|e| format!("the settle could not be filed: {e}"))
     }
@@ -470,6 +861,7 @@ impl Facts {
     #[must_use]
     pub fn fold(events: &[Event]) -> Facts {
         let mut facts: BTreeMap<String, Fact> = BTreeMap::new();
+        let mut unproven = BTreeSet::new();
         // A fact the parent merged into another answers for it from then on.
         let resolve = |facts: &BTreeMap<String, Fact>, id: &str| {
             let mut id = id.to_owned();
@@ -516,13 +908,15 @@ impl Facts {
                         f.settled = false;
                     }
                 }
-                Event::Settle { id, .. } => {
+                Event::Settle { id, by, proof } => {
                     let into = resolve(&facts, id);
                     if let Some(f) = facts.get_mut(&into) {
                         f.settled = true;
                         f.settled_at = Some(seq);
+                        f.settled_by = Some((by.clone(), proof.clone()));
                     }
                 }
+                Event::Import { settles, .. } => unproven.extend(settles.iter().cloned()),
                 Event::Label { new, label, of, .. } => {
                     if of.as_deref() == Some(new.as_str()) {
                         continue;
@@ -562,7 +956,12 @@ impl Facts {
             }
         }
         collide(&mut facts);
-        Facts { facts }
+        Facts {
+            facts,
+            events: events.to_vec(),
+            unproven,
+            ..Facts::default()
+        }
     }
 
     /// The live facts: not merged into another.

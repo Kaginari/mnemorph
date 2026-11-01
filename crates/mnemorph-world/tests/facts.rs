@@ -26,6 +26,11 @@ fn counter(about: &str, text: &str, by: &str) -> Event {
     }
 }
 
+/// The trusted facts of the test world `w`, kept beside it: never the human's own state.
+fn state(w: &Path) -> PathBuf {
+    w.with_extension("state")
+}
+
 fn status(events: &[Event], about: &str, text: &str) -> Status {
     Facts::fold(events).facts[&fact_id(about, text)].status()
 }
@@ -383,15 +388,18 @@ fn a_fact_is_anchored_where_it_is_about() {
     };
     assert_eq!(a.at, "src/lexer.rs");
     assert!(a.digest.is_some(), "a file is anchored by its text");
-    Facts::record(&w, &event).unwrap();
-    let fresh = Facts::load(&w);
+    Facts::record_in(Some(&state(&w)), &w, &event).unwrap();
+    let fresh = Facts::load_in(Some(&state(&w)), &w);
     assert!(!fresh.live().any(|f| f.stale(&w)), "unchanged: not stale");
     fs::write(w.join("src/lexer.rs"), "fn lex() { panic!() }\n").unwrap();
     assert!(
-        Facts::load(&w).live().any(|f| f.stale(&w)),
+        Facts::load_in(Some(&state(&w)), &w)
+            .live()
+            .any(|f| f.stale(&w)),
         "its file moved: stale"
     );
     let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state(&w));
 }
 
 /// The cases of the triage fixture: on one path, the older fact a new one restates, six older
@@ -569,12 +577,15 @@ fn a_fact_newly_contested_marks_the_claims_resting_on_it() {
             .filter(|e| matches!(e.change, Change::Review { .. }))
             .count()
     };
-    Facts::record(&w, &say(f.0, f.1, "a")).unwrap();
-    Facts::record(&w, &say(f.0, f.1, "b")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &say(f.0, f.1, "a")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &say(f.0, f.1, "b")).unwrap();
     assert_eq!(reviews(), 0, "agreed: nothing moved");
-    Facts::record(&w, &counter(f.0, f.1, "c")).unwrap();
-    Facts::record(&w, &counter(f.0, f.1, "d")).unwrap();
-    assert_eq!(Facts::load(&w).facts[&id].status(), Status::Contested);
+    Facts::record_in(Some(&state(&w)), &w, &counter(f.0, f.1, "c")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &counter(f.0, f.1, "d")).unwrap();
+    assert_eq!(
+        Facts::load_in(Some(&state(&w)), &w).facts[&id].status(),
+        Status::Contested
+    );
     let note = fold(&read(&w, &tier).unwrap().rows)
         .remove(&claim.note)
         .unwrap();
@@ -586,10 +597,11 @@ fn a_fact_newly_contested_marks_the_claims_resting_on_it() {
         note.review
     );
     let marked = reviews();
-    Facts::record(&w, &counter(f.0, f.1, "e")).unwrap();
-    Facts::record(&w, &say(f.0, f.1, "g")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &counter(f.0, f.1, "e")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &say(f.0, f.1, "g")).unwrap();
     assert_eq!(reviews(), marked, "still contested: marked once");
     let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state(&w));
 }
 
 /// A settle names the digest of the fact the human read: a fact that reads otherwise now is
@@ -601,12 +613,13 @@ fn a_settle_of_a_fact_that_reads_otherwise_is_refused() {
     let _ = fs::remove_dir_all(&w);
     fs::create_dir_all(&w).unwrap();
     let (about, text) = ("src/", "src holds the code");
-    Facts::record(&w, &say(about, text, "slime-a")).unwrap();
+    Facts::record_in(Some(&state(&w)), &w, &say(about, text, "slime-a")).unwrap();
     let id = fact_id(about, text);
     let file = w.join(".mnemorph/ontology/facts.jsonl");
     let before = fs::read_to_string(&file).unwrap();
     assert_eq!(
-        Facts::settle(
+        Facts::settle_in(
+            Some(&state(&w)),
             &w,
             &id,
             "human",
@@ -617,9 +630,20 @@ fn a_settle_of_a_fact_that_reads_otherwise_is_refused() {
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), before, "nothing filed");
     assert_eq!(
-        Facts::settle(&w, &id, "human", "the human's word", &seen(&id, text)),
+        Facts::settle_in(
+            Some(&state(&w)),
+            &w,
+            &id,
+            "human",
+            "the human's word",
+            &seen(&id, text)
+        ),
         Ok(id.clone())
     );
-    assert_eq!(Facts::load(&w).facts[&id].status(), Status::Settled);
+    assert_eq!(
+        Facts::load_in(Some(&state(&w)), &w).facts[&id].status(),
+        Status::Settled
+    );
     let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state(&w));
 }
