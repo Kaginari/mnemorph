@@ -224,7 +224,9 @@ fn the_metrics_total_what_the_cli_totals() {
     let meters: Vec<Value> = h
         .run(&["meters", "--world", &world, "--json"])
         .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        // The board's meters are the CLI's meters; a pending rise or fall is the bodies page's.
+        .map(|c| serde_json::json!({"creature": c["creature"], "race": c["race"], "meters": c["meters"]}))
         .collect();
     let mut cli = Vec::new();
     for window in ["7d", "28d", "all"] {
