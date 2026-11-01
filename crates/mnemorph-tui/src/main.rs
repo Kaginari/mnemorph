@@ -205,7 +205,13 @@ fn chat(
     };
     // The first run in a fresh or cloned world: its cards' verify lines are pinned, or not, by
     // the human's one answer, before the gate is built from them.
+    // The creatures are adopted, or not, first: a stranger runs its own seat alone.
     if std::io::stdin().is_terminal() {
+        let _ = mnemorph_tui::adopt::offer(
+            &world,
+            &mut std::io::stdout(),
+            &mut mnemorph_tui::adopt::at_terminal,
+        );
         let _ = mnemorph_tui::pin::offer(
             &world,
             &mut std::io::stdout(),

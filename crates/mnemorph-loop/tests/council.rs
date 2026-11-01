@@ -31,6 +31,8 @@ fn world(name: &str) -> PathBuf {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("README.md"), body).unwrap();
     }
+    // The human adopts each card as written: the trusted roster holds it.
+    mnemorph_world::creatures::record(&w, mnemorph_world::creatures::adoption(&w)).unwrap();
     w
 }
 

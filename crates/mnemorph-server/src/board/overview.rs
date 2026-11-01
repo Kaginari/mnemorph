@@ -507,7 +507,7 @@ pub(super) fn meters_of(
         .map(|(f, _)| f)
         .unwrap_or_default();
     let reports = mnemorph_loop::world::reports::fold(path);
-    let roster = mnemorph_loop::world::Roster::load(copy);
+    let roster = mnemorph_loop::world::Roster::copied(copy, path);
     let all = meters::of(&roster, &folds, &reports)
         .into_iter()
         .map(|m| CreatureMeters {

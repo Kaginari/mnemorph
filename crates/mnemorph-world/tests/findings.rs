@@ -60,7 +60,7 @@ fn every_breach_has_its_code_severity_and_place() {
         "c",
         "# slime-c\n\n- **Race:** slime\n- **Reports to:** orc-gone\n- **Territory:** lib/\n",
     );
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     let tracked = ["src/a.rs", "lib/x.rs", "etc/stray.txt", "etc/other.txt"].map(str::to_owned);
     let found = check(&roster, &tracked);
@@ -108,7 +108,7 @@ fn every_breach_has_its_code_severity_and_place() {
 #[test]
 fn domains_and_lanes_never_overlap_the_zones_they_hold() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let roster = Roster::load(&repo);
+    let roster = Roster::cards(&repo);
     let found = check(&roster, &[]);
     assert!(found.iter().all(|f| !f.severity.blocks()), "{found:#?}");
 }
@@ -134,7 +134,7 @@ fn compiled_soil_without_its_keeper_and_retired_parents() {
         "q",
         "# elf-q\n\n- **Race:** elf\n- **Reports to:** elf-r\n",
     );
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     let tracked = [
         "Cargo.toml",
         "README.md",
@@ -180,7 +180,7 @@ fn a_path_named_in_prose_and_not_claimed_is_a_prose_claim() {
          The workspace's: `./Cargo.toml`.\n",
     )
     .unwrap();
-    let roster = mnemorph_world::Roster::load(&w);
+    let roster = mnemorph_world::Roster::cards(&w);
     let found = mnemorph_world::prose_claims(&roster, &w);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].code, "prose-claim");
@@ -252,7 +252,7 @@ fn a_dead_line_of_heirs_is_heir_dead() {
         "w",
         "# slime-w\n\n- **Race:** slime\n- **Territory:** src/v/\n",
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     let all: Vec<_> = check(&roster, &[])
         .into_iter()
         .filter(|f| f.code == "heir-dead")
@@ -331,7 +331,7 @@ fn a_mind_nobody_wears_and_not_shared_is_an_orphan() {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("README.md"), body).unwrap();
     }
-    let found = mnemorph_world::mind_findings(&Roster::load(&w), &w);
+    let found = mnemorph_world::mind_findings(&Roster::cards(&w), &w);
     let at: Vec<&str> = found.iter().map(|f| f.at.as_str()).collect();
     assert_eq!(
         at,
@@ -365,7 +365,7 @@ fn a_date_or_a_change_note_in_a_living_doc_is_doc_provenance() {
          ```\nlet released = \"2026-01-01\";\n```\n",
     )
     .unwrap();
-    let found = mnemorph_world::provenance(&Roster::load(&w), &w);
+    let found = mnemorph_world::provenance(&Roster::cards(&w), &w);
     let at: Vec<&str> = found.iter().map(|f| f.at.as_str()).collect();
     assert_eq!(
         at,

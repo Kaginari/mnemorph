@@ -162,6 +162,9 @@ const body = (b: Partial<BoardBody> & Pick<BoardBody, 'name' | 'race'>): BoardBo
   minds: [],
   live: { state: 'idle', why: 'its last commission ended: answered', run: null, at: null },
   acts: fixtureEntries.filter((e) => e.body === b.name),
+  standing: 'trusted',
+  runs_as: b.race,
+  differs: [],
   ...b,
 });
 
@@ -170,6 +173,7 @@ export const fixtureBodies: BoardBodies = {
     body({
       name: 'rimuru',
       race: 'rimuru',
+      standing: 'throne',
       live: { state: 'working', why: 'run r17 is held by a live session', run: null, at: null },
     }),
     body({
@@ -233,11 +237,22 @@ export const fixtureBodies: BoardBodies = {
     }),
     body({
       name: 'kijin-forge',
-      race: 'kijin',
+      race: 'oni',
+      runs_as: 'kijin',
+      standing: 'mismatched',
+      differs: ['Race'],
       post: 'forge',
       live: { state: 'never', why: 'no commission journal names it yet', run: null, at: null },
     }),
     body({ name: 'dark-elf-supply', race: 'dark-elf', speciality: 'supply' }),
+    body({
+      name: 'kijin-scribe',
+      race: 'kijin',
+      runs_as: 'slime',
+      standing: 'stranger',
+      post: 'scribe',
+      live: { state: 'never', why: 'no commission journal names it yet', run: null, at: null },
+    }),
     body({
       name: 'slime-old',
       race: 'slime',
@@ -254,6 +269,11 @@ export const fixtureBodies: BoardBodies = {
     source: '.mnemorph/<race>/<seat>/README.md (in the world)',
     trusted: false,
     why: 'a body can write its doc: shown, granting nothing',
+  },
+  witness: {
+    source: "the creatures' witness under the state directory",
+    trusted: true,
+    why: null,
   },
   minds: { source: "the Minds' witness under the state directory", trusted: true, why: null },
   live: {

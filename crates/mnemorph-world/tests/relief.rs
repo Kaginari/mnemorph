@@ -5,11 +5,34 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mnemorph_world::Roster;
-use mnemorph_world::relief::{Act, relieve};
+use mnemorph_world::creatures::{self, Act as Wrote, HUMAN};
+use mnemorph_world::relief::{Act, Relief};
+
+/// Each test world's creatures' witness, beside it: tests never write the human's state directory.
+fn state_of(w: &Path) -> PathBuf {
+    let mut s = w.as_os_str().to_owned();
+    s.push("-state");
+    PathBuf::from(s)
+}
+
+/// Relief on `w`, every card adopted first as the human would: relief runs on the trusted roster.
+fn relieve(w: &Path, name: &str, apply: bool) -> Result<Relief, String> {
+    let state = state_of(w);
+    let held = creatures::witnessed_in(Some(&state), w).unwrap().unwrap();
+    let rows = Roster::cards(w)
+        .creatures
+        .values()
+        .filter(|c| c.name != "rimuru" && !held.contains_key(&c.name))
+        .map(|c| creatures::row_of(Wrote::Adopt, c, HUMAN))
+        .collect();
+    creatures::record_in(Some(&state), w, rows).unwrap();
+    mnemorph_world::relief::relieve_in(Some(&state), w, name, apply)
+}
 
 fn world(name: &str) -> PathBuf {
     let w = std::env::temp_dir().join(format!("mnemorph-relief-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state_of(&w));
     doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
     doc(
         &w,
@@ -58,7 +81,7 @@ fn a_ground_of_prefixes_splits_in_halves() {
             ]
         }
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert!(roster.creatures["slime-s"].retired);
     let a = &roster.creatures["slime-s-a"];
     assert_eq!(
@@ -128,7 +151,7 @@ fn a_one_directory_ground_splits_by_its_tree_and_one_file_retires() {
     );
     let u = relieve(&w, "slime-u", true).unwrap();
     assert_eq!(u.act, Act::Retire);
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert!(roster.creatures["slime-u"].retired);
     assert!(
         relieve(&w, "elf-e", false)
@@ -163,7 +186,7 @@ fn an_orc_relief_relinks_its_slimes() {
             ("slime-s".into(), "orc-o-b".into())
         ]
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert_eq!(
         roster.creatures["slime-s"].reports_to.as_deref(),
         Some("orc-o-b")
@@ -176,6 +199,18 @@ fn an_orc_relief_relinks_its_slimes() {
             .all(|f| f.code != "dead-bond" && f.code != "overlap"),
         "{findings:?}"
     );
+    // The witness learnt it from relief itself: the trusted view agrees with the cards written.
+    let trusted = Roster::load_in(Some(&state_of(&w)), &w);
+    assert_eq!(
+        trusted.creatures["orc-o-a"].race,
+        mnemorph_world::races::Race::Orc
+    );
+    assert_eq!(
+        trusted.creatures["slime-s"].reports_to.as_deref(),
+        Some("orc-o-b")
+    );
+    assert!(trusted.creatures["orc-o"].retired);
+    assert!(trusted.mismatches.is_empty(), "{:?}", trusted.mismatches);
     let _ = fs::remove_dir_all(&w);
 }
 
@@ -191,7 +226,7 @@ fn relief_checks_first_and_keeps_every_claim_readable() {
         "# slime-r\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** ./CHANGELOG.md, ./README.md\n",
     );
     relieve(&w, "slime-r", true).unwrap();
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     assert_eq!(roster.creatures["slime-r-a"].zone, ["CHANGELOG.md"]);
 
@@ -207,7 +242,7 @@ fn relief_checks_first_and_keeps_every_claim_readable() {
         !w.join(".mnemorph/slime/q-a").exists(),
         "nothing written before the check failed"
     );
-    assert!(!Roster::load(&w).creatures["slime-q"].retired);
+    assert!(!Roster::cards(&w).creatures["slime-q"].retired);
 
     fs::create_dir_all(w.join("deep/only/x")).unwrap();
     fs::create_dir_all(w.join("deep/only/y")).unwrap();

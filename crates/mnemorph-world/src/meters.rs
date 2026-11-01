@@ -165,7 +165,7 @@ mod tests {
             std::fs::create_dir_all(&at).unwrap();
             std::fs::write(at.join("README.md"), doc).unwrap();
         }
-        let r = Roster::load(dir.path());
+        let r = Roster::cards(dir.path());
         (dir, r)
     }
 

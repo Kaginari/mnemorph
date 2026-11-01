@@ -5,6 +5,8 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod roster;
+
 const HELP: &str = "mnemorphd — the Mnemorph core
 
 Usage: mnemorphd [--world <dir>] [--resume <run|last>]
@@ -44,6 +46,10 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
        mnemorphd verify pin <creature> [--yes] [--world <dir>]
+       mnemorphd roster list [--world <dir>]
+       mnemorphd roster adopt [<creature>...] [--yes] [--world <dir>]
+       mnemorphd roster set-race <creature> <race> [--yes] [--world <dir>]
+       mnemorphd roster retire <creature> [--yes] [--world <dir>]
        mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open] [--background]
        mnemorphd board add|forget <dir>
        mnemorphd board prune [--dry-run]
@@ -176,6 +182,19 @@ the card itself); it is refused inside a body's command as the question is. An O
 pins the line it codes for its own Slime through the harness, and relief pins each young to its
 parent's pinned lines. A body never runs it.
 
+`roster` is the human's door to the creatures' witness: who each creature is — its race and
+rank, whom it reports to, its post or speciality, its ground — kept under the human's state
+directory, never in the world. A card lives in the world, which a body's commit writes and a
+cloned repository brings from a stranger, so every privilege reads the witness: a card that
+differs from its row runs at the lower of the two, with a `roster-mismatch` finding, and a card
+with no row is a stranger, its own seat alone. `list` shows each card, its standing and its row.
+`adopt` shows every stranger and every card that differs from its row — or the creatures named —
+and asks once for `y` at the terminal (`/dev/tty`; piped input is refused), then records each card
+as it stands. `set-race <creature> <race>` raises or lowers a race, and sets the card's `Race`
+line to match; `retire <creature>` retires it. `--yes` writes without the question, for a script
+the human runs; every write is refused inside a body's command and under a harness process. The
+harness writes the rest: relief, and an evolution swap the human said yes to.
+
 `board` serves the board — the web cockpit over every world on this machine — on loopback
 (`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
 for another machine, forward the port over SSH). It prints `http://127.0.0.1:<port>/#k=<key>`:
@@ -230,6 +249,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "evolution" => evolution,
         "mind" => mind,
         "verify" => verify,
+        "roster" => roster::roster,
         "board" => board,
         _ => return None,
     })
@@ -743,9 +763,28 @@ fn onto(args: &[String]) -> ExitCode {
     for problem in &roster.problems {
         let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
     }
-    if command == "check" {
-        return check(&world, &roster, dimension);
+    if let Some(why) = &roster.witness {
+        let _ = writeln!(std::io::stderr(), "mnemorphd: {why}");
     }
+    let strangers: Vec<&str> = roster
+        .creatures
+        .keys()
+        .filter(|n| roster.stranger(n))
+        .map(String::as_str)
+        .collect();
+    if !strangers.is_empty() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: no row holds the card of {}: each is a stranger, its own seat alone, until \
+             `mnemorphd roster adopt`",
+            mnemorph_server::challenge::safe(&strangers.join(", "))
+        );
+    }
+    if command == "check" {
+        // The shape is the cards'; what differs from the witness is a finding of its own.
+        return check(&world, &Roster::shown(&world, &world), dimension);
+    }
+    let cards = Roster::cards(&world);
     let mut out = std::io::stdout().lock();
     for path in &paths {
         // A path is the human's: relative to where they stand, read against the world.
@@ -779,7 +818,17 @@ fn onto(args: &[String]) -> ExitCode {
             || e.rule.words().to_owned(),
             |c| format!("{} {c}", e.rule.words()),
         );
-        let _ = writeln!(out, "{path}\t{owner}\t{why}");
+        // The trusted owner; a card that would name another is said beside it, granting nothing.
+        let said = explain(&cards, &rel).owner;
+        let card = match (&said, &e.owner) {
+            (a, b) if a == b => String::new(),
+            (Owner::Creature(c), _) => format!(
+                "\t(its card says {}: it owns nothing until `mnemorphd roster adopt`)",
+                mnemorph_server::challenge::safe(c)
+            ),
+            _ => String::new(),
+        };
+        let _ = writeln!(out, "{path}\t{owner}\t{why}{card}");
     }
     ExitCode::SUCCESS
 }

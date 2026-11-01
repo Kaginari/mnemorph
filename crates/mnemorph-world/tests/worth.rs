@@ -52,7 +52,7 @@ fn a_card_counts_the_body_and_every_body_below_it() {
         "t",
         "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     // No record yet: worth 0.75.
     assert_eq!(card(&w, &roster, "slime-s").worth_milli(), 750);
     verdict(&w, "slime-s", "PASS");
@@ -236,7 +236,7 @@ fn a_check_that_gave_no_result_counts_as_a_fail() {
     said("NOT_VERIFIED, unrun");
     let records = mnemorph_world::worth::Records::load(&w);
     assert_eq!(records.stuck("slime-s"), ["src/a.rs"]);
-    let card = records.card(&mnemorph_world::Roster::load(&w), "slime-s");
+    let card = records.card(&mnemorph_world::Roster::cards(&w), "slime-s");
     assert_eq!((card.passes, card.fails, card.handed_back), (0, 3, 1));
     let _ = fs::remove_dir_all(&w);
 }

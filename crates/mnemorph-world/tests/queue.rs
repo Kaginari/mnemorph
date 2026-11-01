@@ -55,11 +55,11 @@ impl Drop for World {
 #[test]
 fn an_item_moves_held_claimed_done() {
     let w = World::new("states");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q
         .add(
-            &Roster::load(&w.0),
+            &Roster::cards(&w.0),
             Some("slime-s"),
             "orc-o",
             "add the tab test",
@@ -95,10 +95,10 @@ fn an_item_moves_held_claimed_done() {
 #[test]
 fn the_rank_law() {
     let w = World::new("rank");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q
-        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .add(&Roster::cards(&w.0), Some("slime-s"), "orc-o", "x", 0)
         .unwrap();
     let touch = || Move::Touch {
         note: "seen".into(),
@@ -115,7 +115,7 @@ fn the_rank_law() {
             holder: "slime-s".into()
         })
     );
-    let throne = q.add(&Roster::load(&w.0), None, "human", "y", 0).unwrap();
+    let throne = q.add(&Roster::cards(&w.0), None, "human", "y", 0).unwrap();
     assert!(
         q.move_item(&r, "elf-e", &throne.id, &touch()).is_err(),
         "unheld work is the throne's"
@@ -130,7 +130,7 @@ fn a_race_is_won_by_the_first_line() {
     let w = World::new("race");
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q
-        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .add(&Roster::cards(&w.0), Some("slime-s"), "orc-o", "x", 0)
         .unwrap();
     // Another session lands rev 2 first.
     let other = Item {
@@ -142,7 +142,7 @@ fn a_race_is_won_by_the_first_line() {
     lines += &serde_json::to_string(&other).unwrap();
     lines.push('\n');
     fs::write(q.path(), lines).unwrap();
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     // This session read rev 1 before the other landed: its rev 2 line is refused by the fold.
     let stale = Item {
         rev: 2,
@@ -171,10 +171,10 @@ fn a_race_is_won_by_the_first_line() {
 #[test]
 fn a_body_never_claims_for_another() {
     let w = World::new("claim-as");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q
-        .add(&Roster::load(&w.0), Some("slime-s"), "orc-o", "x", 0)
+        .add(&Roster::cards(&w.0), Some("slime-s"), "orc-o", "x", 0)
         .unwrap();
     let as_orc = Move::Claim {
         as_body: Some("orc-p".into()),
@@ -190,7 +190,7 @@ fn a_body_never_claims_for_another() {
 #[test]
 fn ties_run_in_order_of_arrival() {
     let w = World::new("arrival");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let ids: Vec<String> = (0..6)
         .map(|n| q.add(&r, None, "human", &format!("job {n}"), 0).unwrap().id)
@@ -205,7 +205,7 @@ fn ties_run_in_order_of_arrival() {
 #[test]
 fn orders_go_down_the_ranks() {
     let w = World::new("down");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     assert!(
         q.add(&r, Some("slime-s"), "elf-e", "x", 0).is_ok(),
@@ -238,7 +238,7 @@ fn the_human_and_the_harness_are_reserved_names() {
         "h",
         "# human\n\n- **Race:** orc\n- **Reports to:** elf-e\n",
     );
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     assert!(r.living().all(|c| c.name != "human"));
     assert!(
         r.problems.iter().any(|p| p.contains("`human` is reserved")),
@@ -251,7 +251,7 @@ fn the_human_and_the_harness_are_reserved_names() {
 #[test]
 fn the_queue_is_not_written_through_a_link() {
     let w = World::new("link");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let target = w.0.join("elsewhere.jsonl");
     std::os::unix::fs::symlink(&target, w.0.join("queue.jsonl")).unwrap();
     let q = Queue::at(&w.0.join("queue.jsonl"));
@@ -266,7 +266,7 @@ fn the_queue_is_not_written_through_a_link() {
 #[test]
 fn a_body_does_not_close_its_own_order() {
     let w = World::new("own-close");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     let q = Queue::at(&w.0.join("queue.jsonl"));
     let item = q.add(&r, Some("slime-s"), "orc-o", "x", 0).unwrap();
     for drop in [false, true] {
@@ -314,7 +314,7 @@ fn a_kijin_name_matches_its_race_and_its_directory() {
         "ci",
         "# kijin-release\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
     );
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     assert!(r.creatures.contains_key("kijin-forge"), "{:?}", r.problems);
     assert!(!r.creatures.contains_key("kijin-deploy"));
     assert!(!r.creatures.contains_key("kijin-release"));
@@ -370,7 +370,7 @@ fn a_dark_elf_name_matches_its_race() {
         "x",
         "# slime-x\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Surfaces:** api/\n",
     );
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     for name in ["dark-elf-agent", "dark-elf-supply", "kijin-scout"] {
         assert!(r.creatures.contains_key(name), "{name}: {:?}", r.problems);
     }
@@ -410,7 +410,7 @@ fn a_dark_elf_doc_adds_surfaces_to_the_route() {
         "general",
         "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** vendor/\n",
     );
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     assert_eq!(r.creatures["dark-elf-web"].surfaces, ["api/", "auth.py"]);
     // The generalist's Surfaces are the world's catch-all: it is routed them alone.
     assert_eq!(r.route(&["vendor/lib.c"]), [General]);

@@ -436,6 +436,9 @@ fn a_rise_is_proposed_to_the_human() {
         "# dark-elf-harness\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
     )
     .unwrap();
+    // The human adopts the card: the race a rise reads is the witness's.
+    let creatures = mnemorph_server::world::creatures::adoption_in(Some(&f.state), &f.world);
+    mnemorph_server::world::creatures::record_in(Some(&f.state), &f.world, creatures).unwrap();
     let c = Challenges::at(&records(&f.state, &f.world));
     let upheld = Decision::human(true, WHY).unwrap();
     for i in 0..20 {

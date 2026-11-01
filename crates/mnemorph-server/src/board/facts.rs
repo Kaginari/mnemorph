@@ -380,7 +380,10 @@ fn read(world: &Path) -> (Facts, Vec<Event>) {
 pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
     let snap = snapshot::ontology(world)?;
     let (facts, events) = read(world);
-    let roster = Roster::load(snap.path());
+    // The shape is the cards' (with the witness's mismatches); each path's owner is the
+    // trusted roster's, as `onto owner` says it.
+    let roster = Roster::shown(snap.path(), world);
+    let trusted = Roster::copied(snap.path(), world);
     let tracked = crate::tracked(world);
     let git = tracked.is_some();
     let (findings, _) = onto_check(world, &roster, &facts, &tracked.unwrap_or_default(), false)?;
@@ -420,7 +423,7 @@ pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
             .into_iter()
             .skip(filter.offset as usize)
             .take(filter.limit as usize)
-            .map(|f| shown(world, &roster, &facts, &events, f))
+            .map(|f| shown(world, &trusted, &facts, &events, f))
             .collect(),
         offset: filter.offset,
         limit: filter.limit,
@@ -437,7 +440,7 @@ pub fn facts(world: &Path, filter: &Filter) -> Result<BoardFacts, String> {
             })
             .collect(),
         problems: roster.problems.clone(),
-        owners: paths.into_iter().map(|p| owner(&roster, p)).collect(),
+        owners: paths.into_iter().map(|p| owner(&trusted, p)).collect(),
         verdicts: passing(world),
         git,
         source: "the trusted facts under the human's state directory (as `mnemorphd onto check` \

@@ -9,6 +9,7 @@
 //! [`pictures`] places the races' portraits over the cells as real pixels where it can.
 
 pub mod activity;
+pub mod adopt;
 pub mod app;
 pub mod approval;
 pub mod blocks;

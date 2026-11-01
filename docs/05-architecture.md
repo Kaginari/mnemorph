@@ -581,12 +581,55 @@ the human's own statement (1 to
 1,000 characters), filed as `the human's word (board): <statement>`. A verdict that failed, landed
 elsewhere, or does not exist is refused (422).
 
+#### The roster's trust
+
+A creature's card (`.mnemorph/<race>/<name>/README.md`) lives in the world, and nothing read from
+inside a world grants trust: a body's commit, a merge or a pull writes a card past every tool
+guard, and a cloned repository brings every card from a stranger. So the roster's source of truth
+is the creatures' witness under the state directory; the cards are display-only. `Roster::load`
+holds each card to its row, and every privilege reads that trusted view — the dispatch law and
+the chain, write soil, the outward tool and the post, an Oni's envelopes, the MCP doors by race,
+the Commission, Verify and Verdict tools, an Orc's `@V settle` and labels, queue moves, recall
+kin, steps and the budget slice by race, Dark Elf routing, meters and rise proposals, relief and
+the gate's findings. `Roster::cards` is the cards as they stand, for what only shows them.
+
+- **A card that says what its row holds** runs as it says.
+- **A card that differs from its row** runs at the lower of the two: the lower race (two ranks
+  of one lineage read as its base, two lineages as a Slime), the ground both name, the row's
+  chain of command, retired if either says so — and it loses its rank besides, so no ascended
+  form, an Oni's envelopes above all, rides a card the witness does not hold. Each field that
+  differs is a `roster-mismatch` finding, high.
+- **A card with no row is a stranger**: a Slime of its own seat and scratch, reporting to no one,
+  with no ground, no outward act, no MCP door, no settle and no dispatch — and no workspace root
+  file, whatever name it bears.
+- **A witness that does not walk whole**, or no home to keep one, trusts no row: every creature
+  but the throne is a stranger until the human looks (`mnemorphd housekeep --verify`).
+
+The throne, `rimuru`, is implicit: the session's own seat, never a row. No tool writes a card —
+the world's records are protected — so a card arrives by the human's hand, by the harness, or by
+a route the witness exists to distrust. The harness writes the rows of the births it makes:
+relief, for the parent it retires, the young at the parent's base race and the children it hands
+on; and an evolution swap the human said yes to, never above the race a row held, a new name at
+its base, a card it removed retired.
+Rises, falls and adoptions are the human's alone: `mnemorphd roster adopt`, `set-race` and
+`retire`, each asked at the terminal (`/dev/tty`; piped input is refused) or under `--yes` for a
+script the human runs, refused inside a body's command, under any `mnemorph`, `mnemorphd` or
+`mnemorph-guard` ancestor, and with a state directory inside the world. A fresh world — its
+throne alone — asks nothing. A card the human writes by hand, a cloned world, or one from before
+the witness opens in the terminal app on one list of its strangers — each card's race, post,
+ground and chain — and adopts them all only on the typed word `adopt`; anything else adopts
+nothing, and they stay strangers until `mnemorphd roster adopt`. A card that differs from its row
+is never adopted there: it is shown with the way on, `mnemorphd roster adopt <creature>`.
+
 #### The bodies, queue and journal pages
 
 All four read a world in-process with the CLI's own functions, and say where each part was read.
-The roster comes from the creature docs, copied first as the overview copies (regular files only,
-capped) with the Minds under `.mnemorph/minds/`: a body can write its doc, so the roster is shown
-and grants nothing. A Mind's standing — adopted, unadopted, changed, retired, unverified, or named
+The roster's cards come from the creature docs, copied first as the overview copies (regular files
+only, capped) with the Minds under `.mnemorph/minds/`: a body can write its doc, so a card is
+shown and grants nothing. What each creature runs as is the creatures' witness's under the state
+directory, read for the world's own path ([the roster's trust](#the-rosters-trust)): each body
+says whether it is the throne, trusted, mismatched — the fields its card says otherwise, and the
+race it runs as — or a stranger, with the way on. A Mind's standing — adopted, unadopted, changed, retired, unverified, or named
 but absent — is the witness's under the state directory, held to its anchor (the anchor's fallback
 in `log.md` read from the file's guarded end): trusted. The race law is compiled in: trusted.
 
@@ -1372,6 +1415,7 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | report ledger | `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — every race's reports but the Dark Elf's, folded from the usage witness, the gate verdicts, the challenge records and the Kijin posts' witnesses alone, each walked and held to its anchor — a journal gone while its anchor stays stops the fold ([the report fold](02-races.md#the-report-fold)): one row per report — `run` (gate word, first try, holes, verify lines green, dispatches landed and re-asked, passes and those overturned), `ask` (a throne landing done or reopened) or `act` (an outward act clean or rolled back) — each with the `build` of the journal row that settled it (`unstamped` where that row carries none), chained from its genesis; a pass counts as verified only on a line the human pinned. Derived: `mnemorphd meters` rebuilds it whole and puts it in place by a rename when its bytes change, never edited in place, so a replay of the same journals reproduces it byte for byte; a fold whose journal does not hold keeps no new ledger | no — machine-local |
 | board answers | `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each answer to the gate given on the board, taken or refused: the chat, the ask, the tab's connection, the act as shown, the digest shown and the one named, the timing since the ask and the render acknowledgement; written by the board alone, append-only and hash-chained, anchored as `answers` with the other chained journals | no — machine-local |
 | verify pins | `$XDG_STATE_HOME/mnemorph/verify/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's pinned verify lines: a `pin` row (the whole set, by the human or by relief) or a `code` row (one line an Orc coded through the harness), with `by` and `build` — each line keeps its author, so an Orc's line is no bench and its pass is the Orc's; append-only and hash-chained, anchored as `verify`; the end gate runs only these lines, and only while the card says the same ([the verify pins](03-loop.md#the-verify-pins)) | no — machine-local |
+| creatures' witness | `$XDG_STATE_HOME/mnemorph/roster/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's whole standing as of the row: its name, race (rank included), `reports_to`, post or speciality, ground with its `ground_sha256`, whether retired, the act (`relief`, `evolution`, `adopt`, `set-race`, `retire`), `by` and `build`; append-only and hash-chained, anchored as `roster` from the state directory alone. It is the roster's source of truth: every privilege reads a card only as held to its row, and the cards in the world are display-only ([the roster's trust](#the-rosters-trust)) | no — machine-local |
 | Minds' witness | `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each Mind the human adopted, retired or unretired: its doc, the SHA-256 of its bytes then, its owner (on adoption) and `build`; written only by `mnemorphd mind` at the terminal, append-only and hash-chained, anchored as `minds`; a Mind loads only while its doc holds the adopted bytes | no — machine-local |
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
@@ -1408,6 +1452,7 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `verify` | the verify pins: the lines each creature's end gate may run | the human's `mnemorphd verify pin` and the terminal app's first-run prompt; the harness, for an Orc's `verify` tool and for relief |
 | `facts` | the trusted territory facts | the harness (a body's `@U territory`, a parent's labels, an Orc's settle, the one import); the human's `mnemorphd onto settle` and the board's settle |
 | `relations` | the relations this world states, and its inverses | the human's `mnemorphd onto relate`, `unrelate`, `inverse` |
+| `roster` | the creatures' witness: each creature's race and rank, chain, post or speciality, and ground | the harness, for relief and an evolution swap the human said yes to; the human's `mnemorphd roster adopt`, `set-race`, `retire` and the terminal app's first-run prompt |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 

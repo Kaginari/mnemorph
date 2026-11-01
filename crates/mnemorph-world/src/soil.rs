@@ -58,7 +58,8 @@ pub fn soil(roster: &Roster, name: &str) -> Option<Soil> {
             write.push((*compiled).to_owned());
         }
     }
-    let root_files = name == WORKSPACE;
+    // The workspace's root files are a trusted seat's: a stranger bearing its name has none.
+    let root_files = name == WORKSPACE && !roster.stranger(name);
     // Every claim in the world that ranks before this creature's, inside its own claims.
     let mut anchors: Vec<String> = HARNESS
         .iter()

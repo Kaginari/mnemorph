@@ -57,6 +57,10 @@ impl Fixture {
             fs::write(world.join(path), text).unwrap();
         }
         let world = world.canonicalize().unwrap();
+        // The human adopts the cards: the races meters and swaps read are the witness's.
+        let state = root.join("state");
+        let creatures = mnemorph_server::world::creatures::adoption_in(Some(&state), &world);
+        mnemorph_server::world::creatures::record_in(Some(&state), &world, creatures).unwrap();
         Self { root, world }
     }
 

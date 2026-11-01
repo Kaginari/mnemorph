@@ -12,7 +12,7 @@ fn repo() -> PathBuf {
 
 #[test]
 fn the_graph_closes_to_its_fixed_point() {
-    let roster = Roster::load(&repo());
+    let roster = Roster::cards(&repo());
     let g = Graph::of(&roster);
     // Asserted: the Orc above its Slime, by the truth sub-bond.
     assert!(g.has("orc-law", Bond::Truth, "slime-wire"));
@@ -36,7 +36,7 @@ fn the_graph_closes_to_its_fixed_point() {
 
 #[test]
 fn explain_names_the_rule_and_the_claim() {
-    let roster = Roster::load(&repo());
+    let roster = Roster::cards(&repo());
     let e = explain(&roster, "crates/mnemorph-wire/src/lib.rs");
     assert_eq!(
         (e.owner, e.rule, e.claim.as_deref()),
@@ -64,7 +64,7 @@ fn explain_names_the_rule_and_the_claim() {
 /// writes.
 #[test]
 fn every_soil_admits_exactly_what_own_gives_it_to_write() {
-    let roster = Roster::load(&repo());
+    let roster = Roster::cards(&repo());
     let out = Command::new("git")
         .arg("-C")
         .arg(repo())

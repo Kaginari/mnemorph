@@ -18,6 +18,8 @@
 //! - `verify`: the verify pins — the lines each creature's end gate may run ([`crate::pins`]);
 //! - `facts`: the trusted territory facts ([`crate::facts`]);
 //! - `relations`: the relations between worlds the human stated ([`crate::dimension`]);
+//! - `roster`: the creatures' witness — each creature's race, chain, post and ground
+//!   ([`crate::creatures`]);
 //! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
 //! - `kijin-<post>`: each Kijin post's witness, the trusted copy of its journal.
 //!
@@ -42,7 +44,7 @@ pub const USAGE_WITNESS: &str = "usage-witness";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
     /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `verify`,
-    /// `facts`, `relations`, `uses`, `revocations` or `kijin-<post>`.
+    /// `facts`, `relations`, `roster`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
@@ -95,6 +97,11 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     out.push(Chained {
         name: crate::dimension::RELATIONS,
         path: crate::dimension::relations_in(state, world),
+    });
+    // The creatures' witness names the world by its real path ([`crate::creatures`]).
+    out.push(Chained {
+        name: crate::creatures::KIND,
+        path: crate::creatures::path_in(state, world),
     });
     let oni = state.join("mnemorph/oni");
     out.push(Chained {
@@ -562,6 +569,7 @@ mod tests {
                 "verify",
                 "facts",
                 "relations",
+                "roster",
                 "uses",
                 "revocations"
             ]

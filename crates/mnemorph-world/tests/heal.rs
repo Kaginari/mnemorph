@@ -108,7 +108,7 @@ fn a_heal_repairs_what_is_mechanical_once() {
         "{:?}",
         done.left
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert!(
         roster.creatures["slime-z"].retired,
         "the stub claims nothing"

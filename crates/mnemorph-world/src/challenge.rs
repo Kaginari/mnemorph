@@ -1177,7 +1177,7 @@ mod tests {
             "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** src/auth/\n",
         )
         .unwrap();
-        let roster = Roster::load(&w);
+        let roster = Roster::cards(&w);
         assert!(roster.problems.is_empty(), "{:?}", roster.problems);
         let l = route(&roster, "l1", &["src/auth/login.rs".to_owned()]);
         let web = l

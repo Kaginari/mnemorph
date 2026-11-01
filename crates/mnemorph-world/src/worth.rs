@@ -417,7 +417,7 @@ mod tests {
         let j = journal_at(&path);
         kept(&j, "PASS, unchecked", "src/a.rs");
         kept(&j, "PASS", "src/b.rs");
-        let roster = Roster::load(&world);
+        let roster = Roster::cards(&world);
         let card = Records::load_at(&world, Some(&path), None).card(&roster, "slime-s");
         assert_eq!((card.passes, card.fails, card.handed_back), (1, 0, 0));
     }

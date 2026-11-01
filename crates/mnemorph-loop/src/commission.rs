@@ -1768,6 +1768,7 @@ mod clock_tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("README.md"), body).unwrap();
         }
+        mnemorph_world::creatures::record(&w, mnemorph_world::creatures::adoption(&w)).unwrap();
         let roster = Roster::load(&w);
         let died = Ending::Checkpoint {
             why: "clock: the deadline passed".into(),
