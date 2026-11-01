@@ -486,6 +486,7 @@ fn build(
         mcp,
         registry: mnemorph_world::dimension::registry(),
         law,
+        guts: mnemorph_world::guts::journal(world),
     });
     let session_mcp = commissioner.mcp.clone();
     let setup = Setup {
@@ -512,7 +513,8 @@ fn build(
     }
     .with_observer(observer)
     .with_gate(gate)
-    .with_mcp(session_mcp);
+    .with_mcp(session_mcp)
+    .with_guts(mnemorph_world::guts::journal(world));
     let run = equip(
         run,
         world,

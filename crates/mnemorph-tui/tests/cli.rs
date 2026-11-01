@@ -258,3 +258,76 @@ fn status_shows_each_mind_and_its_standing() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// Where the harness keeps `world`'s record of `kind` under the state directory `state`.
+fn state_file(state: &std::path::Path, world: &std::path::Path, kind: &str) -> PathBuf {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in world.as_os_str().as_encoded_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    let name = world.file_name().unwrap().to_string_lossy();
+    state
+        .join("mnemorph")
+        .join(kind)
+        .join(format!("{name}-{h:016x}.jsonl"))
+}
+
+/// `status` counts the last run's acts per class from the harness's chained record outside the
+/// world, and refuses that record once a link of it is edited.
+#[test]
+fn status_counts_the_last_runs_guts_classes() {
+    use mnemorph_server::world::guts::{Class, GutsRow, append_stamped, journal_at};
+    use mnemorph_server::world::ledger::{Build, Timestamp};
+    let w = empty_world("guts");
+    let state = w.join("state");
+    // `status` names the world by its real path: macOS's temp directory is behind a link.
+    let path = state_file(&state, &w.canonicalize().unwrap(), "guts");
+    let j = journal_at(&path);
+    for (run, classes) in [
+        ("r0", vec![Class::Positive]),
+        ("r1", vec![Class::Fail, Class::Repeat]),
+        ("r1", vec![Class::RedPin]),
+        ("r1", vec![]),
+    ] {
+        let row = GutsRow {
+            ts: Timestamp::now(),
+            run: run.into(),
+            body: "slime-a".into(),
+            tool_use_id: "t".into(),
+            tool: "bash".into(),
+            classes,
+            build: Build::default(),
+        };
+        append_stamped(&j, row).unwrap();
+    }
+    let status = || {
+        let out = bin()
+            .args(["status", "--world", w.to_str().unwrap()])
+            .env("XDG_CONFIG_HOME", w.join("config"))
+            .env("XDG_STATE_HOME", &state)
+            .env("HOME", &w)
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let shown = status();
+    assert!(
+        shown.contains(
+            "guts     last run r1 (slime-a): 3 acts · fail 1 · red-pin 1 · positive 0 · repeat 1 \
+             · echo 0 · thrash 0 — signals, never a verdict\n"
+        ),
+        "{shown}"
+    );
+    let raw = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, raw.replacen("\"red-pin\"", "\"positive\"", 1)).unwrap();
+    let shown = status();
+    assert!(
+        shown.contains("guts     the classes are not believed: their chain is broken at line 3"),
+        "{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}

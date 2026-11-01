@@ -52,6 +52,7 @@ export type { GateReply } from './generated/GateReply.js';
 export type { GateRequest } from './generated/GateRequest.js';
 export type { GateVerdict } from './generated/GateVerdict.js';
 export type { Ground } from './generated/Ground.js';
+export type { GutsClass } from './generated/GutsClass.js';
 export type { Hello } from './generated/Hello.js';
 export type { HoleView } from './generated/HoleView.js';
 export type { JournalEntry } from './generated/JournalEntry.js';

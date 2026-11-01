@@ -1288,6 +1288,21 @@ about each report — the gate's word on its landing, a first-try pass, the hole
   the journal, that fold must keep these properties: they are re-asserted against it, not assumed
   from this one.
 
+**The guts classes are signals for a learned value, never a meter.** Every act of every body is
+classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its
+structured outcome, never from text — only a trusted verify line, matched exactly, is a bench, and
+none is trusted until verify lines live out of a body's reach — and kept in a chained record
+outside the world
+([the loop](03-loop.md#stress-in-four-instruments)). No bar reads them, and no rise, fall or
+probation follows from them. When a learned value model reads them, two rules are fixed structure
+that no update may undo:
+
+- **The red pin weighs 0.** A test bench that ran red is TDD's right process; its class is not an
+  input, and its weight is pinned at 0 and left out of every update.
+- **Honest bad news never costs.** A body that reports a failure honestly is never valued below
+  one that fails silently: for a linear model the honest report's weight is kept at 0 or above,
+  projected back after each update.
+
 Rules that hold for every ascension:
 
 - **Never** outward or destructive without a gate: the Oni's envelope *is* a gate, signed in

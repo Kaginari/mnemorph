@@ -192,6 +192,33 @@ nav.tabs {
   color: var(--mn-text-muted);
   font-size: 12px;
 }
+.act-guts {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.guts-acts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.guts-act {
+  display: inline-flex;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  font-size: 12px;
+}
+.guts-plain {
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-mono);
+}
 
 .race-cards {
   list-style: none;

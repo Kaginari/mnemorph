@@ -98,6 +98,8 @@ const verdict = (at: string, body: string, word: string, n: number): TimelineEnt
   why: null,
   source: "the gate's verdict journal under the state directory",
   trusted: true,
+  acts: [],
+  acts_cut: 0,
 });
 
 const commission = (
@@ -105,6 +107,7 @@ const commission = (
   body: string,
   ask: string,
   state: 'ended' | 'open',
+  acts: TimelineEntry['acts'] = [],
 ): TimelineEntry => ({
   kind: 'commission',
   at,
@@ -120,6 +123,8 @@ const commission = (
   why: null,
   source: `.mnemorph/instruments/loop/${body}-186f0a2b3c4d5e6f-0.jsonl`,
   trusted: false,
+  acts,
+  acts_cut: 0,
 });
 
 export const fixtureEntries: TimelineEntry[] = [
@@ -131,7 +136,15 @@ export const fixtureEntries: TimelineEntry[] = [
     'open',
   ),
   verdict('2026-10-30T20:10:00Z', 'orc-sql', 'FAIL, handed back', 2),
-  commission('2026-10-30T20:00:00Z', 'orc-sql', 'judge the dialect landing', 'ended'),
+  commission('2026-10-30T20:00:00Z', 'orc-sql', 'judge the dialect landing', 'ended', [
+    [],
+    ['red-pin'],
+    ['red-pin', 'repeat'],
+    ['fail'],
+    ['echo'],
+    ['positive'],
+    ['red-pin', 'thrash'],
+  ]),
   commission('2026-10-30T19:00:00Z', 'kijin-forge', 'open the PR for #42', 'ended'),
   verdict('2026-10-30T18:00:00Z', 'slime-lexer', 'PASS', 1),
 ];
@@ -340,6 +353,7 @@ export function timelineOf(kind: string | null, who: string | null): BoardTimeli
     verdicts: fixtureEntries.filter((e) => e.kind === 'verdict').length,
     older: 0,
     verdicts_why: null,
+    guts_why: null,
   };
 }
 

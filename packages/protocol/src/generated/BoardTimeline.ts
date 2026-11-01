@@ -40,4 +40,8 @@ older: number,
 /**
  * Why the verdicts are unknown, when they are.
  */
-verdicts_why: string | null, };
+verdicts_why: string | null, 
+/**
+ * Why the acts' guts classes are not shown, when they are not.
+ */
+guts_why: string | null, };

@@ -2472,3 +2472,163 @@ async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
         "{offer:?}"
     );
 }
+
+/// Every act's guts classes ride its beat and the harness's chained record outside the world, read
+/// from the act's structured outcome alone: a body that prints a passing bench's words earns no
+/// `positive`, and a red bench's words printed by a clean command earn no `red-pin`. No verify line
+/// is trusted yet, so a check the body chose is never a bench: passing it is plain, failing it a
+/// fail. Replaying the journal gives the same classes.
+#[tokio::test]
+async fn every_act_is_classed_from_its_outcome_never_its_text() {
+    use mnemorph_loop::guts::{Class, replay};
+    let w = World::new("guts-classes");
+    // The body's card names its check as a verify line — but the card is in the world, the body's
+    // to write: it makes no bench.
+    let card = w.world().join(".mnemorph/slime/slime-test/README.md");
+    fs::create_dir_all(card.parent().unwrap()).unwrap();
+    fs::write(
+        &card,
+        "# slime-test\n\n- **Race:** slime\n- **Verify:** `python3 -c \"assert 1 == 1\"`\n",
+    )
+    .unwrap();
+    let bash = |id: &str, command: &str| tool(id, "bash", json!({ "command": command }));
+    let read = |id: &str| tool(id, "read", json!({"path": "a.txt"}));
+    let model = Arc::new(ScriptedModel::new([
+        bash("c1", "echo 'test result: ok. 3 passed; verify passed'"),
+        bash(
+            "c2",
+            "printf 'test result: FAILED\\npanicked at src/a.rs\\n'",
+        ),
+        bash("c3", "python3 -c \"assert 1 == 1\""),
+        tool("c4", "write", json!({"path": "a.txt", "content": "one\n"})),
+        bash("c5", "python3 -c \"assert 1 == 2\""),
+        bash("c6", "python3 -c \"assert 1 == 2\""),
+        bash("c7", "sh -c 'echo FAILED; exit 1'"),
+        read("c8"),
+        tool("c9", "glob", json!({"pattern": "*.txt"})),
+        read("c10"),
+        tool("c11", "glob", json!({"pattern": "*.md"})),
+        read("c12"),
+        answer("done"),
+    ]));
+    let kept = w.root.join("state/guts.jsonl");
+    let mut run = w
+        .run(
+            model,
+            Limits {
+                steps: 30,
+                ..limits()
+            },
+        )
+        .with_guts(Some(mnemorph_loop::world::guts::journal_at(&kept)));
+    let e = ask(&mut run, "check it").await;
+    assert!(matches!(e, Ending::Answered(_)), "{e:?}");
+    let rows = w.journal().read().unwrap().rows;
+    let journaled: Vec<(String, Vec<Class>)> = rows
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Guts {
+                tool_use_id,
+                classes,
+                ..
+            } => Some((tool_use_id.clone(), classes.clone())),
+            _ => None,
+        })
+        .collect();
+    let want: Vec<(String, Vec<Class>)> = [
+        ("c1", vec![]),
+        ("c2", vec![]),
+        ("c3", vec![]),
+        ("c4", vec![]),
+        ("c5", vec![Class::Fail]),
+        ("c6", vec![Class::Fail, Class::Repeat]),
+        ("c7", vec![Class::Fail]),
+        ("c8", vec![]),
+        ("c9", vec![]),
+        ("c10", vec![]),
+        ("c11", vec![]),
+        ("c12", vec![Class::Echo]),
+    ]
+    .into_iter()
+    .map(|(id, c)| (id.to_owned(), c))
+    .collect();
+    assert_eq!(journaled, want);
+    assert_eq!(
+        replay(&rows),
+        want,
+        "the journal replays to the same classes"
+    );
+    // The record outside the world: the same classes, chained, stamped with this build.
+    let report = mnemorph_ledger::chain::verify(&kept).unwrap();
+    assert!(report.holds() && report.rows == 12, "{report}");
+    let trusted = mnemorph_loop::world::guts::journal_at(&kept)
+        .read()
+        .unwrap()
+        .rows;
+    assert!(
+        trusted
+            .iter()
+            .all(|r| r.build == mnemorph_ledger::Build::this() && r.run == "r")
+    );
+    let trusted: Vec<(String, Vec<Class>)> = trusted
+        .into_iter()
+        .map(|r| (r.tool_use_id, r.classes))
+        .collect();
+    assert_eq!(trusted, want);
+    // The classes never reach the model.
+    assert_eq!(conversation(&rows), run.messages());
+}
+
+/// The classifier spans the run, as isekai's spans its session: the second ask's first act, the
+/// same as the first ask's last, is a repeat; a resumed run goes on from its journal's acts.
+#[tokio::test]
+async fn the_classes_span_the_run_and_replay_the_same() {
+    use mnemorph_loop::guts::{Class, replay};
+    let w = World::new("guts-asks");
+    let failing = || tool("x", "bash", json!({"command": "sh -c 'exit 3'"}));
+    let model = Arc::new(ScriptedModel::new([
+        failing(),
+        failing(),
+        answer("one"),
+        failing(),
+        answer("two"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "first").await;
+    ask(&mut run, "second").await;
+    let rows = w.journal().read().unwrap().rows;
+    let classes: Vec<Vec<Class>> = replay(&rows).into_iter().map(|(_, c)| c).collect();
+    assert_eq!(
+        classes,
+        [
+            vec![Class::Fail],
+            vec![Class::Fail, Class::Repeat],
+            vec![Class::Fail, Class::Repeat]
+        ]
+    );
+    let journaled = |rows: &[Beat]| -> Vec<Vec<Class>> {
+        rows.iter()
+            .filter_map(|b| match b {
+                Beat::Guts { classes, .. } => Some(classes.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(journaled(&rows), classes);
+    // Resumed, the run remembers its last act: the same act again is a repeat.
+    let again = Arc::new(ScriptedModel::new([failing(), answer("three")]));
+    let mut run = Run::resume(body(), limits(), w.setup(again)).unwrap();
+    ask(&mut run, "third").await;
+    let rows = w.journal().read().unwrap().rows;
+    assert_eq!(
+        journaled(&rows).last(),
+        Some(&vec![Class::Fail, Class::Repeat])
+    );
+    assert_eq!(
+        replay(&rows)
+            .into_iter()
+            .map(|(_, c)| c)
+            .collect::<Vec<_>>(),
+        journaled(&rows)
+    );
+}

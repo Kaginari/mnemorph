@@ -18,6 +18,7 @@ pub mod evolution;
 pub mod facts;
 pub mod findings;
 pub mod graph;
+pub mod guts;
 pub mod heal;
 pub mod log;
 pub mod meters;

@@ -60,6 +60,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   witnesses [#265].
 - Evolution judged after the freeze, against a do-nothing control, on an exact staged file set
   [#264] [#268] [#298]; a claim graph for memory [#266].
+- Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
+  structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
+  chipped on the board's timeline; signals only, the red pin weighing 0.
 
 ### M10 — Dark Elf
 

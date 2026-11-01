@@ -152,6 +152,7 @@ impl World {
         let commissioner = mnemorph_loop::Commissioner {
             registry: None,
             law: mnemorph_loop::Law::On,
+            guts: None,
             world: world.clone(),
             model,
             prices: anthropic_prices().unwrap(),

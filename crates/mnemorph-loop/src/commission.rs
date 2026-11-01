@@ -155,6 +155,9 @@ pub struct Commissioner {
     /// Whether every commissioned body's fixed prompt carries the world's law, cards and
     /// manifests: the session's own, from the human's command line.
     pub law: crate::Law,
+    /// Where every commissioned body's guts classes are kept again outside the world
+    /// ([`mnemorph_world::guts`]); `None` keeps them on each run's journal alone.
+    pub guts: Option<Journal<mnemorph_world::guts::GutsRow>>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -1443,7 +1446,8 @@ fn child_run(
         .with_gate(gate)
         .with_manifest(manifest_for(c, roster, &name))
         .with_mcp(c.mcp.clone())
-        .with_registry(c.registry.clone());
+        .with_registry(c.registry.clone())
+        .with_guts(c.guts.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();

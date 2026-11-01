@@ -13,7 +13,7 @@ use std::time::SystemTime;
 use mnemorph_loop::Beat;
 use mnemorph_loop::resume::is_session_run;
 use mnemorph_loop::world::ledger::Timestamp;
-use mnemorph_loop::world::verdicts;
+use mnemorph_loop::world::{guts, verdicts};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -59,6 +59,41 @@ pub enum CommissionState {
     Unknown,
 }
 
+/// One guts class of an act ([`guts::Class`]): a signal for a learned value, never a verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum GutsClass {
+    /// The act errored; a human's denial never is one.
+    Fail,
+    /// A test bench the shell saw exit non-zero: TDD's red, weighed 0.
+    RedPin,
+    /// A test bench the shell saw exit 0.
+    Positive,
+    /// The same act as the one before.
+    Repeat,
+    /// A third look at the same thing with nothing written since.
+    Echo,
+    /// A test bench struck six times or more in one ask.
+    Thrash,
+}
+
+impl From<guts::Class> for GutsClass {
+    fn from(c: guts::Class) -> Self {
+        match c {
+            guts::Class::Fail => GutsClass::Fail,
+            guts::Class::RedPin => GutsClass::RedPin,
+            guts::Class::Positive => GutsClass::Positive,
+            guts::Class::Repeat => GutsClass::Repeat,
+            guts::Class::Echo => GutsClass::Echo,
+            guts::Class::Thrash => GutsClass::Thrash,
+        }
+    }
+}
+
+/// The most acts one commission's entry shows the classes of: the newest are kept.
+pub const ACTS: usize = 200;
+
 /// One entry of the timeline.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -92,6 +127,12 @@ pub struct TimelineEntry {
     pub source: String,
     /// Whether that source is the harness's own, under the human's state directory.
     pub trusted: bool,
+    /// A commission's acts in order, each with its guts classes, from the harness's chained record
+    /// under the human's state directory — trusted whatever `trusted` says of the journal; the
+    /// newest [`ACTS`] when it ran more. Empty for a verdict, or a run with no act classed.
+    pub acts: Vec<Vec<GutsClass>>,
+    /// Older acts past [`ACTS`], not shown.
+    pub acts_cut: u32,
 }
 
 /// `GET /api/w/<id>/timeline`: a page of entries, newest first.
@@ -119,6 +160,8 @@ pub struct BoardTimeline {
     pub older: u32,
     /// Why the verdicts are unknown, when they are.
     pub verdicts_why: Option<String>,
+    /// Why the acts' guts classes are not shown, when they are not.
+    pub guts_why: Option<String>,
 }
 
 /// The timeline's filter.
@@ -347,6 +390,24 @@ fn of_commission(c: &Commission) -> TimelineEntry {
         why: c.why.clone(),
         source: format!(".mnemorph/instruments/loop/{}.jsonl", c.run),
         trusted: false,
+        acts: Vec::new(),
+        acts_cut: 0,
+    }
+}
+
+/// Each commission's acts, with their classes from the harness's record: `rows` held already.
+fn with_acts(entries: &mut [TimelineEntry], rows: &[guts::GutsRow]) {
+    let runs = guts::by_run(rows);
+    for e in entries {
+        let Some(acts) = e.run.as_deref().and_then(|r| runs.get(r)) else {
+            continue;
+        };
+        let from = acts.len().saturating_sub(ACTS);
+        e.acts_cut = u32::try_from(from).unwrap_or(u32::MAX);
+        e.acts = acts[from..]
+            .iter()
+            .map(|cs| cs.iter().copied().map(GutsClass::from).collect())
+            .collect();
     }
 }
 
@@ -397,6 +458,8 @@ pub fn entries_with(
                             source: "the gate's verdict journal under the state directory"
                                 .to_owned(),
                             trusted: true,
+                            acts: Vec::new(),
+                            acts_cut: 0,
                         },
                     ));
                 }
@@ -433,13 +496,26 @@ pub fn timeline(world: &Path, filter: &Filter) -> BoardTimeline {
         .filter(|e| filter.body.as_ref().is_none_or(|b| &e.body == b))
         .collect();
     let limit = filter.limit.clamp(1, PAGE_MAX);
+    let mut entries: Vec<TimelineEntry> = matching
+        .iter()
+        .skip(filter.offset)
+        .take(limit)
+        .cloned()
+        .collect();
+    let guts_why = if entries.iter().any(|e| e.kind == TimelineKind::Commission) {
+        match guts::held(world) {
+            Ok(rows) => {
+                with_acts(&mut entries, &rows);
+                None
+            }
+            Err(why) => Some(why),
+        }
+    } else {
+        None
+    };
     BoardTimeline {
         total: matching.len() as u64,
-        entries: matching
-            .into_iter()
-            .skip(filter.offset)
-            .take(limit)
-            .collect(),
+        entries,
         offset: filter.offset as u64,
         limit: limit as u64,
         bodies,
@@ -447,6 +523,7 @@ pub fn timeline(world: &Path, filter: &Filter) -> BoardTimeline {
         verdicts: u32::try_from(verdicts).unwrap_or(u32::MAX),
         older,
         verdicts_why,
+        guts_why,
     }
 }
 
@@ -473,6 +550,58 @@ mod tests {
         ] {
             assert_eq!(body_run(no), None, "{no}");
         }
+    }
+
+    /// A commission's acts carry their classes from the harness's record, the newest [`ACTS`]
+    /// kept; a verdict carries none.
+    #[test]
+    fn a_commission_shows_each_acts_classes() {
+        let row = |run: &str, classes: Vec<guts::Class>| guts::GutsRow {
+            ts: Timestamp(0),
+            run: run.into(),
+            body: "slime-a".into(),
+            tool_use_id: "t".into(),
+            tool: "bash".into(),
+            classes,
+            build: mnemorph_loop::world::ledger::Build::default(),
+        };
+        let mut rows = vec![
+            row("r1", vec![guts::Class::Fail, guts::Class::Repeat]),
+            row("r2", vec![guts::Class::Positive]),
+            row("r1", vec![]),
+        ];
+        rows.extend((0..ACTS).map(|_| row("r3", vec![guts::Class::Echo])));
+        let commission = |run: &str| {
+            of_commission(&Commission {
+                body: "slime-a".into(),
+                run: run.into(),
+                at: Timestamp(0),
+                ask: None,
+                state: CommissionState::Ended,
+                ending: None,
+                verdict: None,
+                changed: 0,
+                why: None,
+                written: None,
+            })
+        };
+        let mut entries = vec![commission("r1"), commission("r3"), commission("r9")];
+        rows.insert(3, row("r3", vec![guts::Class::Thrash]));
+        with_acts(&mut entries, &rows);
+        assert_eq!(
+            entries[0].acts,
+            [vec![GutsClass::Fail, GutsClass::Repeat], vec![]]
+        );
+        assert_eq!((entries[1].acts.len(), entries[1].acts_cut), (ACTS, 1));
+        assert!(
+            entries[1].acts.iter().all(|a| a == &[GutsClass::Echo]),
+            "the oldest act is the one cut"
+        );
+        assert!(entries[2].acts.is_empty(), "a run with no act classed");
+        assert_eq!(
+            serde_json::to_string(&GutsClass::RedPin).unwrap(),
+            "\"red-pin\""
+        );
     }
 
     #[test]
