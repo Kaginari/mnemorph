@@ -95,6 +95,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Every diagram parses (as GitHub's Mermaid would read it)
         run: node tools/check-diagrams.mjs
+      - name: No canvas holds a script, a handler, an outside link or HTML
+        run: node tools/check-canvas.mjs
       - name: Build the book (fails on a dead link)
         run: pnpm --filter @mnemorph/site build
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

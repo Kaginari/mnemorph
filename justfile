@@ -107,11 +107,13 @@ calibrate reviewer="dark-elf" models="nvidia/nemotron-3.5-lightning:free":
     echo "calibrate: sends to {{models}}, which may log or train on it: each gold case's claim and code (fixture files and reconstructions, never the live tree){{ if reviewer == "fable" { "" } else { ", and the compiled playbooks" } }}."
     MNEMORPH_LIVE=1 MNEMORPH_CALIBRATE_REVIEWER='{{reviewer}}' MNEMORPH_CALIBRATE_MODELS='{{models}}' cargo nextest run -p mnemorph-loop --test calibrate --run-ignored only --no-capture calibrate_live
 
-# Build the book as a website (fails on a dead link or a diagram Mermaid cannot parse).
+# Build the book as a website (fails on a dead link, a diagram Mermaid cannot parse, or a canvas
+# holding a script, a handler, an outside link or HTML).
 docs:
     # No merge left half-done: a conflict marker anywhere tracked fails the check.
     ! git grep -nE '^(<<<<<<<|>>>>>>>)( |$)' -- .
     node tools/check-diagrams.mjs
+    node tools/check-canvas.mjs
     pnpm --filter @mnemorph/site build
 
 # Serve the book locally while editing it.

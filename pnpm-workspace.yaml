@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - site
+  - tools/canvas
 
 # Dependencies allowed to run install scripts. esbuild (vite) fetches its platform binary.
 allowBuilds:

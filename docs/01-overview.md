@@ -2,6 +2,14 @@
 
 ## In one picture
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/overview-dark.svg">
+  <img src="./canvas/overview-light.svg" alt="The overview canvas: Veldora talks to Rimuru; Rimuru commissions the Elf, the Kijin and the Dark Elf; the Elf commissions the Orc and the Orc the Slime; reports and verdicts climb back; only the Kijin reaches the outside world, every act through the human gate">
+</picture>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -47,6 +55,8 @@ flowchart TD
     classDef outside fill:#eceff3,stroke:#6b7280,stroke-width:1.5px,color:#111827
     class OUT outside
 ```
+
+</details>
 
 | <img src="../assets/portraits/veldora@64.png" width="64" alt="Veldora"> | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
