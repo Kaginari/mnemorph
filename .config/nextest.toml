@@ -1,0 +1,12 @@
+experimental = ["setup-scripts"]
+
+# Every test runs under a home of its own: HOME and every XDG directory in a fresh temporary
+# directory for the run, never the developer's. The in-process tests resolve the state, config and
+# data directories from the environment, and on a developer's machine that is their real
+# `~/.local/state/mnemorph`.
+[scripts.setup.test-home]
+command = "bash tools/test-home.sh"
+
+[[profile.default.scripts]]
+filter = "all()"
+setup = "test-home"

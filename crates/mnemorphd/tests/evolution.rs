@@ -2,9 +2,12 @@
 //! `mnemorphd evolution` is the human's door to an evolution: a swap is asked for at the terminal,
 //! and `judge` runs the controls a swap waits on, then proposes keep or rollback.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 use mnemorph_server::world::evolution::{
     Arm, Facts, Plan, Staged, Stamp, journal_at, restore_before, stamp_for, swap_at,
@@ -76,11 +79,11 @@ impl Fixture {
         // In a session of its own, on Linux: no controlling terminal, as a body's command or a
         // script has none — and never the terminal of whoever runs the tests.
         let mut cmd = if cfg!(target_os = "linux") {
-            let mut c = Command::new("setsid");
+            let mut c = isolated::bin("setsid");
             c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
             c
         } else {
-            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         };
         cmd.args(args)
             .args(["--world", self.world.to_str().unwrap()])
@@ -110,7 +113,7 @@ impl Fixture {
             quoted.join(" "),
             self.world.display()
         );
-        let mut child = Command::new("script")
+        let mut child = isolated::bin("script")
             .args(["-qec", &line, "/dev/null"])
             .env("XDG_STATE_HOME", self.state())
             .env_remove("MNEMORPH_BODY")
@@ -364,7 +367,7 @@ fn a_swap_is_asked_at_the_terminal_and_never_a_bodys() {
     // At the terminal, `y` swaps it in: the Mind rewritten, one swap row naming it.
     #[cfg(target_os = "linux")]
     swapped_at_tty(&f);
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(["evolution", "judge", "careful-1"])
         .env("MNEMORPH_BODY", "slime-a")
         .output()
@@ -585,7 +588,9 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
     assert!(stdout.contains("swapped sly-1"), "{stdout}{err}");
     assert!(
         stdout.contains("as the creatures' witness would hold them")
-            && stdout.contains("Reports to: the card says \\u{60}orc-x\\u{60}, its row holds \\u{60}nobody")
+            && stdout.contains(
+                "Reports to: the card says \\u{60}orc-x\\u{60}, its row holds \\u{60}nobody"
+            )
             && stdout.contains("witnessed as: sly — slime, reports to nobody, ground none")
             && stdout.contains("kijin-forge — oni, post kijin-forge")
             && stdout.contains("a new name: a stranger"),

@@ -421,11 +421,8 @@ impl Paths {
     /// home from the platform, never a literal `~`), then the world's two.
     #[must_use]
     pub fn resolve(world: &Path) -> Self {
-        let config_home = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .or_else(|| std::env::home_dir().map(|h| h.join(".config")))
-            .unwrap_or_else(|| PathBuf::from("/nonexistent"));
+        let config_home =
+            mnemorph_tools::dirs::config_home().unwrap_or_else(|| PathBuf::from("/nonexistent"));
         Self::with_global(config_home.join("mnemorph/config.toml"), world)
     }
 

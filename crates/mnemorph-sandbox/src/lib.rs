@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod dirs;
 mod env;
 #[cfg(target_os = "linux")]
 pub mod linux;

@@ -26,6 +26,8 @@ pub use gate::{Answer, Ask, Gate, NoHuman, Pending};
 pub use mnemorph_sandbox::Policy;
 /// The sandbox a context runs commands in, as the context takes it.
 pub use mnemorph_sandbox::Sandbox;
+/// The human's state and config directories, refused to an unisolated test.
+pub use mnemorph_sandbox::dirs;
 /// A `git` command started without the harness's secrets.
 pub use mnemorph_sandbox::git;
 /// Close the harness's `/proc` files (its environment, where provider keys live) to other processes.

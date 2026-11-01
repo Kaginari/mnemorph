@@ -53,6 +53,8 @@ for (const pkg of meta.packages) {
     continue;
   }
   for (const dep of pkg.dependencies) {
+    // A crate's own tests may depend on it with a test feature on: no edge in the graph.
+    if (dep.name === pkg.name && dep.kind === 'dev') continue;
     if (members.has(dep.name) && !allowed.includes(dep.name)) {
       errors.push(`${pkg.name} → ${dep.name}: an edge the architecture does not draw`);
     }

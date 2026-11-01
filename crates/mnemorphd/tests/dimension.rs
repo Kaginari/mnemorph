@@ -3,6 +3,9 @@
 //! human's yes writes the manifest, and revokes it; `onto check --dimension` reports an
 //! obstruction.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -42,11 +45,11 @@ impl Dim {
     /// answered by whoever runs the tests.
     fn run(&self, args: &[&str], body: Option<&str>) -> (Option<i32>, String, String) {
         let mut c = if cfg!(target_os = "linux") {
-            let mut c = Command::new("setsid");
+            let mut c = isolated::bin("setsid");
             c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
             c
         } else {
-            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         };
         c.args(args)
             .stdin(std::process::Stdio::null())
@@ -88,7 +91,7 @@ fn a_session_opening_writes_a_registry_row() {
         "[sandbox]\nallow_unguarded = true\n\n[models]\nprovider = \"local\"\n\n[providers.local]\nkind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\n",
     )
     .unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let mut child = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(["--world", s(&w)])
         .env_remove("ANTHROPIC_API_KEY")
         .env("XDG_STATE_HOME", d.state())
