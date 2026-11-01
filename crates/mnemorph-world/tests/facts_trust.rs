@@ -287,13 +287,31 @@ fn a_tampered_trusted_journal_reads_unavailable_never_settled() {
         .unwrap()
         .head
         .unwrap();
+    // A head anchored in the world's `log.md` is no anchor: a forged one there makes nothing
+    // unavailable.
     let mut log = fs::read_to_string(w.join(".mnemorph/log.md")).unwrap();
     let _ = writeln!(
         log,
-        "\n- **{KIND} chain:** OK, head {} at line {}",
-        head.digest, head.line
+        "\n- **{KIND} chain:** OK, head {} at line 9",
+        "f".repeat(64)
     );
     fs::write(w.join(".mnemorph/log.md"), log).unwrap();
+    assert_eq!(
+        f.load(&w).facts[&id].status(),
+        Status::Settled,
+        "log.md anchors nothing"
+    );
+    // The state directory's anchor, as `housekeep --verify` keeps it.
+    let kept = mnemorph_world::chains::kept_in(&state, &w);
+    fs::create_dir_all(kept.parent().unwrap()).unwrap();
+    fs::write(
+        &kept,
+        format!(
+            "{{\"ts\":\"2026-11-01T00:00:00Z\",\"journal\":\"{KIND}\",\"digest\":\"{}\",\"line\":{}}}\n",
+            head.digest, head.line
+        ),
+    )
+    .unwrap();
     assert_eq!(f.load(&w).facts[&id].status(), Status::Settled);
     fs::remove_file(&journal).unwrap();
     let facts = f.load(&w);
@@ -337,4 +355,79 @@ fn a_state_directory_inside_the_world_is_refused() {
     let registry = inside.join("mnemorph/worlds.jsonl");
     let e = mnemorph_world::dimension::Manifest::trusted(Some(&registry), &w).unwrap_err();
     assert!(e.contains("inside the world"), "{e}");
+}
+
+/// Every status the copy reads otherwise than the trusted journal is flagged: agreed there against
+/// contested here, too.
+#[test]
+fn every_status_the_copy_reads_otherwise_is_flagged() {
+    let f = Fixture::new();
+    let w = f.world("w");
+    let id = fact_id(ABOUT, TEXT);
+    for e in [say("slime-a"), say("slime-b")] {
+        Facts::record_in(Some(&f.state()), &w, &e).unwrap();
+    }
+    for by in ["slime-c", "slime-d"] {
+        Facts::record_in(
+            Some(&f.state()),
+            &w,
+            &Event::Counter {
+                id: id.clone(),
+                by: by.into(),
+                reason: "no".into(),
+            },
+        )
+        .unwrap();
+    }
+    assert_eq!(f.load(&w).facts[&id].status(), Status::Contested);
+    assert_eq!(f.load(&w).untrusted, vec![]);
+    // The copy rewritten to say it agreed.
+    fs::write(w.join(FACTS), "").unwrap();
+    forge(&w, &[say("slime-a"), say("slime-b")]);
+    let facts = f.load(&w);
+    assert_eq!(facts.untrusted.len(), 1, "{:?}", facts.untrusted);
+    assert_eq!(
+        (facts.untrusted[0].said, facts.untrusted[0].trusted),
+        (Status::Agreed, Some(Status::Contested))
+    );
+}
+
+/// An imported anchor is a stranger's words: kept only as a path inside the world.
+#[test]
+fn an_imported_anchor_is_kept_only_inside_the_world() {
+    use mnemorph_world::facts::Anchor;
+    let f = Fixture::new();
+    let w = f.world("w");
+    let with = |about: &str, at: &str| Event::Support {
+        id: fact_id(about, "t"),
+        about: about.into(),
+        text: "t".into(),
+        by: "x".into(),
+        source: Some(Anchor {
+            at: at.into(),
+            digest: Some("d".into()),
+        }),
+    };
+    forge(
+        &w,
+        &[
+            with("a/", "../../etc/passwd:1"),
+            with("b/", "/etc/shadow"),
+            with("c/", "src/./x.rs:2-3"),
+            with("d/", "src/"),
+            with("e/", "commit:abc"),
+        ],
+    );
+    let facts = f.load(&w);
+    let at = |about: &str| {
+        facts.facts[&fact_id(about, "t")]
+            .source
+            .as_ref()
+            .map(|a| a.at.clone())
+    };
+    assert_eq!(at("a/"), None);
+    assert_eq!(at("b/"), None);
+    assert_eq!(at("c/").as_deref(), Some("src/x.rs:2-3"));
+    assert_eq!(at("d/").as_deref(), Some("src/"));
+    assert_eq!(at("e/").as_deref(), Some("commit:abc"));
 }

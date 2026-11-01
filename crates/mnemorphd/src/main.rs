@@ -61,9 +61,10 @@ that does not read. `--dimension` also glues this world's dimension manifest wit
 neighbour's — read, never written — and prints, after the findings, one `dimension` line per
 neighbour: what both state, and what each states alone.
 
-`onto settle` settles a fact on the human's word, in the trusted facts under the human's state
-directory; the world's `.mnemorph/ontology/facts.jsonl` is only a copy of them, never read for
-trust. A body never runs it.
+`onto settle` shows the fact and settles it on the human's word, after asking for `y` at the
+terminal (`/dev/tty`; piped input is refused, and there is no `--yes`), in the trusted facts
+under the human's state directory; the world's `.mnemorph/ontology/facts.jsonl` is only a copy of
+them, never read for trust. A body never runs it.
 
 `onto relations` prints the relations this world states — kept under the human's state
 directory, chained; `.mnemorph/dimension.toml` is only their copy — then what that copy states
@@ -1264,12 +1265,23 @@ fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
         .get(id.trim_start_matches('#'))
         .map(|f| f.text.clone())
         .unwrap_or_default();
-    if !text.is_empty() {
-        println!(
-            "settling #{}: {}",
-            field(id.trim_start_matches('#')),
-            field(&text)
-        );
+    if text.is_empty() {
+        return refused(&format!(
+            "no fact `#{}` in this world's ontology",
+            field(id.trim_start_matches('#'))
+        ));
+    }
+    println!(
+        "settling #{}: {}",
+        field(id.trim_start_matches('#')),
+        field(&text)
+    );
+    // The human's own `y`, at the terminal: an environment is a body's to unset and an ancestry a
+    // body's to shed, a terminal question is neither. No `--yes`: a settle is never scripted.
+    match at_terminal("settle it on your word?") {
+        Ok(true) => {}
+        Ok(false) => return refused(&"not confirmed: nothing was settled"),
+        Err(e) => return refused(&e),
     }
     let seen = mnemorph_server::world::memory::seen(id.trim_start_matches('#'), &text);
     match Facts::settle(&world, id, "human", "the human's word", &seen) {

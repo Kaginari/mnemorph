@@ -950,10 +950,30 @@ pub(crate) fn file_verdicts(world: &Path, roster: &Roster, verdicts: &[String], 
             );
             continue;
         }
+        // The roster is the world's, and a commit or a clone may name any body an Orc: the
+        // verdict settles only on a landing proven by the trusted gate, on a line the human
+        // pinned, at the fact's path. Without one the fact stays as it stood.
+        let rows = mnemorph_world::verdicts::read(world).unwrap_or_default();
+        let Some((n, proof)) = facts
+            .facts
+            .get(id)
+            .and_then(|f| mnemorph_world::verdicts::proving(&rows, &f.about))
+        else {
+            eprintln!(
+                "mnemorph: {by} cannot settle `#{id}`: no passing end-gate verdict on a line the \
+                 human pinned landed on its path"
+            );
+            continue;
+        };
         let event = mnemorph_world::facts::Event::Settle {
             id: id.to_owned(),
             by: by.to_owned(),
-            proof: format!("{by}'s verdict: {}", v.trim()),
+            proof: format!(
+                "{by}'s verdict: {}, on the gate's verdict {n}: PASS on {}'s landing ({})",
+                v.trim(),
+                proof.body,
+                proof.ts
+            ),
         };
         if let Err(e) = mnemorph_world::Facts::record(world, &event) {
             eprintln!("mnemorph: {by}'s settle could not be filed: {e}");

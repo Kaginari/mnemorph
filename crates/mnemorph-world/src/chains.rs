@@ -101,7 +101,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     });
     // A post's witness is walked once kept, and for good once anchored: a witness removed whole
     // is then found against its anchor.
-    let anchors = state_file_in(state, world, "anchors");
+    let anchors = kept_in(state, world);
     for post in Post::ALL {
         let path = post_witness_in(state, world, post);
         let logged_too = || {
@@ -143,7 +143,15 @@ fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
 /// `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl`; `None` with no home.
 #[must_use]
 pub fn kept_at(world: &Path) -> Option<PathBuf> {
-    crate::queue::state_file(world, "anchors")
+    Some(kept_in(&crate::queue::state_dir()?, world))
+}
+
+/// [`kept_at`], the human's state directory at `state`. The world is named by its real path, as
+/// the trusted facts and relations name it, so every spelling of it finds one set of anchors.
+#[must_use]
+pub fn kept_in(state: &Path, world: &Path) -> PathBuf {
+    let real = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    state_file_in(state, &real, "anchors")
 }
 
 /// One anchor, as the state directory keeps it.
@@ -220,15 +228,13 @@ pub fn anchor_with(world: &Path, name: &str, log: impl FnOnce() -> String) -> Op
     }
 }
 
-/// [`anchor_of`], the human's state directory at `state`.
+/// The newest head the human's state directory `state` anchors for the journal `name` of `world`;
+/// `log.md` is never read for it.
 #[must_use]
 pub fn anchor_under(state: &Path, world: &Path, name: &str) -> Option<Head> {
-    anchored(&state_file_in(state, world, "anchors"), name).or_else(|| {
-        logged(
-            &crate::regular::text(&world.join(LOG)).unwrap_or_default(),
-            name,
-        )
-    })
+    // The state directory's alone: `log.md` is the world's, and a line forged there would hold a
+    // trusted journal to a head it never had.
+    anchored(&kept_in(state, world), name)
 }
 
 /// The newest head of the journal `name` anchored in `kept`.

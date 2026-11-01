@@ -433,7 +433,7 @@ pub struct Facts {
     pub unproven: BTreeSet<String>,
 }
 
-/// A fact the in-world copy reads with more standing than the trusted journal gives it.
+/// A fact the in-world copy reads otherwise than the trusted journal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Untrusted {
     /// Its id.
@@ -544,12 +544,38 @@ fn imported(events: &[Event]) -> Vec<Event> {
             if text.is_empty() || !seen.insert(id.clone()) {
                 continue;
             }
+            // An anchor is a stranger's words too: kept only as a path inside the world, its
+            // digest with it, or a commit or journal entry; anything else is dropped.
+            let source = source.as_ref().and_then(|a| {
+                let at = if a.at.starts_with("commit:") || a.at.starts_with("journal:") {
+                    Some(a.at.clone()).filter(|at| !at.contains(char::is_control))
+                } else {
+                    let (file, lines) = match a.at.rsplit_once(':') {
+                        Some((f, l))
+                            if !l.is_empty()
+                                && l.chars().all(|c| c.is_ascii_digit() || c == '-') =>
+                        {
+                            (f, Some(l))
+                        }
+                        _ => (a.at.as_str(), None),
+                    };
+                    let dir = file.ends_with('/');
+                    fact_path(file).filter(|f| !f.is_empty()).map(|f| {
+                        let f = if dir { format!("{f}/") } else { f };
+                        lines.map_or(f.clone(), |l| format!("{f}:{l}"))
+                    })
+                };
+                at.map(|at| Anchor {
+                    at,
+                    digest: a.digest.clone(),
+                })
+            });
             out.push(Event::Support {
                 id,
                 about: path,
                 text,
                 by: IMPORTED.to_owned(),
-                source: source.clone(),
+                source,
             });
         }
     }
@@ -565,9 +591,8 @@ fn imported(events: &[Event]) -> Vec<Event> {
     out
 }
 
-/// What the in-world copy `said` reads with more standing than `trusted` gives: a fact it reads
-/// settled that the trusted journal does not, one it reads agreed that is a single voice there,
-/// or one the trusted journal does not hold at all.
+/// What the in-world copy `said` reads otherwise than `trusted`: a fact whose status there differs
+/// from the trusted journal's, or one the trusted journal does not hold at all.
 fn untrusted(trusted: &Facts, said: &Facts) -> Vec<Untrusted> {
     said.live()
         .filter_map(|f| {
@@ -577,14 +602,9 @@ fn untrusted(trusted: &Facts, said: &Facts) -> Vec<Untrusted> {
                 .get(&f.id)
                 .filter(|t| t.merged_into.is_none())
                 .map(Fact::status);
-            let more = match t {
-                None => true,
-                Some(t) => {
-                    (s == Status::Settled && t != Status::Settled)
-                        || (s == Status::Agreed && t == Status::Single)
-                }
-            };
-            more.then(|| Untrusted {
+            // Any status the copy reads otherwise is a mismatch: the copy is written whole from the
+            // trusted journal, so only a hand, a commit or a clone makes one.
+            (t != Some(s)).then(|| Untrusted {
                 id: f.id.clone(),
                 about: f.about.clone(),
                 text: f.text.clone(),
