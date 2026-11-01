@@ -164,13 +164,13 @@ pub fn worlds_at(registry: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// The key file at `path` (as the human wrote it), opened and checked, with what it holds:
-/// trimmed, never empty.
-fn open_checked(
+/// The key file at `path` (as the human wrote it), opened and checked by what `fstat` says of it
+/// alone — nothing in it is read: the open file and its permission bits.
+fn open_stat(
     path: &str,
     home: Option<&str>,
     worlds: &[PathBuf],
-) -> Result<(Checked, ApiKey), String> {
+) -> Result<(File, Checked), String> {
     use rustix::fs::{Mode, OFlags};
     use std::os::unix::fs::MetadataExt as _;
     let at = expand(path, home)?;
@@ -185,7 +185,7 @@ fn open_checked(
         rustix::io::Errno::LOOP => "it is a symbolic link".to_owned(),
         e => std::io::Error::from(e).to_string(),
     })?;
-    let mut file = File::from(fd);
+    let file = File::from(fd);
     let meta = file.metadata().map_err(|e| e.to_string())?;
     let stat = Stat {
         regular: meta.file_type().is_file(),
@@ -203,6 +203,25 @@ fn open_checked(
             w.display()
         ));
     }
+    if stat.size == 0 {
+        return Err("it is empty".into());
+    }
+    Ok((
+        file,
+        Checked {
+            mode: stat.mode & 0o777,
+        },
+    ))
+}
+
+/// The key file at `path` (as the human wrote it), checked ([`open_stat`]), then read: what it
+/// holds, trimmed, never empty.
+fn open_checked(
+    path: &str,
+    home: Option<&str>,
+    worlds: &[PathBuf],
+) -> Result<(Checked, ApiKey), String> {
+    let (mut file, checked) = open_stat(path, home, worlds)?;
     let mut bytes = Vec::new();
     (&mut file)
         .take(MAX_KEY_FILE + 1)
@@ -221,12 +240,7 @@ fn open_checked(
     if key.chars().any(char::is_control) {
         return Err("it holds more than one line, or a control character".into());
     }
-    Ok((
-        Checked {
-            mode: stat.mode & 0o777,
-        },
-        ApiKey(key.to_owned()),
-    ))
+    Ok((checked, ApiKey(key.to_owned())))
 }
 
 /// Where the open `file` really is: as the kernel names it, else `at` made canonical.
@@ -243,13 +257,14 @@ fn real_path(file: &File, at: &Path) -> PathBuf {
 }
 
 /// Whether the key file at `path` (as the human wrote it) would be read: its mode if so, or why
-/// not. What it holds is read, to know it is not empty, and dropped: only the mode is returned.
+/// not — from `fstat` alone. Nothing in it is read, so the key is never in memory for this; a
+/// file whose contents a session would refuse (two lines, not UTF-8, only whitespace) passes.
 ///
 /// # Errors
 ///
 /// Why it is refused or unreadable.
 pub fn inspect(path: &str, home: Option<&str>, worlds: &[PathBuf]) -> Result<Checked, String> {
-    open_checked(path, home, worlds).map(|(c, _)| c)
+    open_stat(path, home, worlds).map(|(_, c)| c)
 }
 
 /// Provider `name`'s key: from the variable its `key_env` names, if that is set (and not empty),

@@ -118,13 +118,16 @@ only this global file sets ([configuration](docs/05-architecture.md#configuratio
 [providers.openrouter]
 kind = "openai"
 base_url = "https://openrouter.ai/api"
-key_env = "OPENROUTER_API_KEY"     # the key is read from this variable, never from the file…
-key_file = "~/.config/mnemorph/openrouter.key"  # …or, when it is not set, from this one (chmod 600)
+key_env = "OPENROUTER_API_KEY"     # the variable that holds the key (never write the key here)
+key_file = "~/.config/mnemorph/openrouter.key"  # used when the variable is unset; chmod 600
 
 [models]
 provider = "openrouter"
 default = "anthropic/claude-sonnet-5.5"
 ```
+
+`key_file` is read only from this global file, never from a world's config. The file must be
+yours, mode `600`, and outside every world.
 
 ### Run it
 

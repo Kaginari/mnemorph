@@ -228,3 +228,31 @@ fn inspect_tells_the_mode_never_the_key() {
     no_leak(&e);
     assert!(e.contains("chmod 600"));
 }
+
+/// `inspect` judges from `fstat` alone: contents a session refuses on reading still pass it,
+/// while the stat checks still refuse.
+#[test]
+fn inspect_reads_nothing_of_the_file() {
+    let h = Home::new();
+    let home = h.path().display().to_string();
+    let p = h.path().join("bytes.key");
+    fs::write(&p, b"\xff\xfe not utf-8\nand two lines").unwrap();
+    fs::set_permissions(&p, fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(
+        inspect("~/bytes.key", Some(&home), &[]).unwrap().mode,
+        0o600
+    );
+    let e = hole(&h, &provider(None, Some("~/bytes.key")), &[]);
+    assert!(
+        e.contains("not UTF-8"),
+        "a session reads it, and refuses: {e}"
+    );
+    h.key("empty.key", "", 0o600);
+    assert!(
+        inspect("~/empty.key", Some(&home), &[])
+            .unwrap_err()
+            .contains("empty")
+    );
+    h.key("open.key", FAKE, 0o644);
+    assert!(inspect("~/open.key", Some(&home), &[]).is_err());
+}
