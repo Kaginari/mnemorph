@@ -279,13 +279,16 @@ sandbox, which reads `/proc` — may read while it runs: the board writes a laun
 `http://127.0.0.1:<port>/#k=<key>` with a link for a browser that does not follow it, and hands
 the opener (`xdg-open`, `open`) that file's path. The page is created exclusively, never through
 a link, in a `0700` directory of the human's own. The file is removed once its key is spent, or
-dies (checked every 30 seconds), or the board stops. Chromium follows the refresh from `file://`
+dies (checked every 30 seconds), or the board stops; a board's start sweeps any an earlier board
+left (regular files the human owns, named `open-<16 hex>.html`, never through a link) from the
+state directory and every snap's `~/snap/<snap>/common/mnemorph/`. Chromium follows the refresh from `file://`
 to loopback; a browser that does not shows the link.
 
 **Snap browsers.** A snap's confinement keeps a snap browser (Ubuntu's Chromium and Firefox) out of
 every hidden directory in the home, the state directory among them, and gives it a `/tmp` of its
 own. The board reads the default browser's desktop file (`xdg-settings get default-web-browser`,
-else `xdg-mime`'s handler of `x-scheme-handler/http`): when it is `<snap>_<app>.desktop` and its
+else `xdg-mime`'s handler of `x-scheme-handler/http`; a second each, so detection and the
+opener's 1.5 s watch fit in the control socket's 5 s wait): when it is `<snap>_<app>.desktop` and its
 `Exec` runs `/snap/bin/<snap>`, or its `Exec` resolves under `/snap/bin/`, the browser is that
 snap, and the launcher goes to the snap's own `~/snap/<snap>/common/mnemorph/` (`0700`), which a
 snap may read as `$SNAP_USER_COMMON`. `~/snap`, `~/snap/<snap>` and its `common` must already be

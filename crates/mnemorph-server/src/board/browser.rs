@@ -11,8 +11,9 @@
 //! browser's desktop file resolves under `/snap/bin/`. Anything less certain is not a snap.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 #[cfg(target_os = "linux")]
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// What the default browser is, for where its launcher goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,7 +216,13 @@ pub fn detect_in(
     classify(id, entry.as_deref(), &path)
 }
 
-/// The first line `program args` prints, if it exits well within two seconds.
+/// How long each question [`detect`] asks (`xdg-settings`, then `xdg-mime`) may take.
+pub const ASK: Duration = Duration::from_secs(1);
+
+/// The longest [`detect`] takes: its two questions.
+pub const DETECT_MAX: Duration = Duration::from_secs(2 * ASK.as_secs());
+
+/// The first line `program args` prints, if it exits well within [`ASK`].
 #[cfg(target_os = "linux")]
 fn ask(program: &str, args: &[&str]) -> Option<String> {
     use std::io::Read as _;
@@ -227,7 +234,7 @@ fn ask(program: &str, args: &[&str]) -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + ASK;
     loop {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => break,
@@ -379,6 +386,82 @@ pub fn snap_dir(home: &Path, snap: &str) -> Result<PathBuf, String> {
     at.push("mnemorph");
     private_dir(&at)?;
     Ok(at)
+}
+
+/// Whether `name` is a launcher's: `open-` and 16 lowercase hex digits, then `.html`.
+fn launcher_name(name: &str) -> bool {
+    name.strip_prefix("open-")
+        .and_then(|n| n.strip_suffix(".html"))
+        .is_some_and(|h| {
+            h.len() == 16
+                && h.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+}
+
+/// Remove the launchers left in `dir`: regular files this user owns, named as a launcher is,
+/// never through a link; anything else stays. How many went.
+#[cfg(unix)]
+fn sweep(dir: &Path) -> usize {
+    use std::os::unix::fs::MetadataExt as _;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut gone = 0;
+    for e in entries.flatten() {
+        let ours = e.file_name().to_str().is_some_and(launcher_name)
+            && std::fs::symlink_metadata(e.path())
+                .is_ok_and(|m| m.file_type().is_file() && m.uid() == uid());
+        if ours && std::fs::remove_file(e.path()).is_ok() {
+            gone += 1;
+        }
+    }
+    gone
+}
+
+/// At a board's start, remove the launchers an earlier board left (a crash, a kill): in the
+/// state directory `state`, and in every snap's `~/snap/<snap>/common/mnemorph` under `home`
+/// whose chain is real directories this user owns — the default browser may have changed since.
+/// How many went.
+#[cfg(unix)]
+pub fn sweep_launchers(state: &Path, home: Option<&Path>) -> usize {
+    let mut gone = if owned_dir(state).is_ok() {
+        sweep(state)
+    } else {
+        0
+    };
+    let Some(home) = home.filter(|h| h.is_absolute()) else {
+        return gone;
+    };
+    let snaps = home.join("snap");
+    if owned_dir(&snaps).is_err() {
+        return gone;
+    }
+    let Ok(entries) = std::fs::read_dir(&snaps) else {
+        return gone;
+    };
+    for e in entries.flatten() {
+        let Some(name) = e.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if !snap_name(&name) {
+            continue;
+        }
+        let mut at = snaps.join(&name);
+        let chain = owned_dir(&at).is_ok()
+            && {
+                at.push("common");
+                owned_dir(&at).is_ok()
+            }
+            && {
+                at.push("mnemorph");
+                owned_dir(&at).is_ok()
+            };
+        if chain {
+            gone += sweep(&at);
+        }
+    }
+    gone
 }
 
 /// Where the launcher for `browser` goes: the state directory `state` for a plain browser, the
@@ -591,6 +674,69 @@ mod tests {
         .unwrap();
         let e = snap_dir(home.path(), "chromium").unwrap_err();
         assert!(e.contains("refusing"), "{e}");
+    }
+
+    #[test]
+    fn detection_and_the_opener_fit_in_the_control_sockets_wait() {
+        assert!(DETECT_MAX + crate::board::OPENER_WATCH < crate::board::control::WAIT);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_launchers_are_swept_and_nothing_else() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let home = tempfile::tempdir().unwrap();
+        let state = home.path().join("state");
+        let snapped = home.path().join("snap/chromium/common/mnemorph");
+        let mut d = std::fs::DirBuilder::new();
+        d.recursive(true);
+        d.create(&state).unwrap();
+        d.create(&snapped).unwrap();
+        let leftover = "open-0123456789abcdef.html";
+        for dir in [&state, &snapped] {
+            std::fs::write(dir.join(leftover), "KEY").unwrap();
+            // Not a launcher's name, or not a regular file: kept.
+            std::fs::write(dir.join("open-0123456789ABCDEF.html"), "x").unwrap();
+            std::fs::write(dir.join("open-0123.html"), "x").unwrap();
+            std::fs::write(dir.join("board.ctl"), "x").unwrap();
+            std::fs::create_dir(dir.join("open-fedcba9876543210.html")).unwrap();
+        }
+        // A link named as a launcher is kept, and its target untouched.
+        let target = home.path().join("keep.txt");
+        std::fs::write(&target, "mine").unwrap();
+        std::os::unix::fs::symlink(&target, state.join("open-aaaaaaaaaaaaaaaa.html")).unwrap();
+        // A snap reached through a link is not swept.
+        let elsewhere = home.path().join("elsewhere/common/mnemorph");
+        d.create(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join(leftover), "KEY").unwrap();
+        std::os::unix::fs::symlink(
+            home.path().join("elsewhere"),
+            home.path().join("snap/firefox"),
+        )
+        .unwrap();
+        for dir in [&state, &snapped] {
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        assert_eq!(sweep_launchers(&state, Some(home.path())), 2);
+        for dir in [&state, &snapped] {
+            assert!(!dir.join(leftover).exists());
+            for kept in [
+                "open-0123456789ABCDEF.html",
+                "open-0123.html",
+                "board.ctl",
+                "open-fedcba9876543210.html",
+            ] {
+                assert!(dir.join(kept).exists(), "{kept}");
+            }
+        }
+        assert!(state.join("open-aaaaaaaaaaaaaaaa.html").is_symlink());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "mine");
+        assert!(elsewhere.join(leftover).exists(), "not through a link");
+        // No home: the state directory alone.
+        std::fs::write(state.join(leftover), "KEY").unwrap();
+        std::fs::write(snapped.join(leftover), "KEY").unwrap();
+        assert_eq!(sweep_launchers(&state, None), 1);
+        assert!(snapped.join(leftover).exists());
     }
 
     #[cfg(unix)]

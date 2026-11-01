@@ -1224,7 +1224,7 @@ pub const UNOPENED: &str =
     "couldn't open your browser automatically: run `mnemorphd board` and paste the link it prints";
 
 /// How long an opener is watched for a failure before it is left to run.
-const OPENER_WATCH: Duration = Duration::from_millis(1500);
+pub(crate) const OPENER_WATCH: Duration = Duration::from_millis(1500);
 
 /// Open the launcher `file` in the browser ([`opener`]): an opener that fails within a moment is
 /// an error; one still running then is waited on off the caller's thread.

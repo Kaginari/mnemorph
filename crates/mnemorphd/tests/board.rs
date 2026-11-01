@@ -35,6 +35,7 @@ impl Home {
         c.args(args)
             .current_dir(&self.root)
             .env_remove("MNEMORPH_BODY")
+            .env("HOME", &self.root)
             .env("XDG_STATE_HOME", self.root.join("state"))
             .env("XDG_CONFIG_HOME", self.root.join("config"));
         if let Some(b) = body {

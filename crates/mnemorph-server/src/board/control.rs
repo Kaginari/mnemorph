@@ -35,7 +35,12 @@ pub const NONCE: &str = "board.ctl";
 const LINE: u64 = 512;
 
 /// How long an asker waits for the board's answer.
-const WAIT: Duration = Duration::from_secs(5);
+pub(crate) const WAIT: Duration = Duration::from_secs(5);
+
+// An `open` answers within the asker's wait: the browser's detection and the opener's watch fit.
+const _: () = assert!(
+    super::browser::DETECT_MAX.as_millis() + super::OPENER_WATCH.as_millis() < WAIT.as_millis()
+);
 
 /// A board that answered `ping`.
 #[derive(Debug, Clone, PartialEq, Eq)]

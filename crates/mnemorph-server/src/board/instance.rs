@@ -72,8 +72,13 @@ pub fn claim(dir: &Path) -> Result<Claim, String> {
     let lock = private(&lock_path, false).map_err(|e| format!("{}: {e}", lock_path.display()))?;
     match lock.try_lock() {
         Ok(()) => {
-            // A board that died left its URL: it names no server now.
+            // A board that died left its URL: it names no server now — and maybe launchers.
             let _ = std::fs::remove_file(&url);
+            #[cfg(unix)]
+            {
+                let home = std::env::var_os("HOME").map(PathBuf::from);
+                super::browser::sweep_launchers(dir, home.as_deref());
+            }
             Ok(Claim::Ours(Instance { _lock: lock, url }))
         }
         Err(TryLockError::WouldBlock) => {
