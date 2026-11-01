@@ -6,9 +6,9 @@
 //!
 //! A test bench is only a verify line from a trusted source, matched exactly ([`Classifier::new`]):
 //! a command a body chose — an inline `assert True`, a script it wrote, `cargo test --no-run` — is
-//! a plain command, however it is named, so it earns no `positive` and dodges no `fail`. No source
-//! of verify lines out of a body's reach exists yet: a creature's card is in the world. So the
-//! harness classes with none, and no act is a bench until one does.
+//! a plain command, however it is named, so it earns no `positive` and dodges no `fail`. The
+//! trusted source is the run's end gate: the lines pinned for the body outside the world
+//! ([`mnemorph_world::pins`]), and none while its card differs from the pin ([`Classifier::trusting`]).
 //!
 //! The classes are signals for a learned value, journaled on the act's guts beat and kept again
 //! outside the world ([`mnemorph_world::guts`]). Nothing here raises or falls a creature, and a
@@ -108,6 +108,16 @@ impl Classifier {
                 .filter(|l| !l.is_empty())
                 .collect(),
             ..Classifier::default()
+        }
+    }
+
+    /// The classifier trusting exactly `trusted` from now on, its memory of the run kept: a run is
+    /// given its end gate's pinned lines when the gate is set, after a resume's replay.
+    #[must_use]
+    pub fn trusting(self, trusted: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        Classifier {
+            trusted: Classifier::new(trusted).trusted,
+            ..self
         }
     }
 
@@ -347,7 +357,8 @@ mod tests {
         }
     }
 
-    /// With no trusted source — the harness today — no act is a bench.
+    /// With no trusted source — a body with no pin, or whose card differs from it — no act is a
+    /// bench; trusting keeps the run's memory.
     #[test]
     fn no_trusted_source_no_bench() {
         let mut c = Classifier::default();
@@ -360,6 +371,12 @@ mod tests {
             Classifier::new([" ", ""]).trusted.is_empty(),
             "a blank line trusts nothing"
         );
+        let mut c = Classifier::default();
+        let a = act("glob", r#"{"pattern":"*.rs"}"#);
+        assert_eq!(c.classify(&a), []);
+        let mut c = c.trusting([VERIFY]);
+        assert_eq!(c.classify(&a), [Class::Repeat], "the run's memory is kept");
+        assert_eq!(classed(&mut c, VERIFY, Some(0)), [Class::Positive]);
     }
 
     #[test]

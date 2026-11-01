@@ -13,6 +13,7 @@
 //! - `answers`: the human's answers to the gate given on the board ([`crate::answers`]);
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
 //!   ([`crate::minds::witness`]);
+//! - `verify`: the verify pins — the lines each creature's end gate may run ([`crate::pins`]);
 //! - `facts`: the trusted territory facts ([`crate::facts`]);
 //! - `relations`: the relations between worlds the human stated ([`crate::dimension`]);
 //! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
@@ -35,15 +36,16 @@ use crate::worth::USAGE;
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `facts`,
-    /// `relations`, `uses`, `revocations` or `kijin-<post>`.
+    /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `verify`,
+    /// `facts`, `relations`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
 }
 
 /// The chained journals of `world`: the usage ledger, and with a home to keep them under, the
-/// value, evolution, gate and guts journals, the board's answers, the Minds' witness, the envelopes' uses and revocations, and each Kijin post's
+/// value, evolution, gate and guts journals, the board's answers, the Minds' witness, the verify
+/// pins, the envelopes' uses and revocations, and each Kijin post's
 /// witness that is kept or was anchored.
 #[must_use]
 pub fn journals(world: &Path) -> Vec<Chained> {
@@ -66,9 +68,11 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         ("guts", "guts"),
         ("answers", crate::answers::KIND),
         ("minds", "minds"),
+        (crate::pins::KIND, crate::pins::KIND),
     ] {
-        // The Minds' witness names the world by its real path ([`crate::minds::witness`]).
-        let real = (kind == "minds")
+        // The Minds' witness and the verify pins name the world by its real path
+        // ([`crate::minds::witness`], [`crate::pins`]).
+        let real = (kind == "minds" || kind == crate::pins::KIND)
             .then(|| world.canonicalize().ok())
             .flatten();
         out.push(Chained {
@@ -542,6 +546,7 @@ mod tests {
                 "guts",
                 "answers",
                 "minds",
+                "verify",
                 "facts",
                 "relations",
                 "uses",

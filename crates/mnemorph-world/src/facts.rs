@@ -721,8 +721,11 @@ impl Facts {
                 "no home: the trusted facts are kept under the human's state directory".into(),
             );
         };
-        let mut said = mirrored(world);
         let path = trusted_in(state, world);
+        if let Err(why) = crate::pins::outside_as(world, &path, "the trusted facts are") {
+            return Facts::unavailable(why);
+        }
+        let mut said = mirrored(world);
         let anchor = crate::chains::anchor_under(state, world, KIND);
         let events = if !path.exists() && anchor.is_none() && !said.is_empty() {
             // Where the import cannot be written — a sandboxed reader — it is read as written.

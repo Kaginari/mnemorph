@@ -18,6 +18,7 @@ pub mod gate;
 pub mod headless;
 pub mod kit;
 pub mod pictures;
+pub mod pin;
 pub mod probe;
 pub mod run;
 pub mod safe;

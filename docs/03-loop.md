@@ -319,10 +319,10 @@ act was, read by harness code from the act's structured outcome and the run's ac
 trimmed with its runs of whitespace made one, must equal it exactly: no prefix, no substring.
 A check the body chose is a plain command, whatever it is named: `python3 -c "assert True"`, a
 `verify.sh` it wrote, `cargo test --no-run`, `cargo test -p x | tail`. Passing one earns nothing;
-failing one is a `fail`, never a red pin. **No such source exists yet.** A creature's verify lines
-are on its card, in the world, which a body can reach, so the harness trusts none: no act is a
-bench, and `red-pin`, `positive` and `thrash` do not occur until verify lines are kept out of a
-body's reach.
+failing one is a `fail`, never a red pin. **The source is the body's end gate:** the verify lines
+[pinned](#the-verify-pins) for it outside the world, never its card's word. A body with no pin,
+or whose card differs from its pin, has no bench, and `red-pin`, `positive` and `thrash` do not
+occur for it. A resumed run is replayed with no bench, then trusts its gate's lines from there.
 
 No text is read. The classifier is given the tool, its input, whether the act failed or the
 human denied it, whether it wrote, and its exit code — never the output. A command that prints
@@ -423,12 +423,64 @@ The world repairs itself in small, mechanical steps, each one written to the led
   alone, never a directory or a journal ([missing worlds](05-architecture.md#the-board-server)).
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
+### The verify pins
+
+A creature's card lives in the world, and nothing read from inside a world grants trust: a body
+can reach a card through routes no tool guard sees — a commit made with git's plumbing and checked
+out later, a merge, a pull — and a cloned repository brings every card from a stranger. So the end
+gate never runs a verify line because a card says it. It runs the lines **pinned** for the
+creature in a witness kept outside the world, `$XDG_STATE_HOME/mnemorph/verify/<world>-<fnv64a>.jsonl`
+(else under `~/.local/state`), hash-chained and anchored as `verify` with the world's other chained
+journals ([storage](05-architecture.md#storage-files-are-the-truth)), and only while the card
+still says the same set of lines.
+
+- **A card that differs from its pin** — a line changed, added or removed — runs nothing. The
+  landing fails closed at once, NOT_VERIFIED with no retry, since no retry of the body's can pin a
+  line: "the verify line in `<card>` differs from the pinned one: run
+  `mnemorphd verify pin <creature>` to accept it".
+- **A card with lines and no pin** — a fresh world, a cloned one, a card born since — runs nothing
+  the same way, with the same way on. A card with no line and no pin runs no check: its landing
+  passes as the baseline, journaled `PASS, unchecked` with "no verify line ran", shown so in the
+  terminal app and `mnemorph status`, and never counted as verified — not by a body's worth,
+  nor as a fact's ground.
+- **A witness whose chain does not walk whole** — a row edited, a tail dropped against its anchor —
+  trusts no pin: every landing fails closed until the human looks (`mnemorphd housekeep --verify`
+  says where it breaks).
+
+Three writers, none of them a body's command: the human's `mnemorphd verify pin <creature>`, which
+shows the card's lines and asks at the terminal (`/dev/tty`; piped input is refused), or pins
+without asking under `--yes` for a script the human runs — a benchmark harness that writes the
+card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool; and
+relief, which pins each young to the lines its parent's pin held, never to the card's. Every write
+is refused inside a body's command (`MNEMORPH_BODY` is set there), and the sandbox grants no
+command the state directory. A body could unset the variable where no sandbox holds it
+(`sandbox.allow_unguarded`), so the human's pin — the command and the first-run prompt — is also
+refused when any process above it is `mnemorph`, `mnemorphd` or `mnemorph-guard` (read from
+`/proc` on Linux, `ps` on macOS; an ancestry that cannot be read refuses). A state directory that
+lies inside the world — `XDG_STATE_HOME` pointed there — holds no pin: nothing is written or read
+there, and the gate fails closed.
+
+**Each line keeps who pinned it.** A line the human pinned, or relief carried down from one, is
+the human's check. A line an Orc coded is the Orc's own word on its Slime: the gate runs it, but
+it earns no test bench for the guts classes (no `positive`, no `red-pin`; its failure is a
+`fail`), and a pass on an Orc's lines alone is journaled "verified by `<orc>`'s pin", apart from
+"the human's pin", so whatever weighs the verdicts can tell them apart. `mnemorphd verify list`
+and the first-run prompt show each pinned line's author.
+
+The first run in a fresh or cloned world asks once. Before the terminal app takes the screen, it
+lists every living creature whose card holds lines the pins do not — the card, the lines, whether
+it is unpinned or differs — and asks one question; `y` pins exactly the lines shown, anything else
+pins nothing and says the landings fail closed until `mnemorphd verify pin`. `mnemorph run` never
+asks: its gate fails closed with the hint. A pin is the human's word on one world, named by its
+real path: a copy of the world is pinned again.
+
 ### The end gate
 
 Runs on the body's own writes (minus what its Courts already landed on their own account) — a
 commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
-card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens, and in solo the whole
-repository is its soil, so right author holds by construction. A card with no verify line runs no
+card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens and run only as
+[pinned](#the-verify-pins), and in solo the whole repository is its soil, so right author holds
+by construction. A card with no verify line runs no
 check, and then no claim of a solo session is ever grounded: `mnemorphd memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
@@ -453,7 +505,7 @@ on each verify command, and names the key that raises it. The gate runs:
    never touches it, and the commission's report names it as another writer's. The grant is the
    one the body ran with, taken before it starts. With no guard, writers cannot be told apart, and every change in the tree is
    judged the body's.
-2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, each
+2. **Traits hold** — the verify lines that stood *before* the turn, as pinned, run green, sandboxed, each
    within `gate.verify_secs` (120 s unless the configuration says; 10 to 600, the most the
    `bash` tool grants a command), and within the ask's own clock. A cold build of a large compiled
    project can take longer than 120 s; killed at the limit, it gives no result, so the landing is

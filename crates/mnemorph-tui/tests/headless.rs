@@ -24,6 +24,7 @@ impl World {
             "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
+        pin(&w, "rimuru", &["grep -q fixed out.txt"]);
         // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
         fs::write(
             w.with_extension("global.toml"),
@@ -369,4 +370,16 @@ fn an_interrupt_stops_the_command_and_exits_1() {
     assert_eq!(code, 1, "{err}");
     assert_eq!(out, "");
     assert_eq!(err.lines().last(), Some("mnemorph: interrupted"), "{err}");
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_loop::world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

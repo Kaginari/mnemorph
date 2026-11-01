@@ -165,6 +165,8 @@ impl Home {
                 changed: vec![changed.into()],
                 failures: vec![],
                 unverified: vec![],
+                unchecked: false,
+                verified_by: Vec::new(),
                 entry: None,
                 build: mnemorph_server::world::ledger::Build::default(),
             })

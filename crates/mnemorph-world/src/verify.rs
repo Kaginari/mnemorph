@@ -1,7 +1,8 @@
 //! An Orc codes its Slime's verify line: the test before the change, which the dispatch law asks
 //! before an Orc commissions a Slime. Creature docs are no body's to write with the file tools —
 //! a body that rewrote its own checks could cheat its trust — so the harness writes this one line,
-//! for an Orc, on the doc of a Slime that reports to it, and journals it.
+//! for an Orc, on the doc of a Slime that reports to it, pins it ([`crate::pins`]), and journals
+//! it.
 
 use std::fs;
 use std::path::Path;
@@ -74,6 +75,13 @@ pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Strin
     // The doc as read now, parsed now: the line goes after the fields this text holds.
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let read = parse(&text, Path::new(&s.seat))?;
+    // The pin first: the Orc's word on its own Slime, kept where no body writes. A line the doc
+    // carries is pinned too — a stranger's line becomes trusted only by this Orc's coding it.
+    crate::pins::record(
+        world,
+        crate::pins::row(crate::pins::Act::Code, slime, &[command.to_owned()], orc),
+    )
+    .map_err(|e| format!("the line is not pinned, so it was not written: {e}"))?;
     if read.verify.iter().any(|v| v == command) {
         return Ok(format!("- **Verify:** `{command}`"));
     }

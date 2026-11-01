@@ -1,7 +1,7 @@
 //! The trusted facts and the relations between worlds live under the human's state directory, and
 //! the sandbox is what keeps a body's command from them — not `MNEMORPH_BODY`, which a body can
-//! unset. Inside the real guard, a body writes neither journal, and `mnemorphd onto relate` run
-//! with the variable unset still states nothing.
+//! unset. Inside the real guard, a body writes neither journal, and `mnemorphd onto relate` or
+//! `onto settle` run with the variable unset is refused and writes nothing there.
 
 #![cfg(target_os = "linux")]
 
@@ -79,6 +79,36 @@ fn a_guarded_body_reaches_neither_the_trusted_facts_nor_the_relations() {
         assert!(o.is_error, "{o:?}");
         assert_eq!(text(j), "{\"kept\":true}\n", "{o:?}");
     }
+    // A fact in the world's copy, which the core would import and settle if it could write.
+    let id = fact_id("src", "x");
+    fs::create_dir_all(world.join(".mnemorph/ontology")).unwrap();
+    fs::write(
+        world.join(".mnemorph/ontology/facts.jsonl"),
+        format!(
+            "{{\"event\":\"support\",\"id\":\"{id}\",\"about\":\"src\",\"text\":\"x\",\"by\":\"slime-a\"}}\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        world.join("src/settle.sh"),
+        format!(
+            "XDG_STATE_HOME='{}' env -u MNEMORPH_BODY ./src/mnemorphd onto settle '#{id}' --world .\n",
+            state.display()
+        ),
+    )
+    .unwrap();
+    let o = bash(&mut cx, "bash src/settle.sh");
+    assert!(o.is_error, "{o:?}");
+    assert!(o.content.contains("mnemorphd: refused"), "{o:?}");
+    assert!(
+        o.content.contains(&format!("settling #{id}")),
+        "the core read the fact: {o:?}"
+    );
+    assert_eq!(
+        walk(&state.join("mnemorph/facts")),
+        vec![facts.clone()],
+        "nothing written under the state directory: {o:?}"
+    );
     let o = bash(&mut cx, "bash src/relate.sh");
     // The core ran, and was refused: its write never reached the state directory.
     assert!(o.content.contains("mnemorphd: refused"), "{o:?}");
@@ -92,6 +122,16 @@ fn a_guarded_body_reaches_neither_the_trusted_facts_nor_the_relations() {
     assert_eq!(written, Vec::<PathBuf>::new(), "{o:?}");
     assert!(!world.join(".mnemorph/dimension.toml").exists(), "{o:?}");
     let _ = fs::remove_dir_all(&root);
+}
+
+/// A fact's id, as `mnemorph_world::facts::fact_id` hashes its path and text (FNV-1a).
+fn fact_id(about: &str, text: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in format!("{about}\0{text}").bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")[..10].to_owned()
 }
 
 /// Every file under `dir`.

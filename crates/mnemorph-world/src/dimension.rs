@@ -1038,6 +1038,7 @@ impl Manifest {
             return Ok(Manifest::default());
         };
         let path = relations_file(registry, world);
+        crate::pins::outside_as(world, &path, "the relations are")?;
         let anchor = crate::chains::anchor_under(&state_of(registry), world, RELATIONS);
         let report = chain::verify_against(&path, anchor.as_ref())
             .map_err(|e| format!("the relations cannot be read: {e}"))?;
@@ -1358,16 +1359,23 @@ pub fn stale_findings(proposals: &[Proposal]) -> Vec<Finding> {
 }
 
 /// The relations are written by the human alone: refused inside a body's command
-/// (`MNEMORPH_BODY` is set there), and the sandbox keeps the state directory out of every
-/// command's reach besides.
+/// (`MNEMORPH_BODY` is set there) and under any of the harness's processes, whatever the
+/// environment says ([`crate::pins::under_harness`]); the sandbox keeps the state directory out
+/// of every command's reach besides.
 fn refuse_a_body() -> Result<(), String> {
-    match std::env::var_os("MNEMORPH_BODY") {
-        Some(body) => Err(format!(
+    if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+        return Err(format!(
             "{} runs this: relations between worlds are the human's to state",
             body.to_string_lossy()
-        )),
-        None => Ok(()),
+        ));
     }
+    if let Some(harness) = crate::pins::under_harness()? {
+        return Err(format!(
+            "this runs under {harness}: relations between worlds are the human's to state, never \
+             a command a session started"
+        ));
+    }
+    Ok(())
 }
 
 /// `row` appended to the relations of `world` kept beside `registry`, their in-world copy then

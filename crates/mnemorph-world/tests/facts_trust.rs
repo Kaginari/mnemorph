@@ -4,6 +4,7 @@
 //! trusted journal imports its copy once, unsettled; a trusted journal that does not walk whole
 //! leaves the facts unavailable, never settled.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -287,10 +288,11 @@ fn a_tampered_trusted_journal_reads_unavailable_never_settled() {
         .head
         .unwrap();
     let mut log = fs::read_to_string(w.join(".mnemorph/log.md")).unwrap();
-    log.push_str(&format!(
-        "\n- **{KIND} chain:** OK, head {} at line {}\n",
+    let _ = writeln!(
+        log,
+        "\n- **{KIND} chain:** OK, head {} at line {}",
         head.digest, head.line
-    ));
+    );
     fs::write(w.join(".mnemorph/log.md"), log).unwrap();
     assert_eq!(f.load(&w).facts[&id].status(), Status::Settled);
     fs::remove_file(&journal).unwrap();
@@ -311,4 +313,28 @@ fn with_no_home_the_facts_are_unavailable() {
     let facts = Facts::load_in(None, &w);
     assert!(facts.facts.is_empty() && facts.unavailable.is_some());
     assert!(Facts::record_in(None, &w, &say("slime-b")).is_err());
+}
+
+/// A state directory inside the world would be the body's to write: the trusted facts are neither
+/// read nor written there, and the relations neither.
+#[test]
+fn a_state_directory_inside_the_world_is_refused() {
+    let f = Fixture::new();
+    let w = f.world("w");
+    let inside = w.join(".mnemorph/tmp/state");
+    forge(&w, &[say("slime-a"), human_settle()]);
+    let facts = Facts::load_in(Some(&inside), &w);
+    assert!(
+        facts
+            .unavailable
+            .as_deref()
+            .is_some_and(|e| e.contains("inside the world")),
+        "{:?}",
+        facts.unavailable
+    );
+    assert!(Facts::record_in(Some(&inside), &w, &say("slime-b")).is_err());
+    assert!(!inside.exists(), "nothing written there");
+    let registry = inside.join("mnemorph/worlds.jsonl");
+    let e = mnemorph_world::dimension::Manifest::trusted(Some(&registry), &w).unwrap_err();
+    assert!(e.contains("inside the world"), "{e}");
 }

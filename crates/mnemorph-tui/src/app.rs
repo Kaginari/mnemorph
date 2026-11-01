@@ -584,9 +584,13 @@ fn status(m: &mut Model, event: &Event) {
         Event::TurnEnded { .. } => {
             m.activity.ended = true;
         }
-        Event::GateVerdict { verdict, .. } => {
+        Event::GateVerdict {
+            verdict, unchecked, ..
+        } => {
             let t = &m.theme;
             let (word, hue) = match verdict.as_str() {
+                // A pass no check ran on is the baseline, never shown as verified.
+                "PASS" if *unchecked => ("pass, unchecked", t.p.gold),
                 "PASS" => ("pass", t.readable(t.races.elf)),
                 "NOT_VERIFIED" => ("not verified", t.p.gold),
                 _ => ("fail", t.p.alarm),

@@ -24,6 +24,7 @@ pub mod log;
 pub mod meters;
 pub mod minds;
 pub mod own;
+pub mod pins;
 pub mod queue;
 pub mod regular;
 pub mod relief;

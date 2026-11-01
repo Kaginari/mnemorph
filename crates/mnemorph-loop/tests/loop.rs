@@ -1250,6 +1250,8 @@ async fn esc_during_a_verify_is_not_a_verdict() {
         .run(model.clone(), limits())
         .with_gate(mnemorph_loop::EndGate {
             verify: vec!["touch running; sleep 30".into()],
+            held: Vec::new(),
+            by: Vec::new(),
             author: None,
             ..Default::default()
         });
@@ -2476,7 +2478,7 @@ async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
 /// Every act's guts classes ride its beat and the harness's chained record outside the world, read
 /// from the act's structured outcome alone: a body that prints a passing bench's words earns no
 /// `positive`, and a red bench's words printed by a clean command earn no `red-pin`. No verify line
-/// is trusted yet, so a check the body chose is never a bench: passing it is plain, failing it a
+/// is pinned here, so a check the body chose is never a bench: passing it is plain, failing it a
 /// fail. Replaying the journal gives the same classes.
 #[tokio::test]
 async fn every_act_is_classed_from_its_outcome_never_its_text() {

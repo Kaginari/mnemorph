@@ -334,8 +334,9 @@ the human's state directory, at `$XDG_STATE_HOME/mnemorph/facts/<world>-<fnv64a>
 the world's other chained journals ([the chain](06-consumption.md#the-usage-row)). Their writers
 are the harness — a body's `@U territory` facts, filed by the loop in the body's name; a parent's
 labels; an Orc's `@V settle` — and the human's settle, `onto settle` and the board's. A body's
-command writes none: the sandbox grants no command the state directory, and every write is
-refused besides when `MNEMORPH_BODY` is set. `.mnemorph/ontology/facts.jsonl`, harness soil, is
+command writes none: the sandbox grants no command the state directory, every write is refused
+besides when `MNEMORPH_BODY` is set, and `onto settle` is refused under any of the harness's
+processes. A state directory inside the world is refused, and the facts read unavailable. `.mnemorph/ontology/facts.jsonl`, harness soil, is
 a copy of that journal written whole after each event, through no link, for readers; it is never
 read for trust. The projection, `onto check`, `onto settle` and the board's ontology page all
 read the trusted journal. What the copy says beyond it — a fact it reads settled that the trusted
@@ -425,8 +426,10 @@ type's inverse declared or taken back. A type is lowercase words joined by `-`. 
 writers are the human's `mnemorphd onto relate <world> <type>`, `onto unrelate <world> <type>`
 and `onto inverse <type> <inverse>|-`, each showing what it writes and asking for `y` at the
 terminal (`/dev/tty`; piped input is refused), or taking `--yes` from a script the human runs;
-each is refused inside a body's command, and the sandbox grants no command the state directory,
-so a body that unsets `MNEMORPH_BODY` still writes nothing there. Relations that do not walk
+each is refused inside a body's command and under any of the harness's processes, whatever the
+environment says, and the sandbox grants no command the state directory, so a body that unsets
+`MNEMORPH_BODY` still writes nothing there. A state directory inside the world is refused: the
+relations are then neither read nor written. Relations that do not walk
 whole do not read, and `onto check` fails on them. `.mnemorph/dimension.toml`, Rimuru's soil, is
 their copy, written after each act through no link: `[[relation]]` entries and an `[inverse]`
 table. It is never read as a relation: what it states beyond the trusted relations — a hand

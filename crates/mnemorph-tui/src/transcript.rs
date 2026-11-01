@@ -537,13 +537,20 @@ impl Transcript {
                 changed,
                 failures,
                 unverified,
+                unchecked,
+                verified_by,
                 ..
-            } => self.push(Entry::Verdict {
-                verdict: verdict.clone(),
-                changed: changed.len(),
-                failures: failures.clone(),
-                unverified: unverified.clone(),
-            }),
+            } => {
+                self.push(Entry::Verdict {
+                    verdict: verdict.clone(),
+                    changed: changed.len(),
+                    failures: failures.clone(),
+                    unverified: unverified.clone(),
+                });
+                if let Some(note) = checked_by(*unchecked, verified_by) {
+                    self.push(Entry::Note(note));
+                }
+            }
             Event::TurnEnded { ending } => self.end_turn(ending),
             Event::Held { held } => self.held = *held,
         }
@@ -920,6 +927,22 @@ fn open_fence(text: &str) -> bool {
 fn first_line(text: &str) -> String {
     let line = text.lines().next().unwrap_or("");
     crate::kit::text::clip(line, 100)
+}
+
+/// What checked a gate's pass, when it was not the human's pin: no verify line at all, or only
+/// an Orc's. `None` for the human's check.
+#[must_use]
+pub fn checked_by(unchecked: bool, verified_by: &[String]) -> Option<String> {
+    if unchecked {
+        return Some("no verify line ran: this landing was checked by nothing".to_owned());
+    }
+    let human = verified_by.iter().any(|v| v == "the human's pin");
+    (!verified_by.is_empty() && !human).then(|| {
+        format!(
+            "verified by {} only, not by a line the human pinned",
+            verified_by.join(", ")
+        )
+    })
 }
 
 #[cfg(test)]

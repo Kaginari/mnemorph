@@ -301,6 +301,7 @@ fn read_beats(c: &mut Commission, beats: &[Beat]) {
         failures,
         unverified,
         verdict,
+        ..
     }) = beats.iter().rev().find(|b| matches!(b, Beat::Gate { .. }))
     {
         c.verdict = Some(word(failures, unverified, verdict));

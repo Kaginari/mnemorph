@@ -119,6 +119,8 @@ impl World {
         };
         let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup).with_gate(EndGate {
             verify: task.verify,
+            held: Vec::new(),
+            by: Vec::new(),
             author: None,
             ..Default::default()
         });
