@@ -32,6 +32,7 @@ export type { BoardTranscript } from './generated/BoardTranscript.js';
 export type { BoardWorld } from './generated/BoardWorld.js';
 export type { BoardWorlds } from './generated/BoardWorlds.js';
 export type { BodyMind } from './generated/BodyMind.js';
+export type { BodyProposal } from './generated/BodyProposal.js';
 export type { BodyState } from './generated/BodyState.js';
 export type { Budget } from './generated/Budget.js';
 export type { ChallengeCounts } from './generated/ChallengeCounts.js';

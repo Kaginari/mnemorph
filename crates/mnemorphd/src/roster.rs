@@ -2,19 +2,20 @@
 //! under the human's state directory, never in the world. A card lives in the world, where a
 //! body's commit or a cloned repository writes it, so it grants nothing because it says it: the
 //! harness writes rows at relief and evolution swaps, and only the human adopts a card, raises or
-//! lowers a race, or retires a creature.
+//! lowers a race, applies a rise or a fall the compiled law proposes, or retires a creature.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use mnemorph_server::challenge::safe;
 use mnemorph_server::world::Roster;
+use mnemorph_server::world::ascension::{self, Move};
 use mnemorph_server::world::creatures::{self, Act, HUMAN, Standing};
 use mnemorph_server::world::races::Race;
 
 use super::{absolute, at_terminal, fail, refused};
 
-/// `roster list|adopt|set-race|retire`.
+/// `roster list|adopt|set-race|rise|fall|retire|replay`.
 pub(crate) fn roster(args: &[String]) -> ExitCode {
     let (mut world, mut yes, mut words) = (None, false, Vec::new());
     let mut it = args.iter();
@@ -40,12 +41,21 @@ pub(crate) fn roster(args: &[String]) -> ExitCode {
     let world = world.canonicalize().unwrap_or(world);
     match words.as_slice() {
         ["list"] | [] if !yes => list(&world),
-        ["list"] | [] => refused(&"--yes is given with adopt, set-race or retire only"),
+        ["list"] | [] | ["replay"] if yes => {
+            refused(&"--yes is given with adopt, set-race or retire only")
+        }
+        ["list"] | [] => list(&world),
+        ["replay"] => replay(&world),
         ["adopt", names @ ..] => adopt(&world, names, yes),
         ["set-race", name, race] => set_race(&world, name, race, yes),
+        ["rise" | "fall", _] if yes => refused(
+            &"a rise or a fall the law proposes is applied at the terminal alone: there is no --yes",
+        ),
+        ["rise", name] => apply(&world, name, Move::Rise),
+        ["fall", name] => apply(&world, name, Move::Fall),
         ["retire", name] => retire(&world, name, yes),
         _ => refused(
-            &"roster needs list, adopt [<creature>...], set-race <creature> <race>, or retire <creature>; see --help",
+            &"roster needs list, adopt [<creature>...], set-race <creature> <race>, rise <creature>, fall <creature>, retire <creature>, or replay; see --help",
         ),
     }
 }
@@ -278,4 +288,108 @@ fn retire(world: &Path, name: &str, yes: bool) -> ExitCode {
     }
     println!("{} is retired", safe(name));
     ExitCode::SUCCESS
+}
+
+/// Refused under a harness process, whatever its environment says: a command a session started
+/// is no human's word.
+fn not_under_harness() -> Result<(), ExitCode> {
+    match mnemorph_server::world::pins::under_harness() {
+        Ok(None) => Ok(()),
+        Ok(Some(harness)) => Err(refused(&format!(
+            "this runs under {harness}: a creature's standing is the human's word, never a \
+             command a session started"
+        ))),
+        Err(e) => Err(refused(&e)),
+    }
+}
+
+/// `roster rise|fall <creature>`: the move the compiled law proposes for the creature, shown in
+/// full — its meters, its record and window, every bar it read — and applied on the human's `y`
+/// at the terminal alone: a `rise` or `fall` row in the witness naming the proposal and its
+/// inputs' digest, and the card's `Race` line set to match.
+fn apply(world: &Path, name: &str, act: Move) -> ExitCode {
+    if let Err(code) = not_a_body().and_then(|()| not_under_harness()) {
+        return code;
+    }
+    let Some(state) = creatures::state() else {
+        return refused(
+            &"no home: the creatures' witness is kept under the human's state directory",
+        );
+    };
+    if let Err(e) =
+        mnemorph_server::world::pins::outside_as(world, &state, "the creatures' rows are")
+    {
+        return refused(&e);
+    }
+    let p = match ascension::proposed_in(world, &state, name, act) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    println!("the compiled law proposes, from the trusted journals alone:");
+    for line in p.lines() {
+        println!("{}", safe(&line));
+    }
+    println!(
+        "  applying it writes a {} row to the creatures' witness, and sets the card's Race line to {}",
+        act.word(),
+        p.to.name()
+    );
+    match super::at_terminal(&format!("apply {}'s {}?", safe(name), safe(&p.what()))) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was written"),
+        Err(e) => return refused(&e),
+    }
+    let p = match ascension::apply_in(Some(&state), world, name, act, &p.id) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    if let Err(e) = creatures::card_says(world, name, "Race", p.to.name()) {
+        println!(
+            "{}'s row holds {}; its card could not be set to match ({e}): it runs at the lower \
+             until it says the same",
+            safe(name),
+            p.to.name()
+        );
+        return ExitCode::SUCCESS;
+    }
+    println!(
+        "{} is a {} now (proposal {})",
+        safe(name),
+        p.to.name(),
+        p.id
+    );
+    ExitCode::SUCCESS
+}
+
+/// `roster replay`: every rise and fall in the witness recomputed from the trusted journals and
+/// the rows before it; exits 1 at the first that does not reproduce.
+fn replay(world: &Path) -> ExitCode {
+    let Some(state) = creatures::state() else {
+        return refused(
+            &"no home: the creatures' witness is kept under the human's state directory",
+        );
+    };
+    match ascension::replay_in(world, &state) {
+        Ok(rows) => {
+            for r in &rows {
+                println!(
+                    "row {}: {} {} to {} — proposal {} reproduces",
+                    r.line,
+                    safe(&r.creature),
+                    r.act.word(),
+                    safe(&r.to),
+                    safe(&r.proposal)
+                );
+            }
+            println!(
+                "{} rise(s) and fall(s) reproduce exactly from the journals and the witness",
+                rows.len()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("does not reproduce: {}", safe(&e));
+            ExitCode::FAILURE
+        }
+    }
 }

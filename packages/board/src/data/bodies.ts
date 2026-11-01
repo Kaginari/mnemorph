@@ -13,6 +13,7 @@ import type {
   BoardQueue,
   BoardTimeline,
   BodyMind,
+  BodyProposal,
   BodyState,
   CommissionState,
   GutsClass,
@@ -132,6 +133,27 @@ function mind(v: unknown): BodyMind | undefined {
     : undefined;
 }
 
+/** A proposal the compiled law makes; `null` for none, `undefined` when it does not hold together. */
+function proposal(v: unknown): BodyProposal | null | undefined {
+  if (v === null) return null;
+  const o = obj(v);
+  if (!o || !str(o.id) || !oneOf(['rise', 'fall'] as const)(o.act) || !str(o.to)) return undefined;
+  if (!bool(o.ended_probation) || !count(o.reports) || !strs(o.meters) || !strs(o.why)) {
+    return undefined;
+  }
+  if (!str(o.command)) return undefined;
+  return {
+    id: o.id,
+    act: o.act,
+    to: o.to,
+    ended_probation: o.ended_probation,
+    reports: o.reports,
+    meters: o.meters,
+    why: o.why,
+    command: o.command,
+  };
+}
+
 function body(v: unknown): BoardBody | undefined {
   const o = obj(v);
   if (!o || !str(o.name) || !str(o.race) || !str(o.lane) || !strOrNull(o.parent)) return undefined;
@@ -140,6 +162,8 @@ function body(v: unknown): BoardBody | undefined {
   }
   if (!strOrNull(o.heir_of) || !str(o.doc)) return undefined;
   if (!oneOf(STANDINGS)(o.standing) || !str(o.runs_as) || !strs(o.differs)) return undefined;
+  const proposed = proposal(o.proposal);
+  if (proposed === undefined || !strOrNull(o.probation)) return undefined;
   const live = obj(o.live);
   if (!live || !oneOf(BODY_STATES)(live.state) || !str(live.why)) return undefined;
   if (!strOrNull(live.run) || !strOrNull(live.at)) return undefined;
@@ -168,6 +192,8 @@ function body(v: unknown): BoardBody | undefined {
     standing: o.standing,
     runs_as: o.runs_as,
     differs: o.differs,
+    proposal: proposed,
+    probation: o.probation,
   };
 }
 
@@ -237,9 +263,9 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
   if (!o || !strs(o.problems) || !strs(o.loops)) return undefined;
   const throne = obj(o.throne);
   if (!throne || !bool(throne.live) || !str(throne.why)) return undefined;
-  const p = ['roster', 'witness', 'minds', 'live', 'acts', 'law'].map((k) => provenance(o[k]));
-  const [roster, witness, minds, live, acts, law] = p;
-  if (!roster || !witness || !minds || !live || !acts || !law) return undefined;
+  const keys = ['roster', 'witness', 'minds', 'live', 'acts', 'law', 'ascension'];
+  const [roster, witness, minds, live, acts, law, ascension] = keys.map((k) => provenance(o[k]));
+  if (!roster || !witness || !minds || !live || !acts || !law || !ascension) return undefined;
   const bodies = rows(o.bodies, body);
   const races = rows(o.races, race);
   return {
@@ -254,6 +280,7 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
     live,
     acts,
     law,
+    ascension,
     unreadable: bodies.bad + races.bad,
   };
 }

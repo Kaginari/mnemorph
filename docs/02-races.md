@@ -1182,7 +1182,7 @@ config:
 stateDiagram-v2
     [*] --> Base
     Base --> Candidate: record crosses its race's bar
-    Candidate --> Ascended: Rimuru proposes · Veldora confirms
+    Candidate --> Ascended: the law proposes · Veldora applies
     Candidate --> Base: Veldora declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
     Ascended --> Base: an event — immediate, no probation
@@ -1196,17 +1196,19 @@ stateDiagram-v2
     class Base step
 ```
 
-**In plain words.** A creature whose record crosses its race's bar becomes a candidate. Rimuru
-proposes the ascension and you confirm it with one keystroke — ascension changes how much
+**In plain words.** A creature whose record crosses its race's bar becomes a candidate. The
+compiled law proposes the ascension and you apply it at the terminal — ascension changes how much
 friction a creature meets, so it is yours to grant. An ascended creature that slips enters
-probation; if it does not recover, it falls back to its base race. Nothing is erased: the record
-and the doc carry over both ways. A rise or a fall is written where the race is trusted — the
-creatures' witness, by `mnemorphd roster set-race <creature> <race>` at the terminal — and the
-card is set to match; a card that only says the new race runs at the lower one.
+probation; if it does not recover, a fall is proposed, and you apply that too. Nothing is erased:
+the record and the doc carry over both ways. A rise or a fall is written where the race is trusted
+— the creatures' witness, by `mnemorphd roster rise <creature>` or `roster fall <creature>` at the
+terminal ([applying a rise or a fall](#applying-a-rise-or-a-fall)) — and the card is set to match;
+a card that only says the new race runs at the lower one. `mnemorphd roster set-race <creature>
+<race>` stays the human's own word, outside any proposal.
 
-**Technical detail.** From M11, bars are evaluated after every report fold over the value
-ledger's 28-day window; the bars themselves are compiled (`rises`, `falls`, `recovers`).
-The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
+**Technical detail.** The bars are evaluated over the report ledger's 28-day window at every
+read of it; the bars themselves are compiled (`rises`, `falls`, `recovers`), and nothing learned
+enters them. The two thresholds are apart on purpose (hysteresis), so a creature does not flap.
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
@@ -1226,9 +1228,9 @@ How a fall is read (`mnemorph-races`, `falls`):
   that just rose never reads as falling.
 - **Probation ends at the fall bar** (`recovers`). Over at least five reports since it began
   (findings for an Arch Dark Elf), a rate back at or above its fall bar, with no event, recovers
-  the form; from M11, the fold that reads it ends probation with a fall once five have passed
-  without that. Recovering to the bar it fell at ends probation;
-  rising again after a fall still needs the rise bar.
+  the form; the fold that reads it proposes a fall once five have passed without that.
+  Recovering to the bar it fell at ends probation; rising again after a fall still needs the rise
+  bar, over reports made since the fall.
 - **A meter is ranked on the race's own unit** (`meter`, by base race): reports, findings for a
   Dark Elf and an Arch Dark Elf, outward acts for a Kijin and an Oni. Fewer than five of them:
   the meter is shown, never ranked.
@@ -1346,7 +1348,64 @@ The fold is kept in the **report ledger**, `$XDG_STATE_HOME/mnemorph/reports/<wo
 `act`), each with every input value above and the `build` of the journal row that settled it, and
 chained from its genesis; a row whose source row carries no build says `unstamped`.
 `mnemorphd meters` folds and keeps it; `mnemorph status` and the board
-fold the same rows in memory and write nothing. No rise, fall or probation is applied from it.
+fold the same rows in memory and write nothing. Each row carries `ts`, the trusted time its report
+began — a run's first call in the usage witness, a throne landing's verdict, an outward act's first
+row in its post's witness — which the window reads. The compiled law proposes rises and falls from
+these rows; none applies itself ([applying a rise or a fall](#applying-a-rise-or-a-fall)).
+
+#### Applying a rise or a fall
+
+`mnemorph_world::ascension` reads the report ledger's rows and the creatures' witness, and
+nothing else: no model, no estimate, no interval — the Wilson interval is shown beside a meter,
+never judged on.
+
+- **The race keying is the witness's.** A creature is read as the race its latest row holds, and
+  its record is its name's reports under that race's base, as the usage witness says it ran. A
+  stranger (no row) and a retired creature are proposed nothing; a card that claims another race
+  claims no record.
+- **The window.** A rise reads the creature's reports whose trusted time lies in the 28 days up
+  to the ledger's clock — the newest report's time, so the window is the journals', never the wall
+  clock's, and a reading at the same clock reads the same. A report counts once the creature's next
+  report has begun, so one still in flight never moves a proposal under the human's eyes. Only
+  reports since the creature's last rise, fall or `set-race` count.
+- **A rise** is proposed when every bar of the form holds over that window (`rises`).
+- **Probation and a fall.** An ascended creature's reports since its rise are walked in order: an
+  event in its last ten ends the form at once; a rate under its fall bar over a full ten starts
+  probation; five reports on, a rate back at the fall bar with no event recovers it, else a fall
+  is proposed (`probation ended unrecovered`). The walk stops at the first fall, so the fall stays
+  the same proposal as reports keep arriving. Probation grants and removes nothing: it is read
+  from the reports, shown, and never written.
+- **An input no trusted journal carries** (`slimeHealth` for an Orc, `envelopeCorrections` for a
+  Kijin) computes no proposal: an Orc or a Kijin is not proposed a move until it is journaled. A
+  Dark Elf's proposals stay on its findings (`mnemorphd challenge score`).
+- **A proposal carries its inputs**: the meters over the reports read, each with its count and
+  interval; how many were read and the window; the law's lines, one per bar; the SHA-256 of the
+  reports read and the move (`inputsSha256`), whose first twelve digits are its id; the time it
+  was read at (`asOf`: the clock for a rise, the start of the report that settled the deciding one
+  for a fall); and the build that read it, which is shown and never digested, so another build
+  reads the same proposal.
+- **Only the human applies one.** `mnemorphd roster rise <creature>` or `roster fall <creature>`
+  shows the proposal in full and asks for `y` at the terminal (`/dev/tty`; piped input is refused,
+  and there is no `--yes`). It is refused inside a body's command, under any `mnemorph`,
+  `mnemorphd` or `mnemorph-guard` ancestor, with no home or a state directory inside the world,
+  when the report fold is unavailable or the report ledger kept beside it does not walk whole, and
+  when the proposal moved between the showing and the yes. The yes writes one row to the
+  creatures' witness — `act` `rise` or `fall`, the new race, `by` `human`, the proposal's id, its
+  `inputs_sha256` and `as_of` — chained with the rest, and sets the card's `Race` line to match.
+- **Where proposals show.** `mnemorph status` (`ascend` lines), `mnemorphd meters` (and each
+  creature's `proposal` and `probation` in `--json`) and the board's bodies page say each pending
+  proposal and probation with the command that applies it, escaped, its words quoted for a shell:
+
+  ```text
+  ascend   sly: rise to named-slime proposed (landRate 1.00 (21/21, 95% 0.85–1.00) · gateRate 1.00 (21/21, 95% 0.85–1.00) · holeRate 0.00 (0/21, 95% 0.00–0.15); 21 reports) — the human applies it: `mnemorphd roster rise sly --world /home/me/world`
+  ascend   lexer (named-slime): on probation since 2026-11-01T09:00:00Z — 2 of 5 reports; it recovers at its fall bar or a fall is proposed
+  ```
+- **Replay.** The proposals are a function of the report ledger's rows and the witness's rows
+  alone. `mnemorphd roster replay` recomputes every `rise` and `fall` row from the journals and the
+  rows before it, at its `as_of`: each must name the very proposal the law makes there — its id,
+  its digest and its race — or the replay names the first row that does not reproduce and exits 1.
+  The same journals with the same applies give the same proposals at the same points and the same
+  rows (`crates/mnemorph-world/tests/ascension.rs`).
 
 **The guts classes are signals for a learned value, never a meter.** Every act of every body is
 classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its
@@ -1447,8 +1506,10 @@ Rules that hold for every ascension:
 - **Nothing skips the human** for a seal, a destructive act, or a rule that reaches other
   bodies' prompts.
 - An ascended creature keeps every trait, territory, verify line and Mind it held (Nature 5).
-- Ascension, probation and fall are each logged in `log.md` with the readings that caused them.
-- From M11, a creature can be named down by the human at any time (`mnemorph fall <creature>`).
+- Each rise and fall is a row in the creatures' witness naming its proposal and the digest of the
+  readings that caused it; probation is read from the reports, never written.
+- A creature can be named down by the human at any time (`mnemorphd roster set-race <creature>
+  <race>`), proposal or none.
 
 ### Evolution — the other way to change
 

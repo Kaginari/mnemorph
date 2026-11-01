@@ -596,7 +596,8 @@ pub fn minds(world: &std::path::Path) -> Vec<String> {
 }
 
 /// `status`'s meters: one compact line per living creature, each meter with its count and its 95%
-/// interval, or `no reports` where no fold reads it yet.
+/// interval, or `no reports` where no fold reads it yet; then each rise or fall the compiled law
+/// proposes, with the command that applies it, and each probation.
 #[must_use]
 pub fn meters(world: &std::path::Path) -> Vec<String> {
     let all = mnemorph_server::world::meters::read(world);
@@ -607,6 +608,15 @@ pub fn meters(world: &std::path::Path) -> Vec<String> {
         .iter()
         .map(|m| format!("{:<9}{}", "meters", one_line(&m.to_string())))
         .collect();
+    // Only proposals and probations are said: a survey with none, or one the fold cannot read
+    // (the meters above say why), adds nothing.
+    if let Ok(s) = mnemorph_server::world::ascension::survey(world) {
+        lines.extend(
+            mnemorph_server::world::ascension::lines_of(&s, world)
+                .iter()
+                .map(|l| format!("{:<9}{}", "ascend", one_line(l))),
+        );
+    }
     lines.extend(
         mnemorph_server::world::evolution::stale(world)
             .iter()

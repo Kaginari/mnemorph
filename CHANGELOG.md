@@ -65,6 +65,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.
+- Rises and falls from the compiled race law alone: proposed from the report ledger over the
+  28-day window and through probation, shown in `mnemorph status`, `mnemorphd meters` and the
+  board's bodies page with the command that applies them, applied only by the human at the
+  terminal (`mnemorphd roster rise|fall`), and replayed exactly from the journals and the
+  creatures' witness (`mnemorphd roster replay`).
 
 ### M10 — Dark Elf
 

@@ -60,6 +60,11 @@ test('each answer is read row by row: a row that does not hold together is left 
   expect(parseBodies(bad)?.unreadable).toBe(1);
   expect(parseBodies(fixtureBodies)?.bodies).toHaveLength(fixtureBodies.bodies.length);
   expect(parseBodies({ bodies: [] })).toBeUndefined();
+  // A proposal that names no move the law makes leaves its body out.
+  const first = fixtureBodies.bodies[0];
+  const odd = { ...first, proposal: { ...fixtureBodies.bodies[3]?.proposal, act: 'ascend' } };
+  expect(parseBodies({ ...fixtureBodies, bodies: [odd] })?.unreadable).toBe(1);
+  expect(parseBodies({ ...fixtureBodies, ascension: null })).toBeUndefined();
   const q = { ...fixtureQueue, orders: [...fixtureQueue.orders, { id: 'x', state: 'gone' }] };
   expect(parseQueue(q)?.unreadable).toBe(1);
   const t = timelineOf(null, null);
@@ -123,6 +128,29 @@ test('a card says how it stands against the witness: trusted, mismatched, or a s
   expect(evil).toContain('stranger');
   expect(evil).toContain('its own seat alone');
   expect(host.textContent).toContain("the creatures' witness under the state directory");
+});
+
+test('a card shows the rise or fall the law proposes, and the command that applies it', async () => {
+  await mount(<BodiesView w={WORLD} tab="colony" />);
+  const open = async (name: string) => {
+    const node = [...host.querySelectorAll<SVGGElement>('.colony-node')].find(
+      (n) => n.dataset.name === name,
+    );
+    await act(async () => node?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    return host.querySelector('.body-card');
+  };
+  const parser = await open('slime-parser');
+  expect(parser?.textContent).toContain('rise to named-slime proposed');
+  expect(parser?.textContent).toContain('nothing changes until the human applies it');
+  expect(parser?.textContent).toContain('landRate 0.95 (19/20, 95% 0.76–0.99)');
+  expect(parser?.querySelector('.body-ascension code')?.textContent).toBe(
+    "mnemorphd roster rise slime-parser --world '/home/me/my world'",
+  );
+  const lexer = await open('slime-lexer');
+  expect(lexer?.textContent).toContain('probation');
+  expect(lexer?.textContent).toContain('2 of 5 reports');
+  expect(lexer?.querySelector('.body-ascension code')).toBeNull();
+  expect((await open('orc-sql'))?.querySelector('.body-ascension')).toBeNull();
 });
 
 test('hostile text in an order and a commission stays text', async () => {

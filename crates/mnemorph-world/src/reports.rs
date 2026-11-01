@@ -132,7 +132,7 @@ fn counts_as(recorded: &str, race: Race) -> bool {
 }
 
 /// `i` added to `acc`.
-fn merge(acc: &mut Inputs, i: &Inputs) {
+pub(crate) fn merge(acc: &mut Inputs, i: &Inputs) {
     use mnemorph_races::Rate;
     let sum = |a: Rate, b: Rate| Rate::of(a.successes + b.successes, a.n + b.n);
     acc.reports += i.reports;
@@ -701,6 +701,7 @@ fn run_reports(
                 creature: r.body.clone(),
                 race: r.race.clone(),
                 run: r.id.clone(),
+                ts: r.ts,
                 build: stamped(last.map(|v| &v.build)),
                 gate: gate[i],
                 first_try: vs.len() == 1 && gate[i] == Some(Gate::Pass),
@@ -739,6 +740,7 @@ fn ask_reports(usage: &[UsageRow], verdicts: &[VerdictRow]) -> Vec<ReportRow> {
                 creature: r.body.clone(),
                 race: r.race.clone(),
                 verdict: n + 1,
+                ts: v.ts,
                 build: stamped(Some(&v.build)),
                 done: gate_of(v) == Some(Gate::Pass) && !reopened,
             })
@@ -756,6 +758,8 @@ struct PostRow {
     undoes: Option<String>,
     #[serde(default)]
     build: Option<Build>,
+    #[serde(default)]
+    at: Option<Timestamp>,
 }
 
 /// One report per outward act of `post` that reached an outcome: its latest state, an undo's own
@@ -763,6 +767,7 @@ struct PostRow {
 fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
     let mut order: Vec<&str> = Vec::new();
     let mut last: BTreeMap<&str, &PostRow> = BTreeMap::new();
+    let mut began: BTreeMap<&str, Timestamp> = BTreeMap::new();
     let undos: BTreeSet<&str> = rows
         .iter()
         .filter(|r| r.undoes.is_some())
@@ -771,6 +776,7 @@ fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
     for r in rows {
         if last.insert(&r.act, r).is_none() {
             order.push(&r.act);
+            began.insert(&r.act, r.at.unwrap_or(Timestamp(0)));
         }
     }
     order
@@ -789,6 +795,7 @@ fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
                 creature: post.creature().to_owned(),
                 race: Race::Kijin.name().to_owned(),
                 act: a.to_owned(),
+                ts: began[a],
                 // The build of the row that settled it.
                 build: stamped(row.build.as_ref()),
                 clean,
