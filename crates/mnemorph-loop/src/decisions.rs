@@ -77,9 +77,9 @@ impl Complete for Own {
 }
 
 /// The run's decisions from the configuration: `decide.via`'s System One provider first (Jev, or
-/// a jeff server), its key read from the environment variable it names (`env`); then `decide.llm`
-/// through the run's own `model` — when no System One is named, when its key variable is not set
-/// (each decision's `fell_back` says so), or when it fails. `None` when decisions are off: not
+/// a jeff server), its key read from the environment variable it names (`env`) or else its key
+/// file; then `decide.llm` through the run's own `model` — when no System One is named, when
+/// neither gives a key (each decision's `fell_back` says so), or when it fails. `None` when decisions are off: not
 /// switched on (`decide.enabled`), or every point off (`decide.bench`, `decide.route`).
 ///
 /// # Errors
@@ -103,25 +103,32 @@ pub fn decisions(
             let p = config.providers().remove(name).ok_or_else(|| {
                 format!("decide.via names `{name}`, and no provider has that name")
             })?;
-            let key = p.key_env.as_deref().map(|var| (var, env(var)));
-            if let Some((var, None)) = key {
+            let worlds = crate::key::known_worlds(Some(world));
+            match crate::key::resolve(name, &p, &env, &worlds) {
                 // A missing key is a missing System One, not a typo: the LLM answers, and every
                 // decision's row says why.
-                unavailable = Some(format!("{name}: its key variable {var} is not set"));
-                None
-            } else {
-                let policy = SystemOne::policy();
-                let transport = HttpTransport::new(policy.connect).map_err(|e| e.to_string())?;
-                Some(Primary {
-                    client: SystemOne::new(
-                        Arc::new(transport),
-                        &p.base_url,
-                        key.and_then(|(_, k)| k),
-                        policy,
-                    ),
-                    provider: name.clone(),
-                    model: d.model.clone(),
-                })
+                Err(why) => {
+                    unavailable = Some(match (&p.key_env, &p.key_file) {
+                        (Some(var), None) => format!("{name}: its key variable {var} is not set"),
+                        _ => format!("{name}: {why}"),
+                    });
+                    None
+                }
+                Ok(key) => {
+                    let policy = SystemOne::policy();
+                    let transport =
+                        HttpTransport::new(policy.connect).map_err(|e| e.to_string())?;
+                    Some(Primary {
+                        client: SystemOne::new(
+                            Arc::new(transport),
+                            &p.base_url,
+                            key.map(|r| r.key.expose()),
+                            policy,
+                        ),
+                        provider: name.clone(),
+                        model: d.model.clone(),
+                    })
+                }
             }
         }
     };

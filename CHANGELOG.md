@@ -35,6 +35,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Relations between worlds: a registry, harness sightings, named-twice proposals, gluing [#271].
 - Recorded provider cassettes for OpenRouter and Ollama, provider-reported cost, unknown usage
   estimated and unpriced [#285] [#303].
+- A provider's key from a file (`key_file`, global file only, 0600, never inside a world), read
+  when its variable is not set: a board started from any shell opens chats; the integrations
+  show the file's state, never its contents.
 
 ### M12 — Board
 

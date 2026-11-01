@@ -55,6 +55,7 @@ export type { Hello } from './generated/Hello.js';
 export type { HoleView } from './generated/HoleView.js';
 export type { JournalEntry } from './generated/JournalEntry.js';
 export type { JournalToc } from './generated/JournalToc.js';
+export type { KeyFileView } from './generated/KeyFileView.js';
 export type { KeySource } from './generated/KeySource.js';
 export type { LawBarView } from './generated/LawBarView.js';
 export type { LawMeter } from './generated/LawMeter.js';

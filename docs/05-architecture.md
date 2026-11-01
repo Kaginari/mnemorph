@@ -286,7 +286,9 @@ proxies (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, either case) and `MNEMORPH_*` 
 `MNEMORPH_BODY` — each dropped still if the sandbox's test reads it as a secret (a proxy URL with
 credentials) — so `AWS_PROFILE`, `SSH_AUTH_SOCK`, `KUBECONFIG` or `DOCKER_HOST` never reach it;
 the only secrets put in are the provider keys named by `key_env` in the built-in defaults and the
-human's global file. `MNEMORPH_BOARD_PID` names the board: on Linux the child sets its
+human's global file. A key kept in a `key_file` is never passed: the child reads it itself, from
+the file the global file names, so a board started from a shell without the variable still opens
+chats. `MNEMORPH_BOARD_PID` names the board: on Linux the child sets its
 parent-death signal (SIGTERM), then checks its parent is still the board, so a board killed
 outright takes its chats with it. A provider defined only inside a world gets no key from the board: as
 anywhere, nothing read from inside a world grants trust. The child makes itself non-dumpable
@@ -558,7 +560,10 @@ invalid row is counted apart, and dollars sum the priced rows.
 
 **Integrations** load the configuration as a session would — the global file alone, or a world's
 tracked and local files over it — and show an allowlist of its fields: each provider's kind, base
-URL and key *source* (`env OPENROUTER_API_KEY: set` — whether the variable is set, never its value);
+URL and key *source* (`env OPENROUTER_API_KEY: set` — whether the variable is set, never its value)
+and its key file, if one is named (`file ~/.config/mnemorph/openrouter.key: readable (0600)`, or
+why it is refused, hidden like any string that looks like a key — the file is judged by
+`fstat` alone, as a session judges it before reading, and nothing in it is read);
 each model a `models.*` key names, the provider its requests go to and its price from the shipped
 table (`unpriced` when the table lacks it); the holes, each with its file and why; the MCP servers
 the global file declares, with their scope (races), class (read-only or outward), sandbox network
@@ -1124,7 +1129,8 @@ appear only as their source.
 then spend per day stacked by race, the cache hit rate per day, the burn per five minutes, the
 spend per race, every creature's meters (a point with its 95% interval, or *silent since …*), the
 sessions, the Dark Elf's scores and the bench (suite, harness, model, mode, passed of valid,
-dollars, date). `#/integrations` is read-only: providers with their key sources, models and
+dollars, date). `#/integrations` is read-only: providers with their key sources (the variable,
+and the key file with its mode or why it is refused), models and
 prices, MCP servers, holes, the effective configuration with origins, the board's port; each
 section ends in a "how to add" snippet for the global file. Their data is described with the
 board server above.
@@ -1731,7 +1737,20 @@ an empty list or table never overrides a lower layer:
   `<provider>:<id>` is a hole, as `models.provider` is. `Config::backend(model)` returns the
   provider, its URL and key variable, and the id it knows the model by; every session's
   provider, a commissioned body's included, is built from it. **Providers** name the environment
-  variable holding their key (`key_env`), never the key. A provider's `kind` is `anthropic`,
+  variable holding their key (`key_env`), never the key, and may name a file holding it
+  (`key_file`), read when the variable is not set or empty. The error when neither gives a key
+  names both: `OPENROUTER_API_KEY is not set and ~/.config/mnemorph/openrouter.key is unreadable:
+  …`. Only the global file names a key file: from a world's file, tracked or local, `key_file` is
+  a hole, since a world must not choose which file's contents are sent to a provider. A leading
+  `~` is the home; the path must then be absolute. The file is opened without following a
+  symbolic link and refused unless it is a regular file owned by the human, with no group or
+  other permission bit (mode `0600` or `0400`; otherwise the refusal says `chmod 600 <path>`), at
+  most 4 KiB, and outside every world this machine knows (the registry's and the board's list).
+  Its contents are trimmed; an empty file, or one of more than a line, is a hole. The key is held
+  as `mnemorph_loop::key::ApiKey`, whose `Debug` and `Display` print `[key]`: no log, hole, error,
+  answer or journal carries its bytes. `mnemorph status` and the session's `key` say which source
+  was read (`file ~/.config/mnemorph/openrouter.key, named by providers.openrouter.key_file in
+  global …`). A provider's `kind` is `anthropic`,
   `openai` (any OpenAI-compatible server) or `systemone` (a classifier: TypeSafe's Jev, or a
   jeff server on your own machine).
 - **Decisions** (`decide.*`) are a feature the human switches on and off (`decide.enabled`, off by
@@ -1739,8 +1758,8 @@ an empty list or table never overrides a lower layer:
   (`base_url = "https://api.typesafe.ai"`, `decide.model = "jev-latest"`), the default to
   configure; a jeff server on your own machine (`jeff-latest`); or any server that speaks the
   same protocol. The LLM `decide.llm` (the fast tier's model by default) answers when no System
-  One is there: none named, its key variable not set (each decision's row names the fallback and
-  why), or a call that fails. A
+  One is there: none named, neither its key variable nor its key file giving a key (each
+  decision's row names the fallback and why), or a call that fails. A
   `decide.via` naming no provider, or a provider of another kind, is a typo, and an error.
   `decide.bench` (on with decisions) and `decide.route` (off until asked) switch each point. A decision
   is only acted on above its cut-off, and the cut-off depends on who answered:
@@ -1766,6 +1785,7 @@ day_usd = 5
 kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
+key_file = "~/.config/mnemorph/openrouter.key"  # when the variable is not set; chmod 600
 
 [providers.vllm]                    # or your own vLLM gateway
 kind = "openai"

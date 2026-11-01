@@ -288,6 +288,48 @@ fn providers_are_read_with_their_key_env_never_a_key() {
     );
 }
 
+/// A key file is read from the human's global file alone: a world's file, tracked or local,
+/// never chooses which file's contents are sent to a provider.
+#[test]
+fn a_key_file_is_honoured_only_from_the_global_file() {
+    let g = Ground::new("key-file");
+    g.global("[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\nkey_env = \"OPENROUTER_API_KEY\"\nkey_file = \"~/.config/mnemorph/openrouter.key\"\n");
+    let p = g.load().unwrap().providers();
+    assert_eq!(
+        p["openrouter"].key_file.as_deref(),
+        Some("~/.config/mnemorph/openrouter.key")
+    );
+    assert_eq!(p["anthropic"].key_file, None);
+    for layer in ["tracked", "local"] {
+        let g = Ground::new(&format!("key-file-{layer}"));
+        let write = if layer == "tracked" {
+            Ground::tracked
+        } else {
+            Ground::local
+        };
+        g.global("[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\nkey_env = \"OPENROUTER_API_KEY\"\n");
+        write(
+            &g,
+            "[providers.openrouter]\nkey_file = \"/home/someone/.ssh/id_ed25519\"\n[providers.anthropic]\nkey_file = \"/etc/passwd\"\n",
+        );
+        let c = g.load().unwrap();
+        let p = c.providers();
+        assert_eq!(p["openrouter"].key_file, None, "{layer}");
+        assert_eq!(p["anthropic"].key_file, None, "{layer}");
+        assert_eq!(
+            c.holes()
+                .iter()
+                .filter(
+                    |h| h.key.ends_with(".key_file") && h.why.contains("a world must not choose")
+                )
+                .count(),
+            2,
+            "{layer}: {:?}",
+            c.holes()
+        );
+    }
+}
+
 /// Lesson: appending keys after a flow-style `{}` wrote an unreadable file and the save failed
 /// silently. Writes go through `toml_edit`, keep comments, and are parsed before they replace.
 #[test]

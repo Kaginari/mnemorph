@@ -8,7 +8,7 @@
 import './metrics.css';
 import type { BoardIntegrations, ConfigView } from '@mnemorph/protocol';
 import { useState } from 'react';
-import { keyWords, useIntegrations } from '../data/integrations.ts';
+import { keyFileWords, keyWords, useIntegrations } from '../data/integrations.ts';
 import { Safe } from '../safe/Safe.tsx';
 import type { Choice } from '../theme.ts';
 import { Empty } from '../ui/Empty.tsx';
@@ -40,6 +40,7 @@ const ADD_PROVIDER = `# ~/.config/mnemorph/config.toml
 kind = "openai"
 base_url = "https://openrouter.ai/api/v1"
 key_env = "OPENROUTER_API_KEY"   # the variable's name, never the key
+key_file = "~/.config/mnemorph/openrouter.key"   # read when the variable is not set (chmod 600)
 
 [models.tier]
 fast = "openrouter:deepseek/deepseek-v4-flash"`;
@@ -100,6 +101,16 @@ function Config({ c }: { c: ConfigView }) {
                   <td className="mono">{hidden(p.baseUrl)}</td>
                   <td>
                     <KeyMark k={p.key} />
+                    {p.keyFile && (
+                      <div>
+                        <Mark
+                          tone={p.keyFile.state === 'readable' ? 'holo' : 'gold'}
+                          glyph={p.keyFile.state === 'readable' ? '●' : '○'}
+                        >
+                          <Safe text={keyFileWords(p.keyFile)} />
+                        </Mark>
+                      </div>
+                    )}
                   </td>
                   <td className="panel-note">
                     <Safe text={p.origin} />

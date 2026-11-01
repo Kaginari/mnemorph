@@ -1609,9 +1609,11 @@ dependencies = [
  "mnemorph-wire",
  "mnemorph-world",
  "proptest",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tokio",
  "toml",
 ]
@@ -1775,6 +1777,7 @@ dependencies = [
  "mnemorph-server",
  "serde_json",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]
