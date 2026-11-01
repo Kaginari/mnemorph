@@ -2128,9 +2128,12 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         entry: None,
         build: mnemorph_world::ledger::Build::default(),
     };
+    // The gate keys its verdicts by the world as the session names it: its real path (`/private/var`
+    // on macOS, for a `/var` temporary directory).
+    let real = w.0.canonicalize().unwrap();
     // A pass on the Orc's own pin, and one that checked nothing, prove nothing.
-    mnemorph_world::verdicts::record(&w.0, pass("orc-o's pin", false)).unwrap();
-    mnemorph_world::verdicts::record(&w.0, pass("the human's pin", true)).unwrap();
+    mnemorph_world::verdicts::record(&real, pass("orc-o's pin", false)).unwrap();
+    mnemorph_world::verdicts::record(&real, pass("the human's pin", true)).unwrap();
     w.rimuru(settle())
         .ask("settle the build command", &mut |_| {})
         .await;
@@ -2138,7 +2141,7 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         !Facts::load(&w.0).facts[&ids[0]].settled,
         "no trusted pass on a human pin: the fact stays proposed"
     );
-    mnemorph_world::verdicts::record(&w.0, pass("the human's pin", false)).unwrap();
+    mnemorph_world::verdicts::record(&real, pass("the human's pin", false)).unwrap();
     w.rimuru(settle())
         .ask("settle the build command", &mut |_| {})
         .await;
