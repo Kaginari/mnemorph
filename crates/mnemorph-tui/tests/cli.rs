@@ -234,7 +234,7 @@ fn status_shows_each_creatures_meters() {
     let shown = status(&w.join("state"));
     assert!(
         shown.contains(
-            "meters   sly (slime): unavailable — the usage journal lies inside the world"
+            "meters   sly (slime): unavailable — the usage-witness journal lies inside the world"
         ),
         "{shown}"
     );

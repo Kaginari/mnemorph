@@ -6,8 +6,8 @@
 //! hash chain walked over the very bytes the fold reads and held to the head anchored under the
 //! state directory:
 //!
-//! - the **usage witness** (`mnemorph/usage/`): each run, its body, its race and the body that
-//!   commissioned it;
+//! - the **usage witness** (`mnemorph/usage/`, anchored as `usage-witness`): each run, its body,
+//!   its race and the body that commissioned it;
 //! - the **gate verdicts** (`mnemorph/gate/`, anchored as `gate`): each landing's word, its
 //!   failures and unverified checks, the paths it changed;
 //! - the **challenge records** (`mnemorph/challenges/`, anchored as `value`): the findings upheld
@@ -16,20 +16,26 @@
 //!   act and where it ended.
 //!
 //! A world's own copies — `.mnemorph/instruments/usage.jsonl`, a post journal, a run journal — are
-//! never read: a body can write them. A journal whose chain does not hold, or whose tail is torn,
-//! stops the fold ([`Unavailable::ChainBroken`]): its meters read unavailable, never stale, never
-//! zero.
+//! never read: a body can write them. A journal whose chain does not hold, whose tail is torn, or
+//! that is gone while a head stays anchored for it stops the fold ([`Unavailable::ChainBroken`]):
+//! its meters read unavailable, never stale, never zero. A pass counts as verified only when a
+//! line the human pinned held it.
+//!
+//! The fold is kept in memory: a journal the kernel says has not changed since its walk, held to
+//! the same anchor, is not read again, and a fold none of whose journals moved is the last one.
 //!
 //! The ledger is kept at `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl` ([`record`]):
 //! rebuilt whole from the journals and put in place by a rename only when its bytes change, so a
 //! replay of the same journals gives the same bytes.
 
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-use mnemorph_ledger::chain::Walk;
+use mnemorph_ledger::chain::{Head, Walk};
 use mnemorph_ledger::reports::{
     ActReport, AskReport, Gate, Inputs, ReportRow, RunReport, fold as fold_rows, ledger_bytes,
 };
@@ -158,32 +164,66 @@ pub fn fold(world: &Path) -> Result<Folded, Unavailable> {
 ///
 /// As [`fold`].
 pub fn fold_in(world: &Path, state: &Path) -> Result<Folded, Unavailable> {
-    let usage: Vec<UsageRow> = trusted(
+    let usage: Arc<Vec<UsageRow>> = trusted(
         world,
         state,
         &state_file_in(state, world, "usage"),
-        "usage",
-        false,
+        crate::chains::USAGE_WITNESS,
+        rows_of,
     )?;
-    let verdicts: Vec<VerdictRow> = trusted(
+    let verdicts: Arc<Vec<VerdictRow>> = trusted(
         world,
         state,
         &state_file_in(state, world, "gate"),
         "gate",
-        true,
+        rows_of,
     )?;
-    let upheld = upheld_runs(world, state)?;
-    let mut acts = Vec::new();
+    // The challenge records folded from the very bytes their chain was walked over: one read.
+    let upheld: Arc<Vec<String>> = trusted(
+        world,
+        state,
+        &state_file_in(state, world, "challenges"),
+        "value",
+        |bytes| Ok(upheld_runs(bytes)),
+    )?;
+    let mut posts = Vec::new();
     for post in Post::ALL {
         let path = crate::chains::post_witness_in(state, world, post);
-        let rows: Vec<PostRow> = trusted(world, state, &path, post.creature(), true)?;
-        acts.extend(act_reports(post, &rows));
+        posts.push(trusted::<PostRow>(
+            world,
+            state,
+            &path,
+            post.creature(),
+            rows_of,
+        )?);
     }
-    let mut rows = run_reports(&usage, &verdicts, &upheld);
+    let mut inputs: Vec<Arc<dyn Any + Send + Sync>> =
+        vec![usage.clone(), verdicts.clone(), upheld.clone()];
+    inputs.extend(
+        posts
+            .iter()
+            .map(|p| p.clone() as Arc<dyn Any + Send + Sync>),
+    );
+    let at = (world.to_path_buf(), state.to_path_buf());
+    // No journal read again since the last fold: its rows are the fold's still.
+    if let Some((was, folded)) = lock(&FOLDS).get(&at)
+        && was.len() == inputs.len()
+        && was.iter().zip(&inputs).all(|(a, b)| Arc::ptr_eq(a, b))
+    {
+        return Ok(folded.clone());
+    }
+    let upheld_set: BTreeSet<String> = upheld.iter().cloned().collect();
+    let mut rows = run_reports(&usage, &verdicts, &upheld_set);
     rows.extend(ask_reports(&usage, &verdicts));
-    rows.extend(acts);
-    let inputs = fold_rows(&rows);
-    Ok(Folded { rows, inputs })
+    for (post, rows_of_post) in Post::ALL.into_iter().zip(&posts) {
+        rows.extend(act_reports(post, rows_of_post));
+    }
+    let folded = Folded {
+        inputs: fold_rows(&rows),
+        rows,
+    };
+    lock(&FOLDS).insert(at, (inputs, folded.clone()));
+    Ok(folded)
 }
 
 /// Where `world`'s report ledger is kept: `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl`,
@@ -250,36 +290,176 @@ fn real(p: &Path) -> PathBuf {
     })
 }
 
-/// The rows of the journal `name` at `path`, read once: a regular file outside the world, its
-/// chain walked over the bytes read — held to the head anchored under the state directory when
-/// `anchored` — and every line a row. An absent journal holds no row.
-fn trusted<T: DeserializeOwned>(
+/// What a journal was when its chain was last walked: absent, or a file the kernel says has not
+/// changed since — its device, inode, size, modification and change times (the change time no
+/// writer can set) — each held to the same anchor. The same key, the same bytes: no reread.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Key {
+    Absent(Option<Head>),
+    File {
+        dev: u64,
+        ino: u64,
+        len: u64,
+        mtime: (i64, i64),
+        ctime: (i64, i64),
+        anchor: Option<Head>,
+    },
+}
+
+#[cfg(unix)]
+fn key_of(m: &std::fs::Metadata, anchor: Option<Head>) -> Key {
+    use std::os::unix::fs::MetadataExt as _;
+    Key::File {
+        dev: m.dev(),
+        ino: m.ino(),
+        len: m.len(),
+        mtime: (m.mtime(), m.mtime_nsec()),
+        ctime: (m.ctime(), m.ctime_nsec()),
+        anchor,
+    }
+}
+
+#[cfg(not(unix))]
+fn key_of(m: &std::fs::Metadata, anchor: Option<Head>) -> Key {
+    let ns = |t: io::Result<std::time::SystemTime>| {
+        t.ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or((0, 0), |d| {
+                (
+                    i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
+                    i64::from(d.subsec_nanos()),
+                )
+            })
+    };
+    Key::File {
+        dev: 0,
+        ino: 0,
+        len: m.len(),
+        mtime: ns(m.modified()),
+        ctime: ns(m.created()),
+        anchor,
+    }
+}
+
+/// How long before a read a file's last change must lie for its key to stand for its bytes: the
+/// kernel stamps change times at its clock tick, so two writes inside one tick can share a time.
+const TICK: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Whether `key`'s file last changed at least a [`TICK`] before `read_at`.
+fn settled(key: &Key, read_at: std::time::SystemTime) -> bool {
+    let Key::File { ctime, mtime, .. } = key else {
+        return true;
+    };
+    let at = |(s, ns): (i64, i64)| {
+        u64::try_from(s).ok().map(|s| {
+            std::time::UNIX_EPOCH + std::time::Duration::new(s, u32::try_from(ns).unwrap_or(0))
+        })
+    };
+    let last = at(*ctime).max(at(*mtime));
+    last.is_some_and(|t| t + TICK <= read_at)
+}
+
+type Rows = Arc<dyn Any + Send + Sync>;
+
+/// Each journal's rows as its last walk left them, by path.
+static JOURNALS: Mutex<BTreeMap<PathBuf, (Key, Rows)>> = Mutex::new(BTreeMap::new());
+
+/// Each world's last fold, with the journals' rows it was folded from.
+static FOLDS: Mutex<BTreeMap<(PathBuf, PathBuf), LastFold>> = Mutex::new(BTreeMap::new());
+
+/// A fold, and the journals' rows it was folded from.
+type LastFold = (Vec<Rows>, Folded);
+
+/// How many times each journal was read whole: what a test counts.
+#[cfg(test)]
+static SCANS: Mutex<BTreeMap<PathBuf, usize>> = Mutex::new(BTreeMap::new());
+
+#[cfg(test)]
+fn scans(path: &Path) -> usize {
+    lock(&SCANS).get(path).copied().unwrap_or(0)
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Every line of `bytes` a row of `T`: a line read past is a report lost.
+fn rows_of<T: DeserializeOwned>(bytes: &[u8]) -> Result<Vec<T>, String> {
+    let back = mnemorph_ledger::parse_rows(bytes).map_err(|e| e.to_string())?;
+    match back.skipped.first() {
+        Some(line) => Err(format!("line {line} is no row it can read")),
+        None => Ok(back.rows),
+    }
+}
+
+/// The rows of the journal `name` at `path`: a regular file outside the world, read under its
+/// shared lock, its chain walked over the bytes read and held to the head anchored for `name`
+/// under the state directory, then `parse`d from those same bytes. An absent journal holds no
+/// row — unless a head was anchored for it, which it can no longer hold. A journal unchanged since
+/// its last walk ([`Key`]) is not read again.
+fn trusted<T: Send + Sync + 'static>(
     world: &Path,
     state: &Path,
     path: &Path,
     name: &str,
-    anchored: bool,
-) -> Result<Vec<T>, Unavailable> {
+    parse: impl FnOnce(&[u8]) -> Result<Vec<T>, String>,
+) -> Result<Arc<Vec<T>>, Unavailable> {
     let journal = || name.to_owned();
     if real(path).starts_with(real(world)) || real(state).starts_with(real(world)) {
         return Err(Unavailable::InWorld { journal: journal() });
     }
-    let bytes = match crate::regular::read(path, CAP) {
-        Ok(Some(b)) => b,
-        Ok(None) => return Ok(Vec::new()),
-        Err(e) => {
-            return Err(Unavailable::Unreadable {
+    let unreadable = |why: String| Unavailable::Unreadable {
+        journal: journal(),
+        why,
+    };
+    let anchor = crate::chains::anchored_in(&state_file_in(state, world, "anchors"), name);
+    let file = crate::regular::open(path).map_err(|e| unreadable(e.to_string()))?;
+    let key = match &file {
+        None => Key::Absent(anchor.clone()),
+        Some(f) => key_of(
+            &f.metadata().map_err(|e| unreadable(e.to_string()))?,
+            anchor.clone(),
+        ),
+    };
+    if let Some((k, rows)) = lock(&JOURNALS).get(path)
+        && *k == key
+        && let Ok(rows) = Arc::clone(rows).downcast::<Vec<T>>()
+    {
+        return Ok(rows);
+    }
+    // Read now; kept for the next fold only when the file's last change is older than the
+    // clock's coarsest step, so a change within the same tick is never taken for none.
+    let read_at = std::time::SystemTime::now();
+    let Some(file) = file else {
+        if let Some(head) = anchor {
+            return Err(Unavailable::ChainBroken {
                 journal: journal(),
-                why: e.to_string(),
+                line: head.line,
+                why: format!("the journal is gone, and the head anchored for it ({head}) with it"),
             });
         }
+        let rows = Arc::new(Vec::new());
+        lock(&JOURNALS).insert(path.to_path_buf(), (key, rows.clone()));
+        return Ok(rows);
     };
+    file.lock_shared().map_err(|e| unreadable(e.to_string()))?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(
+        &mut std::io::Read::take(&file, CAP.saturating_add(1)),
+        &mut bytes,
+    )
+    .map_err(|e| unreadable(e.to_string()))?;
+    drop(file);
+    #[cfg(test)]
+    {
+        *lock(&SCANS).entry(path.to_path_buf()).or_default() += 1;
+    }
+    if bytes.len() as u64 > CAP {
+        return Err(unreadable(format!("it is over {CAP} bytes")));
+    }
     let mut walk = Walk::new();
-    if anchored {
-        let kept = state_file_in(state, world, "anchors");
-        if let Some(head) = crate::chains::anchored_in(&kept, name) {
-            walk = walk.anchored(head);
-        }
+    if let Some(head) = anchor {
+        walk = walk.anchored(head);
     }
     walk.feed(&bytes);
     let report = walk.report();
@@ -304,40 +484,24 @@ fn trusted<T: DeserializeOwned>(
             why: "no row is chained: nothing binds it".to_owned(),
         });
     }
-    let back = mnemorph_ledger::parse_rows(&bytes[..]).map_err(|e| Unavailable::Unreadable {
-        journal: journal(),
-        why: e.to_string(),
-    })?;
-    if let Some(line) = back.skipped.first() {
-        return Err(Unavailable::Unreadable {
-            journal: journal(),
-            why: format!("line {line} is no row it can read"),
-        });
+    let rows = Arc::new(parse(&bytes).map_err(unreadable)?);
+    if settled(&key, read_at) {
+        lock(&JOURNALS).insert(path.to_path_buf(), (key, rows.clone()));
+    } else {
+        lock(&JOURNALS).remove(path);
     }
-    Ok(back.rows)
+    Ok(rows)
 }
 
-/// The runs a Dark Elf's upheld finding names a landing of, as the challenge records hold them:
-/// a landing's id is its run's, then `:` and its step.
-fn upheld_runs(world: &Path, state: &Path) -> Result<BTreeSet<String>, Unavailable> {
-    let path = state_file_in(state, world, "challenges");
-    // The chain, walked and anchored over the records' lines, before any finding is read.
-    trusted::<serde_json::Value>(world, state, &path, "value", true)?;
-    let (rows, chain) = crate::challenge::Challenges::at(&path).finding_rows_chained();
-    if let Some(r) = chain.filter(|r| !r.holds() || r.truncated.is_some()) {
-        return Err(Unavailable::ChainBroken {
-            journal: "value".to_owned(),
-            line: r
-                .broken
-                .map_or_else(|| r.truncated.unwrap_or(0), |(l, _)| l),
-            why: r.to_string(),
-        });
-    }
-    Ok(rows
+/// The runs a Dark Elf's upheld finding names a landing of, folded from the challenge records'
+/// bytes: a landing's id is its run's, then `:` and its step.
+fn upheld_runs(bytes: &[u8]) -> Vec<String> {
+    let found: BTreeSet<String> = crate::challenge::finding_rows_of(bytes)
         .into_iter()
         .filter(|f| matches!(f.standing, Standing::Confirmed | Standing::Upheld))
         .filter_map(|f| f.landing.rsplit_once(':').map(|(run, _)| run.to_owned()))
-        .collect())
+        .collect();
+    found.into_iter().collect()
 }
 
 /// A run's id as a landing's id carries it: every character outside `[A-Za-z0-9._-]` a `-`, at
@@ -370,6 +534,42 @@ fn word(v: &str) -> Option<Gate> {
         Some(Gate::NotVerified)
     } else {
         Some(Gate::Fail)
+    }
+}
+
+/// Whether a verdict's verify lines include one the human pinned (directly, or carried down by
+/// relief): only such a line is the human's check ([`crate::pins::Pinned::source`]).
+fn human_checked(v: &VerdictRow) -> bool {
+    let human = crate::pins::Pinned {
+        line: String::new(),
+        by: crate::pins::HUMAN.to_owned(),
+    }
+    .source();
+    v.verified_by.contains(&human)
+}
+
+/// The gate's word on `v` as the fold counts it: a pass is a landing verified only when a line
+/// the human pinned held it — a pass on an Orc's pins alone, or from before verdicts named their
+/// pins, is not verified.
+fn gate_of(v: &VerdictRow) -> Option<Gate> {
+    match word(&v.verdict)? {
+        Gate::Pass if !human_checked(v) => Some(Gate::NotVerified),
+        g => Some(g),
+    }
+}
+
+/// What the verify lines said of `v`: green or not, read only when lines the human pinned ran.
+fn verify_green(v: &VerdictRow) -> Option<bool> {
+    (!v.unchecked && human_checked(v)).then(|| {
+        v.unverified.is_empty() && !v.failures.iter().any(|f| f.starts_with("traits hold:"))
+    })
+}
+
+/// A build as a report row carries it: a source row that carries none says `unstamped`.
+fn stamped(b: Option<&Build>) -> Build {
+    match b {
+        Some(b) if *b != Build::default() => b.clone(),
+        _ => mnemorph_ledger::reports::unstamped(),
     }
 }
 
@@ -440,7 +640,7 @@ fn run_reports(
     }
     let gate: Vec<Option<Gate>> = of_run
         .iter()
-        .map(|vs| vs.last().and_then(|v| word(&v.verdict)))
+        .map(|vs| vs.last().and_then(|v| gate_of(v)))
         .collect();
     // Each run's parent: the commissioning body's latest run begun before it.
     let parent: Vec<Option<usize>> = runs
@@ -497,15 +697,11 @@ fn run_reports(
                 creature: r.body.clone(),
                 race: r.race.clone(),
                 run: r.id.clone(),
-                build: last.map(|v| v.build.clone()).unwrap_or_default(),
+                build: stamped(last.map(|v| &v.build)),
                 gate: gate[i],
                 first_try: vs.len() == 1 && gate[i] == Some(Gate::Pass),
                 holes: u32::try_from(holes).unwrap_or(u32::MAX),
-                // A landing no verify line ran on says nothing of its lines.
-                verify_green: last.filter(|v| !v.unchecked).map(|v| {
-                    v.unverified.is_empty()
-                        && !v.failures.iter().any(|f| f.starts_with("traits hold:"))
-                }),
+                verify_green: last.and_then(|v| verify_green(v)),
                 dispatches: u32::try_from(children[i].len()).unwrap_or(u32::MAX),
                 landed,
                 reasks,
@@ -539,8 +735,8 @@ fn ask_reports(usage: &[UsageRow], verdicts: &[VerdictRow]) -> Vec<ReportRow> {
                 creature: r.body.clone(),
                 race: r.race.clone(),
                 verdict: n + 1,
-                build: v.build.clone(),
-                done: word(&v.verdict) == Some(Gate::Pass) && !reopened,
+                build: stamped(Some(&v.build)),
+                done: gate_of(v) == Some(Gate::Pass) && !reopened,
             })
         })
         .collect()
@@ -554,20 +750,22 @@ struct PostRow {
     state: String,
     #[serde(default)]
     undoes: Option<String>,
+    #[serde(default)]
+    build: Option<Build>,
 }
 
 /// One report per outward act of `post` that reached an outcome: its latest state, an undo's own
 /// acts aside (the harness's, putting one back).
 fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
     let mut order: Vec<&str> = Vec::new();
-    let mut last: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut last: BTreeMap<&str, &PostRow> = BTreeMap::new();
     let undos: BTreeSet<&str> = rows
         .iter()
         .filter(|r| r.undoes.is_some())
         .map(|r| r.act.as_str())
         .collect();
     for r in rows {
-        if last.insert(&r.act, &r.state).is_none() {
+        if last.insert(&r.act, r).is_none() {
             order.push(&r.act);
         }
     }
@@ -575,7 +773,8 @@ fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
         .into_iter()
         .filter(|a| !undos.contains(a))
         .filter_map(|a| {
-            let (clean, rolled_back) = match last[a] {
+            let row = last[a];
+            let (clean, rolled_back) = match row.state.as_str() {
                 "observed" | "unobserved" | "settled" => (true, false),
                 "reconcile" => (false, false),
                 "corrected" => (false, true),
@@ -586,7 +785,8 @@ fn act_reports(post: Post, rows: &[PostRow]) -> Vec<ReportRow> {
                 creature: post.creature().to_owned(),
                 race: Race::Kijin.name().to_owned(),
                 act: a.to_owned(),
-                build: Build::default(),
+                // The build of the row that settled it.
+                build: stamped(row.build.as_ref()),
                 clean,
                 rolled_back,
             }))

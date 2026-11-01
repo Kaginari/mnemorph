@@ -1304,17 +1304,19 @@ about each report — the gate's word on its landing, a first-try pass, the hole
 Every race but the Dark Elf is measured on its reports, folded by `mnemorph_world::reports` from
 the harness's own journals under the human's state directory — never a copy in the world, which a
 body can write. Each journal is read once, its hash chain walked over the bytes read and held to
-the head anchored under the state directory; a chain that does not hold, a torn tail, a journal
-with no chained row, a line that is no row, or a journal whose path lies inside the world stops
-the fold, and every meter it feeds reads `unavailable`.
+the head anchored under the state directory (the usage witness as `usage-witness`); a chain that
+does not hold, a torn tail, a journal gone while a head stays anchored for it, a journal with no
+chained row, a line that is no row, or a journal whose path lies inside the world stops the fold,
+and every meter it feeds reads `unavailable`. A journal unchanged since its walk — the same
+file, size and change times, the same anchor — is not read again.
 
 | Input | Unit | Folded from |
 |---|---|---|
 | `reports` | runs | the usage witness: each run its body made, by the race it ran as |
-| `landRate` | runs | the gate verdicts: the run's last word is `PASS`. `, unrun` (no kernel guard) and `, unpinned` (lines held for the human to pin) are the machine's or the human's, never read; `PASS, unchecked` (no verify line ran) is the baseline, never counted as verified |
+| `landRate` | runs | the gate verdicts: the run's last word is `PASS`, and a line the human pinned ran (`verifiedBy` names `the human's pin`); a pass on an Orc's pins alone, or from before verdicts named their pins, is not verified. `, unrun` (no kernel guard) and `, unpinned` (lines held for the human to pin) are the machine's or the human's, never read; `PASS, unchecked` (no verify line ran) is the baseline, never counted as verified |
 | `gateRate` | runs | the gate verdicts: one verdict on the run, and it passed |
 | `holeRate`, `testsIntactFailures` | runs | the gate verdicts: a *tests intact* failure on the run |
-| `verifyGreenRate` | runs whose verify lines ran | the gate verdicts: the last one names no `traits hold` failure and no unverified line; an unchecked one says nothing of its lines |
+| `verifyGreenRate` | runs on whose landing lines the human pinned ran | the gate verdicts: the last one names no `traits hold` failure and no unverified line; an unchecked one, or one on an Orc's pins alone, says nothing of the human's lines |
 | `planLandRate` | dispatches | the usage witness (each run's commissioner; a run's parent is the commissioner's latest run begun before it) and the gate verdicts: a pass under the dispatch, a fail under none |
 | `reaskRate` | dispatches | the usage witness: a body the same run had commissioned already |
 | `gateRight` | the gate's passes on its dispatches | the gate verdicts and the challenge records: a pass on whose landing no Dark Elf finding was upheld |
@@ -1329,7 +1331,8 @@ one the usage witness says it ran as, so a doc that claims another race claims n
 The fold is kept in the **report ledger**, `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl`
 ([storage](05-architecture.md#storage-files-are-the-truth)) — one row per report (`run`, `ask` or
 `act`), each with every input value above and the `build` of the journal row that settled it, and
-chained from its genesis. `mnemorphd meters` folds and keeps it; `mnemorph status` and the board
+chained from its genesis; a row whose source row carries no build says `unstamped`.
+`mnemorphd meters` folds and keeps it; `mnemorph status` and the board
 fold the same rows in memory and write nothing. No rise, fall or probation is applied from it.
 
 **The guts classes are signals for a learned value, never a meter.** Every act of every body is

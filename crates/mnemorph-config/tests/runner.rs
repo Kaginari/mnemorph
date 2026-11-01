@@ -1160,6 +1160,7 @@ fn receipts_forged_in_the_world_or_unbacked_by_the_witness_count_for_nothing() {
             why: Some("the probe saw the effect gone".into()),
             undoes: None,
             by: None,
+            build: None,
         }
     };
     world.append(&undone).unwrap();
@@ -1557,6 +1558,7 @@ fn a_correction_counts_only_while_it_is_the_acts_latest_row() {
         why: Some("seen again".into()),
         undoes: None,
         by: None,
+        build: None,
     };
     Journal::<Row>::chained(&f.witness).append(&later).unwrap();
     assert_eq!(f.incident(&act).corrected, None);

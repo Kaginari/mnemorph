@@ -14,7 +14,7 @@
 //!   or not.
 //!
 //! The rows are a function of the journals alone: each row carries the build of the journal row
-//! that settled it (`unknown` when that journal stamps none), never the build that folded it, so
+//! that settled it (`unstamped` when that row carries none), never the build that folded it, so
 //! the same journals fold to the same bytes under any binary ([`ledger_bytes`]). The ledger is
 //! chained from its genesis ([`crate::chain`]).
 //!
@@ -28,6 +28,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::Build;
 use crate::chain::Walk;
+
+/// What a report row's build reads when the journal row that settled it carries none.
+pub const UNSTAMPED: &str = "unstamped";
+
+/// The build of a row whose source carries none: `unstamped`, said so, never a guess.
+#[must_use]
+pub fn unstamped() -> Build {
+    Build {
+        version: UNSTAMPED.to_owned(),
+        commit: UNSTAMPED.to_owned(),
+    }
+}
 
 /// The gate's last word on a run's landing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,7 +75,7 @@ pub struct RunReport {
     pub race: String,
     /// The run.
     pub run: String,
-    /// The build of the gate verdict that settled it; `unknown` with none.
+    /// The build of the gate verdict that settled it; `unstamped` with none.
     pub build: Build,
     /// The gate's last word on its landing; `None` when nothing landed.
     pub gate: Option<Gate>,
@@ -112,7 +124,8 @@ pub struct ActReport {
     pub race: String,
     /// The act's receipt.
     pub act: String,
-    /// The post journal stamps no build: `unknown`.
+    /// The build of the post row that settled it; `unstamped` for a row from before rows were
+    /// stamped.
     pub build: Build,
     /// Completed without rollback or the human's look.
     pub clean: bool,

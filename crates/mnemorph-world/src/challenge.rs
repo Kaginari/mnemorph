@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use crate::roster::Roster;
 
 pub mod verification;
+pub(crate) use verification::finding_rows_of;
 
 /// The records' hash chain, as a walk reports it.
 pub use mnemorph_ledger::Report as ChainReport;

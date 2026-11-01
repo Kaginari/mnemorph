@@ -3,6 +3,17 @@ use mnemorph_ledger::{Journal, Usage};
 use mnemorph_races::Rate;
 use serde_json::json;
 
+/// How the gate names a line the human pinned.
+const HUMAN_PIN: &str = "the human's pin";
+
+/// The build the fixture's verdicts are stamped with.
+fn stamp() -> Build {
+    Build {
+        version: "9.9.9".into(),
+        commit: "gate000001".into(),
+    }
+}
+
 /// A world and a state directory beside it, never the human's.
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -69,6 +80,28 @@ impl Fixture {
         failures: &[&str],
         unverified: &[&str],
     ) {
+        // A verdict whose lines ran on the human's pins, as the gate writes it.
+        let by: &[&str] = if word.contains(", unchecked") {
+            &[]
+        } else {
+            &[HUMAN_PIN]
+        };
+        self.verdict_by(run, body, word, ts, changed, failures, unverified, by);
+    }
+
+    /// A verdict whose lines ran on the pins `by` (`the human's pin`, `<orc>'s pin`).
+    #[allow(clippy::too_many_arguments)]
+    fn verdict_by(
+        &self,
+        run: Option<&str>,
+        body: &str,
+        word: &str,
+        ts: i64,
+        changed: &[&str],
+        failures: &[&str],
+        unverified: &[&str],
+        by: &[&str],
+    ) {
         let own = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect();
         crate::verdicts::journal_at(self.at("gate"))
             .append(&VerdictRow {
@@ -79,16 +112,17 @@ impl Fixture {
                 failures: own(failures),
                 unverified: own(unverified),
                 unchecked: word.contains(", unchecked"),
-                verified_by: Vec::new(),
+                verified_by: own(by),
                 entry: None,
-                build: Build::default(),
+                build: stamp(),
                 run: run.map(Into::into),
             })
             .unwrap();
     }
 
     fn act(&self, post: Post, act: &str, state: &str, undoes: Option<&str>) {
-        let mut row = json!({"act": act, "state": state, "at": "2026-11-01T10:00:00Z"});
+        let mut row = json!({"act": act, "state": state, "at": "2026-11-01T10:00:00Z",
+            "build": {"version": "9.9.9", "commit": "post000001"}});
         if let Some(u) = undoes {
             row["undoes"] = json!(u);
         }
@@ -347,7 +381,7 @@ fn a_tampered_or_truncated_journal_stops_the_fold() {
     std::fs::write(&usage, raw.replacen("\"slime\"", "\"orc\"", 1)).unwrap();
     assert!(matches!(
         f.fold(),
-        Err(Unavailable::ChainBroken { journal, .. }) if journal == "usage"
+        Err(Unavailable::ChainBroken { journal, .. }) if journal == "usage-witness"
     ));
 }
 
@@ -486,5 +520,200 @@ fn an_unchecked_pass_is_not_verified_and_an_unpinned_one_not_the_bodys() {
     assert_eq!(
         i.outcomes[1].gate, None,
         "held for the human: no landing of the body's"
+    );
+}
+
+/// Keeps a head for `name` under the state directory, as `housekeep --verify` does.
+fn anchor(f: &Fixture, name: &str, path: &Path) {
+    let head = mnemorph_ledger::chain::verify(path).unwrap().head.unwrap();
+    Journal::<serde_json::Value>::new(f.at("anchors"))
+        .append(&json!({"ts": "2026-11-01T10:00:00Z", "journal": name,
+            "digest": head.digest, "line": head.line}))
+        .unwrap();
+}
+
+/// A pass counts as verified only when a line the human pinned held it: an Orc's pins alone, or
+/// a verdict from before verdicts named their pins, is no verified landing and says nothing of
+/// the verify lines.
+#[test]
+fn a_pass_on_an_orcs_pins_alone_is_not_verified() {
+    use mnemorph_races::GateWord::{Fail, NotVerified, Pass};
+    let f = Fixture::new();
+    f.call("a", "sly", "slime", None, 1);
+    f.verdict_by(
+        Some("a"),
+        "sly",
+        "PASS",
+        2,
+        &["x"],
+        &[],
+        &[],
+        &["orc-o's pin"],
+    );
+    f.call("b", "sly", "slime", None, 3);
+    f.verdict_by(Some("b"), "sly", "PASS", 4, &["x"], &[], &[], &[]);
+    f.call("c", "sly", "slime", None, 5);
+    f.verdict_by(
+        Some("c"),
+        "sly",
+        "PASS",
+        6,
+        &["x"],
+        &[],
+        &[],
+        &["orc-o's pin", HUMAN_PIN],
+    );
+    f.call("d", "sly", "slime", None, 7);
+    f.verdict_by(
+        Some("d"),
+        "sly",
+        "FAIL",
+        8,
+        &["x"],
+        &["traits hold: `t` failed:\nno"],
+        &[],
+        &["orc-o's pin"],
+    );
+    let i = f.fold().unwrap().of("sly", Race::Slime);
+    assert_eq!(i.land, Rate::of(1, 4), "only c: the human's pin held it");
+    assert_eq!(i.gate, Rate::of(1, 4));
+    assert_eq!(
+        i.verify_green,
+        Rate::of(1, 1),
+        "an Orc's lines say nothing of the human's: only c is read"
+    );
+    let gates: Vec<_> = i.outcomes.iter().map(|o| o.gate).collect();
+    assert_eq!(
+        gates,
+        [Some(NotVerified), Some(NotVerified), Some(Pass), Some(Fail)]
+    );
+}
+
+/// A journal deleted whole while its head stays anchored is no empty journal: the fold stops.
+#[test]
+fn a_deleted_anchored_journal_stops_the_fold() {
+    let f = Fixture::colony();
+    let gate = f.at("gate");
+    anchor(&f, "gate", &gate);
+    assert!(f.fold().is_ok());
+    std::fs::remove_file(&gate).unwrap();
+    let broken = f.fold().unwrap_err();
+    assert!(
+        matches!(&broken, Unavailable::ChainBroken { journal, .. } if journal == "gate"),
+        "{broken}"
+    );
+    assert!(
+        broken.to_string().contains("the journal is gone"),
+        "{broken}"
+    );
+    // Never anchored, an absent journal is an empty one.
+    let fresh = Fixture::new();
+    assert_eq!(fresh.fold().unwrap().rows, Vec::new());
+}
+
+/// The usage witness is held to its own anchor: cut or written again, the fold stops.
+#[test]
+fn the_usage_witness_is_held_to_its_anchor() {
+    let f = Fixture::colony();
+    let usage = f.at("usage");
+    anchor(&f, crate::chains::USAGE_WITNESS, &usage);
+    assert!(f.fold().is_ok());
+    let raw = std::fs::read_to_string(&usage).unwrap();
+    let kept: Vec<&str> = raw.lines().take(2).collect();
+    std::fs::write(&usage, kept.join("\n") + "\n").unwrap();
+    assert!(matches!(
+        f.fold(),
+        Err(Unavailable::ChainBroken { journal, .. }) if journal == "usage-witness"
+    ));
+    // Regenerated from scratch: a chain that holds, but not the one anchored.
+    std::fs::remove_file(&usage).unwrap();
+    f.call("z", "sly", "slime", None, 1);
+    assert!(matches!(
+        f.fold(),
+        Err(Unavailable::ChainBroken { journal, .. }) if journal == "usage-witness"
+    ));
+}
+
+/// Challenge records that cannot be read drop no overturn silently: the fold stops.
+#[test]
+fn unreadable_challenge_records_stop_the_fold() {
+    let f = Fixture::colony();
+    std::fs::create_dir_all(f.at("challenges")).unwrap();
+    assert!(matches!(
+        f.fold(),
+        Err(Unavailable::Unreadable { journal, .. }) if journal == "value"
+    ));
+}
+
+/// A journal unchanged since its walk is not read again; one that grew is.
+#[test]
+fn an_unchanged_journal_is_not_read_again() {
+    let f = Fixture::colony();
+    std::thread::sleep(TICK * 2);
+    let gate = f.at("gate");
+    let usage = f.at("usage");
+    let first = f.fold().unwrap();
+    let (g, u) = (scans(&gate), scans(&usage));
+    assert_eq!((g, u), (1, 1));
+    let again = f.fold().unwrap();
+    assert_eq!(first, again);
+    assert_eq!(
+        (scans(&gate), scans(&usage)),
+        (1, 1),
+        "no head moved: no rescan"
+    );
+    f.verdict(Some("s2"), "sam", "PASS", 146, &["src/b.rs"]);
+    std::thread::sleep(TICK * 2);
+    let grown = f.fold().unwrap();
+    assert_eq!(scans(&gate), 2, "the gate's head moved");
+    assert_eq!(scans(&usage), 1, "the usage witness's did not");
+    assert_ne!(grown, first);
+    // Edited in place to the same length: its change time moved, so it is read and found.
+    let raw = std::fs::read_to_string(&gate).unwrap();
+    std::fs::write(&gate, raw.replacen("\"FAIL\"", "\"PASS\"", 1)).unwrap();
+    assert!(matches!(f.fold(), Err(Unavailable::ChainBroken { .. })));
+}
+
+/// Every report row carries the build of the row that settled it, and `unstamped` where that
+/// row carries none.
+#[test]
+fn each_row_carries_its_sources_build() {
+    let f = Fixture::colony();
+    Journal::<serde_json::Value>::chained(crate::chains::post_witness_in(
+        &f.state,
+        &f.world,
+        Post::Ci,
+    ))
+    .append(&json!({"act": "old", "state": "observed", "at": "2026-11-01T10:00:00Z"}))
+    .unwrap();
+    let rows = f.fold().unwrap().rows;
+    let build = |want: &dyn Fn(&ReportRow) -> bool| {
+        rows.iter()
+            .find(|r| want(r))
+            .map(|r| match r {
+                ReportRow::Run(x) => x.build.clone(),
+                ReportRow::Ask(x) => x.build.clone(),
+                ReportRow::Act(x) => x.build.clone(),
+            })
+            .unwrap()
+    };
+    let unstamped = mnemorph_ledger::reports::unstamped();
+    assert_eq!(
+        build(&|r| matches!(r, ReportRow::Run(x) if x.run == "s1")),
+        stamp()
+    );
+    assert_eq!(
+        build(&|r| matches!(r, ReportRow::Run(x) if x.run == "o2")),
+        unstamped,
+        "no verdict settled it"
+    );
+    assert_eq!(build(&|r| matches!(r, ReportRow::Ask(_))), stamp());
+    assert_eq!(
+        build(&|r| matches!(r, ReportRow::Act(x) if x.act == "a1")).commit,
+        "post000001"
+    );
+    assert_eq!(
+        build(&|r| matches!(r, ReportRow::Act(x) if x.act == "old")),
+        unstamped
     );
 }
