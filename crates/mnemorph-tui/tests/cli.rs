@@ -461,7 +461,7 @@ fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
             "--test-threads",
             "1",
         ])
-        .env("HOME", &h)
+        .env("HOME", h)
         .env("XDG_CONFIG_HOME", h.join(".config"))
         .env("XDG_STATE_HOME", h.join(".local/state"))
         .env("XDG_DATA_HOME", h.join(".local/share"))
@@ -477,5 +477,5 @@ fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
     );
     assert!(out.status.success(), "{said}");
     assert!(said.contains("2 passed"), "both tests ran: {said}");
-    assert_eq!(files(&h), before, "the populated home was left as it was");
+    assert_eq!(files(h), before, "the populated home was left as it was");
 }
