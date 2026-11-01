@@ -3,9 +3,12 @@
 //! here): listing is anyone's; adopting, retiring and unretiring are the human's, at the terminal,
 //! and refused inside a body's command.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Output;
 
 struct Fixture {
     root: PathBuf,
@@ -34,11 +37,11 @@ impl Fixture {
     /// when one is given.
     fn run(&self, args: &[&str], body: Option<&str>) -> Output {
         let mut cmd = if cfg!(target_os = "linux") {
-            let mut c = Command::new("setsid");
+            let mut c = isolated::bin("setsid");
             c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
             c
         } else {
-            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         };
         cmd.arg("mind")
             .args(args)
@@ -62,7 +65,7 @@ impl Fixture {
             args.join(" "),
             self.world.display()
         );
-        let mut child = Command::new("script")
+        let mut child = isolated::bin("script")
             .args(["-qec", &line, "/dev/null"])
             .env("XDG_STATE_HOME", &self.state)
             .env_remove("MNEMORPH_BODY")

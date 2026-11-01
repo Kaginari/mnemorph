@@ -1,8 +1,10 @@
 //! `mnemorphd memory status`: each creature's unproven note events, named for the human; it fails
 //! while any is found.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
-use std::process::Command;
 
 fn status(world: &std::path::Path, json: bool) -> (Option<i32>, String) {
     let mut args = vec!["memory", "status", "--world"];
@@ -11,7 +13,7 @@ fn status(world: &std::path::Path, json: bool) -> (Option<i32>, String) {
     if json {
         args.push("--json");
     }
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(&args)
         .env_remove("ANTHROPIC_API_KEY")
         .env("XDG_STATE_HOME", world.join("state"))
@@ -87,13 +89,13 @@ fn a_retired_note_is_listed_and_the_human_wakes_it() {
         "{out}"
     );
     let bin = env!("CARGO_BIN_EXE_mnemorphd");
-    let body = Command::new(bin)
+    let body = isolated::bin(bin)
         .args(["memory", "wake", "n1", "--world", world.to_str().unwrap()])
         .env("MNEMORPH_BODY", "slime-a")
         .output()
         .unwrap();
     assert_eq!(body.status.code(), Some(2), "a body never wakes a note");
-    let human = Command::new(bin)
+    let human = isolated::bin(bin)
         .args(["memory", "wake", "n1", "--world", world.to_str().unwrap()])
         .env_remove("MNEMORPH_BODY")
         .output()
@@ -133,11 +135,11 @@ fn the_human_settles_a_fact_at_the_terminal_and_a_body_cannot() {
     let bin = env!("CARGO_BIN_EXE_mnemorphd");
     let detached = |args: &[&str], body: Option<&str>| {
         let mut c = if cfg!(target_os = "linux") {
-            let mut c = Command::new("setsid");
+            let mut c = isolated::bin("setsid");
             c.args(["-w", bin]);
             c
         } else {
-            Command::new(bin)
+            isolated::bin(bin)
         };
         c.args(args)
             .env("XDG_STATE_HOME", &state)
@@ -165,7 +167,7 @@ fn the_human_settles_a_fact_at_the_terminal_and_a_body_cannot() {
         use std::io::Write as _;
         let at_tty = |input: &str| {
             let line = format!("{bin} onto settle '#{id}' --world '{w}'");
-            let mut child = Command::new("script")
+            let mut child = isolated::bin("script")
                 .args(["-qec", &line, "/dev/null"])
                 .env("XDG_STATE_HOME", &state)
                 .env_remove("MNEMORPH_BODY")
@@ -230,7 +232,7 @@ fn the_human_confirms_a_proposed_claim_and_a_body_cannot() {
     let w = world.to_str().unwrap();
     let bin = env!("CARGO_BIN_EXE_mnemorphd");
     let run = |args: &[&str], body: Option<&str>| {
-        let mut c = Command::new(bin);
+        let mut c = isolated::bin(bin);
         c.args(args).args(["--world", w]);
         match body {
             Some(b) => c.env("MNEMORPH_BODY", b),

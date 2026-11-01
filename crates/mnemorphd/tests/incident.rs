@@ -2,6 +2,9 @@
 //! state directory (a temporary `XDG_STATE_HOME` here): marking a `reconcile` an incident, listing
 //! what it misses, recording its lesson, settling a `reconcile` that is none — and never a body's.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -97,7 +100,7 @@ impl Fixture {
     /// Run with `input` on stdin: the human's answer to a confirmation.
     fn answer(&self, args: &[&str], input: &str) -> Output {
         use std::io::Write as _;
-        let mut child = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        let mut child = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
             .arg("incident")
             .args(args)
             .args(["--world", self.world.to_str().unwrap()])
@@ -196,7 +199,7 @@ fn the_human_marks_lists_and_settles_incidents_and_records_a_lesson() {
 #[test]
 fn a_body_never_opens_or_settles_an_incident() {
     let f = Fixture::new("body");
-    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(["incident", "settle", "forge", "abc123", "--world"])
         .arg(&f.world)
         .env("XDG_STATE_HOME", &f.state)

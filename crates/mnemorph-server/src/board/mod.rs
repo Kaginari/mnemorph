@@ -497,6 +497,13 @@ impl Board {
         self.clock.pass(by);
     }
 
+    /// Stop the board's clock: from here on only [`Board::pass`] moves it, so a test of a
+    /// lifetime or a floor names exact instants, never the scheduler's jitter.
+    #[doc(hidden)]
+    pub fn stop_clock(&self) {
+        self.clock.stop();
+    }
+
     /// The live chats.
     #[must_use]
     pub fn bridge(&self) -> &Arc<bridge::Bridge> {

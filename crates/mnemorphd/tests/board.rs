@@ -2,6 +2,9 @@
 //! running one's URL —, loopback only, the key traded once over a real socket, and the human's
 //! commands refused to a body.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -31,7 +34,7 @@ impl Home {
     }
 
     fn cmd(&self, args: &[&str], body: Option<&str>) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+        let mut c = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"));
         c.args(args)
             .current_dir(&self.root)
             .env_remove("MNEMORPH_BODY")
@@ -260,9 +263,20 @@ mod autostart {
     fn ensure(h: &Home, open: bool, port: Option<u16>) -> String {
         let path = opener(h);
         let config = h.root.join("config");
-        let env: [(&str, &std::ffi::OsStr); 3] = [
+        // The board inherits the app's environment whole: every directory of the human's that it
+        // could read is named here, so none of theirs is.
+        let iso = crate::isolated::home();
+        let (data, cache, run) = (
+            iso.join(".local/share"),
+            iso.join(".cache"),
+            iso.join("run"),
+        );
+        let env: [(&str, &std::ffi::OsStr); 6] = [
             ("HOME", h.root.as_os_str()),
             ("XDG_CONFIG_HOME", config.as_os_str()),
+            ("XDG_DATA_HOME", data.as_os_str()),
+            ("XDG_CACHE_HOME", cache.as_os_str()),
+            ("XDG_RUNTIME_DIR", run.as_os_str()),
             ("PATH", path.as_os_str()),
         ];
         autostart::ensure_in(

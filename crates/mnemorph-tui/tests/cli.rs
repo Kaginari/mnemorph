@@ -1,6 +1,9 @@
 //! The `mnemorph` command line: what each form reads as, and the binary's plain-text answers
 //! before any terminal is taken.
 
+#[path = "../../mnemorphd/tests/support/isolated.rs"]
+mod isolated;
+
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command as Proc, Stdio};
@@ -120,7 +123,7 @@ fn the_world_s_admin_commands_are_the_core_s() {
 }
 
 fn bin() -> Proc {
-    Proc::new(env!("CARGO_BIN_EXE_mnemorph"))
+    isolated::bin(env!("CARGO_BIN_EXE_mnemorph"))
 }
 
 fn empty_world(name: &str) -> PathBuf {
@@ -343,4 +346,133 @@ fn status_counts_the_last_runs_guts_classes() {
         "{shown}"
     );
     let _ = std::fs::remove_dir_all(&w);
+}
+
+#[cfg(unix)]
+/// A home set up as a human's: a global file that autostarts and opens the board and names a
+/// provider's key file, a `0700` state directory holding a board's control files and registry,
+/// and a browser opener that records what it is asked to open.
+fn hostile_home(name: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let h = std::env::temp_dir().join(format!("mnemorph-hostile-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&h);
+    let state = h.join(".local/state/mnemorph");
+    for dir in [".config/mnemorph", ".local/share", ".cache", "run", "bin"] {
+        std::fs::create_dir_all(h.join(dir)).unwrap();
+    }
+    std::fs::create_dir_all(&state).unwrap();
+    for dir in [state.as_path(), &h.join("run")] {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let key = h.join("openrouter.key");
+    std::fs::write(&key, "sk-or-hostile-not-a-key\n").unwrap();
+    std::fs::write(
+        h.join(".config/mnemorph/config.toml"),
+        format!(
+            "[board]\nautostart = true\nopen = true\nport = 1\n\n[providers.openrouter]\n\
+             kind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\nkey_file = \"{}\"\n",
+            key.display()
+        ),
+    )
+    .unwrap();
+    for file in ["board.ctl", "board.sock", "boards.jsonl", "worlds.jsonl"] {
+        std::fs::write(state.join(file), "hostile\n").unwrap();
+    }
+    let opener = format!(
+        "#!/bin/sh\necho \"$0 $*\" >> '{}'\n",
+        h.join("opened").display()
+    );
+    for name in ["xdg-open", "open", "sensible-browser", "x-www-browser"] {
+        let p = h.join("bin").join(name);
+        std::fs::write(&p, &opener).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    h
+}
+
+#[cfg(unix)]
+/// Every file under `dir` with its bytes: what a run must leave as it found it.
+fn files(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut todo = vec![dir.to_path_buf()];
+    while let Some(d) = todo.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                todo.push(p);
+            } else {
+                out.push((p.clone(), std::fs::read(&p).unwrap_or_default()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// A child spawned isolated keeps nothing of the home it was spawned from: its home and every XDG
+/// directory are the isolated home's, and no other variable of the parent's comes through.
+#[cfg(unix)]
+#[test]
+fn an_isolated_child_keeps_nothing_of_the_home_it_was_spawned_from() {
+    let out = isolated::bin("env").output().unwrap();
+    assert!(out.status.success());
+    let home = isolated::home();
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let (name, value) = line.split_once('=').unwrap();
+        match name {
+            "HOME" | "XDG_CONFIG_HOME" | "XDG_STATE_HOME" | "XDG_DATA_HOME" | "XDG_CACHE_HOME"
+            | "XDG_RUNTIME_DIR" => assert!(Path::new(value).starts_with(home), "{line}"),
+            "PATH" | "LANG" | "LLVM_PROFILE_FILE" | "TMPDIR" => {}
+            _ => panic!("the parent's `{name}` came through"),
+        }
+    }
+    let path = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("PATH=").map(str::to_owned))
+        .unwrap();
+    for dir in std::env::split_paths(&path) {
+        assert!(
+            !dir.join("mnemorph").is_file(),
+            "an installed harness on the path: {dir:?}"
+        );
+    }
+}
+
+/// A test that spawns the binary passes the same under a human's populated home: the binary reads
+/// none of it, opens nothing, and writes nothing there; and the isolation holds there too.
+#[cfg(unix)]
+#[test]
+fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
+    let h = hostile_home("guard");
+    let before = files(&h);
+    let path = std::env::join_paths(std::iter::once(h.join("bin")).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    let out = Proc::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "status_counts_the_last_runs_guts_classes",
+            "an_isolated_child_keeps_nothing_of_the_home_it_was_spawned_from",
+            "--test-threads",
+            "1",
+        ])
+        .env("HOME", &h)
+        .env("XDG_CONFIG_HOME", h.join(".config"))
+        .env("XDG_STATE_HOME", h.join(".local/state"))
+        .env("XDG_DATA_HOME", h.join(".local/share"))
+        .env("XDG_CACHE_HOME", h.join(".cache"))
+        .env("XDG_RUNTIME_DIR", h.join("run"))
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{said}");
+    assert!(said.contains("2 passed"), "both tests ran: {said}");
+    assert_eq!(files(&h), before, "the populated home was left as it was");
+    let _ = std::fs::remove_dir_all(&h);
 }

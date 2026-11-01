@@ -3,9 +3,12 @@
 //! and waiving one with a reason — never a body's, never without a reason; the Dark Elf's score
 //! folded from them, and the human's decision on one finding.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
 use mnemorph_server::world::Roster;
 use mnemorph_server::world::challenge::{Challenges, Decision, Found, Opening, Status, route};
@@ -65,11 +68,11 @@ impl Fixture {
         // In a session of its own, on Linux: no controlling terminal, as a body's command or a
         // script has none — and never the terminal of whoever runs the tests.
         let mut cmd = if cfg!(target_os = "linux") {
-            let mut c = Command::new("setsid");
+            let mut c = isolated::bin("setsid");
             c.args(["-w", env!("CARGO_BIN_EXE_mnemorphd")]);
             c
         } else {
-            Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+            isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         };
         cmd.arg("challenge")
             .args(args)
@@ -103,7 +106,7 @@ impl Fixture {
             quoted.join(" "),
             self.world.display()
         );
-        let mut child = Command::new("script")
+        let mut child = isolated::bin("script")
             .args(["-qec", &line, "/dev/null"])
             .env("XDG_STATE_HOME", &self.state)
             .env_remove("MNEMORPH_BODY")
@@ -319,7 +322,7 @@ fn the_score_folds_each_speciality() {
         "{shown}"
     );
     // The finding was settled under the build `--version` prints.
-    let version = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+    let version = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .arg("--version")
         .output()
         .unwrap();

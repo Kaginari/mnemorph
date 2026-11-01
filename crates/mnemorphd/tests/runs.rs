@@ -1,12 +1,15 @@
 //! `mnemorphd runs` lists the runs that may be resumed; `mnemorphd --resume` refuses one that
 //! is not there as the `initialize` call's error.
 
+#[path = "support/isolated.rs"]
+mod isolated;
+
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn core() -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_mnemorphd"));
+    let mut c = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"));
     c.env_remove("ANTHROPIC_API_KEY");
     c
 }
