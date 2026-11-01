@@ -243,11 +243,46 @@ fn chat(
     };
     // The sidebar's memory and races come from the world, read off the UI thread.
     host.run(model.survey());
+    board(&world, &tx);
     let result = run(model, &host, tx, &rx);
     host.stop();
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&format!("the terminal: {e}"), 1),
+    }
+}
+
+/// With `board.autostart` in the human's global file, make sure a board runs with this world on
+/// it, off the UI thread; its one status line, which never holds a key, comes to the app.
+fn board(world: &std::path::Path, tx: &std::sync::mpsc::Sender<mnemorph_tui::app::Msg>) {
+    let paths = mnemorph_loop::Paths::resolve(world);
+    let Ok(settings) = mnemorph_loop::Config::load_global(&paths).map(|c| c.board()) else {
+        return;
+    };
+    if !settings.autostart {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        use mnemorph_server::board::autostart;
+        let (world, tx) = (world.to_path_buf(), tx.clone());
+        std::thread::spawn(move || {
+            let ask = autostart::Ask {
+                open: settings.open,
+                port: settings.port,
+            };
+            let status = match autostart::sibling() {
+                Ok(d) => autostart::ensure(&d, &world, ask, std::time::Duration::from_secs(5)),
+                Err(e) => format!("board: not started: {e}"),
+            };
+            let _ = tx.send(mnemorph_tui::app::Msg::Said(status));
+        });
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tx.send(mnemorph_tui::app::Msg::Said(
+            "board: autostart needs a Unix socket; run `mnemorphd board`".to_owned(),
+        ));
     }
 }
 

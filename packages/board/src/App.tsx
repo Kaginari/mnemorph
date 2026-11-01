@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { type Chats, useChats } from './data/chats.ts';
 import { commands } from './data/commands.ts';
+import { useAccess } from './data/session.ts';
 import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
@@ -26,7 +27,8 @@ import { MemoryView } from './views/Memory.tsx';
 import { MetricsView } from './views/Metrics.tsx';
 import { OntologyView } from './views/Ontology.tsx';
 import { SettingsView, UnknownView } from './views/Pages.tsx';
-import { NoWorld, SectionView, WorldView } from './views/World.tsx';
+import { SignedOut } from './views/SignedOut.tsx';
+import { MissingWorld, NoWorld, SectionView, WorldView } from './views/World.tsx';
 import { WorldsView } from './views/Worlds.tsx';
 
 const PANE_KEY = 'mnemorph.pane';
@@ -117,7 +119,10 @@ function Centre({
       return <UnknownView path={route.path} />;
   }
   if (load.state !== 'ready') return <WorldsView load={load} now={now} />;
-  if (!world) return <NoWorld id={route.world} />;
+  if (!world) {
+    const gone = load.data.missing.find((m) => m.id === route.world);
+    return gone ? <MissingWorld m={gone} now={now} /> : <NoWorld id={route.world} />;
+  }
   if (route.name === 'section' && route.section === 'bodies') {
     return <BodiesView key={world.id} w={world} tab={route.tab} />;
   }
@@ -188,7 +193,13 @@ function useShortcuts(setOpen: (o: Open | ((was: Open) => Open)) => void) {
   }, [setOpen]);
 }
 
+/** The board, or — in a tab without a session — the page that says so, never a blank root. */
 export function App() {
+  const access = useAccess();
+  return access === 'open' ? <Shell /> : <SignedOut why={access} />;
+}
+
+function Shell() {
   const route = useRoute();
   const load = useWorlds();
   const now = useNow();

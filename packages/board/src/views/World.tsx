@@ -1,9 +1,10 @@
 /** Inside a world: its overview, a section, or a session. */
-import type { BoardOverview, BoardWorld, Sourced } from '@mnemorph/protocol';
+import type { BoardMissing, BoardOverview, BoardWorld, Sourced } from '@mnemorph/protocol';
 import { useOverview } from '../data/overview.ts';
 import { usePush } from '../data/push.ts';
 import type { WorldSection } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
+import { shellWord, since } from '../time.ts';
 import { Empty } from '../ui/Empty.tsx';
 import { Mark, STATUS, WORLD_STATUS } from '../ui/Mark.tsx';
 import { SECTIONS } from '../ui/Rail.tsx';
@@ -20,6 +21,33 @@ export function NoWorld({ id }: { id: string }) {
             <Safe text={id} />
           </code>{' '}
           is known to this board.
+        </p>
+        <p>
+          <a href="#/">See every world</a>
+        </p>
+      </Empty>
+    </div>
+  );
+}
+
+/** A world the board knows whose directory is gone: where it was, since when, how to forget it. */
+export function MissingWorld({ m, now }: { m: BoardMissing; now: number }) {
+  return (
+    <div className="page">
+      <Empty glyph="✕" title={<Safe text={`${m.name} is missing`} />}>
+        <p>
+          Its directory{' '}
+          <code className="mono">
+            <Safe text={m.path} />
+          </code>{' '}
+          is gone, or holds no <code className="mono">.mnemorph/</code>: missing since{' '}
+          {since(m.since, now)}. It is live again once it is back.
+        </p>
+        <p>
+          To forget it:{' '}
+          <code className="mono">
+            <Safe text={`mnemorphd board forget ${shellWord(m.path)}`} />
+          </code>
         </p>
         <p>
           <a href="#/">See every world</a>

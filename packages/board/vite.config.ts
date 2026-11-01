@@ -63,7 +63,8 @@ export const PREVIEW_PORT = 4317;
 export const BOARD_HEADERS = {
   'content-security-policy':
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; " +
-    `font-src 'self'; connect-src 'self' ws://127.0.0.1:${PREVIEW_PORT}; base-uri 'none'; ` +
+    `font-src 'self'; connect-src 'self' ws://127.0.0.1:${PREVIEW_PORT} ws://localhost:${PREVIEW_PORT}; ` +
+    "base-uri 'none'; " +
     "form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',

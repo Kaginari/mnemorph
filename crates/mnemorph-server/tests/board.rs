@@ -100,7 +100,12 @@ async fn a_foreign_host_is_refused_on_every_route() {
     let f = Fixture::new("host");
     for host in [
         "evil.example:7878",
-        "localhost:7878",
+        "localhost.evil.com:7878",
+        "foo.localhost:7878",
+        "localhost:7879",
+        "localhost",
+        "127.0.0.2:7878",
+        "0.0.0.0:7878",
         "127.0.0.1:7879",
         "127.0.0.1",
         "127.1:7878",
@@ -430,7 +435,7 @@ fn snapshot(res: &Response<Body>) -> String {
 async fn every_response_carries_the_same_headers() {
     let f = Fixture::new("headers");
     let common = "cache-control: no-store
-content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws://127.0.0.1:7878; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'
+content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws://127.0.0.1:7878 ws://localhost:7878; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'
 cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 referrer-policy: no-referrer
@@ -468,24 +473,167 @@ x-content-type-options: nosniff";
         .send(get("/api/health").body(Body::empty()).unwrap())
         .await;
     assert_eq!(snapshot(&health), text("content-type: application/json"));
+    // A refused page load is a page, under the same headers.
+    let page = f
+        .send(
+            Request::get("/")
+                .header(header::HOST, "evil.example")
+                .header("sec-fetch-dest", "document")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(page.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        snapshot(&page),
+        text("content-type: text/html; charset=utf-8")
+    );
+}
+
+/// The text of `res`.
+async fn text_of(res: Response<Body>) -> String {
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }
 
 #[tokio::test]
+async fn localhost_is_a_loopback_name_and_signs_in_on_its_own() {
+    const LOCAL: &str = "localhost:7878";
+    let f = Fixture::new("localhost");
+    let at = |path: &str| Request::get(path).header(header::HOST, LOCAL);
+    let res = f.send(at("/api/health").body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    // Its own origin passes; another origin of the board's, with this Host, does not.
+    let (cookie, csrf) = f.login().await;
+    let upgrade = |origin: &str| {
+        at("/ws/board")
+            .header(header::UPGRADE, "websocket")
+            .header(header::CONNECTION, "upgrade")
+            .header(header::COOKIE, &cookie)
+            .header(header::ORIGIN, origin)
+            .header(
+                header::SEC_WEBSOCKET_PROTOCOL,
+                format!("mnemorph.v1, mnemorph.csrf.{csrf}"),
+            )
+            .body(Body::empty())
+            .unwrap()
+    };
+    // Past every refusal of the guard's: with no real socket under it, the upgrade is a 400.
+    assert_eq!(
+        f.send(upgrade("http://localhost:7878")).await.status(),
+        StatusCode::BAD_REQUEST
+    );
+    for foreign in [ORIGIN, "http://evil.example", "http://localhost:7879"] {
+        assert_eq!(
+            f.send(upgrade(foreign)).await.status(),
+            StatusCode::FORBIDDEN,
+            "{foreign}"
+        );
+    }
+    let mutation = Request::post("/session")
+        .header(header::HOST, LOCAL)
+        .header(header::ORIGIN, "http://localhost:7878")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "key": f.key() }).to_string()))
+        .unwrap();
+    assert_eq!(f.send(mutation).await.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_refused_page_load_says_why_and_what_to_do() {
+    let f = Fixture::new("pages");
+    let nav = |host: &str, path: &str| {
+        Request::get(path)
+            .header(header::HOST, host)
+            .header("sec-fetch-dest", "document")
+            .header(header::ACCEPT, "text/html")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let res = f.send(nav("mnemorph.test:7878", "/")).await;
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    let page = text_of(res).await;
+    assert!(
+        page.contains("Open the board at <a href=\"http://127.0.0.1:7878/\">"),
+        "{page}"
+    );
+    assert!(page.contains("to block DNS rebinding"), "{page}");
+    for at in ["127.0.0.1:7878", "[::1]:7878", "localhost:7878"] {
+        assert!(page.contains(&format!("http://{at}")), "{at}: {page}");
+    }
+    assert!(page.contains("<link rel=\"stylesheet\" href=\"/refused.css\">"));
+    assert!(!page.contains("<script"), "no script, inline or not");
+
+    let res = f.send(nav(HOST, "/api/worlds")).await;
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let page = text_of(res).await;
+    assert!(page.contains("This tab isn\u{2019}t signed in"), "{page}");
+    assert!(page.contains("Each link works once."), "{page}");
+    assert!(!page.contains(&f.key()), "the key never reaches a page");
+
+    // A script's fetch is answered as before: plain text, the same status.
+    let res = f
+        .send(get("/api/worlds").body(Body::empty()).unwrap())
+        .await;
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        res.headers()[header::CONTENT_TYPE],
+        "text/plain; charset=utf-8"
+    );
+
+    // The stylesheet is served to every Host, so the refused page reads; it holds no secret.
+    for host in ["mnemorph.test:7878", HOST] {
+        let res = f
+            .send(
+                Request::get("/refused.css")
+                    .header(header::HOST, host)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(res.status(), StatusCode::OK, "{host}");
+        assert_eq!(
+            res.headers()[header::CONTENT_TYPE],
+            "text/css; charset=utf-8"
+        );
+        assert!(res.headers().contains_key(header::CONTENT_SECURITY_POLICY));
+        assert!(!text_of(res).await.contains(&f.key()));
+    }
+    // Any other method on it is the guard's as ever.
+    let res = f
+        .send(
+            Request::post("/refused.css")
+                .header(header::HOST, "mnemorph.test:7878")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one listing, followed through its changes"
+)]
 async fn the_worlds_are_the_registry_and_the_human_hand() {
     let f = Fixture::new("worlds");
     let world = |name: &str| {
         let w = f.root.join(name);
-        std::fs::create_dir_all(&w).unwrap();
+        std::fs::create_dir_all(w.join(".mnemorph")).unwrap();
         w
     };
     let (alpha, beta, gamma, gone) = (world("alpha"), world("beta"), world("gamma"), world("gone"));
+    let bare = f.root.join("bare");
+    std::fs::create_dir_all(&bare).unwrap();
     let registry = f.registry();
     let hands = hand_file(&registry);
     register_at(&registry, &alpha, Some("github.com/o/alpha".to_owned())).unwrap();
     register_at(&registry, &alpha, None).unwrap();
     register_at(&registry, &gone, None).unwrap();
     register_at(&registry, &gamma, None).unwrap();
-    std::fs::remove_dir(&gone).unwrap();
+    register_at(&registry, &bare, None).unwrap();
+    std::fs::remove_dir_all(&gone).unwrap();
     let add = |w: &Path, act| hand(&hands, &registry, act, w);
     add(&beta, Hand::Add).unwrap();
     add(&gamma, Hand::Forget).unwrap();
@@ -520,20 +668,37 @@ async fn the_worlds_are_the_registry_and_the_human_hand() {
         })
     };
     let worlds = got["worlds"].as_array().unwrap();
-    assert_eq!(worlds.len(), 3, "{got}");
-    // gamma was forgotten; the vanished world shows missing; beta, only added, goes last.
-    assert!(worlds.contains(&row(
-        &alpha,
-        json!("github.com/o/alpha"),
-        json!("<at>"),
-        2,
-        "present"
-    )));
-    assert!(worlds.contains(&row(&gone, json!(null), json!("<at>"), 1, "missing")));
+    assert_eq!(worlds.len(), 2, "{got}");
+    // gamma was forgotten; beta, only added, goes last; the vanished world and the one with no
+    // `.mnemorph/` are apart, as missing.
     assert_eq!(
-        worlds[2],
+        worlds[0],
+        row(
+            &alpha,
+            json!("github.com/o/alpha"),
+            json!("<at>"),
+            2,
+            "present"
+        )
+    );
+    assert_eq!(
+        worlds[1],
         row(&beta, json!(null), json!(null), 0, "present")
     );
+    let missing = got["missing"].as_array().unwrap();
+    let paths: Vec<&str> = missing
+        .iter()
+        .map(|m| m["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths.len(), 2, "{got}");
+    assert!(paths.contains(&gone.to_str().unwrap()) && paths.contains(&bare.to_str().unwrap()));
+    for m in missing {
+        assert!(
+            mnemorph_server::world::ledger::Timestamp::parse(m["since"].as_str().unwrap())
+                .is_some(),
+            "{m}"
+        );
+    }
 
     // Added again, gamma is back.
     add(&gamma, Hand::Add).unwrap();
@@ -545,7 +710,21 @@ async fn the_worlds_are_the_registry_and_the_human_hand() {
                 .unwrap(),
         )
         .await;
-    assert_eq!(body(res).await["worlds"].as_array().unwrap().len(), 4);
+    assert_eq!(body(res).await["worlds"].as_array().unwrap().len(), 3);
+
+    // The vanished world comes back: live again, and no longer missing.
+    std::fs::create_dir_all(gone.join(".mnemorph")).unwrap();
+    let res = f
+        .send(
+            get("/api/worlds")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    let got = body(res).await;
+    assert_eq!(got["worlds"].as_array().unwrap().len(), 4, "{got}");
+    assert_eq!(got["missing"].as_array().unwrap().len(), 1, "{got}");
 }
 
 #[test]

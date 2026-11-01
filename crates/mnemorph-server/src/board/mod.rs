@@ -13,8 +13,12 @@
 //! `/api/` or `/ws/` is guarded without being named in it.
 
 mod assets;
+#[cfg(unix)]
+pub mod autostart;
 pub mod bodies;
 pub mod bridge;
+#[cfg(unix)]
+pub mod control;
 pub mod facts;
 pub mod guard;
 pub mod instance;
@@ -109,12 +113,30 @@ pub enum WorldState {
     Missing,
 }
 
-/// What `GET /api/worlds` answers: the worlds, the latest session first.
+/// A world the board knows whose directory is gone, or holds no `.mnemorph/`: shown apart from
+/// the live ones, with the command that forgets it, until it comes back or is pruned.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct BoardMissing {
+    /// Its id across the state directory.
+    pub id: String,
+    /// Its directory's name.
+    pub name: String,
+    /// The path it was known at.
+    pub path: String,
+    /// When the board first saw it missing (RFC 3339, UTC).
+    pub since: String,
+}
+
+/// What `GET /api/worlds` answers: the live worlds, the latest session first, and the missing
+/// ones apart.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct BoardWorlds {
-    /// The worlds.
+    /// The live worlds.
     pub worlds: Vec<BoardWorld>,
+    /// The worlds whose directory is gone, the longest missing first.
+    pub missing: Vec<BoardMissing>,
 }
 
 /// How long each secret lives.
@@ -348,15 +370,22 @@ impl Board {
         for a in addrs {
             loopback(a.ip())?;
         }
+        let port = host.port();
         let csp = format!(
             "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; \
-             font-src 'self'; connect-src 'self' ws://{host}; base-uri 'none'; \
-             form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'"
+             font-src 'self'; connect-src 'self' ws://{host} ws://localhost:{port}; \
+             base-uri 'none'; form-action 'none'; frame-ancestors 'none'; \
+             require-trusted-types-for 'script'"
         );
         let clock = bridge::Clock::default();
         Ok(Arc::new(Self {
             host,
-            hosts: addrs.iter().map(ToString::to_string).collect(),
+            // `localhost` a browser resolves to loopback itself, never through DNS: no rebinding.
+            hosts: addrs
+                .iter()
+                .map(ToString::to_string)
+                .chain(std::iter::once(format!("localhost:{port}")))
+                .collect(),
             csp: HeaderValue::from_str(&csp).map_err(|e| e.to_string())?,
             registry,
             hand,
@@ -383,6 +412,18 @@ impl Board {
     pub fn url(&self) -> String {
         let keys = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
         format!("http://{}/#k={}", self.host, keys.pending)
+    }
+
+    /// The address the board answers at, without a key: `http://127.0.0.1:<port>`.
+    #[must_use]
+    pub fn base(&self) -> String {
+        format!("http://{}", self.host)
+    }
+
+    /// The `Host` values the board answers to: each bound address, and `localhost`, with the port.
+    #[must_use]
+    pub fn hosts(&self) -> &[String] {
+        &self.hosts
     }
 
     /// The router: the key exchange, the API, and the assets, all behind the guard.
@@ -681,23 +722,24 @@ impl Board {
         keys.sessions.retain(|s| !same(&s.cookie, cookie));
     }
 
-    /// The worlds the board lists, the latest session first.
+    /// The worlds the board lists: the live ones, the latest session first, and the missing ones
+    /// apart, the longest missing first. A world newly missing is recorded as missing since now.
     #[must_use]
     pub fn worlds(&self) -> BoardWorlds {
-        let mut worlds: Vec<BoardWorld> = dimension::listed(&self.registry, &self.hand)
+        let now = mnemorph_loop::world::ledger::Timestamp::now();
+        let standing = dimension::standing(&self.registry, &self.hand, now, true);
+        let name = |p: &std::path::Path| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        let mut worlds: Vec<BoardWorld> = standing
+            .live
             .into_iter()
             .map(|l| BoardWorld {
-                name: l
-                    .world
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
+                name: name(&l.world),
                 path: l.world.to_string_lossy().into_owned(),
-                state: if l.world.is_dir() {
-                    WorldState::Present
-                } else {
-                    WorldState::Missing
-                },
+                state: WorldState::Present,
                 id: l.id,
                 remote: l.remote,
                 last: l.last,
@@ -706,7 +748,26 @@ impl Board {
             .collect();
         // RFC 3339 in UTC sorts as text; a world never opened goes last.
         worlds.sort_by(|a, b| b.last.cmp(&a.last));
-        BoardWorlds { worlds }
+        let mut missing: Vec<(i64, BoardMissing)> = standing
+            .missing
+            .into_iter()
+            .map(|(l, since)| {
+                (
+                    since.0,
+                    BoardMissing {
+                        name: name(&l.world),
+                        path: l.world.to_string_lossy().into_owned(),
+                        id: l.id,
+                        since: since.to_string(),
+                    },
+                )
+            })
+            .collect();
+        missing.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.path.cmp(&b.1.path)));
+        BoardWorlds {
+            worlds,
+            missing: missing.into_iter().map(|(_, m)| m).collect(),
+        }
     }
 }
 
@@ -1030,6 +1091,31 @@ async fn asset(method: Method, uri: Uri) -> Response {
     }
 }
 
+/// Open `url` in the browser: `open` on macOS, `xdg-open` elsewhere, waited on off the caller's
+/// thread.
+///
+/// # Errors
+///
+/// The opener cannot be started.
+pub fn browse(url: &str) -> Result<(), String> {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut child = std::process::Command::new(opener)
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("{opener}: {e}"))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 /// Whether the real board was embedded at build time, not the placeholder page.
 #[must_use]
 pub fn built() -> bool {
@@ -1052,6 +1138,20 @@ fn refuse(status: StatusCode, why: &str) -> Response {
 ///
 /// The runtime cannot start, or a listener cannot be served.
 pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<(), String> {
+    run_at(listeners, board, None)
+}
+
+/// As [`run`], answering the control channel under `dir` too (where there are Unix sockets): a
+/// `stop` there stops it as Ctrl-C does.
+///
+/// # Errors
+///
+/// The runtime cannot start, the control socket cannot be bound, or a listener cannot be served.
+pub fn run_at(
+    listeners: Vec<std::net::TcpListener>,
+    board: &Arc<Board>,
+    dir: Option<&std::path::Path>,
+) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -1081,9 +1181,31 @@ pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<
         });
         // The worlds' files, watched: each change is told on `WS /ws/board`.
         let watcher = tokio::spawn(watch::watch(Arc::clone(board)));
-        signal().await;
+        let (asked, mut asked_stop) = tokio::sync::watch::channel(false);
+        #[cfg(unix)]
+        let control = match dir {
+            Some(d) => Some(tokio::spawn(control::serve(
+                control::bind(d)?,
+                Arc::clone(board),
+                asked,
+            ))),
+            None => None,
+        };
+        #[cfg(not(unix))]
+        let _ = (dir, asked);
+        tokio::select! {
+            () = signal() => {}
+            Ok(()) = asked_stop.changed() => {}
+        }
         ticker.abort();
         watcher.abort();
+        #[cfg(unix)]
+        if let Some(c) = control {
+            c.abort();
+            if let Some(d) = dir {
+                let _ = std::fs::remove_file(control::socket(d));
+            }
+        }
         // Every chat's child asked to leave, then its group killed: none outlives the board.
         board.bridge.end_all("the board stopped").await;
         let _ = stop.send(true);

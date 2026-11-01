@@ -346,6 +346,9 @@ The world repairs itself in small, mechanical steps, each one written to the led
   is left or a repair waits for `--heal`, 2 on an error or inside a body's command. With
   `--verify` it walks the chained journals instead and anchors their heads in `log.md`
   ([the chain](06-consumption.md#the-usage-row)).
+  It is also the board's routine: with `--heal` it forgets from the board's list the worlds missing
+  longer than `board.prune_after_days` (14; 0 never), and without it names them — the list
+  alone, never a directory or a journal ([missing worlds](05-architecture.md#the-board-server)).
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
 ### The end gate

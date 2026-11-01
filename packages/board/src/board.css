@@ -932,3 +932,70 @@ code {
 .panel[aria-label="Meters"] {
   grid-column: 1 / -1;
 }
+
+/* The worlds whose directory is gone, folded under the live ones. */
+.missing-worlds {
+  margin: 18px 0 0;
+  border-top: 1px solid var(--mn-line);
+  padding-top: 12px;
+}
+.missing-summary {
+  cursor: pointer;
+  font-family: var(--mn-font-ui);
+  font-size: 15px;
+  color: var(--mn-text-muted);
+}
+.missing-worlds[open] .missing-summary {
+  margin-bottom: 10px;
+}
+.missing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.missing-world {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  border: 1px dashed var(--mn-line);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.missing-name {
+  color: var(--mn-text);
+}
+
+/* A tab without a session: one card saying so, centred. */
+.signed-out {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: var(--mn-bg);
+  color: var(--mn-text);
+}
+.signed-out-card {
+  max-width: 34rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 28px 32px;
+  border: 1px solid var(--mn-line);
+  border-top: 3px solid var(--mn-gold);
+  border-radius: calc(var(--mn-radius) + 2px);
+  background: var(--mn-panel);
+  line-height: 1.55;
+}
+.signed-out-title {
+  margin: 14px 0 12px;
+  font-family: var(--mn-font-ui);
+  font-size: 24px;
+  line-height: 1.25;
+}
+.signed-out-card .hint {
+  margin: 16px 0 0;
+}

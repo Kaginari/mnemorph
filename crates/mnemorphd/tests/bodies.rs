@@ -43,7 +43,7 @@ impl Home {
             std::env::temp_dir().join(format!("mnemorph-bodiesd-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let world = root.join("world");
-        std::fs::create_dir_all(&world).unwrap();
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
         let root = root.canonicalize().unwrap();
         let world = world.canonicalize().unwrap();
         let home = Self {
@@ -580,12 +580,12 @@ fn a_directory_link_on_the_way_reads_nothing_outside_the_world() {
     assert!(res.starts_with("HTTP/1.1 503"), "{res}");
     assert!(res.contains("a link on the way"), "{res}");
     assert!(!res.contains("from outside"), "{res}");
-    // The whole .mnemorph a link: the journal is refused too.
-    let mut other = Home::new("dirlink-log");
+    // The whole .mnemorph a link out: no world of its own, so the board never lists it.
+    let other = Home::new("dirlink-log");
     std::fs::remove_dir_all(other.world.join(".mnemorph")).unwrap();
     std::os::unix::fs::symlink(&outside, other.world.join(".mnemorph")).unwrap();
-    let (host, cookie) = other.serve();
-    let res = Home::raw(&host, &cookie, &format!("/api/w/{}/journal", other.id()));
-    assert!(res.starts_with("HTTP/1.1 503"), "{res}");
-    assert!(!res.contains("from outside"), "{res}");
+    let added = other.cmd(&["board", "add", "world"]).output().unwrap();
+    assert!(!added.status.success());
+    let err = String::from_utf8_lossy(&added.stderr);
+    assert!(err.contains("holds no .mnemorph/"), "{err}");
 }

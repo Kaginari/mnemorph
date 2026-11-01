@@ -23,7 +23,7 @@ import type {
 } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import { type Change, usePush } from './push.ts';
-import { establish, post } from './session.ts';
+import { establish, post, signedOut } from './session.ts';
 
 /** The statuses of a fact, in the order the page tabs them: the facts table's partition. */
 export const FACT_STATUSES: readonly BoardFactStatus[] = [
@@ -285,6 +285,7 @@ async function read<T>(
     headers: { accept: 'application/json' },
   });
   if (res.status === 401) {
+    signedOut();
     throw new Error('this browser holds no board session: open the URL `mnemorphd board` prints');
   }
   if (!res.ok) throw new Error(await why(res));

@@ -60,6 +60,7 @@ pub enum Msg {
     },
     /// Recall gave the session's ask this many notes.
     Recalled(usize),
+
     /// A piece of the session's reasoning, as it streams; empty when its text is hidden.
     Thinking(String),
     /// A piece of a started call's input, as raw JSON.

@@ -16,6 +16,7 @@ export type { BoardIntegrations } from './generated/BoardIntegrations.js';
 export type { BoardJournal } from './generated/BoardJournal.js';
 export type { BoardMemory } from './generated/BoardMemory.js';
 export type { BoardMetrics } from './generated/BoardMetrics.js';
+export type { BoardMissing } from './generated/BoardMissing.js';
 export type { BoardOrder } from './generated/BoardOrder.js';
 export type { BoardOverview } from './generated/BoardOverview.js';
 export type { BoardQueue } from './generated/BoardQueue.js';

@@ -117,6 +117,24 @@ pub const CHALLENGE_REVIEWERS: usize = 3;
 const CHALLENGE_REVIEWERS_CEILING: i64 = 7;
 
 /// `gate.challenge_reviewers` holds a count of reviewers from 1 to every speciality.
+/// `board.port` is a port, and `board.prune_after_days` a count of days from 0 (never).
+fn board_bound(key: &str, value: &Value, at: &Origin) -> Result<(), String> {
+    let n = value.as_integer();
+    match key {
+        "board.port" if !n.is_some_and(|p| (1..=i64::from(u16::MAX)).contains(&p)) => {
+            Err(format!("{at}: board.port is a port from 1 to 65535"))
+        }
+        "board.prune_after_days"
+            if !n.is_some_and(|d| (0..=PRUNE_AFTER_DAYS_CEILING).contains(&d)) =>
+        {
+            Err(format!(
+                "{at}: board.prune_after_days is a count of days from 0 (never) to {PRUNE_AFTER_DAYS_CEILING}"
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// `evolution.min_net_wins`: a count of paired wins, at least 1.
 fn net_wins(value: &Value, at: &Origin) -> Result<(), String> {
     if value
@@ -156,6 +174,25 @@ fn reviewers(value: &Value, at: &Origin) -> Result<(), String> {
             "{at}: gate.challenge_reviewers is a count of reviewers from 1 to {CHALLENGE_REVIEWERS_CEILING}"
         ))
     }
+}
+
+/// How many days a world the board lists may be missing before it is forgotten, unless the human
+/// sets `board.prune_after_days`: a drive unmounted for a while is not forgotten at once.
+pub const PRUNE_AFTER_DAYS: u32 = 14;
+/// The most `board.prune_after_days` may be.
+const PRUNE_AFTER_DAYS_CEILING: i64 = 3650;
+
+/// The board's settings, from the human's global file alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Board {
+    /// Whether the terminal app makes sure a board runs when it starts.
+    pub autostart: bool,
+    /// Whether that start opens the browser on a fresh one-time link.
+    pub open: bool,
+    /// The port a board the terminal app starts listens on; `None` for the default.
+    pub port: Option<u16>,
+    /// How many days a missing world stays listed before it is forgotten; 0 never.
+    pub prune_after_days: u32,
 }
 
 /// How many more paired tasks an evolution must win than lose to be kept, unless the human sets
@@ -308,6 +345,10 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("mcp.servers.*.network", Kind::Bool),
     ("mcp.servers.*.timeout_secs", Kind::Int),
     ("board.bench_results", Kind::Str),
+    ("board.autostart", Kind::Bool),
+    ("board.open", Kind::Bool),
+    ("board.port", Kind::Int),
+    ("board.prune_after_days", Kind::Int),
 ];
 
 /// A configuration layer, lowest first.
@@ -660,7 +701,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "the local file lives inside the world, where a body or a repository's script can write it; this key widens the sandbox, the gate, a spending cap, where a key is sent or who decides, so it is honoured only from your global file".into(),
+                    why: "the local file lives inside the world, where a body or a repository's script can write it; this key widens the sandbox, the gate, a spending cap, where a key is sent, who decides or what the board serves and starts, so it is honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -676,7 +717,7 @@ impl Config {
                 self.holes.push(Hole {
                     key,
                     origin: origin.clone(),
-                    why: "the board reads the files this names, so it is honoured only from your global file".into(),
+                    why: "the board serves every world on the machine: what it reads, whether it starts and what it opens are honoured only from your global file".into(),
                 });
                 continue;
             }
@@ -812,6 +853,7 @@ impl Config {
                     ));
                 }
                 "gate.challenge_reviewers" => reviewers(&leaf.value, at)?,
+                k if k.starts_with("board.") => board_bound(k, &leaf.value, at)?,
                 "tools.read.range_over" => range_over(&leaf.value, at)?,
                 "evolution.min_net_wins" => net_wins(&leaf.value, at)?,
                 "oni.envelope_days"
@@ -1274,6 +1316,33 @@ impl Config {
             .and_then(|l| l.value.as_str())
             .filter(|p| !p.is_empty())
             .map(PathBuf::from)
+    }
+
+    /// The board's settings (`board.autostart`, `board.open`, `board.port`,
+    /// `board.prune_after_days`), from the human's global file alone: a world's file never
+    /// starts, opens or prunes the board.
+    #[must_use]
+    pub fn board(&self) -> Board {
+        let global = |key: &str| {
+            self.get(key)
+                .filter(|l| l.origin.layer == Layer::Global)
+                .map(|l| &l.value)
+        };
+        Board {
+            autostart: global("board.autostart")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            open: global("board.open")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            port: global("board.port")
+                .and_then(Value::as_integer)
+                .and_then(|p| u16::try_from(p).ok()),
+            prune_after_days: global("board.prune_after_days")
+                .and_then(Value::as_integer)
+                .and_then(|d| u32::try_from(d).ok())
+                .unwrap_or(PRUNE_AFTER_DAYS),
+        }
     }
 
     /// The MCP servers the human's own files declare — each tool's class among them — and how many

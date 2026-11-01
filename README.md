@@ -143,6 +143,20 @@ mnemorphd board                     # the board on 127.0.0.1:7878: open the URL 
 for a session cookie. It listens on loopback only — from another machine, forward the same port:
 `ssh -L 7878:127.0.0.1:7878 <host>`, then open the printed URL. A second `mnemorphd board` prints
 the running board's URL, with the key waiting now ([the board server](docs/05-architecture.md#the-board-server)).
+Each link works once, in one browser: a link VS Code's browser opened first is spent for Chrome.
+The board answers at `127.0.0.1`, `[::1]` and `localhost`, and refuses every other host name, to
+block DNS rebinding.
+
+To have `mnemorph` start the board (or reuse the running one) and open it as a session opens, say
+so in your global file, `~/.config/mnemorph/config.toml` — a world's file never can:
+
+```toml
+[board]
+autostart = true
+open = true
+```
+
+The board outlives the app; `mnemorphd board stop` stops it.
 
 The board is every world on the machine in one page: its worlds, chats in the terminal's grammar,
 the approval card with the terminal's protections, memory, ontology, bodies and metrics, live.

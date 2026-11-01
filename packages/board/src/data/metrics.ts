@@ -20,7 +20,7 @@ import type {
 } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import { type Change, usePush } from './push.ts';
-import { establish } from './session.ts';
+import { establish, signedOut } from './session.ts';
 
 export const WINDOWS = ['7d', '28d', 'all'] as const;
 export type Window = (typeof WINDOWS)[number];
@@ -278,7 +278,10 @@ export function useMetrics(world: string, window: Window): MetricsLoad {
         }),
       )
       .then(async (res) => {
-        if (res.status === 401) throw new Error('this browser holds no board session');
+        if (res.status === 401) {
+          signedOut();
+          throw new Error('this browser holds no board session');
+        }
         if (res.status === 404) throw new Error('the board lists no world with this id');
         if (!res.ok) throw new Error(`the board server answered ${res.status}`);
         const m = parseMetrics(await res.json());

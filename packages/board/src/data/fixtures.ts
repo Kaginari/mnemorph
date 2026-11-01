@@ -1,5 +1,5 @@
 /**
- * Worlds for development and tests, in the shape `GET /api/worlds` answers: present and missing,
+ * Worlds for development and tests, in the shape `GET /api/worlds` answers: live and missing,
  * with and without a remote, one never opened. The clock they read against is `FIXTURE_NOW`.
  */
 import type { BoardOverview, BoardWorlds } from '@mnemorph/protocol';
@@ -35,14 +35,13 @@ export const fixtureWorlds: BoardWorlds = {
       sessions: 0,
       state: 'present',
     },
+  ],
+  missing: [
     {
       id: 'old-spike-c3d2e1f0a9b8c7d6',
       name: 'old-spike',
       path: '/tmp/old-spike',
-      remote: null,
-      last: '2026-07-01T16:20:00Z',
-      sessions: 2,
-      state: 'missing',
+      since: '2026-10-21T09:00:00Z',
     },
   ],
 };
@@ -64,17 +63,10 @@ function world(name: string) {
   return w;
 }
 
-const gone = (source: string) => ({
-  value: null,
-  source,
-  trusted: false,
-  why: 'the directory is gone',
-});
-
 /**
  * Overviews for development and tests, in the shape `GET /api/w/<id>` answers: tempest-try live
  * in a board chat with an ask waiting, sqlglot held by a terminal session with a challenge
- * blocked, notes silent (never opened, nothing booked), old-spike missing.
+ * blocked, notes silent (never opened, nothing booked).
  */
 export const fixtureOverviews: Record<string, BoardOverview> = {
   [world('tempest-try').id]: {
@@ -227,33 +219,6 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
     gate: { value: { verdicts: 0, last: null }, source: GATE_SOURCE, trusted: true, why: null },
     meters: { value: [], source: METERS_SOURCE, trusted: false, why: METERS_WHY },
     spend: { value: null, source: USAGE, trusted: false, why: 'no call is booked yet' },
-    waiting: { value: 0, source: CHATS, trusted: true, why: WAITING_WHY },
-    updates: PUSHED,
-  },
-  [world('old-spike').id]: {
-    world: world('old-spike'),
-    status: {
-      value: 'missing',
-      source: "the world's directory",
-      trusted: true,
-      why: 'the directory is gone; the world stays listed until it is forgotten',
-    },
-    activity: {
-      value: { at: '2026-07-01T16:20:00Z', what: 'a session opened' },
-      source: 'the worlds registry',
-      trusted: true,
-      why: null,
-    },
-    memory: gone(MEMORY_SOURCE),
-    challenges: {
-      value: { pending: 0, blocked: 0, verifying: 0, unstaffed: 0, findings: 0, unreadable: 0 },
-      source: CHALLENGES_SOURCE,
-      trusted: true,
-      why: null,
-    },
-    gate: { value: { verdicts: 0, last: null }, source: GATE_SOURCE, trusted: true, why: null },
-    meters: gone(METERS_SOURCE),
-    spend: gone(USAGE),
     waiting: { value: 0, source: CHATS, trusted: true, why: WAITING_WHY },
     updates: PUSHED,
   },

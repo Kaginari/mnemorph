@@ -3,13 +3,13 @@
  * activity, memory standing, open challenges, gate and spend, and "waiting for you" when one of the
  * board's chats keeps a gate ask.
  */
-import type { BoardWorld } from '@mnemorph/protocol';
+import type { BoardMissing, BoardWorld } from '@mnemorph/protocol';
 import { useState } from 'react';
 import { type OverviewLoad, useOverview } from '../data/overview.ts';
 import type { Load } from '../data/worlds.ts';
 import { format } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
-import { ago } from '../time.ts';
+import { ago, shellWord, since } from '../time.ts';
 import { Empty } from '../ui/Empty.tsx';
 import { Mark, STATUS, WORLD_STATUS } from '../ui/Mark.tsx';
 import { GatePill, money, Unknown, When } from './facts.tsx';
@@ -140,6 +140,41 @@ function Card({ w, now }: { w: BoardWorld; now: number }) {
   );
 }
 
+/**
+ * The worlds whose directory is gone, folded away under the live ones: each one's path, since
+ * when, and the command that forgets it. `mnemorphd board prune` forgets them all.
+ */
+function MissingList({ missing, now }: { missing: BoardMissing[]; now: number }) {
+  return (
+    <details className="missing-worlds">
+      <summary className="missing-summary">Missing ({missing.length})</summary>
+      <p className="hint">
+        Their directory is gone, or holds no <code className="mono">.mnemorph/</code>. A world that
+        comes back is live again; <code className="mono">mnemorphd board prune</code> forgets them
+        all.
+      </p>
+      <ul className="missing-list">
+        {missing.map((m) => (
+          <li key={m.id} className="missing-world">
+            <span className="missing-name">
+              <Mark tone="alarm" glyph="✕">
+                <Safe text={m.name} />
+              </Mark>
+            </span>
+            <code className="mono missing-path">
+              <Safe text={m.path} />
+            </code>
+            <span className="missing-since">missing since {since(m.since, now)}</span>
+            <code className="mono missing-forget">
+              <Safe text={`mnemorphd board forget ${shellWord(m.path)}`} />
+            </code>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 export function WorldsView({ load, now }: { load: Load; now: number }) {
   const [adding, setAdding] = useState(false);
   return (
@@ -194,6 +229,9 @@ export function WorldsView({ load, now }: { load: Load; now: number }) {
             <Card key={w.id} w={w} now={now} />
           ))}
         </ul>
+      )}
+      {load.state === 'ready' && load.data.missing.length > 0 && (
+        <MissingList missing={load.data.missing} now={now} />
       )}
       {load.state === 'ready' && load.data.unreadable > 0 && (
         <p className="hint">
