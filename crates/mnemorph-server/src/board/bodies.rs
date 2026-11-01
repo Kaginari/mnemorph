@@ -13,6 +13,7 @@ use std::time::{Duration, SystemTime};
 
 use mnemorph_loop::world::Roster;
 use mnemorph_loop::world::chains;
+use mnemorph_loop::world::creatures::{self, Standing as Trust};
 use mnemorph_loop::world::doc::Creature;
 use mnemorph_loop::world::log::LOG;
 use mnemorph_loop::world::minds::{self, Standing, witness};
@@ -168,6 +169,15 @@ pub struct BoardBody {
     pub live: LiveState,
     /// Its latest acts: commissions and verdicts, newest first.
     pub acts: Vec<TimelineEntry>,
+    /// How its card stands against the creatures' witness under the state directory: `throne`,
+    /// `trusted`, `mismatched` (it runs at the lower of its card and its row) or `stranger` (no
+    /// row: its own seat alone).
+    pub standing: String,
+    /// The race it runs as: its row's, held to its card ([`Roster::load`]); a stranger's is
+    /// `slime`.
+    pub runs_as: String,
+    /// The fields its card says otherwise than its row (`Race`, `Post`).
+    pub differs: Vec<String>,
 }
 
 /// Whether the throne — the session's own body — is live in the world.
@@ -294,6 +304,8 @@ pub struct BoardBodies {
     pub races: Vec<RaceLaw>,
     /// Where the roster was read.
     pub roster: Provenance,
+    /// Where each creature's standing was read: the creatures' witness.
+    pub witness: Provenance,
     /// Where the Minds' standing was read.
     pub minds: Provenance,
     /// Where the live states were read.
@@ -590,6 +602,7 @@ pub fn live_of(
 /// latest of `commissions` (the throne's from the session), its acts among `all`.
 fn body_of(
     c: &Creature,
+    trusted: &Roster,
     survey: &minds::Survey,
     commissions: &[Commission],
     all: &[TimelineEntry],
@@ -630,6 +643,21 @@ fn body_of(
             .take(ACTS)
             .cloned()
             .collect(),
+        standing: trusted
+            .standing
+            .get(&c.name)
+            .map_or("stranger", Trust::word)
+            .to_owned(),
+        runs_as: trusted
+            .creatures
+            .get(&c.name)
+            .map_or(Race::Slime, |t| t.race)
+            .name()
+            .to_owned(),
+        differs: match trusted.standing.get(&c.name) {
+            Some(Trust::Mismatched(f)) => f.iter().map(|f| (*f).to_owned()).collect(),
+            _ => Vec::new(),
+        },
     }
 }
 
@@ -641,7 +669,9 @@ fn body_of(
 /// or too many entries.
 pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
     let snap = snapshot::bodies(world)?;
-    let roster = Roster::load(snap.path());
+    // The cards as copied are shown; what each runs as is the witness's, read for the world.
+    let roster = Roster::cards(snap.path());
+    let trusted = creatures::trusted(roster.clone(), &creatures::witnessed(world));
     let log = || {
         if snapshot::parents_plain(world, Path::new(LOG)).is_err() {
             return String::new();
@@ -678,6 +708,7 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
         .map(|c| {
             body_of(
                 c,
+                &trusted,
                 &survey,
                 &commissions,
                 &all,
@@ -698,10 +729,16 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
             ".mnemorph/<race>/<seat>/README.md (in the world)",
             false,
             Some(
-                "a body can write its doc: shown, granting nothing — a Kijin's post and a Dark \
-                 Elf's speciality are read from the name its doc gives, not from a witness"
+                "a body can write its doc: shown, granting nothing — each runs as the creatures' \
+                 witness under the state directory holds it"
                     .into(),
             ),
+        ),
+        witness: prov(
+            "the creatures' witness under the state directory (each creature's race, chain, \
+             post and ground)",
+            trusted.witness.is_none(),
+            trusted.witness.clone(),
         ),
         minds: prov(
             "the Minds' witness under the state directory (a Mind's about and shared mark are \

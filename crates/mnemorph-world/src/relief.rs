@@ -76,7 +76,22 @@ impl Relief {
 /// No living Slime or Orc of that name, a young's name or seat already taken, a link where a doc
 /// goes, or a doc that cannot be written.
 pub fn relieve(world: &Path, name: &str, apply: bool) -> Result<Relief, String> {
-    let roster = Roster::load(world);
+    relieve_in(crate::queue::state_dir().as_deref(), world, name, apply)
+}
+
+/// [`relieve`], the creatures' witness under the state directory `state` (`None`: no home): the
+/// trusted roster it plans on, and where its rows are written.
+///
+/// # Errors
+///
+/// As [`relieve`].
+pub fn relieve_in(
+    state: Option<&Path>,
+    world: &Path,
+    name: &str,
+    apply: bool,
+) -> Result<Relief, String> {
+    let roster = Roster::load_in(state, world);
     let c = roster
         .creatures
         .get(name)
@@ -115,6 +130,18 @@ pub fn relieve(world: &Path, name: &str, apply: bool) -> Result<Relief, String> 
     if apply {
         carry_out(world, &roster, c, &relief, &seats)?;
         pin_young(world, c, &relief);
+        // The witness learns the relief from the trusted roster it ran on, never from the cards
+        // it wrote: the young stand at their parent's base race, the children with their young.
+        if let Err(e) = crate::creatures::record_in(
+            state,
+            world,
+            crate::creatures::relief_rows(&roster, &relief),
+        ) {
+            eprintln!(
+                "mnemorph: relief's rows could not be written ({e}): its young stand as strangers \
+                 until `mnemorphd roster adopt`"
+            );
+        }
     }
     Ok(relief)
 }

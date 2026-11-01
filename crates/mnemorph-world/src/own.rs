@@ -254,7 +254,13 @@ fn compiled(roster: &Roster, path: &str) -> Option<Ownership> {
     let root_file = !path.contains('/') && path != ".mnemorph";
     if root_file || path.starts_with("tools/") {
         let claim = if root_file { path } else { "tools/" };
-        return found(living(roster, WORKSPACE), Rule::Workspace, claim);
+        // A stranger bearing the workspace's name keeps no root file: the name is a card's word.
+        let owner = if roster.stranger(WORKSPACE) {
+            Owner::Unowned
+        } else {
+            living(roster, WORKSPACE)
+        };
+        return found(owner, Rule::Workspace, claim);
     }
     None
 }

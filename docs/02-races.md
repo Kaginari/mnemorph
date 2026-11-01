@@ -279,6 +279,17 @@ or another body's scratch is never routed: a body writes only its own plan and i
 The human's soil and the harness's are named as theirs, with no way to write them.
 The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
 
+**A race, a rank, a post and a soil are the witness's, never the card's.** A creature's card says
+its race (rank included, `oni`), whom it reports to and its ground, and a Kijin's post or a Dark
+Elf's speciality is read from its name — but the card lives in the world, where a body's commit or
+a cloned repository writes it. So every privilege of this chapter reads the card held to its row
+in the creatures' witness under the human's state directory: a card that differs runs at the
+lower of the two and loses its rank, and a card with no row is a stranger, a Slime of its own
+seat alone, until the human adopts it (`mnemorphd roster adopt`). The harness writes the rows of
+the births it makes — relief's young, at their parent's base race — and holds a card an
+evolution swap rewrites to its row; a new name a swap brings, a rise, a fall and an adoption are
+the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
+
 ---
 
 ### 👑 Rimuru — the throne
@@ -1189,7 +1200,9 @@ stateDiagram-v2
 proposes the ascension and you confirm it with one keystroke — ascension changes how much
 friction a creature meets, so it is yours to grant. An ascended creature that slips enters
 probation; if it does not recover, it falls back to its base race. Nothing is erased: the record
-and the doc carry over both ways.
+and the doc carry over both ways. A rise or a fall is written where the race is trusted — the
+creatures' witness, by `mnemorphd roster set-race <creature> <race>` at the terminal — and the
+card is set to match; a card that only says the new race runs at the lower one.
 
 **Technical detail.** From M11, bars are evaluated after every report fold over the value
 ledger's 28-day window; the bars themselves are compiled (`rises`, `falls`, `recovers`).
@@ -1360,7 +1373,11 @@ Rules that hold for every ascension:
 - **How the gate admits an act under an envelope** (`mnemorph_config::EnvelopeGate`, step 4 of
   [the act runner](#-kijin--the-hands-that-reach-outside)). It reads, in this order, and stops at
   the first that fails — the act then goes to the human, the card saying why:
-  1. the body is an Oni, by the race the roster gives it;
+  1. the body is an Oni, by the race the trusted roster gives it: the creatures' witness holds it
+     an Oni and its card says the same everywhere, so its post is the witness's too. A stranger —
+     a cloned world's `Race: oni` card named `kijin-forge`, with no row — runs as a Slime of its
+     own seat and has no outward act at all; a card that differs from its row on any field loses
+     its rank, and no envelope applies;
   2. the act is typed, not an undo, and classed `outward`, never `destructive`;
   3. the envelopes, read afresh from the human's global file alone, so one revoked a moment ago
      is seen revoked. A file in the world — the local one too — is never read for them, since

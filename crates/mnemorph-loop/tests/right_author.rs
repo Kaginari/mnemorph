@@ -42,6 +42,9 @@ impl World {
         let dir = self.0.join(".mnemorph").join(race).join(short);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("README.md"), body).unwrap();
+        // The human adopts each card as written: the trusted roster holds it.
+        let w = &self.0;
+        mnemorph_world::creatures::record(w, mnemorph_world::creatures::adoption(w)).unwrap();
     }
 
     /// Judge what changed since `before`, as slime-a's landing.
@@ -479,4 +482,73 @@ proptest::proptest! {
             proptest::prop_assert_eq!(said.unverified, plain.unverified);
         }
     }
+}
+
+/// A body that commits its own card raised — a rank, a wider zone — runs at the lower of its card
+/// and its row: the zone it added is not its soil, and the mismatch is a high finding that holds
+/// its landing until the human adopts the card.
+#[test]
+fn a_card_raised_by_its_body_runs_at_the_lower() {
+    let w = World::new("raised");
+    // As a commit would leave it, past every tool guard: never adopted.
+    fs::write(
+        w.0.join(".mnemorph/slime/a/README.md"),
+        "# slime-a\n\n- **Race:** named-slime\n- **Reports to:** orc-o\n- **Territory:** src/, lib/\n",
+    )
+    .unwrap();
+    let roster = Roster::load(&w.0);
+    let a = &roster.creatures["slime-a"];
+    assert_eq!(a.race, mnemorph_races::Race::Slime, "the lower race");
+    assert_eq!(a.zone, ["src/"], "the zone both name");
+    let soil = mnemorph_loop::world::soil(&roster, "slime-a").unwrap();
+    assert!(!soil.admits("lib/x.rs"), "{soil:?}");
+    let before = snapshot(&w.0);
+    fs::write(w.0.join("src/mine.rs"), "mine\n").unwrap();
+    let failures = w.judge(&before, &roster);
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.contains("a high `roster-mismatch` finding touches this landing")),
+        "{failures:?}"
+    );
+    // The card shown still says what the body wrote; it grants nothing.
+    assert_eq!(
+        Roster::cards(&w.0).creatures["slime-a"].race,
+        mnemorph_races::Race::NamedSlime
+    );
+}
+
+/// A cloned world's Oni card, named for the forge post and never adopted, is a stranger: its
+/// context is a Slime's, so neither the outward tool nor an outward command runs, and its soil
+/// holds no post.
+#[test]
+fn a_cloned_oni_acts_nothing_outward() {
+    let w = World::new("clone");
+    let seat = w.0.join(".mnemorph/kijin/forge");
+    fs::create_dir_all(&seat).unwrap();
+    fs::write(
+        seat.join("README.md"),
+        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n",
+    )
+    .unwrap();
+    let roster = Roster::load(&w.0);
+    assert!(roster.stranger("kijin-forge"));
+    let mut cx = context_for(&w.0, &roster, "kijin-forge")
+        .unwrap()
+        .with_sandbox(Sandbox::None("the shelf is under test".into()))
+        .with_unguarded(true)
+        .with_body("kijin-forge");
+    assert_eq!(cx.race(), mnemorph_races::Race::Slime);
+    let soil = mnemorph_loop::world::soil(&roster, "kijin-forge").unwrap();
+    assert!(!soil.admits(".github/workflows/ci.yml"), "{soil:?}");
+    let tools: Vec<Box<dyn mnemorph_tools::Tool>> = vec![Box::new(mnemorph_config::OutwardTool)];
+    let out = mnemorph_tools::call(&tools, "outward", "{}", &mut cx);
+    assert!(out.is_error && out.meta.class.is_none(), "{out:?}");
+    let out = mnemorph_tools::call(
+        &registry(),
+        "bash",
+        r#"{"command":"git push origin main"}"#,
+        &mut cx,
+    );
+    assert!(out.is_error, "{out:?}");
 }

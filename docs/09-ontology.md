@@ -177,6 +177,13 @@ by every rule but a domain — an Orc's soil is its seat and scratch. Its exclus
 asking `own` of every claim inside the body's, never by restating the rules, and a test holds
 the two to the same answer on every tracked file.
 
+$\mathrm{own}$ reads the trusted roster, never the cards alone: each card held to its row in the
+creatures' witness under the state directory ([the roster's trust](05-architecture.md#the-rosters-trust)).
+A card that differs from its row owns only the ground both name; a stranger — a card no row
+holds — owns its seat and scratch and nothing else, the workspace's root files and `tools/` not
+even under the workspace's name. So a body that commits a wider `Territory` to its own card, or a
+cloned repository's cards, own nothing they were not given.
+
 `mnemorphd onto owner <path>...` prints, for each path, its owner, the rule that gave it and the
 claim that matched — `crates/mnemorph-wire/src/lib.rs  slime-wire  zone crates/mnemorph-wire/`.
 A path is the human's: relative to where they stand, or absolute; one outside the world is
@@ -473,6 +480,7 @@ creature, so what a stranger wrote there holds no one's landing. Both still fail
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold — reported to Rimuru, never blocking the gate (above) |
 | `facts-unavailable` | high | the trusted facts do not walk whole, are gone once anchored, or have no home: no fact stands |
 | `untrusted-fact` | high | the facts' in-world copy reads a fact's status otherwise than the trusted journal, or holds one it does not — ignored, one per fact |
+| `roster-mismatch` | high | a creature's card says a field — `Race`, `Reports to`, a ground field, `Retired` — otherwise than its row in the creatures' witness: it runs at the lower of the two, one finding per field, blocking the creature's own landings until the human adopts the card or puts it back |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` or `- **Retired:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |

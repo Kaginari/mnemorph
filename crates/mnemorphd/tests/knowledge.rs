@@ -121,6 +121,11 @@ impl Home {
             std::fs::create_dir_all(&at).unwrap();
             std::fs::write(at.join("README.md"), doc).unwrap();
         }
+        // The human adopts the cards: each path's owner is the witness's.
+        let state = self.state();
+        let world = self.world.canonicalize().unwrap();
+        let creatures = mnemorph_server::world::creatures::adoption_in(Some(&state), &world);
+        mnemorph_server::world::creatures::record_in(Some(&state), &world, creatures).unwrap();
     }
 
     /// One fact of each status, and the gate's verdicts: a failure and a pass on `src/a.rs`.

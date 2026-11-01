@@ -62,6 +62,58 @@ const MIND: Record<MindStanding, { tone: Tone; glyph: string; words: string }> =
   absent: { tone: 'muted', glyph: '·', words: 'named, but not in the world' },
 };
 
+/** How a card stands against the creatures' witness: what it runs as, and why. */
+function Trust({ b }: { b: BoardBody }) {
+  if (b.standing === 'throne') {
+    return (
+      <p>
+        <Mark tone="holo" glyph="♛">
+          the throne
+        </Mark>{' '}
+        <span className="panel-note">implicit: the session's own seat</span>
+      </p>
+    );
+  }
+  if (b.standing === 'trusted') {
+    return (
+      <p>
+        <Mark tone="holo" glyph="✓">
+          trusted
+        </Mark>{' '}
+        <span className="panel-note">its card says what the witness holds</span>
+      </p>
+    );
+  }
+  const adopt = (
+    <code className="mono">
+      mnemorphd roster adopt <Safe text={b.name} />
+    </code>
+  );
+  if (b.standing === 'mismatched') {
+    return (
+      <p>
+        <Mark tone="alarm" glyph="⚠">
+          mismatched
+        </Mark>{' '}
+        <span className="panel-note">
+          runs as <Safe text={b.runs_as} />: its card differs from its row on{' '}
+          <Safe text={b.differs.join(', ')} />, so it runs at the lower of the two — {adopt}
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p>
+      <Mark tone="gold" glyph="○">
+        stranger
+      </Mark>{' '}
+      <span className="panel-note">
+        no row holds its card: it runs as a slime, its own seat alone — {adopt}
+      </span>
+    </p>
+  );
+}
+
 const ORDER: Record<OrderState, { tone: Tone; glyph: string }> = {
   held: { tone: 'gold', glyph: '◇' },
   claimed: { tone: 'holo', glyph: '◆' },
@@ -340,6 +392,7 @@ function BodyCard({
               <Safe text={b.live.why} />
             </span>
           </p>
+          <Trust b={b} />
           <p>
             reports to{' '}
             {b.parent ? <Safe text={b.parent} /> : <span className="panel-note">no one named</span>}
@@ -482,6 +535,7 @@ function ColonyTab({ p }: { p: BodiesPage }) {
         </section>
       )}
       <Source what="roster" p={p.roster} />
+      <Source what="standing" p={p.witness} />
       <Source what="Minds" p={p.minds} />
       <Source what="live states" p={p.live} />
       <Source what="acts" p={p.acts} />

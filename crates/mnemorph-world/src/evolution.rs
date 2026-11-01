@@ -418,14 +418,31 @@ fn destinations(
     Ok(())
 }
 
-/// Swaps `plan` into `world` and writes its `swap` row to the world's evolution ledger.
+/// Swaps `plan` into `world`, writes its `swap` row to the world's evolution ledger, and the rows
+/// of the cards it wrote to the creatures' witness ([`crate::creatures::evolution_rows`]).
 ///
 /// # Errors
 ///
 /// What [`swap_at`] refuses on, or there is no home to keep the ledger under.
 pub fn swap(world: &Path, plan: &Plan) -> Result<Swap, String> {
     let ledger = journal(world).ok_or("no home to keep the evolution ledger under")?;
-    swap_at(world, &ledger, plan)
+    let before = crate::Roster::cards(world);
+    let rows = crate::creatures::witnessed(world);
+    let swap = swap_at(world, &ledger, plan)?;
+    // The cards the human's yes swapped in are witnessed, each held to its row: never raised,
+    // re-parented or widened; a new name stays a stranger.
+    let paths: Vec<String> = swap.files.iter().map(|f| f.path.clone()).collect();
+    let new =
+        crate::creatures::evolution_rows(&before, &crate::Roster::cards(world), &rows, &paths);
+    if !new.is_empty()
+        && let Err(e) = crate::creatures::record(world, new)
+    {
+        eprintln!(
+            "mnemorph: the swap's cards could not be witnessed ({e}): they run as their rows \
+             held until `mnemorphd roster adopt`"
+        );
+    }
+    Ok(swap)
 }
 
 /// [`swap`], on the ledger given. The plan is refused when its id is taken or malformed, a path

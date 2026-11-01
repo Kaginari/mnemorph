@@ -16,7 +16,7 @@ fn creature(name: &str) -> Owner {
 
 #[test]
 fn this_repositorys_world_reads_whole() {
-    let roster = Roster::load(&repo());
+    let roster = Roster::cards(&repo());
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     assert!(roster.creatures.len() >= 20, "{}", roster.creatures.len());
     assert_eq!(roster.loops(), [] as [std::string::String; 0]);
@@ -30,7 +30,7 @@ fn this_repositorys_world_reads_whole() {
 
 #[test]
 fn every_path_of_this_world_has_the_owner_its_docs_say() {
-    let roster = Roster::load(&repo());
+    let roster = Roster::cards(&repo());
     let cases = [
         ("crates/mnemorph-wire/src/lib.rs", creature("slime-wire")),
         ("crates/mnemorph-loop/src/run.rs", creature("slime-loop")),
@@ -108,7 +108,7 @@ fn a_creature_claiming_the_records_owns_none_of_the_seats_the_queue_or_scratch()
     w.doc("orc", "boss", "# orc-boss\n\n- **Race:** orc\n- **Reports to:** rimuru\n- **Domain:** src/\n")
         .doc("slime", "greedy", "# slime-greedy\n\n- **Race:** slime\n- **Reports to:** orc-boss\n- **Territory:** .mnemorph/\n")
         .doc("slime", "small", "# slime-small\n\n- **Race:** slime\n- **Reports to:** orc-boss\n- **Territory:** src/small/\n");
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     assert_eq!(
         own(&roster, ".mnemorph/slime/small/README.md"),
@@ -148,7 +148,7 @@ fn retired_ties_and_loops() {
         "old",
         "# slime-old\n\n- **Race:** slime\n- **Territory:** lib/\n- **Retired:** yes\n",
     );
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert_eq!(
         own(&roster, "src/x.rs"),
         creature("slime-a"),
@@ -173,7 +173,7 @@ fn a_doc_that_does_not_read_is_reported() {
     )
     .doc("slime", "y", "no heading\n")
     .doc("slime", "z", "# slime-z\n\n- **Race:** wizard\n");
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert!(roster.creatures.is_empty());
     let problems = roster.problems.join("\n");
     assert!(
@@ -188,7 +188,7 @@ fn a_doc_that_does_not_read_is_reported() {
         "p",
         "# slime-p\n\n- **Race:** slime\n- **Territory:** every file at the root\n",
     );
-    let problems = Roster::load(&w.0).problems.join("\n");
+    let problems = Roster::cards(&w.0).problems.join("\n");
     assert!(
         problems.contains("`every` is not one"),
         "prose is never a claim: {problems}"
@@ -208,7 +208,7 @@ fn nested_posts_lanes_ascended_and_files() {
         .doc("high-orc", "big", "# high-orc-big\n\n- **Race:** high-orc\n- **Domain:** docs/\n")
         .doc("dark-elf", "shade", "# dark-elf-shade\n\n- **Race:** dark-elf\n")
         .doc("dark-elf", "abyss", "# dark-elf-abyss\n\n- **Race:** dark-elf\n");
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     assert_eq!(own(&roster, "src/a.rs"), creature("slime-outer"));
     assert_eq!(
@@ -263,7 +263,7 @@ fn a_claim_outside_the_world_is_no_claim() {
             "x",
             &format!("# slime-x\n\n- **Race:** slime\n- **Territory:** {bad}\n"),
         );
-        let roster = Roster::load(&w.0);
+        let roster = Roster::cards(&w.0);
         assert!(roster.creatures.is_empty(), "`{bad}` was taken as a claim");
         assert!(
             roster.problems[0].contains("is not one"),
@@ -278,7 +278,7 @@ fn a_claim_outside_the_world_is_no_claim() {
         "# slime-fr\n\n- **Race:** slime\n- **Territory:** docs/français/\n",
     );
     assert_eq!(
-        own(&Roster::load(&w.0), "docs/français/a.md"),
+        own(&Roster::cards(&w.0), "docs/français/a.md"),
         creature("slime-fr")
     );
 }
@@ -292,11 +292,11 @@ fn a_doc_that_cannot_be_read_is_reported_and_fingerprinted() {
         "ok",
         "# slime-ok\n\n- **Race:** slime\n- **Territory:** src/\n",
     );
-    let before = Roster::load(&w.0).fingerprint;
+    let before = Roster::cards(&w.0).fingerprint;
     let doc = w.0.join(".mnemorph/slime/bad/README.md");
     fs::create_dir_all(doc.parent().unwrap()).unwrap();
     fs::write(&doc, [0xff, 0xfe, 0x00]).unwrap();
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert_ne!(roster.fingerprint, before);
     assert!(
         roster
@@ -307,7 +307,7 @@ fn a_doc_that_cannot_be_read_is_reported_and_fingerprinted() {
         roster.problems
     );
     fs::write(&doc, [0xff, 0xfe, 0x01]).unwrap();
-    assert_ne!(Roster::load(&w.0).fingerprint, roster.fingerprint);
+    assert_ne!(Roster::cards(&w.0).fingerprint, roster.fingerprint);
 }
 
 /// The soil handed to a creature claiming the records gives away what the earlier rules give
@@ -340,7 +340,7 @@ fn a_greedy_creatures_soil_leaves_the_seats_the_queue_and_scratch() {
         "workspace",
         "# slime-workspace\n\n- **Race:** slime\n- **Territory:** tools/\n",
     );
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     let greedy = soil(&roster, "slime-greedy").unwrap();
     for p in [
         ".mnemorph/shared/queue.jsonl",
@@ -413,7 +413,7 @@ fn nested_claims_every_soil_agrees_with_own() {
         "old",
         "# slime-old\n\n- **Race:** slime\n- **Territory:** src/b/a/old/\n- **Retired:** yes\n",
     );
-    let roster = Roster::load(&w.0);
+    let roster = Roster::cards(&w.0);
     assert!(roster.problems.is_empty(), "{:?}", roster.problems);
     let paths = [
         "src/y.rs",

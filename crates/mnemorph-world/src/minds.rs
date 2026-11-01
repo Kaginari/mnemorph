@@ -557,7 +557,7 @@ mod tests {
             .unwrap()
             .row;
         super::witness::record_at(&at, row).unwrap();
-        let roster = crate::Roster::load(&w);
+        let roster = crate::Roster::cards(&w);
         assert!(load(&w).iter().all(|m| m.name != "poisoned"));
         assert!(
             wearable(&w, &roster, "rimuru")
@@ -605,7 +605,7 @@ mod tests {
         forget(&w);
         let w = world("wear");
         witness_all(&w, Act::Adopt);
-        let roster = crate::Roster::load(&w);
+        let roster = crate::Roster::cards(&w);
         let names = |body: &str| -> Vec<String> {
             wearable(&w, &roster, body)
                 .into_iter()
@@ -624,7 +624,10 @@ mod tests {
         );
         let bare = std::env::temp_dir().join(format!("mnemorph-minds-none-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&bare);
-        assert_eq!(manifest(&bare, &crate::Roster::load(&bare), "rimuru"), None);
+        assert_eq!(
+            manifest(&bare, &crate::Roster::cards(&bare), "rimuru"),
+            None
+        );
         forget(&w);
         let _ = std::fs::remove_dir_all(&bare);
     }

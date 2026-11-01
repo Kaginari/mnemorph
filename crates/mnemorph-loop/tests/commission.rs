@@ -62,6 +62,9 @@ impl World {
         let dir = self.0.join(".mnemorph").join(race).join(short);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("README.md"), body).unwrap();
+        // The human adopts each card as written: the trusted roster holds it.
+        let w = &self.0;
+        mnemorph_world::creatures::record(w, mnemorph_world::creatures::adoption(w)).unwrap();
     }
 
     /// Rimuru's run, able to commission, every body riding `model`.

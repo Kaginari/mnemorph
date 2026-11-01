@@ -64,7 +64,8 @@ pub struct Heal {
 ///
 /// A doc that cannot be written.
 pub fn heal(world: &Path, apply: bool) -> std::io::Result<Heal> {
-    let roster = Roster::load(world);
+    // The cards as they stand: a heal repairs their text, and grants nothing.
+    let roster = Roster::cards(world);
     let mut found = Heal {
         fixes: Vec::new(),
         left: roster.problems.clone(),

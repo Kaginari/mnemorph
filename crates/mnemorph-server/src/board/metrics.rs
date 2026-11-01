@@ -429,7 +429,7 @@ fn scores(worlds: &[(BoardWorld, PathBuf)]) -> Sourced<Vec<Score>> {
                 let snap = snapshot::take(path);
                 let roster = snap
                     .as_ref()
-                    .map(|s| mnemorph_loop::world::Roster::load(s.path()))
+                    .map(|s| mnemorph_loop::world::Roster::copied(s.path(), path))
                     .unwrap_or_default();
                 for (speciality, f) in &folded {
                     let form = roster

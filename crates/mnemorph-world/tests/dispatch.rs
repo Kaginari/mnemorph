@@ -9,7 +9,7 @@ use mnemorph_wire::Hole;
 use mnemorph_world::{Ask, Hop, Roster, dispatch};
 
 fn repo() -> Roster {
-    Roster::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+    Roster::cards(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
 }
 
 fn ask(plan: &[String]) -> Ask<'_> {
@@ -156,7 +156,7 @@ fn verify_first_lanes_retired_and_skipped_ranks() {
         .doc("slime", "s", "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n")
         .doc("slime", "b", "# slime-b\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Verify:**\n- **Territory:** lib/\n")
         .doc("slime", "orphan", "# slime-orphan\n\n- **Race:** slime\n- **Reports to:** orc-gone\n- **Verify:** `true`\n- **Territory:** etc/\n");
-    let r = Roster::load(&w.0);
+    let r = Roster::cards(&w.0);
     assert!(r.problems.is_empty(), "{:?}", r.problems);
     let none: [String; 0] = [];
     let e = dispatch(&r, "orc-o", "slime-s", &ask(&none)).unwrap_err();

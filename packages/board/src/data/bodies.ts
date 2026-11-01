@@ -56,6 +56,9 @@ function rows<T>(v: unknown, row: (r: unknown) => T | undefined): { ok: T[]; bad
 }
 
 export const BODY_STATES: readonly BodyState[] = ['working', 'idle', 'cut', 'never', 'retired'];
+
+/** How a card stands against the creatures' witness. */
+export const STANDINGS = ['throne', 'trusted', 'mismatched', 'stranger'] as const;
 export const MIND_STANDINGS: readonly MindStanding[] = [
   'adopted',
   'unadopted',
@@ -136,6 +139,7 @@ function body(v: unknown): BoardBody | undefined {
     return undefined;
   }
   if (!strOrNull(o.heir_of) || !str(o.doc)) return undefined;
+  if (!oneOf(STANDINGS)(o.standing) || !str(o.runs_as) || !strs(o.differs)) return undefined;
   const live = obj(o.live);
   if (!live || !oneOf(BODY_STATES)(live.state) || !str(live.why)) return undefined;
   if (!strOrNull(live.run) || !strOrNull(live.at)) return undefined;
@@ -161,6 +165,9 @@ function body(v: unknown): BoardBody | undefined {
     minds: minds.ok,
     live: { state: live.state, why: live.why, run: live.run, at: live.at },
     acts: acts.ok,
+    standing: o.standing,
+    runs_as: o.runs_as,
+    differs: o.differs,
   };
 }
 
@@ -230,9 +237,9 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
   if (!o || !strs(o.problems) || !strs(o.loops)) return undefined;
   const throne = obj(o.throne);
   if (!throne || !bool(throne.live) || !str(throne.why)) return undefined;
-  const p = ['roster', 'minds', 'live', 'acts', 'law'].map((k) => provenance(o[k]));
-  const [roster, minds, live, acts, law] = p;
-  if (!roster || !minds || !live || !acts || !law) return undefined;
+  const p = ['roster', 'witness', 'minds', 'live', 'acts', 'law'].map((k) => provenance(o[k]));
+  const [roster, witness, minds, live, acts, law] = p;
+  if (!roster || !witness || !minds || !live || !acts || !law) return undefined;
   const bodies = rows(o.bodies, body);
   const races = rows(o.races, race);
   return {
@@ -242,6 +249,7 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
     throne: { live: throne.live, why: throne.why },
     races: races.ok,
     roster,
+    witness,
     minds,
     live,
     acts,

@@ -5,7 +5,40 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mnemorph_world::Roster;
-use mnemorph_world::verify::code;
+use mnemorph_world::creatures::{self, Act, HUMAN};
+
+/// Each test world's creatures' witness, beside it: tests never write the human's state directory.
+fn state_of(w: &Path) -> PathBuf {
+    let mut s = w.as_os_str().to_owned();
+    s.push("-state");
+    PathBuf::from(s)
+}
+
+/// The Orc's code on `w`, every card adopted first as the human would.
+fn code(w: &Path, orc: &str, slime: &str, command: &str) -> Result<String, String> {
+    let state = state_of(w);
+    let held = creatures::witnessed_in(Some(&state), w).unwrap().unwrap();
+    let rows = Roster::cards(w)
+        .creatures
+        .values()
+        .filter(|c| c.name != "rimuru" && !held.contains_key(&c.name))
+        .map(|c| creatures::row_of(Act::Adopt, c, HUMAN))
+        .collect();
+    creatures::record_in(Some(&state), w, rows).unwrap();
+    mnemorph_world::verify::code_in(Some(&state), w, orc, slime, command)
+}
+
+/// A stranger is no Orc, whatever its card says: it codes no line until the human adopts it.
+#[test]
+fn a_stranger_orc_codes_nothing() {
+    let w = world("stranger");
+    let e = mnemorph_world::verify::code_in(Some(&state_of(&w)), &w, "orc-o", "slime-s", "true")
+        .unwrap_err();
+    assert!(e.contains("no living Orc"), "{e}");
+    assert!(code(&w, "orc-o", "slime-s", "true").is_ok());
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state_of(&w));
+}
 
 fn doc(w: &Path, race: &str, short: &str, body: &str) {
     let dir = w.join(".mnemorph").join(race).join(short);
@@ -16,6 +49,7 @@ fn doc(w: &Path, race: &str, short: &str, body: &str) {
 fn world(name: &str) -> PathBuf {
     let w = std::env::temp_dir().join(format!("mnemorph-verify-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state_of(&w));
     doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
     doc(
         &w,
@@ -69,7 +103,7 @@ fn an_orc_codes_its_own_slimes_verify_line() {
         t,
         "# slime-t\r\n\r\n- **Race:** slime\r\n- **Reports to:** orc-o\r\n- **Verify:** `old`\r\n- **Territory:** src/b/\r\n- **Verify:** `true`\r\n"
     );
-    let roster = Roster::load(&w);
+    let roster = Roster::cards(&w);
     assert_eq!(
         roster.creatures["slime-s"].verify,
         ["python3 -m unittest -q"]
@@ -126,7 +160,7 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
     assert_eq!(suggest(&w).as_deref(), Some("pnpm test"));
     fs::write(w.join("Cargo.toml"), "[workspace]\n").unwrap();
     assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
-    let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
+    let said = missing_session_verify(&w, &Roster::cards(&w)).unwrap();
     assert!(said.contains("`cargo test --workspace`"), "{said}");
     // Creatures agreeing on a test command change nothing: a suggested line is never a model's.
     for by in ["slime-a", "slime-b"] {
@@ -138,7 +172,7 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
     assert!(said.contains("`gate.verify_secs`"), "{said}");
     let python = world("suggest-python");
     fs::write(python.join("pyproject.toml"), "[project]\nname = \"p\"\n").unwrap();
-    let said = missing_session_verify(&python, &Roster::load(&python)).unwrap();
+    let said = missing_session_verify(&python, &Roster::cards(&python)).unwrap();
     assert!(!said.contains("verify_secs"), "{said}");
     // npm's placeholder test script suggests nothing.
     let bare = world("suggest-npm");
@@ -155,7 +189,7 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
         "rimuru",
         "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
     );
-    assert_eq!(missing_session_verify(&w, &Roster::load(&w)), None);
+    assert_eq!(missing_session_verify(&w, &Roster::cards(&w)), None);
 }
 
 /// A Cargo workspace is suggested whole — every member's tests — and nothing from its manifest
@@ -171,7 +205,7 @@ fn a_cargo_workspace_is_suggested_whole_and_never_by_its_names() {
     )
     .unwrap();
     assert_eq!(suggest(&w).as_deref(), Some("cargo test --workspace"));
-    let said = missing_session_verify(&w, &Roster::load(&w)).unwrap();
+    let said = missing_session_verify(&w, &Roster::cards(&w)).unwrap();
     assert!(!said.contains("rm -rf"), "{said}");
     assert!(said.contains("`gate.verify_secs`"), "{said}");
 }

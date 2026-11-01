@@ -5,6 +5,8 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod roster;
+
 const HELP: &str = "mnemorphd — the Mnemorph core
 
 Usage: mnemorphd [--world <dir>] [--resume <run|last>]
@@ -44,6 +46,10 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
        mnemorphd verify pin <creature> [--yes] [--world <dir>]
+       mnemorphd roster list [--world <dir>]
+       mnemorphd roster adopt [<creature>...] [--yes] [--world <dir>]
+       mnemorphd roster set-race <creature> <race> [--yes] [--world <dir>]
+       mnemorphd roster retire <creature> [--yes] [--world <dir>]
        mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open] [--background]
        mnemorphd board add|forget <dir>
        mnemorphd board prune [--dry-run]
@@ -176,6 +182,19 @@ the card itself); it is refused inside a body's command as the question is. An O
 pins the line it codes for its own Slime through the harness, and relief pins each young to its
 parent's pinned lines. A body never runs it.
 
+`roster` is the human's door to the creatures' witness: who each creature is — its race and
+rank, whom it reports to, its post or speciality, its ground — kept under the human's state
+directory, never in the world. A card lives in the world, which a body's commit writes and a
+cloned repository brings from a stranger, so every privilege reads the witness: a card that
+differs from its row runs at the lower of the two, with a `roster-mismatch` finding, and a card
+with no row is a stranger, its own seat alone. `list` shows each card, its standing and its row.
+`adopt` shows every stranger and every card that differs from its row — or the creatures named —
+and asks once for `y` at the terminal (`/dev/tty`; piped input is refused), then records each card
+as it stands. `set-race <creature> <race>` raises or lowers a race, and sets the card's `Race`
+line to match; `retire <creature>` retires it. `--yes` writes without the question, for a script
+the human runs; every write is refused inside a body's command and under a harness process. The
+harness writes the rest: relief, and an evolution swap the human said yes to.
+
 `board` serves the board — the web cockpit over every world on this machine — on loopback
 (`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
 for another machine, forward the port over SSH). It prints `http://127.0.0.1:<port>/#k=<key>`:
@@ -230,6 +249,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "evolution" => evolution,
         "mind" => mind,
         "verify" => verify,
+        "roster" => roster::roster,
         "board" => board,
         _ => return None,
     })
@@ -740,12 +760,12 @@ fn onto(args: &[String]) -> ExitCode {
     let world = canonical(world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w)));
     let cwd = canonical(cwd);
     let roster = Roster::load(&world);
-    for problem in &roster.problems {
-        let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
-    }
+    say_trust(&roster);
     if command == "check" {
-        return check(&world, &roster, dimension);
+        // The shape is the cards'; what differs from the witness is a finding of its own.
+        return check(&world, &Roster::shown(&world, &world), dimension);
     }
+    let cards = Roster::cards(&world);
     let mut out = std::io::stdout().lock();
     for path in &paths {
         // A path is the human's: relative to where they stand, read against the world.
@@ -779,9 +799,55 @@ fn onto(args: &[String]) -> ExitCode {
             || e.rule.words().to_owned(),
             |c| format!("{} {c}", e.rule.words()),
         );
-        let _ = writeln!(out, "{path}\t{owner}\t{why}");
+        let card = card_note(&cards, &rel, &e.owner);
+        let _ = writeln!(out, "{path}\t{owner}\t{why}{card}");
     }
     ExitCode::SUCCESS
+}
+
+/// What the cards alone would name as `rel`'s owner, when it is another creature than the trusted
+/// `owner`: said beside it, granting nothing.
+fn card_note(
+    cards: &mnemorph_server::world::Roster,
+    rel: &str,
+    owner: &mnemorph_server::world::Owner,
+) -> String {
+    match mnemorph_server::world::explain(cards, rel).owner {
+        mnemorph_server::world::Owner::Creature(c)
+            if *owner != mnemorph_server::world::Owner::Creature(c.clone()) =>
+        {
+            format!(
+                "\t(its card says {}: it owns nothing until `mnemorphd roster adopt`)",
+                mnemorph_server::challenge::safe(&c)
+            )
+        }
+        _ => String::new(),
+    }
+}
+
+/// On stderr: the docs that do not read, why the witness trusts no row, and the creatures no row
+/// holds.
+fn say_trust(roster: &mnemorph_server::world::Roster) {
+    for problem in &roster.problems {
+        let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
+    }
+    if let Some(why) = &roster.witness {
+        let _ = writeln!(std::io::stderr(), "mnemorphd: {why}");
+    }
+    let strangers: Vec<&str> = roster
+        .creatures
+        .keys()
+        .filter(|n| roster.stranger(n))
+        .map(String::as_str)
+        .collect();
+    if !strangers.is_empty() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: no row holds the card of {}: each is a stranger, its own seat alone, until \
+             `mnemorphd roster adopt`",
+            mnemorph_server::challenge::safe(&strangers.join(", "))
+        );
+    }
 }
 
 /// `onto check`: every finding about the world's shape, most severe first. It fails on a
@@ -2783,6 +2849,13 @@ fn shown_doc(text: &str) -> Vec<String> {
     out
 }
 
+/// Whether `path` is a creature's card: `.mnemorph/<race>/<seat>/README.md`.
+fn is_card(path: &str) -> bool {
+    let parts: Vec<&str> = path.trim_start_matches("./").split('/').collect();
+    matches!(parts.as_slice(), [".mnemorph", race, _, "README.md"]
+        if mnemorph_server::world::races::Race::from_name(race).is_some())
+}
+
 /// `evolution swap`: the plan shown, asked at the terminal, then swapped in and its row written.
 fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> ExitCode {
     let safe = mnemorph_server::challenge::safe;
@@ -2802,6 +2875,22 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
             },
         );
         println!("  {} — {what}", safe(&f.path));
+    }
+    // The yes is to bytes: what each card it writes would stand as is shown first.
+    let cards: Vec<(String, String)> = plan
+        .files
+        .iter()
+        .filter(|f| is_card(&f.path))
+        .filter_map(|f| {
+            let text = String::from_utf8_lossy(f.after.as_deref()?).into_owned();
+            Some((f.path.clone(), text))
+        })
+        .collect();
+    if !cards.is_empty() {
+        println!("the cards it writes, as the creatures' witness would hold them:");
+        for line in mnemorph_server::world::creatures::swap_standing(world, &cards) {
+            println!("  {}", safe(&line));
+        }
     }
     match at_terminal(&format!("swap {} in?", plan.id)) {
         Ok(true) => {}

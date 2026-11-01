@@ -63,4 +63,19 @@ live: LiveState,
 /**
  * Its latest acts: commissions and verdicts, newest first.
  */
-acts: Array<TimelineEntry>, };
+acts: Array<TimelineEntry>, 
+/**
+ * How its card stands against the creatures' witness under the state directory: `throne`,
+ * `trusted`, `mismatched` (it runs at the lower of its card and its row) or `stranger` (no
+ * row: its own seat alone).
+ */
+standing: string, 
+/**
+ * The race it runs as: its row's, held to its card ([`Roster::load`]); a stranger's is
+ * `slime`.
+ */
+runs_as: string, 
+/**
+ * The fields its card says otherwise than its row (`Race`, `Post`).
+ */
+differs: Array<string>, };

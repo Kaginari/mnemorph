@@ -26,7 +26,28 @@ pub const MAX_VERIFY: usize = 300;
 /// or holds a control character or a backtick, the seat or the doc is a link, or the doc cannot be
 /// read, parsed or written.
 pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<String, String> {
-    let roster = Roster::load(world);
+    code_in(
+        crate::queue::state_dir().as_deref(),
+        world,
+        orc,
+        slime,
+        command,
+    )
+}
+
+/// [`code`], the trusted roster read against the creatures' witness under `state`.
+///
+/// # Errors
+///
+/// As [`code`].
+pub fn code_in(
+    state: Option<&Path>,
+    world: &Path,
+    orc: &str,
+    slime: &str,
+    command: &str,
+) -> Result<String, String> {
+    let roster = Roster::load_in(state, world);
     let o = roster
         .creatures
         .get(orc)

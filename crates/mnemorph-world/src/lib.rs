@@ -11,6 +11,7 @@ pub mod answers;
 mod beneath;
 pub mod chains;
 pub mod challenge;
+pub mod creatures;
 pub mod dimension;
 pub mod dispatch;
 pub mod doc;

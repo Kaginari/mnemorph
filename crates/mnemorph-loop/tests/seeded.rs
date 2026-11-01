@@ -93,6 +93,9 @@ impl World {
         let dir = self.world().join(".mnemorph").join(race).join(seat);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("README.md"), text).unwrap();
+        // The human adopts each card as written: the trusted roster holds it.
+        let w = self.world();
+        mnemorph_world::creatures::record(&w, mnemorph_world::creatures::adoption(&w)).unwrap();
     }
 
     fn put(&self, path: &str, bytes: &[u8]) {

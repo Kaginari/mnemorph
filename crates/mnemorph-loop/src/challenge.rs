@@ -650,7 +650,7 @@ mod tests {
     fn record(w: &Path, by: &str, written: &[&str]) -> Record {
         let written: Vec<String> = written.iter().map(|s| (*s).to_owned()).collect();
         Record {
-            landing: route(&Roster::load(w), "l:1", &written),
+            landing: route(&Roster::cards(w), "l:1", &written),
             opening: Opening {
                 tree: "ab".repeat(32),
                 by: by.to_owned(),
@@ -687,7 +687,7 @@ mod tests {
                 "crates/mnemorph-ledger/src/lib.rs",
             ],
         );
-        let p = plan(&Roster::load(&w), &r, 3);
+        let p = plan(&Roster::cards(&w), &r, 3);
         let seated: Vec<Speciality> = p.commission.iter().map(|(s, _)| *s).collect();
         assert_eq!(
             seated,
@@ -707,7 +707,7 @@ mod tests {
                 waited: 0,
             },
         ));
-        let p = plan(&Roster::load(&w), &r, 3);
+        let p = plan(&Roster::cards(&w), &r, 3);
         assert_eq!(
             p.commission.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
             [Speciality::Supply, Speciality::Agent, Speciality::Law]
@@ -724,14 +724,14 @@ mod tests {
             "dark-elf-harness",
             &["crates/mnemorph-tools/src/files.rs"],
         );
-        let p = plan(&Roster::load(&w), &r, 3);
+        let p = plan(&Roster::cards(&w), &r, 3);
         assert!(p.commission.is_empty(), "{p:?}");
         assert_eq!(p.unstaffed, [Speciality::Harness]);
         // Nor a body above the author.
         let mut r = record(&w, "slime-s", &["crates/mnemorph-tools/src/files.rs"]);
         r.opening.chain = vec!["dark-elf-harness".into()];
         assert_eq!(
-            plan(&Roster::load(&w), &r, 3).unstaffed,
+            plan(&Roster::cards(&w), &r, 3).unstaffed,
             [Speciality::Harness]
         );
         let _ = std::fs::remove_dir_all(&w);
@@ -835,10 +835,10 @@ mod tests {
             waited,
         };
         r.staff = vec![(Speciality::Harness, sent(RESEND_AFTER - 1))];
-        assert_eq!(plan(&Roster::load(&w), &r, 3).commission, []);
+        assert_eq!(plan(&Roster::cards(&w), &r, 3).commission, []);
         r.staff = vec![(Speciality::Harness, sent(RESEND_AFTER))];
         assert_eq!(
-            plan(&Roster::load(&w), &r, 3).commission,
+            plan(&Roster::cards(&w), &r, 3).commission,
             [(Speciality::Harness, "dark-elf-harness".to_owned())]
         );
         let _ = std::fs::remove_dir_all(&w);
@@ -888,7 +888,7 @@ mod tests {
                 "dark-elf",
             ],
         );
-        let roster = Roster::load(&w);
+        let roster = Roster::cards(&w);
         let f = kept("dark-elf-harness", "high");
         let file = ["crates/mnemorph-tools/src/files.rs"];
         let mut r = record(&w, "orc-o", &file);
@@ -908,7 +908,7 @@ mod tests {
         );
         let w2 = world("verifier-alone", &["dark-elf-harness"]);
         let r = record(&w2, "orc-o", &file);
-        assert_eq!(verifier(&Roster::load(&w2), &r, &f), None);
+        assert_eq!(verifier(&Roster::cards(&w2), &r, &f), None);
         let _ = std::fs::remove_dir_all(&w);
         let _ = std::fs::remove_dir_all(&w2);
     }
@@ -918,7 +918,7 @@ mod tests {
     #[test]
     fn verification_is_planned_up_to_the_cap() {
         let w = world("vplan", &["dark-elf-harness", "dark-elf-agent"]);
-        let roster = Roster::load(&w);
+        let roster = Roster::cards(&w);
         let mut r = record(&w, "orc-o", &["crates/mnemorph-tools/src/files.rs"]);
         let mut second = kept("dark-elf-harness", "medium");
         second.found.record.fingerprint = "fedcba9876543210".into();
@@ -943,7 +943,7 @@ mod tests {
         r.findings[0].staff = Some(sent(RESEND_AFTER));
         assert_eq!(verifying(&roster, &r, 2).commission.len(), 2);
         let alone = world("vplan-alone", &["dark-elf-harness"]);
-        assert_eq!(verifying(&Roster::load(&alone), &r, 2).unstaffed.len(), 2);
+        assert_eq!(verifying(&Roster::cards(&alone), &r, 2).unstaffed.len(), 2);
         let _ = std::fs::remove_dir_all(&w);
         let _ = std::fs::remove_dir_all(&alone);
     }

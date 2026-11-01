@@ -23,6 +23,9 @@ function b(name: string, race: string, parent: string | null = null): BoardBody 
     minds: [],
     live: idle,
     acts: [],
+    standing: 'trusted',
+    runs_as: race,
+    differs: [],
   };
 }
 

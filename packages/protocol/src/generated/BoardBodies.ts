@@ -33,6 +33,10 @@ races: Array<RaceLaw>,
  */
 roster: Provenance, 
 /**
+ * Where each creature's standing was read: the creatures' witness.
+ */
+witness: Provenance, 
+/**
  * Where the Minds' standing was read.
  */
 minds: Provenance, 

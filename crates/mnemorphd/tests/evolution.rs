@@ -60,6 +60,10 @@ impl Fixture {
             fs::write(world.join(path), text).unwrap();
         }
         let world = world.canonicalize().unwrap();
+        // The human adopts the cards: the races meters and swaps read are the witness's.
+        let state = root.join("state");
+        let creatures = mnemorph_server::world::creatures::adoption_in(Some(&state), &world);
+        mnemorph_server::world::creatures::record_in(Some(&state), &world, creatures).unwrap();
         Self { root, world }
     }
 
@@ -540,4 +544,66 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
     assert!(text(&out).0.contains("swapped c"), "{:?}", text(&out));
     record(&swap_of("c"), "nova", "Fix the parser");
     assert!(judged("c").contains("in two splits"));
+}
+
+/// A swap that writes a card shows, before the yes, what the witness would hold of it: a swap
+/// that re-parents or widens is shown so, and its yes leaves the row's chain and ground as they
+/// were; a new name it creates stays a stranger.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_card_swap_shows_its_standing_and_never_widens() {
+    use mnemorph_server::world::creatures;
+    let f = Fixture::new("card");
+    let sly = ".mnemorph/slime/sly/README.md";
+    let forge = ".mnemorph/kijin/forge/README.md";
+    let stage = f.world.join(".mnemorph/tmp/evolution/sly-1");
+    for (path, text) in [
+        (
+            sly,
+            "# sly\n\n- **Race:** named-slime\n- **Reports to:** orc-x\n- **Territory:** src/\n",
+        ),
+        (
+            forge,
+            "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/\n",
+        ),
+    ] {
+        fs::create_dir_all(stage.join(path).parent().unwrap()).unwrap();
+        fs::write(stage.join(path), text).unwrap();
+    }
+    let out = f.at_tty(
+        &[
+            "evolution",
+            "swap",
+            "sly-1",
+            "--creature",
+            "sly",
+            "--file",
+            sly,
+            "--create",
+            forge,
+        ],
+        "y\n",
+    );
+    let (stdout, err) = text(&out);
+    assert!(stdout.contains("swapped sly-1"), "{stdout}{err}");
+    assert!(
+        stdout.contains("as the creatures' witness would hold them")
+            && stdout.contains(
+                "Reports to: the card says \\u{60}orc-x\\u{60}, its row holds \\u{60}nobody"
+            )
+            && stdout.contains("witnessed as: sly — slime, reports to nobody, ground none")
+            && stdout.contains("kijin-forge — oni, post kijin-forge")
+            && stdout.contains("a new name: a stranger"),
+        "{stdout}"
+    );
+    let held = creatures::witnessed_in(Some(&f.state()), &f.world)
+        .unwrap()
+        .unwrap();
+    assert_eq!(held["sly"].race.name(), "slime");
+    assert_eq!(held["sly"].reports_to, None, "not re-parented");
+    assert_eq!(held["sly"].ground.zone, Vec::<String>::new(), "not widened");
+    assert!(
+        !held.contains_key("kijin-forge"),
+        "a stranger until adopted"
+    );
 }

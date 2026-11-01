@@ -162,6 +162,9 @@ const body = (b: Partial<BoardBody> & Pick<BoardBody, 'name' | 'race'>): BoardBo
   minds: [],
   live: { state: 'idle', why: 'its last commission ended: answered', run: null, at: null },
   acts: fixtureEntries.filter((e) => e.body === b.name),
+  standing: 'trusted',
+  runs_as: b.race,
+  differs: [],
   ...b,
 });
 
@@ -170,6 +173,7 @@ export const fixtureBodies: BoardBodies = {
     body({
       name: 'rimuru',
       race: 'rimuru',
+      standing: 'throne',
       live: { state: 'working', why: 'run r17 is held by a live session', run: null, at: null },
     }),
     body({
@@ -217,12 +221,16 @@ export const fixtureBodies: BoardBodies = {
     body({
       name: 'slime-lexer',
       race: 'named-slime',
+      standing: 'mismatched',
+      runs_as: 'slime',
+      differs: ['Race'],
       parent: 'orc-sql',
       ground: [{ kind: 'zone', path: 'sqlglot/tokens.py' }],
     }),
     body({
       name: 'slime-‮evil',
       race: 'slime',
+      standing: 'stranger',
       parent: 'orc-sql',
       live: {
         state: 'cut',
@@ -254,6 +262,11 @@ export const fixtureBodies: BoardBodies = {
     source: '.mnemorph/<race>/<seat>/README.md (in the world)',
     trusted: false,
     why: 'a body can write its doc: shown, granting nothing',
+  },
+  witness: {
+    source: "the creatures' witness under the state directory",
+    trusted: true,
+    why: null,
   },
   minds: { source: "the Minds' witness under the state directory", trusted: true, why: null },
   live: {

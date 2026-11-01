@@ -7,6 +7,20 @@ mod isolated;
 use std::process::Command;
 
 fn onto(args: &[&str], cwd: &std::path::Path) -> (bool, String, String) {
+    // The human adopts the world's cards first, as on its first run: ownership is the witness's.
+    if cwd.join(".mnemorph").is_dir() {
+        let adopted = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
+            .args(["roster", "adopt", "--yes"])
+            .current_dir(cwd)
+            .env("XDG_STATE_HOME", state())
+            .output()
+            .unwrap();
+        assert!(
+            adopted.status.success(),
+            "{}",
+            String::from_utf8_lossy(&adopted.stderr)
+        );
+    }
     let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
         .args(args)
         .current_dir(cwd)

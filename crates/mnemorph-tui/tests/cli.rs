@@ -348,6 +348,61 @@ fn status_counts_the_last_runs_guts_classes() {
     let _ = std::fs::remove_dir_all(&w);
 }
 
+/// `status` counts the creatures the witness trusts, and says so when the witness is broken.
+#[test]
+fn status_says_the_rosters_standing_and_a_broken_witness() {
+    use mnemorph_loop::world::creatures;
+    let w = empty_world("roster").canonicalize().unwrap();
+    let state = w.join("../").join(format!(
+        "{}-state",
+        w.file_name().unwrap().to_string_lossy()
+    ));
+    let _ = std::fs::remove_dir_all(&state);
+    let seat = w.join(".mnemorph/slime/s");
+    std::fs::create_dir_all(&seat).unwrap();
+    std::fs::write(
+        seat.join("README.md"),
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
+    )
+    .unwrap();
+    let status = || {
+        let out = bin()
+            .args(["status", "--world", w.to_str().unwrap()])
+            .env("XDG_CONFIG_HOME", w.join("config"))
+            .env("XDG_STATE_HOME", &state)
+            .env("HOME", &w)
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    assert!(
+        status().contains("roster   0 trusted, 0 mismatched, 1 strangers"),
+        "{}",
+        status()
+    );
+    let rows = creatures::adoption_in(Some(&state), &w);
+    creatures::record_in(Some(&state), &w, rows).unwrap();
+    assert!(
+        status().contains("roster   1 trusted, 0 mismatched, 0 strangers\n"),
+        "{}",
+        status()
+    );
+    let at = creatures::path_in(&state, &w);
+    let raw = std::fs::read_to_string(&at).unwrap();
+    std::fs::write(&at, raw.replace("\"slime\"", "\"named-slime\"")).unwrap();
+    let shown = status();
+    assert!(
+        shown.contains("roster   the roster witness is broken (")
+            && shown.contains("every creature runs as a stranger"),
+        "{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(&state);
+}
+
 #[cfg(unix)]
 /// A home set up as a human's: a global file that autostarts and opens the board and names a
 /// provider's key file, a `0700` state directory holding a board's control files and registry,

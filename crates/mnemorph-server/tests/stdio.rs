@@ -573,6 +573,10 @@ fn a_commissioned_body_reaches_the_wire_under_its_own_name() {
         "s",
         "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n- **Verify:** `true`\n",
     );
+    // The human adopts the cards as written: the trusted roster holds them.
+    let w = world.canonicalize().unwrap();
+    let creatures = |w: &std::path::Path| mnemorph_server::world::creatures::adoption(w);
+    mnemorph_server::world::creatures::record(&w, creatures(&w)).unwrap();
     std::fs::create_dir_all(world.join("src")).unwrap();
     let id = c.request("initialize", &json!({}));
     let hello = c.response(id);

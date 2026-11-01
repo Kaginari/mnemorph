@@ -1,4 +1,6 @@
-//! The roster: every creature the world's docs describe, read fresh when the docs change.
+//! The roster: every creature the world's docs describe, read fresh when the docs change, and
+//! held to the creatures' witness ([`crate::creatures`]). [`Roster::load`] is the trusted view
+//! every privilege reads; [`Roster::cards`] is the cards as they stand, only ever shown.
 
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
@@ -9,6 +11,7 @@ use std::path::Path;
 
 use mnemorph_races::{Race, Speciality};
 
+use crate::creatures::{Mismatch, Standing};
 use crate::doc::{Creature, covers, parse};
 
 /// The creatures of a world, by name, and the docs that could not be read.
@@ -21,6 +24,12 @@ pub struct Roster {
     /// The docs' fingerprint: when it moves, the roster is read again. In-process only — the
     /// hasher is not stable across Rust releases, so it is never written down.
     pub fingerprint: u64,
+    /// How each creature stands against the witness; empty for the cards alone.
+    pub standing: BTreeMap<String, Standing>,
+    /// Each field a card says otherwise than its row.
+    pub mismatches: Vec<Mismatch>,
+    /// Why the witness trusts no row, when it does not: no home, or a chain that does not walk.
+    pub witness: Option<String>,
 }
 
 /// Names no creature may take: the human and the harness stand over every body.
@@ -63,9 +72,59 @@ fn misnamed_dark_elf(c: &Creature) -> Option<String> {
 }
 
 impl Roster {
-    /// Read every `.mnemorph/<race>/<name>/README.md` of `world`.
+    /// The trusted view of `world`'s creatures: each card held to the witness's row under the
+    /// human's state directory ([`crate::creatures::trusted`]). Every privilege reads this.
     #[must_use]
     pub fn load(world: &Path) -> Roster {
+        Roster::load_in(crate::queue::state_dir().as_deref(), world)
+    }
+
+    /// [`Roster::load`], the human's state directory at `state` (`None`: no home).
+    #[must_use]
+    pub fn load_in(state: Option<&Path>, world: &Path) -> Roster {
+        crate::creatures::trusted(
+            Roster::cards(world),
+            &crate::creatures::witnessed_in(state, world),
+        )
+    }
+
+    /// The trusted view of the cards copied at `copy` (a reader's snapshot of `world`), held to
+    /// `world`'s own witness: the witness names the world by its real path, never the copy's.
+    #[must_use]
+    pub fn copied(copy: &Path, world: &Path) -> Roster {
+        crate::creatures::trusted(Roster::cards(copy), &crate::creatures::witnessed(world))
+    }
+
+    /// The cards copied at `copy` (or `world` itself) as they stand, with the witness's word on
+    /// each — its standing, the fields that differ, why no row is trusted — for what checks the
+    /// docs' shape and shows it (`onto check`, the board's ontology): the shape is the cards',
+    /// the `roster-mismatch` findings the witness's. Never a privilege's.
+    #[must_use]
+    pub fn shown(copy: &Path, world: &Path) -> Roster {
+        let cards = Roster::cards(copy);
+        let held = crate::creatures::trusted(cards.clone(), &crate::creatures::witnessed(world));
+        Roster {
+            standing: held
+                .standing
+                .into_iter()
+                .filter(|(_, s)| *s != Standing::Stranger)
+                .collect(),
+            mismatches: held.mismatches,
+            witness: held.witness,
+            ..cards
+        }
+    }
+
+    /// Whether `name` stands as a stranger: no row holds its card.
+    #[must_use]
+    pub fn stranger(&self, name: &str) -> bool {
+        matches!(self.standing.get(name), Some(Standing::Stranger))
+    }
+
+    /// Read every `.mnemorph/<race>/<name>/README.md` of `world`, as the cards stand: a body can
+    /// write a card, so this is only ever shown — every privilege reads [`Roster::load`].
+    #[must_use]
+    pub fn cards(world: &Path) -> Roster {
         let mut roster = Roster::default();
         let mut hasher = DefaultHasher::new();
         let records = world.join(".mnemorph");
@@ -152,6 +211,7 @@ impl Roster {
             .collect();
         mnemorph_races::route_with(&paths, |s, path| {
             self.living()
+                .filter(|c| c.race.base() == Race::DarkElf)
                 .filter(|c| Speciality::of(&c.name) == Some(s))
                 .any(|c| c.surfaces.iter().any(|claim| covers(claim, path)))
         })

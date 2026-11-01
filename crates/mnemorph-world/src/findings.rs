@@ -69,6 +69,7 @@ pub fn check(roster: &Roster, tracked: &[String]) -> Vec<Finding> {
     bonds(roster, &mut out);
     heirs(roster, &mut out);
     unowned(roster, tracked, &mut out);
+    mismatched(roster, &mut out);
     out.sort_by(|a, b| {
         b.severity
             .cmp(&a.severity)
@@ -76,6 +77,31 @@ pub fn check(roster: &Roster, tracked: &[String]) -> Vec<Finding> {
             .then_with(|| a.code.cmp(b.code))
     });
     out
+}
+
+/// `roster-mismatch`: a card says a field otherwise than the creatures' witness holds it — a
+/// commit, a merge or a clone wrote it. It runs at the lower of the two; one finding per field.
+fn mismatched(roster: &Roster, out: &mut Vec<Finding>) {
+    for m in &roster.mismatches {
+        let Some(c) = roster.creatures.get(&m.name) else {
+            continue;
+        };
+        out.push(Finding {
+            code: "roster-mismatch",
+            severity: Severity::High,
+            at: c.at(m.field),
+            paths: Vec::new(),
+            creatures: vec![m.name.clone()],
+            message: format!(
+                "{}'s card says {} `{}`, its row holds `{}`: it runs at the lower of the two — {}",
+                m.name,
+                m.field,
+                m.card,
+                m.row,
+                crate::creatures::hint(&m.name)
+            ),
+        });
+    }
 }
 
 /// `overlap`: two creatures' write grounds — Slime zones, Kijin posts — equal or nested. An
