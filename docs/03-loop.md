@@ -319,10 +319,10 @@ act was, read by harness code from the act's structured outcome and the run's ac
 trimmed with its runs of whitespace made one, must equal it exactly: no prefix, no substring.
 A check the body chose is a plain command, whatever it is named: `python3 -c "assert True"`, a
 `verify.sh` it wrote, `cargo test --no-run`, `cargo test -p x | tail`. Passing one earns nothing;
-failing one is a `fail`, never a red pin. **No such source exists yet.** A creature's verify lines
-are on its card, in the world, which a body can reach, so the harness trusts none: no act is a
-bench, and `red-pin`, `positive` and `thrash` do not occur until verify lines are kept out of a
-body's reach.
+failing one is a `fail`, never a red pin. **The source is the body's end gate:** the verify lines
+[pinned](#the-verify-pins) for it outside the world, never its card's word. A body with no pin,
+or whose card differs from its pin, has no bench, and `red-pin`, `positive` and `thrash` do not
+occur for it. A resumed run is replayed with no bench, then trusts its gate's lines from there.
 
 No text is read. The classifier is given the tool, its input, whether the act failed or the
 human denied it, whether it wrote, and its exit code — never the output. A command that prints

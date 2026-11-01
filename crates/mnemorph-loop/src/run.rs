@@ -781,6 +781,8 @@ impl Run {
     /// Judge every answer that changed files with this end gate.
     #[must_use]
     pub fn with_gate(mut self, gate: EndGate) -> Self {
+        // The gate's lines are the pinned ones: the only verify lines a bench may be.
+        self.guts = std::mem::take(&mut self.guts).trusting(&gate.verify);
         self.gate = Some(gate);
         self
     }

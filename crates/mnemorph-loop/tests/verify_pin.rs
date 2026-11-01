@@ -260,3 +260,39 @@ fn pin_as_a_body() {
     .unwrap_err();
     assert!(e.contains("slime-x runs this"), "{e}");
 }
+
+/// The guts classes' bench is the pinned line: run by the body, it is `positive` while the card
+/// says the pin, and a plain command once the card differs.
+#[tokio::test]
+async fn the_pinned_line_is_the_only_bench() {
+    let w = World::new("bench", CHECK);
+    w.pin(&[CHECK]);
+    let classes = |w: &World| -> String {
+        let dir = w.0.join(".mnemorph/instruments/loop");
+        fs::read_dir(dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| fs::read_to_string(e.path()).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let bench = || {
+        Arc::new(ScriptedModel::new([
+            write("w1", "out.txt", "fixed\n"),
+            ScriptedModel::tool("b1", "bash", serde_json::json!({ "command": CHECK })),
+            ScriptedModel::text("Fixed."),
+        ]))
+    };
+    let ending = w.ask(&bench()).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    assert!(classes(&w).contains("\"positive\""), "{}", classes(&w));
+    // The card now differs: the same command is no bench.
+    let _ = fs::remove_dir_all(w.0.join(".mnemorph/instruments"));
+    fs::write(
+        w.0.join(CARD),
+        format!("# rimuru\n\n- **Race:** rimuru\n- **Verify:** `{CHECK}`\n- **Verify:** `true`\n"),
+    )
+    .unwrap();
+    let _ = w.ask(&bench()).await;
+    assert!(!classes(&w).contains("\"positive\""), "{}", classes(&w));
+}
