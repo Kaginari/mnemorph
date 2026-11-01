@@ -1,13 +1,14 @@
 /**
  * Integrations and settings, read-only, from `GET /api/integrations[?world=<id>]` (the board
  * server's `BoardIntegrations`, generated from Rust): providers, models, prices, key sources (never
- * values), holes, MCP servers, the effective configuration with origins. The server redacts; the
+ * values; a key file by its path and whether it would be read), holes, MCP servers, the effective configuration with origins. The server redacts; the
  * page checks the shape and shows a hidden value as hidden.
  */
 import type {
   BoardIntegrations,
   ConfigView,
   HoleView,
+  KeyFileView,
   KeySource,
   McpServerView,
   McpView,
@@ -48,6 +49,20 @@ const key = (v: unknown): KeySource | undefined => {
     : undefined;
 };
 
+const KEY_FILE_STATES = ['readable', 'refused'];
+
+const keyFile = (v: unknown): KeyFileView | null | undefined => {
+  if (v === null || v === undefined) return null;
+  const o = obj(v);
+  return o &&
+    strOrNull(o.path) &&
+    str(o.state) &&
+    KEY_FILE_STATES.includes(o.state) &&
+    str(o.detail)
+    ? { path: o.path, state: o.state, detail: o.detail }
+    : undefined;
+};
+
 const price = (v: unknown): PriceView | undefined => {
   const o = obj(v);
   if (!o || !str(o.model)) return undefined;
@@ -66,8 +81,15 @@ const price = (v: unknown): PriceView | undefined => {
 const provider = (v: unknown): ProviderView | undefined => {
   const o = obj(v);
   const k = key(o?.key);
-  return o && k && str(o.name) && str(o.kind) && strOrNull(o.baseUrl) && str(o.origin)
-    ? { name: o.name, kind: o.kind, baseUrl: o.baseUrl, key: k, origin: o.origin }
+  const f = keyFile(o?.keyFile);
+  return o &&
+    k &&
+    f !== undefined &&
+    str(o.name) &&
+    str(o.kind) &&
+    strOrNull(o.baseUrl) &&
+    str(o.origin)
+    ? { name: o.name, kind: o.kind, baseUrl: o.baseUrl, key: k, keyFile: f, origin: o.origin }
     : undefined;
 };
 
@@ -160,6 +182,14 @@ export function keyWords(k: KeySource): string {
   if (k.state === 'none') return 'no key';
   if (k.state === 'hidden' || k.variable === null) return 'hidden: not a variable name';
   return `env ${k.variable}: ${k.state}`;
+}
+
+/** A key file in words: `file ~/.config/mnemorph/openrouter.key: readable (0600)`, or why not. */
+export function keyFileWords(f: KeyFileView): string {
+  const path = f.path ?? 'hidden';
+  return f.state === 'readable'
+    ? `file ${path}: readable (${f.detail})`
+    : `file ${path}: refused, ${f.detail}`;
 }
 
 export type IntegrationsLoad =

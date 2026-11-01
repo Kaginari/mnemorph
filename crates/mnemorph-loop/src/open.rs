@@ -189,7 +189,7 @@ fn open_from(
         other => other,
     };
     let config = Config::load(&Paths::resolve(world))?;
-    let (model, backend, named) = model_of(&config, &env)?;
+    let (model, backend, named, source) = model_of(&config, world, &env)?;
     let mut opened = build(
         world,
         &config,
@@ -209,11 +209,19 @@ fn open_from(
     if let Err(e) = mnemorph_world::dimension::register(world) {
         eprintln!("mnemorph: the world registry could not be written: {e}");
     }
-    opened.key = backend.provider.key_env.as_ref().map(|var| {
-        let field = format!("providers.{}.key_env", backend.provider_name);
+    opened.key = source.map(|source| {
+        let field = format!(
+            "providers.{}.{}",
+            backend.provider_name,
+            if source.starts_with("file ") {
+                "key_file"
+            } else {
+                "key_env"
+            }
+        );
         match config.get(&field) {
-            Some(leaf) => format!("{var}, named by {field} in {}", leaf.origin),
-            None => var.clone(),
+            Some(leaf) => format!("{source}, named by {field} in {}", leaf.origin),
+            None => source,
         }
     });
     opened.model = named;
@@ -221,27 +229,33 @@ fn open_from(
     Ok(opened)
 }
 
-/// The session's model, reached through the backend the human chose, its key read from the
-/// variable the provider names: the model, its backend and the name the configuration gives it.
+/// A model, its backend, the name the configuration gives it, and where its key was read from.
+pub type ModelOf = (
+    Arc<dyn Model>,
+    mnemorph_config::Backend,
+    String,
+    Option<String>,
+);
+
+/// The session's model in `world`, reached through the backend the human chose, its key read
+/// from the variable the provider names or else its key file ([`crate::key::resolve`]): the
+/// model, its backend, the name the configuration gives it and the key's source.
 ///
 /// # Errors
 ///
-/// The model's backend is unknown, its key variable is not set, or the HTTP stack cannot start.
+/// The model's backend is unknown, neither its key variable nor its key file gives a key, or the
+/// HTTP stack cannot start.
 pub fn model_of(
     config: &Config,
+    world: &Path,
     env: &dyn Fn(&str) -> Option<String>,
-) -> Result<(Arc<dyn Model>, mnemorph_config::Backend, String), String> {
+) -> Result<ModelOf, String> {
     let named = config.model_for("rimuru", Race::Rimuru, None);
     let backend = config.backend(&named)?;
-    let key = match &backend.provider.key_env {
-        Some(var) => Some(env(var).ok_or_else(|| {
-            format!(
-                "{var} is not set: provider `{}` reads its key from it",
-                backend.provider_name
-            )
-        })?),
-        None => None,
-    };
+    let worlds = crate::key::known_worlds(Some(world));
+    let resolved = crate::key::resolve(&backend.provider_name, &backend.provider, env, &worlds)?;
+    let source = resolved.as_ref().map(|r| r.source.clone());
+    let key = resolved.map(|r| r.key.expose());
     let transport =
         Arc::new(HttpTransport::new(Duration::from_secs(10)).map_err(|e| format!("HTTP: {e}"))?);
     let model: Arc<dyn Model> = match backend.provider.kind.as_str() {
@@ -250,7 +264,7 @@ pub fn model_of(
             &backend.provider.base_url,
             key.ok_or_else(|| {
                 format!(
-                    "provider `{}` needs a key: name its variable with key_env",
+                    "provider `{}` needs a key: name its variable with key_env, or its file with key_file",
                     backend.provider_name
                 )
             })?,
@@ -272,7 +286,7 @@ pub fn model_of(
             ));
         }
     };
-    Ok((model, backend, named))
+    Ok((model, backend, named, source))
 }
 
 /// What [`open_with`] is given rather than built: the model, and where the attic lives.

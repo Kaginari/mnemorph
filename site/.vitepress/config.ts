@@ -1,3 +1,5 @@
+import { cpSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
@@ -33,6 +35,13 @@ export default withMermaid(
     },
     // The brand's files are the site's public files: the emblem is the logo and the favicon.
     vite: { publicDir: fileURLToPath(new URL('../../assets/brand', import.meta.url)) },
+    // A canvas links to its SVG at full size: the SVGs are served beside the pages, at /canvas/.
+    buildEnd(site) {
+      cpSync(join(site.srcDir, 'canvas'), join(site.outDir, 'canvas'), {
+        recursive: true,
+        filter: (path) => path.endsWith('.svg') || statSync(path).isDirectory(),
+      });
+    },
     head: [
       ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
       ['link', { rel: 'icon', type: 'image/png', href: '/mnemorph-icon@64.png' }],

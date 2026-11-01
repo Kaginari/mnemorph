@@ -118,6 +118,8 @@ test('the integrations page: key sources never values, holes, MCP scope, origins
   expect(text).toContain('env OPENROUTER_API_KEY: set');
   expect(text).toContain('env ANTHROPIC_API_KEY: unset');
   expect(text).toContain('hidden: not a variable name');
+  expect(text).toContain('file ~/.config/mnemorph/openrouter.key: readable (0600)');
+  expect(text).toContain('file ~/open.key: refused, its mode is 0644');
   expect(text).toContain('providers.openrouter.api_key');
   expect(text).toContain('kijin');
   expect(text).toContain('read · submit = outward · network');

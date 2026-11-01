@@ -702,11 +702,17 @@ impl Board {
             hosts: self.hosts.clone(),
         };
         let set = |name: &str| std::env::var_os(name).is_some_and(|v| !v.is_empty());
+        // A key file may lie in no world this machine knows, listed or not.
+        let files = integrations::KeyFiles {
+            home: std::env::var("HOME").ok(),
+            worlds: mnemorph_loop::key::worlds_at(&self.registry),
+        };
         Some(integrations::integrations(
             &self.global_file(),
             at.as_ref().map(|(id, p)| (id.as_str(), p.as_path())),
             board,
             &set,
+            &files,
         ))
     }
 

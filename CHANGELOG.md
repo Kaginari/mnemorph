@@ -35,6 +35,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Relations between worlds: a registry, harness sightings, named-twice proposals, gluing [#271].
 - Recorded provider cassettes for OpenRouter and Ollama, provider-reported cost, unknown usage
   estimated and unpriced [#285] [#303].
+- A provider's key from a file (`key_file`, global file only, 0600, never inside a world), read
+  when its variable is not set: a board started from any shell opens chats; the integrations
+  show the file's state, never its contents.
 
 ### M12 — Board
 
@@ -177,6 +180,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   the audit against the code [#46] [#47] [#49] [#53] [#60] [#69] [#87] [#120] [#249].
 - The name Mnemorph, the emblem, the banner, the race icons and cards, `@mnemorph/theme` [#55]
   [#56] [#57] [#58] [#59] [#61].
+- The canvases: each page's sketches drawn by tldraw's Mermaid converter as `.tldr` documents and
+  light and dark SVGs in the pages, every canvas checked for script and outside links [#311].
 
 [Unreleased]: https://github.com/Kaginari/mnemorph/commits/main
 [#31]: https://github.com/Kaginari/mnemorph/pull/31
@@ -393,3 +398,4 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 [#305]: https://github.com/Kaginari/mnemorph/pull/305
 [#307]: https://github.com/Kaginari/mnemorph/pull/307
 [#308]: https://github.com/Kaginari/mnemorph/pull/308
+[#311]: https://github.com/Kaginari/mnemorph/pull/311
