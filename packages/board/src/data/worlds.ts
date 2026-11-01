@@ -3,13 +3,16 @@
  * answer is checked field by field before the page uses it: a row that does not hold together is
  * left out and counted, never guessed at.
  */
-import type { BoardWorld, WorldState } from '@mnemorph/protocol';
+import type { BoardMissing, BoardWorld, WorldState } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import { type Change, usePush } from './push.ts';
-import { establish } from './session.ts';
+import { establish, signedOut } from './session.ts';
 
 export interface Worlds {
+  /** The live worlds. */
   worlds: BoardWorld[];
+  /** The worlds whose directory is gone, the longest missing first: shown apart. */
+  missing: BoardMissing[];
   /** Rows the answer held that were not a world. */
   unreadable: number;
 }
@@ -33,6 +36,14 @@ function row(v: unknown): BoardWorld | undefined {
   return { id, name, path, remote, last, sessions, state: state as WorldState };
 }
 
+function gone(v: unknown): BoardMissing | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const { id, name, path, since } = v as Record<string, unknown>;
+  if (!str(id) || id === '' || !str(name) || !str(path) || !str(since)) return undefined;
+  if (Number.isNaN(Date.parse(since))) return undefined;
+  return { id, name, path, since };
+}
+
 /** When a world was last opened, for sorting: a world never opened sorts last. */
 const when = (w: BoardWorld) => (w.last === null ? Number.NEGATIVE_INFINITY : Date.parse(w.last));
 
@@ -49,7 +60,14 @@ export function parseWorlds(body: unknown): Worlds {
     else unreadable += 1;
   }
   worlds.sort((a, b) => when(b) - when(a) || a.name.localeCompare(b.name));
-  return { worlds, unreadable };
+  const away = (body as { missing?: unknown }).missing;
+  const missing: BoardMissing[] = [];
+  for (const v of Array.isArray(away) ? away : []) {
+    const m = gone(v);
+    if (m) missing.push(m);
+    else unreadable += 1;
+  }
+  return { worlds, missing, unreadable };
 }
 
 export type Load =
@@ -81,6 +99,7 @@ export function useWorlds(): Load {
       )
       .then(async (res) => {
         if (res.status === 401) {
+          signedOut();
           throw new Error(
             'this browser holds no board session: open the URL `mnemorphd board` prints',
           );

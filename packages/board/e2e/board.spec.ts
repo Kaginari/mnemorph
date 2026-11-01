@@ -153,7 +153,11 @@ const byName = (name: string) => {
 };
 const SQLGLOT = byName('sqlglot');
 const NOTES = byName('notes');
-const GONE = byName('old-spike');
+const GONE =
+  fixtureWorlds.missing.find((m) => m.name === 'old-spike') ??
+  (() => {
+    throw new Error('the fixtures hold old-spike, missing');
+  })();
 
 const PAGES: [string, string][] = [
   ['home', '#/'],
@@ -214,13 +218,24 @@ test("the page runs under the board server's CSP", async ({ page }) => {
 test('every world reads in words, the latest first', async ({ page }, info) => {
   await open(page, '#/');
   const cards = page.locator('.world-card');
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(3);
   await expect(cards.first()).toContainText('tempest-try');
   await expect(cards.first()).toContainText('live');
   await expect(cards.last()).toContainText('never opened');
-  await expect(page.locator('.world-card', { hasText: 'old-spike' })).toContainText('missing');
+  // A missing world is no card: it waits folded under the live ones, with how to forget it.
+  await expect(page.locator('.world-card', { hasText: 'old-spike' })).toHaveCount(0);
+  const missing = page.locator('.missing-worlds');
+  await expect(missing.locator('summary')).toHaveText('Missing (1)');
+  await expect(missing.locator('.missing-world')).toBeHidden();
+  await missing.locator('summary').click();
+  await expect(missing.locator('.missing-world')).toContainText('/tmp/old-spike');
+  await expect(missing.locator('.missing-world')).toContainText('missing since 2026-10-21');
+  await expect(missing.locator('.missing-world')).toContainText(
+    'mnemorphd board forget /tmp/old-spike',
+  );
+  expect(await lowContrast(page)).toEqual([]);
   if (info.project.name === 'desktop') {
-    await expect(page.locator('.rail-world')).toHaveCount(4);
+    await expect(page.locator('.rail-world')).toHaveCount(3);
   }
 });
 
@@ -339,8 +354,6 @@ test('each home row says its world: status, standing, gate, cost, what waits', a
   await expect(row(NOTES)).toContainText('idle');
   await expect(row(NOTES)).toContainText('no gate verdict yet');
   await expect(row(NOTES)).not.toContainText('$');
-  await expect(row(GONE)).toContainText('missing');
-  await expect(row(GONE)).toContainText('memory unknown');
 });
 
 test('a world overview says each source, and unknown where it is', async ({ page }) => {
@@ -356,11 +369,11 @@ test('a world overview says each source, and unknown where it is', async ({ page
   await expect(panel('Memory')).toContainText('in-world, shown only');
   await expect(panel('End gate')).toContainText('No verdict yet.');
 
+  // A missing world's link says where it was, since when, and how to forget it.
   await page.goto(`/#/w/${GONE.id}`);
-  await expect(page.locator('.page-head')).toContainText('missing');
-  await expect(page.getByText("This world's directory is gone.")).toBeVisible();
-  await expect(panel('Memory')).toContainText('unknown — the directory is gone');
-  await expect(panel('Challenges')).toContainText('pending');
+  await expect(page.getByRole('heading', { name: 'old-spike is missing' })).toBeVisible();
+  await expect(page.getByText('missing since 2026-10-21')).toBeVisible();
+  await expect(page.getByText('mnemorphd board forget /tmp/old-spike')).toBeVisible();
 
   await page.goto(`/#/w/${SQLGLOT.id}`);
   await expect(page.getByText('too many entries: updates slowed')).toBeVisible();

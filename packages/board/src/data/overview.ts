@@ -17,7 +17,7 @@ import type {
 } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import { type Change, usePush } from './push.ts';
-import { establish } from './session.ts';
+import { establish, signedOut } from './session.ts';
 
 /** Every status a world can read. */
 export const WORLD_STATUSES: readonly WorldStatus[] = ['live', 'tui-live', 'idle', 'missing'];
@@ -156,6 +156,7 @@ async function read(id: string, signal: AbortSignal): Promise<BoardOverview> {
     headers: { accept: 'application/json' },
   });
   if (res.status === 401) {
+    signedOut();
     throw new Error('this browser holds no board session: open the URL `mnemorphd board` prints');
   }
   if (res.status === 404) throw new Error('the board lists no world with this id');

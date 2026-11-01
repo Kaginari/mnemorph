@@ -5,36 +5,54 @@ import { parseWorlds } from './worlds.ts';
 /**
  * `GET /api/worlds` byte for byte as the board server's handler writes it: serde's compact JSON
  * of `BoardWorlds`, fields in declaration order, `null` for an absent remote or a world never
- * opened (crates/mnemorph-server/src/board/mod.rs, tests/board.rs).
+ * opened, the missing worlds apart (crates/mnemorph-server/src/board/mod.rs, tests/board.rs).
  */
 const SERVED =
   '{"worlds":[' +
   '{"id":"alpha-1f2e3d4c5b6a7980","name":"alpha","path":"/home/u/alpha","remote":"github.com/o/alpha","last":"2026-10-30T19:20:11Z","sessions":3,"state":"present"},' +
-  '{"id":"gone-0a1b2c3d4e5f6071","name":"gone","path":"/home/u/gone","remote":null,"last":"2026-10-29T08:00:00Z","sessions":1,"state":"missing"},' +
   '{"id":"beta-99aa88bb77cc66dd","name":"beta","path":"/home/u/beta","remote":null,"last":null,"sessions":0,"state":"present"}' +
+  '],"missing":[' +
+  '{"id":"gone-0a1b2c3d4e5f6071","name":"gone","path":"/home/u/gone","since":"2026-10-29T08:00:00Z"}' +
   ']}';
 
 describe('the worlds answer', () => {
   it("reads the server's own answer whole, nulls included", () => {
-    const { worlds, unreadable } = parseWorlds(JSON.parse(SERVED));
+    const { worlds, missing, unreadable } = parseWorlds(JSON.parse(SERVED));
     expect(unreadable).toBe(0);
-    expect(worlds.map((w) => w.name)).toEqual(['alpha', 'gone', 'beta']);
-    expect(worlds[1]).toEqual({
-      id: 'gone-0a1b2c3d4e5f6071',
-      name: 'gone',
-      path: '/home/u/gone',
-      remote: null,
-      last: '2026-10-29T08:00:00Z',
-      sessions: 1,
-      state: 'missing',
-    });
-    expect(worlds[2]?.last).toBeNull();
+    expect(worlds.map((w) => w.name)).toEqual(['alpha', 'beta']);
+    expect(worlds[1]?.last).toBeNull();
+    expect(missing).toEqual([
+      {
+        id: 'gone-0a1b2c3d4e5f6071',
+        name: 'gone',
+        path: '/home/u/gone',
+        since: '2026-10-29T08:00:00Z',
+      },
+    ]);
   });
 
   it('sorts the latest session first, a world never opened last', () => {
     const { worlds, unreadable } = parseWorlds(fixtureWorlds);
     expect(unreadable).toBe(0);
-    expect(worlds.map((w) => w.name)).toEqual(['tempest-try', 'sqlglot', 'old-spike', 'notes']);
+    expect(worlds.map((w) => w.name)).toEqual(['tempest-try', 'sqlglot', 'notes']);
+  });
+
+  it('keeps the missing worlds apart, and counts a missing row that does not hold together', () => {
+    const { worlds, missing, unreadable } = parseWorlds({
+      worlds: [],
+      missing: [
+        { id: 'a-1', name: 'a', path: '/a', since: '2026-10-20T00:00:00Z' },
+        { id: 'b-2', name: 'b', path: '/b', since: 'last week' },
+        { id: '', name: 'c', path: '/c', since: '2026-10-20T00:00:00Z' },
+      ],
+    });
+    expect(worlds).toEqual([]);
+    expect(missing.map((m) => m.name)).toEqual(['a']);
+    expect(unreadable).toBe(2);
+  });
+
+  it('reads an answer without missing worlds as none missing', () => {
+    expect(parseWorlds({ worlds: [] }).missing).toEqual([]);
   });
 
   it('leaves out and counts a row that does not hold together', () => {

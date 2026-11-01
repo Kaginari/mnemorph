@@ -1510,3 +1510,49 @@ fn the_bench_results_the_board_reads_come_only_from_the_global_file() {
     );
     assert!(mnemorph_config::global_only("board.bench_results"));
 }
+
+#[test]
+fn the_board_starts_opens_and_prunes_only_on_the_global_file() {
+    let g = Ground::new("board-settings");
+    let none = g.load().unwrap().board();
+    assert!(!none.autostart && !none.open, "off unless the human says");
+    assert_eq!(none.port, None);
+    assert_eq!(none.prune_after_days, mnemorph_config::PRUNE_AFTER_DAYS);
+    let world = "[board]\nautostart = true\nopen = true\nport = 7000\nprune_after_days = 0\n";
+    g.tracked(world).local(world);
+    let c = g.load().unwrap();
+    assert_eq!(
+        c.board(),
+        none,
+        "a world's file never starts, opens or prunes the board"
+    );
+    for key in [
+        "board.autostart",
+        "board.open",
+        "board.port",
+        "board.prune_after_days",
+    ] {
+        assert!(mnemorph_config::global_only(key), "{key}");
+        assert_eq!(
+            c.holes().iter().filter(|h| h.key == key).count(),
+            2,
+            "{key} is a hole from the tracked and the local file"
+        );
+    }
+    g.global("[board]\nautostart = true\nopen = true\nport = 7001\nprune_after_days = 3\n");
+    let b = g.load().unwrap().board();
+    assert!(b.autostart && b.open);
+    assert_eq!(b.port, Some(7001));
+    assert_eq!(b.prune_after_days, 3);
+}
+
+#[test]
+fn the_board_port_and_prune_days_are_bounded() {
+    let g = Ground::new("board-bounds");
+    g.global("[board]\nport = 0\n");
+    assert!(g.load().unwrap_err().contains("board.port"));
+    g.global("[board]\nport = 70000\n");
+    assert!(g.load().unwrap_err().contains("board.port"));
+    g.global("[board]\nprune_after_days = 99999\n");
+    assert!(g.load().unwrap_err().contains("board.prune_after_days"));
+}

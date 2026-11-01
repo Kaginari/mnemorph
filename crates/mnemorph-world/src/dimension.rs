@@ -361,7 +361,7 @@ pub fn listed(registry: &Path, hand: &Path) -> Vec<Listed> {
 
 /// Write the human's `act` on `world` into the board's list at `hand`, and return the world as
 /// listed. Refused inside a body's command (`MNEMORPH_BODY` is set there): what the board shows
-/// is the human's to choose. `add` needs a directory; `forget` needs a world the board lists
+/// is the human's to choose. `add` needs a world (a directory holding `.mnemorph/`); `forget` needs a world the board lists
 /// (the registry at `registry` is read for it), a vanished one included.
 ///
 /// # Errors
@@ -376,6 +376,13 @@ pub fn hand(hand: &Path, registry: &Path, act: Hand, world: &Path) -> Result<Lis
     }
     let world = match act {
         Hand::Add => match world.canonicalize() {
+            Ok(w) if w.is_dir() && !live(&w) => {
+                return Err(format!(
+                    "{} holds no .mnemorph/: it is no world yet, and the board would list it as \
+                     missing; open a session in it with `mnemorph` and it joins the board",
+                    w.display()
+                ));
+            }
             Ok(w) if w.is_dir() => w,
             Ok(w) => return Err(format!("{} is not a directory", w.display())),
             Err(e) => return Err(format!("{}: {e}", world.display())),
@@ -405,6 +412,139 @@ pub fn hand(hand: &Path, registry: &Path, act: Hand, world: &Path) -> Result<Lis
         })
         .map_err(|e| format!("the board's list cannot be written: {e}"))?;
     Ok(out)
+}
+
+/// Whether `world` is a live world: a directory (a link to one is followed, so a link whose
+/// target is gone is missing) holding a `.mnemorph/` directory of its own — never a link out.
+#[must_use]
+pub fn live(world: &Path) -> bool {
+    std::fs::metadata(world).is_ok_and(|m| m.is_dir())
+        && std::fs::symlink_metadata(world.join(".mnemorph")).is_ok_and(|m| m.is_dir())
+}
+
+/// Where the board keeps when each missing world was first seen missing, beside the registry at
+/// `registry`: `<state>/mnemorph/board/missing.json` — the human's state, outside every world.
+#[must_use]
+pub fn missing_file(registry: &Path) -> PathBuf {
+    registry
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("board/missing.json")
+}
+
+/// The worlds the board lists, split: the live ones, and the missing ones with when each was
+/// first seen missing.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Standing {
+    /// The live worlds.
+    pub live: Vec<Listed>,
+    /// The missing worlds, each with when it was first seen missing.
+    pub missing: Vec<(Listed, Timestamp)>,
+}
+
+/// The `since` each world id was first seen missing, as kept at `file`; empty when it does not
+/// read.
+fn read_missing(file: &Path) -> BTreeMap<String, String> {
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+/// Keep `since` at `file` whole: a fresh `0600` file renamed over it.
+fn write_missing(file: &Path, since: &BTreeMap<String, String>) -> std::io::Result<()> {
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = file.with_extension("json.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        o.mode(0o600);
+    }
+    let mut f = o.open(&tmp)?;
+    std::io::Write::write_all(&mut f, serde_json::to_string(since)?.as_bytes())?;
+    f.sync_all()?;
+    std::fs::rename(&tmp, file)
+}
+
+/// The worlds the board lists at `registry` and `hand`, live and missing. With `record`, a world
+/// newly missing is kept as missing since `now`, and one that came back is dropped from the record,
+/// so it is live again.
+#[must_use]
+pub fn standing(registry: &Path, hand: &Path, now: Timestamp, record: bool) -> Standing {
+    let file = missing_file(registry);
+    let kept = read_missing(&file);
+    let mut since = BTreeMap::new();
+    let mut out = Standing::default();
+    for l in listed(registry, hand) {
+        if live(&l.world) {
+            out.live.push(l);
+            continue;
+        }
+        let at = kept
+            .get(&l.id)
+            .and_then(|t| Timestamp::parse(t))
+            .unwrap_or(now);
+        since.insert(l.id.clone(), at.to_string());
+        out.missing.push((l, at));
+    }
+    if record && since != kept {
+        let _ = write_missing(&file, &since);
+    }
+    out
+}
+
+/// Forget the missing worlds the board lists at `registry` and `hand` — those missing for at
+/// least `after` seconds by `now`, or every one with `None` — and return them. Only the board's
+/// list is written (a `forget` row each): no directory, journal or other state is touched. With
+/// `dry_run`, nothing is written at all.
+///
+/// # Errors
+///
+/// A body asks, or the board's list cannot be written.
+pub fn prune(
+    registry: &Path,
+    hand: &Path,
+    after: Option<i64>,
+    now: Timestamp,
+    dry_run: bool,
+) -> Result<Vec<(Listed, Timestamp)>, String> {
+    if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+        return Err(format!(
+            "{} runs this: the board's worlds are forgotten by the human alone",
+            body.to_string_lossy()
+        ));
+    }
+    let gone: Vec<(Listed, Timestamp)> = standing(registry, hand, now, !dry_run)
+        .missing
+        .into_iter()
+        .filter(|(_, since)| after.is_none_or(|a| now.0.saturating_sub(since.0) >= a))
+        .collect();
+    if dry_run || gone.is_empty() {
+        return Ok(gone);
+    }
+    let journal = Journal::<Handled>::new(hand);
+    for (l, _) in &gone {
+        journal
+            .append(&Handled {
+                act: Hand::Forget,
+                world: l.world.display().to_string(),
+                id: l.id.clone(),
+                at: now.to_string(),
+            })
+            .map_err(|e| format!("the board's list cannot be written: {e}"))?;
+    }
+    let file = missing_file(registry);
+    let mut since = read_missing(&file);
+    for (l, _) in &gone {
+        since.remove(&l.id);
+    }
+    write_missing(&file, &since).map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(gone)
 }
 
 // ---------------------------------------------------------------------------------------------

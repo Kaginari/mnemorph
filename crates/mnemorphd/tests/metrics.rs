@@ -56,7 +56,7 @@ impl Home {
             std::env::temp_dir().join(format!("mnemorph-metricsd-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let world = root.join("world");
-        std::fs::create_dir_all(&world).unwrap();
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
         std::fs::create_dir_all(root.join("config/mnemorph")).unwrap();
         let root = root.canonicalize().unwrap();
         let world = world.canonicalize().unwrap();

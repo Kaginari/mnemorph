@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { FileMark } from '../data/chat.ts';
-import { establish } from '../data/session.ts';
+import { establish, signedOut } from '../data/session.ts';
 import { Safe } from '../safe/Safe.tsx';
 import type { Side } from '../views/Chat.tsx';
 import { tokens } from '../views/Chat.tsx';
@@ -59,6 +59,7 @@ function useMemory(world: string): Counts | null | undefined {
         }),
       )
       .then(async (res) => {
+        if (res.status === 401) signedOut();
         if (!res.ok) return setM(null);
         const v = ((await res.json()) as { memory?: { value?: unknown } })?.memory?.value;
         if (typeof v !== 'object' || v === null) return setM(null);

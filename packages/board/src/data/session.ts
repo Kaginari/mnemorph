@@ -8,7 +8,46 @@
  * while the cookie lives. Every mutation sends it in `x-mnemorph-csrf`; a chat's WebSocket offers
  * it as the subprotocol entry `mnemorph.csrf.<token>` (the SDK's `ws({csrf})`), and so does the
  * board's push socket.
+ *
+ * A tab without a session shows one page saying so, never a blank root: `signedOut()` is told by
+ * every read that the server answers 401, and a key the trade refuses — spent already, perhaps by
+ * another browser such as VS Code's — says that instead, unless the cookie the tab holds still
+ * names a session.
  */
+import { useSyncExternalStore } from 'react';
+
+/** Whether this tab may use the board: `open`, or why not. */
+export type Access = 'open' | 'signed-out' | 'link-used';
+
+let access: Access = 'open';
+const watchers = new Set<() => void>();
+
+function become(a: Access) {
+  if (access === a) return;
+  access = a;
+  for (const w of watchers) w();
+}
+
+/** The server answered 401: this tab holds no session. A spent link, said already, stays said. */
+export function signedOut(): void {
+  if (access === 'open') become('signed-out');
+}
+
+/** The tab's access, following it. */
+export function useAccess(): Access {
+  return useSyncExternalStore(
+    (on) => {
+      watchers.add(on);
+      return () => watchers.delete(on);
+    },
+    () => access,
+  );
+}
+
+/** Back to `open`: for a test. */
+export function resetAccess(): void {
+  become('open');
+}
 
 /** The key a fragment carries: 64 hex characters, or nothing. */
 export function keyOf(hash: string): string | undefined {
@@ -35,6 +74,17 @@ export function takeKey() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ key }),
   }).then(async (res) => {
+    if (res.status === 401) {
+      // The link was spent; the tab may still hold a session of its own.
+      const held = await fetch('/api/session', { credentials: 'same-origin' }).catch(
+        () => undefined,
+      );
+      if (held?.ok) {
+        token = readToken(await held.json().catch(() => undefined));
+        return;
+      }
+      become('link-used');
+    }
     if (!res.ok)
       throw new Error(
         `the board refused the key (${res.status}): it may be spent; open the URL “mnemorphd board” prints again`,
@@ -54,6 +104,7 @@ export async function csrf(): Promise<string> {
   await establish().catch(() => {});
   if (token) return token;
   const res = await fetch('/api/session', { credentials: 'same-origin' });
+  if (res.status === 401) signedOut();
   if (!res.ok)
     throw new Error(`no board session (${res.status}): open the URL “mnemorphd board” prints`);
   token = readToken(await res.json());

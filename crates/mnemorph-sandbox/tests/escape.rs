@@ -538,3 +538,29 @@ fn a_body_cannot_read_the_harness_environment_through_sysctl() {
         "ps read the harness's environment: {out}"
     );
 }
+
+/// The board's control nonce and its launcher pages live in the human's state directory: a body —
+/// even one with the network, which may connect to the board's socket — reads neither, so it can
+/// neither drive the socket nor take a key.
+#[test]
+fn the_boards_nonce_and_launcher_cannot_be_read() {
+    let g = Ground::new("board");
+    let state = g.path("home/.local/state/mnemorph");
+    fs::create_dir_all(&state).unwrap();
+    fs::write(state.join("board.ctl"), "NONCE-SECRET\n").unwrap();
+    fs::write(state.join("open-0123456789abcdef.html"), "KEY-SECRET\n").unwrap();
+    for network in [false, true] {
+        for file in ["board.ctl", "open-0123456789abcdef.html"] {
+            let (ok, out) = g.run(
+                &g.policy(network),
+                &format!("cat {}", state.join(file).display()),
+            );
+            assert!(
+                !ok && !out.contains("SECRET"),
+                "network {network}, {file}: {out}"
+            );
+        }
+        let (_, out) = g.run(&g.policy(network), &format!("ls {}", state.display()));
+        assert!(!out.contains("open-"), "network {network}: {out}");
+    }
+}

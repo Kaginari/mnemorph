@@ -44,7 +44,7 @@ impl Fixture {
     /// A world directory under the fixture, opened once in the registry.
     fn world(&self, name: &str) -> PathBuf {
         let w = self.root.join(name);
-        std::fs::create_dir_all(&w).unwrap();
+        std::fs::create_dir_all(w.join(".mnemorph")).unwrap();
         register_at(&self.root.join("state/mnemorph/worlds.jsonl"), &w, None).unwrap();
         w
     }
@@ -233,23 +233,27 @@ async fn a_held_run_reads_tui_live_and_a_vanished_directory_missing() {
     let o = f.overview(&cookie, &live).await;
     assert_eq!(o["status"]["value"], "idle");
 
-    // Gone, it is shown, never dropped: what lived in it is unknown.
+    // Gone, it is shown apart as missing, never silently dropped; it has no overview to read.
     let res = f.send(get("/api/worlds", Some(&cookie))).await;
     let listed = body(res).await;
     assert!(
-        listed["worlds"]
+        listed["missing"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|w| w["id"] == world_id(&gone) && w["state"] == "missing")
+            .any(|w| w["id"] == world_id(&gone))
     );
-    let o = f.overview(&cookie, &gone).await;
-    assert_eq!(o["status"]["value"], "missing");
-    assert_eq!(o["status"]["trusted"], true);
-    for field in ["memory", "meters", "spend"] {
-        assert_eq!(o[field]["value"], Value::Null, "{field}");
-        assert_eq!(o[field]["why"], "the directory is gone", "{field}");
-    }
+    assert!(
+        !listed["worlds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["id"] == world_id(&gone))
+    );
+    let res = f
+        .send(get(&format!("/api/w/{}", world_id(&gone)), Some(&cookie)))
+        .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[test]

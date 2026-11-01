@@ -166,7 +166,8 @@ mnemorph run "<ask>"              # one ask without the app
 `mnemorphd` is the same core as a server — the client protocol for the TypeScript SDK and the
 board — and holds the world's admin commands: `runs`, `onto`, `memory`, `q`, `incident`,
 `envelope`, `challenge`, `meters`, `usage`, `evolution`, `housekeep` (`--verify` walks the chained
-journals) and `relief`, and the board's: `board`, `board add`, `board forget` (`mnemorphd --help`).
+journals) and `relief`, and the board's: `board`, `board add`, `board forget`, `board prune`,
+`board stop` (`mnemorphd --help`).
 
 **Why two binaries.** They answer two kinds of caller over one core. `mnemorph` is for a person at
 a terminal, and for scripts: it hosts the session in its own process, with no protocol between the
@@ -192,19 +193,73 @@ to resume is refused in plain text, before the terminal is taken. `mnemorphd run
 
 #### The board server
 
-`mnemorphd board [--port 7878] [--bind 127.0.0.1|::1] [--open]` is one daemon for every world on
-the machine: an axum router in `mnemorph-server` (`src/board/`) on `127.0.0.1` and `[::1]`. Any
-other address is refused — remote use is an SSH port-forward of the same port
+`mnemorphd board [--port 7878] [--bind 127.0.0.1|::1] [--open] [--background]` is one daemon for
+every world on the machine: an axum router in `mnemorph-server` (`src/board/`) on `127.0.0.1` and
+`[::1]`. Any other address is refused — remote use is an SSH port-forward of the same port
 (`ssh -L 7878:127.0.0.1:7878 <host>`), the explicit opt-in. One board runs per machine:
 `$XDG_STATE_HOME/mnemorph/board.lock` is held for its life, and `board.url` beside it (`0600`)
 holds the URL with the key waiting now, which a second launch prints before it exits. A body never
-runs `board`, `board add` or `board forget` (`MNEMORPH_BODY` is refused).
+runs `board`, `board add`, `board forget`, `board prune` or `board stop` (`MNEMORPH_BODY` is
+refused).
+
+**The control socket.** The board that holds the lock also answers `board.sock` beside it, a Unix
+socket made `0600` in the `0700` state directory, and writes a fresh nonce to `board.ctl` beside
+it (`0600`) at its start. Each connection asks one line and reads one, the nonce first: `ping`
+(`ok <pid> http://127.0.0.1:<port>`), `open` (the board opens the browser itself, on a launcher
+file as `--open` does) and `stop`. A body runs as the human's uid, and one with the network may
+connect to a pathname socket, so the uid is not the guard: the board compares the nonce in
+constant time and answers `refused` to any line without it, and a body's sandbox reads no state
+directory, so it never has it. An asker speaks only to a socket and a nonce file its own uid owns;
+the board replaces only a socket left in its place, and refuses anything else there. No key
+crosses the socket. `mnemorphd board stop` stops this user's board under this state directory and
+nothing else. A second
+`mnemorphd board --open` asks the running board to open the browser this way. `--background`
+prints no URL: the board started with the terminal app runs so, and its log holds no key.
+
+**Started with the terminal app.** With `board.autostart` in the human's global file, `mnemorph`
+makes sure a board runs as its session opens, off the UI thread:
+
+```toml
+[board]
+autostart = true   # false unless set
+open = true        # open the browser on a fresh one-time link; false unless set
+port = 7777        # the port a board started this way listens on; 7878 unless set
+```
+
+A running board is reused, never a second: the control socket answers, or the lock refuses a
+second claim. With none running, the app starts `mnemorphd board --background` — the `mnemorphd`
+beside the running `mnemorph`, never one found on `PATH` or in the world — in its own process
+group, with the app's environment (the human's own shell, as when they start it by hand; each of
+its chats' children still gets only the bridge's allowlist), its output to `$XDG_STATE_HOME/mnemorph/board.log` (`0600`, begun again past 1 MiB). The
+world is put on the board if it is not there yet. With `board.open`, the board opens the browser
+on a fresh one-time link, never a printed one. The app shows one line, `board:
+http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorphd board` for a
+sign-in link)*; a port in use, a missing binary or a board slow to answer is that line too, never a crash
+or a hang. No key reaches the app's screen or the log. The board outlives the app: quitting
+`mnemorph` leaves it serving, and a Ctrl-C at that terminal never reaches it.
+`mnemorphd board stop` stops it — its chats end, its socket and URL file go, its lock is let go.
+Every `board.*` key is the global file's alone: from a world's file it is a hole, since starting a
+server that serves every world, and opening a browser on it, are the human's call.
 
 **The worlds** are the registry's — every world a session opened in — and the human's hand,
 `$XDG_STATE_HOME/mnemorph/board/worlds.jsonl`: `board add <dir>` lists a world no session opened in
-yet; `board forget <dir>` stops listing one until it is added again or a session opens in it.
-A world whose directory vanished stays listed as `missing`. Nothing inside a world is read to list
-it, and nothing read from inside a world grants trust.
+yet (a directory holding `.mnemorph/`); `board forget <dir>` stops listing one until it is added
+again or a session opens in it. Nothing inside a world is read to list it but whether its
+`.mnemorph/` is there, and nothing read from inside a world grants trust.
+
+**Missing worlds.** A listed world is *missing* when its directory is gone, is not a directory, or
+holds no `.mnemorph/` of its own (a link to the directory is followed, so a link whose target is
+gone is missing; a `.mnemorph` that is a link out is not the world's own). When the board first
+sees one missing it keeps the time in `$XDG_STATE_HOME/mnemorph/board/missing.json`, the human's
+state; a world that comes back is live again and its record is dropped. `/api/worlds`, the
+worlds page, the rail, the palette and the metrics of `all` show only the live worlds; the
+missing ones wait folded under them, *Missing (N)*, each with its path, *missing since …* and the
+`board forget` that drops it. `mnemorphd board prune [--dry-run]` forgets every missing world —
+a `forget` row in the board's list each, and nothing else: no directory, journal or state is
+touched; `--dry-run` only names them. The same prune runs as a routine at a board's start and at
+`mnemorphd housekeep --heal` (plain `housekeep` names what it would forget) for the worlds missing
+longer than `board.prune_after_days` (14; 0 never; the global file's alone), so a drive unmounted
+for a day is not forgotten.
 
 **The key, the cookie, the token.** The daemon prints `http://127.0.0.1:<port>/#k=<key>`, 32 random
 bytes in hex in the fragment, which a browser never sends or logs. The page reads it, drops it from
@@ -218,8 +273,13 @@ which cannot set a header, sends it as a `Sec-WebSocket-Protocol` entry `mnemorp
 
 Every secret is short-lived. A printed key not traded within 10 minutes is replaced, and the new
 URL kept in `board.url` for a second launch to print. `--open` hands the browser a key of its own,
-valid once and for 60 seconds, because the opener's command line is readable by every local user
-— and by a body's sandbox, which reads `/proc` — while it runs; it is refused when no board is built
+valid once and for 60 seconds, and never on a command line, which every local user — and a body's
+sandbox, which reads `/proc` — may read while it runs: the board writes a launcher page,
+`open-<random>.html` (`0600`) in the state directory, a `<meta http-equiv="refresh">` to
+`http://127.0.0.1:<port>/#k=<key>` with a link for a browser that does not follow it, and hands
+the opener (`xdg-open`, `open`) that file's path. The file is removed once its key is spent, or
+dies (checked every 30 seconds), or the board stops. Chromium follows the refresh from `file://`
+to loopback; a browser that does not shows the link. `--open` is refused when no board is built
 in, since no page would spend the key. A session ends after 12 idle hours, or 7 days after it
 began.
 
@@ -227,16 +287,41 @@ began.
 
 | Check | Applies to | Refused with |
 |---|---|---|
-| `Host` is a bound address, literally (`127.0.0.1:<port>`, `[::1]:<port>`) — never a name, so a rebound DNS name fails | every request | 403 |
+| `Host` is a bound address, literally (`127.0.0.1:<port>`, `[::1]:<port>`), or `localhost:<port>` — never another name, so a rebound DNS name fails | every request | 403 |
 | `Sec-Fetch-Site`, when sent, is `same-origin` or `none` — another port of `127.0.0.1` is the same *site*, so `SameSite` alone does not hold it | every request | 403 |
 | `Origin`, when sent, is `http://` + the `Host`; it must be sent | every request; required on a mutation and a WebSocket upgrade | 403 |
 | the session cookie | `/api/…` but `/api/health`, `/ws`, `/ws/…`, every mutation and upgrade but `POST /session` | 401 |
 | the CSRF token | every mutation and upgrade but `POST /session` | 403 |
 
+**Why other names are refused.** A page on any site can point a name it controls at `127.0.0.1`
+once the browser has loaded it (DNS rebinding); its later requests then reach the board with that
+name as their `Host`, so the board answers only a `Host` that no DNS answer can produce: its bound
+addresses, literally, and `localhost`, which Chrome, Firefox and Safari resolve to loopback
+themselves without asking DNS. The match is exact: `localhost.evil.com`, `foo.localhost`,
+`127.0.0.2` and `0.0.0.0` are refused. Cookies are kept per host, so `127.0.0.1`, `[::1]` and
+`localhost` each sign in on their own; the printed link names `127.0.0.1`.
+
+**Signed out, said so.** A refused page load (a navigation, not a script's fetch) is answered with
+the same status as a page that says why and what to do: a foreign `Host` gets *Open the board at
+`http://127.0.0.1:<port>`: other host names are refused, to block DNS rebinding*, with the addresses
+it answers at; a tab without a session asking for a guarded path gets *This tab isn't signed in*.
+They hold no script, and are styled by `/refused.css`, a fixed public stylesheet — the one path
+answered before the guard, to every `Host`, so a page refused for its `Host` reads too. A
+script's fetch is refused in plain text as before. The page itself shows the same: an `/api/`
+read answered 401 turns the tab to *This tab isn't signed in. Run `mnemorphd board` and open the
+link it prints, in this browser. Each link works once.*, and a key the exchange refuses — spent
+already, perhaps by another browser such as VS Code's — to *This link was already used*, unless
+the tab's cookie still names a session. Each link is one browser's: opened in two, the second is
+signed out.
+
+| Foreign host name | No session | Spent link |
+|---|---|---|
+| <img src="./img/board/signin-host.png" width="260" alt="The server's page for a foreign host name: open the board at http://127.0.0.1, the addresses it answers at"> | <img src="./img/board/signin-signed-out.png" width="260" alt="The board's signed-out page: run mnemorphd board and open the link it prints, in this browser"> | <img src="./img/board/signin-link-used.png" width="260" alt="The board's spent-link page: this link was already used, perhaps by VS Code's browser"> |
+
 **Every response**, a refusal included, carries `Content-Security-Policy: default-src 'none';
 script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src
-'self' ws://127.0.0.1:<port>; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-require-trusted-types-for 'script'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+'self' ws://127.0.0.1:<port> ws://localhost:<port>; base-uri 'none'; form-action 'none';
+frame-ancestors 'none'; require-trusted-types-for 'script'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
 no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy:
 same-origin` and `Cache-Control: no-store`.
 
@@ -253,7 +338,7 @@ embeds a placeholder page saying so, and serves the API all the same.
 |---|---|
 | `GET /api/health` | `{"ok": true}`, with no session |
 | `GET /api/session` | `{"csrf": "<token>"}`: a reloaded page's way back to its token while the cookie lives; the page keeps it in memory only |
-| `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}]}` — `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present` or `missing`; the latest session first. Paths and names are the world's own text: the page renders them as text, never markup |
+| `GET /api/worlds` | `BoardWorlds`: `{"worlds": [{"id", "name", "path", "remote", "last", "sessions", "state"}], "missing": [{"id", "name", "path", "since"}]}` — `worlds` the live ones, `id` is `<name>-<fnv64a>`, `remote` the normalised `origin` or `null`, `last` the latest session's RFC 3339 time or `null` for a world only added, `state` `present`; the latest session first. `missing` the missing ones (above), the longest missing first, `since` when the board first saw it so. Paths and names are the world's own text: the page renders them as text, never markup |
 | `GET /api/w/<id>` | `BoardOverview` of a listed world, 404 for an id no listed world has — see *The world overview* below |
 | `GET /api/w/<id>/memory` | `BoardMemory`: the standing, each creature's row and a page of notes — `?creature=`, `?scope=personal\|shared`, `?standing=proposed\|grounded\|retired\|dormant\|tombstoned`, `?review=yes\|no`, `?offset=`, `?limit=` (100, at most 500) — see *The memory and ontology pages* below |
 | `POST /api/w/<id>/memory/<note>/confirm` | `{"seen"}`: the **confirmed** route, as `mnemorphd memory confirm`; `BoardDone {done}` |
@@ -1672,8 +1757,11 @@ an empty list or table never overrides a lower layer:
   the work and what it costs), so they are honoured only from the global file; from
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere.
-  So is `board.*` (`board.bench_results`, the directory of bench result rows the board shows):
-  the board reads the files it names.
+  So is `board.*` — `board.bench_results`, the directory of bench result rows the board shows;
+  `board.autostart`, `board.open` and `board.port`, whether the terminal app starts a board, opens
+  the browser on it and on which port; `board.prune_after_days`, how long a missing world stays
+  listed (14; 0 never; at most 3650): the board serves every world on the machine, so what it
+  reads, whether it starts and what it opens and forgets are the human's.
 - **The local file widens nothing.** `.mnemorph/config.local.toml` lives inside the world, where
   a body's command or a repository's script (a `make test` the gate runs) may write it. Every key
   above, every `budget.*` cap, every `providers.*`, every `mcp.*` and every `board.*` from it is a hole: the

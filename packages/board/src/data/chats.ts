@@ -14,7 +14,7 @@ import type {
 import { eventType } from '@mnemorph/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePush } from './push.ts';
-import { establish, post } from './session.ts';
+import { establish, post, signedOut } from './session.ts';
 
 const str = (v: unknown): v is string => typeof v === 'string';
 const nat = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
@@ -92,6 +92,7 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
     headers: { accept: 'application/json' },
   });
   if (res.status === 401) {
+    signedOut();
     throw new Error('this browser holds no board session: open the URL `mnemorphd board` prints');
   }
   if (!res.ok) {

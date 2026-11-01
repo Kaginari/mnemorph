@@ -19,7 +19,7 @@ import type {
 } from '@mnemorph/protocol';
 import { useEffect, useState } from 'react';
 import { sourced } from './metrics.ts';
-import { establish } from './session.ts';
+import { establish, signedOut } from './session.ts';
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | undefined =>
@@ -212,7 +212,10 @@ export function useIntegrations(world: string | undefined): IntegrationsLoad {
         }),
       )
       .then(async (res) => {
-        if (res.status === 401) throw new Error('this browser holds no board session');
+        if (res.status === 401) {
+          signedOut();
+          throw new Error('this browser holds no board session');
+        }
         if (!res.ok) throw new Error(`the board server answered ${res.status}`);
         const i = parseIntegrations(await res.json());
         if (!i) throw new Error('the answer is not integrations');

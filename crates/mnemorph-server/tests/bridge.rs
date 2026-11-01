@@ -220,7 +220,7 @@ struct Browser {
 fn rig(name: &str, limits: Limits) -> Rig {
     let root = std::env::temp_dir().join(format!("mnemorph-bridge-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("world")).unwrap();
+    std::fs::create_dir_all(root.join("world/.mnemorph")).unwrap();
     let root = root.canonicalize().unwrap();
     let world = root.join("world");
     let registry = root.join("state/mnemorph/worlds.jsonl");

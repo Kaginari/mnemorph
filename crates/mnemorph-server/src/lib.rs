@@ -28,6 +28,8 @@ pub use mnemorph_loop::mcp_journal;
 pub use mnemorph_loop::wire;
 /// The world, for the commands that read it without a session (`onto owner`).
 pub use mnemorph_loop::world;
+/// The configuration, for the commands that read the human's global file (`board`, `housekeep`).
+pub use mnemorph_loop::{Config, Paths, config};
 /// The runs that stopped and may be resumed.
 pub use mnemorph_loop::{Stopped, stopped};
 

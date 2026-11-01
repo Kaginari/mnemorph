@@ -9,3 +9,15 @@ export function ago(iso: string, now: number): string {
   if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
   return iso.slice(0, 10);
 }
+
+/** When `iso` was, for "missing since …": the day, and how long ago while it is recent. */
+export function since(iso: string, now: number): string {
+  const day = iso.slice(0, 10);
+  const a = ago(iso, now);
+  return a === day || a === 'unknown' ? day : `${day} (${a} ago)`;
+}
+
+/** `text` as one shell word: as it is when it is plain, else in single quotes. */
+export function shellWord(text: string): string {
+  return /^[A-Za-z0-9_./~@%+=:,-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`;
+}
