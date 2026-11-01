@@ -16,17 +16,34 @@ We start by writing, then we code. Every page reads the same way:
 
 Two layers, one picture each:
 
-- **Canvases** — the architecture, the races, the loop and the communication flows are drawn in
-  [tldraw offline](https://github.com/tldraw/tldraw-offline) as `docs/canvas/<page>.tldraw`, and
-  exported next to them as `docs/canvas/<page>.svg`, which the pages embed. An agent connected to
-  the open canvas draws and updates them; you rearrange by hand.
+- **Canvases** — the overview, races and ascensions, the loop, one order down and back, the
+  client protocol, the architecture, the sandbox and consumption are drawn on tldraw's canvas:
+  one document per page, `docs/canvas/<page>.tldr` (a tldraw page per sketch), and each sketch
+  exported as `docs/canvas/<sketch>-light.svg` and `-dark.svg`, which the page shows in the
+  reader's theme. A `.tldr` opens in [tldraw offline](https://github.com/tldraw/tldraw-offline),
+  tldraw.com and tldraw's VS Code extension.
 - **Mermaid sketches** — every page also keeps its diagrams as hand-drawn Mermaid in the text.
-  They render on GitHub, diff in review, and are the layout a canvas is drawn from.
+  They render on GitHub, diff in review, and are the source a canvas is drawn from: under a
+  canvas, its sketch sits folded in a "The sketch in Mermaid" section.
 
-When the code changes a flow, the sketch and the canvas change in the same change (Vitality).
-tldraw offline does not merge external edits to an open file: close a canvas before a pull,
-checkout or rebase touches it. A `.tldraw` file can carry document scripts that run when it is opened:
-review a canvas change like a code change.
+A canvas is drawn, never edited by hand: `pnpm --filter @mnemorph/canvas draw` lays each sketch
+out with tldraw's own Mermaid converter (`@tldraw/mermaid`) in headless Chromium and writes the
+`.tldr` and both SVGs; the same sketches always make the same files. Its labels are written as
+plain SVG text in tldraw's hand-drawn font, cut down to the characters they use, so an SVG holds
+no HTML and fetches nothing. A canvas must read in the page's column: no wider than 2:1, its
+labels at 10 px or more at 900 px wide, or the draw fails; a long sketch is re-laid for its canvas
+only (the loop and the sandbox top-down, the architecture by ELK, one order's messages wrapped and
+its rows spaced), its Mermaid text kept as written. A node its sketch dashes keeps the dashed
+border. Each canvas links to its SVG at full size. The list of sketches and their layouts is
+`tools/canvas/draw.mjs`'s; it needs the Chromium `@playwright/test` pins once (`pnpm --filter
+@mnemorph/canvas exec playwright install chromium`).
+
+When the code changes a flow, the sketch and its canvas change in the same change (Vitality).
+Canvases are reviewed like code: a tldraw document or an SVG can carry script, and tldraw
+offline's own `.tldraw` archive can embed a document script that runs when it is opened, so the
+book keeps `.tldr` and SVG only. `node tools/check-canvas.mjs` (in `just docs` and CI) fails on
+anything else in `docs/canvas/`, and on any script, event handler, `javascript:` URL, link or
+source outside the file, `<foreignObject>`, embed or media there.
 
 ## Reading order
 

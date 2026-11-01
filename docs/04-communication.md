@@ -8,6 +8,16 @@ Two different conversations happen in Mnemorph, and they speak different languag
 
 ## In one picture — one order, down and back
 
+<a href="./canvas/order-light.svg">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/order-dark.svg">
+  <img src="./canvas/order-light.svg" alt="One order, down and back: Veldora's ask goes from Rimuru to elf-engine, orc-engine and slime-wire, each with a budget; slime-wire passes the gate; the DONE reports climb back to Veldora">
+</picture>
+</a>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -45,6 +55,8 @@ sequenceDiagram
     R-->>V: "Done — @W lines now fill Report.Wrote, tested in wire/parse.rs."
     end
 ```
+
+</details>
 
 ## In plain words
 
@@ -371,6 +383,16 @@ it hosts the session in its own process and draws the same events, made by the s
 (`mnemorph_server::events`); its gate cards answer the same questions `gate/ask` carries, and
 `mnemorph run --json` prints those events as JSON lines.
 
+<a href="./canvas/client-protocol-light.svg">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/client-protocol-dark.svg">
+  <img src="./canvas/client-protocol-light.svg" alt="The client protocol: the SDK client initializes and prompts mnemorphd; the turn's events stream back; gate/ask waits for the client's allow; the gate verdict and the turn's end close it">
+</picture>
+</a>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -402,6 +424,8 @@ sequenceDiagram
     D--)C: event/turnEnded {ending: answered}
     end
 ```
+
+</details>
 
 | Kind | Served | Planned |
 |---|---|---|

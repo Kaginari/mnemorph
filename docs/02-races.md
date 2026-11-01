@@ -2,6 +2,16 @@
 
 ## In one picture
 
+<a href="./canvas/races-light.svg">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/races-dark.svg">
+  <img src="./canvas/races-light.svg" alt="Races and ascensions: Veldora above Rimuru; the chain Elf, Orc, Slime and, beside it, the Kijin and the Dark Elf; each race ascends: High Elf, High Orc, Named Slime, Oni, Arch Dark Elf">
+</picture>
+</a>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -49,6 +59,8 @@ flowchart TD
     style chain fill:#f0fdf4,stroke:#2FA36B
     style standing fill:#faf5ff,stroke:#7B4FD6
 ```
+
+</details>
 
 | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
