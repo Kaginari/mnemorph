@@ -234,7 +234,8 @@ set, and once — writing a new file renamed over the doc, never through a link,
 journals it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
 pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
 word on its own Slime, kept by the harness under the human's state directory, where no body
-writes. And a check
+writes, and kept as the Orc's — no test bench, and a pass on it alone is the Orc's check, never
+the human's. And a check
 never writes: the end gate fails a landing whose verify run changed the tree beyond what git
 ignores, so no verify line lands work past the gate's judgement.
 

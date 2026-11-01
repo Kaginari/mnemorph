@@ -453,7 +453,19 @@ without asking under `--yes` for a script the human runs — a benchmark harness
 card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool; and
 relief, which pins each young to the lines its parent's pin held, never to the card's. Every write
 is refused inside a body's command (`MNEMORPH_BODY` is set there), and the sandbox grants no
-command the state directory.
+command the state directory. A body could unset the variable where no sandbox holds it
+(`sandbox.allow_unguarded`), so the human's pin — the command and the first-run prompt — is also
+refused when any process above it is `mnemorph`, `mnemorphd` or `mnemorph-guard` (read from
+`/proc` on Linux, `ps` on macOS; an ancestry that cannot be read refuses). A state directory that
+lies inside the world — `XDG_STATE_HOME` pointed there — holds no pin: nothing is written or read
+there, and the gate fails closed.
+
+**Each line keeps who pinned it.** A line the human pinned, or relief carried down from one, is
+the human's check. A line an Orc coded is the Orc's own word on its Slime: the gate runs it, but
+it earns no test bench for the guts classes (no `positive`, no `red-pin`; its failure is a
+`fail`), and a pass on an Orc's lines alone is journaled "verified by `<orc>`'s pin", apart from
+"the human's pin", so whatever weighs the verdicts can tell them apart. `mnemorphd verify list`
+and the first-run prompt show each pinned line's author.
 
 The first run in a fresh or cloned world asks once. Before the terminal app takes the screen, it
 lists every living creature whose card holds lines the pins do not — the card, the lines, whether
