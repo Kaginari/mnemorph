@@ -388,6 +388,12 @@ includes the witness.
   and shown to the human, in the session and in `mnemorphd envelope list`
   ([#88](https://github.com/Kaginari/mnemorph/issues/88)). `mnemorph status` listing envelopes
   (M6) is still to come.
+- The guts classes on the act beat, the learned value's first signals (built): every act classed
+  `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its structured
+  outcome, journaled on its beat and in a chained, build-stamped record outside the world, counted
+  in `mnemorph status` and chipped on the board's timeline; replaying a run journal gives the same
+  classes. Signals only: nothing rises or falls on them, and the red pin weighs 0
+  ([the loop](03-loop.md#stress-in-four-instruments)).
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 

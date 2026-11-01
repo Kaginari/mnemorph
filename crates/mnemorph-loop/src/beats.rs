@@ -115,6 +115,13 @@ pub enum Beat {
         /// How that bench run counted: green, red, muted, read green or read red.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bench_outcome: Option<String>,
+        /// The command's exit code; `None` for other tools, or a command killed by a signal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit: Option<i32>,
+        /// The act's guts classes ([`crate::guts`]), read by harness code from the facts above and
+        /// the acts before it, never from any text: signals for a learned value, deciding nothing.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        classes: Vec<crate::guts::Class>,
     },
     /// A request that rewrote what the one before it sent: where the cached prefix moved, why — a
     /// fold, a compaction, or nothing documented — and how many thinking blocks the recovery

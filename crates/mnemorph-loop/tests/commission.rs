@@ -103,6 +103,7 @@ impl World {
         let commissioner = Commissioner {
             registry: None,
             law: mnemorph_loop::Law::On,
+            guts: None,
             world: self.0.canonicalize().unwrap(),
             model: model.clone(),
             prices: anthropic_prices().unwrap(),

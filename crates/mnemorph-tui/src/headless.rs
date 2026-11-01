@@ -514,6 +514,18 @@ pub fn status(opened: &Opened) -> Vec<String> {
         .collect()
 }
 
+/// `status`'s guts: the last run's acts counted per class, from the harness's chained record
+/// outside the world — signals for a learned value, never a verdict on the body.
+#[must_use]
+pub fn guts(world: &std::path::Path) -> Vec<String> {
+    let line = match mnemorph_server::world::guts::last_run_held(world) {
+        Ok(Some(c)) => format!("last run {c} — signals, never a verdict"),
+        Ok(None) => "no act classed yet".to_owned(),
+        Err(why) => why,
+    };
+    vec![format!("{:<9}{}", "guts", one_line(&line))]
+}
+
 /// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
 /// an unadopted Mind needs; nothing when the world holds none.
 #[must_use]

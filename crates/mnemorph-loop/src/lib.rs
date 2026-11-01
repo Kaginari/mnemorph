@@ -12,6 +12,7 @@ pub mod decisions;
 pub mod envelope;
 pub mod evolution;
 pub mod gate;
+pub mod guts;
 pub mod incident;
 pub mod key;
 pub mod mcp_journal;

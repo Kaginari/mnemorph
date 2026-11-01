@@ -263,6 +263,11 @@ pub struct Run {
     caller: Caller,
     messages: Vec<Message>,
     stress: Stress,
+    /// The guts classes' memory of this ask's acts.
+    guts: crate::guts::Classifier,
+    /// Where each act's classes are kept again outside the world, chained and stamped; `None`
+    /// keeps them on the run's journal alone.
+    guts_journal: Option<Journal<mnemorph_world::guts::GutsRow>>,
     steps: u32,
     ask_steps: u32,
     spent_wt: u64,
@@ -441,6 +446,8 @@ impl Run {
             caller: setup.caller,
             messages: Vec::new(),
             stress: Stress::for_steps(limits.steps),
+            guts: crate::guts::Classifier::default(),
+            guts_journal: None,
             steps: 0,
             ask_steps: 0,
             spent_wt: 0,
@@ -879,6 +886,15 @@ impl Run {
     #[must_use]
     pub fn with_registry(mut self, registry: Option<std::path::PathBuf>) -> Self {
         self.registry = registry;
+        self
+    }
+
+    /// Where each act's guts classes are kept again outside the world, chained and stamped with
+    /// this build ([`mnemorph_world::guts`]): the record `status` and the board read, out of every
+    /// body's reach.
+    #[must_use]
+    pub fn with_guts(mut self, journal: Option<Journal<mnemorph_world::guts::GutsRow>>) -> Self {
+        self.guts_journal = journal;
         self
     }
 
@@ -1359,6 +1375,7 @@ impl Run {
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
+        self.guts = crate::guts::Classifier::default();
         self.noticed = false;
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
@@ -3148,11 +3165,10 @@ impl Run {
         }
     }
 
-    /// Run each call in order, give every result back, and read the instruments: a reason to
-    /// stop, or none.
-    /// Journal what the guts read from one act, with the act's instruments: the record a learned
-    /// value model will train on.
-    fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
+    /// Journal what the guts read from one act, with the act's instruments and its classes: the
+    /// record a learned value model will train on. The classes are kept again outside the world
+    /// when the run keeps them there.
+    fn record_guts(&mut self, id: &str, name: &str, input: &str, o: &mnemorph_tools::Outcome) {
         if let Some(touched) = &o.meta.mcp_touched {
             self.mcp_touched
                 .lock()
@@ -3160,6 +3176,36 @@ impl Run {
                 .push((**touched).clone());
         }
         let reading = self.stress.last().clone();
+        // Only the structured outcome is read: never `o.content`.
+        let classes = self.guts.classify(&crate::guts::Act::of(
+            name,
+            input,
+            o.is_error,
+            o.meta.refusal(),
+            !o.meta.wrote.is_empty(),
+            reading
+                .bench
+                .as_deref()
+                .map(|b| (b, reading.bench_outcome, o.meta.exit)),
+        ));
+        if let Some(j) = &self.guts_journal {
+            let row = mnemorph_world::guts::GutsRow {
+                ts: Timestamp::now(),
+                run: self.caller.run.clone(),
+                body: self.body.name.clone(),
+                tool_use_id: id.to_owned(),
+                tool: name.to_owned(),
+                classes: classes.clone(),
+                build: mnemorph_ledger::Build::default(),
+            };
+            if let Err(e) = mnemorph_world::guts::append_stamped(j, row) {
+                self.record(&Beat::Warning {
+                    text: format!(
+                        "the act's guts classes could not reach their chained journal: {e}"
+                    ),
+                });
+            }
+        }
         self.record(&Beat::Guts {
             tool_use_id: id.to_owned(),
             tool: name.to_owned(),
@@ -3173,9 +3219,13 @@ impl Run {
             edit_miss: o.meta.edit_miss,
             bench: reading.bench,
             bench_outcome: reading.bench_outcome.map(str::to_owned),
+            exit: o.meta.exit,
+            classes,
         });
     }
 
+    /// Run each call in order, give every result back, and read the instruments: a reason to
+    /// stop, or none.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
@@ -3249,7 +3299,7 @@ impl Run {
                 &o,
                 read,
             ));
-            self.record_guts(&id, &name, &o);
+            self.record_guts(&id, &name, &input, &o);
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,

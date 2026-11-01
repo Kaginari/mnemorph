@@ -299,8 +299,51 @@ a learned value model ([M11](roadmap.md)) will train on:
   in one place on a forgiving rung ([lessons](lessons.md)) — the body editing text it had not read (or, in a multiedit, text an earlier edit of the call had changed);
 - the **bench** it ran, if any, and how that run counted: green, red, muted, read green or read red.
 
-The beat is for the record only: the conversation rebuilt from the journal ignores it, and no
-surface shows it.
+The beat is for the record only: the conversation rebuilt from the journal ignores it, and only
+its classes reach a surface.
+
+**The guts classes.** Each guts beat also names the act's **classes**, isekai's words for what an
+act was, read by harness code from the act's structured outcome and the acts before it in the
+ask (`mnemorph_loop::guts`):
+
+| Class | The act |
+|---|---|
+| `fail` | errored: an error result, a non-zero exit, a kill at the deadline, a refusal by the envelope, the sandbox or the shelf. A human's denial at the gate is the human's choice, never a fail |
+| `red-pin` | ran a test bench the shell saw exit non-zero: TDD's red, in place of a fail |
+| `positive` | ran a test bench the shell saw exit 0 |
+| `repeat` | had the same tool and input as the act just before |
+| `echo` | was the third or later `read` of one window, or `bash` of one command head (its first two words), among the last 12 acts, clean, with nothing written since its last visit and not a repeat: a walk through a file's pages is no echo, the debug rhythm of edit and re-run is none either |
+| `thrash` | ran a test bench (keyed by its first two words, so every `cargo test -p x` is one) for the sixth time or more in the ask, every visit from the sixth |
+
+No text is read. The classifier is given the tool, its input, whether the act failed or the
+human denied it, whether it wrote, and a bench run's exit status as the shell showed it — never
+the output. A command that prints "test result: ok" or "verify passed" is not a bench and earns no
+`positive`; a clean command that prints a red bench's words earns no `red-pin`. A run that hid its
+exit status (piped, or followed by `;`) is neither, and neither is what a decision read from its
+output: the output is the body's to forge. The classes are counted afresh at each ask, and
+replaying a run journal's beats (`guts::replay`) gives the classes the run gave.
+
+The classes are kept twice: on the beat, in the run's journal inside the world; and as one row per
+act — the run, the body, the tool call, its classes and the build that classed it — in a journal
+the harness alone writes, outside the world: `$XDG_STATE_HOME/mnemorph/guts/<world>-<fnv64a>.jsonl`,
+chained by hash and anchored with the world's other chained journals
+([chains](05-architecture.md#configuration)). Only that record is shown. `mnemorph status` counts the
+last run's acts per class from it, while its chain holds:
+
+```text
+guts     last run slime-wire-186f0a2b3c4d5e6f-3 (slime-wire): 14 acts · fail 1 · red-pin 2 · positive 3 · repeat 0 · echo 1 · thrash 0 — signals, never a verdict
+```
+
+and says why when it does not (`the classes are not believed: their chain is broken at line 7`).
+The board's timeline shows a chip per class on each act of a commission, the newest 200, through
+`<Safe>`.
+
+**They are signals, never verdicts.** No bar, rise, fall, warning or stop reads a class: the guts
+score, the stalls and escalation are unchanged by them. They are the record a learned value
+([M11](roadmap.md), [races](02-races.md#ascension--earned-granted-revocable)) will train on, and
+the red pin's weight in any such model is pinned at 0, left out of every update: a red test
+written before the change is the right process, and a model that learned to punish it would teach
+bodies to skip the test.
 
 The human's configuration reaches a run through `configure`: the attic's limits, the stress
 line, the guard rules that ask instead of refusing, and whether commands may run unguarded.

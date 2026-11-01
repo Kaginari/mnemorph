@@ -111,6 +111,7 @@ impl World {
         Commissioner {
             registry: None,
             law: mnemorph_loop::Law::On,
+            guts: None,
             world: self.world().canonicalize().unwrap(),
             model,
             prices: anthropic_prices().unwrap(),

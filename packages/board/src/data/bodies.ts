@@ -15,6 +15,7 @@ import type {
   BodyMind,
   BodyState,
   CommissionState,
+  GutsClass,
   JournalEntry,
   JournalToc,
   MindStanding,
@@ -66,6 +67,17 @@ export const MIND_STANDINGS: readonly MindStanding[] = [
 export const ORDER_STATES: readonly OrderState[] = ['held', 'claimed', 'done', 'dropped'];
 export const TIMELINE_KINDS: readonly TimelineKind[] = ['commission', 'verdict'];
 const COMMISSION_STATES: readonly CommissionState[] = ['ended', 'open', 'unknown'];
+/** The guts classes, in the order an act lists them. */
+export const GUTS_CLASSES: readonly GutsClass[] = [
+  'fail',
+  'red-pin',
+  'positive',
+  'repeat',
+  'echo',
+  'thrash',
+];
+const acts = (v: unknown): v is GutsClass[][] =>
+  Array.isArray(v) && v.every((a) => Array.isArray(a) && a.every(oneOf(GUTS_CLASSES)));
 
 function provenance(v: unknown): Provenance | undefined {
   const o = obj(v);
@@ -84,6 +96,7 @@ export function entry(v: unknown): TimelineEntry | undefined {
   if (!strs(o.failures) || !strOrNull(o.why) || !str(o.source) || !bool(o.trusted)) {
     return undefined;
   }
+  if (!acts(o.acts) || !count(o.acts_cut)) return undefined;
   return {
     kind: o.kind,
     at: o.at,
@@ -99,6 +112,8 @@ export function entry(v: unknown): TimelineEntry | undefined {
     why: o.why,
     source: o.source,
     trusted: o.trusted,
+    acts: o.acts,
+    acts_cut: o.acts_cut,
   };
 }
 
@@ -292,7 +307,7 @@ export function parseTimeline(v: unknown): TimelinePage | undefined {
     return undefined;
   }
   if (!count(o.commissions) || !count(o.verdicts) || !count(o.older)) return undefined;
-  if (!strOrNull(o.verdicts_why)) return undefined;
+  if (!strOrNull(o.verdicts_why) || !strOrNull(o.guts_why)) return undefined;
   const entries = rows(o.entries, entry);
   return {
     entries: entries.ok,
@@ -304,6 +319,7 @@ export function parseTimeline(v: unknown): TimelinePage | undefined {
     verdicts: o.verdicts,
     older: o.older,
     verdicts_why: o.verdicts_why,
+    guts_why: o.guts_why,
     unreadable: entries.bad,
   };
 }

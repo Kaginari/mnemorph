@@ -121,3 +121,36 @@ test('the journal renders log.md inert, with its contents', async () => {
   expect(host.querySelectorAll('.journal-toc li')).toHaveLength(3);
   expect(host.querySelectorAll('.journal-entry')).toHaveLength(3);
 });
+
+test('a commission shows a guts chip per class of each act, every chip with its word', async () => {
+  await mount(<BodiesView w={WORLD} tab="timeline" />);
+  const acts = [...host.querySelectorAll<HTMLLIElement>('.guts-act')];
+  expect(acts).toHaveLength(7);
+  const words = acts.map((a) =>
+    [...a.querySelectorAll('.guts-chip .mark-label')].map((m) => m.textContent),
+  );
+  expect(words).toEqual([
+    [],
+    ['red-pin'],
+    ['red-pin', 'repeat'],
+    ['fail'],
+    ['echo'],
+    ['positive'],
+    ['red-pin', 'thrash'],
+  ]);
+  expect(acts[0]?.dataset.plain).toBe('true');
+  expect(acts[0]?.textContent).toContain('no class');
+  for (const chip of host.querySelectorAll<HTMLElement>('.guts-chip')) {
+    expect(chip.dataset.class).toBe(chip.querySelector('.mark-label')?.textContent);
+  }
+});
+
+test('an act with a class the board does not know leaves its entry out, counted', () => {
+  const t = timelineOf(null, null);
+  const forged = t.entries.map((e) =>
+    e.acts.length > 0 ? { ...e, acts: [['positive'], ['<img src=x onerror=alert(1)>']] } : e,
+  );
+  const page = parseTimeline({ ...t, entries: forged });
+  expect(page?.unreadable).toBe(1);
+  expect(page?.entries.every((e) => e.acts.length === 0)).toBe(true);
+});
