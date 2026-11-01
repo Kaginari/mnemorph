@@ -280,7 +280,7 @@ themselves without asking DNS. The match is exact: `localhost.evil.com`, `foo.lo
 
 **Signed out, said so.** A refused page load (a navigation, not a script's fetch) is answered with
 the same status as a page that says why and what to do: a foreign `Host` gets *Open the board at
-http://127.0.0.1:<port>: other host names are refused, to block DNS rebinding*, with the addresses
+`http://127.0.0.1:<port>`: other host names are refused, to block DNS rebinding*, with the addresses
 it answers at; a tab without a session asking for a guarded path gets *This tab isn't signed in*.
 They hold no script, and are styled by `/refused.css`, a fixed public stylesheet — the one path
 answered before the guard, to every `Host`, so a page refused for its `Host` reads too. A
@@ -293,12 +293,12 @@ signed out.
 
 | Foreign host name | No session | Spent link |
 |---|---|---|
-| <img src="img/board/signin-host.png" width="260" alt="The server's page for a foreign host name: open the board at http://127.0.0.1, the addresses it answers at"> | <img src="img/board/signin-signed-out.png" width="260" alt="The board's signed-out page: run mnemorphd board and open the link it prints, in this browser"> | <img src="img/board/signin-link-used.png" width="260" alt="The board's spent-link page: this link was already used, perhaps by VS Code's browser"> |
+| <img src="./img/board/signin-host.png" width="260" alt="The server's page for a foreign host name: open the board at http://127.0.0.1, the addresses it answers at"> | <img src="./img/board/signin-signed-out.png" width="260" alt="The board's signed-out page: run mnemorphd board and open the link it prints, in this browser"> | <img src="./img/board/signin-link-used.png" width="260" alt="The board's spent-link page: this link was already used, perhaps by VS Code's browser"> |
 
 **Every response**, a refusal included, carries `Content-Security-Policy: default-src 'none';
 script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src
-'self' ws://127.0.0.1:<port> ws://localhost:<port>; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-require-trusted-types-for 'script'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+'self' ws://127.0.0.1:<port> ws://localhost:<port>; base-uri 'none'; form-action 'none';
+frame-ancestors 'none'; require-trusted-types-for 'script'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
 no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy:
 same-origin` and `Cache-Control: no-store`.
 
