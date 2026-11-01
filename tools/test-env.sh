@@ -12,7 +12,9 @@ set -euo pipefail
 [ $# -gt 0 ] || { echo "usage: tools/test-env.sh <command> [args…]" >&2; exit 2; }
 
 sentinel=$(mktemp -d "${TMPDIR:-/tmp}/mnemorph-sentinel.XXXXXX")
-trap 'rm -rf "$sentinel"' EXIT
+# The run's temporary directory: every test home and world under it goes when the run ends.
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/mnemorph-test-tmp.XXXXXX")
+trap 'rm -rf "$sentinel" "$scratch"' EXIT
 for d in home state/mnemorph config/mnemorph data cache run; do mkdir -p "$sentinel/$d"; done
 chmod 700 "$sentinel" "$sentinel/state" "$sentinel/state/mnemorph" "$sentinel/run"
 for f in home/MARKER state/mnemorph/MARKER config/mnemorph/MARKER data/MARKER cache/MARKER run/MARKER; do
@@ -41,6 +43,8 @@ CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rust
   XDG_DATA_HOME="$sentinel/data" \
   XDG_CACHE_HOME="$sentinel/cache" \
   XDG_RUNTIME_DIR="$sentinel/run" \
+  TMPDIR="$scratch" \
+  MNEMORPH_ISOLATED=1 \
   "$@" || status=$?
 
 after=$(survey)

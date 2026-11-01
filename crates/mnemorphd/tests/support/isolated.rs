@@ -11,7 +11,7 @@
 #![allow(dead_code)]
 
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -23,27 +23,34 @@ const KEPT: [&str; 2] = ["LLVM_PROFILE_FILE", "TMPDIR"];
 /// The harness's binaries: a directory holding one is an installed harness, never on the path.
 const HARNESS: [&str; 3] = ["mnemorph", "mnemorphd", "mnemorph-guard"];
 
-/// The home every isolated child runs under: one per test process, made empty, `0700` like the
-/// human's state directory.
+/// The home every isolated child runs under: one per test process, made fresh under an
+/// unpredictable name, `0700` like the human's state directory. It lives as long as the process:
+/// under `tools/test-env.sh` the run's temporary directory, and it with it, is removed at the end.
 #[must_use]
 pub fn home() -> &'static Path {
-    static HOME: OnceLock<PathBuf> = OnceLock::new();
+    static HOME: OnceLock<tempfile::TempDir> = OnceLock::new();
     HOME.get_or_init(|| {
-        let home = std::env::temp_dir().join(format!("mnemorph-isolated-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
+        let home = tempfile::Builder::new()
+            .prefix("mnemorph-isolated-")
+            .tempdir()
+            .unwrap();
         for dir in [".config", ".local/state", ".local/share", ".cache", "run"] {
-            std::fs::create_dir_all(home.join(dir)).unwrap();
+            std::fs::create_dir_all(home.path().join(dir)).unwrap();
         }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
             for dir in ["", ".local/state", "run"] {
-                std::fs::set_permissions(home.join(dir), std::fs::Permissions::from_mode(0o700))
-                    .unwrap();
+                std::fs::set_permissions(
+                    home.path().join(dir),
+                    std::fs::Permissions::from_mode(0o700),
+                )
+                .unwrap();
             }
         }
         home
     })
+    .path()
 }
 
 /// `PATH`, less every directory that holds an installed harness binary.
@@ -68,6 +75,7 @@ pub fn isolated(cmd: &mut Command) -> &mut Command {
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))
         .env("XDG_RUNTIME_DIR", home.join("run"))
+        .env("MNEMORPH_ISOLATED", "1")
         .env("LANG", "C");
     for name in KEPT {
         if let Some(v) = std::env::var_os(name) {

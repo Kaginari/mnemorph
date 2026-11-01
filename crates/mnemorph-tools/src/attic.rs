@@ -202,10 +202,7 @@ impl Attic {
     /// no home or no `git`.
     #[must_use]
     pub fn for_world(world: &Path) -> Option<Self> {
-        let state = std::env::var_os("XDG_STATE_HOME")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .or_else(|| std::env::home_dir().map(|h| h.join(".local/state")))?;
+        let state = mnemorph_sandbox::dirs::state_home()?;
         let mut h = DefaultHasher::new();
         world.hash(&mut h);
         let name = format!(

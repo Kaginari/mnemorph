@@ -62,6 +62,9 @@ board-e2e:
 # Every crate depends only on lower layers (docs/05-architecture.md).
 layers:
     node tools/check-layers.mjs
+    # The shipped binaries are built without the board's test seams.
+    if cargo tree -p mnemorphd -p mnemorph-tui -e normal,build -f '{p} {f}' | grep -q 'test-support'; then \
+        echo "a shipped binary is built with the test-support feature"; exit 1; fi
 
 # The bench, with no model: its report's rules, and every task real and answer-free.
 bench:

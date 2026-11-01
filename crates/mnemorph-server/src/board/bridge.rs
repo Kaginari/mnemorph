@@ -352,11 +352,13 @@ impl Clock {
         hands.stopped.unwrap_or_else(Instant::now) + hands.passed
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn pass(&self, by: Duration) {
         lock(&self.0).passed += by;
     }
 
     /// Stop the system's time: from here on only [`Clock::pass`] moves the clock.
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn stop(&self) {
         let mut hands = lock(&self.0);
         hands.stopped.get_or_insert_with(Instant::now);

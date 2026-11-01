@@ -352,10 +352,13 @@ fn status_counts_the_last_runs_guts_classes() {
 /// A home set up as a human's: a global file that autostarts and opens the board and names a
 /// provider's key file, a `0700` state directory holding a board's control files and registry,
 /// and a browser opener that records what it is asked to open.
-fn hostile_home(name: &str) -> PathBuf {
+fn hostile_home() -> tempfile::TempDir {
     use std::os::unix::fs::PermissionsExt as _;
-    let h = std::env::temp_dir().join(format!("mnemorph-hostile-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&h);
+    let home = tempfile::Builder::new()
+        .prefix("mnemorph-hostile-")
+        .tempdir()
+        .unwrap();
+    let h = home.path();
     let state = h.join(".local/state/mnemorph");
     for dir in [".config/mnemorph", ".local/share", ".cache", "run", "bin"] {
         std::fs::create_dir_all(h.join(dir)).unwrap();
@@ -387,7 +390,7 @@ fn hostile_home(name: &str) -> PathBuf {
         std::fs::write(&p, &opener).unwrap();
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
-    h
+    home
 }
 
 #[cfg(unix)]
@@ -422,7 +425,7 @@ fn an_isolated_child_keeps_nothing_of_the_home_it_was_spawned_from() {
         match name {
             "HOME" | "XDG_CONFIG_HOME" | "XDG_STATE_HOME" | "XDG_DATA_HOME" | "XDG_CACHE_HOME"
             | "XDG_RUNTIME_DIR" => assert!(Path::new(value).starts_with(home), "{line}"),
-            "PATH" | "LANG" | "LLVM_PROFILE_FILE" | "TMPDIR" => {}
+            "PATH" | "LANG" | "LLVM_PROFILE_FILE" | "TMPDIR" | "MNEMORPH_ISOLATED" => {}
             _ => panic!("the parent's `{name}` came through"),
         }
     }
@@ -443,8 +446,9 @@ fn an_isolated_child_keeps_nothing_of_the_home_it_was_spawned_from() {
 #[cfg(unix)]
 #[test]
 fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
-    let h = hostile_home("guard");
-    let before = files(&h);
+    let home = hostile_home();
+    let h = home.path();
+    let before = files(h);
     let path = std::env::join_paths(std::iter::once(h.join("bin")).chain(std::env::split_paths(
         &std::env::var_os("PATH").unwrap_or_default(),
     )))
@@ -474,5 +478,4 @@ fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
     assert!(out.status.success(), "{said}");
     assert!(said.contains("2 passed"), "both tests ran: {said}");
     assert_eq!(files(&h), before, "the populated home was left as it was");
-    let _ = std::fs::remove_dir_all(&h);
 }

@@ -248,6 +248,7 @@ fn rig(name: &str, limits: Limits) -> Rig {
         ("XDG_DATA_HOME", root.join("data").display().to_string()),
         ("XDG_CACHE_HOME", root.join("cache").display().to_string()),
         ("XDG_RUNTIME_DIR", root.join("run").display().to_string()),
+        ("MNEMORPH_ISOLATED", "1".to_owned()),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_owned(), v))
