@@ -56,10 +56,15 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Meters with their count and 95% interval; value rows stamped with their build [#166] [#260]
   [#267] [#268].
 - Hash-chained trust journals, the head anchored in `log.md` [#261] [#267].
+- The end gate runs only pinned verify lines: `mnemorphd verify pin`, a chained witness under the
+  state directory, the terminal app's first-run prompt; a card that differs fails closed.
 - Explainable falls and honest bad news [#263]; lifecycles explored whole, with reachability
   witnesses [#265].
 - Evolution judged after the freeze, against a do-nothing control, on an exact staged file set
   [#264] [#268] [#298]; a claim graph for memory [#266].
+- Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
+  structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
+  chipped on the board's timeline; signals only, the red pin weighing 0.
 
 ### M10 — Dark Elf
 

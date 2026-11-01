@@ -61,8 +61,10 @@ fn verify_says_each_chain_and_anchors_its_head() {
         "value",
         "evolution",
         "gate",
+        "guts",
         "answers",
         "minds",
+        "verify",
         "uses",
         "revocations",
     ] {

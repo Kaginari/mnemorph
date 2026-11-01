@@ -78,6 +78,8 @@ impl Fixture {
                 changed: own(changed),
                 failures: own(failures),
                 unverified: own(unverified),
+                unchecked: word.contains(", unchecked"),
+                verified_by: Vec::new(),
                 entry: None,
                 build: Build::default(),
                 run: run.map(Into::into),
@@ -384,6 +386,8 @@ fn an_in_world_journal_copy_is_ignored() {
             changed: vec!["a".into()],
             failures: Vec::new(),
             unverified: Vec::new(),
+            unchecked: false,
+            verified_by: Vec::new(),
             entry: None,
             build: Build::default(),
             run: Some("x1".into()),
@@ -456,4 +460,31 @@ fn a_row_the_fold_cannot_read_stops_it() {
         f.fold(),
         Err(Unavailable::Unreadable { journal, .. }) if journal == "gate"
     ));
+}
+
+/// A pass no verify line ran on lands as the baseline, never counted as verified; lines held back
+/// for the human to pin are the human's, never the body's record.
+#[test]
+fn an_unchecked_pass_is_not_verified_and_an_unpinned_one_not_the_bodys() {
+    let f = Fixture::new();
+    f.call("a", "sly", "slime", None, 1);
+    f.verdict(Some("a"), "sly", "PASS, unchecked", 2, &["x"]);
+    f.call("b", "sly", "slime", None, 3);
+    f.verdict(Some("b"), "sly", "NOT_VERIFIED, unpinned", 4, &["x"]);
+    let i = f.fold().unwrap().of("sly", Race::Slime);
+    assert_eq!(i.reports, 2);
+    assert_eq!(i.land, Rate::of(0, 2));
+    assert_eq!(
+        i.verify_green,
+        Rate::of(0, 0),
+        "no line ran: nothing said of its lines"
+    );
+    assert_eq!(
+        i.outcomes[0].gate,
+        Some(mnemorph_races::GateWord::NotVerified)
+    );
+    assert_eq!(
+        i.outcomes[1].gate, None,
+        "held for the human: no landing of the body's"
+    );
 }

@@ -484,7 +484,8 @@ provider, where the provider's key comes from (its variable and the file that na
 value), the sandbox actually in force (or `none — <reason>`), what the caps leave, the
 configuration's holes, and each living creature's meters on one line — each with its count and
 its 95% interval, or `no reports` where no fold reads it yet
-([meters](02-races.md#ascension--earned-granted-revocable)), printed even when no session opens. **`mnemorphd onto owner <path>...`** asks the core who owns each path, by
+([meters](02-races.md#ascension--earned-granted-revocable)), and the last run's acts counted per
+[guts class](03-loop.md#stress-in-four-instruments), printed even when no session opens. **`mnemorphd onto owner <path>...`** asks the core who owns each path, by
 which rule and claim ([ontology](09-ontology.md#ownership-one-function)), with no session and no
 key. **Enter** sends, and while a turn runs the line waits its turn; **Alt+Enter** starts a new
 line; **`/send <text>`** steers the turn that runs, the text reaching the body after its next tool

@@ -122,6 +122,7 @@ fn facts_of(journal: &Journal<Beat>) -> Facts {
 /// its own prompt, soil and verify lines; its gate denies every act that asks.
 fn body_run(
     world: &Path,
+    trust: &Path,
     root: &Path,
     name: &str,
     c: &Controller<'_>,
@@ -130,16 +131,13 @@ fn body_run(
     let roster = Roster::load(world);
     let (body, cx, gate) = if name == "rimuru" {
         let (body, cx) = solo(world, &c.model_id);
-        let verify = roster
-            .creatures
-            .get(name)
-            .map(|cr| cr.verify.clone())
-            .unwrap_or_default();
-        let gate = EndGate {
-            verify,
-            verify_secs: c.config.verify_secs(),
-            author: None,
-        };
+        let card = roster.creatures.get(name);
+        let doc = card.map_or_else(
+            || ".mnemorph/rimuru/rimuru/README.md".to_owned(),
+            mnemorph_world::Creature::doc,
+        );
+        let verify = card.map(|cr| cr.verify.clone()).unwrap_or_default();
+        let gate = EndGate::pinned(trust, name, &doc, &verify, c.config.verify_secs(), None);
         (body, cx, gate)
     } else {
         let creature = roster
@@ -155,14 +153,17 @@ fn body_run(
             model: c.model_id.clone(),
             system: crate::commission::prompt(world, &roster, name, "human", crate::Law::On),
         };
-        let gate = EndGate {
-            verify: creature.verify.clone(),
-            verify_secs: c.config.verify_secs(),
-            author: Some(Author {
+        let gate = EndGate::pinned(
+            trust,
+            name,
+            &creature.doc(),
+            &creature.verify,
+            c.config.verify_secs(),
+            Some(Author {
                 name: name.to_owned(),
                 roster: roster.clone(),
             }),
-        };
+        );
         (body, cx, gate)
     };
     let race = body.race;
@@ -319,7 +320,8 @@ async fn control(
         return Err("the scratch world does not hold the named files as they were before".into());
     }
     let journal: Journal<Beat> = Journal::new(root.join("control.jsonl"));
-    let mut run = body_run(scratch, root, body, c, journal.clone())?;
+    // The scratch copy's cards are judged against the live world's pins: a copy has none.
+    let mut run = body_run(scratch, world, root, body, c, journal.clone())?;
     let stamp = Stamp {
         ledger: at.to_path_buf(),
         swap: swap.clone(),

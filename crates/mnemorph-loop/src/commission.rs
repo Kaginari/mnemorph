@@ -155,6 +155,9 @@ pub struct Commissioner {
     /// Whether every commissioned body's fixed prompt carries the world's law, cards and
     /// manifests: the session's own, from the human's command line.
     pub law: crate::Law,
+    /// Where every commissioned body's guts classes are kept again outside the world
+    /// ([`mnemorph_world::guts`]); `None` keeps them on each run's journal alone.
+    pub guts: Option<Journal<mnemorph_world::guts::GutsRow>>,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -1429,21 +1432,26 @@ fn child_run(
             prefix: 0,
         },
     };
-    let gate = EndGate {
-        verify: creature.verify.clone(),
-        verify_secs: c.verify_secs.unwrap_or(mnemorph_config::VERIFY_SECS),
-        author: Some(Author {
+    // The lines pinned for the creature, never its card's word: the card lives in the world.
+    let gate = EndGate::pinned(
+        &c.world,
+        &name,
+        &creature.doc(),
+        &creature.verify,
+        c.verify_secs.unwrap_or(mnemorph_config::VERIFY_SECS),
+        Some(Author {
             name: name.clone(),
             roster: roster.clone(),
         }),
-    };
+    );
     let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup)
         .with_law(c.law)
         .with_gate(gate)
         .with_manifest(manifest_for(c, roster, &name))
         .with_mcp(c.mcp.clone())
-        .with_registry(c.registry.clone());
+        .with_registry(c.registry.clone())
+        .with_guts(c.guts.clone());
     // What the child sees reaches the session's watcher, under the child's own name.
     if let Some(watch) = c.observer.clone() {
         let body_name = name.clone();
@@ -1815,6 +1823,8 @@ mod write_rule_tests {
                 unverified: Vec::new(),
                 unguarded: false,
                 wrote: false,
+                unpinned: false,
+                verified_by: vec!["the human's pin".to_owned()],
                 ran: 1,
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");

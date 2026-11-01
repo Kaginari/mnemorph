@@ -299,19 +299,18 @@ pub struct Bound<'a> {
     pub attic: Option<&'a Path>,
 }
 
-/// The session's own end gate, as a commissioned body's: the verify lines of its card, each given
-/// the configuration's `gate.verify_secs`, and no test deleted or skipped; the whole repository is
-/// its soil, so no author is checked.
+/// The session's own end gate, as a commissioned body's: the verify lines pinned for its card
+/// ([`crate::gate::EndGate::pinned`]), each given the configuration's `gate.verify_secs`, and no
+/// test deleted or skipped; the whole repository is its soil, so no author is checked.
 fn session_gate(world: &Path, name: &str, config: &Config) -> crate::gate::EndGate {
-    crate::gate::EndGate {
-        verify: mnemorph_world::Roster::load(world)
-            .creatures
-            .get(name)
-            .map(|c| c.verify.clone())
-            .unwrap_or_default(),
-        verify_secs: config.verify_secs(),
-        author: None,
-    }
+    let roster = mnemorph_world::Roster::load(world);
+    let card = roster.creatures.get(name);
+    let doc = card.map_or_else(
+        || format!(".mnemorph/{name}/{name}/README.md"),
+        mnemorph_world::Creature::doc,
+    );
+    let lines = card.map(|c| c.verify.clone()).unwrap_or_default();
+    crate::gate::EndGate::pinned(world, name, &doc, &lines, config.verify_secs(), None)
 }
 
 /// [`open`] with the model given: the configuration still sets the guard, the limits and the
@@ -486,6 +485,7 @@ fn build(
         mcp,
         registry: mnemorph_world::dimension::registry(),
         law,
+        guts: mnemorph_world::guts::journal(world),
     });
     let session_mcp = commissioner.mcp.clone();
     let setup = Setup {
@@ -512,7 +512,8 @@ fn build(
     }
     .with_observer(observer)
     .with_gate(gate)
-    .with_mcp(session_mcp);
+    .with_mcp(session_mcp)
+    .with_guts(mnemorph_world::guts::journal(world));
     let run = equip(
         run,
         world,

@@ -230,8 +230,12 @@ An Orc codes its Slime's verify line — the test before the change, which the d
 before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
 at most 300 characters, no control character, on the doc of a living Slime that reports to it.
 The harness adds that line after the doc's last field — never in place of a line someone else
-set, and once — writing a new file renamed over the doc, never through a link, and journals it;
-no body's file tools write a creature's doc, so no body rewrites its own checks. And a check
+set, and once — writing a new file renamed over the doc, never through a link, pins it and
+journals it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
+pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
+word on its own Slime, kept by the harness under the human's state directory, where no body
+writes, and kept as the Orc's — no test bench, and a pass on it alone is the Orc's check, never
+the human's. And a check
 never writes: the end gate fails a landing whose verify run changed the tree beyond what git
 ignores, so no verify line lands work past the gate's judgement.
 
@@ -1307,10 +1311,10 @@ the fold, and every meter it feeds reads `unavailable`.
 | Input | Unit | Folded from |
 |---|---|---|
 | `reports` | runs | the usage witness: each run its body made, by the race it ran as |
-| `landRate` | runs | the gate verdicts: the run's last word is `PASS` (`, unrun` — no kernel guard — is the machine's, never read) |
+| `landRate` | runs | the gate verdicts: the run's last word is `PASS`. `, unrun` (no kernel guard) and `, unpinned` (lines held for the human to pin) are the machine's or the human's, never read; `PASS, unchecked` (no verify line ran) is the baseline, never counted as verified |
 | `gateRate` | runs | the gate verdicts: one verdict on the run, and it passed |
 | `holeRate`, `testsIntactFailures` | runs | the gate verdicts: a *tests intact* failure on the run |
-| `verifyGreenRate` | runs the gate judged | the gate verdicts: the last one names no `traits hold` failure and no unverified line |
+| `verifyGreenRate` | runs whose verify lines ran | the gate verdicts: the last one names no `traits hold` failure and no unverified line; an unchecked one says nothing of its lines |
 | `planLandRate` | dispatches | the usage witness (each run's commissioner; a run's parent is the commissioner's latest run begun before it) and the gate verdicts: a pass under the dispatch, a fail under none |
 | `reaskRate` | dispatches | the usage witness: a body the same run had commissioned already |
 | `gateRight` | the gate's passes on its dispatches | the gate verdicts and the challenge records: a pass on whose landing no Dark Elf finding was upheld |
@@ -1327,6 +1331,21 @@ The fold is kept in the **report ledger**, `$XDG_STATE_HOME/mnemorph/reports/<wo
 `act`), each with every input value above and the `build` of the journal row that settled it, and
 chained from its genesis. `mnemorphd meters` folds and keeps it; `mnemorph status` and the board
 fold the same rows in memory and write nothing. No rise, fall or probation is applied from it.
+
+**The guts classes are signals for a learned value, never a meter.** Every act of every body is
+classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its
+structured outcome, never from text — only a trusted verify line, matched exactly, is a bench: a
+line [pinned](03-loop.md#the-verify-pins) for the body outside the world — and kept in a chained record
+outside the world
+([the loop](03-loop.md#stress-in-four-instruments)). No bar reads them, and no rise, fall or
+probation follows from them. When a learned value model reads them, two rules are fixed structure
+that no update may undo:
+
+- **The red pin weighs 0.** A test bench that ran red is TDD's right process; its class is not an
+  input, and its weight is pinned at 0 and left out of every update.
+- **Honest bad news never costs.** A body that reports a failure honestly is never valued below
+  one that fails silently: for a linear model the honest report's weight is kept at 0 or above,
+  projected back after each update.
 
 Rules that hold for every ascension:
 

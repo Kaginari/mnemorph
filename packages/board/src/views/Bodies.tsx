@@ -9,6 +9,7 @@ import type {
   BoardOrder,
   BoardWorld,
   BodyState,
+  GutsClass,
   MindStanding,
   OrderState,
   Provenance,
@@ -131,6 +132,54 @@ function Unreadable({ n }: { n: number }) {
   );
 }
 
+/** How each guts class is drawn: a glyph and a tone, always beside its word. */
+const GUTS: Record<GutsClass, { glyph: string; tone: Tone }> = {
+  fail: { glyph: '✕', tone: 'alarm' },
+  'red-pin': { glyph: '◌', tone: 'muted' },
+  positive: { glyph: '✓', tone: 'holo' },
+  repeat: { glyph: '↻', tone: 'gold' },
+  echo: { glyph: '≡', tone: 'gold' },
+  thrash: { glyph: '⟳', tone: 'alarm' },
+};
+
+/**
+ * A commission's acts, in order, each with a chip per guts class — from the harness's record
+ * outside the world. Signals for a learned value: none of them is a verdict on the body.
+ */
+function GutsActs({ e }: { e: TimelineEntry }) {
+  if (e.acts.length === 0) return null;
+  return (
+    <span className="act-guts">
+      <span className="panel-note">
+        guts, per act (trusted){e.acts_cut > 0 && ` · ${e.acts_cut} older act(s) not shown`}:
+      </span>
+      <ol className="guts-acts">
+        {e.acts.map((classes, i) => (
+          // An act's place in its run is its identity: the list never reorders.
+          // biome-ignore lint/suspicious/noArrayIndexKey: acts are positional
+          <li key={i} className="guts-act" data-plain={classes.length === 0 || undefined}>
+            <span className="visually-hidden">act {i + 1 + e.acts_cut}:</span>
+            {classes.length === 0 ? (
+              <span className="guts-plain">
+                <span aria-hidden="true">·</span>
+                <span className="visually-hidden">no class</span>
+              </span>
+            ) : (
+              classes.map((c) => (
+                <span key={c} className="guts-chip" data-class={c}>
+                  <Mark tone={GUTS[c].tone} glyph={GUTS[c].glyph}>
+                    <Safe text={c} />
+                  </Mark>
+                </span>
+              ))
+            )}
+          </li>
+        ))}
+      </ol>
+    </span>
+  );
+}
+
 /** One act: a commission or a verdict. */
 export function Act({ e }: { e: TimelineEntry }) {
   return (
@@ -175,6 +224,7 @@ export function Act({ e }: { e: TimelineEntry }) {
           · <Safe text={e.why} />
         </span>
       )}
+      <GutsActs e={e} />
       <span className="act-source">
         {e.trusted ? 'trusted' : 'in-world'} · <Safe text={e.source} />
       </span>
@@ -691,6 +741,13 @@ function TimelineTab({ w }: { w: BoardWorld }) {
         <p className="hint">
           <Mark tone="gold" glyph="⚠">
             <Safe text={t.verdicts_why} />
+          </Mark>
+        </p>
+      )}
+      {t?.guts_why && (
+        <p className="hint">
+          <Mark tone="gold" glyph="⚠">
+            The acts' guts classes are not shown: <Safe text={t.guts_why} />
           </Mark>
         </p>
       )}

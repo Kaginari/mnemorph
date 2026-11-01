@@ -592,6 +592,8 @@ fn a_frame_for_the_eye() {
             changed: vec!["sqlglot/parser.py".into()],
             failures: vec![],
             unverified: vec![],
+            unchecked: false,
+            verified_by: Vec::new(),
         },
     );
     ev(

@@ -355,11 +355,15 @@ fn landing_run(run: &str) -> String {
         .collect()
 }
 
-/// The gate's word, as the fold reads it; `None` for a verdict no check could run for (no kernel
-/// guard): the machine's doing, never the body's.
+/// The gate's word, as the fold reads it; `None` for a verdict no check could run for — no kernel
+/// guard (`, unrun`), or lines held back for the human to pin (`, unpinned`): the machine's or the
+/// human's doing, never the body's. A pass no verify line ran on (`, unchecked`) lands as the
+/// baseline and is never counted as verified: not verified.
 fn word(v: &str) -> Option<Gate> {
-    if v.contains(", unrun") {
+    if v.contains(", unrun") || v.contains(", unpinned") {
         None
+    } else if v.contains(", unchecked") {
+        Some(Gate::NotVerified)
     } else if v.starts_with("PASS") {
         Some(Gate::Pass)
     } else if v.starts_with("NOT_VERIFIED") {
@@ -497,7 +501,8 @@ fn run_reports(
                 gate: gate[i],
                 first_try: vs.len() == 1 && gate[i] == Some(Gate::Pass),
                 holes: u32::try_from(holes).unwrap_or(u32::MAX),
-                verify_green: last.map(|v| {
+                // A landing no verify line ran on says nothing of its lines.
+                verify_green: last.filter(|v| !v.unchecked).map(|v| {
                     v.unverified.is_empty()
                         && !v.failures.iter().any(|f| f.starts_with("traits hold:"))
                 }),

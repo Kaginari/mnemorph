@@ -299,8 +299,68 @@ a learned value model ([M11](roadmap.md)) will train on:
   in one place on a forgiving rung ([lessons](lessons.md)) — the body editing text it had not read (or, in a multiedit, text an earlier edit of the call had changed);
 - the **bench** it ran, if any, and how that run counted: green, red, muted, read green or read red.
 
-The beat is for the record only: the conversation rebuilt from the journal ignores it, and no
-surface shows it.
+The beat is for the record only: the conversation rebuilt from the journal ignores it, and only
+its classes reach a surface.
+
+**The guts classes.** Each guts beat also names the act's **classes**, isekai's words for what an
+act was, read by harness code from the act's structured outcome and the run's acts before it
+(`mnemorph_loop::guts`):
+
+| Class | The act |
+|---|---|
+| `fail` | errored: an error result, a non-zero exit, a kill at the deadline, a refusal by the envelope, the sandbox or the shelf. A human's denial at the gate is the human's choice, never a fail |
+| `red-pin` | ran a trusted bench that exited non-zero: TDD's red, in place of a fail |
+| `positive` | ran a trusted bench that exited 0 |
+| `repeat` | had the same tool and input as the act just before |
+| `echo` | was the third or later `read` of one window, or `bash` of one command head (its first two words), among the last 12 acts, clean, with nothing written since its last visit and not a repeat: a walk through a file's pages is no echo, the debug rhythm of edit and re-run is none either |
+| `thrash` | ran one trusted bench for the sixth time or more in the run, every visit from the sixth |
+
+**A trusted bench** is a verify line from a source no body can write, and the act's command,
+trimmed with its runs of whitespace made one, must equal it exactly: no prefix, no substring.
+A check the body chose is a plain command, whatever it is named: `python3 -c "assert True"`, a
+`verify.sh` it wrote, `cargo test --no-run`, `cargo test -p x | tail`. Passing one earns nothing;
+failing one is a `fail`, never a red pin. **The source is the body's end gate:** the verify lines
+[pinned](#the-verify-pins) for it outside the world, never its card's word. A body with no pin,
+or whose card differs from its pin, has no bench, and `red-pin`, `positive` and `thrash` do not
+occur for it. A resumed run is replayed with no bench, then trusts its gate's lines from there.
+
+No text is read. The classifier is given the tool, its input, whether the act failed or the
+human denied it, whether it wrote, and its exit code — never the output. A command that prints
+"test result: ok" or "verify passed" earns no `positive`; one that prints a red bench's words
+earns no `red-pin`.
+
+The classifier spans the run, every ask of it, as isekai's spans its session: the act before, the
+echo's ring and each bench's visits carry from one ask to the next, and a resumed run goes on
+from its journal's acts. Replaying a run journal's beats (`guts::replay`) gives the classes the
+run gave. Two things differ from isekai, both because a body can forge text: isekai reads the red
+pin and `positive` from the output's words, and counts any command that looks like a test runner
+as a bench; here only the exit code of a trusted verify line counts. isekai's `neg-lexeme`, a
+class read from words alone, is not kept.
+
+The classes are kept twice: on the beat, in the run's journal inside the world; and as one row per
+act — the run, the body, the tool call, its classes and the build that classed it — in a journal
+the harness alone writes, outside the world: `$XDG_STATE_HOME/mnemorph/guts/<world>-<fnv64a>.jsonl`,
+chained by hash and anchored with the world's other chained journals
+([chains](05-architecture.md#configuration)). Only that record is shown. `mnemorph status` counts the
+last run's acts per class from it, while its chain holds:
+
+```text
+guts     last run slime-wire-186f0a2b3c4d5e6f-3 (slime-wire): 14 acts · fail 1 · red-pin 2 · positive 3 · repeat 0 · echo 1 · thrash 0 — signals, never a verdict
+```
+
+and says why when it does not (`the classes are not believed: their chain is broken at line 7`).
+A process walks the record whole once, then only the rows appended since, reading its last row
+again each time; another file, a shorter one, a new anchor or a last row changed in place walks it
+whole again. It keeps the newest 100,000 rows.
+The board's timeline shows a chip per class on each act of a commission, the newest 200, through
+`<Safe>`.
+
+**They are signals, never verdicts.** No bar, rise, fall, warning or stop reads a class: the guts
+score, the stalls and escalation are unchanged by them. They are the record a learned value
+([M11](roadmap.md), [races](02-races.md#ascension--earned-granted-revocable)) will train on, and
+the red pin's weight in any such model is pinned at 0, left out of every update: a red test
+written before the change is the right process, and a model that learned to punish it would teach
+bodies to skip the test.
 
 The human's configuration reaches a run through `configure`: the attic's limits, the stress
 line, the guard rules that ask instead of refusing, and whether commands may run unguarded.
@@ -363,12 +423,64 @@ The world repairs itself in small, mechanical steps, each one written to the led
   alone, never a directory or a journal ([missing worlds](05-architecture.md#the-board-server)).
 - **One live court per seat**: a second commission to a busy seat waits in its lane.
 
+### The verify pins
+
+A creature's card lives in the world, and nothing read from inside a world grants trust: a body
+can reach a card through routes no tool guard sees — a commit made with git's plumbing and checked
+out later, a merge, a pull — and a cloned repository brings every card from a stranger. So the end
+gate never runs a verify line because a card says it. It runs the lines **pinned** for the
+creature in a witness kept outside the world, `$XDG_STATE_HOME/mnemorph/verify/<world>-<fnv64a>.jsonl`
+(else under `~/.local/state`), hash-chained and anchored as `verify` with the world's other chained
+journals ([storage](05-architecture.md#storage-files-are-the-truth)), and only while the card
+still says the same set of lines.
+
+- **A card that differs from its pin** — a line changed, added or removed — runs nothing. The
+  landing fails closed at once, NOT_VERIFIED with no retry, since no retry of the body's can pin a
+  line: "the verify line in `<card>` differs from the pinned one: run
+  `mnemorphd verify pin <creature>` to accept it".
+- **A card with lines and no pin** — a fresh world, a cloned one, a card born since — runs nothing
+  the same way, with the same way on. A card with no line and no pin runs no check: its landing
+  passes as the baseline, journaled `PASS, unchecked` with "no verify line ran", shown so in the
+  terminal app and `mnemorph status`, and never counted as verified — not by a body's worth,
+  nor as a fact's ground.
+- **A witness whose chain does not walk whole** — a row edited, a tail dropped against its anchor —
+  trusts no pin: every landing fails closed until the human looks (`mnemorphd housekeep --verify`
+  says where it breaks).
+
+Three writers, none of them a body's command: the human's `mnemorphd verify pin <creature>`, which
+shows the card's lines and asks at the terminal (`/dev/tty`; piped input is refused), or pins
+without asking under `--yes` for a script the human runs — a benchmark harness that writes the
+card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool; and
+relief, which pins each young to the lines its parent's pin held, never to the card's. Every write
+is refused inside a body's command (`MNEMORPH_BODY` is set there), and the sandbox grants no
+command the state directory. A body could unset the variable where no sandbox holds it
+(`sandbox.allow_unguarded`), so the human's pin — the command and the first-run prompt — is also
+refused when any process above it is `mnemorph`, `mnemorphd` or `mnemorph-guard` (read from
+`/proc` on Linux, `ps` on macOS; an ancestry that cannot be read refuses). A state directory that
+lies inside the world — `XDG_STATE_HOME` pointed there — holds no pin: nothing is written or read
+there, and the gate fails closed.
+
+**Each line keeps who pinned it.** A line the human pinned, or relief carried down from one, is
+the human's check. A line an Orc coded is the Orc's own word on its Slime: the gate runs it, but
+it earns no test bench for the guts classes (no `positive`, no `red-pin`; its failure is a
+`fail`), and a pass on an Orc's lines alone is journaled "verified by `<orc>`'s pin", apart from
+"the human's pin", so whatever weighs the verdicts can tell them apart. `mnemorphd verify list`
+and the first-run prompt show each pinned line's author.
+
+The first run in a fresh or cloned world asks once. Before the terminal app takes the screen, it
+lists every living creature whose card holds lines the pins do not — the card, the lines, whether
+it is unpinned or differs — and asks one question; `y` pins exactly the lines shown, anything else
+pins nothing and says the landings fail closed until `mnemorphd verify pin`. `mnemorph run` never
+asks: its gate fails closed with the hint. A pin is the human's word on one world, named by its
+real path: a copy of the world is pinned again.
+
 ### The end gate
 
 Runs on the body's own writes (minus what its Courts already landed on their own account) — a
 commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
-card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens, and in solo the whole
-repository is its soil, so right author holds by construction. A card with no verify line runs no
+card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens and run only as
+[pinned](#the-verify-pins), and in solo the whole repository is its soil, so right author holds
+by construction. A card with no verify line runs no
 check, and then no claim of a solo session is ever grounded: `mnemorphd memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
@@ -393,7 +505,7 @@ on each verify command, and names the key that raises it. The gate runs:
    never touches it, and the commission's report names it as another writer's. The grant is the
    one the body ran with, taken before it starts. With no guard, writers cannot be told apart, and every change in the tree is
    judged the body's.
-2. **Traits hold** — the verify lines that stood *before* the turn run green, sandboxed, each
+2. **Traits hold** — the verify lines that stood *before* the turn, as pinned, run green, sandboxed, each
    within `gate.verify_secs` (120 s unless the configuration says; 10 to 600, the most the
    `bash` tool grants a command), and within the ask's own clock. A cold build of a large compiled
    project can take longer than 120 s; killed at the limit, it gives no result, so the landing is

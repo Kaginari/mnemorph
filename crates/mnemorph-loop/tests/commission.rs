@@ -47,6 +47,7 @@ impl World {
             "s",
             "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n- **Verify:** `test -f src/done.txt`\n",
         );
+        pin(&w.0, "slime-s", &["test -f src/done.txt"]);
         w
     }
 
@@ -103,6 +104,7 @@ impl World {
         let commissioner = Commissioner {
             registry: None,
             law: mnemorph_loop::Law::On,
+            guts: None,
             world: self.0.canonicalize().unwrap(),
             model: model.clone(),
             prices: anthropic_prices().unwrap(),
@@ -1857,6 +1859,13 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
     );
     let roster = mnemorph_loop::world::Roster::load(&w.0);
     assert_eq!(roster.creatures["slime-t"].verify, ["true"]);
+    // The Orc's line is pinned through the harness, so the Slime's gate runs it.
+    let pinned = mnemorph_world::pins::pinned(&w.0).unwrap().unwrap();
+    assert_eq!(pinned["slime-t"][0].line, "true");
+    assert_eq!(
+        pinned["slime-t"][0].by, "orc-o",
+        "the Orc's own word, not the human's"
+    );
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
 }
 
@@ -2260,4 +2269,16 @@ async fn law_off_no_body_is_told_the_world_s_own_words() {
         "the session and its three bodies say law on"
     );
     assert_eq!(said_off, [false; 4], "and law off");
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

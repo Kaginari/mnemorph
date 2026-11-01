@@ -624,7 +624,10 @@ by the queue's own fold; an order the witness under the state directory holds ex
 its start read from the name, its first ask, its last gate word and its ending (the newest 500
 journals, 4 MiB each, 64 MiB in all, each opened only as a regular file) — and the end gate's
 verdicts from its chained journal, numbered as a settle cites them. A commission is in-world, a
-verdict trusted. It filters by kind and body, and pages.
+verdict trusted. Each commission also shows its acts in order, the newest 200, with a chip per
+[guts class](03-loop.md#stress-in-four-instruments), read from the harness's chained guts record
+under the state directory while its chain holds — trusted, whatever the journal is; the page says
+why when they cannot be shown. It filters by kind and body, and pages.
 
 **The journal** is `log.md`'s last 4 MiB (the page says when older entries are left), opened only
 as a regular file, cut into its `### [<time>] <body> — <title>` entries, each entry's text cut at
@@ -1365,8 +1368,10 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
 | evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after, the soil diff the harness saw and the tasks its plan was proven on (the record that keeps a held-out task to one use and out of two splits), each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
 | gate verdicts | `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each verdict the end gate journals in `log.md`, again: the body and the run whose landing it judged (a row from before runs were named carries none), the verdict, the paths changed, the failures and unverified checks, the `log.md` heading, and `build: { version, commit }` (a row from before reading `unknown`; `mnemorph_world::verdicts::by_build` keeps one build's); written by the harness alone, append-only and hash-chained, anchored as `gate`; outside the world | no — machine-local |
+| guts classes | `$XDG_STATE_HOME/mnemorph/guts/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — one row per act the loop classed: the run, the body, the tool call and tool, its [guts classes](03-loop.md#stress-in-four-instruments), and `build: { version, commit }`; written by the harness alone, append-only and hash-chained, anchored as `guts`; read by `status` and the board's timeline only while the chain holds; outside the world | no — machine-local |
 | report ledger | `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — every race's reports but the Dark Elf's, folded from the usage witness, the gate verdicts, the challenge records and the Kijin posts' witnesses alone, each walked and held to its anchor ([the report fold](02-races.md#the-report-fold)): one row per report — `run` (gate word, first try, holes, verify lines green, dispatches landed and re-asked, passes and those overturned), `ask` (a throne landing done or reopened) or `act` (an outward act clean or rolled back) — each with the `build` of the journal row that settled it, chained from its genesis. Derived: `mnemorphd meters` rebuilds it whole and puts it in place by a rename when its bytes change, never edited in place, so a replay of the same journals reproduces it byte for byte; a fold whose journal does not hold keeps no new ledger | no — machine-local |
 | board answers | `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each answer to the gate given on the board, taken or refused: the chat, the ask, the tab's connection, the act as shown, the digest shown and the one named, the timing since the ask and the render acknowledgement; written by the board alone, append-only and hash-chained, anchored as `answers` with the other chained journals | no — machine-local |
+| verify pins | `$XDG_STATE_HOME/mnemorph/verify/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's pinned verify lines: a `pin` row (the whole set, by the human or by relief) or a `code` row (one line an Orc coded through the harness), with `by` and `build` — each line keeps its author, so an Orc's line is no bench and its pass is the Orc's; append-only and hash-chained, anchored as `verify`; the end gate runs only these lines, and only while the card says the same ([the verify pins](03-loop.md#the-verify-pins)) | no — machine-local |
 | Minds' witness | `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each Mind the human adopted, retired or unretired: its doc, the SHA-256 of its bytes then, its owner (on adoption) and `build`; written only by `mnemorphd mind` at the terminal, append-only and hash-chained, anchored as `minds`; a Mind loads only while its doc holds the adopted bytes | no — machine-local |
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
@@ -1394,8 +1399,10 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `value` | the Dark Elf's challenge records: findings, verdicts, seal proposals, waivers | the harness, under the records' lock |
 | `evolution` | the evolution ledger | the harness |
 | `gate` | the end gate's verdicts | every session and commission that lands |
+| `guts` | each act's guts classes | every session and commission, after each act |
 | `answers` | the human's answers to the gate given on the board, with their connection, digests and timing | the board's bridge |
 | `minds` | the Minds' witness: adoptions, owners, retirements | the human's `mnemorphd mind` (adopt, retire, unretire) |
+| `verify` | the verify pins: the lines each creature's end gate may run | the human's `mnemorphd verify pin` and the terminal app's first-run prompt; the harness, for an Orc's `verify` tool and for relief |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 
@@ -1665,7 +1672,10 @@ flowchart LR
   every change is put back and the body is told. The Kijin post journals and the usage ledger
   are put back as the work queue is: what each held, plus the rows its witness gained while the command ran. The file tools refuse those paths outright, but
   one: a body's own `plan.md`, directly in its own seat, which the dispatch law reads (an Orc's
-  verify lines on its Slimes' docs are written by the harness, through the `verify` tool) — written
+  verify lines on its Slimes' docs are written by the harness, through the `verify` tool, and
+  pinned outside the world: the end gate runs a card's line only as pinned, so a card reached by
+  a route the tripwire does not see — a commit checked out later, a clone — still runs nothing it
+  was not pinned to) — written
   with the file tools; a command's write there is put back, and a plan that is a link is no plan. On
   Linux no process escapes the snapshot: seccomp refuses `setsid` and `setpgid`, so killing the
   group ends everything the command started. A tool that insists on its own session or group

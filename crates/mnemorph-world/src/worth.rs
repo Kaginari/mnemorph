@@ -228,9 +228,11 @@ impl Records {
         for (_, verdict, _) in self.verdicts.iter().filter(|(b, _, _)| mine(b)) {
             // A check that gave no result is no pass: it counts as a failure, so not verifying
             // never buys a body worth — unless it never ran, which is the machine's doing
-            // ("NOT_VERIFIED, unrun"), and counts neither way.
+            // ("NOT_VERIFIED, unrun"), and counts neither way. A pass no verify line ran on
+            // ("PASS, unchecked") is never counted as verified: it counts neither way either.
             match verdict.as_str() {
                 "PASS" => card.passes += 1,
+                "PASS, unchecked" => {}
                 "FAIL" | "NOT_VERIFIED" => card.fails += 1,
                 v if v.ends_with(", handed back") => card.handed_back += 1,
                 _ => {}
@@ -345,6 +347,8 @@ mod tests {
             changed: vec![path.into()],
             failures: Vec::new(),
             unverified: Vec::new(),
+            unchecked: false,
+            verified_by: Vec::new(),
             entry: None,
             build: Build::this(),
             run: None,
@@ -396,5 +400,25 @@ mod tests {
         std::fs::write(&path, first).unwrap();
         let dropped = Records::load_at(&world, Some(&path), Some(&head));
         assert!(dropped.unsound().is_some(), "{:?}", dropped.source());
+    }
+
+    /// A pass no verify line ran on is never counted as verified: it is no pass on the card.
+    #[test]
+    fn an_unchecked_pass_counts_neither_way() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("w");
+        std::fs::create_dir_all(world.join(".mnemorph/slime/s")).unwrap();
+        std::fs::write(
+            world.join(".mnemorph/slime/s/README.md"),
+            "# slime-s\n\n- **Race:** slime\n- **Territory:** src/\n",
+        )
+        .unwrap();
+        let path = dir.path().join("state/gate.jsonl");
+        let j = journal_at(&path);
+        kept(&j, "PASS, unchecked", "src/a.rs");
+        kept(&j, "PASS", "src/b.rs");
+        let roster = Roster::load(&world);
+        let card = Records::load_at(&world, Some(&path), None).card(&roster, "slime-s");
+        assert_eq!((card.passes, card.fails, card.handed_back), (1, 0, 0));
     }
 }

@@ -29,6 +29,13 @@ pub struct VerdictRow {
     /// The checks that gave no result.
     #[serde(default)]
     pub unverified: Vec<String>,
+    /// The landing changed files and no verify line ran: a pass that checked nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unchecked: bool,
+    /// Whose pins the lines that ran are: `the human's pin`, `orc-o's pin`. A pass on an Orc's
+    /// lines alone is that Orc's check, weighed apart from the human's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verified_by: Vec<String>,
     /// The heading of its `log.md` entry; `None` when the entry could not be written.
     #[serde(default)]
     pub entry: Option<String>,
@@ -133,6 +140,8 @@ mod tests {
             changed: vec!["src/a.rs".into()],
             failures: Vec::new(),
             unverified: Vec::new(),
+            unchecked: false,
+            verified_by: Vec::new(),
             entry: None,
             build: Build::default(),
             run: None,

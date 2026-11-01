@@ -263,6 +263,11 @@ pub struct Run {
     caller: Caller,
     messages: Vec<Message>,
     stress: Stress,
+    /// The guts classes' memory of this run's acts: the run's span, as isekai's is its session's.
+    guts: crate::guts::Classifier,
+    /// Where each act's classes are kept again outside the world, chained and stamped; `None`
+    /// keeps them on the run's journal alone.
+    guts_journal: Option<Journal<mnemorph_world::guts::GutsRow>>,
     steps: u32,
     ask_steps: u32,
     spent_wt: u64,
@@ -441,6 +446,8 @@ impl Run {
             caller: setup.caller,
             messages: Vec::new(),
             stress: Stress::for_steps(limits.steps),
+            guts: crate::guts::Classifier::default(),
+            guts_journal: None,
             steps: 0,
             ask_steps: 0,
             spent_wt: 0,
@@ -714,6 +721,8 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // The guts classes go on from the run's acts, as they were classed.
+        run.guts = crate::guts::replayed(&beats, crate::guts::Classifier::default()).0;
         // A reference stands only for a tool this frame still defers: a catalog that shrank, a
         // server now past its ceiling or a shelf that changed would make the provider refuse it.
         let deferred: std::collections::BTreeSet<&str> = run
@@ -772,6 +781,8 @@ impl Run {
     /// Judge every answer that changed files with this end gate.
     #[must_use]
     pub fn with_gate(mut self, gate: EndGate) -> Self {
+        // A bench is a line the human pinned: an Orc's coded line is checked, but earns none.
+        self.guts = std::mem::take(&mut self.guts).trusting(gate.benches());
         self.gate = Some(gate);
         self
     }
@@ -879,6 +890,15 @@ impl Run {
     #[must_use]
     pub fn with_registry(mut self, registry: Option<std::path::PathBuf>) -> Self {
         self.registry = registry;
+        self
+    }
+
+    /// Where each act's guts classes are kept again outside the world, chained and stamped with
+    /// this build ([`mnemorph_world::guts`]): the record `status` and the board read, out of every
+    /// body's reach.
+    #[must_use]
+    pub fn with_guts(mut self, journal: Option<Journal<mnemorph_world::guts::GutsRow>>) -> Self {
+        self.guts_journal = journal;
         self
     }
 
@@ -1500,6 +1520,8 @@ impl Run {
             failures: verdict.failures.clone(),
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
+            unchecked: verdict.unchecked(),
+            verified_by: verdict.verified_by.clone(),
         });
         self.saw_verdict(&verdict);
         let solo = gate.author.is_none();
@@ -1542,14 +1564,9 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
-        // No kernel guard, so no check could run: a retry cannot change the machine, and the body
-        // is not to blame. The human is told how to let them run.
-        if verdict.unrun() {
-            return Some(Ending::Failed(format!(
-                "the end gate could not verify: {} — make the sandbox work on this machine, or set \
-`sandbox.allow_unguarded = true` in your global config",
-                verdict.unverified.join("; ")
-            )));
+        // A verdict no retry changes: an unpinned verify line, or no kernel guard.
+        if let Some(ending) = unretriable(&verdict) {
+            return Some(ending);
         }
         let said: Vec<&str> = verdict
             .failures
@@ -1939,10 +1956,15 @@ impl Run {
             format!("{word} (challenge pending)")
         } else if held == Held::Unrecorded {
             format!("{word} (challenge unrecorded)")
+        } else if verdict.unpinned {
+            format!("{word}, unpinned")
         } else if verdict.unrun() {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
             format!("{word}, handed back")
+        } else if verdict.passed() && verdict.unchecked() {
+            // A pass no check ran on: the baseline lands, and is never counted as verified.
+            format!("{word}, unchecked")
         } else {
             word.to_owned()
         };
@@ -1965,6 +1987,11 @@ impl Run {
         if !verdict.unverified.is_empty() {
             lines.push(("Unverified".to_owned(), verdict.unverified.join("; ")));
         }
+        if verdict.unchecked() {
+            lines.push(("Unchecked".to_owned(), "no verify line ran".to_owned()));
+        } else if !verdict.verified_by.is_empty() {
+            lines.push(("Verified by".to_owned(), verdict.verified_by.join(", ")));
+        }
         lines.push(("By".to_owned(), "the end gate".to_owned()));
         let entry = mnemorph_world::log::Entry {
             body: self.body.name.clone(),
@@ -1986,6 +2013,8 @@ impl Run {
                     .collect(),
                 failures: verdict.failures.clone(),
                 unverified: verdict.unverified.clone(),
+                unchecked: verdict.unchecked(),
+                verified_by: verdict.verified_by.clone(),
                 entry: written.as_ref().ok().cloned().flatten(),
                 build: mnemorph_ledger::Build::default(),
                 run: Some(self.caller.run.clone()),
@@ -3149,11 +3178,10 @@ impl Run {
         }
     }
 
-    /// Run each call in order, give every result back, and read the instruments: a reason to
-    /// stop, or none.
-    /// Journal what the guts read from one act, with the act's instruments: the record a learned
-    /// value model will train on.
-    fn record_guts(&mut self, id: &str, name: &str, o: &mnemorph_tools::Outcome) {
+    /// Journal what the guts read from one act, with the act's instruments and its classes: the
+    /// record a learned value model will train on. The classes are kept again outside the world
+    /// when the run keeps them there.
+    fn record_guts(&mut self, id: &str, name: &str, input: &str, o: &mnemorph_tools::Outcome) {
         if let Some(touched) = &o.meta.mcp_touched {
             self.mcp_touched
                 .lock()
@@ -3161,6 +3189,33 @@ impl Run {
                 .push((**touched).clone());
         }
         let reading = self.stress.last().clone();
+        // Only the structured outcome is read: never `o.content`.
+        let classes = self.guts.classify(&crate::guts::Act::of(
+            name,
+            input,
+            o.is_error,
+            o.meta.refusal(),
+            !o.meta.wrote.is_empty(),
+            o.meta.exit,
+        ));
+        if let Some(j) = &self.guts_journal {
+            let row = mnemorph_world::guts::GutsRow {
+                ts: Timestamp::now(),
+                run: self.caller.run.clone(),
+                body: self.body.name.clone(),
+                tool_use_id: id.to_owned(),
+                tool: name.to_owned(),
+                classes: classes.clone(),
+                build: mnemorph_ledger::Build::default(),
+            };
+            if let Err(e) = mnemorph_world::guts::append_stamped(j, row) {
+                self.record(&Beat::Warning {
+                    text: format!(
+                        "the act's guts classes could not reach their chained journal: {e}"
+                    ),
+                });
+            }
+        }
         self.record(&Beat::Guts {
             tool_use_id: id.to_owned(),
             tool: name.to_owned(),
@@ -3174,9 +3229,13 @@ impl Run {
             edit_miss: o.meta.edit_miss,
             bench: reading.bench,
             bench_outcome: reading.bench_outcome.map(str::to_owned),
+            exit: o.meta.exit,
+            classes,
         });
     }
 
+    /// Run each call in order, give every result back, and read the instruments: a reason to
+    /// stop, or none.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
@@ -3250,7 +3309,7 @@ impl Run {
                 &o,
                 read,
             ));
-            self.record_guts(&id, &name, &o);
+            self.record_guts(&id, &name, &input, &o);
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,
@@ -3700,6 +3759,25 @@ fn card_list(failures: &[String]) -> String {
         shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
     }
     shown.join("; ")
+}
+
+/// A verdict no retry can change, as the ending it gives at once: a verify line the pins do not
+/// hold — the card's word is no check, and the human's way on is said — or no kernel guard, so
+/// no check could run, the machine's doing and never the body's.
+fn unretriable(verdict: &crate::gate::GateVerdict) -> Option<Ending> {
+    if verdict.unpinned {
+        return Some(Ending::Failed(format!(
+            "the end gate could not verify: {}",
+            verdict.unverified.join("; ")
+        )));
+    }
+    verdict.unrun().then(|| {
+        Ending::Failed(format!(
+            "the end gate could not verify: {} — make the sandbox work on this machine, or set \
+`sandbox.allow_unguarded = true` in your global config",
+            verdict.unverified.join("; ")
+        ))
+    })
 }
 
 pub use mnemorph_wire::{HIDDEN, hidden, kept_in_prose, shown};

@@ -267,6 +267,8 @@ fn meters_fold_the_trusted_journals_and_keep_the_report_ledger() {
             changed: vec!["src/a.rs".into()],
             failures: Vec::new(),
             unverified: Vec::new(),
+            unchecked: false,
+            verified_by: vec!["the human's pin".into()],
             entry: None,
             build: mnemorph_server::world::ledger::Build::default(),
             run: Some("sly-1".into()),

@@ -41,6 +41,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
+       mnemorphd verify list [--world <dir>]
+       mnemorphd verify pin <creature> [--yes] [--world <dir>]
        mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open] [--background]
        mnemorphd board add|forget <dir>
        mnemorphd board prune [--dry-run]
@@ -153,6 +155,18 @@ owner — the human unless `--owner` names the creature that proposed it (on ado
 loading, `unretire <name>` takes that back. Each shows the Mind and asks for `y` at the terminal
 (`/dev/tty`; piped input is refused). A body never runs them.
 
+`verify` is the human's door to the verify pins: the lines each creature's end gate may run,
+kept under the human's state directory, never in the world. A card's verify line lives in the
+world, which a body writes and a cloned repository brings from a stranger, so the gate runs only
+the lines pinned for the creature, and only while its card says the same: a card that differs, or
+holds a line no pin holds, runs nothing and fails the landing closed. `list` shows each living
+creature's card lines and whether they are pinned. `pin <creature>` shows the card's lines and
+asks for `y` at the terminal (`/dev/tty`; piped input is refused), then pins exactly those lines.
+`--yes` pins without the question, for a script the human runs (a benchmark harness that writes
+the card itself); it is refused inside a body's command as the question is. An Orc's `verify` tool
+pins the line it codes for its own Slime through the harness, and relief pins each young to its
+parent's pinned lines. A body never runs it.
+
 `board` serves the board — the web cockpit over every world on this machine — on loopback
 (`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
 for another machine, forward the port over SSH). It prints `http://127.0.0.1:<port>/#k=<key>`:
@@ -206,6 +220,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "usage" => usage,
         "evolution" => evolution,
         "mind" => mind,
+        "verify" => verify,
         "board" => board,
         _ => return None,
     })
@@ -2486,6 +2501,134 @@ fn mind(args: &[String]) -> ExitCode {
     match witness::record_at(&at, row) {
         Ok(()) => {
             println!("{} {done}", safe(name));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `verify list|pin`: the verify pins, for the human.
+fn verify(args: &[String]) -> ExitCode {
+    let (mut world, mut yes, mut words) = (None, false, Vec::new());
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--world" => {
+                let Some(v) = it.next() else {
+                    return refused(&"--world needs a value");
+                };
+                world = Some(PathBuf::from(v));
+            }
+            "--yes" => yes = true,
+            other if other.starts_with("--") => {
+                return refused(&format!("unknown argument `{other}`; see --help"));
+            }
+            _ => words.push(w.as_str()),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    match words.as_slice() {
+        ["list"] | [] if !yes => verify_list(&world),
+        ["list"] | [] => refused(&"--yes is given with pin only"),
+        ["pin", name] => verify_pin(&world, name, yes),
+        _ => refused(&"verify needs list, or pin <creature>; see --help"),
+    }
+}
+
+/// `verify list`: each living creature's card lines, and whether its gate runs them.
+fn verify_list(world: &Path) -> ExitCode {
+    use mnemorph_server::world::{Roster, pins};
+    let safe = mnemorph_server::challenge::safe;
+    let held = match pins::pinned(world) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return refused(&"no home: the verify pins are kept under the human's state directory");
+        }
+        Err(e) => return refused(&e),
+    };
+    let mut any = false;
+    let all = Ok(Some(held.clone()));
+    for c in Roster::load(world)
+        .creatures
+        .values()
+        .filter(|c| !c.retired)
+    {
+        let pinned = held.get(&c.name);
+        if c.verify.is_empty() && pinned.is_none() {
+            continue;
+        }
+        any = true;
+        let state = match pins::trusted_in(&all, &c.name, &c.doc(), &c.verify) {
+            Ok(_) => "pinned",
+            Err(_) if pinned.is_none() => "not pinned: its gate runs nothing",
+            Err(_) => "differs from the pin: its gate runs nothing",
+        };
+        println!("{} — {state}", safe(&c.name));
+        for line in &c.verify {
+            println!("  card    `{}`", safe(line));
+        }
+        for p in pinned.into_iter().flatten() {
+            println!("  pinned  `{}` — by {}", safe(&p.line), safe(&p.by));
+        }
+    }
+    if !any {
+        println!("no creature's card holds a verify line");
+    }
+    ExitCode::SUCCESS
+}
+
+/// `verify pin <creature>`: the card's lines shown, asked at the terminal unless `yes`, pinned.
+fn verify_pin(world: &Path, name: &str, yes: bool) -> ExitCode {
+    use mnemorph_server::world::{Roster, pins};
+    let safe = mnemorph_server::challenge::safe;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: a verify line is pinned by the human alone"
+        ));
+    }
+    let roster = Roster::load(world);
+    let Some(c) = roster.creatures.get(name).filter(|c| !c.retired) else {
+        return refused(&format!("no living creature is named `{}`", safe(name)));
+    };
+    if let Err(e) = pins::pinned(world) {
+        return refused(&e);
+    }
+    // The card is read once: the lines shown are exactly the lines pinned.
+    let lines = c.verify.clone();
+    println!(
+        "pin the verify lines of `{}` ({}):",
+        safe(&c.name),
+        safe(&c.doc())
+    );
+    if lines.is_empty() {
+        println!("  (none: its gate runs no check, and a line added later runs only once pinned)");
+    }
+    for line in &lines {
+        println!("  `{}`", safe(line));
+    }
+    if !yes {
+        match at_terminal(&format!(
+            "the end gate of `{}` runs these on every landing — pin them?",
+            safe(&c.name)
+        )) {
+            Ok(true) => {}
+            Ok(false) => return refused(&"nothing was pinned"),
+            Err(e) => return refused(&e),
+        }
+    }
+    match pins::record_human(
+        world,
+        pins::row(pins::Act::Pin, &c.name, &lines, pins::HUMAN),
+    ) {
+        Ok(()) => {
+            println!(
+                "{} pinned: its gate runs these lines while its card says the same",
+                safe(name)
+            );
             ExitCode::SUCCESS
         }
         Err(e) => refused(&e),

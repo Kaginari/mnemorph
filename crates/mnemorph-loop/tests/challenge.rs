@@ -111,6 +111,7 @@ impl World {
         Commissioner {
             registry: None,
             law: mnemorph_loop::Law::On,
+            guts: None,
             world: self.world().canonicalize().unwrap(),
             model,
             prices: anthropic_prices().unwrap(),
@@ -473,6 +474,11 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
         "s",
         "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** crates/mnemorph-tools/\n- **Verify:** `test -f crates/mnemorph-tools/src/files.rs`\n",
     );
+    pin(
+        &w.world(),
+        "slime-s",
+        &["test -f crates/mnemorph-tools/src/files.rs"],
+    );
     let order = |id: &str, to: &str| {
         ScriptedModel::tool(id, "commission", json!({"to": to, "ask": "add the reader"}))
     };
@@ -618,4 +624,16 @@ async fn an_unfiled_review_is_said_and_sent_again() {
         .filter(|r| r["staff"].get("waited").is_none())
         .count();
     assert_eq!(sends, 2, "sent, then sent again");
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }
