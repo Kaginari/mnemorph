@@ -156,6 +156,7 @@ async fn the_session_lands_through_the_end_gate() {
         "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
     )
     .unwrap();
+    pin(&w, "rimuru", &["grep -q fixed out.txt"]);
     // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
     let global = w.with_extension("global.toml");
     fs::write(&global, "[sandbox]\nallow_unguarded = true\n").unwrap();
@@ -279,4 +280,16 @@ async fn a_world_s_configuration_cannot_turn_the_law_off() {
     );
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(&attic);
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

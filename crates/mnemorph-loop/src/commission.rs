@@ -1432,14 +1432,18 @@ fn child_run(
             prefix: 0,
         },
     };
-    let gate = EndGate {
-        verify: creature.verify.clone(),
-        verify_secs: c.verify_secs.unwrap_or(mnemorph_config::VERIFY_SECS),
-        author: Some(Author {
+    // The lines pinned for the creature, never its card's word: the card lives in the world.
+    let gate = EndGate::pinned(
+        &c.world,
+        &name,
+        &creature.doc(),
+        &creature.verify,
+        c.verify_secs.unwrap_or(mnemorph_config::VERIFY_SECS),
+        Some(Author {
             name: name.clone(),
             roster: roster.clone(),
         }),
-    };
+    );
     let run_name = setup.caller.run.clone();
     let mut child = Run::new(body, limits, setup)
         .with_law(c.law)
@@ -1819,6 +1823,7 @@ mod write_rule_tests {
                 unverified: Vec::new(),
                 unguarded: false,
                 wrote: false,
+                unpinned: false,
                 ran: 1,
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");

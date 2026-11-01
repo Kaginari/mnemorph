@@ -118,6 +118,11 @@ impl World {
             .unwrap();
         }
         mnemorph_memory::propose(&w, "rimuru", NOTE, Vec::new(), None).unwrap();
+        pin(
+            &w,
+            "rimuru",
+            &["! grep -qs broken out-*.txt", "! ls findings-*.md"],
+        );
         fs::write(root.join("global.toml"), "").unwrap();
         Self { root }
     }
@@ -187,6 +192,7 @@ async fn ask_once(w: &World, i: usize, replies: Vec<Result<Response, Error>>) ->
     let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup)
         .with_gate(EndGate {
             verify: roster.creatures["rimuru"].verify.clone(),
+            held: Vec::new(),
             author: None,
             ..Default::default()
         })
@@ -447,4 +453,16 @@ async fn a_spent_cap_runs_no_control() {
         .unwrap_err();
     assert!(e.contains("cap is spent"), "{e}");
     assert!(runs(&w).iter().all(|r| !r.control), "no control written");
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

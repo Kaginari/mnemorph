@@ -114,8 +114,31 @@ pub fn relieve(world: &Path, name: &str, apply: bool) -> Result<Relief, String> 
     let seats = preflight(world, &roster, c, &relief)?;
     if apply {
         carry_out(world, &roster, c, &relief, &seats)?;
+        pin_young(world, c, &relief);
     }
     Ok(relief)
+}
+
+/// Each young pinned to the verify lines its parent's pin held — never to the card's, which any
+/// body could have written: a young whose parent held no pin, or whose pins cannot be written,
+/// stays unpinned, and its gate fails closed until the human pins it.
+fn pin_young(world: &Path, c: &Creature, relief: &Relief) {
+    let Act::Split { young } = &relief.act else {
+        return;
+    };
+    let Ok(Some(pins)) = crate::pins::pinned(world) else {
+        return;
+    };
+    let Some(lines) = pins.get(&c.name).filter(|l| !l.is_empty()) else {
+        return;
+    };
+    for (name, _) in young {
+        let by = format!("relief of {}", c.name);
+        let _ = crate::pins::record(
+            world,
+            crate::pins::row(crate::pins::Act::Pin, name, lines, &by),
+        );
+    }
 }
 
 /// Each living child of `c` and the young it reports to after: the one whose ground covers the

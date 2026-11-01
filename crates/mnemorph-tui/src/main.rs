@@ -197,6 +197,15 @@ fn chat(
         Ok(w) => w,
         Err(e) => return fail(&e, 1),
     };
+    // The first run in a fresh or cloned world: its cards' verify lines are pinned, or not, by
+    // the human's one answer, before the gate is built from them.
+    if std::io::stdin().is_terminal() {
+        let _ = mnemorph_tui::pin::offer(
+            &world,
+            &mut std::io::stdout(),
+            &mut mnemorph_tui::pin::at_terminal,
+        );
+    }
     let variant = Variant::choose(theme, |k| std::env::var(k).ok());
     highlight::warm();
     let (tx, rx) = channel();

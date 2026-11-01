@@ -48,6 +48,7 @@ impl World {
     fn judge(&self, before: &mnemorph_loop::Tree, roster: &Roster) -> Vec<String> {
         let gate = EndGate {
             verify: Vec::new(),
+            held: Vec::new(),
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
@@ -193,6 +194,7 @@ fn a_verify_line_that_writes_fails_the_gate() {
         fs::write(w.0.join("src/mine.rs"), format!("{verify}\n")).unwrap();
         let gate = EndGate {
             verify: vec![verify.to_owned()],
+            held: Vec::new(),
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
@@ -295,6 +297,7 @@ fn a_verify_line_runs_for_the_gates_limit() {
         fs::write(w.0.join("src/mine.rs"), format!("{verify}\n")).unwrap();
         let gate = EndGate {
             verify: vec![verify.to_owned()],
+            held: Vec::new(),
             verify_secs,
             author: Some(Author {
                 name: "slime-a".into(),
@@ -395,6 +398,7 @@ fn another_writers_change_is_not_the_bodys_under_a_guard() {
         fs::write(w.0.join("lib/theirs.rs"), "another session's\n").unwrap();
         let gate = EndGate {
             verify: Vec::new(),
+            held: Vec::new(),
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
@@ -446,6 +450,7 @@ proptest::proptest! {
             }
             let gate = EndGate {
                 verify: verify.clone(),
+                held: Vec::new(),
                 author: Some(Author {
                     name: "slime-a".into(),
                     roster: roster.clone(),

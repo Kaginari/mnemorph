@@ -26,6 +26,7 @@ impl World {
             "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
+        pin(&root.join("w"), "rimuru", &["grep -q fixed out.txt"]);
         let w = Self { root };
         w.config(None);
         w
@@ -504,4 +505,16 @@ async fn a_resumed_law_off_run_says_it_mixed_arms() {
         [(false, false), (true, true)],
         "the last one holds from the resume"
     );
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

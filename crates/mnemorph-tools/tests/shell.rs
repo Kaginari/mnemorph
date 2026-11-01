@@ -961,3 +961,79 @@ fn an_approved_spawn_reads_the_harnesss_bytes_on_its_input_and_nothing_else() {
     assert_eq!(out.meta.exit, Some(0));
     assert!(out.content.starts_with("[no output]"), "{}", out.content);
 }
+
+/// Every shell route to a creature's verify line, tried by a body inside the guard: a card
+/// rewritten, a new card written, another branch checked out over the cards — each put back by
+/// the tripwire once the command is dead — and the verify pins under the human's state directory,
+/// which the sandbox never lets a command write.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("pin-routes");
+    let world = w.world();
+    let card = world.join(".mnemorph/rimuru/rimuru/README.md");
+    fs::create_dir_all(card.parent().unwrap()).unwrap();
+    let pinned = "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `pytest -q`\n";
+    fs::write(&card, pinned).unwrap();
+    git(&world, &["init", "-q"]);
+    git(&world, &["add", "-A"]);
+    git(&world, &["commit", "-qm", "cards"]);
+    git(&world, &["checkout", "-qb", "hostile"]);
+    fs::write(
+        &card,
+        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `true`\n",
+    )
+    .unwrap();
+    git(&world, &["commit", "-qam", "hostile"]);
+    git(&world, &["checkout", "-q", "-"]);
+    let pins = w.root.join("state/mnemorph/verify/world.jsonl");
+    fs::create_dir_all(pins.parent().unwrap()).unwrap();
+    fs::write(&pins, "{\"pinned\":\"pytest -q\"}\n").unwrap();
+    fs::write(
+        world.join("src/rewrite.sh"),
+        "printf -- '- **Verify:** `true`\\n' > .mnemorph/rimuru/rimuru/README.md\n",
+    )
+    .unwrap();
+    fs::write(
+        world.join("src/born.sh"),
+        "mkdir -p .mnemorph/orc/x && printf -- '# orc-x\\n\\n- **Race:** orc\\n- **Verify:** `true`\\n' > .mnemorph/orc/x/README.md\n",
+    )
+    .unwrap();
+    fs::write(
+        world.join("src/branch.sh"),
+        "HOME=\"$PWD/.mnemorph/tmp\" git checkout -q hostile\n",
+    )
+    .unwrap();
+    fs::write(world.join("src/pin.sh"), "echo forged >> \"$1\"\n").unwrap();
+    let home = w.root.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let mut cx = Context::new(Race::Rimuru, world.clone(), &["."])
+        .with_body("rimuru")
+        .with_gate(Arc::new(Scripted::new([])))
+        .with_home(&home)
+        .with_sandbox(Sandbox::Guard(guard));
+    for script in ["rewrite", "born", "branch"] {
+        let o = bash(&mut cx, &format!("bash src/{script}.sh"));
+        assert_eq!(
+            fs::read_to_string(&card).unwrap(),
+            pinned,
+            "{script}: {o:?}"
+        );
+        assert!(
+            o.content.contains("changed protected files"),
+            "{script}: {o:?}"
+        );
+    }
+    assert!(!world.join(".mnemorph/orc/x").exists());
+    let o = bash(&mut cx, &format!("bash src/pin.sh {}", pins.display()));
+    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        fs::read_to_string(&pins).unwrap(),
+        "{\"pinned\":\"pytest -q\"}\n",
+        "{o:?}"
+    );
+}

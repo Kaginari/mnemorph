@@ -98,6 +98,7 @@ async fn live_solo_fixes_a_typo() {
     };
     let gate = EndGate {
         verify: vec!["grep -q 'harness for agents' notes.md".into()],
+        held: Vec::new(),
         author: None,
         ..Default::default()
     };

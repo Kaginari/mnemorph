@@ -74,6 +74,7 @@ impl World {
         };
         Run::new(body, Limits::for_race(Race::Rimuru), setup).with_gate(EndGate {
             verify: verify.iter().map(|s| (*s).to_owned()).collect(),
+            held: Vec::new(),
             author: None,
             ..Default::default()
         })

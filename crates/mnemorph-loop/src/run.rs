@@ -1560,14 +1560,9 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
-        // No kernel guard, so no check could run: a retry cannot change the machine, and the body
-        // is not to blame. The human is told how to let them run.
-        if verdict.unrun() {
-            return Some(Ending::Failed(format!(
-                "the end gate could not verify: {} — make the sandbox work on this machine, or set \
-`sandbox.allow_unguarded = true` in your global config",
-                verdict.unverified.join("; ")
-            )));
+        // A verdict no retry changes: an unpinned verify line, or no kernel guard.
+        if let Some(ending) = unretriable(&verdict) {
+            return Some(ending);
         }
         let said: Vec<&str> = verdict
             .failures
@@ -1957,6 +1952,8 @@ impl Run {
             format!("{word} (challenge pending)")
         } else if held == Held::Unrecorded {
             format!("{word} (challenge unrecorded)")
+        } else if verdict.unpinned {
+            format!("{word}, unpinned")
         } else if verdict.unrun() {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
@@ -3747,6 +3744,25 @@ fn card_list(failures: &[String]) -> String {
         shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
     }
     shown.join("; ")
+}
+
+/// A verdict no retry can change, as the ending it gives at once: a verify line the pins do not
+/// hold — the card's word is no check, and the human's way on is said — or no kernel guard, so
+/// no check could run, the machine's doing and never the body's.
+fn unretriable(verdict: &crate::gate::GateVerdict) -> Option<Ending> {
+    if verdict.unpinned {
+        return Some(Ending::Failed(format!(
+            "the end gate could not verify: {}",
+            verdict.unverified.join("; ")
+        )));
+    }
+    verdict.unrun().then(|| {
+        Ending::Failed(format!(
+            "the end gate could not verify: {} — make the sandbox work on this machine, or set \
+`sandbox.allow_unguarded = true` in your global config",
+            verdict.unverified.join("; ")
+        ))
+    })
 }
 
 pub use mnemorph_wire::{HIDDEN, hidden, kept_in_prose, shown};

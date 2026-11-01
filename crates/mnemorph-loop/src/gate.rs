@@ -57,8 +57,13 @@ const TEST_MARKERS: &[&str] = &[
 /// have written the landing.
 #[derive(Debug, Clone)]
 pub struct EndGate {
-    /// Verify commands, each run through `bash` with [`EndGate::verify_secs`] as its limit.
+    /// Verify commands, each run through `bash` with [`EndGate::verify_secs`] as its limit. A
+    /// creature's are its pinned lines ([`EndGate::pinned`]), never its card's as the card says.
     pub verify: Vec<String>,
+    /// Why the creature's verify lines may not run — its card differs from the pin, holds a line
+    /// no pin holds, or the pins cannot be trusted: each a hole that fails every landing closed,
+    /// for the human to answer with `mnemorphd verify pin`. Empty when the lines are trusted.
+    pub held: Vec<String>,
     /// How long each verify command may run, in seconds (`gate.verify_secs`, 120 unless the
     /// configuration says): a command killed at it gave no result, so the claim is not verified.
     pub verify_secs: u64,
@@ -71,8 +76,36 @@ impl Default for EndGate {
     fn default() -> Self {
         Self {
             verify: Vec::new(),
+            held: Vec::new(),
             verify_secs: mnemorph_config::VERIFY_SECS,
             author: None,
+        }
+    }
+}
+
+impl EndGate {
+    /// The end gate of the creature `name`, its card at `doc` reading the verify lines `card`:
+    /// the lines pinned for it in `trust`'s witness ([`mnemorph_world::pins`]), and only while the
+    /// card says the same. Otherwise nothing runs and the landing fails closed, with the human's
+    /// way on: what a card says is never trusted because the card says it.
+    #[must_use]
+    pub fn pinned(
+        trust: &Path,
+        name: &str,
+        doc: &str,
+        card: &[String],
+        verify_secs: u64,
+        author: Option<Author>,
+    ) -> Self {
+        let (verify, held) = match mnemorph_world::pins::trusted(trust, name, doc, card) {
+            Ok(lines) => (lines, Vec::new()),
+            Err(hole) => (Vec::new(), vec![format!("traits unverified: {hole}")]),
+        };
+        Self {
+            verify,
+            held,
+            verify_secs,
+            author,
         }
     }
 }
@@ -236,6 +269,9 @@ pub struct GateVerdict {
     pub unguarded: bool,
     /// A verify run changed the tree: a check never writes, and the landing fails whole.
     pub wrote: bool,
+    /// The verify lines were held back unpinned ([`EndGate::held`]): no retry can pin them, so the
+    /// landing fails closed at once, for the human.
+    pub unpinned: bool,
     /// How many verify lines ran over the change: none when nothing changed.
     pub ran: usize,
 }
@@ -346,6 +382,7 @@ impl EndGate {
                 unverified: Vec::new(),
                 unguarded: false,
                 wrote: false,
+                unpinned: false,
                 ran: 0,
             };
         }
@@ -361,7 +398,9 @@ impl EndGate {
                 .collect();
             failures.extend(right_author(author, &its, cx.world()));
         }
-        let mut unverified = Vec::new();
+        // Lines the pins do not hold never run: the card's word is no check.
+        let mut unverified = self.held.clone();
+        let unpinned = !self.held.is_empty();
         let unguarded = matches!(cx.sandbox(), mnemorph_tools::Sandbox::None(_))
             && !cx.allows_unguarded()
             && !self.verify.is_empty();
@@ -373,6 +412,7 @@ impl EndGate {
             unverified,
             unguarded,
             wrote,
+            unpinned,
             ran: self.verify.len(),
         }
     }
