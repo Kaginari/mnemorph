@@ -422,71 +422,7 @@ fn a_proposed_rise_is_applied_by_the_human_at_the_terminal_alone() {
     );
     assert_eq!(f.rows(), 2, "nothing was written");
     #[cfg(target_os = "linux")]
-    {
-        // Under a harness process, whatever its environment says.
-        let fake = f.root.join("bin/mnemorph");
-        fs::create_dir_all(fake.parent().unwrap()).unwrap();
-        fs::copy("/bin/sh", &fake).unwrap();
-        let inner = format!(
-            "{} roster rise slime-s --world '{}'; true",
-            env!("CARGO_BIN_EXE_mnemorphd"),
-            f.world.display()
-        );
-        let out = Command::new(&fake)
-            .args(["-c", &format!("/bin/sh -c \"{inner}\"; true")])
-            .env("XDG_STATE_HOME", &f.state)
-            .env_remove("MNEMORPH_BODY")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .unwrap();
-        assert!(
-            text(&out).contains("this runs under mnemorph"),
-            "{}",
-            text(&out)
-        );
-        // At the terminal: `n` writes nothing, after the proposal is shown in full.
-        let out = f.at_tty(&["roster", "rise", "slime-s"], "n\n");
-        assert!(
-            text(&out).contains("slime-s (slime): rise to named-slime proposed — proposal ")
-                && text(&out).contains("rise: landRate 1.00 >= 0.90 (over 21 reports)")
-                && text(&out).contains("nothing was written"),
-            "{}",
-            text(&out)
-        );
-        assert_eq!(f.rows(), 2);
-        let out = f.at_tty(&["roster", "rise", "slime-s"], "y\n");
-        assert!(
-            text(&out).contains("slime-s is a named-slime now"),
-            "{}",
-            text(&out)
-        );
-        assert_eq!(f.rows(), 3);
-        let last = fs::read_to_string(f.witness().unwrap()).unwrap();
-        let last = last.lines().last().unwrap().to_owned();
-        assert!(
-            last.contains(r#""act":"rise""#)
-                && last.contains(r#""race":"named-slime""#)
-                && last.contains(r#""by":"human""#)
-                && last.contains(r#""proposal":""#)
-                && last.contains(r#""inputs_sha256":""#),
-            "{last}"
-        );
-        assert!(
-            fs::read_to_string(f.world.join(".mnemorph/slime/s/README.md"))
-                .unwrap()
-                .contains("- **Race:** named-slime\n")
-        );
-        let out = f.run(&["roster", "list"], None);
-        assert!(text(&out).contains("slime-s [trusted]"), "{}", text(&out));
-        let out = f.run(&["roster", "replay"], None);
-        assert!(
-            out.status.success()
-                && text(&out).contains("row 3: slime-s rise to named-slime — proposal ")
-                && text(&out).contains("1 rise(s) and fall(s) reproduce exactly"),
-            "{}",
-            text(&out)
-        );
-    }
+    applied_at_the_terminal(&f);
 }
 
 /// A state directory inside the world is the body's: no rise is read or written there.
@@ -507,4 +443,73 @@ fn a_rise_with_a_state_directory_inside_the_world_is_refused() {
         text(&out)
     );
     assert!(!f.world.join(".mnemorph/tmp/state/mnemorph/roster").exists());
+}
+
+/// The rise of `a_proposed_rise_is_applied_by_the_human_at_the_terminal_alone` under a harness
+/// process, then at a terminal of its own: `n` writes nothing, `y` the row and the card.
+#[cfg(target_os = "linux")]
+fn applied_at_the_terminal(f: &Fixture) {
+    // Under a harness process, whatever its environment says.
+    let fake = f.root.join("bin/mnemorph");
+    fs::create_dir_all(fake.parent().unwrap()).unwrap();
+    fs::copy("/bin/sh", &fake).unwrap();
+    let inner = format!(
+        "{} roster rise slime-s --world '{}'; true",
+        env!("CARGO_BIN_EXE_mnemorphd"),
+        f.world.display()
+    );
+    let out = Command::new(&fake)
+        .args(["-c", &format!("/bin/sh -c \"{inner}\"; true")])
+        .env("XDG_STATE_HOME", &f.state)
+        .env_remove("MNEMORPH_BODY")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        text(&out).contains("this runs under mnemorph"),
+        "{}",
+        text(&out)
+    );
+    // At the terminal: `n` writes nothing, after the proposal is shown in full.
+    let out = f.at_tty(&["roster", "rise", "slime-s"], "n\n");
+    assert!(
+        text(&out).contains("slime-s (slime): rise to named-slime proposed — proposal ")
+            && text(&out).contains("rise: landRate 1.00 >= 0.90 (over 21 reports)")
+            && text(&out).contains("nothing was written"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 2);
+    let out = f.at_tty(&["roster", "rise", "slime-s"], "y\n");
+    assert!(
+        text(&out).contains("slime-s is a named-slime now"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 3);
+    let last = fs::read_to_string(f.witness().unwrap()).unwrap();
+    let last = last.lines().last().unwrap().to_owned();
+    assert!(
+        last.contains(r#""act":"rise""#)
+            && last.contains(r#""race":"named-slime""#)
+            && last.contains(r#""by":"human""#)
+            && last.contains(r#""proposal":""#)
+            && last.contains(r#""inputs_sha256":""#),
+        "{last}"
+    );
+    assert!(
+        fs::read_to_string(f.world.join(".mnemorph/slime/s/README.md"))
+            .unwrap()
+            .contains("- **Race:** named-slime\n")
+    );
+    let out = f.run(&["roster", "list"], None);
+    assert!(text(&out).contains("slime-s [trusted]"), "{}", text(&out));
+    let out = f.run(&["roster", "replay"], None);
+    assert!(
+        out.status.success()
+            && text(&out).contains("row 3: slime-s rise to named-slime — proposal ")
+            && text(&out).contains("1 rise(s) and fall(s) reproduce exactly"),
+        "{}",
+        text(&out)
+    );
 }
