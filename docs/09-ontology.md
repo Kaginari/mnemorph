@@ -300,8 +300,10 @@ cases bound the term loosely — a miss rate of 0 of 8 is consistent with one in
 fixture grows with each miss found in a real world.
 
 **Recency never settles a fact.** A contested fact stays contested until a *settle* event with a
-proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground,
-or the human (`mnemorphd onto settle <id>`, or **Settle** on the board's ontology page, which asks
+proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own line's ground and only
+on a passing end-gate verdict in the trusted gate journal — one that checked something, on a line
+the human pinned, of a landing on the fact's path — since the roster that names a body an Orc is
+the world's; without one the fact stays as it stood; or the human (`mnemorphd onto settle <id>`, or **Settle** on the board's ontology page, which asks
 for a proof: a passing end-gate verdict that landed on the fact's path, or the human's own
 statement — see [the board](05-architecture.md#the-memory-and-ontology-pages)); a landing by the
 path's owner that passed its gate and cites the fact is a third route, deferred: not built, and no settle rests on it. A
@@ -339,17 +341,18 @@ besides when `MNEMORPH_BODY` is set, and `onto settle` is refused under any of t
 processes. A state directory inside the world is refused, and the facts read unavailable. `.mnemorph/ontology/facts.jsonl`, harness soil, is
 a copy of that journal written whole after each event, through no link, for readers; it is never
 read for trust. The projection, `onto check`, `onto settle` and the board's ontology page all
-read the trusted journal. What the copy says beyond it — a fact it reads settled that the trusted
-journal does not, one it reads agreed that is a single voice there, or one the trusted journal
-does not hold — is ignored and raises an `untrusted-fact` finding naming the mismatch, standing
+read the trusted journal. What the copy says otherwise — a fact whose status there differs from the
+trusted journal's, or one the trusted journal does not hold — is ignored and raises an `untrusted-fact` finding naming the mismatch, standing
 on the copy alone so no landing elsewhere is held by what a stranger wrote. A trusted journal
-whose chain does not walk whole, or that is gone once anchored, leaves the facts unavailable: no
+whose chain does not walk whole, or that is gone once anchored — held to the head the state
+directory anchors for it, never to one in the world's `log.md` — leaves the facts unavailable: no
 fact stands, settled or not, nothing more is filed or settled onto it, and `facts-unavailable`
 says why. With no home there is no trusted journal, and the facts are unavailable the same way.
 
 **The import.** The first read of a world that has no trusted journal, and never had one
 anchored, imports its in-world copy once: each fact it holds, under the id its path and text hash
-to, as one support by `imported` with its anchor — so every imported fact reads **single** until
+to, as one support by `imported` with its anchor, kept only as a path inside the world, a commit
+or a journal entry — so every imported fact reads **single** until
 a body says it again — and no counter, label or settle, since none of their authors can be
 proven. An `import` event closes the import, naming each fact the copy read settled; each such
 fact raises an `unproven-settle` finding until it is settled again, and the import is journaled
@@ -469,7 +472,7 @@ creature, so what a stranger wrote there holds no one's landing. Both still fail
 | `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
 | `dimension-obstruction` | high | two worlds state relations that cannot both hold — reported to Rimuru, never blocking the gate (above) |
 | `facts-unavailable` | high | the trusted facts do not walk whole, are gone once anchored, or have no home: no fact stands |
-| `untrusted-fact` | high | the facts' in-world copy reads a fact settled, agreed or present where the trusted journal does not — ignored, one per fact |
+| `untrusted-fact` | high | the facts' in-world copy reads a fact's status otherwise than the trusted journal, or holds one it does not — ignored, one per fact |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` or `- **Retired:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
