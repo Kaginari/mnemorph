@@ -181,6 +181,17 @@ pub fn global_only(key: &str) -> bool {
             .any(|p| key.starts_with(p))
 }
 
+/// Why `key`, read from a file of `layer`, is refused before anything else: a key file named
+/// from inside a world, which would choose which file's contents are sent to a provider.
+fn refused_in_a_world(key: &str, layer: Layer) -> Option<&'static str> {
+    (matches!(layer, Layer::Local | Layer::Tracked)
+        && key.starts_with("providers.")
+        && key.ends_with(".key_file"))
+    .then_some(
+        "a key file's contents are sent to a provider, and a world must not choose which file that is, so it is honoured only from your global file",
+    )
+}
+
 /// Keys only the global file may set (a tracked one is a hole, and so is a local one): each one
 /// loosens the human gate.
 const LOOSENING: &[&str] = &[
@@ -275,6 +286,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
+    ("providers.*.key_file", Kind::Str),
     ("decide.enabled", Kind::Bool),
     ("decide.via", Kind::Str),
     ("decide.model", Kind::Str),
@@ -451,6 +463,9 @@ pub struct Provider {
     pub base_url: String,
     /// The environment variable holding its key (never the key itself).
     pub key_env: Option<String>,
+    /// The file holding its key when the variable is not set: a path as the human wrote it (`~`
+    /// not yet expanded), from the global file alone.
+    pub key_file: Option<String>,
 }
 
 /// Where one model's requests go: the provider, and the id it knows the model by.
@@ -647,6 +662,14 @@ impl Config {
         let mut leaves = Vec::new();
         flatten(table, "", &mut leaves);
         for (key, value) in leaves {
+            if let Some(why) = refused_in_a_world(&key, origin.layer) {
+                self.holes.push(Hole {
+                    key,
+                    origin: origin.clone(),
+                    why: why.into(),
+                });
+                continue;
+            }
             let Some(kind) = kind_of(&key) else {
                 self.holes.push(Hole {
                     key,
@@ -1259,6 +1282,7 @@ impl Config {
                     kind: field("kind").unwrap_or_default(),
                     base_url: field("base_url").unwrap_or_default(),
                     key_env: field("key_env"),
+                    key_file: field("key_file"),
                 },
             );
         }

@@ -1,6 +1,7 @@
 //! Integrations and settings, read-only, as `GET /api/integrations[?world=<id>]` shows them: the
 //! providers, the models each role rides and their prices, each key's *source* — the variable
-//! that holds it, and whether it is set — never its value; the configuration's holes; the MCP
+//! that holds it, and whether it is set, and the key file read when it is not, and whether it
+//! would be read (its mode, or why it is refused) — never its value; the configuration's holes; the MCP
 //! servers the human's global file declares; the effective configuration, each key with its
 //! origin and whether only the global file may set it; and the board's own port.
 //!
@@ -32,6 +33,28 @@ pub struct KeySource {
     pub state: String,
 }
 
+/// The file a key is read from when its variable is not set, and whether it would be read —
+/// never what it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct KeyFileView {
+    /// The path as the global file writes it; `null` when hidden (it looked like a key).
+    pub path: Option<String>,
+    /// `readable` or `refused`.
+    pub state: String,
+    /// Its mode when readable (`0600`), else why it is refused.
+    pub detail: String,
+}
+
+/// What a key file is checked against: the home `~` stands for, and the worlds it may not lie in.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyFiles {
+    /// The home `~` stands for.
+    pub home: Option<String>,
+    /// Every world this machine knows.
+    pub worlds: Vec<PathBuf>,
+}
+
 /// A configured provider.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +68,8 @@ pub struct ProviderView {
     pub base_url: Option<String>,
     /// Where its key is read from.
     pub key: KeySource,
+    /// The file its key is read from when the variable is not set; `null` when none is named.
+    pub key_file: Option<KeyFileView>,
     /// Where it was defined.
     pub origin: String,
 }
@@ -303,6 +328,20 @@ fn source(name: Option<&str>, set: &dyn Fn(&str) -> bool) -> KeySource {
     }
 }
 
+/// The key file at `path`, as the board shows it: whether it would be read, never its contents.
+fn key_file(path: &str, files: &KeyFiles) -> KeyFileView {
+    let (state, detail) =
+        match mnemorph_loop::key::inspect(path, files.home.as_deref(), &files.worlds) {
+            Ok(c) => ("readable", format!("{:04o}", c.mode)),
+            Err(why) => ("refused", first_line(&why)),
+        };
+    KeyFileView {
+        path: redact("", path),
+        state: state.to_owned(),
+        detail,
+    }
+}
+
 fn origin(o: &Origin) -> String {
     o.to_string()
 }
@@ -323,6 +362,8 @@ fn shown(key: &str, value: &Value) -> Option<String> {
         Value::String(s) if key.ends_with(".key_env") => {
             variable_name(s).then(|| value.to_string())
         }
+        // A key file's path is shown, as a variable's name is: what it holds never is.
+        Value::String(s) if key.ends_with(".key_file") => redact("", s).map(|_| value.to_string()),
         Value::String(s) => redact(key, s).map(|_| value.to_string()),
         Value::Array(items) => {
             for item in items {
@@ -450,7 +491,7 @@ fn mcp(c: &Config, set: &dyn Fn(&str) -> bool) -> Sourced<McpView> {
 }
 
 /// `c`, shown: every field allowlisted, every string redacted.
-fn view(c: &Config, set: &dyn Fn(&str) -> bool) -> ConfigView {
+fn view(c: &Config, set: &dyn Fn(&str) -> bool, files: &KeyFiles) -> ConfigView {
     let providers = c
         .providers()
         .into_iter()
@@ -462,6 +503,7 @@ fn view(c: &Config, set: &dyn Fn(&str) -> bool) -> ConfigView {
                 .unwrap_or_default(),
             base_url: redact(&format!("providers.{name}.base_url"), &p.base_url),
             key: source(p.key_env.as_deref(), set),
+            key_file: p.key_file.as_deref().map(|f| key_file(f, files)),
             kind: redact("kind", &p.kind).unwrap_or_default(),
             name,
         })
@@ -503,13 +545,15 @@ fn view(c: &Config, set: &dyn Fn(&str) -> bool) -> ConfigView {
 }
 
 /// The integrations: the configuration of `world` (its files over `global`), or of `global` alone;
-/// `set` says whether a variable is set, and is never asked its value.
+/// `set` says whether a variable is set, and is never asked its value; `files` is what a key file
+/// is checked against, and a key file is checked, never shown.
 #[must_use]
 pub fn integrations(
     global: &Path,
     world: Option<(&str, &Path)>,
     board: BoardSettings,
     set: &dyn Fn(&str) -> bool,
+    files: &KeyFiles,
 ) -> BoardIntegrations {
     let (paths, layers) = match world {
         Some((_, dir)) => (Paths::with_global(global.to_path_buf(), dir), true),
@@ -530,7 +574,7 @@ pub fn integrations(
         "the global file"
     };
     let config = match loaded {
-        Ok(c) => Sourced::known(view(&c, set), source, !layers),
+        Ok(c) => Sourced::known(view(&c, set, files), source, !layers),
         Err(e) => Sourced::unknown(source, !layers, first_line(&e)),
     };
     BoardIntegrations {

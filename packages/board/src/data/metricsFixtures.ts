@@ -177,6 +177,7 @@ export const fixtureIntegrations: BoardIntegrations = {
           kind: 'anthropic',
           baseUrl: 'https://api.anthropic.com',
           key: { variable: 'ANTHROPIC_API_KEY', state: 'unset' },
+          keyFile: null,
           origin: 'default (built in)',
         },
         {
@@ -184,6 +185,7 @@ export const fixtureIntegrations: BoardIntegrations = {
           kind: 'openai',
           baseUrl: 'https://openrouter.ai/api/v1',
           key: { variable: 'OPENROUTER_API_KEY', state: 'set' },
+          keyFile: { path: '~/.config/mnemorph/openrouter.key', state: 'readable', detail: '0600' },
           origin: 'global (~/.config/mnemorph/config.toml)',
         },
         {
@@ -191,6 +193,11 @@ export const fixtureIntegrations: BoardIntegrations = {
           kind: 'openai',
           baseUrl: null,
           key: { variable: null, state: 'hidden' },
+          keyFile: {
+            path: '~/open.key',
+            state: 'refused',
+            detail: 'its mode is 0644, and a key file is yours alone: chmod 600 ~/open.key',
+          },
           origin: 'global (~/.config/mnemorph/config.toml)',
         },
       ],

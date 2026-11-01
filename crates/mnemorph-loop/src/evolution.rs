@@ -385,7 +385,7 @@ pub fn judge(
     }
     let waits = awaiting.is_some_and(|(_, w)| !w.is_empty());
     let controls = if waits {
-        let (model, backend, _) = crate::open::model_of(&config, env)?;
+        let (model, backend, ..) = crate::open::model_of(&config, world, env)?;
         let c = Controller {
             model,
             model_id: backend.model,
