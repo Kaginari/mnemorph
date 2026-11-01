@@ -393,7 +393,8 @@ includes the witness.
   outcome, journaled on its beat and in a chained, build-stamped record outside the world, counted
   in `mnemorph status` and chipped on the board's timeline; replaying a run journal gives the same
   classes. Signals only: nothing rises or falls on them, and the red pin weighs 0
-  ([the loop](03-loop.md#stress-in-four-instruments)).
+  ([the loop](03-loop.md#stress-in-four-instruments)). Still to come: verify lines kept out of a
+  body's reach, the only benches the classes will trust; until then no act is one.
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 

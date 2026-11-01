@@ -1290,7 +1290,9 @@ about each report — the gate's word on its landing, a first-try pass, the hole
 
 **The guts classes are signals for a learned value, never a meter.** Every act of every body is
 classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its
-structured outcome, never from text, and kept in a chained record outside the world
+structured outcome, never from text — only a trusted verify line, matched exactly, is a bench, and
+none is trusted until verify lines live out of a body's reach — and kept in a chained record
+outside the world
 ([the loop](03-loop.md#stress-in-four-instruments)). No bar reads them, and no rise, fall or
 probation follows from them. When a learned value model reads them, two rules are fixed structure
 that no update may undo:

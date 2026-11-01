@@ -2475,12 +2475,22 @@ async fn mcp_levels_loaded_and_called_mid_run_never_move_the_prefix() {
 
 /// Every act's guts classes ride its beat and the harness's chained record outside the world, read
 /// from the act's structured outcome alone: a body that prints a passing bench's words earns no
-/// `positive`, and a red bench's words printed by a clean command earn no `red-pin`. Replaying the
-/// journal gives the same classes.
+/// `positive`, and a red bench's words printed by a clean command earn no `red-pin`. No verify line
+/// is trusted yet, so a check the body chose is never a bench: passing it is plain, failing it a
+/// fail. Replaying the journal gives the same classes.
 #[tokio::test]
 async fn every_act_is_classed_from_its_outcome_never_its_text() {
     use mnemorph_loop::guts::{Class, replay};
     let w = World::new("guts-classes");
+    // The body's card names its check as a verify line — but the card is in the world, the body's
+    // to write: it makes no bench.
+    let card = w.world().join(".mnemorph/slime/slime-test/README.md");
+    fs::create_dir_all(card.parent().unwrap()).unwrap();
+    fs::write(
+        &card,
+        "# slime-test\n\n- **Race:** slime\n- **Verify:** `python3 -c \"assert 1 == 1\"`\n",
+    )
+    .unwrap();
     let bash = |id: &str, command: &str| tool(id, "bash", json!({ "command": command }));
     let read = |id: &str| tool(id, "read", json!({"path": "a.txt"}));
     let model = Arc::new(ScriptedModel::new([
@@ -2528,10 +2538,10 @@ async fn every_act_is_classed_from_its_outcome_never_its_text() {
     let want: Vec<(String, Vec<Class>)> = [
         ("c1", vec![]),
         ("c2", vec![]),
-        ("c3", vec![Class::Positive]),
+        ("c3", vec![]),
         ("c4", vec![]),
-        ("c5", vec![Class::RedPin]),
-        ("c6", vec![Class::RedPin, Class::Repeat]),
+        ("c5", vec![Class::Fail]),
+        ("c6", vec![Class::Fail, Class::Repeat]),
         ("c7", vec![Class::Fail]),
         ("c8", vec![]),
         ("c9", vec![]),
@@ -2569,9 +2579,10 @@ async fn every_act_is_classed_from_its_outcome_never_its_text() {
     assert_eq!(conversation(&rows), run.messages());
 }
 
-/// A fresh classifier at every ask: an act the same as the last ask's last act is no repeat.
+/// The classifier spans the run, as isekai's spans its session: the second ask's first act, the
+/// same as the first ask's last, is a repeat; a resumed run goes on from its journal's acts.
 #[tokio::test]
-async fn each_ask_is_classed_afresh_and_replays_the_same() {
+async fn the_classes_span_the_run_and_replay_the_same() {
     use mnemorph_loop::guts::{Class, replay};
     let w = World::new("guts-asks");
     let failing = || tool("x", "bash", json!({"command": "sh -c 'exit 3'"}));
@@ -2592,15 +2603,32 @@ async fn each_ask_is_classed_afresh_and_replays_the_same() {
         [
             vec![Class::Fail],
             vec![Class::Fail, Class::Repeat],
-            vec![Class::Fail]
+            vec![Class::Fail, Class::Repeat]
         ]
     );
-    let journaled: Vec<Vec<Class>> = rows
-        .iter()
-        .filter_map(|b| match b {
-            Beat::Guts { classes, .. } => Some(classes.clone()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(journaled, classes);
+    let journaled = |rows: &[Beat]| -> Vec<Vec<Class>> {
+        rows.iter()
+            .filter_map(|b| match b {
+                Beat::Guts { classes, .. } => Some(classes.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(journaled(&rows), classes);
+    // Resumed, the run remembers its last act: the same act again is a repeat.
+    let again = Arc::new(ScriptedModel::new([failing(), answer("three")]));
+    let mut run = Run::resume(body(), limits(), w.setup(again)).unwrap();
+    ask(&mut run, "third").await;
+    let rows = w.journal().read().unwrap().rows;
+    assert_eq!(
+        journaled(&rows).last(),
+        Some(&vec![Class::Fail, Class::Repeat])
+    );
+    assert_eq!(
+        replay(&rows)
+            .into_iter()
+            .map(|(_, c)| c)
+            .collect::<Vec<_>>(),
+        journaled(&rows)
+    );
 }

@@ -303,25 +303,39 @@ The beat is for the record only: the conversation rebuilt from the journal ignor
 its classes reach a surface.
 
 **The guts classes.** Each guts beat also names the act's **classes**, isekai's words for what an
-act was, read by harness code from the act's structured outcome and the acts before it in the
-ask (`mnemorph_loop::guts`):
+act was, read by harness code from the act's structured outcome and the run's acts before it
+(`mnemorph_loop::guts`):
 
 | Class | The act |
 |---|---|
 | `fail` | errored: an error result, a non-zero exit, a kill at the deadline, a refusal by the envelope, the sandbox or the shelf. A human's denial at the gate is the human's choice, never a fail |
-| `red-pin` | ran a test bench the shell saw exit non-zero: TDD's red, in place of a fail |
-| `positive` | ran a test bench the shell saw exit 0 |
+| `red-pin` | ran a trusted bench that exited non-zero: TDD's red, in place of a fail |
+| `positive` | ran a trusted bench that exited 0 |
 | `repeat` | had the same tool and input as the act just before |
 | `echo` | was the third or later `read` of one window, or `bash` of one command head (its first two words), among the last 12 acts, clean, with nothing written since its last visit and not a repeat: a walk through a file's pages is no echo, the debug rhythm of edit and re-run is none either |
-| `thrash` | ran a test bench (keyed by its first two words, so every `cargo test -p x` is one) for the sixth time or more in the ask, every visit from the sixth |
+| `thrash` | ran one trusted bench for the sixth time or more in the run, every visit from the sixth |
+
+**A trusted bench** is a verify line from a source no body can write, and the act's command,
+trimmed with its runs of whitespace made one, must equal it exactly: no prefix, no substring.
+A check the body chose is a plain command, whatever it is named: `python3 -c "assert True"`, a
+`verify.sh` it wrote, `cargo test --no-run`, `cargo test -p x | tail`. Passing one earns nothing;
+failing one is a `fail`, never a red pin. **No such source exists yet.** A creature's verify lines
+are on its card, in the world, which a body can reach, so the harness trusts none: no act is a
+bench, and `red-pin`, `positive` and `thrash` do not occur until verify lines are kept out of a
+body's reach.
 
 No text is read. The classifier is given the tool, its input, whether the act failed or the
-human denied it, whether it wrote, and a bench run's exit status as the shell showed it — never
-the output. A command that prints "test result: ok" or "verify passed" is not a bench and earns no
-`positive`; a clean command that prints a red bench's words earns no `red-pin`. A run that hid its
-exit status (piped, or followed by `;`) is neither, and neither is what a decision read from its
-output: the output is the body's to forge. The classes are counted afresh at each ask, and
-replaying a run journal's beats (`guts::replay`) gives the classes the run gave.
+human denied it, whether it wrote, and its exit code — never the output. A command that prints
+"test result: ok" or "verify passed" earns no `positive`; one that prints a red bench's words
+earns no `red-pin`.
+
+The classifier spans the run, every ask of it, as isekai's spans its session: the act before, the
+echo's ring and each bench's visits carry from one ask to the next, and a resumed run goes on
+from its journal's acts. Replaying a run journal's beats (`guts::replay`) gives the classes the
+run gave. Two things differ from isekai, both because a body can forge text: isekai reads the red
+pin and `positive` from the output's words, and counts any command that looks like a test runner
+as a bench; here only the exit code of a trusted verify line counts. isekai's `neg-lexeme`, a
+class read from words alone, is not kept.
 
 The classes are kept twice: on the beat, in the run's journal inside the world; and as one row per
 act — the run, the body, the tool call, its classes and the build that classed it — in a journal
@@ -335,6 +349,9 @@ guts     last run slime-wire-186f0a2b3c4d5e6f-3 (slime-wire): 14 acts · fail 1 
 ```
 
 and says why when it does not (`the classes are not believed: their chain is broken at line 7`).
+A process walks the record whole once, then only the rows appended since, reading its last row
+again each time; another file, a shorter one, a new anchor or a last row changed in place walks it
+whole again. It keeps the newest 100,000 rows.
 The board's timeline shows a chip per class on each act of a commission, the newest 200, through
 `<Safe>`.
 

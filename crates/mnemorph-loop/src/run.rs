@@ -263,7 +263,7 @@ pub struct Run {
     caller: Caller,
     messages: Vec<Message>,
     stress: Stress,
-    /// The guts classes' memory of this ask's acts.
+    /// The guts classes' memory of this run's acts: the run's span, as isekai's is its session's.
     guts: crate::guts::Classifier,
     /// Where each act's classes are kept again outside the world, chained and stamped; `None`
     /// keeps them on the run's journal alone.
@@ -721,6 +721,8 @@ impl Run {
         )
         .unwrap_or(u32::MAX);
         run.messages = conversation(&beats);
+        // The guts classes go on from the run's acts, as they were classed.
+        run.guts = crate::guts::replayed(&beats, crate::guts::Classifier::default()).0;
         // A reference stands only for a tool this frame still defers: a catalog that shrank, a
         // server now past its ceiling or a shelf that changed would make the provider refuse it.
         let deferred: std::collections::BTreeSet<&str> = run
@@ -1375,7 +1377,6 @@ impl Run {
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
-        self.guts = crate::guts::Classifier::default();
         self.noticed = false;
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
@@ -3183,10 +3184,7 @@ impl Run {
             o.is_error,
             o.meta.refusal(),
             !o.meta.wrote.is_empty(),
-            reading
-                .bench
-                .as_deref()
-                .map(|b| (b, reading.bench_outcome, o.meta.exit)),
+            o.meta.exit,
         ));
         if let Some(j) = &self.guts_journal {
             let row = mnemorph_world::guts::GutsRow {

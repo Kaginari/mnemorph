@@ -211,22 +211,120 @@ pub fn held(world: &Path) -> Result<Vec<GutsRow>, String> {
     held_at(&path, crate::chains::anchor_of(world, "guts").as_ref())
 }
 
-/// [`held`] over the rows at `path`, held to `anchor`.
+/// The most rows [`held`] keeps and answers, the newest: what `status` and a timeline page read.
+pub const HELD_ROWS: usize = 100_000;
+
+/// How many bytes before a walk's end are read again on the next call: the last row, which an edit
+/// in place would change without growing the file.
+const RECHECK: u64 = 4096;
+
+/// A file's walk so far, kept between calls so each call walks only the bytes appended since.
+struct Kept {
+    /// The anchor the walk was held to: another anchor walks the file again.
+    anchor: Option<mnemorph_ledger::chain::Head>,
+    /// The file it walked, by device and inode: another file walks again.
+    id: (u64, u64),
+    /// The bytes walked: a file shorter than this walks again.
+    len: u64,
+    /// The last [`RECHECK`] bytes walked, compared again on the next call.
+    end: Vec<u8>,
+    /// The walk.
+    walk: mnemorph_ledger::chain::Walk,
+    /// The rows of the whole lines walked, the newest [`HELD_ROWS`].
+    rows: std::collections::VecDeque<GutsRow>,
+    /// A last line not yet ended, walked but not read as a row.
+    partial: Vec<u8>,
+}
+
+/// Every walk this process keeps, by path.
+static KEPT: std::sync::Mutex<BTreeMap<PathBuf, Kept>> = std::sync::Mutex::new(BTreeMap::new());
+
+/// Bytes walked by [`held_at`], for the test that it walks only what was appended.
+#[cfg(test)]
+static WALKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// [`held`] over the rows at `path`, held to `anchor`. The file is walked once whole, then only
+/// what was appended since, its last row read again each call; another anchor, another file, a
+/// shorter one or a last row changed in place walks it again from its first byte.
 fn held_at(
     path: &Path,
     anchor: Option<&mnemorph_ledger::chain::Head>,
 ) -> Result<Vec<GutsRow>, String> {
-    let report = mnemorph_ledger::chain::verify_against(path, anchor)
-        .map_err(|e| format!("the classes cannot be read: {e}"))?;
+    use std::io::{Read, Seek, SeekFrom};
+    use std::os::unix::fs::MetadataExt;
+    let unread = |e: io::Error| format!("the classes cannot be read: {e}");
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(unread(e)),
+    };
+    let meta = file.metadata().map_err(unread)?;
+    let (id, len) = ((meta.dev(), meta.ino()), meta.len());
+    let mut all = KEPT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let fresh = || Kept {
+        anchor: anchor.cloned(),
+        id,
+        len: 0,
+        end: Vec::new(),
+        walk: anchor.map_or_else(mnemorph_ledger::chain::Walk::new, |a| {
+            mnemorph_ledger::chain::Walk::new().anchored(a.clone())
+        }),
+        rows: std::collections::VecDeque::new(),
+        partial: Vec::new(),
+    };
+    let mut kept = all.remove(path).unwrap_or_else(fresh);
+    let same_end = || -> io::Result<bool> {
+        let n = kept.end.len() as u64;
+        let mut f = &file;
+        f.seek(SeekFrom::Start(kept.len - n))?;
+        let mut end = vec![0u8; kept.end.len()];
+        f.read_exact(&mut end)?;
+        Ok(end == kept.end)
+    };
+    if kept.anchor.as_ref() != anchor
+        || kept.id != id
+        || kept.len > len
+        || !same_end().map_err(unread)?
+    {
+        kept = fresh();
+    }
+    file.seek(SeekFrom::Start(kept.len)).map_err(unread)?;
+    let mut new = Vec::new();
+    (&file)
+        .take(len - kept.len)
+        .read_to_end(&mut new)
+        .map_err(unread)?;
+    #[cfg(test)]
+    WALKED.fetch_add(new.len() as u64, std::sync::atomic::Ordering::Relaxed);
+    kept.walk.feed(&new);
+    kept.len += new.len() as u64;
+    let mut end = std::mem::take(&mut kept.end);
+    end.extend_from_slice(&new);
+    let cut = end
+        .len()
+        .saturating_sub(usize::try_from(RECHECK).unwrap_or(usize::MAX));
+    end.drain(..cut);
+    kept.end = end;
+    kept.partial.extend_from_slice(&new);
+    if let Some(at) = kept.partial.iter().rposition(|&b| b == b'\n') {
+        let whole: Vec<u8> = kept.partial.drain(..=at).collect();
+        let back: mnemorph_ledger::ReadBack<GutsRow> =
+            mnemorph_ledger::parse_rows(whole.as_slice()).map_err(unread)?;
+        kept.rows.extend(back.rows);
+        let over = kept.rows.len().saturating_sub(HELD_ROWS);
+        kept.rows.drain(..over);
+    }
+    let report = kept.walk.report();
+    let rows = kept.rows.iter().cloned().collect();
+    all.insert(path.to_path_buf(), kept);
     if !report.holds() {
         return Err(format!(
             "the classes are not believed: their chain is {report}"
         ));
     }
-    Ok(journal_at(path)
-        .read()
-        .map_err(|e| format!("the classes cannot be read: {e}"))?
-        .rows)
+    Ok(rows)
 }
 
 /// [`last_run_held`] over the rows at `path`, held to `anchor`.
@@ -342,6 +440,59 @@ mod tests {
         std::fs::write(&path, raw.replacen("\"fail\"", "\"positive\"", 1)).unwrap();
         let refused = last_run_at(&path, None).unwrap_err();
         assert!(refused.contains("not believed"), "{refused}");
+    }
+
+    /// A large record is walked once whole, then only what was appended; an edit in place of the
+    /// last row, a shorter file or a new anchor walks it again, and the edit is found.
+    #[test]
+    fn a_large_record_is_walked_once_then_only_its_new_rows() {
+        use std::sync::atomic::Ordering;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("guts/w.jsonl");
+        let j = journal_at(&path);
+        // Sealed in memory and written once: twenty thousand synced appends would take a minute.
+        let mut walk = mnemorph_ledger::chain::Walk::new();
+        let mut bytes = Vec::new();
+        for n in 0..20_000 {
+            let classes = if n % 2 == 0 {
+                vec![Class::Fail]
+            } else {
+                vec![]
+            };
+            let mut r = row(&format!("r{}", n / 100), &classes);
+            r.build = Build::this();
+            let (line, next) = walk.seal(&serde_json::to_vec(&r).unwrap()).unwrap();
+            bytes.extend_from_slice(&line);
+            walk = next;
+        }
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        let size = std::fs::metadata(&path).unwrap().len();
+        let walked = || WALKED.load(Ordering::Relaxed);
+        let before = walked();
+        assert_eq!(held_at(&path, None).unwrap().len(), 20_000);
+        assert!(walked() - before >= size, "the first call walks it whole");
+        let before = walked();
+        assert_eq!(held_at(&path, None).unwrap().len(), 20_000);
+        assert_eq!(walked() - before, 0, "nothing new, nothing walked");
+        append_stamped(&j, row("r-last", &[Class::Echo])).unwrap();
+        let grown = std::fs::metadata(&path).unwrap().len();
+        let before = walked();
+        let rows = held_at(&path, None).unwrap();
+        assert_eq!(walked() - before, grown - size, "only the new row");
+        assert_eq!(rows.last().unwrap().classes, [Class::Echo]);
+        // The last row edited in place, the file's length unchanged: found.
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let at = raw.rfind("\"echo\"").unwrap();
+        let mut edited = raw.clone();
+        edited.replace_range(at..at + 6, "\"fail\"");
+        std::fs::write(&path, &edited).unwrap();
+        let refused = held_at(&path, None).unwrap_err();
+        assert!(refused.contains("not believed"), "{refused}");
+        // Cut short: walked again, and believed.
+        let cut = raw.lines().take(10).collect::<Vec<_>>().join("\n") + "\n";
+        std::fs::write(&path, cut).unwrap();
+        assert_eq!(held_at(&path, None).unwrap().len(), 10);
     }
 
     #[test]
