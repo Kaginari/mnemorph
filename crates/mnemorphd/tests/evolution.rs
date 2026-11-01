@@ -585,8 +585,8 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
     assert!(stdout.contains("swapped sly-1"), "{stdout}{err}");
     assert!(
         stdout.contains("as the creatures' witness would hold them")
-            && stdout.contains("Reports to: the card says `orc-x`, its row holds `nobody`")
-            && stdout.contains("Territory: the card says `src/`, its row holds `none`")
+            && stdout.contains("Reports to: the card says \\u{60}orc-x\\u{60}, its row holds \\u{60}nobody")
+            && stdout.contains("witnessed as: sly — slime, reports to nobody, ground none")
             && stdout.contains("kijin-forge — oni, post kijin-forge")
             && stdout.contains("a new name: a stranger"),
         "{stdout}"
