@@ -142,6 +142,7 @@ impl Home {
                 verified_by: Vec::new(),
                 entry: None,
                 build: mnemorph_server::world::ledger::Build::default(),
+                run: None,
             })
             .unwrap();
         }

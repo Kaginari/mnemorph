@@ -75,14 +75,20 @@ export function tokens(wt: number): string {
   return `${(wt / 1_000_000).toFixed(2)}M`;
 }
 
-/** A rate with its count and 95% interval, as `mnemorphd meters` says it; none, "silent — no report yet". */
+/**
+ * A rate with its count and 95% interval, as `mnemorphd meters` says it; "unavailable — why" when
+ * a journal it folds from does not hold; else, with none, "silent — no report yet".
+ */
 export function rate(m: {
+  status?: 'counted' | 'noReports' | 'unavailable';
+  why?: string | null;
   successes: number | null;
   n: number | null;
   value: number | null;
   lo: number | null;
   hi: number | null;
 }): string {
+  if (m.status === 'unavailable') return `unavailable — ${m.why ?? 'its fold is unavailable'}`;
   if (m.n === null || m.successes === null || m.value === null) return 'silent — no report yet';
   const interval =
     m.lo !== null && m.hi !== null ? `, 95% ${m.lo.toFixed(2)}–${m.hi.toFixed(2)}` : '';

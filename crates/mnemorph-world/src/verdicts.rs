@@ -42,6 +42,10 @@ pub struct VerdictRow {
     /// The build that gave it; `unknown` for a row from before stamps.
     #[serde(default)]
     pub build: Build,
+    /// The run whose landing it judged; `None` for a row from before runs were named, which the
+    /// report fold gives to the body's latest run begun before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
 }
 
 /// Where `world`'s gate verdicts are kept: `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl`,
@@ -164,6 +168,7 @@ mod tests {
             verified_by: Vec::new(),
             entry: None,
             build: Build::default(),
+            run: None,
         }
     }
 

@@ -351,6 +351,7 @@ mod tests {
             verified_by: Vec::new(),
             entry: None,
             build: Build::this(),
+            run: None,
         })
         .unwrap();
     }

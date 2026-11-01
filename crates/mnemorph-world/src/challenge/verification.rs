@@ -1090,6 +1090,12 @@ impl Challenges {
     }
 }
 
+/// Every finding of the records `bytes` hold, folded from those bytes alone: for a reader that
+/// walked their chain over the same bytes (the report fold).
+pub(crate) fn finding_rows_of(bytes: &[u8]) -> Vec<FindingRow> {
+    rows_of(super::fold(bytes))
+}
+
 /// Every finding of the folded records, as [`Challenges::finding_rows`] gives them.
 fn rows_of(all: std::collections::BTreeMap<String, super::Open>) -> Vec<FindingRow> {
     all.into_iter()

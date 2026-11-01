@@ -120,10 +120,13 @@ one finding for that score, after showing it and asking for `y` at the terminal.
 runs it.
 
 `meters` shows every living creature's meters by race, each with its count and its 95% Wilson
-interval — `precision 0.90 (18/20, 95% 0.70–0.97)` — or `no reports` where no fold reads it
-yet. Only the Dark Elf's meters are live, folded from the challenge records per speciality; the
-other races' fold from their reports, and the general report fold is M11's. Shown, never judged
-on: every rise and fall reads the point estimate.
+interval — `precision 0.90 (18/20, 95% 0.70–0.97)` — `no reports` where its record holds none,
+or `unavailable` where a journal it folds from does not hold. The Dark Elf's fold from the
+challenge records per speciality; every other race's from its reports, folded from the usage
+witness, the gate verdicts, the challenge records and the Kijin posts' witnesses under the state
+directory — never a copy in the world — and kept in the report ledger there
+(`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on: no rise or
+fall is applied.
 
 `usage` folds the world's usage ledger over the window (7 days unless `--window` says) — read
 from its witness under the state directory, trusted while its chain holds, else from the world's
@@ -2150,7 +2153,16 @@ fn meters(args: &[String]) -> ExitCode {
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
     let world = world.canonicalize().unwrap_or(world);
-    let all = mnemorph_server::world::meters::read(&world);
+    let w = mnemorph_server::world::Roster::load(&world);
+    let folds = mnemorph_server::world::challenge::scored(&world)
+        .map(|(f, _)| f)
+        .unwrap_or_default();
+    // The fold kept in the report ledger; a fold that cannot be trusted is shown unavailable.
+    let (reports, kept) = match mnemorph_server::world::reports::record(&world) {
+        Ok((f, path)) => (Ok(f), Ok(path)),
+        Err(why) => (mnemorph_server::world::reports::fold(&world), Err(why)),
+    };
+    let all = mnemorph_server::world::meters::of(&w, &folds, &reports);
     let safe = mnemorph_server::challenge::safe;
     if json {
         for m in &all {
@@ -2158,11 +2170,18 @@ fn meters(args: &[String]) -> ExitCode {
                 .readings
                 .iter()
                 .map(|r| {
-                    // No report — no fold, or a fold of none — is no count, never a zero.
+                    // No report is no count, never a zero; an unavailable fold says why.
+                    let status = match r.rate {
+                        None => "unavailable",
+                        Some(x) if x.n == 0 => "noReports",
+                        Some(_) => "counted",
+                    };
                     let rate = r.rate.filter(|x| x.n > 0);
                     let (lo, hi) = rate.and_then(|x| x.interval()).unzip();
                     serde_json::json!({
                         "meter": r.meter,
+                        "status": status,
+                        "why": r.rate.is_none().then(|| m.unavailable.clone()).flatten(),
                         "successes": rate.map(|x| x.successes),
                         "n": rate.map(|x| x.n),
                         "value": rate.and_then(|x| x.value()),
@@ -2192,9 +2211,15 @@ fn meters(args: &[String]) -> ExitCode {
             println!("  {}", safe(&m.to_string()));
         }
     }
+    match kept {
+        Ok(path) => println!(
+            "\nreports folded from the trusted journals, kept in {}",
+            safe(&path.display().to_string())
+        ),
+        Err(why) => println!("\nthe report ledger is not kept: {}", safe(&why)),
+    }
     println!(
-        "\nshown with their count and 95% interval, never judged on; only the Dark Elf's meters \
-         fold yet — the other races' report fold is M11's"
+        "shown with their count and 95% interval, never judged on; no rise or fall is applied"
     );
     ExitCode::SUCCESS
 }

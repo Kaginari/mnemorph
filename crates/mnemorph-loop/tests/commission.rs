@@ -2127,6 +2127,7 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         verified_by: vec![verified_by.into()],
         entry: None,
         build: mnemorph_world::ledger::Build::default(),
+        run: None,
     };
     // The gate keys its verdicts by the world as the session names it: its real path (`/private/var`
     // on macOS, for a `/var` temporary directory).

@@ -6,6 +6,8 @@
 //! [`verify`]. The journals:
 //!
 //! - `usage`: the usage ledger, in the world;
+//! - `usage-witness`: its witness under the state directory, every byte the ledger was written,
+//!   the copy the report fold trusts;
 //! - `value`: the Dark Elf's challenge records — findings, verdicts, seal proposals, waivers;
 //! - `evolution`: the evolution ledger;
 //! - `gate`: the end gate's verdicts ([`crate::verdicts`]);
@@ -32,6 +34,9 @@ use serde::{Deserialize, Serialize};
 use crate::log::{Entry, LOG};
 use crate::queue::state_file_in;
 use crate::worth::USAGE;
+
+/// The chained journal name of the usage ledger's witness under the state directory.
+pub const USAGE_WITNESS: &str = "usage-witness";
 
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +67,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         return out;
     };
     for (name, kind) in [
+        (USAGE_WITNESS, "usage"),
         ("value", "challenges"),
         ("evolution", "evolution"),
         ("gate", "gate"),
@@ -133,7 +139,7 @@ pub fn post_witness(world: &Path, post: Post) -> Option<PathBuf> {
     Some(post_witness_in(&crate::queue::state_dir()?, world, post))
 }
 
-fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
+pub(crate) fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
     state_file_in(state, world, "kijin")
         .with_extension("")
         .join(format!("{}.jsonl", post.creature()))
@@ -546,6 +552,7 @@ mod tests {
             names(&all),
             [
                 "usage",
+                "usage-witness",
                 "value",
                 "evolution",
                 "gate",

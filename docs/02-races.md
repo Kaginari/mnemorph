@@ -1231,15 +1231,22 @@ How a fall is read (`mnemorph-races`, `falls`):
 
   ```text
   meters   glim (dark-elf): precision 0.90 (18/20, 95% 0.70–0.97) · upheldRate 0.90 (18/20, 95% 0.70–0.97) · cannotVerifyRate 0.10 (1/10, 95% 0.02–0.40)
-  meters   sly (slime): no reports — landRate, gateRate, holeRate
+  meters   sly (slime): landRate 0.50 (1/2, 95% 0.09–0.91) · gateRate 0.00 (0/2, 95% 0.00–0.66) · holeRate 0.50 (1/2, 95% 0.09–0.91)
+  meters   lana (elf): no reports — planLandRate, reaskRate, landRate
   ```
 
-  **Live today: the Dark Elf's** `precision`, `upheldRate` and `cannotVerifyRate`, folded from
-  the challenge records per speciality, by the creature that bears the speciality's name. Every
-  other race's meters (`landRate`, `gateRate`, `holeRate`, `gateRight`, `planLandRate`,
-  `reaskRate`, `outwardCleanRate`, `verifyGreenRate`, `askDoneRate`) fold from its reports, and
-  the general report fold over the journal is M11's: until it exists they read `no reports`,
-  never a number, and the JSON carries no count rather than a zero.
+  The board's world and metrics pages show the same readings; the JSON gives each meter its
+  `status` — `counted`, `noReports` or `unavailable` (with `why`).
+
+  The Dark Elf's `precision`, `upheldRate` and `cannotVerifyRate` fold from the challenge
+  records per speciality, by the creature that bears the speciality's name. Every other race's
+  fold from its reports ([the report fold](#the-report-fold)). A meter whose record holds none
+  reads `no reports` (its `n` zero, the JSON's count `null`, never a 0%); one whose journal does
+  not hold reads `unavailable`, with why — never a stale reading, never a zero:
+
+  ```text
+  meters   sly (slime): unavailable — the gate chain is broken at line 4: its digest is not the digest of its bytes: the row was edited
+  ```
 - **The interval is shown, never judged on.** Every bar — a meter's band, a rise, a fall, a
   recovery — reads the point estimate, so a record exactly at a rise bar rises whatever its lower
   bound. Judging on the lower bound would change the law; that is the human's decision to make.
@@ -1288,9 +1295,45 @@ about each report — the gate's word on its landing, a first-try pass, the hole
   always does; and a gate verdict never depends on a report's prose — any answer that says
   something, a claimed pass included, gets the verdict and the failures the plain one does. Only
   an empty answer fails, on *duties done*.
-- **`fold_reports` has no journal behind it yet.** When M11 builds the general report fold over
-  the journal, that fold must keep these properties: they are re-asserted against it, not assumed
-  from this one.
+- **The report fold keeps them.** It reads the gate's word, the holes the gate named and the
+  verify lines' results — never a report's `@S`, its `@?` or its prose — and every property above
+  is asserted against it too.
+
+#### The report fold
+
+Every race but the Dark Elf is measured on its reports, folded by `mnemorph_world::reports` from
+the harness's own journals under the human's state directory — never a copy in the world, which a
+body can write. Each journal is read once, its hash chain walked over the bytes read and held to
+the head anchored under the state directory (the usage witness as `usage-witness`); a chain that
+does not hold, a torn tail, a journal gone while a head stays anchored for it, a journal with no
+chained row, a line that is no row, or a journal whose path lies inside the world stops the fold,
+and every meter it feeds reads `unavailable`. A journal unchanged since its walk — the same
+file, size and change times, the same anchor — is not read again.
+
+| Input | Unit | Folded from |
+|---|---|---|
+| `reports` | runs | the usage witness: each run its body made, by the race it ran as |
+| `landRate` | runs | the gate verdicts: the run's last word is `PASS`, and a line the human pinned ran (`verifiedBy` names `the human's pin`); a pass on an Orc's pins alone, or from before verdicts named their pins, is not verified. `, unrun` (no kernel guard) and `, unpinned` (lines held for the human to pin) are the machine's or the human's, never read; `PASS, unchecked` (no verify line ran) is the baseline, never counted as verified |
+| `gateRate` | runs | the gate verdicts: one verdict on the run, and it passed |
+| `holeRate`, `testsIntactFailures` | runs | the gate verdicts: a *tests intact* failure on the run |
+| `verifyGreenRate` | runs on whose landing lines the human pinned ran | the gate verdicts: the last one names no `traits hold` failure and no unverified line; an unchecked one, or one on an Orc's pins alone, says nothing of the human's lines |
+| `planLandRate` | dispatches | the usage witness (each run's commissioner; a run's parent is the commissioner's latest run begun before it) and the gate verdicts: a pass under the dispatch, a fail under none |
+| `reaskRate` | dispatches | the usage witness: a body the same run had commissioned already |
+| `gateRight` | the gate's passes on its dispatches | the gate verdicts and the challenge records: a pass on whose landing no Dark Elf finding was upheld |
+| `outwardCleanRate`, `rollbacks` | outward acts | each Kijin post's witness: the act's last state — `observed`, `unobserved` or `settled` clean, `reconcile` not, `corrected` rolled back; one still open, `absent` or an undo is no act yet |
+| `askDoneRate` | the throne's judged landings | the gate verdicts: passed, and none of the throne's next three landings rewrites one of its paths (a hand-back is the same turn) |
+| `slimeHealth`, `overturnedOnSealed`, `envelopeCorrections` | — | **unknown**: strain is journaled only in the world, no journal marks a seal on a landing or names the envelope an act ran under. Never a zero: a rise or a score that reads one is not computed |
+
+A verdict names its run; one from before verdicts did is given to its body's latest run begun at
+or before it. A creature's meters are its name's rows under its doc's base race: the race is the
+one the usage witness says it ran as, so a doc that claims another race claims no record.
+
+The fold is kept in the **report ledger**, `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl`
+([storage](05-architecture.md#storage-files-are-the-truth)) — one row per report (`run`, `ask` or
+`act`), each with every input value above and the `build` of the journal row that settled it, and
+chained from its genesis; a row whose source row carries no build says `unstamped`.
+`mnemorphd meters` folds and keeps it; `mnemorph status` and the board
+fold the same rows in memory and write nothing. No rise, fall or probation is applied from it.
 
 **The guts classes are signals for a learned value, never a meter.** Every act of every body is
 classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its

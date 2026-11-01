@@ -1,10 +1,13 @@
 //! Every creature's meters as `status` and `mnemorphd meters` show them: each with its count and
-//! its 95% Wilson interval, read from a fold that exists, or `no reports` where none does.
+//! its 95% Wilson interval, `no reports` where its record holds none, or `unavailable` where a
+//! journal it folds from cannot be trusted.
 //!
-//! Only the Dark Elf's meters are live: they fold from the challenge records, per speciality
-//! (`precision`, `upheldRate`, `cannotVerifyRate`). Every other race's meters fold from its
-//! reports, and the general report fold over the journal is M11's: until it exists they read
-//! `no reports`, never a number. Showing only: every decision reads the point estimate.
+//! The Dark Elf's meters fold from the challenge records, per speciality (`precision`,
+//! `upheldRate`, `cannotVerifyRate`). Every other race's fold from its reports
+//! ([`crate::reports`]): the usage witness, the gate verdicts, the challenge records and the Kijin
+//! posts' witnesses, under the human's state directory. A journal that does not hold stops that
+//! fold, and every meter it feeds reads unavailable — never stale, never zero. Showing only:
+//! every decision reads the point estimate, and none is made here.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,13 +18,15 @@ use mnemorph_ledger::SpecialityFold;
 pub use mnemorph_races::{Race, Rate};
 
 use crate::Roster;
+use crate::reports::{Folded, Unavailable};
 
-/// One meter: its name and its counts; `None` when no fold reads it yet.
+/// One meter: its name and its counts; `None` when the fold that reads it is unavailable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     /// The meter, as the race law names it.
     pub meter: &'static str,
-    /// Its successes over its record; `None` when no fold reads it yet.
+    /// Its successes over its record — none of none reads `no reports` — or `None` when its fold
+    /// is unavailable.
     pub rate: Option<Rate>,
 }
 
@@ -34,6 +39,8 @@ pub struct Meters {
     pub race: Race,
     /// Its meters, in the race's order.
     pub readings: Vec<Reading>,
+    /// Why its fold gave no reading, when it gave none.
+    pub unavailable: Option<String>,
 }
 
 /// The meters a race is read on, headline first.
@@ -68,43 +75,70 @@ fn dark_elf(f: Option<&SpecialityFold>) -> Vec<Reading> {
     ]
 }
 
-/// Every living creature's meters over the challenge records' folds, by speciality: a Dark Elf's
-/// from the fold that bears its name, every other race's `no reports`.
+/// Every living creature's meters: a Dark Elf's from the challenge records' fold that bears its
+/// name, every other race's from the report fold `reports`, by its name and its base race.
 #[must_use]
-pub fn of(roster: &Roster, folds: &BTreeMap<String, SpecialityFold>) -> Vec<Meters> {
+pub fn of(
+    roster: &Roster,
+    folds: &BTreeMap<String, SpecialityFold>,
+    reports: &Result<Folded, Unavailable>,
+) -> Vec<Meters> {
     roster
         .living()
-        .map(|c| Meters {
-            name: c.name.clone(),
-            race: c.race,
-            readings: if c.race.base() == Race::DarkElf {
-                dark_elf(folds.get(&c.name))
-            } else {
-                of_race(c.race)
+        .map(|c| {
+            if c.race.base() == Race::DarkElf {
+                return Meters {
+                    name: c.name.clone(),
+                    race: c.race,
+                    readings: dark_elf(folds.get(&c.name)),
+                    unavailable: None,
+                };
+            }
+            let (inputs, unavailable) = match reports {
+                Ok(f) => (Some(f.of(&c.name, c.race)), None),
+                Err(e) => (None, Some(e.to_string())),
+            };
+            Meters {
+                name: c.name.clone(),
+                race: c.race,
+                readings: of_race(c.race)
                     .iter()
-                    .map(|&meter| Reading { meter, rate: None })
-                    .collect()
-            },
+                    .map(|&meter| Reading {
+                        meter,
+                        rate: inputs.as_ref().map(|i| i.rate(meter).unwrap_or_default()),
+                    })
+                    .collect(),
+                unavailable,
+            }
         })
         .collect()
 }
 
-/// [`of`] for `world`: its roster and its challenge records, when it has a home for them.
+/// [`of`] for `world`: its roster, its challenge records and its report fold, read and never
+/// written.
 #[must_use]
 pub fn read(world: &Path) -> Vec<Meters> {
     let folds = crate::challenge::scored(world)
         .map(|(f, _)| f)
         .unwrap_or_default();
-    of(&Roster::load(world), &folds)
+    of(&Roster::load(world), &folds, &crate::reports::fold(world))
 }
 
 impl fmt::Display for Meters {
-    /// `glim (dark-elf): precision 0.90 (18/20, 95% 0.70–0.97) · …`, or
-    /// `sly (slime): no reports — landRate, gateRate, holeRate`.
+    /// `glim (dark-elf): precision 0.90 (18/20, 95% 0.70–0.97) · …`,
+    /// `sly (slime): no reports — landRate, gateRate, holeRate`, or
+    /// `sly (slime): unavailable — the gate chain is broken at line 4: …`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ({}): ", self.name, self.race.name())?;
-        // A fold that reads none of its meters yet says so once, naming them.
-        if self.readings.iter().all(|r| r.rate.is_none()) {
+        if let Some(why) = &self.unavailable {
+            return write!(f, "unavailable — {why}");
+        }
+        // A record that holds none of its meters says so once, naming them.
+        if self
+            .readings
+            .iter()
+            .all(|r| r.rate.is_none_or(|x| x.n == 0))
+        {
             let names: Vec<&str> = self.readings.iter().map(|r| r.meter).collect();
             return write!(f, "no reports — {}", names.join(", "));
         }
@@ -113,7 +147,7 @@ impl fmt::Display for Meters {
             .iter()
             .map(|r| match r.rate {
                 Some(rate) => format!("{} {rate}", r.meter),
-                None => format!("{} no reports", r.meter),
+                None => format!("{} unavailable", r.meter),
             })
             .collect();
         f.write_str(&shown.join(" · "))
@@ -154,7 +188,10 @@ mod tests {
                 ..SpecialityFold::default()
             },
         );
-        let shown: Vec<String> = of(&r, &folds).iter().map(ToString::to_string).collect();
+        let shown: Vec<String> = of(&r, &folds, &Ok(Folded::default()))
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         assert!(
             shown.contains(
                 &"glim (dark-elf): precision 0.90 (18/20, 95% 0.70–0.97) · upheldRate 0.90 \

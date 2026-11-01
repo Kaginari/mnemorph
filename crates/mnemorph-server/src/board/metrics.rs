@@ -359,7 +359,6 @@ fn meters(
     worlds: &[(BoardWorld, PathBuf)],
     first: &BTreeMap<(String, String), Timestamp>,
 ) -> Sourced<Vec<MetricsCreature>> {
-    const SOURCE: &str = "the roster's creatures (in the world) over the challenge records' folds";
     let mut all = Vec::new();
     let mut why = Vec::new();
     for (w, path) in worlds {
@@ -385,11 +384,9 @@ fn meters(
             )),
         }
     }
-    let mut note = vec![
-        "only the Dark Elf's meters fold yet; shown with their count, never judged on".to_owned(),
-    ];
+    let mut note = vec![super::overview::METERS_NOTE.to_owned()];
     note.extend(why);
-    Sourced::known(all, SOURCE, false).with(note.join("; "))
+    Sourced::known(all, super::overview::METERS_SOURCE, false).with(note.join("; "))
 }
 
 /// One speciality's score.
@@ -404,10 +401,10 @@ fn score(world: &str, speciality: &str, f: &SpecialityFold, form: Option<Race>) 
         cannot_verify: f.cannot_verify,
         held: f.held,
         unverified: f.unverified,
-        precision: meter("precision", Some(f.precision_rate())),
-        upheld_rate: meter("upheldRate", Some(Rate::of(f.upheld, f.findings))),
-        recent: meter("recentPrecision", Some(f.recent_rate())),
-        cannot_verify_rate: meter("cannotVerifyRate", Some(f.cannot_verify_counts())),
+        precision: meter("precision", Some(f.precision_rate()), None),
+        upheld_rate: meter("upheldRate", Some(Rate::of(f.upheld, f.findings)), None),
+        recent: meter("recentPrecision", Some(f.recent_rate()), None),
+        cannot_verify_rate: meter("cannotVerifyRate", Some(f.cannot_verify_counts()), None),
         proposal: form.and_then(|r| f.proposal(r)).map(|a| {
             match a {
                 Ascension::Rise => "rise",

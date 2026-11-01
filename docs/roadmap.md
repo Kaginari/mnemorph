@@ -368,8 +368,10 @@ includes the witness.
 
 ### M11 — Value, evolution, ascension · M
 
-- The value ledger and its fold into each race's signals, score folds per race, meters, minimum
-  record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
+- The value ledger and its fold into each race's signals (built: the report fold over the
+  harness's trusted journals into the chained report ledger, and every race's meters from it —
+  [the report fold](02-races.md#the-report-fold); still M11's: rises and falls applied from it),
+  score folds per race, meters, minimum record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
   each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over
   exactly the files it named, its judgement replayed from the chained ledger (built: the

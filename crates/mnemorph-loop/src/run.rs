@@ -2017,6 +2017,7 @@ impl Run {
                 verified_by: verdict.verified_by.clone(),
                 entry: written.as_ref().ok().cloned().flatten(),
                 build: mnemorph_ledger::Build::default(),
+                run: Some(self.caller.run.clone()),
             },
         );
         if let Err(e) = kept {

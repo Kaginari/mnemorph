@@ -10,6 +10,7 @@ import type {
   BoardMetrics,
   DayRaces,
   Meter,
+  MeterStatus,
   MetricsCreature,
   Named,
   Score,
@@ -111,13 +112,22 @@ function usage(v: unknown): Usage | undefined {
   };
 }
 
+const STATUSES: readonly MeterStatus[] = ['counted', 'noReports', 'unavailable'];
+
+/** A meter's status, as the server says it: counted, no reports, or unavailable. */
+export function meterStatus(v: unknown): MeterStatus | undefined {
+  return STATUSES.find((s) => s === v);
+}
+
 export function parseMeter(v: unknown): Meter | undefined {
   const r = obj(v);
   if (!r || !str(r.meter)) return undefined;
-  const { successes, n, value, lo, hi } = r;
+  const { successes, n, value, lo, hi, why } = r;
+  const status = meterStatus(r.status);
+  if (!status || !orNull(why, str)) return undefined;
   if (!orNull(successes, count) || !orNull(n, count)) return undefined;
   if (!orNull(value, num) || !orNull(lo, num) || !orNull(hi, num)) return undefined;
-  return { meter: r.meter, successes, n, value, lo, hi };
+  return { meter: r.meter, status, why, successes, n, value, lo, hi };
 }
 
 const creature = (v: unknown): MetricsCreature | undefined => {

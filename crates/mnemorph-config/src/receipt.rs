@@ -841,6 +841,9 @@ pub struct Row {
     /// On a `corrected` row: the receipt of the undo whose probe saw the effect gone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub by: Option<String>,
+    /// The build that wrote the row; `None` for a row from before rows were stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<mnemorph_ledger::Build>,
 }
 
 impl Row {
@@ -859,6 +862,7 @@ impl Row {
             why: None,
             undoes: None,
             by: None,
+            build: Some(mnemorph_ledger::Build::this()),
         }
     }
 }
