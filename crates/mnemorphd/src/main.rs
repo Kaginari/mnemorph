@@ -760,26 +760,7 @@ fn onto(args: &[String]) -> ExitCode {
     let world = canonical(world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w)));
     let cwd = canonical(cwd);
     let roster = Roster::load(&world);
-    for problem in &roster.problems {
-        let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
-    }
-    if let Some(why) = &roster.witness {
-        let _ = writeln!(std::io::stderr(), "mnemorphd: {why}");
-    }
-    let strangers: Vec<&str> = roster
-        .creatures
-        .keys()
-        .filter(|n| roster.stranger(n))
-        .map(String::as_str)
-        .collect();
-    if !strangers.is_empty() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "mnemorphd: no row holds the card of {}: each is a stranger, its own seat alone, until \
-             `mnemorphd roster adopt`",
-            mnemorph_server::challenge::safe(&strangers.join(", "))
-        );
-    }
+    say_trust(&roster);
     if command == "check" {
         // The shape is the cards'; what differs from the witness is a finding of its own.
         return check(&world, &Roster::shown(&world, &world), dimension);
@@ -818,19 +799,55 @@ fn onto(args: &[String]) -> ExitCode {
             || e.rule.words().to_owned(),
             |c| format!("{} {c}", e.rule.words()),
         );
-        // The trusted owner; a card that would name another is said beside it, granting nothing.
-        let said = explain(&cards, &rel).owner;
-        let card = match (&said, &e.owner) {
-            (a, b) if a == b => String::new(),
-            (Owner::Creature(c), _) => format!(
-                "\t(its card says {}: it owns nothing until `mnemorphd roster adopt`)",
-                mnemorph_server::challenge::safe(c)
-            ),
-            _ => String::new(),
-        };
+        let card = card_note(&cards, &rel, &e.owner);
         let _ = writeln!(out, "{path}\t{owner}\t{why}{card}");
     }
     ExitCode::SUCCESS
+}
+
+/// What the cards alone would name as `rel`'s owner, when it is another creature than the trusted
+/// `owner`: said beside it, granting nothing.
+fn card_note(
+    cards: &mnemorph_server::world::Roster,
+    rel: &str,
+    owner: &mnemorph_server::world::Owner,
+) -> String {
+    match mnemorph_server::world::explain(cards, rel).owner {
+        mnemorph_server::world::Owner::Creature(c)
+            if *owner != mnemorph_server::world::Owner::Creature(c.clone()) =>
+        {
+            format!(
+                "\t(its card says {}: it owns nothing until `mnemorphd roster adopt`)",
+                mnemorph_server::challenge::safe(&c)
+            )
+        }
+        _ => String::new(),
+    }
+}
+
+/// On stderr: the docs that do not read, why the witness trusts no row, and the creatures no row
+/// holds.
+fn say_trust(roster: &mnemorph_server::world::Roster) {
+    for problem in &roster.problems {
+        let _ = writeln!(std::io::stderr(), "mnemorphd: {problem}");
+    }
+    if let Some(why) = &roster.witness {
+        let _ = writeln!(std::io::stderr(), "mnemorphd: {why}");
+    }
+    let strangers: Vec<&str> = roster
+        .creatures
+        .keys()
+        .filter(|n| roster.stranger(n))
+        .map(String::as_str)
+        .collect();
+    if !strangers.is_empty() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: no row holds the card of {}: each is a stranger, its own seat alone, until \
+             `mnemorphd roster adopt`",
+            mnemorph_server::challenge::safe(&strangers.join(", "))
+        );
+    }
 }
 
 /// `onto check`: every finding about the world's shape, most severe first. It fails on a

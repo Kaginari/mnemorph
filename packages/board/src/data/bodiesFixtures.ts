@@ -221,12 +221,16 @@ export const fixtureBodies: BoardBodies = {
     body({
       name: 'slime-lexer',
       race: 'named-slime',
+      standing: 'mismatched',
+      runs_as: 'slime',
+      differs: ['Race'],
       parent: 'orc-sql',
       ground: [{ kind: 'zone', path: 'sqlglot/tokens.py' }],
     }),
     body({
       name: 'slime-‮evil',
       race: 'slime',
+      standing: 'stranger',
       parent: 'orc-sql',
       live: {
         state: 'cut',
@@ -237,22 +241,11 @@ export const fixtureBodies: BoardBodies = {
     }),
     body({
       name: 'kijin-forge',
-      race: 'oni',
-      runs_as: 'kijin',
-      standing: 'mismatched',
-      differs: ['Race'],
+      race: 'kijin',
       post: 'forge',
       live: { state: 'never', why: 'no commission journal names it yet', run: null, at: null },
     }),
     body({ name: 'dark-elf-supply', race: 'dark-elf', speciality: 'supply' }),
-    body({
-      name: 'kijin-scribe',
-      race: 'kijin',
-      runs_as: 'slime',
-      standing: 'stranger',
-      post: 'scribe',
-      live: { state: 'never', why: 'no commission journal names it yet', run: null, at: null },
-    }),
     body({
       name: 'slime-old',
       race: 'slime',

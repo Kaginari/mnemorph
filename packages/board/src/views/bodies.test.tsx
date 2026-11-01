@@ -104,6 +104,27 @@ test('the colony net labels every body, and a click opens its card with its art,
   expect(card?.textContent).toContain('reports to');
 });
 
+test('a card says how it stands against the witness: trusted, mismatched, or a stranger', async () => {
+  await mount(<BodiesView w={WORLD} tab="colony" />);
+  const open = async (name: string) => {
+    const node = [...host.querySelectorAll<SVGGElement>('.colony-node')].find(
+      (n) => n.dataset.name === name,
+    );
+    await act(async () => node?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    return host.querySelector('.body-card')?.textContent ?? '';
+  };
+  expect(await open('orc-sql')).toContain('trusted');
+  const lexer = await open('slime-lexer');
+  expect(lexer).toContain('mismatched');
+  expect(lexer).toContain('runs as slime');
+  expect(lexer).toContain('differs from its row on Race');
+  expect(lexer).toContain('mnemorphd roster adopt slime-lexer');
+  const evil = await open('slime-‮evil');
+  expect(evil).toContain('stranger');
+  expect(evil).toContain('its own seat alone');
+  expect(host.textContent).toContain("the creatures' witness under the state directory");
+});
+
 test('hostile text in an order and a commission stays text', async () => {
   await mount(<BodiesView w={WORLD} tab="queue" />);
   expect(host.querySelector('script')).toBeNull();

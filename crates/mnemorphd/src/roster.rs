@@ -88,9 +88,9 @@ fn list(world: &Path) -> ExitCode {
     let view = creatures::trusted(cards.clone(), &rows);
     for c in cards.creatures.values() {
         let standing = view.standing.get(&c.name).cloned();
-        let word = standing.as_ref().map_or("stranger", Standing::word);
+        let label = standing.as_ref().map_or("stranger", Standing::word);
         println!(
-            "{} [{word}] card: {}",
+            "{} [{label}] card: {}",
             safe(&c.name),
             safe(&creatures::shown(c))
         );

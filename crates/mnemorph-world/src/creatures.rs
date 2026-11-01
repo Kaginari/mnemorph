@@ -706,7 +706,7 @@ pub fn evolution_rows(
             .get(&c.name)
             .map_or_else(|| c.race.base(), |w| lower(c.race, w.race));
         let mut r = row_of(Act::Evolution, c, &by);
-        r.race = race.name().to_owned();
+        race.name().clone_into(&mut r.race);
         r.post = post_of(&c.name, race);
         out.push(r);
     }
@@ -912,19 +912,22 @@ mod tests {
             "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/, src/\n",
         )
         .unwrap();
-        let r = view(&state, &w);
-        let c = &r.creatures["kijin-forge"];
-        assert_eq!(c.race, Race::Kijin, "the lower, its rank lost");
-        assert_eq!(c.post, [".github/workflows/"], "not widened");
+        let held = view(&state, &w);
+        let forge = &held.creatures["kijin-forge"];
+        assert_eq!(forge.race, Race::Kijin, "the lower, its rank lost");
+        assert_eq!(forge.post, [".github/workflows/"], "not widened");
         assert_eq!(
-            r.standing["kijin-forge"],
+            held.standing["kijin-forge"],
             Standing::Mismatched(vec!["Race", "Post"])
         );
-        let f = crate::check(&r, &[]);
-        let m: Vec<_> = f.iter().filter(|f| f.code == "roster-mismatch").collect();
-        assert_eq!(m.len(), 2, "{f:?}");
-        assert!(m.iter().all(|f| f.severity == crate::Severity::High));
-        assert!(m.iter().any(|f| f.message.contains("Race")));
+        let found = crate::check(&held, &[]);
+        let mismatch: Vec<_> = found
+            .iter()
+            .filter(|f| f.code == "roster-mismatch")
+            .collect();
+        assert_eq!(mismatch.len(), 2, "{found:?}");
+        assert!(mismatch.iter().all(|f| f.severity == crate::Severity::High));
+        assert!(mismatch.iter().any(|f| f.message.contains("Race")));
     }
 
     /// An Oni whose row holds it but whose card differs elsewhere loses its rank: no envelope.
@@ -973,6 +976,56 @@ mod tests {
         assert_eq!(view(&state, &w).creatures["slime-s"].zone, ["src/a/b/"]);
     }
 
+    /// A Slime whose card turns it into an Orc of another lineage runs as the Slime its row holds,
+    /// with no domain.
+    #[test]
+    fn a_card_crossing_lineages_runs_as_its_row() {
+        let (_d, w, state) = world(&[(
+            "slime",
+            "s",
+            "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
+        )]);
+        adopt(&state, &w);
+        std::fs::write(
+            w.join(".mnemorph/slime/s/README.md"),
+            "# slime-s\n\n- **Race:** orc\n- **Reports to:** orc-o\n- **Domain:** src/\n",
+        )
+        .unwrap();
+        let held = view(&state, &w);
+        assert_eq!(held.creatures["slime-s"].race, Race::Slime);
+        assert!(held.creatures["slime-s"].domain.is_empty());
+    }
+
+    /// The report fold's meters key by the trusted race: a Slime whose card says Orc is metered
+    /// as the Slime its row holds, and a stranger as a Slime.
+    #[test]
+    fn meters_read_the_trusted_race() {
+        let (_d, w, state) = world(&[(
+            "slime",
+            "s",
+            "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
+        )]);
+        adopt(&state, &w);
+        std::fs::write(
+            w.join(".mnemorph/slime/s/README.md"),
+            "# slime-s\n\n- **Race:** orc\n- **Reports to:** orc-o\n- **Domain:** src/\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(w.join(".mnemorph/dark-elf/glim")).unwrap();
+        std::fs::write(
+            w.join(".mnemorph/dark-elf/glim/README.md"),
+            "# glim\n\n- **Race:** dark-elf\n",
+        )
+        .unwrap();
+        let meters = crate::meters::of(
+            &view(&state, &w),
+            &BTreeMap::new(),
+            &Ok(crate::reports::Folded::default()),
+        );
+        let race = |n: &str| meters.iter().find(|m| m.name == n).unwrap().race;
+        assert_eq!((race("slime-s"), race("glim")), (Race::Slime, Race::Slime));
+    }
+
     /// Another lineage reads as a Slime, and a stranger named for the workspace gets no root file.
     #[test]
     fn the_lower_of_two_lineages_is_a_slime() {
@@ -1015,9 +1068,8 @@ mod tests {
         // No evolution row is written over a broken chain.
         let cards = Roster::cards(&w);
         let rows = witnessed_in(Some(&state), &w);
-        assert!(
-            evolution_rows(&cards, &cards, &rows, &[".mnemorph/orc/o/README.md".into()]).is_empty()
-        );
+        let none = evolution_rows(&cards, &cards, &rows, &[".mnemorph/orc/o/README.md".into()]);
+        assert_eq!(none, []);
     }
 
     /// A state directory inside the world holds no row: nothing is read or written there.
@@ -1122,7 +1174,7 @@ mod tests {
         assert!(list[0].row.is_none());
         assert!(shown(&list[0].card).contains("oni, post kijin-forge, reports to rimuru"));
         adopt(&state, &w);
-        assert!(unadopted_in(Some(&state), &w).is_empty());
+        assert_eq!(unadopted_in(Some(&state), &w), []);
     }
 
     /// A row naming the throne, or a ground that does not hash to its `ground_sha256`, does not
