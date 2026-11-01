@@ -436,8 +436,8 @@ still says the same set of lines.
 
 - **A card that differs from its pin** — a line changed, added or removed — runs nothing. The
   landing fails closed at once, NOT_VERIFIED with no retry, since no retry of the body's can pin a
-  line: "the verify line in `<card>` differs from the pinned one: run `mnemorphd verify pin
-  <creature>` to accept it".
+  line: "the verify line in `<card>` differs from the pinned one: run
+  `mnemorphd verify pin <creature>` to accept it".
 - **A card with lines and no pin** — a fresh world, a cloned one, a card born since — runs nothing
   the same way, with the same way on. A card with no line and no pin runs no check, as before.
 - **A witness whose chain does not walk whole** — a row edited, a tail dropped against its anchor —
