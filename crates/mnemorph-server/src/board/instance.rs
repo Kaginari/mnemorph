@@ -55,28 +55,30 @@ fn plausible(text: &str) -> bool {
         && !text.chars().any(char::is_control)
 }
 
-/// Claim the board under `dir` (`$XDG_STATE_HOME/mnemorph`).
+/// Claim the board under `dir` (`$XDG_STATE_HOME/mnemorph`), made `0700` — one of this user's
+/// with group or other bits is tightened to `0700`.
 ///
 /// # Errors
 ///
 /// The directory or the lock cannot be made, or a running board's URL cannot be read.
 pub fn claim(dir: &Path) -> Result<Claim, String> {
-    let mut d = std::fs::DirBuilder::new();
-    d.recursive(true);
+    // Made `0700`, or tightened to it — said once, on the board's own output.
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt as _;
-        d.mode(0o700);
-    }
-    d.create(dir)
-        .map_err(|e| format!("{}: {e}", dir.display()))?;
+    super::browser::state_dir(dir, |said| eprintln!("mnemorphd board: {said}"))?;
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let lock_path = dir.join("board.lock");
     let url = dir.join("board.url");
     let lock = private(&lock_path, false).map_err(|e| format!("{}: {e}", lock_path.display()))?;
     match lock.try_lock() {
         Ok(()) => {
-            // A board that died left its URL: it names no server now.
+            // A board that died left its URL: it names no server now — and maybe launchers.
             let _ = std::fs::remove_file(&url);
+            #[cfg(unix)]
+            {
+                let home = std::env::var_os("HOME").map(PathBuf::from);
+                super::browser::sweep_launchers(dir, home.as_deref());
+            }
             Ok(Claim::Ours(Instance { _lock: lock, url }))
         }
         Err(TryLockError::WouldBlock) => {

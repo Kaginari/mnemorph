@@ -264,7 +264,12 @@ fn unix_sockets_are_closed_too() {
         sock.display()
     );
     let (ok, out) = g.run(&g.policy(false), &script);
-    assert!(!ok && !out.contains("connected"), "{out}");
+    // A line of its own: Python 3.13+ quotes the failing source, `print("connected")` included,
+    // in its traceback.
+    assert!(
+        !ok && !out.lines().any(|l| l.trim() == "connected"),
+        "{out}"
+    );
 }
 
 /// Landlock already keeps a sandboxed process out of `/proc` of processes outside its domain;
@@ -546,21 +551,29 @@ fn a_body_cannot_read_the_harness_environment_through_sysctl() {
 fn the_boards_nonce_and_launcher_cannot_be_read() {
     let g = Ground::new("board");
     let state = g.path("home/.local/state/mnemorph");
+    // A snap browser's launcher: in that snap's own `~/snap/<snap>/common/mnemorph`.
+    let snap = g.path("home/snap/chromium/common/mnemorph");
     fs::create_dir_all(&state).unwrap();
+    fs::create_dir_all(&snap).unwrap();
     fs::write(state.join("board.ctl"), "NONCE-SECRET\n").unwrap();
     fs::write(state.join("open-0123456789abcdef.html"), "KEY-SECRET\n").unwrap();
+    fs::write(snap.join("open-fedcba9876543210.html"), "SNAP-KEY-SECRET\n").unwrap();
     for network in [false, true] {
-        for file in ["board.ctl", "open-0123456789abcdef.html"] {
-            let (ok, out) = g.run(
-                &g.policy(network),
-                &format!("cat {}", state.join(file).display()),
-            );
+        for file in [
+            state.join("board.ctl"),
+            state.join("open-0123456789abcdef.html"),
+            snap.join("open-fedcba9876543210.html"),
+        ] {
+            let (ok, out) = g.run(&g.policy(network), &format!("cat {}", file.display()));
             assert!(
                 !ok && !out.contains("SECRET"),
-                "network {network}, {file}: {out}"
+                "network {network}, {}: {out}",
+                file.display()
             );
         }
-        let (_, out) = g.run(&g.policy(network), &format!("ls {}", state.display()));
-        assert!(!out.contains("open-"), "network {network}: {out}");
+        for dir in [&state, &snap, &g.path("home/snap")] {
+            let (_, out) = g.run(&g.policy(network), &format!("ls -R {}", dir.display()));
+            assert!(!out.contains("open-"), "network {network}: {out}");
+        }
     }
 }

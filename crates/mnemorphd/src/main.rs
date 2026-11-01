@@ -538,8 +538,8 @@ fn serve_board(args: &[String], registry: PathBuf, hand: PathBuf) -> ExitCode {
             "open the URL above — its key works once. Ctrl-C or `mnemorphd board stop` stops it."
         }
     );
-    if open && let Err(e) = open_board(&served, dir) {
-        return fail(&e);
+    if open {
+        open_board(&served, dir);
     }
     let out = board::run_at(listeners, &served, Some(dir));
     drop(instance);
@@ -549,15 +549,18 @@ fn serve_board(args: &[String], registry: PathBuf, hand: PathBuf) -> ExitCode {
     }
 }
 
-/// Open the board in the browser, through a launcher file under `dir` that holds a key of its own,
-/// spent on arrival or dead within the minute: an opener's command line is readable by every local
-/// user while it runs, so the key is never on it.
-fn open_board(served: &mnemorph_server::board::Board, dir: &Path) -> Result<(), String> {
-    let file = served.launch(dir)?;
-    if let Err(e) = mnemorph_server::board::browse(&file) {
-        let _ = writeln!(std::io::stderr(), "mnemorphd board: {e}");
+/// Open the board in the browser, through a launcher file the browser reads (under `dir`, or a
+/// snap browser's own directory) that holds a key of its own, spent on arrival or dead within the
+/// minute: an opener's command line is readable by every local user while it runs, so the key is
+/// never on it. A browser that cannot be opened is said, and the board serves on.
+fn open_board(served: &mnemorph_server::board::Board, dir: &Path) {
+    if let Err(e) = served.open_browser(dir) {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd board: {} ({e})",
+            mnemorph_server::board::UNOPENED
+        );
     }
-    Ok(())
 }
 
 /// A board runs already under `dir`: with `open`, it opens the browser on a fresh one-time link
@@ -581,7 +584,7 @@ fn already_running(dir: &Path, open: bool) -> ExitCode {
             Err(e) => return fail(&format!("a board is running, but does not answer: {e}")),
         };
         if open && let Err(e) = control::open(dir) {
-            return fail(&format!("the running board did not open the browser: {e}"));
+            return fail(&format!("{} ({e})", mnemorph_server::board::UNOPENED));
         }
         let _ = writeln!(
             std::io::stderr(),

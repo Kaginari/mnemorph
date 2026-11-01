@@ -35,6 +35,7 @@ impl Home {
         c.args(args)
             .current_dir(&self.root)
             .env_remove("MNEMORPH_BODY")
+            .env("HOME", &self.root)
             .env("XDG_STATE_HOME", self.root.join("state"))
             .env("XDG_CONFIG_HOME", self.root.join("config"));
         if let Some(b) = body {
@@ -236,6 +237,12 @@ mod autostart {
             std::fs::write(&p, &script).unwrap();
             std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
+        // No default browser known: the human's own is never asked.
+        for name in ["xdg-settings", "xdg-mime"] {
+            let p = bin.join(name);
+            std::fs::write(&p, "#!/bin/sh\nexit 1\n").unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         let mut path = OsString::from(bin.as_os_str());
         path.push(":");
         path.push(std::env::var_os("PATH").unwrap_or_default());
@@ -329,7 +336,10 @@ mod autostart {
             );
             assert!(!printed.contains(key), "a fresh key, never the printed one");
         } else {
-            assert!(second.contains("the browser did not open"), "{second}");
+            assert!(
+                second.contains(mnemorph_server::board::UNOPENED),
+                "{second}"
+            );
             assert!(second.contains("no board built in"), "{second}");
         }
 
