@@ -160,6 +160,7 @@ impl Home {
                 unverified: vec![],
                 entry: None,
                 build: mnemorph_server::world::ledger::Build::default(),
+                run: None,
             })
             .unwrap();
         }

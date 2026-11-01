@@ -92,6 +92,8 @@ test('the metrics page: totals, charts with a legend, meters silent or with thei
   expect(text).toContain('0.90 (18/20, 95% 0.70–0.97)');
   expect(text).toContain('silent since 2026-10-20');
   expect(text).toContain('silent — no call booked yet');
+  // A fold whose journal does not hold reads unavailable, and says why: never a stale number.
+  expect(text).toContain('unavailable — the gate chain is broken at line 4: the row was edited');
   expect(text).toContain('4/10');
   expect(text).toContain('rise');
   // Hostile words are text: no element made, hidden characters escaped.

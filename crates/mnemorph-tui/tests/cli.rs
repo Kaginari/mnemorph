@@ -2,7 +2,7 @@
 //! before any terminal is taken.
 
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as Proc, Stdio};
 
 use mnemorph_tui::cli::{Command, parse};
@@ -204,29 +204,42 @@ fn run_reads_stdin() {
 }
 
 /// `status` shows each living creature's meters, compact, with their count and interval — or
-/// `no reports` where no fold reads them yet — whether or not a session opens.
+/// `no reports` where its record holds none — whether or not a session opens; a state directory
+/// inside the world is no trusted one, and the meters say unavailable.
 #[test]
 fn status_shows_each_creatures_meters() {
     let w = empty_world("meters");
     let doc = w.join(".mnemorph/slime/sly/README.md");
     std::fs::create_dir_all(doc.parent().unwrap()).unwrap();
     std::fs::write(&doc, "# sly\n\n- **Race:** slime\n").unwrap();
-    let out = bin()
-        .args(["status", "--world", w.to_str().unwrap()])
-        .env("XDG_CONFIG_HOME", w.join("config"))
-        .env("XDG_STATE_HOME", w.join("state"))
-        .env("HOME", &w)
-        .env_remove("OPENROUTER_API_KEY")
-        .env_remove("ANTHROPIC_API_KEY")
-        .env_remove("OPENAI_API_KEY")
-        .output()
-        .unwrap();
-    let shown = String::from_utf8_lossy(&out.stdout);
+    let outside = PathBuf::from(format!("{}-state", w.display()));
+    let status = |state: &Path| {
+        let out = bin()
+            .args(["status", "--world", w.to_str().unwrap()])
+            .env("XDG_CONFIG_HOME", w.join("config"))
+            .env("XDG_STATE_HOME", state)
+            .env("HOME", &w)
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let shown = status(&outside);
     assert!(
         shown.contains("meters   sly (slime): no reports — landRate, gateRate, holeRate\n"),
         "{shown}"
     );
+    let shown = status(&w.join("state"));
+    assert!(
+        shown.contains(
+            "meters   sly (slime): unavailable — the usage journal lies inside the world"
+        ),
+        "{shown}"
+    );
     let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(&outside);
 }
 
 /// `status` shows each Mind against its witness: a Mind never adopted does not load, and is said

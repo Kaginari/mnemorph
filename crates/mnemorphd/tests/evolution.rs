@@ -14,6 +14,11 @@ const MIND: &str = ".mnemorph/minds/careful/README.md";
 
 /// Where the harness keeps a world's evolution ledger: `<state>/mnemorph/evolution/<name>-<fnv64a>.jsonl`.
 fn ledger(state: &Path, world: &Path) -> PathBuf {
+    kept(state, world, "evolution")
+}
+
+/// Where the harness keeps a world's journal of `kind`: `<state>/mnemorph/<kind>/<name>-<fnv64a>.jsonl`.
+fn kept(state: &Path, world: &Path, kind: &str) -> PathBuf {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in world.as_os_str().as_encoded_bytes() {
         h ^= u64::from(*b);
@@ -21,7 +26,8 @@ fn ledger(state: &Path, world: &Path) -> PathBuf {
     }
     let name = world.file_name().unwrap().to_string_lossy();
     state
-        .join("mnemorph/evolution")
+        .join("mnemorph")
+        .join(kind)
         .join(format!("{name}-{h:016x}.jsonl"))
 }
 
@@ -198,8 +204,7 @@ fn meters_show_by_race_and_say_no_reports_where_no_fold_reads() {
     );
     assert!(
         stdout.contains(
-            "dark-elf\n  glim (dark-elf): precision no reports · upheldRate no reports · \
-             cannotVerifyRate no reports\n"
+            "dark-elf\n  glim (dark-elf): no reports — precision, upheldRate, cannotVerifyRate\n"
         ),
         "{stdout}"
     );
@@ -223,6 +228,104 @@ fn meters_show_by_race_and_say_no_reports_where_no_fold_reads() {
     assert!(
         glim["meters"][0]["n"].is_null(),
         "a live meter with no report: no count"
+    );
+}
+
+/// A slime's runs in the usage witness and its landings in the gate verdicts, under the state
+/// directory: `meters` shows its real meters and keeps the report ledger beside them.
+#[test]
+fn meters_fold_the_trusted_journals_and_keep_the_report_ledger() {
+    use mnemorph_server::world::ledger::{Journal, Timestamp, Usage, UsageRow};
+    use mnemorph_server::world::verdicts::VerdictRow;
+    let f = Fixture::new("meters-fold");
+    let usage = Journal::<UsageRow>::chained(kept(&f.state(), &f.world, "usage"));
+    usage
+        .append(&UsageRow {
+            ts: Timestamp(100),
+            session: "s".into(),
+            run: "sly-1".into(),
+            body: "sly".into(),
+            race: "slime".into(),
+            commission: Some("rimuru".into()),
+            model: "m".into(),
+            provider: "p".into(),
+            usage: Usage::default(),
+            prefix: 0,
+            wt: 0,
+            usd: None,
+            reported_cost: None,
+            estimated: false,
+            envelope: None,
+            purpose: None,
+        })
+        .unwrap();
+    Journal::<VerdictRow>::chained(kept(&f.state(), &f.world, "gate"))
+        .append(&VerdictRow {
+            ts: Timestamp(101),
+            body: "sly".into(),
+            verdict: "PASS".into(),
+            changed: vec!["src/a.rs".into()],
+            failures: Vec::new(),
+            unverified: Vec::new(),
+            entry: None,
+            build: mnemorph_server::world::ledger::Build::default(),
+            run: Some("sly-1".into()),
+        })
+        .unwrap();
+    // The world's own copy of the usage ledger says otherwise: never read.
+    fs::create_dir_all(f.world.join(".mnemorph/instruments")).unwrap();
+    fs::write(f.world.join(".mnemorph/instruments/usage.jsonl"), "{}\n").unwrap();
+    let out = f.run(&["meters"]);
+    let (stdout, err) = text(&out);
+    assert!(out.status.success(), "{err}");
+    assert!(
+        stdout.contains(
+            "sly (slime): landRate 1.00 (1/1, 95% 0.21–1.00) · gateRate 1.00 (1/1, 95% \
+             0.21–1.00) · holeRate 0.00 (0/1, 95% 0.00–0.79)\n"
+        ),
+        "{stdout}"
+    );
+    let ledger = kept(&f.state(), &f.world, "reports");
+    let bytes = fs::read(&ledger).unwrap();
+    assert!(stdout.contains("kept in"), "{stdout}");
+    let out = f.run(&["meters", "--json"]);
+    assert_eq!(
+        fs::read(&ledger).unwrap(),
+        bytes,
+        "folded again: the same bytes"
+    );
+    let sly = text(&out)
+        .0
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .find(|v| v["creature"] == "sly")
+        .unwrap();
+    assert_eq!(sly["meters"][0]["status"], "counted");
+    assert_eq!(sly["meters"][0]["n"], 1);
+
+    // The gate's witness edited: the fold stops, the meters read unavailable.
+    let gate = kept(&f.state(), &f.world, "gate");
+    let raw = fs::read_to_string(&gate).unwrap();
+    fs::write(&gate, raw.replacen("PASS", "FAIL", 1)).unwrap();
+    let out = f.run(&["meters", "--json"]);
+    let sly = text(&out)
+        .0
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .find(|v| v["creature"] == "sly")
+        .unwrap();
+    assert_eq!(sly["meters"][0]["status"], "unavailable");
+    assert!(sly["meters"][0]["n"].is_null());
+    assert!(
+        sly["meters"][0]["why"]
+            .as_str()
+            .is_some_and(|w| w.contains("the gate chain is broken")),
+        "{sly}"
+    );
+    assert_eq!(
+        fs::read(&ledger).unwrap(),
+        bytes,
+        "an unavailable fold keeps no new ledger"
     );
 }
 

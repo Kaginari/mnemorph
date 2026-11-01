@@ -347,6 +347,7 @@ mod tests {
             unverified: Vec::new(),
             entry: None,
             build: Build::this(),
+            run: None,
         })
         .unwrap();
     }

@@ -69,6 +69,7 @@ export type { Memory } from './generated/Memory.js';
 export type { MemoryCreature } from './generated/MemoryCreature.js';
 export type { MemoryNote } from './generated/MemoryNote.js';
 export type { Meter } from './generated/Meter.js';
+export type { MeterStatus } from './generated/MeterStatus.js';
 export type { MetricsCreature } from './generated/MetricsCreature.js';
 export type { MindStanding } from './generated/MindStanding.js';
 export type { ModelView } from './generated/ModelView.js';

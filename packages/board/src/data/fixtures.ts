@@ -49,8 +49,10 @@ export const fixtureWorlds: BoardWorlds = {
 const MEMORY_SOURCE = '.mnemorph/memory/ (as `mnemorphd memory status` reads it)';
 const CHALLENGES_SOURCE = 'the challenge records under the state directory';
 const GATE_SOURCE = "the gate's verdict journal under the state directory";
-const METERS_SOURCE = "the roster's creatures (in the world) over the challenge records' folds";
-const METERS_WHY = "only the Dark Elf's meters fold yet; shown with their count, never judged on";
+const METERS_SOURCE =
+  "the roster's creatures (in the world) over the challenge records' folds and the report fold of the usage witness, the gate verdicts and the Kijin posts' witnesses (under the state directory)";
+const METERS_WHY =
+  'shown with their count and 95% interval, never judged on; no rise or fall is applied here';
 const USAGE = '.mnemorph/instruments/usage.jsonl';
 const LOCK = '.mnemorph/instruments/loop/<run>.lock';
 const CHATS = "the board's chats";
@@ -105,10 +107,30 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
           creature: 'glim',
           race: 'dark-elf',
           meters: [
-            { meter: 'precision', successes: 18, n: 20, value: 0.9, lo: 0.699, hi: 0.972 },
-            { meter: 'upheldRate', successes: 18, n: 20, value: 0.9, lo: 0.699, hi: 0.972 },
+            {
+              meter: 'precision',
+              status: 'counted',
+              why: null,
+              successes: 18,
+              n: 20,
+              value: 0.9,
+              lo: 0.699,
+              hi: 0.972,
+            },
+            {
+              meter: 'upheldRate',
+              status: 'counted',
+              why: null,
+              successes: 18,
+              n: 20,
+              value: 0.9,
+              lo: 0.699,
+              hi: 0.972,
+            },
             {
               meter: 'cannotVerifyRate',
+              status: 'noReports',
+              why: null,
               successes: null,
               n: null,
               value: null,
@@ -121,9 +143,36 @@ export const fixtureOverviews: Record<string, BoardOverview> = {
           creature: 'orc-wire',
           race: 'orc',
           meters: [
-            { meter: 'gateRight', successes: null, n: null, value: null, lo: null, hi: null },
-            { meter: 'holeRate', successes: null, n: null, value: null, lo: null, hi: null },
-            { meter: 'landRate', successes: null, n: null, value: null, lo: null, hi: null },
+            {
+              meter: 'gateRight',
+              status: 'noReports',
+              why: null,
+              successes: null,
+              n: null,
+              value: null,
+              lo: null,
+              hi: null,
+            },
+            {
+              meter: 'holeRate',
+              status: 'noReports',
+              why: null,
+              successes: null,
+              n: null,
+              value: null,
+              lo: null,
+              hi: null,
+            },
+            {
+              meter: 'landRate',
+              status: 'noReports',
+              why: null,
+              successes: null,
+              n: null,
+              value: null,
+              lo: null,
+              hi: null,
+            },
           ],
         },
       ],

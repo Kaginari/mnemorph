@@ -1,7 +1,7 @@
 /**
  * Metrics: what the usage ledgers spent over a window — the totals line, spend per day by race,
  * the cache hit rate, the burn — beside the race meters with their count and interval, the Dark
- * Elf's scores and the bench. Unpriced never reads $0; a silent meter reads "silent since …";
+ * Elf's scores and the bench. Unpriced never reads $0; a silent meter reads "silent since …", an unavailable one says why;
  * every word a world wrote goes through `<Safe>`.
  */
 import './metrics.css';
@@ -212,7 +212,11 @@ function CreatureMeters({ c, names }: { c: MetricsCreature; names: Map<string, s
         {c.meters.map((r) => (
           <li key={r.meter} className="meter-reading">
             <Safe text={r.meter} />{' '}
-            {r.n === null ? (
+            {r.status === 'unavailable' ? (
+              <Mark tone="alarm" glyph="✕">
+                <Safe text={rate(r)} />
+              </Mark>
+            ) : r.n === null ? (
               <Mark tone="muted" glyph="◌">
                 {silent(c.firstCall)}
               </Mark>

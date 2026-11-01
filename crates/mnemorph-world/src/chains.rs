@@ -115,7 +115,7 @@ pub fn post_witness(world: &Path, post: Post) -> Option<PathBuf> {
     Some(post_witness_in(&crate::queue::state_dir()?, world, post))
 }
 
-fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
+pub(crate) fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf {
     state_file_in(state, world, "kijin")
         .with_extension("")
         .join(format!("{}.jsonl", post.creature()))
@@ -200,6 +200,12 @@ pub fn anchor_with(world: &Path, name: &str, log: impl FnOnce() -> String) -> Op
         Some(kept) => anchored(&kept, name).or_else(|| logged(&log(), name)),
         None => logged(&log(), name),
     }
+}
+
+/// The newest head of the journal `name` anchored in `kept`, the anchors kept under the state
+/// directory alone: what a trusted reader holds a walk to.
+pub(crate) fn anchored_in(kept: &Path, name: &str) -> Option<Head> {
+    anchored(kept, name)
 }
 
 /// The newest head of the journal `name` anchored in `kept`.

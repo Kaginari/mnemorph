@@ -27,6 +27,7 @@ pub mod queue;
 pub mod regular;
 pub mod relief;
 pub mod report;
+pub mod reports;
 pub mod roster;
 pub mod soil;
 pub mod spend;

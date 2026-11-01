@@ -239,7 +239,7 @@ function Overview({ o, now }: { o: BoardOverview; now: number }) {
                   <ul className="meter-readings mono">
                     {c.meters.map((m) => (
                       <li key={m.meter}>
-                        <Safe text={m.meter} /> {rate(m)}
+                        <Safe text={m.meter} /> <Safe text={rate(m)} />
                       </li>
                     ))}
                   </ul>

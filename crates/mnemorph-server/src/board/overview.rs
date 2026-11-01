@@ -153,12 +153,30 @@ pub struct GateVerdict {
     pub changed: u32,
 }
 
+/// Where a meter's reading stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum MeterStatus {
+    /// Counted: successes of `n`, `n` at least one.
+    Counted,
+    /// Its record holds no report: `n` is zero, never a 0%.
+    NoReports,
+    /// A journal it folds from cannot be trusted — its chain broken, its tail torn: no reading,
+    /// never a stale one.
+    Unavailable,
+}
+
 /// One meter, as `mnemorphd meters --json` shows it: no report is no count, never a zero.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct Meter {
     /// The meter, as the race law names it.
     pub meter: String,
+    /// Where its reading stands.
+    pub status: MeterStatus,
+    /// Why it is unavailable; `null` otherwise.
+    pub why: Option<String>,
     /// What succeeded; `null` with no report.
     pub successes: Option<u32>,
     /// Of how many; `null` with no report.
@@ -443,13 +461,21 @@ fn gate(path: &Path) -> Sourced<Gate> {
     }
 }
 
-/// One meter, as `mnemorphd meters --json` shows it: no report — no fold, or a fold of none — is no
-/// count, never a zero.
-pub(super) fn meter(name: &str, rate: Option<meters::Rate>) -> Meter {
+/// One meter, as `mnemorphd meters --json` shows it: no report is no count, never a zero; an
+/// unavailable fold is no count either, and says why.
+pub(super) fn meter(name: &str, rate: Option<meters::Rate>, why: Option<&str>) -> Meter {
+    let status = match rate {
+        None => MeterStatus::Unavailable,
+        Some(x) if x.n == 0 => MeterStatus::NoReports,
+        Some(_) => MeterStatus::Counted,
+    };
     let rate = rate.filter(|x| x.n > 0);
     let (lo, hi) = rate.and_then(|x| x.interval()).unzip();
     Meter {
         meter: name.to_owned(),
+        status,
+        why: (status == MeterStatus::Unavailable)
+            .then(|| why.unwrap_or("its fold is unavailable").to_owned()),
         successes: rate.map(|x| x.successes),
         n: rate.map(|x| x.n),
         value: rate.and_then(|x| x.value()),
@@ -458,31 +484,43 @@ pub(super) fn meter(name: &str, rate: Option<meters::Rate>) -> Meter {
     }
 }
 
+/// What the meters fold from, as the board says it.
+pub(super) const METERS_SOURCE: &str = "the roster's creatures (in the world) over the challenge \
+     records' folds and the report fold of the usage witness, the gate verdicts and the Kijin \
+     posts' witnesses (under the state directory)";
+
+/// What the board says beside the meters.
+pub(super) const METERS_NOTE: &str =
+    "shown with their count and 95% interval, never judged on; no rise or fall is applied here";
+
 /// Every living creature's meters, as `mnemorphd meters --json` shows them.
 pub(super) fn meters_of(
     path: &Path,
     snap: Result<&Snapshot, &str>,
 ) -> Sourced<Vec<CreatureMeters>> {
-    const SOURCE: &str = "the roster's creatures (in the world) over the challenge records' folds";
     let copy = match snap {
         Ok(s) => s.path(),
-        Err(why) => return Sourced::unknown(SOURCE, false, why),
+        Err(why) => return Sourced::unknown(METERS_SOURCE, false, why),
     };
-    // The roster from the copy; the folds from the records kept for the world's own path.
+    // The roster from the copy; the folds from the journals kept for the world's own path.
     let folds = mnemorph_loop::world::challenge::scored(path)
         .map(|(f, _)| f)
         .unwrap_or_default();
+    let reports = mnemorph_loop::world::reports::fold(path);
     let roster = mnemorph_loop::world::Roster::load(copy);
-    let all = meters::of(&roster, &folds)
+    let all = meters::of(&roster, &folds, &reports)
         .into_iter()
         .map(|m| CreatureMeters {
             creature: m.name,
             race: m.race.name().to_owned(),
-            meters: m.readings.iter().map(|r| meter(r.meter, r.rate)).collect(),
+            meters: m
+                .readings
+                .iter()
+                .map(|r| meter(r.meter, r.rate, m.unavailable.as_deref()))
+                .collect(),
         })
         .collect();
-    Sourced::known(all, SOURCE, false)
-        .with("only the Dark Elf's meters fold yet; shown with their count, never judged on")
+    Sourced::known(all, METERS_SOURCE, false).with(METERS_NOTE)
 }
 
 /// The latest session's spend, from the usage ledger in the world.

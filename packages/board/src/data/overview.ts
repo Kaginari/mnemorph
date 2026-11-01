@@ -16,6 +16,7 @@ import type {
   WorldStatus,
 } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
+import { parseMeter } from './metrics.ts';
 import { type Change, usePush } from './push.ts';
 import { establish, signedOut } from './session.ts';
 
@@ -82,12 +83,9 @@ const meters: Check<CreatureMeters[]> = (v) => {
     if (!o || !str(o.creature) || !str(o.race) || !Array.isArray(o.meters)) return undefined;
     const ms = [];
     for (const m of o.meters) {
-      const r = obj(m);
-      if (!r || !str(r.meter)) return undefined;
-      const { successes, n, value, lo, hi } = r;
-      if (!orNull(successes, count) || !orNull(n, count)) return undefined;
-      if (!orNull(value, num) || !orNull(lo, num) || !orNull(hi, num)) return undefined;
-      ms.push({ meter: r.meter, successes, n, value, lo, hi });
+      const r = parseMeter(m);
+      if (!r) return undefined;
+      ms.push(r);
     }
     out.push({ creature: o.creature, race: o.race, meters: ms });
   }
