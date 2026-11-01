@@ -2,10 +2,12 @@
 
 ## In one picture
 
+<a href="./canvas/architecture-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/architecture-dark.svg">
   <img src="./canvas/architecture-light.svg" alt="The architecture: the TypeScript packages board, sdk and protocol; the Rust crates from tui and mnemorphd through server and loop down to world, tools, provider, memory, ledger, proving, wire, sandbox and races; the sdk speaks JSON-RPC to the server">
 </picture>
+</a>
 
 <details>
 <summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
@@ -1285,10 +1287,12 @@ its next row.
 
 ### Sandbox
 
+<a href="./canvas/sandbox-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/sandbox-dark.svg">
   <img src="./canvas/sandbox-light.svg" alt="The sandbox: a tool call meets its race and soil's policy: landlock on files, seccomp on system calls, secrets by name with outputs redacted, and sockets only for an approved outward act">
 </picture>
+</a>
 
 <details>
 <summary>The sketch in Mermaid, the text this canvas is drawn from</summary>

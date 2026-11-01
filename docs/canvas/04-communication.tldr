@@ -57,7 +57,7 @@
 		},
 		{
 			"x": 90,
-			"y": 273.4,
+			"y": 1041.9669333333334,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -68,18 +68,18 @@
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "draw",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
-				"bend": -80,
+				"bend": -128,
 				"start": {
 					"x": 0,
 					"y": 0
 				},
 				"end": {
 					"x": 0,
-					"y": 71.19999999999999
+					"y": 113.04133333333334
 				},
 				"arrowheadStart": "none",
 				"arrowheadEnd": "arrow",
@@ -91,7 +91,34 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "4  plan deck: [wire parses @W → orc-engine]"
+									"text": "6  write the"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "verify line on"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "slime-wire's"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "doc"
 								}
 							]
 						}
@@ -107,7 +134,7 @@
 		},
 		{
 			"x": 0,
-			"y": 0,
+			"y": 22.500000000000004,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -120,7 +147,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -128,7 +155,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -140,7 +167,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "🌿 elf-engine"
+									"text": "🪓 orc-engine"
 								}
 							]
 						}
@@ -152,7 +179,7 @@
 		},
 		{
 			"x": 0,
-			"y": 965,
+			"y": 2403.3266666666664,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -165,7 +192,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -173,7 +200,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -185,7 +212,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "🌿 elf-engine"
+									"text": "🪓 orc-engine"
 								}
 							]
 						}
@@ -197,7 +224,7 @@
 		},
 		{
 			"x": 90,
-			"y": 75,
+			"y": 120,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -220,7 +247,7 @@
 						"id": "a2",
 						"index": "a2",
 						"x": 0,
-						"y": 890
+						"y": 2260.8266666666664
 					}
 				},
 				"scale": 1
@@ -231,7 +258,7 @@
 		},
 		{
 			"x": 90,
-			"y": 395.40000000000003,
+			"y": 1343.8336,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -242,18 +269,18 @@
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "draw",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
-				"bend": -80,
+				"bend": -128,
 				"start": {
 					"x": 0,
 					"y": 0
 				},
 				"end": {
 					"x": 0,
-					"y": 71.19999999999999
+					"y": 113.04133333333334
 				},
 				"arrowheadStart": "none",
 				"arrowheadEnd": "arrow",
@@ -265,7 +292,25 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "6  write the verify line on slime-wire's doc"
+									"text": "8  edit wire/,"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "its test, its"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "doc"
 								}
 							]
 						}
@@ -281,7 +326,7 @@
 		},
 		{
 			"x": 0,
-			"y": 0,
+			"y": 22.500000000000004,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -294,7 +339,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -302,7 +347,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -314,7 +359,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "🪓 orc-engine"
+									"text": "💧 slime-wire"
 								}
 							]
 						}
@@ -326,7 +371,7 @@
 		},
 		{
 			"x": 0,
-			"y": 965,
+			"y": 2403.3266666666664,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -339,7 +384,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -347,7 +392,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -359,7 +404,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "🪓 orc-engine"
+									"text": "💧 slime-wire"
 								}
 							]
 						}
@@ -371,7 +416,7 @@
 		},
 		{
 			"x": 90,
-			"y": 75,
+			"y": 120,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -394,7 +439,7 @@
 						"id": "a2",
 						"index": "a2",
 						"x": 0,
-						"y": 890
+						"y": 2260.8266666666664
 					}
 				},
 				"scale": 1
@@ -404,33 +449,32 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 90,
-			"y": 515.4000000000001,
+			"x": 0,
+			"y": 22.500000000000004,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
 			"id": "shape:009",
-			"type": "arrow",
+			"type": "geo",
+			"parentId": "shape:038",
 			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
+				"w": 180,
+				"h": 75,
+				"geo": "rectangle",
 				"dash": "draw",
-				"size": "s",
-				"fill": "none",
+				"growY": 0,
+				"url": "",
+				"scale": 1,
+				"flipX": false,
+				"flipY": false,
 				"color": "black",
 				"labelColor": "black",
-				"bend": -80,
-				"start": {
-					"x": 0,
-					"y": 0
-				},
-				"end": {
-					"x": 0,
-					"y": 71.19999999999993
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
+				"fill": "none",
+				"size": "l",
+				"font": "draw",
+				"align": "middle",
+				"verticalAlign": "middle",
 				"richText": {
 					"type": "doc",
 					"content": [
@@ -439,23 +483,19 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "8  edit wire/, its test, its doc"
+									"text": "🚪 gate"
 								}
 							]
 						}
 					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
+				}
 			},
-			"parentId": "shape:038",
 			"index": "a2",
 			"typeName": "shape"
 		},
 		{
 			"x": 0,
-			"y": 0,
+			"y": 2403.3266666666664,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -476,7 +516,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -488,7 +528,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "💧 slime-wire"
+									"text": "🚪 gate"
 								}
 							]
 						}
@@ -499,15 +539,232 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 0,
-			"y": 965,
+			"x": 90,
+			"y": 120,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
 			"id": "shape:011",
-			"type": "geo",
+			"type": "line",
+			"props": {
+				"dash": "draw",
+				"size": "s",
+				"color": "black",
+				"spline": "line",
+				"points": {
+					"a1": {
+						"id": "a1",
+						"index": "a1",
+						"x": 0,
+						"y": 0
+					},
+					"a2": {
+						"id": "a2",
+						"index": "a2",
+						"x": 0,
+						"y": 2260.8266666666664
+					}
+				},
+				"scale": 1
+			},
 			"parentId": "shape:038",
+			"index": "a1",
+			"typeName": "shape"
+		},
+		{
+			"x": 0,
+			"y": 22.500000000000004,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:012",
+			"type": "geo",
+			"parentId": "shape:039",
+			"props": {
+				"w": 180,
+				"h": 75,
+				"geo": "ellipse",
+				"dash": "draw",
+				"growY": 0,
+				"url": "",
+				"scale": 1,
+				"flipX": false,
+				"flipY": false,
+				"color": "black",
+				"labelColor": "black",
+				"fill": "none",
+				"size": "l",
+				"font": "draw",
+				"align": "middle",
+				"verticalAlign": "middle",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "Veldora"
+								}
+							]
+						}
+					]
+				}
+			},
+			"index": "a2",
+			"typeName": "shape"
+		},
+		{
+			"x": 0,
+			"y": 2403.3266666666664,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:013",
+			"type": "geo",
+			"parentId": "shape:039",
+			"props": {
+				"w": 180,
+				"h": 75,
+				"geo": "ellipse",
+				"dash": "draw",
+				"growY": 0,
+				"url": "",
+				"scale": 1,
+				"flipX": false,
+				"flipY": false,
+				"color": "black",
+				"labelColor": "black",
+				"fill": "none",
+				"size": "l",
+				"font": "draw",
+				"align": "middle",
+				"verticalAlign": "middle",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "Veldora"
+								}
+							]
+						}
+					]
+				}
+			},
+			"index": "a3",
+			"typeName": "shape"
+		},
+		{
+			"x": 90,
+			"y": 120,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:014",
+			"type": "line",
+			"props": {
+				"dash": "draw",
+				"size": "s",
+				"color": "black",
+				"spline": "line",
+				"points": {
+					"a1": {
+						"id": "a1",
+						"index": "a1",
+						"x": 0,
+						"y": 0
+					},
+					"a2": {
+						"id": "a2",
+						"index": "a2",
+						"x": 0,
+						"y": 2260.8266666666664
+					}
+				},
+				"scale": 1
+			},
+			"parentId": "shape:039",
+			"index": "a1",
+			"typeName": "shape"
+		},
+		{
+			"x": 90,
+			"y": 319.9669333333334,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:015",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "draw",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": -128,
+				"start": {
+					"x": 0,
+					"y": 0
+				},
+				"end": {
+					"x": 0,
+					"y": 113.04133333333334
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "2  shape the ask"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "· plan"
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:040",
+			"index": "a2",
+			"typeName": "shape"
+		},
+		{
+			"x": 0,
+			"y": 22.500000000000004,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:016",
+			"type": "geo",
+			"parentId": "shape:040",
 			"props": {
 				"w": 180,
 				"h": 75,
@@ -521,7 +778,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -533,7 +790,52 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "💧 slime-wire"
+									"text": "👑 Rimuru"
+								}
+							]
+						}
+					]
+				}
+			},
+			"index": "a3",
+			"typeName": "shape"
+		},
+		{
+			"x": 0,
+			"y": 2403.3266666666664,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:017",
+			"type": "geo",
+			"parentId": "shape:040",
+			"props": {
+				"w": 180,
+				"h": 75,
+				"geo": "rectangle",
+				"dash": "draw",
+				"growY": 0,
+				"url": "",
+				"scale": 1,
+				"flipX": false,
+				"flipY": false,
+				"color": "black",
+				"labelColor": "black",
+				"fill": "none",
+				"size": "l",
+				"font": "draw",
+				"align": "middle",
+				"verticalAlign": "middle",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "👑 Rimuru"
 								}
 							]
 						}
@@ -545,255 +847,7 @@
 		},
 		{
 			"x": 90,
-			"y": 75,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:012",
-			"type": "line",
-			"props": {
-				"dash": "draw",
-				"size": "s",
-				"color": "black",
-				"spline": "line",
-				"points": {
-					"a1": {
-						"id": "a1",
-						"index": "a1",
-						"x": 0,
-						"y": 0
-					},
-					"a2": {
-						"id": "a2",
-						"index": "a2",
-						"x": 0,
-						"y": 890
-					}
-				},
-				"scale": 1
-			},
-			"parentId": "shape:038",
-			"index": "a1",
-			"typeName": "shape"
-		},
-		{
-			"x": 0,
-			"y": 0,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:013",
-			"type": "geo",
-			"parentId": "shape:039",
-			"props": {
-				"w": 180,
-				"h": 75,
-				"geo": "rectangle",
-				"dash": "draw",
-				"growY": 0,
-				"url": "",
-				"scale": 1,
-				"flipX": false,
-				"flipY": false,
-				"color": "black",
-				"labelColor": "black",
-				"fill": "none",
-				"size": "s",
-				"font": "draw",
-				"align": "middle",
-				"verticalAlign": "middle",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "🚪 gate"
-								}
-							]
-						}
-					]
-				}
-			},
-			"index": "a2",
-			"typeName": "shape"
-		},
-		{
-			"x": 0,
-			"y": 965,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:014",
-			"type": "geo",
-			"parentId": "shape:039",
-			"props": {
-				"w": 180,
-				"h": 75,
-				"geo": "rectangle",
-				"dash": "draw",
-				"growY": 0,
-				"url": "",
-				"scale": 1,
-				"flipX": false,
-				"flipY": false,
-				"color": "black",
-				"labelColor": "black",
-				"fill": "none",
-				"size": "s",
-				"font": "draw",
-				"align": "middle",
-				"verticalAlign": "middle",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "🚪 gate"
-								}
-							]
-						}
-					]
-				}
-			},
-			"index": "a3",
-			"typeName": "shape"
-		},
-		{
-			"x": 90,
-			"y": 75,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:015",
-			"type": "line",
-			"props": {
-				"dash": "draw",
-				"size": "s",
-				"color": "black",
-				"spline": "line",
-				"points": {
-					"a1": {
-						"id": "a1",
-						"index": "a1",
-						"x": 0,
-						"y": 0
-					},
-					"a2": {
-						"id": "a2",
-						"index": "a2",
-						"x": 0,
-						"y": 890
-					}
-				},
-				"scale": 1
-			},
-			"parentId": "shape:039",
-			"index": "a1",
-			"typeName": "shape"
-		},
-		{
-			"x": 0,
-			"y": 0,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:016",
-			"type": "geo",
-			"parentId": "shape:040",
-			"props": {
-				"w": 180,
-				"h": 75,
-				"geo": "ellipse",
-				"dash": "draw",
-				"growY": 0,
-				"url": "",
-				"scale": 1,
-				"flipX": false,
-				"flipY": false,
-				"color": "black",
-				"labelColor": "black",
-				"fill": "none",
-				"size": "s",
-				"font": "draw",
-				"align": "middle",
-				"verticalAlign": "middle",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "Veldora"
-								}
-							]
-						}
-					]
-				}
-			},
-			"index": "a2",
-			"typeName": "shape"
-		},
-		{
-			"x": 0,
-			"y": 965,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:017",
-			"type": "geo",
-			"parentId": "shape:040",
-			"props": {
-				"w": 180,
-				"h": 75,
-				"geo": "ellipse",
-				"dash": "draw",
-				"growY": 0,
-				"url": "",
-				"scale": 1,
-				"flipX": false,
-				"flipY": false,
-				"color": "black",
-				"labelColor": "black",
-				"fill": "none",
-				"size": "s",
-				"font": "draw",
-				"align": "middle",
-				"verticalAlign": "middle",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "Veldora"
-								}
-							]
-						}
-					]
-				}
-			},
-			"index": "a3",
-			"typeName": "shape"
-		},
-		{
-			"x": 90,
-			"y": 75,
+			"y": 120,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -816,7 +870,7 @@
 						"id": "a2",
 						"index": "a2",
 						"x": 0,
-						"y": 890
+						"y": 2260.8266666666664
 					}
 				},
 				"scale": 1
@@ -827,7 +881,7 @@
 		},
 		{
 			"x": 90,
-			"y": 151.4,
+			"y": 683.9669333333334,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -838,18 +892,18 @@
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "draw",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
-				"bend": -80,
+				"bend": -128,
 				"start": {
 					"x": 0,
 					"y": 0
 				},
 				"end": {
 					"x": 0,
-					"y": 71.20000000000002
+					"y": 113.04133333333323
 				},
 				"arrowheadStart": "none",
 				"arrowheadEnd": "arrow",
@@ -861,7 +915,34 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "2  shape the ask · plan"
+									"text": "4  plan deck:"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "[wire parses"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "@W →"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "orc-engine]"
 								}
 							]
 						}
@@ -877,7 +958,7 @@
 		},
 		{
 			"x": 0,
-			"y": 0,
+			"y": 22.500000000000004,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -890,7 +971,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -898,7 +979,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -910,7 +991,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "👑 Rimuru"
+									"text": "🌿 elf-engine"
 								}
 							]
 						}
@@ -922,7 +1003,7 @@
 		},
 		{
 			"x": 0,
-			"y": 965,
+			"y": 2403.3266666666664,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -935,7 +1016,7 @@
 				"h": 75,
 				"geo": "rectangle",
 				"dash": "draw",
-				"growY": 0,
+				"growY": 27,
 				"url": "",
 				"scale": 1,
 				"flipX": false,
@@ -943,7 +1024,7 @@
 				"color": "black",
 				"labelColor": "black",
 				"fill": "none",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -955,7 +1036,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "👑 Rimuru"
+									"text": "🌿 elf-engine"
 								}
 							]
 						}
@@ -967,7 +1048,7 @@
 		},
 		{
 			"x": 90,
-			"y": 75,
+			"y": 120,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -990,7 +1071,7 @@
 						"id": "a2",
 						"index": "a2",
 						"x": 0,
-						"y": 890
+						"y": 2260.8266666666664
 					}
 				},
 				"scale": 1
@@ -1000,8 +1081,8 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 120,
-			"y": 123.25,
+			"x": 1180.5633802816901,
+			"y": 1267.3000000000002,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -1012,7 +1093,7 @@
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "draw",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
@@ -1022,7 +1103,7 @@
 					"y": 0
 				},
 				"end": {
-					"x": 669,
+					"x": 380.28169014084506,
 					"y": 0
 				},
 				"arrowheadStart": "none",
@@ -1035,207 +1116,25 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "1  \"the wire should read @W lines into Report.Wrote\""
+									"text": "7  @ASK draft"
 								}
 							]
-						}
-					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
-			},
-			"parentId": "shape:042",
-			"index": "a7",
-			"typeName": "shape"
-		},
-		{
-			"x": 120,
-			"y": 927.25,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:024",
-			"type": "arrow",
-			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
-				"dash": "dotted",
-				"size": "s",
-				"fill": "none",
-				"color": "black",
-				"labelColor": "black",
-				"bend": 0,
-				"start": {
-					"x": 669,
-					"y": 0
-				},
-				"end": {
-					"x": 0,
-					"y": 0
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
-				"richText": {
-					"type": "doc",
-					"content": [
+						},
 						{
 							"type": "paragraph",
 							"content": [
 								{
 									"type": "text",
-									"text": "14  \"Done — @W lines now fill Report.Wrote, tested in wire/parse.rs.\""
+									"text": "+unsaid ·"
 								}
 							]
-						}
-					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
-			},
-			"parentId": "shape:042",
-			"index": "a6",
-			"typeName": "shape"
-		},
-		{
-			"x": 1408.5,
-			"y": 367.25,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:025",
-			"type": "arrow",
-			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
-				"dash": "draw",
-				"size": "s",
-				"fill": "none",
-				"color": "black",
-				"labelColor": "black",
-				"bend": 0,
-				"start": {
-					"x": 0,
-					"y": 0
-				},
-				"end": {
-					"x": 553.5,
-					"y": 0
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
-				"richText": {
-					"type": "doc",
-					"content": [
+						},
 						{
 							"type": "paragraph",
 							"content": [
 								{
 									"type": "text",
-									"text": "5  @ASK verdict +unsaid · @BUDGET 120k wt"
-								}
-							]
-						}
-					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
-			},
-			"parentId": "shape:042",
-			"index": "aD",
-			"typeName": "shape"
-		},
-		{
-			"x": 1408.5,
-			"y": 835.25,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:026",
-			"type": "arrow",
-			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
-				"dash": "dotted",
-				"size": "s",
-				"fill": "none",
-				"color": "black",
-				"labelColor": "black",
-				"bend": 0,
-				"start": {
-					"x": 553.5,
-					"y": 0
-				},
-				"end": {
-					"x": 0,
-					"y": 0
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "12  @S DONE · @V landing holds · @E"
-								}
-							]
-						}
-					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
-			},
-			"parentId": "shape:042",
-			"index": "aC",
-			"typeName": "shape"
-		},
-		{
-			"x": 1962,
-			"y": 489.25,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:027",
-			"type": "arrow",
-			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
-				"dash": "draw",
-				"size": "s",
-				"fill": "none",
-				"color": "black",
-				"labelColor": "black",
-				"bend": 0,
-				"start": {
-					"x": 0,
-					"y": 0
-				},
-				"end": {
-					"x": 660,
-					"y": 0
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "7  @ASK draft +unsaid · @BUDGET 60k wt"
+									"text": "@BUDGET 60k wt"
 								}
 							]
 						}
@@ -1250,25 +1149,25 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 1962,
-			"y": 789.25,
+			"x": 1180.5633802816901,
+			"y": 1880.1000000000001,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
-			"id": "shape:028",
+			"id": "shape:024",
 			"type": "arrow",
 			"props": {
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "dotted",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
 				"bend": 0,
 				"start": {
-					"x": 660,
+					"x": 380.28169014084506,
 					"y": 0
 				},
 				"end": {
@@ -1285,7 +1184,34 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "11  @S DONE · @F wire/parse.rs:88 · @U territory … · @E"
+									"text": "11  @S DONE · @F"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "wire/parse.rs:88"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "· @U territory"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "… · @E"
 								}
 							]
 						}
@@ -1300,19 +1226,105 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 2622,
-			"y": 667.75,
+			"x": 120,
+			"y": 2292.4199999999996,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
-			"id": "shape:029",
+			"id": "shape:025",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "dotted",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": 0,
+				"start": {
+					"x": 300,
+					"y": 0
+				},
+				"end": {
+					"x": 0,
+					"y": 0
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "14  \"Done — @W"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "lines now fill"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "Report.Wrote,"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "tested in"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "wire/parse.rs.\""
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:042",
+			"index": "a6",
+			"typeName": "shape"
+		},
+		{
+			"x": 120,
+			"y": 259,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:026",
 			"type": "arrow",
 			"props": {
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "draw",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
@@ -1323,6 +1335,83 @@
 				},
 				"end": {
 					"x": 300,
+					"y": 0
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "1  \"the wire"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "should read @W"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "lines into"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "Report.Wrote\""
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:042",
+			"index": "a7",
+			"typeName": "shape"
+		},
+		{
+			"x": 1560.8450704225352,
+			"y": 1620.9,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:027",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "draw",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": 0,
+				"start": {
+					"x": 0,
+					"y": 0
+				},
+				"end": {
+					"x": 380.28169014084506,
 					"y": 0
 				},
 				"arrowheadStart": "none",
@@ -1350,25 +1439,25 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 2622,
-			"y": 713.25,
+			"x": 1560.8450704225352,
+			"y": 1693.7,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
-			"id": "shape:030",
+			"id": "shape:028",
 			"type": "arrow",
 			"props": {
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "dotted",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
 				"bend": 0,
 				"start": {
-					"x": 300,
+					"x": 380.28169014084506,
 					"y": 0
 				},
 				"end": {
@@ -1400,75 +1489,25 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 789,
-			"y": 245.25,
+			"x": 420,
+			"y": 2128.1,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
-			"id": "shape:031",
-			"type": "arrow",
-			"props": {
-				"kind": "arc",
-				"elbowMidPoint": 0.5,
-				"dash": "draw",
-				"size": "s",
-				"fill": "none",
-				"color": "black",
-				"labelColor": "black",
-				"bend": 0,
-				"start": {
-					"x": 0,
-					"y": 0
-				},
-				"end": {
-					"x": 619.5,
-					"y": 0
-				},
-				"arrowheadStart": "none",
-				"arrowheadEnd": "arrow",
-				"richText": {
-					"type": "doc",
-					"content": [
-						{
-							"type": "paragraph",
-							"content": [
-								{
-									"type": "text",
-									"text": "3  @ASK draft +unsaid · @BUDGET 200k wt · the ask"
-								}
-							]
-						}
-					]
-				},
-				"labelPosition": 0.5,
-				"font": "draw",
-				"scale": 1
-			},
-			"parentId": "shape:042",
-			"index": "aA",
-			"typeName": "shape"
-		},
-		{
-			"x": 789,
-			"y": 881.25,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:032",
+			"id": "shape:029",
 			"type": "arrow",
 			"props": {
 				"kind": "arc",
 				"elbowMidPoint": 0.5,
 				"dash": "dotted",
-				"size": "s",
+				"size": "l",
 				"fill": "none",
 				"color": "black",
 				"labelColor": "black",
 				"bend": 0,
 				"start": {
-					"x": 619.5,
+					"x": 380.28169014084506,
 					"y": 0
 				},
 				"end": {
@@ -1485,7 +1524,16 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "13  @S DONE · lane verdict · @E"
+									"text": "13  @S DONE · lane"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "verdict · @E"
 								}
 							]
 						}
@@ -1500,8 +1548,230 @@
 			"typeName": "shape"
 		},
 		{
+			"x": 420,
+			"y": 565.6,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:030",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "draw",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": 0,
+				"start": {
+					"x": 0,
+					"y": 0
+				},
+				"end": {
+					"x": 380.28169014084506,
+					"y": 0
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "3  @ASK draft"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "+unsaid ·"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "@BUDGET 200k"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "wt · the ask"
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:042",
+			"index": "aA",
+			"typeName": "shape"
+		},
+		{
+			"x": 800.2816901408451,
+			"y": 2018.5,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:031",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "dotted",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": 0,
+				"start": {
+					"x": 380.28169014084506,
+					"y": 0
+				},
+				"end": {
+					"x": 0,
+					"y": 0
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "12  @S DONE · @V"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "landing holds"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "· @E"
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:042",
+			"index": "aC",
+			"typeName": "shape"
+		},
+		{
+			"x": 800.2816901408451,
+			"y": 929.4000000000001,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:032",
+			"type": "arrow",
+			"props": {
+				"kind": "arc",
+				"elbowMidPoint": 0.5,
+				"dash": "draw",
+				"size": "l",
+				"fill": "none",
+				"color": "black",
+				"labelColor": "black",
+				"bend": 0,
+				"start": {
+					"x": 0,
+					"y": 0
+				},
+				"end": {
+					"x": 380.28169014084506,
+					"y": 0
+				},
+				"arrowheadStart": "none",
+				"arrowheadEnd": "arrow",
+				"richText": {
+					"type": "doc",
+					"content": [
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "5  @ASK verdict"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "+unsaid ·"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "@BUDGET 120k"
+								}
+							]
+						},
+						{
+							"type": "paragraph",
+							"content": [
+								{
+									"type": "text",
+									"text": "wt"
+								}
+							]
+						}
+					]
+				},
+				"labelPosition": 0.5,
+				"font": "draw",
+				"scale": 1
+			},
+			"parentId": "shape:042",
+			"index": "aD",
+			"typeName": "shape"
+		},
+		{
 			"x": 0,
-			"y": 73.25,
+			"y": 179,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -1510,8 +1780,8 @@
 			"type": "geo",
 			"parentId": "shape:042",
 			"props": {
-				"w": 2742,
-				"h": 502.75,
+				"w": 1680.8450704225352,
+				"h": 1295.2666666666667,
 				"geo": "rectangle",
 				"dash": "draw",
 				"growY": 0,
@@ -1522,7 +1792,7 @@
 				"color": "light-blue",
 				"labelColor": "black",
 				"fill": "semi",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -1540,7 +1810,7 @@
 		},
 		{
 			"x": 0,
-			"y": 739.25,
+			"y": 1800.1000000000001,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -1549,8 +1819,8 @@
 			"type": "geo",
 			"parentId": "shape:042",
 			"props": {
-				"w": 2742,
-				"h": 213,
+				"w": 1680.8450704225352,
+				"h": 532.3199999999997,
 				"geo": "rectangle",
 				"dash": "draw",
 				"growY": 0,
@@ -1561,7 +1831,7 @@
 				"color": "green",
 				"labelColor": "black",
 				"fill": "semi",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -1578,8 +1848,8 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 2502,
-			"y": 617.75,
+			"x": 1440.8450704225352,
+			"y": 1540.9,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -1588,8 +1858,8 @@
 			"type": "geo",
 			"parentId": "shape:042",
 			"props": {
-				"w": 540,
-				"h": 120.5,
+				"w": 620.2816901408451,
+				"h": 192.8,
 				"geo": "rectangle",
 				"dash": "draw",
 				"growY": 0,
@@ -1600,7 +1870,7 @@
 				"color": "orange",
 				"labelColor": "black",
 				"fill": "semi",
-				"size": "s",
+				"size": "l",
 				"font": "draw",
 				"align": "middle",
 				"verticalAlign": "middle",
@@ -1617,7 +1887,7 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 1318.5,
+			"x": 1090.5633802816901,
 			"y": 0,
 			"rotation": 0,
 			"isLocked": false,
@@ -1626,12 +1896,12 @@
 			"id": "shape:036",
 			"type": "group",
 			"parentId": "shape:042",
-			"index": "a8",
+			"index": "aB",
 			"props": {},
 			"typeName": "shape"
 		},
 		{
-			"x": 1872,
+			"x": 1470.8450704225352,
 			"y": 0,
 			"rotation": 0,
 			"isLocked": false,
@@ -1640,32 +1910,18 @@
 			"id": "shape:037",
 			"type": "group",
 			"parentId": "shape:042",
-			"index": "aB",
+			"index": "aE",
 			"props": {},
 			"typeName": "shape"
 		},
 		{
-			"x": 2532,
+			"x": 1851.1267605633802,
 			"y": 0,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
 			"id": "shape:038",
-			"type": "group",
-			"parentId": "shape:042",
-			"index": "aE",
-			"props": {},
-			"typeName": "shape"
-		},
-		{
-			"x": 2832,
-			"y": 0,
-			"rotation": 0,
-			"isLocked": false,
-			"opacity": 1,
-			"meta": {},
-			"id": "shape:039",
 			"type": "group",
 			"parentId": "shape:042",
 			"index": "aH",
@@ -1679,7 +1935,7 @@
 			"isLocked": false,
 			"opacity": 1,
 			"meta": {},
-			"id": "shape:040",
+			"id": "shape:039",
 			"type": "group",
 			"parentId": "shape:042",
 			"index": "a4",
@@ -1687,7 +1943,21 @@
 			"typeName": "shape"
 		},
 		{
-			"x": 699,
+			"x": 330,
+			"y": 0,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:040",
+			"type": "group",
+			"parentId": "shape:042",
+			"index": "a5",
+			"props": {},
+			"typeName": "shape"
+		},
+		{
+			"x": 710.2816901408451,
 			"y": 0,
 			"rotation": 0,
 			"isLocked": false,
@@ -1696,7 +1966,7 @@
 			"id": "shape:041",
 			"type": "group",
 			"parentId": "shape:042",
-			"index": "a5",
+			"index": "a8",
 			"props": {},
 			"typeName": "shape"
 		},
@@ -2721,7 +2991,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.22292134831460672
+					"y": 0.40780080442551997,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2739,7 +3010,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.3029213483146067
+					"y": 0.48780080442551993,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2757,7 +3029,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.36000000000000004
+					"y": 0.541321286609028,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2775,7 +3048,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.44
+					"y": 0.6213212866090281,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2785,15 +3059,16 @@
 		{
 			"meta": {},
 			"id": "binding:005",
-			"fromId": "shape:009",
-			"toId": "shape:012",
+			"fromId": "shape:015",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.49483146067415734
+					"y": 0.0884485910758307,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2803,15 +3078,16 @@
 		{
 			"meta": {},
 			"id": "binding:006",
-			"fromId": "shape:009",
-			"toId": "shape:012",
+			"fromId": "shape:015",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.5748314606741574
+					"y": 0.1684485910758307,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2829,7 +3105,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.08584269662921348
+					"y": 0.24945164600559092,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2847,7 +3124,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.1658426966292135
+					"y": 0.3294516460055909,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2858,14 +3136,15 @@
 			"meta": {},
 			"id": "binding:009",
 			"fromId": "shape:023",
-			"toId": "shape:018",
+			"toId": "shape:004",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.054213483146067415
+					"y": 0.507469244288225,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2876,14 +3155,15 @@
 			"meta": {},
 			"id": "binding:010",
 			"fromId": "shape:023",
-			"toId": "shape:022",
+			"toId": "shape:008",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.054213483146067415
+					"y": 0.507469244288225,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2894,14 +3174,15 @@
 			"meta": {},
 			"id": "binding:011",
 			"fromId": "shape:024",
-			"toId": "shape:018",
+			"toId": "shape:004",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.9575842696629213
+					"y": 0.7785205411589863,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -2912,14 +3193,15 @@
 			"meta": {},
 			"id": "binding:012",
 			"fromId": "shape:024",
-			"toId": "shape:022",
+			"toId": "shape:008",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.9575842696629213
+					"y": 0.7785205411589863,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -2930,17 +3212,18 @@
 			"meta": {},
 			"id": "binding:013",
 			"fromId": "shape:025",
-			"toId": "shape:004",
+			"toId": "shape:014",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.3283707865168539
+					"y": 0.960896309314587,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -2948,17 +3231,18 @@
 			"meta": {},
 			"id": "binding:014",
 			"fromId": "shape:025",
-			"toId": "shape:008",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.3283707865168539
+					"y": 0.960896309314587,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},
@@ -2966,17 +3250,18 @@
 			"meta": {},
 			"id": "binding:015",
 			"fromId": "shape:026",
-			"toId": "shape:004",
+			"toId": "shape:014",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.8542134831460674
+					"y": 0.06148193581108976,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},
@@ -2984,17 +3269,18 @@
 			"meta": {},
 			"id": "binding:016",
 			"fromId": "shape:026",
-			"toId": "shape:008",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.8542134831460674
+					"y": 0.06148193581108976,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -3009,7 +3295,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.4654494382022472
+					"y": 0.6638722119342778,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -3020,14 +3307,15 @@
 			"meta": {},
 			"id": "binding:018",
 			"fromId": "shape:027",
-			"toId": "shape:012",
+			"toId": "shape:011",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.4654494382022472
+					"y": 0.6638722119342778,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -3045,7 +3333,8 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.8025280898876405
+					"y": 0.6960728229202299,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "end"
@@ -3056,14 +3345,15 @@
 			"meta": {},
 			"id": "binding:020",
 			"fromId": "shape:028",
-			"toId": "shape:012",
+			"toId": "shape:011",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.8025280898876405
+					"y": 0.6960728229202299,
+					"z": 1
 				},
 				"snap": "none",
 				"terminal": "start"
@@ -3074,17 +3364,18 @@
 			"meta": {},
 			"id": "binding:021",
 			"fromId": "shape:029",
-			"toId": "shape:012",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.6660112359550562
+					"y": 0.8882149302320097,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -3092,17 +3383,18 @@
 			"meta": {},
 			"id": "binding:022",
 			"fromId": "shape:029",
-			"toId": "shape:015",
+			"toId": "shape:022",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.6660112359550562
+					"y": 0.8882149302320097,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},
@@ -3110,17 +3402,18 @@
 			"meta": {},
 			"id": "binding:023",
 			"fromId": "shape:030",
-			"toId": "shape:012",
+			"toId": "shape:018",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.7171348314606741
+					"y": 0.19709604746346474,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},
@@ -3128,17 +3421,18 @@
 			"meta": {},
 			"id": "binding:024",
 			"fromId": "shape:030",
-			"toId": "shape:015",
+			"toId": "shape:022",
 			"type": "arrow",
 			"props": {
 				"isPrecise": true,
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.7171348314606741
+					"y": 0.19709604746346474,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -3153,10 +3447,11 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.19129213483146068
+					"y": 0.8397370873190929,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},
@@ -3171,10 +3466,11 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.19129213483146068
+					"y": 0.8397370873190929,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -3189,10 +3485,11 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.9058988764044944
+					"y": 0.3580106391762306,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "start"
+				"terminal": "end"
 			},
 			"typeName": "binding"
 		},
@@ -3207,10 +3504,11 @@
 				"isExact": true,
 				"normalizedAnchor": {
 					"x": 0.5,
-					"y": 0.9058988764044944
+					"y": 0.3580106391762306,
+					"z": 1
 				},
 				"snap": "none",
-				"terminal": "end"
+				"terminal": "start"
 			},
 			"typeName": "binding"
 		},

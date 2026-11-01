@@ -299,6 +299,9 @@ importers:
 
   tools/canvas:
     devDependencies:
+      "@mermaid-js/layout-elk":
+        specifier: 0.2.3
+        version: 0.2.3(mermaid@11.16.1)
       "@playwright/test":
         specifier: 1.64.1
         version: 1.64.1
@@ -308,6 +311,9 @@ importers:
       "@tldraw/mermaid":
         specifier: 5.6.0
         version: 5.6.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tldraw@5.6.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
+      mermaid:
+        specifier: 11.16.1
+        version: 11.16.1
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -1266,6 +1272,14 @@ packages:
       {
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
       }
+
+  "@mermaid-js/layout-elk@0.2.3":
+    resolution:
+      {
+        integrity: sha512-m46RVGfvKK1PSMdAFGDz2nksI4jusEkFxvf0lb48bYWmqLQxZpjtpruiw29MbOy9rlWJtuMf9EzG9fAF8CVZbg==,
+      }
+    peerDependencies:
+      mermaid: ^11.0.2
 
   "@mermaid-js/mermaid-mindmap@9.3.0":
     resolution:
@@ -4126,6 +4140,12 @@ packages:
         integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==,
       }
 
+  elkjs@0.9.3:
+    resolution:
+      {
+        integrity: sha512-f/ZeWvW/BCXbhGEf1Ujp29EASo/lk1FDnETgNKwJrsVvGZhUWCZyg3xLJjAsxfOmt8KjswHmI5EwCQcPMpOYhQ==,
+      }
+
   emoji-regex-xs@1.0.0:
     resolution:
       {
@@ -6146,6 +6166,12 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
 
+  "@mermaid-js/layout-elk@0.2.3(mermaid@11.16.1)":
+    dependencies:
+      d3: 7.9.0
+      elkjs: 0.9.3
+      mermaid: 11.16.1
+
   "@mermaid-js/mermaid-mindmap@9.3.0":
     dependencies:
       "@braintree/sanitize-url": 6.0.4
@@ -8040,6 +8066,8 @@ snapshots:
       dom-serializer: 1.4.1
       domelementtype: 2.3.0
       domhandler: 4.3.1
+
+  elkjs@0.9.3: {}
 
   emoji-regex-xs@1.0.0: {}
 

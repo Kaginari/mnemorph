@@ -2,10 +2,12 @@
 
 ## In one picture
 
+<a href="./canvas/overview-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/overview-dark.svg">
   <img src="./canvas/overview-light.svg" alt="The overview canvas: Veldora talks to Rimuru; Rimuru commissions the Elf, the Kijin and the Dark Elf; the Elf commissions the Orc and the Orc the Slime; reports and verdicts climb back; only the Kijin reaches the outside world, every act through the human gate">
 </picture>
+</a>
 
 <details>
 <summary>The sketch in Mermaid, the text this canvas is drawn from</summary>

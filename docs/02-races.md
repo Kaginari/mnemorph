@@ -2,10 +2,12 @@
 
 ## In one picture
 
+<a href="./canvas/races-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/races-dark.svg">
   <img src="./canvas/races-light.svg" alt="Races and ascensions: Veldora above Rimuru; the chain Elf, Orc, Slime and, beside it, the Kijin and the Dark Elf; each race ascends: High Elf, High Orc, Named Slime, Oni, Arch Dark Elf">
 </picture>
+</a>
 
 <details>
 <summary>The sketch in Mermaid, the text this canvas is drawn from</summary>

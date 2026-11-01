@@ -38,16 +38,52 @@ const RECORDS = new Set(['document', 'page', 'shape', 'binding', 'asset']);
 const SHAPES = new Set(['geo', 'arrow', 'line', 'group', 'text', 'frame', 'note', 'draw']);
 const HOSTILE_URL = /(?:java|vb)script\s*:|data\s*:\s*text\/html/i;
 
+// Every start tag, read the way an XML or HTML parser reads it: attributes split by whitespace or
+// a slash (`<svg/onload=…>`), each value quoted (a `>` inside it does not end the tag) or bare.
+function tags(text) {
+  const found = [];
+  for (let i = text.indexOf('<'); i !== -1; i = text.indexOf('<', i)) {
+    const name = text.slice(i + 1).match(/^[a-zA-Z][\w:.-]*/)?.[0];
+    i++;
+    if (!name) continue;
+    i += name.length;
+    const attrs = [];
+    for (;;) {
+      while (i < text.length && /[\s/]/.test(text[i])) i++;
+      if (i >= text.length || text[i] === '>') break;
+      const attr = text.slice(i).match(/^[^\s"'>/=]+/)?.[0] ?? text[i];
+      i += attr.length;
+      while (i < text.length && /\s/.test(text[i])) i++;
+      let value = '';
+      if (text[i] === '=') {
+        i++;
+        while (i < text.length && /\s/.test(text[i])) i++;
+        if (text[i] === '"' || text[i] === "'") {
+          const end = text.indexOf(text[i], i + 1);
+          value = text.slice(i + 1, end === -1 ? text.length : end);
+          i = end === -1 ? text.length : end + 1;
+        } else {
+          value = text.slice(i).match(/^[^\s>]*/)[0];
+          i += value.length;
+        }
+      }
+      attrs.push([attr, value]);
+    }
+    found.push({ name, attrs });
+  }
+  return found;
+}
+
 function svgOffences(text) {
   const found = [];
   if (HOSTILE_URL.test(text)) found.push('a script URL');
   if (/<!DOCTYPE|<!ENTITY/i.test(text)) found.push('a DOCTYPE or entity declaration');
   if (/<\?xml-stylesheet/i.test(text)) found.push('an external stylesheet');
-  for (const [, name, attrs] of text.matchAll(/<([a-zA-Z][\w:.-]*)([^>]*)>/g)) {
+  for (const { name, attrs } of tags(text)) {
     if (!SVG_ELEMENTS.has(name)) found.push(`a <${name}> element`);
-    for (const [, attr, value] of attrs.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+    for (const [attr, value] of attrs) {
       if (/^on/i.test(attr)) found.push(`an event handler (${attr})`);
-      if (/^(?:xlink:)?href$|^src$/i.test(attr) && !/^#[\w-]+$/.test(value ?? '')) {
+      if (/^(?:xlink:)?href$|^src$/i.test(attr) && !/^#[\w-]+$/.test(value)) {
         found.push(`a link outside the file (${attr}="${value}")`);
       }
     }
@@ -120,6 +156,13 @@ const HOSTILE = [
   ['a.svg', '<svg><script>alert(1)</script></svg>'],
   ['a.svg', '<svg><g onload="alert(1)"/></svg>'],
   ['a.svg', '<svg><rect ONCLICK="x()"/></svg>'],
+  ['a.svg', '<svg><g onload=alert(1)></g></svg>'],
+  ['a.svg', '<svg><g title="a > b" onload="alert(1)"/></svg>'],
+  ['a.svg', "<svg><g title='a > b' onload=alert(1) /></svg>"],
+  ['a.svg', '<svg/onload=alert(1)>'],
+  ['a.svg', '<svg><g ONLOAD=alert(1)/></svg>'],
+  ['a.svg', '<svg><use href=https://example.com/x.svg#a /></svg>'],
+  ['a.svg', '<SVG><SCRIPT>alert(1)</SCRIPT></SVG>'],
   ['a.svg', '<svg><a href="javascript:alert(1)"><text>x</text></a></svg>'],
   ['a.svg', '<svg><use href="https://example.com/x.svg#a"/></svg>'],
   ['a.svg', '<svg><use xlink:href="//example.com/x.svg#a"/></svg>'],

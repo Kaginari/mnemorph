@@ -2,8 +2,10 @@
 // so nothing is cached in the browser), its fonts and icons served from @tldraw/assets, never a
 // CDN. window.mnDraw lays out one book page's sketches with tldraw's own Mermaid converter, one
 // tldraw page per sketch, and hands back the .tldr document and each sketch's light and dark SVG.
+import elkLayouts from '@mermaid-js/layout-elk';
 import { getAssetUrls } from '@tldraw/assets/selfHosted';
-import { createMermaidDiagram } from '@tldraw/mermaid';
+import { createMermaidDiagram, defaultMermaidNodeRenderSpec } from '@tldraw/mermaid';
+import mermaid from 'mermaid';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getSnapshot, parseTldrawJsonFile, serializeTldrawJson, Tldraw } from 'tldraw';
@@ -13,6 +15,9 @@ const assetUrls = getAssetUrls({ baseUrl: '/tldraw-assets' });
 const DOCUMENT_RECORDS = new Set(['document', 'page', 'shape', 'binding', 'asset']);
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 let blank;
+
+// ELK, Mermaid's layered layout, for a sketch whose canvas asks for it (more compact than dagre).
+mermaid.registerLayoutLoaders(elkLayouts);
 
 // The nth fractional index (n from 1): a1 … az, then b10 … bzz — tldraw's own are jittered.
 function nthIndex(n) {
@@ -85,15 +90,55 @@ window.mnDraw = async (sketches) => {
       editor.createPage({ name: sketch.title });
       editor.setCurrentPage(editor.getPages().at(-1).id);
     }
+    const dashed = new Set(sketch.dashed);
     await createMermaidDiagram(editor, sketch.mermaid, {
-      blueprintRender: { position: { x: 0, y: 0 }, centerOnPosition: false },
+      mermaidConfig: sketch.mermaidConfig,
+      blueprintRender: {
+        position: { x: 0, y: 0 },
+        centerOnPosition: false,
+        // A node its sketch dashes keeps the dashed border.
+        mapNodeToRenderSpec(input) {
+          if (!dashed.has(input.nodeId)) return undefined;
+          const spec = defaultMermaidNodeRenderSpec(input.diagramKind, input.kind);
+          if (spec.variant !== 'geo') return undefined;
+          return { variant: 'shape', type: 'geo', props: { geo: spec.geo, dash: 'dashed' } };
+        },
+      },
     });
+    // A sequence whose labels outgrow Mermaid's rows is stretched down, labels kept at their size:
+    // lines, arrows and frames stretch; a participant's box only moves, its centre with the rest.
+    if (sketch.stretchY) {
+      const k = sketch.stretchY;
+      const leaves = [];
+      const walk = (parent) => {
+        for (const id of editor.getSortedChildIdsForParent(parent)) {
+          if (editor.getShape(id).type === 'group') walk(id);
+          else leaves.push(id);
+        }
+      };
+      walk(editor.getCurrentPageId());
+      for (const id of leaves) {
+        const shape = editor.getShape(id);
+        const bounds = editor.getShapePageBounds(id);
+        if (shape.type === 'geo' && bounds.h < 100) {
+          const delta = bounds.center.y * (k - 1);
+          const point = editor.getPointInParentSpace(id, { x: bounds.x, y: bounds.y + delta });
+          editor.updateShape({ id, type: shape.type, y: point.y });
+        } else {
+          editor.resizeShape(id, { x: 1, y: k }, { scaleOrigin: { x: 0, y: 0 } });
+        }
+      }
+    }
     // tldraw's hand-drawn stroke for every solid line; dotted and dashed edges keep their meaning.
+    // A canvas that asks for bigger labels gets them on its boxes and arrows.
     editor.updateShapes(
-      editor
-        .getCurrentPageShapesSorted()
-        .filter((shape) => shape.props.dash === 'solid')
-        .map((shape) => ({ id: shape.id, type: shape.type, props: { dash: 'draw' } })),
+      editor.getCurrentPageShapesSorted().flatMap((shape) => {
+        const props = {};
+        if (shape.props.dash === 'solid') props.dash = 'draw';
+        if (sketch.labelSize && ['geo', 'arrow'].includes(shape.type))
+          props.size = sketch.labelSize;
+        return Object.keys(props).length ? [{ id: shape.id, type: shape.type, props }] : [];
+      }),
     );
   }
 

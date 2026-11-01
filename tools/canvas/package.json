@@ -8,9 +8,11 @@
     "draw": "node draw.mjs"
   },
   "devDependencies": {
+    "@mermaid-js/layout-elk": "0.2.3",
     "@playwright/test": "1.64.1",
     "@tldraw/assets": "5.6.0",
     "@tldraw/mermaid": "5.6.0",
+    "mermaid": "11.16.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "subset-font": "2.9.0",

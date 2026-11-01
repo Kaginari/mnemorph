@@ -30,9 +30,13 @@ A canvas is drawn, never edited by hand: `pnpm --filter @mnemorph/canvas draw` l
 out with tldraw's own Mermaid converter (`@tldraw/mermaid`) in headless Chromium and writes the
 `.tldr` and both SVGs; the same sketches always make the same files. Its labels are written as
 plain SVG text in tldraw's hand-drawn font, cut down to the characters they use, so an SVG holds
-no HTML and fetches nothing. The list of sketches is `tools/canvas/draw.mjs`'s; it needs the
-Chromium `@playwright/test` pins once (`pnpm --filter @mnemorph/canvas exec playwright install
-chromium`).
+no HTML and fetches nothing. A canvas must read in the page's column: no wider than 2:1, its
+labels at 10 px or more at 900 px wide, or the draw fails; a long sketch is re-laid for its canvas
+only (the loop and the sandbox top-down, the architecture by ELK, one order's messages wrapped and
+its rows spaced), its Mermaid text kept as written. A node its sketch dashes keeps the dashed
+border. Each canvas links to its SVG at full size. The list of sketches and their layouts is
+`tools/canvas/draw.mjs`'s; it needs the Chromium `@playwright/test` pins once (`pnpm --filter
+@mnemorph/canvas exec playwright install chromium`).
 
 When the code changes a flow, the sketch and its canvas change in the same change (Vitality).
 Canvases are reviewed like code: a tldraw document or an SVG can carry script, and tldraw
