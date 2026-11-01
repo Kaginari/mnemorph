@@ -1824,6 +1824,7 @@ mod write_rule_tests {
                 unguarded: false,
                 wrote: false,
                 unpinned: false,
+                verified_by: vec!["the human's pin".to_owned()],
                 ran: 1,
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");

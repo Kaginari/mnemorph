@@ -195,6 +195,13 @@ pub enum Event {
         failures: Vec<String>,
         /// The checks that gave no result.
         unverified: Vec<String>,
+        /// Files changed and no verify line ran: a pass that checked nothing, never counted as
+        /// verified.
+        #[serde(default)]
+        unchecked: bool,
+        /// Whose pins the lines that ran are: `the human's pin`, `orc-o's pin`.
+        #[serde(default)]
+        verified_by: Vec<String>,
     },
     /// A turn ended.
     TurnEnded {

@@ -1861,7 +1861,11 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
     assert_eq!(roster.creatures["slime-t"].verify, ["true"]);
     // The Orc's line is pinned through the harness, so the Slime's gate runs it.
     let pinned = mnemorph_world::pins::pinned(&w.0).unwrap().unwrap();
-    assert_eq!(pinned["slime-t"], ["true"]);
+    assert_eq!(pinned["slime-t"][0].line, "true");
+    assert_eq!(
+        pinned["slime-t"][0].by, "orc-o",
+        "the Orc's own word, not the human's"
+    );
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
 }
 

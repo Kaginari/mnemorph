@@ -2546,8 +2546,8 @@ fn verify_list(world: &Path) -> ExitCode {
         for line in &c.verify {
             println!("  card    `{}`", safe(line));
         }
-        for line in pinned.into_iter().flatten() {
-            println!("  pinned  `{}`", safe(line));
+        for p in pinned.into_iter().flatten() {
+            println!("  pinned  `{}` — by {}", safe(&p.line), safe(&p.by));
         }
     }
     if !any {
@@ -2595,7 +2595,7 @@ fn verify_pin(world: &Path, name: &str, yes: bool) -> ExitCode {
             Err(e) => return refused(&e),
         }
     }
-    match pins::record(
+    match pins::record_human(
         world,
         pins::row(pins::Act::Pin, &c.name, &lines, pins::HUMAN),
     ) {

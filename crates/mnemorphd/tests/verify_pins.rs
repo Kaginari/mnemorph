@@ -201,3 +201,49 @@ fn a_tampered_witness_is_refused() {
         );
     }
 }
+
+/// `MNEMORPH_BODY` is a body's to unset: a pin asked by any process under the harness — here a
+/// grandchild of a process named `mnemorph` — is refused all the same.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_pin_under_the_harness_is_refused_whatever_its_environment() {
+    let f = Fixture::new("ancestry");
+    let fake = f.root.join("bin/mnemorph");
+    fs::create_dir_all(fake.parent().unwrap()).unwrap();
+    fs::copy("/bin/sh", &fake).unwrap();
+    let inner = format!(
+        "{} verify pin rimuru --yes --world '{}'; true",
+        env!("CARGO_BIN_EXE_mnemorphd"),
+        f.world.display()
+    );
+    let out = Command::new(&fake)
+        .args(["-c", &format!("/bin/sh -c \"{inner}\"; true")])
+        .env("XDG_STATE_HOME", &f.state)
+        .env_remove("MNEMORPH_BODY")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        text(&out).contains("this runs under mnemorph"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 0, "nothing was pinned");
+}
+
+/// A state directory inside the world is the body's: no pin is written or read there.
+#[test]
+fn a_state_directory_inside_the_world_is_refused() {
+    let f = Fixture::new("inside");
+    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["verify", "pin", "rimuru", "--yes", "--world"])
+        .arg(&f.world)
+        .env("XDG_STATE_HOME", f.world.join(".mnemorph/tmp/state"))
+        .env_remove("MNEMORPH_BODY")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+    assert!(text(&out).contains("inside the world"), "{}", text(&out));
+    assert!(!f.world.join(".mnemorph/tmp/state/mnemorph/verify").exists());
+}

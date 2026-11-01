@@ -60,6 +60,12 @@ pub enum Beat {
         /// PASS, FAIL or `NOT_VERIFIED`.
         #[serde(default)]
         verdict: String,
+        /// Files changed and no verify line ran: a pass that checked nothing.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unchecked: bool,
+        /// Whose pins the lines that ran are: `the human's pin`, `orc-o's pin`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        verified_by: Vec<String>,
     },
     /// A structured compaction: the body's summary of the conversation before it, and how many
     /// of the newest messages were kept verbatim after it — what a resume rebuilds.

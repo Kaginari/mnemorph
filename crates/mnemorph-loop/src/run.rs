@@ -781,8 +781,8 @@ impl Run {
     /// Judge every answer that changed files with this end gate.
     #[must_use]
     pub fn with_gate(mut self, gate: EndGate) -> Self {
-        // The gate's lines are the pinned ones: the only verify lines a bench may be.
-        self.guts = std::mem::take(&mut self.guts).trusting(&gate.verify);
+        // A bench is a line the human pinned: an Orc's coded line is checked, but earns none.
+        self.guts = std::mem::take(&mut self.guts).trusting(gate.benches());
         self.gate = Some(gate);
         self
     }
@@ -1520,6 +1520,8 @@ impl Run {
             failures: verdict.failures.clone(),
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
+            unchecked: verdict.unchecked(),
+            verified_by: verdict.verified_by.clone(),
         });
         self.saw_verdict(&verdict);
         let solo = gate.author.is_none();
@@ -1960,6 +1962,9 @@ impl Run {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
             format!("{word}, handed back")
+        } else if verdict.passed() && verdict.unchecked() {
+            // A pass no check ran on: the baseline lands, and is never counted as verified.
+            format!("{word}, unchecked")
         } else {
             word.to_owned()
         };
@@ -1982,6 +1987,11 @@ impl Run {
         if !verdict.unverified.is_empty() {
             lines.push(("Unverified".to_owned(), verdict.unverified.join("; ")));
         }
+        if verdict.unchecked() {
+            lines.push(("Unchecked".to_owned(), "no verify line ran".to_owned()));
+        } else if !verdict.verified_by.is_empty() {
+            lines.push(("Verified by".to_owned(), verdict.verified_by.join(", ")));
+        }
         lines.push(("By".to_owned(), "the end gate".to_owned()));
         let entry = mnemorph_world::log::Entry {
             body: self.body.name.clone(),
@@ -2003,6 +2013,8 @@ impl Run {
                     .collect(),
                 failures: verdict.failures.clone(),
                 unverified: verdict.unverified.clone(),
+                unchecked: verdict.unchecked(),
+                verified_by: verdict.verified_by.clone(),
                 entry: written.as_ref().ok().cloned().flatten(),
                 build: mnemorph_ledger::Build::default(),
             },

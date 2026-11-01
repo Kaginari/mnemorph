@@ -53,6 +53,9 @@ pub fn offer(
         for line in &u.card {
             writeln!(out, "    `{}`", shown(line))?;
         }
+        for p in u.pinned.iter().flatten() {
+            writeln!(out, "    pinned `{}` by {}", shown(&p.line), shown(&p.by))?;
+        }
         if u.card.is_empty() {
             writeln!(out, "    (no line: its gate would run no check)")?;
         }
@@ -69,7 +72,7 @@ pub fn offer(
     }
     let mut pinned = Vec::new();
     for u in &list {
-        match pins::record(world, pins::row(Act::Pin, &u.creature, &u.card, HUMAN)) {
+        match pins::record_human(world, pins::row(Act::Pin, &u.creature, &u.card, HUMAN)) {
             Ok(()) => pinned.push(u.creature.clone()),
             Err(e) => writeln!(out, "  {} not pinned: {}", shown(&u.creature), shown(&e))?,
         }

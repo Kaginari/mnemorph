@@ -38,6 +38,41 @@ pub const KIND: &str = "verify";
 /// The human, as a pin's author.
 pub const HUMAN: &str = "human";
 
+/// How relief names itself as a pin's author: `relief of <parent>`. It pins a young only to the
+/// lines the human pinned for its parent, so its pin is the human's word carried down.
+pub const RELIEF: &str = "relief of ";
+
+/// One pinned line and who pinned it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pinned {
+    /// The command.
+    pub line: String,
+    /// Who pinned it: the human, `relief of <parent>`, or the Orc that coded it.
+    pub by: String,
+}
+
+impl Pinned {
+    /// Pinned by the human — directly, or carried down by relief — rather than by a body: only
+    /// such a line is a test bench for the guts classes, and a pass on it is the human's check.
+    #[must_use]
+    pub fn human(&self) -> bool {
+        self.by == HUMAN || self.by.starts_with(RELIEF)
+    }
+
+    /// Who pinned it, as a verdict says it: `the human's pin`, or `<orc>'s pin`.
+    #[must_use]
+    pub fn source(&self) -> String {
+        if self.human() {
+            "the human's pin".to_owned()
+        } else {
+            format!("{}'s pin", self.by)
+        }
+    }
+}
+
+/// Each creature's pinned lines.
+pub type Pins = BTreeMap<String, Vec<Pinned>>;
+
 /// What a row does to a creature's pinned lines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -88,10 +123,7 @@ pub fn journal_at(path: impl Into<PathBuf>) -> Journal<Row> {
 /// # Errors
 ///
 /// The witness cannot be read, a link is broken, or a line does not parse.
-pub fn fold_at(
-    path: &Path,
-    anchor: Option<&Head>,
-) -> Result<BTreeMap<String, Vec<String>>, String> {
+pub fn fold_at(path: &Path, anchor: Option<&Head>) -> Result<Pins, String> {
     let report = chain::verify_against(path, anchor)
         .map_err(|e| format!("the verify pins cannot be read: {e}"))?;
     if !report.holds() {
@@ -108,10 +140,11 @@ pub fn fold_at(
     Ok(fold(&back.rows))
 }
 
-/// The witness's rows folded, per creature: a pin replaces the set, a code adds to it.
+/// The witness's rows folded, per creature: a pin replaces the set, a code adds to it; each line
+/// keeps who first pinned it in its set.
 #[must_use]
-pub fn fold(rows: &[Row]) -> BTreeMap<String, Vec<String>> {
-    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+pub fn fold(rows: &[Row]) -> Pins {
+    let mut out = Pins::new();
     for r in rows {
         let set = out.entry(r.creature.clone()).or_default();
         if r.act == Act::Pin {
@@ -119,12 +152,119 @@ pub fn fold(rows: &[Row]) -> BTreeMap<String, Vec<String>> {
         }
         for line in &r.lines {
             let line = line.trim();
-            if !line.is_empty() && !set.iter().any(|l| l == line) {
-                set.push(line.to_owned());
+            if !line.is_empty() && !set.iter().any(|p| p.line == line) {
+                set.push(Pinned {
+                    line: line.to_owned(),
+                    by: r.by.clone(),
+                });
             }
         }
     }
     out
+}
+
+/// The harness's own processes: a pin asked under one of them is a body's, whatever its
+/// environment says.
+const HARNESS: [&str; 3] = ["mnemorph", "mnemorphd", "mnemorph-guard"];
+
+/// Whether this process runs under the harness: some ancestor is `mnemorph`, `mnemorphd` or
+/// `mnemorph-guard`. `MNEMORPH_BODY` is a body's to unset (`env -u`), its ancestry is not.
+///
+/// # Errors
+///
+/// The ancestry cannot be read: the caller refuses, never guesses.
+pub fn under_harness() -> Result<Option<String>, String> {
+    let mut pid = std::os::unix::process::parent_id();
+    // A chain longer than this is no process tree.
+    for _ in 0..4096 {
+        if pid <= 1 {
+            return Ok(None);
+        }
+        let (name, parent) = process(pid)?;
+        if HARNESS.contains(&name.as_str()) {
+            return Ok(Some(name));
+        }
+        pid = parent;
+    }
+    Err("the process ancestry does not end".to_owned())
+}
+
+/// Process `pid`'s name and parent, from `/proc/<pid>/stat`.
+#[cfg(target_os = "linux")]
+fn process(pid: u32) -> Result<(String, u32), String> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_err(|e| format!("process {pid}'s ancestry cannot be read: {e}"))?;
+    // `<pid> (<comm>) <state> <ppid> …`: the name may hold spaces and parentheses, so it ends at
+    // the last `)`.
+    let (open, close) = (stat.find('('), stat.rfind(')'));
+    let (Some(open), Some(close)) = (open, close) else {
+        return Err(format!("process {pid}'s stat does not read"));
+    };
+    let name = stat[open + 1..close].to_owned();
+    let parent = stat[close + 1..]
+        .split_whitespace()
+        .nth(1)
+        .and_then(|p| p.parse().ok())
+        .ok_or_else(|| format!("process {pid}'s stat does not read"))?;
+    Ok((name, parent))
+}
+
+/// Process `pid`'s name and parent, from `ps`.
+#[cfg(not(target_os = "linux"))]
+fn process(pid: u32) -> Result<(String, u32), String> {
+    let out = std::process::Command::new("/bin/ps")
+        .args(["-o", "ppid=,comm=", "-p", &pid.to_string()])
+        .output()
+        .map_err(|e| format!("process {pid}'s ancestry cannot be read: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let text = text.trim();
+    let (parent, comm) = text
+        .split_once(char::is_whitespace)
+        .ok_or_else(|| format!("process {pid}'s ancestry cannot be read"))?;
+    let name = Path::new(comm.trim())
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let parent = parent
+        .trim()
+        .parse()
+        .map_err(|_| format!("process {pid}'s ancestry cannot be read"))?;
+    Ok((name, parent))
+}
+
+/// The state directory, refused when it lies inside `world`: a body writes the world, so pins
+/// kept there would be the body's.
+fn outside(world: &Path, at: &Path) -> Result<(), String> {
+    let real = |p: &Path| {
+        // The nearest part that exists, made real, and the rest as written.
+        let mut head = p.to_path_buf();
+        let mut tail = Vec::new();
+        while !head.exists() {
+            match (
+                head.file_name().map(std::ffi::OsStr::to_owned),
+                head.parent(),
+            ) {
+                (Some(n), Some(parent)) => {
+                    tail.push(n);
+                    head = parent.to_path_buf();
+                }
+                _ => break,
+            }
+        }
+        let mut out = head.canonicalize().unwrap_or(head);
+        for n in tail.into_iter().rev() {
+            out.push(n);
+        }
+        out
+    };
+    if real(at).starts_with(real(world)) {
+        return Err(format!(
+            "the state directory ({}) lies inside the world: the verify pins are kept where no \
+             body writes, so none is read or written there",
+            at.display()
+        ));
+    }
+    Ok(())
 }
 
 /// `row` appended to the witness at `path`, stamped with this binary's build. Refused inside a
@@ -141,6 +281,7 @@ pub fn record_at(path: &Path, mut row: Row) -> Result<(), String> {
             body.to_string_lossy()
         ));
     }
+
     row.build = Build::this();
     journal_at(path)
         .append(&row)
@@ -151,11 +292,30 @@ pub fn record_at(path: &Path, mut row: Row) -> Result<(), String> {
 ///
 /// # Errors
 ///
-/// No home, a body asks, or the witness cannot be written.
+/// No home, the state directory lies inside the world, a body asks, or the witness cannot be
+/// written.
 pub fn record(world: &Path, row: Row) -> Result<(), String> {
     let at = path_of(world)
         .ok_or("no home: the verify pins are kept under the human's state directory")?;
+    outside(world, &at)?;
     record_at(&at, row)
+}
+
+/// The human's pin: [`record`], refused also when this process runs under the harness — a
+/// command a session started, whatever its environment says (`under_harness`). The harness's own
+/// rows (an Orc's coded line, relief's) are written in its process, by [`record`].
+///
+/// # Errors
+///
+/// As [`record`], and the ancestry is the harness's or cannot be read.
+pub fn record_human(world: &Path, row: Row) -> Result<(), String> {
+    if let Some(harness) = under_harness()? {
+        return Err(format!(
+            "this runs under {harness}: a verify line is pinned by the human, never by a command \
+             a session started"
+        ));
+    }
+    record(world, row)
 }
 
 /// A row now: `act` of `lines` on `creature`, by `by`.
@@ -176,11 +336,12 @@ pub fn row(act: Act, creature: &str, lines: &[String], by: &str) -> Row {
 ///
 /// # Errors
 ///
-/// The witness cannot be trusted.
-pub fn pinned(world: &Path) -> Result<Option<BTreeMap<String, Vec<String>>>, String> {
+/// The witness cannot be trusted, or the state directory lies inside the world.
+pub fn pinned(world: &Path) -> Result<Option<Pins>, String> {
     let Some(at) = path_of(world) else {
         return Ok(None);
     };
+    outside(world, &at)?;
     let anchor = crate::chains::anchor_of(world, KIND);
     fold_at(&at, anchor.as_ref()).map(Some)
 }
@@ -200,11 +361,11 @@ pub fn hint(creature: &str) -> String {
 /// The hole that fails the landing closed: the pins cannot be trusted or kept, the card holds a
 /// line no pin holds, or it differs from the pin.
 pub fn trusted_in(
-    pins: &Result<Option<BTreeMap<String, Vec<String>>>, String>,
+    pins: &Result<Option<Pins>, String>,
     creature: &str,
     doc: &str,
     card: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<Pinned>, String> {
     let card: BTreeSet<&str> = card
         .iter()
         .map(|l| l.trim())
@@ -233,7 +394,7 @@ pub fn trusted_in(
             hint(creature)
         )),
         Some(lines) => {
-            let held: BTreeSet<&str> = lines.iter().map(String::as_str).collect();
+            let held: BTreeSet<&str> = lines.iter().map(|p| p.line.as_str()).collect();
             if held == card {
                 Ok(lines.clone())
             } else {
@@ -256,7 +417,7 @@ pub fn trusted(
     creature: &str,
     doc: &str,
     card: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<Pinned>, String> {
     trusted_in(&pinned(world), creature, doc, card)
 }
 
@@ -270,7 +431,7 @@ pub struct Unpinned {
     /// The card's verify lines.
     pub card: Vec<String>,
     /// What the pin holds, when one was made.
-    pub pinned: Option<Vec<String>>,
+    pub pinned: Option<Vec<Pinned>>,
 }
 
 /// Every living creature of `roster` whose card holds verify lines the pins do not: the human's
@@ -305,6 +466,61 @@ mod tests {
         l.iter().map(|s| (*s).to_owned()).collect()
     }
 
+    fn texts(p: &[Pinned]) -> Vec<String> {
+        p.iter().map(|p| p.line.clone()).collect()
+    }
+
+    fn human(l: &[&str]) -> Vec<Pinned> {
+        l.iter()
+            .map(|s| Pinned {
+                line: (*s).to_owned(),
+                by: HUMAN.to_owned(),
+            })
+            .collect()
+    }
+
+    /// Pins kept inside the world would be the body's: a state directory there is refused.
+    #[test]
+    fn a_state_directory_inside_the_world_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("w");
+        std::fs::create_dir_all(&world).unwrap();
+        let inside = world.join(".mnemorph/tmp/state/mnemorph/verify/w.jsonl");
+        assert!(
+            outside(&world, &inside)
+                .unwrap_err()
+                .contains("inside the world")
+        );
+        let elsewhere = dir.path().join("state/mnemorph/verify/w.jsonl");
+        assert_eq!(outside(&world, &elsewhere), Ok(()));
+        // A link into the world is inside it too.
+        std::os::unix::fs::symlink(&world, dir.path().join("link")).unwrap();
+        assert!(outside(&world, &dir.path().join("link/state/x.jsonl")).is_err());
+    }
+
+    /// The test runner is no harness: its ancestry reads, and holds none of the harness's names.
+    #[test]
+    fn the_ancestry_reads() {
+        assert_eq!(under_harness(), Ok(None));
+    }
+
+    /// Who pinned a line is kept: the human's (or relief's) lines are the human's check, an Orc's
+    /// are its own.
+    #[test]
+    fn each_line_keeps_who_pinned_it() {
+        let rows = vec![
+            row(Act::Pin, "slime-a", &lines(&["cargo test"]), HUMAN),
+            row(Act::Code, "slime-a", &lines(&["true"]), "orc-o"),
+            row(Act::Pin, "slime-b", &lines(&["make"]), "relief of slime-x"),
+        ];
+        let f = fold(&rows);
+        let a = &f["slime-a"];
+        assert!(a[0].human() && !a[1].human());
+        assert_eq!(a[1].source(), "orc-o's pin");
+        assert!(f["slime-b"][0].human());
+        assert_eq!(a[0].source(), "the human's pin");
+    }
+
     #[test]
     fn a_pin_replaces_and_a_code_adds() {
         let rows = vec![
@@ -315,20 +531,20 @@ mod tests {
             row(Act::Pin, "rimuru", &lines(&["pytest -q"]), HUMAN),
         ];
         let f = fold(&rows);
-        assert_eq!(f["slime-a"], lines(&["cargo test", "make check"]));
-        assert_eq!(f["rimuru"], lines(&["pytest -q"]));
+        assert_eq!(texts(&f["slime-a"]), lines(&["cargo test", "make check"]));
+        assert_eq!(texts(&f["rimuru"]), lines(&["pytest -q"]));
     }
 
     #[test]
     fn the_card_must_say_what_the_pin_holds() {
         let pins: Result<_, String> = Ok(Some(BTreeMap::from([(
             "rimuru".to_owned(),
-            lines(&["pytest -q"]),
+            human(&["pytest -q"]),
         )])));
         let doc = ".mnemorph/rimuru/rimuru/README.md";
         assert_eq!(
             trusted_in(&pins, "rimuru", doc, &lines(&["pytest -q"])),
-            Ok(lines(&["pytest -q"]))
+            Ok(human(&["pytest -q"]))
         );
         let e = trusted_in(&pins, "rimuru", doc, &lines(&["true"])).unwrap_err();
         assert!(e.contains("differs from the pinned one"), "{e}");
@@ -338,7 +554,7 @@ mod tests {
         let e = trusted_in(&pins, "slime-s", "s.md", &lines(&["true"])).unwrap_err();
         assert!(e.contains("is not pinned"), "{e}");
         assert_eq!(trusted_in(&pins, "slime-s", "s.md", &[]), Ok(Vec::new()));
-        let broken: Result<Option<BTreeMap<String, Vec<String>>>, String> =
+        let broken: Result<Option<Pins>, String> =
             Err("the verify pins do not verify: broken at line 2".into());
         assert!(
             trusted_in(&broken, "rimuru", doc, &lines(&["pytest -q"]))

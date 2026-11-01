@@ -449,6 +449,8 @@ fn mine(event: &Event, p: &mut Progress, err: &mut dyn Write) {
             unverified,
             passed,
             changed,
+            unchecked,
+            verified_by,
         } => {
             newline(p, err);
             let said: Vec<String> = failures
@@ -456,14 +458,17 @@ fn mine(event: &Event, p: &mut Progress, err: &mut dyn Write) {
                 .chain(unverified)
                 .map(|f| one_line(f))
                 .collect();
+            let checked = crate::transcript::checked_by(*unchecked, verified_by)
+                .map_or_else(String::new, |n| format!(" ({n})"));
             if said.is_empty() {
-                let _ = writeln!(err, "◆ end gate {}", one_line(verdict));
+                let _ = writeln!(err, "◆ end gate {}{checked}", one_line(verdict));
             } else {
                 let _ = writeln!(err, "◆ end gate {}: {}", one_line(verdict), said.join("; "));
             }
             p.gate = Some(json!({
                 "passed": passed, "verdict": verdict, "changed": changed,
                 "failures": failures, "unverified": unverified,
+                "unchecked": unchecked, "verified_by": verified_by,
             }));
         }
         _ => {}
@@ -512,6 +517,32 @@ pub fn status(opened: &Opened) -> Vec<String> {
         .into_iter()
         .map(|(k, v)| format!("{k:<9}{}", one_line(&v)))
         .collect()
+}
+
+/// `status`'s verify line: what the session's end gate runs — its pinned lines and who pinned
+/// them, nothing (each landing unchecked), or nothing because its card is not as pinned.
+#[must_use]
+pub fn verify(world: &std::path::Path) -> Vec<String> {
+    use mnemorph_server::world::{Roster, pins};
+    let roster = Roster::load(world);
+    let card = roster.creatures.get("rimuru");
+    let doc = card.map_or_else(
+        || ".mnemorph/rimuru/rimuru/README.md".to_owned(),
+        mnemorph_server::world::Creature::doc,
+    );
+    let lines = card.map(|c| c.verify.clone()).unwrap_or_default();
+    let said = match pins::trusted(world, "rimuru", &doc, &lines) {
+        Ok(p) if p.is_empty() => {
+            "none — every landing is unchecked: no verify line runs".to_owned()
+        }
+        Ok(p) => p
+            .iter()
+            .map(|p| format!("`{}` (by {})", p.line, p.by))
+            .collect::<Vec<_>>()
+            .join(", "),
+        Err(hole) => format!("held — the gate fails closed: {hole}"),
+    };
+    vec![format!("{:<9}{}", "verify", one_line(&said))]
 }
 
 /// `status`'s guts: the last run's acts counted per class, from the harness's chained record

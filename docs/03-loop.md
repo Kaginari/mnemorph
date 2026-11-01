@@ -439,7 +439,10 @@ still says the same set of lines.
   line: "the verify line in `<card>` differs from the pinned one: run
   `mnemorphd verify pin <creature>` to accept it".
 - **A card with lines and no pin** — a fresh world, a cloned one, a card born since — runs nothing
-  the same way, with the same way on. A card with no line and no pin runs no check, as before.
+  the same way, with the same way on. A card with no line and no pin runs no check: its landing
+  passes as the baseline, journaled `PASS, unchecked` with "no verify line ran", shown so in the
+  terminal app and `mnemorph status`, and never counted as verified — not by a body's worth,
+  nor as a fact's ground.
 - **A witness whose chain does not walk whole** — a row edited, a tail dropped against its anchor —
   trusts no pin: every landing fails closed until the human looks (`mnemorphd housekeep --verify`
   says where it breaks).

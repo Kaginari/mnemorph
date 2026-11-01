@@ -64,6 +64,10 @@ pub struct EndGate {
     /// no pin holds, or the pins cannot be trusted: each a hole that fails every landing closed,
     /// for the human to answer with `mnemorphd verify pin`. Empty when the lines are trusted.
     pub held: Vec<String>,
+    /// Who pinned each verify line, in [`EndGate::verify`]'s order: `human`, `relief of <parent>`
+    /// or the Orc that coded it ([`mnemorph_world::pins::Pinned`]). A line with no word here is
+    /// trusted as no one's: it is no bench, and its pass is no one's check.
+    pub by: Vec<String>,
     /// How long each verify command may run, in seconds (`gate.verify_secs`, 120 unless the
     /// configuration says): a command killed at it gave no result, so the claim is not verified.
     pub verify_secs: u64,
@@ -77,6 +81,7 @@ impl Default for EndGate {
         Self {
             verify: Vec::new(),
             held: Vec::new(),
+            by: Vec::new(),
             verify_secs: mnemorph_config::VERIFY_SECS,
             author: None,
         }
@@ -84,6 +89,39 @@ impl Default for EndGate {
 }
 
 impl EndGate {
+    /// The lines a test bench may be for the guts classes: those the human pinned (directly, or
+    /// carried down by relief). An Orc's line is its own word on its Slime: it is checked, but it
+    /// earns no bench.
+    #[must_use]
+    pub fn benches(&self) -> Vec<String> {
+        self.verify
+            .iter()
+            .zip(&self.by)
+            .filter(|(_, by)| Self::pin_of(by).human())
+            .map(|(l, _)| l.clone())
+            .collect()
+    }
+
+    /// Whose pins the lines that run are, each once: `the human's pin`, `orc-o's pin`.
+    #[must_use]
+    pub fn sources(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for (_, by) in self.verify.iter().zip(&self.by) {
+            let s = Self::pin_of(by).source();
+            if !out.contains(&s) {
+                out.push(s);
+            }
+        }
+        out
+    }
+
+    fn pin_of(by: &str) -> mnemorph_world::pins::Pinned {
+        mnemorph_world::pins::Pinned {
+            line: String::new(),
+            by: by.to_owned(),
+        }
+    }
+
     /// The end gate of the creature `name`, its card at `doc` reading the verify lines `card`:
     /// the lines pinned for it in `trust`'s witness ([`mnemorph_world::pins`]), and only while the
     /// card says the same. Otherwise nothing runs and the landing fails closed, with the human's
@@ -97,12 +135,13 @@ impl EndGate {
         verify_secs: u64,
         author: Option<Author>,
     ) -> Self {
-        let (verify, held) = match mnemorph_world::pins::trusted(trust, name, doc, card) {
+        let (pinned, held) = match mnemorph_world::pins::trusted(trust, name, doc, card) {
             Ok(lines) => (lines, Vec::new()),
             Err(hole) => (Vec::new(), vec![format!("traits unverified: {hole}")]),
         };
         Self {
-            verify,
+            verify: pinned.iter().map(|p| p.line.clone()).collect(),
+            by: pinned.into_iter().map(|p| p.by).collect(),
             held,
             verify_secs,
             author,
@@ -272,6 +311,9 @@ pub struct GateVerdict {
     /// The verify lines were held back unpinned ([`EndGate::held`]): no retry can pin them, so the
     /// landing fails closed at once, for the human.
     pub unpinned: bool,
+    /// Whose pins the lines that ran are ([`EndGate::sources`]): a pass on an Orc's lines alone is
+    /// that Orc's check, not the human's.
+    pub verified_by: Vec<String>,
     /// How many verify lines ran over the change: none when nothing changed.
     pub ran: usize,
 }
@@ -300,6 +342,13 @@ impl Verdict {
 }
 
 impl GateVerdict {
+    /// The landing changed files and no verify line ran: the creature has none. It passes, as
+    /// the baseline, but it was checked by nothing, and is never counted as verified.
+    #[must_use]
+    pub fn unchecked(&self) -> bool {
+        !self.unpinned && self.ran == 0 && !self.changed.is_empty()
+    }
+
     /// The gate passed: every check ran and held.
     #[must_use]
     pub fn passed(&self) -> bool {
@@ -383,6 +432,7 @@ impl EndGate {
                 unguarded: false,
                 wrote: false,
                 unpinned: false,
+                verified_by: Vec::new(),
                 ran: 0,
             };
         }
@@ -413,6 +463,7 @@ impl EndGate {
             unguarded,
             wrote,
             unpinned,
+            verified_by: self.sources(),
             ran: self.verify.len(),
         }
     }

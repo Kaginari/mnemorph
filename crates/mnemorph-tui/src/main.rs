@@ -154,6 +154,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
             for line in headless::status(&opened) {
                 println!("{line}");
             }
+            for line in headless::verify(&world) {
+                println!("{line}");
+            }
             for line in headless::minds(&world) {
                 println!("{line}");
             }
@@ -172,6 +175,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
                 "session",
                 mnemorph_tui::safe::one_line(&e)
             );
+            for line in headless::verify(&world) {
+                println!("{line}");
+            }
             for line in headless::minds(&world) {
                 println!("{line}");
             }

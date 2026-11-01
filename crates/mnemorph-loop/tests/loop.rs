@@ -1251,6 +1251,7 @@ async fn esc_during_a_verify_is_not_a_verdict() {
         .with_gate(mnemorph_loop::EndGate {
             verify: vec!["touch running; sleep 30".into()],
             held: Vec::new(),
+            by: Vec::new(),
             author: None,
             ..Default::default()
         });

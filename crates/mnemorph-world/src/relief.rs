@@ -129,15 +129,32 @@ fn pin_young(world: &Path, c: &Creature, relief: &Relief) {
     let Ok(Some(pins)) = crate::pins::pinned(world) else {
         return;
     };
-    let Some(lines) = pins.get(&c.name).filter(|l| !l.is_empty()) else {
+    let Some(held) = pins.get(&c.name).filter(|l| !l.is_empty()) else {
         return;
     };
+    // The human's lines carried down as relief's pin; each Orc's line kept as that Orc's.
+    let human: Vec<String> = held
+        .iter()
+        .filter(|p| p.human())
+        .map(|p| p.line.clone())
+        .collect();
     for (name, _) in young {
-        let by = format!("relief of {}", c.name);
+        let by = format!("{}{}", crate::pins::RELIEF, c.name);
         let _ = crate::pins::record(
             world,
-            crate::pins::row(crate::pins::Act::Pin, name, lines, &by),
+            crate::pins::row(crate::pins::Act::Pin, name, &human, &by),
         );
+        for p in held.iter().filter(|p| !p.human()) {
+            let _ = crate::pins::record(
+                world,
+                crate::pins::row(
+                    crate::pins::Act::Code,
+                    name,
+                    std::slice::from_ref(&p.line),
+                    &p.by,
+                ),
+            );
+        }
     }
 }
 

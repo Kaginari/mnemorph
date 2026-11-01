@@ -42,7 +42,11 @@ fn the_first_run_asks_once_and_pins_what_it_showed() {
     .unwrap();
     assert_eq!(got, Offered::Pinned(vec!["rimuru".into()]));
     assert_eq!(asked, 2, "one question each time");
-    assert_eq!(pins::pinned(&w).unwrap().unwrap()["rimuru"], ["pytest -q"]);
+    let held = &pins::pinned(&w).unwrap().unwrap()["rimuru"];
+    assert_eq!(
+        (held[0].line.as_str(), held[0].by.as_str()),
+        ("pytest -q", "human")
+    );
     let got = offer(&w, &mut Vec::new(), &mut |_| panic!("asked again")).unwrap();
     assert_eq!(got, Offered::Nothing);
     let _ = fs::remove_file(pins::path_of(&w).unwrap());

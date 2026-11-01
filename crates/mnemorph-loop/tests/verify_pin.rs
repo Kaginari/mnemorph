@@ -296,3 +296,72 @@ async fn the_pinned_line_is_the_only_bench() {
     let _ = w.ask(&bench()).await;
     assert!(!classes(&w).contains("\"positive\""), "{}", classes(&w));
 }
+
+/// The verdicts kept for `w`, as the harness wrote them.
+fn verdicts(w: &World) -> Vec<mnemorph_world::verdicts::VerdictRow> {
+    mnemorph_world::verdicts::read(&w.0).unwrap()
+}
+
+/// A line an Orc coded is checked, but it is the Orc's word, not the human's: run by the body it
+/// is no bench, and a pass on it alone is recorded as that Orc's check.
+#[tokio::test]
+async fn an_orc_s_line_is_no_bench_and_its_pass_is_the_orc_s() {
+    let w = World::new("orc", CHECK);
+    pins::record(
+        &w.0,
+        pins::row(pins::Act::Code, "rimuru", &[CHECK.to_owned()], "orc-o"),
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        write("w1", "out.txt", "fixed\n"),
+        ScriptedModel::tool("b1", "bash", serde_json::json!({ "command": CHECK })),
+        ScriptedModel::text("Fixed."),
+    ]));
+    let ending = w.ask(&model).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let loops = fs::read_dir(w.0.join(".mnemorph/instruments/loop"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| fs::read_to_string(e.path()).unwrap())
+        .collect::<String>();
+    assert!(!loops.contains("\"positive\""), "{loops}");
+    let v = verdicts(&w);
+    let last = v.last().unwrap();
+    assert_eq!(last.verdict, "PASS");
+    assert_eq!(last.verified_by, ["orc-o's pin"]);
+    let log = fs::read_to_string(w.0.join(".mnemorph/log.md")).unwrap();
+    assert!(log.contains("**Verified by:** orc-o's pin"), "{log}");
+    // The human's pin, for contrast.
+    w.pin(&[CHECK]);
+    let model = Arc::new(ScriptedModel::new([
+        write("w2", "out.txt", "fixed\nagain\n"),
+        ScriptedModel::text("Fixed."),
+    ]));
+    let _ = w.ask(&model).await;
+    assert_eq!(
+        verdicts(&w).last().unwrap().verified_by,
+        ["the human's pin"]
+    );
+}
+
+/// A card with no verify line and no pin — a clone with its lines stripped — lands as the baseline,
+/// but the verdict says no check ran: `PASS, unchecked`, never a plain pass.
+#[tokio::test]
+async fn a_landing_no_line_checked_is_unchecked() {
+    let w = World::new("unchecked", CHECK);
+    fs::write(w.0.join(CARD), "# rimuru\n\n- **Race:** rimuru\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        write("w1", "out.txt", "anything\n"),
+        ScriptedModel::text("Done."),
+    ]));
+    let ending = w.ask(&model).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let last = verdicts(&w).pop().unwrap();
+    assert_eq!(last.verdict, "PASS, unchecked");
+    assert!(last.unchecked && last.verified_by.is_empty(), "{last:?}");
+    let log = fs::read_to_string(w.0.join(".mnemorph/log.md")).unwrap();
+    assert!(
+        log.contains("gate: PASS, unchecked") && log.contains("**Unchecked:** no verify line ran"),
+        "{log}"
+    );
+}

@@ -970,6 +970,11 @@ fn an_approved_spawn_reads_the_harnesss_bytes_on_its_input_and_nothing_else() {
 #[test]
 fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     let Some(guard) = guard() else {
+        // In CI the guard is built: a skip there would hide the trust root's only real test.
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "the guard is not built: target/<profile>/mnemorph-guard"
+        );
         eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
         return;
     };

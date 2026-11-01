@@ -193,6 +193,7 @@ async fn ask_once(w: &World, i: usize, replies: Vec<Result<Response, Error>>) ->
         .with_gate(EndGate {
             verify: roster.creatures["rimuru"].verify.clone(),
             held: Vec::new(),
+            by: Vec::new(),
             author: None,
             ..Default::default()
         })
