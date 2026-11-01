@@ -21,6 +21,18 @@ pub enum Offered {
     Adopted(Vec<String>),
     /// The human said no, or could not be asked: these creatures stay strangers.
     Declined(Vec<String>),
+    /// The witness does not walk whole, and why: every creature runs as a stranger, and nothing
+    /// was asked.
+    Broken(String),
+}
+
+/// What the human is told when the witness does not walk whole.
+#[must_use]
+pub fn broken(why: &str) -> String {
+    format!(
+        "the roster witness is broken ({why}): every creature runs as a stranger; run \
+         `mnemorphd roster adopt` after checking (`mnemorphd housekeep --verify` says where it breaks)"
+    )
 }
 
 /// [`offer_in`], under the human's state directory.
@@ -48,6 +60,10 @@ pub fn offer_in(
     out: &mut dyn Write,
     ask: &mut dyn FnMut(&str) -> Result<bool, String>,
 ) -> io::Result<Offered> {
+    if let Err(why) = creatures::witnessed_in(state, world) {
+        writeln!(out, "{}", shown(&broken(&why)))?;
+        return Ok(Offered::Broken(why));
+    }
     let all = creatures::unadopted_in(state, world);
     if all.is_empty() {
         return Ok(Offered::Nothing);

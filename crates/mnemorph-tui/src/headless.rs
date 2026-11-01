@@ -545,6 +545,33 @@ pub fn verify(world: &std::path::Path) -> Vec<String> {
     vec![format!("{:<9}{}", "verify", one_line(&said))]
 }
 
+/// `status`'s roster: how many creatures the witness trusts, how many cards differ from their
+/// rows, how many are strangers — or that the witness is broken, and every creature a stranger.
+#[must_use]
+pub fn roster(world: &std::path::Path) -> Vec<String> {
+    use mnemorph_server::world::creatures::{self, Standing};
+    let said = match creatures::witnessed(world) {
+        Err(why) => crate::adopt::broken(&why),
+        Ok(None) => "no home: every creature but the throne runs as a stranger".to_owned(),
+        Ok(rows) => {
+            let held = creatures::trusted(mnemorph_server::world::Roster::cards(world), &Ok(rows));
+            let count =
+                |want: fn(&Standing) -> bool| held.standing.values().filter(|s| want(s)).count();
+            let (trusted, differ, strangers) = (
+                count(|s| matches!(s, Standing::Trusted)),
+                count(|s| matches!(s, Standing::Mismatched(_))),
+                count(|s| matches!(s, Standing::Stranger)),
+            );
+            let mut said = format!("{trusted} trusted, {differ} mismatched, {strangers} strangers");
+            if differ + strangers > 0 {
+                said.push_str(" — `mnemorphd roster list`, then `mnemorphd roster adopt`");
+            }
+            said
+        }
+    };
+    vec![format!("{:<9}{}", "roster", one_line(&said))]
+}
+
 /// `status`'s guts: the last run's acts counted per class, from the harness's chained record
 /// outside the world — signals for a learned value, never a verdict on the body.
 #[must_use]

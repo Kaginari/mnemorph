@@ -286,8 +286,9 @@ a cloned repository writes it. So every privilege of this chapter reads the card
 in the creatures' witness under the human's state directory: a card that differs runs at the
 lower of the two and loses its rank, and a card with no row is a stranger, a Slime of its own
 seat alone, until the human adopts it (`mnemorphd roster adopt`). The harness writes the rows of
-the births it makes — relief's young, an evolution swap's new card, at their base race; a rise, a
-fall and an adoption are the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
+the births it makes — relief's young, at their parent's base race — and holds a card an
+evolution swap rewrites to its row; a new name a swap brings, a rise, a fall and an adoption are
+the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 
 ---
 

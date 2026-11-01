@@ -609,16 +609,25 @@ The throne, `rimuru`, is implicit: the session's own seat, never a row. No tool 
 the world's records are protected — so a card arrives by the human's hand, by the harness, or by
 a route the witness exists to distrust. The harness writes the rows of the births it makes:
 relief, for the parent it retires, the young at the parent's base race and the children it hands
-on; and an evolution swap the human said yes to, never above the race a row held, a new name at
-its base, a card it removed retired.
+on; and an evolution swap the human said yes to — a yes to bytes, so a card a row holds is held to
+it as the trusted view holds it (the lower race, the row's chain, the ground and Minds both name:
+a swap never raises, re-parents or widens), a new name stays a stranger until adopted, and a
+card it removed is retired. Before that yes, `mnemorphd evolution swap` shows each card the plan
+writes — race, post, ground, chain and Minds — against its row. The row holds the creature's
+Minds too: a card that names a Mind its row does not hold wears none of it.
 Rises, falls and adoptions are the human's alone: `mnemorphd roster adopt`, `set-race` and
 `retire`, each asked at the terminal (`/dev/tty`; piped input is refused) or under `--yes` for a
 script the human runs, refused inside a body's command, under any `mnemorph`, `mnemorphd` or
-`mnemorph-guard` ancestor, and with a state directory inside the world. A fresh world — its
+`mnemorph-guard` ancestor, and with a state directory inside the world. The ancestry is read
+from the process tree, so a command that leaves it — `setsid`, or a daemon re-parented to init —
+is caught only where the sandbox refuses that, as its seccomp filter refuses `setsid` under the
+kernel guard; with no guard, the body's command is the human's to trust. A fresh world — its
 throne alone — asks nothing. A card the human writes by hand, a cloned world, or one from before
 the witness opens in the terminal app on one list of its strangers — each card's race, post,
 ground and chain — and adopts them all only on the typed word `adopt`; anything else adopts
-nothing, and they stay strangers until `mnemorphd roster adopt`. A card that differs from its row
+nothing, and they stay strangers until `mnemorphd roster adopt`. A witness that does not walk
+whole is said there and on `mnemorph status`'s `roster` line, which also counts the trusted, the
+mismatched and the strangers. A card that differs from its row
 is never adopted there: it is shown with the way on, `mnemorphd roster adopt <creature>`.
 
 #### The bodies, queue and journal pages

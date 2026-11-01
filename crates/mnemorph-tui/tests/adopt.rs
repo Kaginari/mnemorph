@@ -149,3 +149,29 @@ fn a_mismatched_card_is_never_adopted_at_the_opening() {
     );
     assert_eq!(w.view().creatures["kijin-forge"].race, Race::Kijin);
 }
+
+/// A witness that does not walk whole is said, never silent: every creature runs as a stranger,
+/// and nothing is asked.
+#[test]
+fn a_broken_witness_is_said_at_the_opening() {
+    let w = World::new("broken");
+    w.card(
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
+    );
+    let (got, _) = w.offer(&mut |_| Ok(true));
+    assert!(matches!(got, Offered::Adopted(_)));
+    let at = path_of(&w.state(), &w.world);
+    let rows = fs::read_to_string(&at).unwrap();
+    fs::write(&at, rows.replace("\"slime\"", "\"named-slime\"")).unwrap();
+    let (got, text) = w.offer(&mut |_| panic!("a broken witness asks nothing"));
+    assert!(matches!(got, Offered::Broken(_)), "{got:?}");
+    assert!(
+        text.contains("the roster witness is broken")
+            && text.contains("every creature runs as a stranger")
+            && text.contains("mnemorphd roster adopt"),
+        "{text}"
+    );
+    assert_eq!(w.view().creatures["slime-s"].race, Race::Slime);
+}

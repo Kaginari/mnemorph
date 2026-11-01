@@ -2849,6 +2849,13 @@ fn shown_doc(text: &str) -> Vec<String> {
     out
 }
 
+/// Whether `path` is a creature's card: `.mnemorph/<race>/<seat>/README.md`.
+fn is_card(path: &str) -> bool {
+    let parts: Vec<&str> = path.trim_start_matches("./").split('/').collect();
+    matches!(parts.as_slice(), [".mnemorph", race, _, "README.md"]
+        if mnemorph_server::world::races::Race::from_name(race).is_some())
+}
+
 /// `evolution swap`: the plan shown, asked at the terminal, then swapped in and its row written.
 fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> ExitCode {
     let safe = mnemorph_server::challenge::safe;
@@ -2868,6 +2875,22 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
             },
         );
         println!("  {} — {what}", safe(&f.path));
+    }
+    // The yes is to bytes: what each card it writes would stand as is shown first.
+    let cards: Vec<(String, String)> = plan
+        .files
+        .iter()
+        .filter(|f| is_card(&f.path))
+        .filter_map(|f| {
+            let text = String::from_utf8_lossy(f.after.as_deref()?).into_owned();
+            Some((f.path.clone(), text))
+        })
+        .collect();
+    if !cards.is_empty() {
+        println!("the cards it writes, as the creatures' witness would hold them:");
+        for line in mnemorph_server::world::creatures::swap_standing(world, &cards) {
+            println!("  {}", safe(&line));
+        }
     }
     match at_terminal(&format!("swap {} in?", plan.id)) {
         Ok(true) => {}

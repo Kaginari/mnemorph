@@ -27,8 +27,8 @@
 //!
 //! - relief, for the parent it retires, the young it writes and the children it hands them
 //!   ([`relief_rows`]): the births the harness makes;
-//! - an evolution swap the human said yes to, for each card it writes — never above the race the
-//!   row held, a new name at its base ([`evolved`]);
+//! - an evolution swap the human said yes to, for each card a row holds — held to that row, so
+//!   it never raises, re-parents or widens; a new name stays a stranger ([`evolution_rows`]);
 //! - the human: `mnemorphd roster adopt` (the first run's prompt too), `set-race` (a rise or a
 //!   fall) and `retire`, asked at the terminal ([`record_human`]).
 //!
@@ -182,6 +182,9 @@ pub struct Row {
     pub ground: Ground,
     /// The SHA-256 of the ground: a row whose ground does not hash to it does not read.
     pub ground_sha256: String,
+    /// The Minds it may wear, beyond the shared ones.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub minds: Vec<String>,
     /// Retired.
     #[serde(default)]
     pub retired: bool,
@@ -201,6 +204,8 @@ pub struct Witnessed {
     pub reports_to: Option<String>,
     /// Its ground.
     pub ground: Ground,
+    /// The Minds it may wear, beyond the shared ones.
+    pub minds: Vec<String>,
     /// Retired.
     pub retired: bool,
     /// The row's act and author: `adopt by human`.
@@ -241,16 +246,17 @@ pub fn row(
         post: post_of(name, race),
         ground_sha256: ground.digest(),
         ground,
+        minds: Vec::new(),
         retired,
         by: by.to_owned(),
         build: Build::default(),
     }
 }
 
-/// A row of `c` as its card stands.
+/// A row of `c` as its card stands, its Minds included.
 #[must_use]
 pub fn row_of(act: Act, c: &Creature, by: &str) -> Row {
-    row(
+    let mut r = row(
         act,
         &c.name,
         c.race,
@@ -258,7 +264,21 @@ pub fn row_of(act: Act, c: &Creature, by: &str) -> Row {
         Ground::of(c),
         c.retired,
         by,
-    )
+    );
+    r.minds = minds_of(c);
+    r
+}
+
+/// A card's Minds, sorted and deduplicated.
+fn minds_of(c: &Creature) -> Vec<String> {
+    let mut m: Vec<String> = c
+        .minds
+        .iter()
+        .map(|m| m.trim_matches('`').to_owned())
+        .collect();
+    m.sort();
+    m.dedup();
+    m
 }
 
 /// The human's state directory the witness is kept under: `$XDG_STATE_HOME` when absolute, else
@@ -318,6 +338,7 @@ pub fn fold(rows: &[Row]) -> Result<Rows, String> {
                 race,
                 reports_to: r.reports_to.clone(),
                 ground: r.ground.clone(),
+                minds: r.minds.clone(),
                 retired: r.retired,
                 by: format!("{} by {}", r.act.word(), r.by),
             },
@@ -515,6 +536,7 @@ fn stranger(c: &mut Creature) {
     c.post.clear();
     c.lane.clear();
     c.surfaces.clear();
+    c.minds.clear();
     c.heir_of = None;
 }
 
@@ -549,6 +571,17 @@ fn held_to(c: &mut Creature, w: &Witnessed) -> Vec<Mismatch> {
             differ(field, said(mine), said(theirs));
         }
     }
+    let minds = minds_of(c);
+    if minds != w.minds {
+        let said = |v: &[String]| {
+            if v.is_empty() {
+                "none".to_owned()
+            } else {
+                v.join(", ")
+            }
+        };
+        differ("Minds", said(&minds), said(&w.minds));
+    }
     if c.retired != w.retired {
         differ("Retired", c.retired.to_string(), w.retired.to_string());
     }
@@ -565,6 +598,7 @@ fn held_to(c: &mut Creature, w: &Witnessed) -> Vec<Mismatch> {
     c.post = both(&c.post, &w.ground.post);
     c.lane = both(&c.lane, &w.ground.lane);
     c.surfaces = both(&c.surfaces, &w.ground.surfaces);
+    c.minds = minds.into_iter().filter(|m| w.minds.contains(m)).collect();
     c.retired = c.retired || w.retired;
     out
 }
@@ -645,6 +679,7 @@ pub fn relief_rows(before: &Roster, relief: &crate::relief::Relief) -> Vec<Row> 
         true,
         &by,
     )];
+    out[0].minds = minds_of(parent);
     if let crate::relief::Act::Split { young } = &relief.act {
         for (name, claims) in young {
             let mut g = Ground::default();
@@ -655,7 +690,7 @@ pub fn relief_rows(before: &Roster, relief: &crate::relief::Relief) -> Vec<Row> 
             } else {
                 g.domain = claims;
             }
-            out.push(row(
+            let mut r = row(
                 Act::Relief,
                 name,
                 parent.race.base(),
@@ -663,12 +698,14 @@ pub fn relief_rows(before: &Roster, relief: &crate::relief::Relief) -> Vec<Row> 
                 g,
                 false,
                 &by,
-            ));
+            );
+            r.minds = minds_of(parent);
+            out.push(r);
         }
     }
     for (child, to) in &relief.children {
         if let Some(c) = before.creatures.get(child) {
-            out.push(row(
+            let mut r = row(
                 Act::Relief,
                 child,
                 c.race,
@@ -676,15 +713,19 @@ pub fn relief_rows(before: &Roster, relief: &crate::relief::Relief) -> Vec<Row> 
                 Ground::of(c),
                 c.retired,
                 &by,
-            ));
+            );
+            r.minds = minds_of(c);
+            out.push(r);
         }
     }
     out
 }
 
-/// The rows an evolution swap the human said yes to earns: for each card among `paths` (relative
-/// to the world) as it stands after, the card — its race never above the row's, a new name at
-/// its base — and a card the swap removed, retired.
+/// The rows an evolution swap the human said yes to earns, for each card among `paths` (relative
+/// to the world). The yes was to bytes, not to a standing, so a card a row already holds is held
+/// to it as the trusted view holds it: the lower race, the row's chain, the ground and Minds both
+/// name — a swap never raises, re-parents or widens. A name no row holds stays a stranger until
+/// the human adopts it, and a card the swap removed is retired.
 #[must_use]
 pub fn evolution_rows(
     before: &Roster,
@@ -699,23 +740,19 @@ pub fn evolution_rows(
     let touched = |c: &Creature| paths.iter().any(|p| *p == c.doc());
     let mut out = Vec::new();
     for c in after.creatures.values().filter(|c| touched(c)) {
-        if c.name == THRONE || c.race == Race::Rimuru {
+        let Some(w) = rows.get(&c.name) else {
             continue;
-        }
-        let race = rows
-            .get(&c.name)
-            .map_or_else(|| c.race.base(), |w| lower(c.race, w.race));
-        let mut r = row_of(Act::Evolution, c, &by);
-        race.name().clone_into(&mut r.race);
-        r.post = post_of(&c.name, race);
-        out.push(r);
+        };
+        let mut held = c.clone();
+        held_to(&mut held, w);
+        out.push(row_of(Act::Evolution, &held, &by));
     }
     for c in before.creatures.values().filter(|c| touched(c)) {
         if after.creatures.contains_key(&c.name) {
             continue;
         }
         if let Some(w) = rows.get(&c.name) {
-            out.push(row(
+            let mut r = row(
                 Act::Evolution,
                 &c.name,
                 w.race,
@@ -723,7 +760,62 @@ pub fn evolution_rows(
                 w.ground.clone(),
                 true,
                 &by,
-            ));
+            );
+            r.minds.clone_from(&w.minds);
+            out.push(r);
+        }
+    }
+    out
+}
+
+/// What an evolution swap would do to the standing of each card its plan writes, in lines for
+/// the human to read before the yes: each card's race, post, ground, chain and Minds, against the
+/// row that holds it — the row wins every field the card would raise — or a stranger's for a new
+/// name.
+#[must_use]
+pub fn swap_standing(world: &Path, cards: &[(String, String)]) -> Vec<String> {
+    swap_standing_in(crate::queue::state_dir().as_deref(), world, cards)
+}
+
+/// [`swap_standing`], the witness under the state directory `state`.
+#[must_use]
+pub fn swap_standing_in(
+    state: Option<&Path>,
+    world: &Path,
+    cards: &[(String, String)],
+) -> Vec<String> {
+    let rows = witnessed_in(state, world);
+    let mut out = Vec::new();
+    for (path, text) in cards {
+        let seat = Path::new(path).parent().unwrap_or(Path::new(""));
+        let Ok(c) = crate::doc::parse(text, seat) else {
+            out.push(format!("{path}: does not read as a card"));
+            continue;
+        };
+        out.push(format!("{path}: {}", shown(&c)));
+        match &rows {
+            Ok(Some(r)) => match r.get(&c.name) {
+                Some(w) => {
+                    let mut held = c.clone();
+                    let differs = held_to(&mut held, w);
+                    if differs.is_empty() {
+                        out.push("  as its row holds it".to_owned());
+                    } else {
+                        for m in &differs {
+                            out.push(format!(
+                                "  {}: the card says `{}`, its row holds `{}`",
+                                m.field, m.card, m.row
+                            ));
+                        }
+                        out.push(format!("  witnessed as: {}", shown(&held)));
+                    }
+                }
+                None => out.push(
+                    "  a new name: a stranger, its own seat alone, until `mnemorphd roster adopt`"
+                        .to_owned(),
+                ),
+            },
+            _ => out.push("  the creatures' witness does not read: no row is written".to_owned()),
         }
     }
     out
@@ -831,11 +923,16 @@ pub fn card_says(world: &Path, name: &str, field: &str, value: &str) -> Result<(
 pub fn shown(c: &Creature) -> String {
     let post = post_of(&c.name, c.race).map_or_else(String::new, |p| format!(", post {p}"));
     format!(
-        "{} — {}{post}, reports to {}, ground {}{}",
+        "{} — {}{post}, reports to {}, ground {}{}{}",
         c.name,
         c.race.name(),
         c.reports_to.as_deref().unwrap_or("nobody"),
         Ground::of(c).line(),
+        if c.minds.is_empty() {
+            String::new()
+        } else {
+            format!(", Minds {}", minds_of(c).join(", "))
+        },
         if c.retired { ", retired" } else { "" }
     )
 }
@@ -1119,15 +1216,15 @@ mod tests {
         assert_eq!(held["slime-s"].reports_to.as_deref(), Some("orc-o-a"));
     }
 
-    /// An evolution swap's card never rises above its row; a new name is born at its base; a card
-    /// it removed is retired.
+    /// An evolution swap's card never rises above its row, re-parents it or widens its ground or
+    /// Minds; a new name — a post's above all — stays a stranger; a card it removed is retired.
     #[test]
-    fn evolution_never_raises() {
+    fn evolution_never_raises_reparents_or_widens() {
         let (_d, w, state) = world(&[
             (
                 "slime",
                 "s",
-                "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
+                "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/a/\n- **Minds:** careful\n",
             ),
             (
                 "slime",
@@ -1137,11 +1234,8 @@ mod tests {
         ]);
         adopt(&state, &w);
         let before = Roster::cards(&w);
-        std::fs::write(
-            w.join(".mnemorph/slime/s/README.md"),
-            "# slime-s\n\n- **Race:** named-slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
-        )
-        .unwrap();
+        let swapped = "# slime-s\n\n- **Race:** named-slime\n- **Reports to:** orc-p\n- **Territory:** src/, ./Cargo.toml\n- **Minds:** careful, root\n";
+        std::fs::write(w.join(".mnemorph/slime/s/README.md"), swapped).unwrap();
         std::fs::remove_dir_all(w.join(".mnemorph/slime/t")).unwrap();
         std::fs::create_dir_all(w.join(".mnemorph/kijin/forge")).unwrap();
         std::fs::write(w.join(".mnemorph/kijin/forge/README.md"), ONI).unwrap();
@@ -1157,9 +1251,71 @@ mod tests {
         );
         record_in(Some(&state), &w, rows).unwrap();
         let held = witnessed_in(Some(&state), &w).unwrap().unwrap();
-        assert_eq!(held["slime-s"].race, Race::Slime);
-        assert_eq!(held["kijin-forge"].race, Race::Kijin);
+        let s = &held["slime-s"];
+        assert_eq!(s.race, Race::Slime);
+        assert_eq!(s.reports_to.as_deref(), Some("orc-o"), "not re-parented");
+        assert_eq!(
+            s.ground.zone,
+            Vec::<String>::new(),
+            "src/ is not inside src/a/"
+        );
+        assert_eq!(s.minds, ["careful"], "no Mind added");
+        assert!(
+            !held.contains_key("kijin-forge"),
+            "a new name stays a stranger"
+        );
+        assert!(view(&state, &w).stranger("kijin-forge"));
         assert!(held["slime-t"].retired);
+        // The swap's preview says each field the row keeps, before the human's yes.
+        let said = swap_standing_in(
+            Some(&state),
+            &w,
+            &[
+                (".mnemorph/slime/s/README.md".into(), swapped.into()),
+                (".mnemorph/kijin/forge/README.md".into(), ONI.into()),
+            ],
+        )
+        .join("\n");
+        assert!(
+            said.contains("reports to orc-p")
+                && said.contains("Reports to: the card says `orc-p`, its row holds `orc-o`")
+                && said.contains("Territory: the card says")
+                && said.contains("kijin-forge — oni, post kijin-forge")
+                && said.contains("a new name: a stranger"),
+            "{said}"
+        );
+    }
+
+    /// A card that names itself a Mind its row does not hold wears none of it.
+    #[test]
+    fn a_card_grants_itself_no_mind() {
+        let (_d, w, state) = world(&[(
+            "slime",
+            "s",
+            "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Minds:** careful\n",
+        )]);
+        let minds = w.join(".mnemorph/minds");
+        std::fs::create_dir_all(&minds).unwrap();
+        std::fs::write(minds.join("careful.md"), "# careful\n\nRead first.\n").unwrap();
+        std::fs::write(minds.join("root.md"), "# root\n\nAll the keys.\n").unwrap();
+        // A stranger wears no Mind its card names.
+        assert_eq!(
+            view(&state, &w).creatures["slime-s"].minds,
+            Vec::<String>::new()
+        );
+        adopt(&state, &w);
+        assert_eq!(view(&state, &w).creatures["slime-s"].minds, ["careful"]);
+        std::fs::write(
+            w.join(".mnemorph/slime/s/README.md"),
+            "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Minds:** careful, root\n",
+        )
+        .unwrap();
+        let held = view(&state, &w);
+        assert_eq!(held.creatures["slime-s"].minds, ["careful"]);
+        assert_eq!(
+            held.standing["slime-s"],
+            Standing::Mismatched(vec!["Minds"])
+        );
     }
 
     /// The human's list: strangers and mismatched cards, never the trusted or the throne.

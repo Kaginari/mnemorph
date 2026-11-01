@@ -429,7 +429,8 @@ pub fn swap(world: &Path, plan: &Plan) -> Result<Swap, String> {
     let before = crate::Roster::cards(world);
     let rows = crate::creatures::witnessed(world);
     let swap = swap_at(world, &ledger, plan)?;
-    // The cards the human's yes swapped in are witnessed — never above the race a row held.
+    // The cards the human's yes swapped in are witnessed, each held to its row: never raised,
+    // re-parented or widened; a new name stays a stranger.
     let paths: Vec<String> = swap.files.iter().map(|f| f.path.clone()).collect();
     let new =
         crate::creatures::evolution_rows(&before, &crate::Roster::cards(world), &rows, &paths);

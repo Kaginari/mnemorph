@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use mnemorph_server::challenge::safe;
 use mnemorph_server::world::Roster;
-use mnemorph_server::world::creatures::{self, Act, Ground, HUMAN, Standing};
+use mnemorph_server::world::creatures::{self, Act, HUMAN, Standing};
 use mnemorph_server::world::races::Race;
 
 use super::{absolute, at_terminal, fail, refused};
@@ -175,19 +175,30 @@ fn adopt(world: &Path, names: &[&str], yes: bool) -> ExitCode {
     }
 }
 
-/// What the row of `name` holds now — else its card, for a stranger the human names.
-fn standing_of(world: &Path, name: &str) -> Result<(Race, Option<String>, Ground, bool), String> {
+/// What the row of `name` holds now, as a row to write again — else its card's, for a stranger
+/// the human names — and its race.
+fn standing_of(world: &Path, name: &str) -> Result<(creatures::Row, Race), String> {
     let held = creatures::witnessed(world)?
         .ok_or("no home: the creatures' witness is kept under the human's state directory")?;
     if let Some(w) = held.get(name) {
-        return Ok((w.race, w.reports_to.clone(), w.ground.clone(), w.retired));
+        let mut r = creatures::row(
+            Act::Adopt,
+            name,
+            w.race,
+            w.reports_to.as_deref(),
+            w.ground.clone(),
+            w.retired,
+            HUMAN,
+        );
+        r.minds.clone_from(&w.minds);
+        return Ok((r, w.race));
     }
     let cards = Roster::cards(world);
     let c = cards
         .creatures
         .get(name)
         .ok_or_else(|| format!("no creature is named `{}`", safe(name)))?;
-    Ok((c.race, c.reports_to.clone(), Ground::of(c), c.retired))
+    Ok((creatures::row_of(Act::Adopt, c, HUMAN), c.race))
 }
 
 /// `roster set-race <creature> <race>`: a rise or a fall, the human's alone. The row takes the
@@ -202,7 +213,7 @@ fn set_race(world: &Path, name: &str, race: &str, yes: bool) -> ExitCode {
     if to == Race::Rimuru || name == mnemorph_server::world::queue::THRONE {
         return refused(&"the throne is implicit: no creature is raised to it, nor it lowered");
     }
-    let (from, reports_to, ground, retired) = match standing_of(world, name) {
+    let (mut row, from) = match standing_of(world, name) {
         Ok(s) => s,
         Err(e) => return refused(&e),
     };
@@ -211,21 +222,15 @@ fn set_race(world: &Path, name: &str, race: &str, yes: bool) -> ExitCode {
         safe(name),
         from.name(),
         to.name(),
-        safe(reports_to.as_deref().unwrap_or("nobody")),
-        safe(&ground.line())
+        safe(row.reports_to.as_deref().unwrap_or("nobody")),
+        safe(&row.ground.line())
     );
     if let Err(code) = asked(&format!("set {}'s race to {}?", safe(name), to.name()), yes) {
         return code;
     }
-    let row = creatures::row(
-        Act::SetRace,
-        name,
-        to,
-        reports_to.as_deref(),
-        ground,
-        retired,
-        HUMAN,
-    );
+    row.act = Act::SetRace;
+    to.name().clone_into(&mut row.race);
+    row.post = creatures::post_of(name, to);
     if let Err(e) = creatures::record_human(world, vec![row]) {
         return refused(&e);
     }
@@ -250,7 +255,7 @@ fn retire(world: &Path, name: &str, yes: bool) -> ExitCode {
     if name == mnemorph_server::world::queue::THRONE {
         return refused(&"the throne is implicit: it is never retired");
     }
-    let (race, reports_to, ground, _) = match standing_of(world, name) {
+    let (mut row, race) = match standing_of(world, name) {
         Ok(s) => s,
         Err(e) => return refused(&e),
     };
@@ -258,20 +263,13 @@ fn retire(world: &Path, name: &str, yes: bool) -> ExitCode {
         "retire {} ({}, ground {}): it owns nothing and commands no one",
         safe(name),
         race.name(),
-        safe(&ground.line())
+        safe(&row.ground.line())
     );
     if let Err(code) = asked(&format!("retire {}?", safe(name)), yes) {
         return code;
     }
-    let row = creatures::row(
-        Act::Retire,
-        name,
-        race,
-        reports_to.as_deref(),
-        ground,
-        true,
-        HUMAN,
-    );
+    row.act = Act::Retire;
+    row.retired = true;
     if let Err(e) = creatures::record_human(world, vec![row]) {
         return refused(&e);
     }
