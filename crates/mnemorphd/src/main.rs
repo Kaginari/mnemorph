@@ -49,6 +49,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd roster list [--world <dir>]
        mnemorphd roster adopt [<creature>...] [--yes] [--world <dir>]
        mnemorphd roster set-race <creature> <race> [--yes] [--world <dir>]
+       mnemorphd roster rise|fall <creature> [--world <dir>]
+       mnemorphd roster replay [--world <dir>]
        mnemorphd roster retire <creature> [--yes] [--world <dir>]
        mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open] [--background]
        mnemorphd board add|forget <dir>
@@ -131,8 +133,9 @@ or `unavailable` where a journal it folds from does not hold. The Dark Elf's fol
 challenge records per speciality; every other race's from its reports, folded from the usage
 witness, the gate verdicts, the challenge records and the Kijin posts' witnesses under the state
 directory — never a copy in the world — and kept in the report ledger there
-(`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on: no rise or
-fall is applied.
+(`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on. Each rise or
+fall the compiled law proposes, and each probation, follows with the command that applies it
+(`roster rise|fall`); none is applied here.
 
 `usage` folds the world's usage ledger over the window (7 days unless `--window` says) — read
 from its witness under the state directory, trusted while its chain holds, else from the world's
@@ -194,6 +197,12 @@ as it stands. `set-race <creature> <race>` raises or lowers a race, and sets the
 line to match; `retire <creature>` retires it. `--yes` writes without the question, for a script
 the human runs; every write is refused inside a body's command and under a harness process. The
 harness writes the rest: relief, and an evolution swap the human said yes to.
+`rise <creature>` and `fall <creature>` apply the move the compiled race law proposes from the
+trusted journals — over the 28-day window, through probation — shown in full (the meters, the
+record read, every bar, the inputs' SHA-256) and asked for `y` at the terminal alone (there is no
+`--yes`); the row names the proposal and its digest, and the card's `Race` line is set to match.
+Nothing applies a proposal but this. `replay` recomputes every rise and fall row from the journals
+and the witness, and exits 1 at the first that does not reproduce.
 
 `board` serves the board — the web cockpit over every world on this machine — on loopback
 (`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
@@ -2230,6 +2239,9 @@ fn meters(args: &[String]) -> ExitCode {
     };
     let all = mnemorph_server::world::meters::of(&w, &folds, &reports);
     let safe = mnemorph_server::challenge::safe;
+    // What the compiled law proposes from the same journals: shown with the command that applies
+    // it, never applied here.
+    let survey = mnemorph_server::world::ascension::survey(&world);
     if json {
         for m in &all {
             let readings: Vec<serde_json::Value> = m
@@ -2256,9 +2268,16 @@ fn meters(args: &[String]) -> ExitCode {
                     })
                 })
                 .collect();
+            let (proposal, probation) = ascension_json(survey.as_ref().ok(), &m.name, &world);
             println!(
                 "{}",
-                serde_json::json!({"creature": m.name, "race": m.race.name(), "meters": readings})
+                serde_json::json!({
+                    "creature": m.name,
+                    "race": m.race.name(),
+                    "meters": readings,
+                    "proposal": proposal,
+                    "probation": probation,
+                })
             );
         }
         return ExitCode::SUCCESS;
@@ -2277,6 +2296,7 @@ fn meters(args: &[String]) -> ExitCode {
             println!("  {}", safe(&m.to_string()));
         }
     }
+    pending(&survey, &world);
     match kept {
         Ok(path) => println!(
             "\nreports folded from the trusted journals, kept in {}",
@@ -2288,6 +2308,50 @@ fn meters(args: &[String]) -> ExitCode {
         "shown with their count and 95% interval, never judged on; no rise or fall is applied"
     );
     ExitCode::SUCCESS
+}
+
+/// A creature's pending proposal and probation, as `meters --json` gives them; `null` for none.
+fn ascension_json(
+    survey: Option<&mnemorph_server::world::ascension::Survey>,
+    name: &str,
+    world: &Path,
+) -> (serde_json::Value, serde_json::Value) {
+    let proposal = survey.and_then(|s| s.of(name)).map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "act": p.act.word(),
+            "to": p.to.name(),
+            "endedProbation": p.ended_probation,
+            "reports": p.n,
+            "asOf": p.as_of.to_string(),
+            "inputsSha256": p.inputs_sha256,
+            "why": p.why.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "command": p.command(world),
+        })
+    });
+    let probation = survey
+        .and_then(|s| s.probation_of(name))
+        .map(|p| serde_json::json!({"reports": p.reports, "since": p.began.to_string()}));
+    (
+        proposal.unwrap_or(serde_json::Value::Null),
+        probation.unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// The rises and falls the compiled law proposes, as `meters` says them, escaped; nothing when
+/// none is pending.
+fn pending(survey: &Result<mnemorph_server::world::ascension::Survey, String>, world: &Path) {
+    let safe = mnemorph_server::challenge::safe;
+    match survey {
+        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() => {}
+        Ok(s) => {
+            println!("\nproposed by the compiled law — nothing changes until the human applies it");
+            for line in mnemorph_server::world::ascension::lines_of(s, world) {
+                println!("  {}", safe(&line));
+            }
+        }
+        Err(why) => println!("\nrises and falls unavailable: {}", safe(why)),
+    }
 }
 
 /// Dollars as `usage` says them: `$0.4200`, `$0.4200 (2 unpriced)`, or `unpriced (2 calls)` when

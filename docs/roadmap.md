@@ -370,7 +370,10 @@ includes the witness.
 
 - The value ledger and its fold into each race's signals (built: the report fold over the
   harness's trusted journals into the chained report ledger, and every race's meters from it —
-  [the report fold](02-races.md#the-report-fold); still M11's: rises and falls applied from it),
+  [the report fold](02-races.md#the-report-fold); and rises and falls proposed from it by the
+  compiled law over the 28-day window, through probation, applied only by the human's `mnemorphd
+  roster rise|fall` and replayed exactly from the journals and the witness —
+  [applying a rise or a fall](02-races.md#applying-a-rise-or-a-fall)),
   score folds per race, meters, minimum record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
   proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
   each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over

@@ -51,4 +51,9 @@ acts: Provenance,
 /**
  * Where the race law comes from.
  */
-law: Provenance, };
+law: Provenance, 
+/**
+ * Where the rises and falls proposed were read: the trusted journals and the witness, under
+ * the state directory; `why` says why none could be read.
+ */
+ascension: Provenance, };

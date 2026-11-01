@@ -70,6 +70,10 @@ pub enum Act {
     SetRace,
     /// The human retired the creature.
     Retire,
+    /// The human applied a rise the compiled law proposed ([`crate::ascension`]).
+    Rise,
+    /// The human applied a fall the compiled law proposed ([`crate::ascension`]).
+    Fall,
 }
 
 impl Act {
@@ -82,6 +86,8 @@ impl Act {
             Act::Adopt => "adopt",
             Act::SetRace => "set-race",
             Act::Retire => "retire",
+            Act::Rise => "rise",
+            Act::Fall => "fall",
         }
     }
 }
@@ -193,6 +199,17 @@ pub struct Row {
     /// The build that wrote it.
     #[serde(default)]
     pub build: Build,
+    /// A rise's or a fall's: the proposal the human applied, by its id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<String>,
+    /// A rise's or a fall's: the SHA-256 of the proposal's inputs — the reports it read and the
+    /// move — so a replay of the journals recomputes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inputs_sha256: Option<String>,
+    /// A rise's or a fall's: the trusted time the proposal was read at, which a replay reads it
+    /// at again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<Timestamp>,
 }
 
 /// One creature as the witness holds it.
@@ -250,6 +267,9 @@ pub fn row(
         retired,
         by: by.to_owned(),
         build: Build::default(),
+        proposal: None,
+        inputs_sha256: None,
+        as_of: None,
     }
 }
 
@@ -354,6 +374,17 @@ pub fn fold(rows: &[Row]) -> Result<Rows, String> {
 ///
 /// The witness cannot be read, a link is broken, a line does not parse, or a row does not fold.
 pub fn fold_at(path: &Path, anchor: Option<&Head>) -> Result<Rows, String> {
+    let rows = rows_at(path, anchor)?;
+    fold(&rows).map_err(|e| format!("the creatures' witness does not verify: {e}"))
+}
+
+/// Every row at `path`, in order, the chain walked first and held to `anchor`: what a replay
+/// reads. A witness that does not walk whole is an error.
+///
+/// # Errors
+///
+/// As [`fold_at`], a row that does not fold aside.
+pub fn rows_at(path: &Path, anchor: Option<&Head>) -> Result<Vec<Row>, String> {
     let report = chain::verify_against(path, anchor)
         .map_err(|e| format!("the creatures' witness cannot be read: {e}"))?;
     if !report.holds() {
@@ -367,7 +398,25 @@ pub fn fold_at(path: &Path, anchor: Option<&Head>) -> Result<Rows, String> {
             "the creatures' witness does not verify: line {line} does not read"
         ));
     }
-    fold(&back.rows).map_err(|e| format!("the creatures' witness does not verify: {e}"))
+    Ok(back.rows)
+}
+
+/// `world`'s rows, in order, as the state directory `state` keeps them, held to the head anchored
+/// there: [`witnessed_in`]'s rows unfolded. `None` with no home.
+///
+/// # Errors
+///
+/// As [`witnessed_in`].
+pub fn rows_in(state: Option<&Path>, world: &Path) -> Result<Option<Vec<Row>>, String> {
+    let Some(state) = state else {
+        return Ok(None);
+    };
+    let at = path_in(state, world);
+    crate::pins::outside_as(world, &at, "the creatures' rows are")?;
+    let anchor = crate::chains::anchor_under(state, world, KIND);
+    let rows = rows_at(&at, anchor.as_ref())?;
+    fold(&rows).map_err(|e| format!("the creatures' witness does not verify: {e}"))?;
+    Ok(Some(rows))
 }
 
 /// `world`'s rows as the state directory `state` keeps them, held to the head anchored there.

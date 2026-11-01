@@ -320,3 +320,197 @@ fn a_tampered_witness_trusts_nobody() {
         "no adoption over a broken chain"
     );
 }
+
+impl Fixture {
+    /// `n` runs of `slime-s` an hour apart, each landing passed on the human's pins, written to
+    /// the usage witness and the gate verdicts as the harness writes them.
+    fn passes(&self, n: i64) {
+        use mnemorph_server::world::ledger::{Build, Journal, Timestamp, Usage, UsageRow};
+        use mnemorph_server::world::queue::state_file_in;
+        use mnemorph_server::world::verdicts::{self, VerdictRow};
+        let t0 = 1_793_000_000;
+        for k in 0..n {
+            let run = format!("slime-s-{k}");
+            Journal::<UsageRow>::chained(state_file_in(&self.state, &self.world, "usage"))
+                .append(&UsageRow {
+                    ts: Timestamp(t0 + k * 3600),
+                    session: "s".into(),
+                    run: run.clone(),
+                    body: "slime-s".into(),
+                    race: "slime".into(),
+                    commission: Some("rimuru".into()),
+                    model: "m".into(),
+                    provider: "p".into(),
+                    usage: Usage::default(),
+                    prefix: 0,
+                    wt: 0,
+                    usd: None,
+                    reported_cost: None,
+                    estimated: false,
+                    envelope: None,
+                    purpose: None,
+                })
+                .unwrap();
+            verdicts::journal_at(state_file_in(&self.state, &self.world, "gate"))
+                .append(&VerdictRow {
+                    ts: Timestamp(t0 + k * 3600 + 600),
+                    body: "slime-s".into(),
+                    verdict: "PASS".into(),
+                    changed: vec!["src/a.rs".into()],
+                    failures: Vec::new(),
+                    unverified: Vec::new(),
+                    unchecked: false,
+                    verified_by: vec!["the human's pin".into()],
+                    entry: None,
+                    build: Build::default(),
+                    run: Some(run),
+                })
+                .unwrap();
+        }
+    }
+}
+
+/// A rise the law proposes is shown wherever the meters are, with the command that applies it,
+/// and applies itself nowhere; only the human's `y` at the terminal writes it — never a body's
+/// command, piped input, `--yes`, a harness process or a state directory inside the world.
+#[test]
+fn a_proposed_rise_is_applied_by_the_human_at_the_terminal_alone() {
+    let f = Fixture::new("rise");
+    let out = f.run(&["roster", "adopt", "--yes"], None);
+    assert!(out.status.success(), "{}", text(&out));
+    f.passes(22);
+    let out = f.run(&["meters"], None);
+    assert!(
+        text(&out)
+            .contains("proposed by the compiled law — nothing changes until the human applies it")
+            && text(&out).contains("slime-s: rise to named-slime proposed (landRate 1.00 (21/21")
+            && text(&out)
+                .contains("the human applies it with: mnemorphd roster rise slime-s --world "),
+        "{}",
+        text(&out)
+    );
+    let out = f.run(&["meters", "--json"], None);
+    assert!(
+        text(&out).contains(r#""act":"rise""#)
+            && text(&out).contains(r#""command":"mnemorphd roster rise slime-s"#),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 2, "a proposal writes nothing");
+    let refusals: [(&[&str], Option<&str>, &str); 3] = [
+        (
+            &["roster", "rise", "slime-s"],
+            Some("slime-s"),
+            "slime-s runs this",
+        ),
+        (&["roster", "rise", "slime-s"], None, "terminal"),
+        (
+            &["roster", "rise", "slime-s", "--yes"],
+            None,
+            "there is no --yes",
+        ),
+    ];
+    for (args, body, says) in refusals {
+        let out = f.run(args, body);
+        assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+        assert!(text(&out).contains(says), "{says}: {}", text(&out));
+    }
+    let out = f.run(&["roster", "fall", "slime-s"], None);
+    assert!(
+        text(&out).contains("proposes a rise for slime-s, not a fall"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 2, "nothing was written");
+    #[cfg(target_os = "linux")]
+    applied_at_the_terminal(&f);
+}
+
+/// A state directory inside the world is the body's: no rise is read or written there.
+#[test]
+fn a_rise_with_a_state_directory_inside_the_world_is_refused() {
+    let f = Fixture::new("rise-inside");
+    let out = Command::new(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["roster", "rise", "slime-s", "--world"])
+        .arg(&f.world)
+        .env("XDG_STATE_HOME", f.world.join(".mnemorph/tmp/state"))
+        .env_remove("MNEMORPH_BODY")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out));
+    assert!(
+        text(&out).contains("lies inside the world"),
+        "{}",
+        text(&out)
+    );
+    assert!(!f.world.join(".mnemorph/tmp/state/mnemorph/roster").exists());
+}
+
+/// The rise of `a_proposed_rise_is_applied_by_the_human_at_the_terminal_alone` under a harness
+/// process, then at a terminal of its own: `n` writes nothing, `y` the row and the card.
+#[cfg(target_os = "linux")]
+fn applied_at_the_terminal(f: &Fixture) {
+    // Under a harness process, whatever its environment says.
+    let fake = f.root.join("bin/mnemorph");
+    fs::create_dir_all(fake.parent().unwrap()).unwrap();
+    fs::copy("/bin/sh", &fake).unwrap();
+    let inner = format!(
+        "{} roster rise slime-s --world '{}'; true",
+        env!("CARGO_BIN_EXE_mnemorphd"),
+        f.world.display()
+    );
+    let out = Command::new(&fake)
+        .args(["-c", &format!("/bin/sh -c \"{inner}\"; true")])
+        .env("XDG_STATE_HOME", &f.state)
+        .env_remove("MNEMORPH_BODY")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        text(&out).contains("this runs under mnemorph"),
+        "{}",
+        text(&out)
+    );
+    // At the terminal: `n` writes nothing, after the proposal is shown in full.
+    let out = f.at_tty(&["roster", "rise", "slime-s"], "n\n");
+    assert!(
+        text(&out).contains("slime-s (slime): rise to named-slime proposed — proposal ")
+            && text(&out).contains("rise: landRate 1.00 >= 0.90 (over 21 reports)")
+            && text(&out).contains("nothing was written"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 2);
+    let out = f.at_tty(&["roster", "rise", "slime-s"], "y\n");
+    assert!(
+        text(&out).contains("slime-s is a named-slime now"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(f.rows(), 3);
+    let last = fs::read_to_string(f.witness().unwrap()).unwrap();
+    let last = last.lines().last().unwrap().to_owned();
+    assert!(
+        last.contains(r#""act":"rise""#)
+            && last.contains(r#""race":"named-slime""#)
+            && last.contains(r#""by":"human""#)
+            && last.contains(r#""proposal":""#)
+            && last.contains(r#""inputs_sha256":""#),
+        "{last}"
+    );
+    assert!(
+        fs::read_to_string(f.world.join(".mnemorph/slime/s/README.md"))
+            .unwrap()
+            .contains("- **Race:** named-slime\n")
+    );
+    let out = f.run(&["roster", "list"], None);
+    assert!(text(&out).contains("slime-s [trusted]"), "{}", text(&out));
+    let out = f.run(&["roster", "replay"], None);
+    assert!(
+        out.status.success()
+            && text(&out).contains("row 3: slime-s rise to named-slime — proposal ")
+            && text(&out).contains("1 rise(s) and fall(s) reproduce exactly"),
+        "{}",
+        text(&out)
+    );
+}

@@ -26,8 +26,8 @@ use std::io;
 use mnemorph_races::{GateWord, Outcome, Race, Rate, Said, Signals, fold_reports};
 use serde::{Deserialize, Serialize};
 
-use crate::Build;
 use crate::chain::Walk;
+use crate::{Build, Timestamp};
 
 /// What a report row's build reads when the journal row that settled it carries none.
 pub const UNSTAMPED: &str = "unstamped";
@@ -75,6 +75,9 @@ pub struct RunReport {
     pub race: String,
     /// The run.
     pub run: String,
+    /// When it began: its first call, as the usage witness stamps it — fixed once written, so a
+    /// window read over it reads the same on every replay.
+    pub ts: Timestamp,
     /// The build of the gate verdict that settled it; `unstamped` with none.
     pub build: Build,
     /// The gate's last word on its landing; `None` when nothing landed.
@@ -108,6 +111,8 @@ pub struct AskReport {
     pub race: String,
     /// The verdict's place among the gate's verdicts, from 1.
     pub verdict: usize,
+    /// When the gate wrote the verdict.
+    pub ts: Timestamp,
     /// The verdict's build.
     pub build: Build,
     /// Passed, and none of the throne's next three landings rewrote one of its paths.
@@ -124,6 +129,9 @@ pub struct ActReport {
     pub race: String,
     /// The act's receipt.
     pub act: String,
+    /// When its first row was written, as the post's witness stamps it; the epoch for a row that
+    /// carries no time, which no window reads.
+    pub ts: Timestamp,
     /// The build of the post row that settled it; `unstamped` for a row from before rows were
     /// stamped.
     pub build: Build,
@@ -153,6 +161,16 @@ impl ReportRow {
             ReportRow::Run(r) => (&r.creature, &r.race),
             ReportRow::Ask(r) => (&r.creature, &r.race),
             ReportRow::Act(r) => (&r.creature, &r.race),
+        }
+    }
+
+    /// When the report began, by a trusted stamp: what a window is read over.
+    #[must_use]
+    pub fn ts(&self) -> Timestamp {
+        match self {
+            ReportRow::Run(r) => r.ts,
+            ReportRow::Ask(r) => r.ts,
+            ReportRow::Act(r) => r.ts,
         }
     }
 }
@@ -338,6 +356,7 @@ mod tests {
             creature: creature.into(),
             race: race.into(),
             run: format!("{creature}-r"),
+            ts: Timestamp(0),
             build: Build::default(),
             gate,
             first_try,
@@ -396,6 +415,7 @@ mod tests {
                 creature: "kijin-forge".into(),
                 race: "kijin".into(),
                 act: "a1".into(),
+                ts: Timestamp(0),
                 build: Build::default(),
                 clean: false,
                 rolled_back: true,

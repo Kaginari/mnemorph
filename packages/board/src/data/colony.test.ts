@@ -26,6 +26,8 @@ function b(name: string, race: string, parent: string | null = null): BoardBody 
     standing: 'trusted',
     runs_as: race,
     differs: [],
+    proposal: null,
+    probation: null,
   };
 }
 

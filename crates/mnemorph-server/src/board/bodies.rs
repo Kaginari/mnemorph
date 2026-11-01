@@ -12,6 +12,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use mnemorph_loop::world::Roster;
+use mnemorph_loop::world::ascension;
 use mnemorph_loop::world::chains;
 use mnemorph_loop::world::creatures::{self, Standing as Trust};
 use mnemorph_loop::world::doc::Creature;
@@ -178,6 +179,47 @@ pub struct BoardBody {
     pub runs_as: String,
     /// The fields its card says otherwise than its row (`Race`, `Post`).
     pub differs: Vec<String>,
+    /// The rise or fall the compiled law proposes for it, from the trusted journals and the
+    /// witness; `null` with none. Only the human applies it, at the terminal.
+    pub proposal: Option<BodyProposal>,
+    /// Its probation, in words; `null` when it is on none.
+    pub probation: Option<String>,
+}
+
+/// A rise or a fall the compiled law proposes, as the board shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct BodyProposal {
+    /// Its id: the first twelve digits of its inputs' SHA-256.
+    pub id: String,
+    /// `rise` or `fall`.
+    pub act: String,
+    /// The race it would be.
+    pub to: String,
+    /// A fall at the end of a probation it did not recover from.
+    pub ended_probation: bool,
+    /// The reports read.
+    pub reports: u32,
+    /// Its meters over them, each with its count and 95% interval.
+    pub meters: Vec<String>,
+    /// The law's lines: every bar it read.
+    pub why: Vec<String>,
+    /// The command that applies it, its words quoted for a shell.
+    pub command: String,
+}
+
+/// The proposal `p` for `world`, as the board shows it.
+fn proposal_of(p: &ascension::Proposal, world: &Path) -> BodyProposal {
+    BodyProposal {
+        id: p.id.clone(),
+        act: p.act.word().to_owned(),
+        to: p.to.name().to_owned(),
+        ended_probation: p.ended_probation,
+        reports: p.n,
+        meters: p.meters.iter().map(|(m, r)| format!("{m} {r}")).collect(),
+        why: p.why.iter().map(ToString::to_string).collect(),
+        command: p.command(world),
+    }
 }
 
 /// Whether the throne — the session's own body — is live in the world.
@@ -314,6 +356,9 @@ pub struct BoardBodies {
     pub acts: Provenance,
     /// Where the race law comes from.
     pub law: Provenance,
+    /// Where the rises and falls proposed were read: the trusted journals and the witness, under
+    /// the state directory; `why` says why none could be read.
+    pub ascension: Provenance,
 }
 
 /// A race's title, as the cards print it.
@@ -607,7 +652,7 @@ fn body_of(
     commissions: &[Commission],
     all: &[TimelineEntry],
     (session, throne, held): (bool, &ThroneLive, &[String]),
-    now: SystemTime,
+    (law, world, now): (Option<&ascension::Survey>, &Path, SystemTime),
 ) -> BoardBody {
     let latest = commissions.iter().find(|x| x.body == c.name);
     let mut live = live_of(c.retired, latest, session, now);
@@ -658,6 +703,12 @@ fn body_of(
             Some(Trust::Mismatched(f)) => f.iter().map(|f| (*f).to_owned()).collect(),
             _ => Vec::new(),
         },
+        proposal: law
+            .and_then(|s| s.of(&c.name))
+            .map(|p| proposal_of(p, world)),
+        probation: law
+            .and_then(|s| s.probation_of(&c.name))
+            .map(ToString::to_string),
     }
 }
 
@@ -702,6 +753,8 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
     let (commissions, older) = timeline::commissions(world);
     let (all, _) = timeline::entries_with(world, &commissions);
     let now = SystemTime::now();
+    // What the compiled law proposes from the trusted journals: shown, never applied here.
+    let law = ascension::survey(world);
     let bodies: Vec<BoardBody> = roster
         .creatures
         .values()
@@ -713,7 +766,7 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
                 &commissions,
                 &all,
                 (session, &throne, &held),
-                now,
+                (law.as_ref().ok(), world, now),
             )
         })
         .collect();
@@ -733,6 +786,12 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
                  witness under the state directory holds it"
                     .into(),
             ),
+        ),
+        ascension: prov(
+            "the compiled race law over the report fold and the creatures' witness (state \
+             directory): proposed only — the human applies a rise or a fall at the terminal",
+            law.is_ok(),
+            law.as_ref().err().cloned(),
         ),
         witness: prov(
             "the creatures' witness under the state directory (each creature's race, chain, \
