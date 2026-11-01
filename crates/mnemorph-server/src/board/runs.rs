@@ -371,7 +371,11 @@ pub fn events(beats: &[Beat]) -> Vec<Event> {
                 failures,
                 unverified,
                 verdict,
+                unchecked,
+                verified_by,
             } => out.push(Event::GateVerdict {
+                unchecked: *unchecked,
+                verified_by: verified_by.iter().map(|v| text(v)).collect(),
                 passed: verdict == "PASS",
                 verdict: verdict.clone(),
                 changed: changed.clone(),

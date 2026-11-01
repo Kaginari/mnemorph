@@ -230,8 +230,12 @@ An Orc codes its Slime's verify line — the test before the change, which the d
 before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
 at most 300 characters, no control character, on the doc of a living Slime that reports to it.
 The harness adds that line after the doc's last field — never in place of a line someone else
-set, and once — writing a new file renamed over the doc, never through a link, and journals it;
-no body's file tools write a creature's doc, so no body rewrites its own checks. And a check
+set, and once — writing a new file renamed over the doc, never through a link, pins it and
+journals it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
+pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
+word on its own Slime, kept by the harness under the human's state directory, where no body
+writes, and kept as the Orc's — no test bench, and a pass on it alone is the Orc's check, never
+the human's. And a check
 never writes: the end gate fails a landing whose verify run changed the tree beyond what git
 ignores, so no verify line lands work past the gate's judgement.
 
@@ -1290,8 +1294,8 @@ about each report — the gate's word on its landing, a first-try pass, the hole
 
 **The guts classes are signals for a learned value, never a meter.** Every act of every body is
 classed `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its
-structured outcome, never from text — only a trusted verify line, matched exactly, is a bench, and
-none is trusted until verify lines live out of a body's reach — and kept in a chained record
+structured outcome, never from text — only a trusted verify line, matched exactly, is a bench: a
+line [pinned](03-loop.md#the-verify-pins) for the body outside the world — and kept in a chained record
 outside the world
 ([the loop](03-loop.md#stress-in-four-instruments)). No bar reads them, and no rise, fall or
 probation follows from them. When a learned value model reads them, two rules are fixed structure

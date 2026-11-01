@@ -781,6 +781,8 @@ impl Run {
     /// Judge every answer that changed files with this end gate.
     #[must_use]
     pub fn with_gate(mut self, gate: EndGate) -> Self {
+        // A bench is a line the human pinned: an Orc's coded line is checked, but earns none.
+        self.guts = std::mem::take(&mut self.guts).trusting(gate.benches());
         self.gate = Some(gate);
         self
     }
@@ -1518,6 +1520,8 @@ impl Run {
             failures: verdict.failures.clone(),
             unverified: verdict.unverified.clone(),
             verdict: verdict.verdict().word().to_owned(),
+            unchecked: verdict.unchecked(),
+            verified_by: verdict.verified_by.clone(),
         });
         self.saw_verdict(&verdict);
         let solo = gate.author.is_none();
@@ -1560,14 +1564,9 @@ impl Run {
                 verdict.failures.join("; ")
             )));
         }
-        // No kernel guard, so no check could run: a retry cannot change the machine, and the body
-        // is not to blame. The human is told how to let them run.
-        if verdict.unrun() {
-            return Some(Ending::Failed(format!(
-                "the end gate could not verify: {} — make the sandbox work on this machine, or set \
-`sandbox.allow_unguarded = true` in your global config",
-                verdict.unverified.join("; ")
-            )));
+        // A verdict no retry changes: an unpinned verify line, or no kernel guard.
+        if let Some(ending) = unretriable(&verdict) {
+            return Some(ending);
         }
         let said: Vec<&str> = verdict
             .failures
@@ -1957,10 +1956,15 @@ impl Run {
             format!("{word} (challenge pending)")
         } else if held == Held::Unrecorded {
             format!("{word} (challenge unrecorded)")
+        } else if verdict.unpinned {
+            format!("{word}, unpinned")
         } else if verdict.unrun() {
             format!("{word}, unrun")
         } else if !verdict.passed() && !retried {
             format!("{word}, handed back")
+        } else if verdict.passed() && verdict.unchecked() {
+            // A pass no check ran on: the baseline lands, and is never counted as verified.
+            format!("{word}, unchecked")
         } else {
             word.to_owned()
         };
@@ -1983,6 +1987,11 @@ impl Run {
         if !verdict.unverified.is_empty() {
             lines.push(("Unverified".to_owned(), verdict.unverified.join("; ")));
         }
+        if verdict.unchecked() {
+            lines.push(("Unchecked".to_owned(), "no verify line ran".to_owned()));
+        } else if !verdict.verified_by.is_empty() {
+            lines.push(("Verified by".to_owned(), verdict.verified_by.join(", ")));
+        }
         lines.push(("By".to_owned(), "the end gate".to_owned()));
         let entry = mnemorph_world::log::Entry {
             body: self.body.name.clone(),
@@ -2004,6 +2013,8 @@ impl Run {
                     .collect(),
                 failures: verdict.failures.clone(),
                 unverified: verdict.unverified.clone(),
+                unchecked: verdict.unchecked(),
+                verified_by: verdict.verified_by.clone(),
                 entry: written.as_ref().ok().cloned().flatten(),
                 build: mnemorph_ledger::Build::default(),
             },
@@ -3747,6 +3758,25 @@ fn card_list(failures: &[String]) -> String {
         shown.push(format!("and {} more", failures.len() - CARD_ITEMS));
     }
     shown.join("; ")
+}
+
+/// A verdict no retry can change, as the ending it gives at once: a verify line the pins do not
+/// hold — the card's word is no check, and the human's way on is said — or no kernel guard, so
+/// no check could run, the machine's doing and never the body's.
+fn unretriable(verdict: &crate::gate::GateVerdict) -> Option<Ending> {
+    if verdict.unpinned {
+        return Some(Ending::Failed(format!(
+            "the end gate could not verify: {}",
+            verdict.unverified.join("; ")
+        )));
+    }
+    verdict.unrun().then(|| {
+        Ending::Failed(format!(
+            "the end gate could not verify: {} — make the sandbox work on this machine, or set \
+`sandbox.allow_unguarded = true` in your global config",
+            verdict.unverified.join("; ")
+        ))
+    })
 }
 
 pub use mnemorph_wire::{HIDDEN, hidden, kept_in_prose, shown};

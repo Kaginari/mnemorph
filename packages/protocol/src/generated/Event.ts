@@ -125,7 +125,16 @@ failures: Array<string>,
 /**
  * The checks that gave no result.
  */
-unverified: Array<string>, } | { "type": "turnEnded", 
+unverified: Array<string>, 
+/**
+ * Files changed and no verify line ran: a pass that checked nothing, never counted as
+ * verified.
+ */
+unchecked: boolean, 
+/**
+ * Whose pins the lines that ran are: `the human's pin`, `orc-o's pin`.
+ */
+verifiedBy: Array<string>, } | { "type": "turnEnded", 
 /**
  * How, in words: `answered`, `interrupted`, `checkpoint: …`, `failed: …`.
  */

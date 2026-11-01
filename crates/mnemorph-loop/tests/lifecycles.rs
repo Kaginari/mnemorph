@@ -129,6 +129,7 @@ impl Node {
             "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
+        pin(&tmp.path().join("w"), "rimuru", &["grep -q fixed out.txt"]);
         Node {
             tmp,
             run: None,
@@ -140,6 +141,8 @@ impl Node {
     fn fork(&self) -> Node {
         let tmp = Temp::new();
         copy_tree(self.root(), tmp.path());
+        // A pin is the human's word on one world: a copy is pinned again.
+        pin(&tmp.path().join("w"), "rimuru", &["grep -q fixed out.txt"]);
         Node {
             tmp,
             run: self.run.clone(),
@@ -507,4 +510,16 @@ fn a_run_reaches_its_stops_and_every_answer_passes_the_end_gate() {
             assert!(first_stop.is_some(), "{path:?}: resumed with no stop");
         }
     }
+}
+
+/// `creature`'s verify lines pinned in `world`, as the human's `mnemorphd verify pin` would pin
+/// them: the end gate runs only pinned lines.
+fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
+    use mnemorph_world::pins;
+    let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
+    pins::record(
+        world,
+        pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
+    )
+    .unwrap();
 }

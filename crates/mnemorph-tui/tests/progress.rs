@@ -599,6 +599,8 @@ fn the_end_gate_is_one_line_and_a_toast() {
             changed: vec!["a.py".into(), "b.py".into()],
             failures: vec!["tests: 2 failed".into()],
             unverified: vec!["lint".into()],
+            unchecked: false,
+            verified_by: Vec::new(),
         },
     );
     let scr = screen(&mut m, 120, 32);
@@ -726,6 +728,8 @@ fn a_turn_frame_by_frame() {
             changed: vec![],
             failures: vec![],
             unverified: vec![],
+            unchecked: false,
+            verified_by: Vec::new(),
         },
     );
     ev(
@@ -888,6 +892,8 @@ fn a_toast_never_covers_the_approval() {
             changed: vec![],
             failures: vec![],
             unverified: vec![],
+            unchecked: false,
+            verified_by: Vec::new(),
         },
     );
     for _ in 0..20 {
