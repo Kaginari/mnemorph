@@ -1373,8 +1373,10 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
 | plan | `.mnemorph/plan.md` — the throne's | yes |
-| dimension manifest | `.mnemorph/dimension.toml` — the neighbouring worlds and their relations ([ontology](09-ontology.md#relations-between-worlds)) | yes |
-| ontology facts | `.mnemorph/ontology/facts.jsonl` — territory facts, counters and settles, as events | yes |
+| dimension manifest | `.mnemorph/dimension.toml` — the copy of the relations this world states, for readers; what it states beyond them is a proposal, never a relation ([ontology](09-ontology.md#relations-between-worlds)) | yes |
+| ontology facts | `.mnemorph/ontology/facts.jsonl` — the copy of the trusted facts, for readers; never read for trust ([ontology](09-ontology.md#facts-who-said-what)) | yes |
+| trusted facts | `$XDG_STATE_HOME/mnemorph/facts/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — territory facts, counters, labels, settles and the one import, as events; written by the harness and the human's settle alone, append-only and hash-chained, anchored as `facts`; outside the world | no — machine-local |
+| relations | `$XDG_STATE_HOME/mnemorph/dimension/<world>-<fnv64a>/relations.jsonl` (else `~/.local/state/…`) — each relation the human stated or revoked, and each inverse declared, with `build`; written only by `mnemorphd onto relate`, `unrelate` and `inverse`, append-only and hash-chained, anchored as `relations`; outside the world | no — machine-local |
 | relation sightings | `$XDG_STATE_HOME/mnemorph/dimension/<world>-<fnv64a>/sightings.jsonl` (else `~/.local/state/…`) — cross-world references the harness saw a body read in a committed manifest, the other world named by id; the ledger relations are learned from, the harness's alone | no — machine-local |
 | board's list and lock | `$XDG_STATE_HOME/mnemorph/board/worlds.jsonl` (else `~/.local/state/…`) — each world the human added to the board or forgot, written only by `mnemorphd board add` and `board forget`; `board.lock`, held while a board runs, and `board.url` (`0600`), its URL with the key waiting now | no — machine-local |
 | world registry | `$XDG_STATE_HOME/mnemorph/worlds.jsonl` (else `~/.local/state/…`), one for every world — a row each time a session opens: the world's canonical path, its id `<world>-<fnv64a>`, its `origin` remote normalised (`host/owner/repo`, never a credential) and when; the board finds worlds there, and a world's row count is the session clock a learned relation's expiry reads | no — machine-local |
@@ -1399,6 +1401,8 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `guts` | each act's guts classes | every session and commission, after each act |
 | `answers` | the human's answers to the gate given on the board, with their connection, digests and timing | the board's bridge |
 | `minds` | the Minds' witness: adoptions, owners, retirements | the human's `mnemorphd mind` (adopt, retire, unretire) |
+| `facts` | the trusted territory facts | the harness (a body's `@U territory`, a parent's labels, an Orc's settle, the one import); the human's `mnemorphd onto settle` and the board's settle |
+| `relations` | the relations this world states, and its inverses | the human's `mnemorphd onto relate`, `unrelate`, `inverse` |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 

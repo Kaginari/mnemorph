@@ -78,7 +78,7 @@ landing only on the serious ones, in the territory it touches. There is no overa
 | `Mind` | worn know-how | `.mnemorph/minds/` — each entry a Mind named for it, a directory with a `README.md` or a `<name>.md` file, whose header may carry `- **Shared:** yes` — and a doc's Minds field; its adoption, digest, owner and retirement are the human's, kept in the Minds' witness under the state directory (`mnemorphd mind`) |
 | `Doc` | a creature's document | the file itself |
 | `Fact` (`Territory`) | something learned about a path | `@U territory` lines, as events |
-| `World` | this world and its neighbours | `.mnemorph/dimension.toml` |
+| `World` | this world and its neighbours | the relations under the state directory (copy: `.mnemorph/dimension.toml`) |
 
 | Bond | From → to | Properties |
 |---|---|---|
@@ -304,15 +304,15 @@ proof: the Orc's verdict naming it (`@V settle #<id>` in its report), on its own
 or the human (`mnemorphd onto settle <id>`, or **Settle** on the board's ontology page, which asks
 for a proof: a passing end-gate verdict that landed on the fact's path, or the human's own
 statement — see [the board](05-architecture.md#the-memory-and-ontology-pages)); a landing by the
-path's owner that passed its gate and cites the fact is the third route, not yet built. A
+path's owner that passed its gate and cites the fact is a third route, deferred: not built, and no settle rests on it. A
 creature's projection (`@ONTO`, [communication](04-communication.md#the-wire-envelope)) shows a
 contested fact with both sides, the way recall always seats one dissenting note: each ask carries
 it, beside the recalled notes, for the paths it concerns — a commissioned body's soil and every
 existing path the ask names — when the ontology holds a fact on any of them.
 
-The events are `.mnemorph/ontology/facts.jsonl`, harness soil, folded in the order written: a
-`support` (id, path, text, who, evidence), a `counter` naming an id, a `settle` with its proof,
-and the parent's `label`. A fact's id is the first ten hex digits of the FNV-1a hash of its
+The events are folded in the order written: a `support` (id, path, text, who, evidence), a
+`counter` naming an id, a `settle` with its proof, the parent's `label`, and the one `import`
+below. A fact's id is the first ten hex digits of the FNV-1a hash of its
 normalised path and text, stable across machines and releases. An anchor's digest is the hash of
 the cited lines (`src/a.rs:12` or `:12-20`) or of the directory's sorted listing; a commit or a
 journal entry carries none. A fact's path is read with no trailing `/`, so `src` and `src/` are one path, and a keyed
@@ -322,8 +322,40 @@ $\theta_t = 0.1$, and a collision raises `untriaged-fact` only when it showed th
 one candidate. A fact countered by every voice it had — its own author withdrawing it — reads
 countered, not contested; a support or a counter that reaches a merged fact counts on the fact it
 was merged into; and the projection marks a stale fact `[stale]` and names each counter's reason. `onto check`
-reports `contested-fact`, `stale-fact` and `untriaged-fact` beside the shape findings, and
+reports `facts-unavailable`, `untrusted-fact`, `unproven-settle`, `contested-fact`, `stale-fact`
+and `untriaged-fact` beside the shape findings, and
 `no-session-verify` when the session's card has no verify line ([the end gate](03-loop.md#the-end-gate)).
+
+**Where a fact's trust comes from.** Nothing read from inside a world grants trust: a body's
+commit of an edited file stays in git and comes back on the next checkout, and a cloned
+repository's `.mnemorph/` is a stranger's from the start. So the events that count live under
+the human's state directory, at `$XDG_STATE_HOME/mnemorph/facts/<world>-<fnv64a>.jsonl` (else
+`~/.local/state/…`; the world named by its real path), hash-chained and anchored as `facts` with
+the world's other chained journals ([the chain](06-consumption.md#the-usage-row)). Their writers
+are the harness — a body's `@U territory` facts, filed by the loop in the body's name; a parent's
+labels; an Orc's `@V settle` — and the human's settle, `onto settle` and the board's. A body's
+command writes none: the sandbox grants no command the state directory, and every write is
+refused besides when `MNEMORPH_BODY` is set. `.mnemorph/ontology/facts.jsonl`, harness soil, is
+a copy of that journal written whole after each event, through no link, for readers; it is never
+read for trust. The projection, `onto check`, `onto settle` and the board's ontology page all
+read the trusted journal. What the copy says beyond it — a fact it reads settled that the trusted
+journal does not, one it reads agreed that is a single voice there, or one the trusted journal
+does not hold — is ignored and raises an `untrusted-fact` finding naming the mismatch, standing
+on the copy alone so no landing elsewhere is held by what a stranger wrote. A trusted journal
+whose chain does not walk whole, or that is gone once anchored, leaves the facts unavailable: no
+fact stands, settled or not, nothing more is filed or settled onto it, and `facts-unavailable`
+says why. With no home there is no trusted journal, and the facts are unavailable the same way.
+
+**The import.** The first read of a world that has no trusted journal, and never had one
+anchored, imports its in-world copy once: each fact it holds, under the id its path and text hash
+to, as one support by `imported` with its anchor — so every imported fact reads **single** until
+a body says it again — and no counter, label or settle, since none of their authors can be
+proven. An `import` event closes the import, naming each fact the copy read settled; each such
+fact raises an `unproven-settle` finding until it is settled again, and the import is journaled
+in `log.md` with the same list, telling the human to settle what matters again with
+`mnemorphd onto settle <id>`. The copy is then written again from the trusted journal. A reader
+that cannot write the state directory reads the import as it would be written, and writes
+nothing.
 
 **A contested fact moves the claims resting on it.** A memory note may name a fact it rests on, by
 id ([the claim graph](08-memory.md#the-claim-graph)). When an event leaves a fact contested that
@@ -348,8 +380,8 @@ states and $R_B$ the set B states, each read from A's side through inverses:
 | only one end states anything | partial: lawful, shown as one-sided |
 | both ends state relations and $R_A \cap R_B = \emptyset$ | a `dimension-obstruction` finding, reported to Rimuru |
 
-`mnemorphd onto check --dimension` reads the neighbours' manifests (on this machine, inward) and
-never edits them; a fix goes to the other world through its own throne, one hop at a time.
+`mnemorphd onto check --dimension` reads the neighbours' relations as the state directory keeps
+them (on this machine, inward) and never edits them; a fix goes to the other world through its own throne, one hop at a time.
 
 **Learning a relation.** The harness records a sighting
 $(\text{from}, \text{to}, \text{type}, \text{anchor}, \text{body}, \text{session})$ when a body
@@ -366,7 +398,7 @@ relation to the human, as a manifest diff, only when:
 3. **it carries its way back** — every learned relation records the session it was last sighted
    in; unseen for 30 sessions of this world, its removal is proposed the same way.
 
-Only the human's yes writes it, through Rimuru, whose soil the manifest is.
+Only the human's yes states it.
 
 **Where sightings come from.** The harness records them, never the model: each time a body's
 `read` or `index` succeeds on a manifest inside its world — `Cargo.toml`, `package.json`,
@@ -384,19 +416,30 @@ git config, so it is only a hint for matching, bounded and stripped of credentia
 outside the world, or a link from inside it to one outside, is never opened for a sighting, and a
 known neighbour is no wider sandbox: its files stay outside every tool's reach.
 
-**The manifest.** `.mnemorph/dimension.toml` holds `[[relation]]` entries — `world`, the other
-world's canonical path on this machine; `type`, read from this world's side; `remote`, its
-normalised remote, how it is known elsewhere — and an optional `[inverse]` table declaring a
-type's inverse; a type is lowercase words joined by `-`, and a manifest with any other, or one
-that is no regular file or is over 64 KiB, does not read. `mnemorphd onto relations` prints what
-it states and each proposal as a diff of it, each world id turned back into its path, and writes
-nothing; `onto relate <world> <type>` is the human's yes and `onto unrelate` its revocation.
-Where other worlds live is the human's to see: `relations`, `relate`, `unrelate` and
-`check --dimension` are refused inside a body's command. A relation the human stated with no sighting
+**The relations and their copy.** The relations a world states are kept under the human's
+state directory, beside its sightings, at `$XDG_STATE_HOME/mnemorph/dimension/<world-id>/relations.jsonl`
+(the world named by its real path): hash-chained, anchored as `relations`, one row per act — a
+relation stated (`world`, the other world's canonical path on this machine; `type`, read from
+this world's side; `remote`, its normalised remote, how it is known elsewhere), one revoked, or a
+type's inverse declared or taken back. A type is lowercase words joined by `-`. Their only
+writers are the human's `mnemorphd onto relate <world> <type>`, `onto unrelate <world> <type>`
+and `onto inverse <type> <inverse>|-`, each showing what it writes and asking for `y` at the
+terminal (`/dev/tty`; piped input is refused), or taking `--yes` from a script the human runs;
+each is refused inside a body's command, and the sandbox grants no command the state directory,
+so a body that unsets `MNEMORPH_BODY` still writes nothing there. Relations that do not walk
+whole do not read, and `onto check` fails on them. `.mnemorph/dimension.toml`, Rimuru's soil, is
+their copy, written after each act through no link: `[[relation]]` entries and an `[inverse]`
+table. It is never read as a relation: what it states beyond the trusted relations — a hand
+edit, a commit, a clone's — is a proposal, an `untrusted-relation` finding naming the
+`onto relate` (or `onto inverse`) that would state it; a copy with an unknown type, or that is no
+regular file or is over 64 KiB, proposes nothing. `mnemorphd onto relations` prints what is
+stated, what the copy states beyond it, and each proposal as a diff, each world id turned back
+into its path, and writes nothing. Where other worlds live is the human's to see: `relations`,
+`relate`, `unrelate`, `inverse` and `check --dimension` are refused inside a body's command. A relation the human stated with no sighting
 was never learned, so it carries no expiry. `onto check` reports `stale-relation`; with
 `--dimension` it also prints, per neighbour, what both state and what each states alone; a
-neighbour's manifest that does not read is an `unreadable-neighbour` finding and is read as
-stating nothing — it never fails this world's check.
+neighbour's relations that do not read are an `unreadable-neighbour` finding and are read as
+stating nothing — they never fail this world's check.
 
 ### Findings
 
@@ -408,6 +451,12 @@ as the landing leaves it: a finding the landing removes — the Slime narrowing 
 field to end an `overlap` — does not block it. Medium and low are reported, never
 blocking. Findings are never summed into a score.
 
+Two exceptions read high and block no landing. A `dimension-obstruction` is reported to Rimuru
+and never blocks the end gate: it is about a pair of worlds, and the fix goes to the other world
+through its own throne, so it stands on the manifest's copy and names only the throne. The facts'
+`untrusted-fact` and `facts-unavailable` stand on the facts' in-world copy alone and name no
+creature, so what a stranger wrote there holds no one's landing. Both still fail `onto check`.
+
 | Code | Severity | Read as |
 |---|---|---|
 | `overlap` | critical | two creatures' write grounds (zones, posts) equal or nested |
@@ -415,12 +464,16 @@ blocking. Findings are never summed into a score.
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
 | `dead-bond` | high | an `above` target with no doc, or retired |
 | `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
-| `dimension-obstruction` | high | two worlds state relations that cannot both hold |
+| `dimension-obstruction` | high | two worlds state relations that cannot both hold — reported to Rimuru, never blocking the gate (above) |
+| `facts-unavailable` | high | the trusted facts do not walk whole, are gone once anchored, or have no home: no fact stands |
+| `untrusted-fact` | high | the facts' in-world copy reads a fact settled, agreed or present where the trusted journal does not — ignored, one per fact |
 | `unowned-soil` | medium | a tracked path where `own` returns $\bot$ — no claim, or a compiled soil whose keeper does not live |
 | `orphan-mind` | medium | a Mind under `.mnemorph/minds/` that no living creature's Minds field names, and whose doc is not marked `- **Shared:** yes` or `- **Retired:** yes` |
 | `contested-fact` | medium | a territory fact with supporters and counters past the threshold |
 | `doc-provenance` | medium | a date (`YYYY-MM-DD`) or a change note (`added on`, `updated on`, `edited on`, `as of`, `at the request of`, `per the human`, each as words of its own) in the law or a creature's doc, code in fences or backticks aside — provenance lives only in `log.md` |
+| `untrusted-relation` | medium | the in-world `dimension.toml` states a relation or an inverse the trusted relations do not — a proposal |
 | `stale-relation` | low | a learned relation unseen for 30 sessions |
+| `unproven-settle` | low | a fact the in-world copy read settled when it was imported, not settled again since |
 | `unreadable-neighbour` | low | a neighbour's dimension manifest that does not read, in `onto check --dimension` |
 | `prose-claim` | low | a Slime's doc names, in prose, a path of the world its Territory field does not claim: a backticked word read as a claim would be, that exists, on soil a Slime could claim (a zone, a domain, or no one's) — one per path, at its line, in `onto check` |
 | `stale-fact` | low | a fact whose anchor's digest no longer matches |

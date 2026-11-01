@@ -70,6 +70,10 @@ fn a_guarded_body_reaches_neither_the_trusted_facts_nor_the_relations() {
         .with_gate(Arc::new(Scripted::new([])))
         .with_home(root.join("home"))
         .with_sandbox(Sandbox::Guard(guard));
+    // The control: the same command writes the world, so a refusal below is the guard's.
+    let o = bash(&mut cx, "bash src/forge.sh src/control.txt");
+    assert!(!o.is_error, "{o:?}");
+    assert_eq!(text(&world.join("src/control.txt")), "forged\n");
     for j in [&facts, &relations] {
         let o = bash(&mut cx, &format!("bash src/forge.sh {}", j.display()));
         assert!(o.is_error, "{o:?}");

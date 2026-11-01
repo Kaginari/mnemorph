@@ -260,7 +260,7 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 | the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/`; the root's toolchain directories (`.cargo/`, `.claude/`) are its zone's by its doc | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
 | a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
 | the **proving ground** `.mnemorph/dark-elf/` | the Dark Elf | its own gate (self-gated) |
-| the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the map of neighbouring worlds) | Rimuru | its own gate |
+| the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the copy of the relations to neighbouring worlds the human stated) | Rimuru | its own gate |
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
