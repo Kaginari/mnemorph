@@ -21,7 +21,7 @@ const T0: i64 = 1_793_000_000;
 
 struct World {
     _dir: tempfile::TempDir,
-    world: PathBuf,
+    root: PathBuf,
     state: PathBuf,
     /// The next run's start.
     at: i64,
@@ -62,7 +62,7 @@ impl World {
         creatures::record_human_in(Some(&state), &world, rows).unwrap();
         World {
             _dir: dir,
-            world,
+            root: world,
             state,
             at: T0,
             n: 0,
@@ -76,7 +76,7 @@ impl World {
         let run = format!("{body}-{}", self.n);
         let ts = self.at;
         self.at += HOUR;
-        Journal::<UsageRow>::chained(state_file_in(&self.state, &self.world, "usage"))
+        Journal::<UsageRow>::chained(state_file_in(&self.state, &self.root, "usage"))
             .append(&UsageRow {
                 ts: Timestamp(ts),
                 session: "s".into(),
@@ -96,7 +96,7 @@ impl World {
                 purpose: None,
             })
             .unwrap();
-        verdicts::journal_at(state_file_in(&self.state, &self.world, "gate"))
+        verdicts::journal_at(state_file_in(&self.state, &self.root, "gate"))
             .append(&VerdictRow {
                 ts: Timestamp(ts + 600),
                 body: body.into(),
@@ -124,21 +124,21 @@ impl World {
     }
 
     fn survey(&self) -> ascension::Survey {
-        ascension::survey_in(&self.world, &self.state).unwrap()
+        ascension::survey_in(&self.root, &self.state).unwrap()
     }
 
     fn roster(&self) -> Vec<Row> {
-        creatures::rows_in(Some(&self.state), &self.world)
+        creatures::rows_in(Some(&self.state), &self.root)
             .unwrap()
             .unwrap()
     }
 
     /// The race the trusted view runs `name` as.
     fn runs_as(&self, name: &str) -> mnemorph_world::races::Race {
-        let cards = mnemorph_world::Roster::cards(&self.world);
+        let cards = mnemorph_world::Roster::cards(&self.root);
         let view = creatures::trusted(
             cards,
-            &creatures::witnessed_in(Some(&self.state), &self.world),
+            &creatures::witnessed_in(Some(&self.state), &self.root),
         );
         view.creatures[name].race
     }
@@ -184,7 +184,7 @@ fn scenario(w: &mut World) -> Vec<Seen> {
     assert_eq!(w.roster(), before);
     assert_eq!(w.runs_as("sly").name(), "slime");
     // The human applies it.
-    ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Rise, &rise.id).unwrap();
+    ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, &rise.id).unwrap();
     let last = w.roster().pop().unwrap();
     assert_eq!(
         (
@@ -230,7 +230,7 @@ fn scenario(w: &mut World) -> Vec<Seen> {
         w.roster().last().map(|r| r.race.clone()).as_deref(),
         Some("named-slime")
     );
-    ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Fall, &fall.id).unwrap();
+    ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Fall, &fall.id).unwrap();
     points.push(seen(w));
     w.runs("mud", "slime", &pass(2));
     points.push(seen(w));
@@ -251,7 +251,7 @@ fn replaying_the_journals_and_the_witness_reproduces_every_rise_and_fall() {
     let mut w = World::new();
     let points = scenario(&mut w);
     // Every rise and fall row recomputes from the journals and the rows before it.
-    let again = ascension::replay_in(&w.world, &w.state).unwrap();
+    let again = ascension::replay_in(&w.root, &w.state).unwrap();
     let moves: Vec<(Act, &str, &str)> = again
         .iter()
         .map(|r| (r.act, r.creature.as_str(), r.to.as_str()))
@@ -265,7 +265,7 @@ fn replaying_the_journals_and_the_witness_reproduces_every_rise_and_fall() {
     );
     // From the start: at every point the human saw, the journals as they stand now give the
     // same proposals.
-    let rows = mnemorph_world::reports::fold_in(&w.world, &w.state)
+    let rows = mnemorph_world::reports::fold_in(&w.root, &w.state)
         .unwrap()
         .rows;
     let roster = w.roster();
@@ -281,11 +281,11 @@ fn replaying_the_journals_and_the_witness_reproduces_every_rise_and_fall() {
     // The same record, lived again in another state directory with the same applies: the same
     // proposals at the same points, and the same rows.
     let mut twin = World::new();
-    twin.world.clone_from(&w.world);
+    twin.root.clone_from(&w.root);
     let _ = std::fs::remove_dir_all(&twin.state);
     std::fs::create_dir_all(&twin.state).unwrap();
-    let adopt = creatures::adoption_in(Some(&twin.state), &twin.world);
-    creatures::record_human_in(Some(&twin.state), &twin.world, adopt).unwrap();
+    let adopt = creatures::adoption_in(Some(&twin.state), &twin.root);
+    creatures::record_human_in(Some(&twin.state), &twin.root, adopt).unwrap();
     assert_eq!(scenario(&mut twin), points);
     let a: Vec<Row> = w.roster().iter().map(kept).collect();
     let b: Vec<Row> = twin.roster().iter().map(kept).collect();
@@ -298,24 +298,24 @@ fn a_tampered_journal_or_report_ledger_proposes_nothing() {
     w.runs("sly", "slime", &[true; 22]);
     assert!(w.survey().of("sly").is_some());
     // The report ledger kept beside the journals, edited: nothing is proposed beside it.
-    let (_, kept) = mnemorph_world::reports::record_in(&w.world, &w.state).unwrap();
+    let (_, kept) = mnemorph_world::reports::record_in(&w.root, &w.state).unwrap();
     let text = std::fs::read_to_string(&kept).unwrap();
     std::fs::write(
         &kept,
         text.replacen("\"gate\":\"pass\"", "\"gate\":\"fail\"", 1),
     )
     .unwrap();
-    let e = ascension::survey_in(&w.world, &w.state).unwrap_err();
+    let e = ascension::survey_in(&w.root, &w.state).unwrap_err();
     assert!(e.contains("report ledger's chain is broken"), "{e}");
-    let e = ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Rise, "x").unwrap_err();
+    let e = ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, "x").unwrap_err();
     assert!(e.contains("report ledger"), "{e}");
-    mnemorph_world::reports::record_in(&w.world, &w.state).unwrap();
+    mnemorph_world::reports::record_in(&w.root, &w.state).unwrap();
     assert!(w.survey().of("sly").is_some(), "rebuilt from the journals");
     // A gate verdict edited in its journal: the fold is unavailable, and so is every proposal.
-    let gate = state_file_in(&w.state, &w.world, "gate");
+    let gate = state_file_in(&w.state, &w.root, "gate");
     let text = std::fs::read_to_string(&gate).unwrap();
     std::fs::write(&gate, text.replacen("\"PASS\"", "\"FAIL\"", 1)).unwrap();
-    let e = ascension::survey_in(&w.world, &w.state).unwrap_err();
+    let e = ascension::survey_in(&w.root, &w.state).unwrap_err();
     assert!(e.contains("the gate chain is broken"), "{e}");
     assert_eq!(w.roster().len(), 3, "nothing was written");
 }
@@ -326,23 +326,23 @@ fn an_apply_is_held_to_the_proposal_shown_and_to_a_state_directory_outside_the_w
     w.runs("sly", "slime", &[true; 22]);
     let p = w.survey().of("sly").cloned().unwrap();
     // A move the law does not propose, or an id that moved, writes nothing.
-    let e = ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Fall, &p.id).unwrap_err();
+    let e = ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Fall, &p.id).unwrap_err();
     assert!(e.contains("proposes a rise for sly, not a fall"), "{e}");
-    let e = ascension::apply_in(Some(&w.state), &w.world, "mud", Move::Rise, &p.id).unwrap_err();
+    let e = ascension::apply_in(Some(&w.state), &w.root, "mud", Move::Rise, &p.id).unwrap_err();
     assert!(e.contains("no rise for mud"), "{e}");
-    let e = ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Rise, "000000000000")
+    let e = ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, "000000000000")
         .unwrap_err();
     assert!(e.contains("the proposal moved since it was shown"), "{e}");
-    let e = ascension::apply_in(None, &w.world, "sly", Move::Rise, &p.id).unwrap_err();
+    let e = ascension::apply_in(None, &w.root, "sly", Move::Rise, &p.id).unwrap_err();
     assert!(e.contains("no home"), "{e}");
-    let inside = w.world.join(".mnemorph/tmp/state");
-    let e = ascension::apply_in(Some(&inside), &w.world, "sly", Move::Rise, &p.id).unwrap_err();
+    let inside = w.root.join(".mnemorph/tmp/state");
+    let e = ascension::apply_in(Some(&inside), &w.root, "sly", Move::Rise, &p.id).unwrap_err();
     assert!(e.contains("lies inside the world"), "{e}");
     assert!(!inside.exists());
     assert_eq!(w.roster().len(), 3, "nothing was written");
     // The row is chained: it walks whole with the rest.
-    ascension::apply_in(Some(&w.state), &w.world, "sly", Move::Rise, &p.id).unwrap();
-    let at = creatures::path_in(&w.state, &w.world);
+    ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, &p.id).unwrap();
+    let at = creatures::path_in(&w.state, &w.root);
     let report = mnemorph_ledger::chain::verify_against(&at, None).unwrap();
     assert!(report.holds() && report.rows == 4, "{report}");
     assert_eq!(
