@@ -695,8 +695,9 @@ mod tests {
         let leftover = "open-0123456789abcdef.html";
         for dir in [&state, &snapped] {
             std::fs::write(dir.join(leftover), "KEY").unwrap();
-            // Not a launcher's name, or not a regular file: kept.
-            std::fs::write(dir.join("open-0123456789ABCDEF.html"), "x").unwrap();
+            // Not a launcher's name (case-distinct on a case-folding disk too), or not a regular
+            // file: kept.
+            std::fs::write(dir.join("open-ABCDEF0123456789.html"), "x").unwrap();
             std::fs::write(dir.join("open-0123.html"), "x").unwrap();
             std::fs::write(dir.join("board.ctl"), "x").unwrap();
             std::fs::create_dir(dir.join("open-fedcba9876543210.html")).unwrap();
@@ -721,7 +722,7 @@ mod tests {
         for dir in [&state, &snapped] {
             assert!(!dir.join(leftover).exists());
             for kept in [
-                "open-0123456789ABCDEF.html",
+                "open-ABCDEF0123456789.html",
                 "open-0123.html",
                 "board.ctl",
                 "open-fedcba9876543210.html",
