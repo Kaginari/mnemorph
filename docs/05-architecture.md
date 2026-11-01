@@ -1402,12 +1402,9 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `guts` | each act's guts classes | every session and commission, after each act |
 | `answers` | the human's answers to the gate given on the board, with their connection, digests and timing | the board's bridge |
 | `minds` | the Minds' witness: adoptions, owners, retirements | the human's `mnemorphd mind` (adopt, retire, unretire) |
-<<<<<<< HEAD
+| `verify` | the verify pins: the lines each creature's end gate may run | the human's `mnemorphd verify pin` and the terminal app's first-run prompt; the harness, for an Orc's `verify` tool and for relief |
 | `facts` | the trusted territory facts | the harness (a body's `@U territory`, a parent's labels, an Orc's settle, the one import); the human's `mnemorphd onto settle` and the board's settle |
 | `relations` | the relations this world states, and its inverses | the human's `mnemorphd onto relate`, `unrelate`, `inverse` |
-=======
-| `verify` | the verify pins: the lines each creature's end gate may run | the human's `mnemorphd verify pin` and the terminal app's first-run prompt; the harness, for an Orc's `verify` tool and for relief |
->>>>>>> origin/main
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 
