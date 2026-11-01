@@ -173,14 +173,13 @@ fn a_directory_or_a_fifo_is_refused() {
     fs::set_permissions(h.path().join("dir.key"), fs::Permissions::from_mode(0o600)).unwrap();
     let e = hole(&h, &provider(None, Some("~/dir.key")), &[]);
     assert!(e.contains("not a regular file"), "{e}");
-    rustix::fs::mknodat(
-        rustix::fs::CWD,
-        h.path().join("fifo.key"),
-        rustix::fs::FileType::Fifo,
-        rustix::fs::Mode::from_raw_mode(0o600),
-        0,
-    )
-    .unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg("-m")
+        .arg("600")
+        .arg(h.path().join("fifo.key"))
+        .status()
+        .unwrap();
+    assert!(made.success());
     let e = hole(&h, &provider(None, Some("~/fifo.key")), &[]);
     assert!(e.contains("not a regular file"), "{e}");
 }
