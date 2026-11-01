@@ -264,7 +264,12 @@ fn unix_sockets_are_closed_too() {
         sock.display()
     );
     let (ok, out) = g.run(&g.policy(false), &script);
-    assert!(!ok && !out.contains("connected"), "{out}");
+    // A line of its own: Python 3.13+ quotes the failing source, `print("connected")` included,
+    // in its traceback.
+    assert!(
+        !ok && !out.lines().any(|l| l.trim() == "connected"),
+        "{out}"
+    );
 }
 
 /// Landlock already keeps a sandboxed process out of `/proc` of processes outside its domain;
