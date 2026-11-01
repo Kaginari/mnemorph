@@ -75,6 +75,7 @@ export default withMermaid(
           text: 'Reference',
           items: [
             { text: 'Lessons from isekai', link: '/lessons' },
+            { text: 'Releasing', link: '/releasing' },
             { text: 'Race cards brief', link: '/race-cards-prompt' },
             { text: 'Research: DIKWP-MESH', link: '/research/dikwp-mesh' },
           ],

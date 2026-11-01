@@ -425,6 +425,8 @@ plainly where it does not.
 ### M14 — 1.0 · S
 
 - Signed release binaries, npm distribution, installer, changelog, the decks.
+- The release path: the release-candidate smoke test, `install.sh`, the tag-only release
+  workflow that drafts and never publishes, `CHANGELOG.md` ([releasing](releasing.md)).
 
 **Exit:** a fresh machine installs and runs Mnemorph in under two minutes.
 

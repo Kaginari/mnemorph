@@ -10,7 +10,7 @@ check:
     #!/usr/bin/env bash
     set -euo pipefail
     before=$(git status --porcelain --untracked-files=all)
-    just rust law ts layers docs workflows bench
+    just rust law ts layers docs workflows bench install-test
     after=$(git status --porcelain --untracked-files=all)
     if [ "$before" != "$after" ]; then
         echo "the check changed the tree:"
@@ -62,6 +62,25 @@ layers:
 bench:
     PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s bench -p 'test_*.py' -q
     PYTHONDONTWRITEBYTECODE=1 python3 bench/run.py --check
+
+# The installer, offline: a fake release served on loopback, each supported machine, the timed
+# fresh install, and a tampered, missing or incomplete checksum refused.
+install-test:
+    bash tools/test-install.sh
+
+# The release-candidate smoke test: the release binaries (built here, or the directory or
+# archive given), in a fresh HOME with realistic dotfiles, against a scripted provider. The real
+# HOME is never touched.
+rc-smoke artifact="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    artifact='{{artifact}}'
+    if [ -z "$artifact" ]; then
+        cargo build --release --locked -p mnemorph-tui -p mnemorphd -p mnemorph-sandbox --bins
+        artifact=${CARGO_TARGET_DIR:-target}/release
+    fi
+    version=$(awk -F'"' '/^version *=/{print $2; exit}' Cargo.toml)
+    bash tools/rc-smoke.sh "$artifact" "$version"
 
 # The GitHub workflows parse and hold together.
 workflows:

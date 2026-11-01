@@ -43,6 +43,7 @@ review a canvas change like a code change.
 | 9 | [Ontology](09-ontology.md) | who owns each path, facts with who said them, relations between worlds |
 | 10 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
 | — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
+| — | [Releasing](releasing.md) | how a version is tagged, built, smoke-tested, drafted and published |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 | — | [Research: DIKWP-MESH](research/dikwp-mesh.md) | the mathematics behind the ontology's outer layer |
 
