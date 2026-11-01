@@ -117,14 +117,18 @@ impl Folded {
     pub fn of(&self, creature: &str, race: Race) -> Inputs {
         self.inputs
             .iter()
-            .filter(|((c, r), _)| {
-                c == creature && Race::from_name(r).is_some_and(|r| r.base() == race.base())
-            })
+            .filter(|((c, r), _)| c == creature && counts_as(r, race))
             .fold(Inputs::default(), |mut acc, (_, i)| {
                 merge(&mut acc, i);
                 acc
             })
     }
+}
+
+/// Whether a record kept under the race `recorded` (as the usage witness names it) counts for a
+/// creature of `race`: the one place meters key by race.
+fn counts_as(recorded: &str, race: Race) -> bool {
+    Race::from_name(recorded).is_some_and(|r| r.base() == race.base())
 }
 
 /// `i` added to `acc`.
@@ -412,7 +416,7 @@ fn trusted<T: Send + Sync + 'static>(
         journal: journal(),
         why,
     };
-    let anchor = crate::chains::anchored_in(&state_file_in(state, world, "anchors"), name);
+    let anchor = crate::chains::anchor_under(state, world, name);
     let file = crate::regular::open(path).map_err(|e| unreadable(e.to_string()))?;
     let key = match &file {
         None => Key::Absent(anchor.clone()),

@@ -1,12 +1,20 @@
 //! Relations between worlds: the registry of the worlds on this machine, the sightings the
 //! harness records when a body reads a manifest naming another world, the named-twice proposal
-//! with its synonym check and its expiry, the dimension manifest only the human's yes writes, and
-//! the gluing of two worlds' manifests on the pair they share.
+//! with its synonym check and its expiry, the relations only the human's yes states, and the
+//! gluing of two worlds' relations on the pair they share.
+//!
+//! The relations a world states are kept outside it, beside its sightings, at
+//! `$XDG_STATE_HOME/mnemorph/dimension/<world-id>/relations.jsonl`: chained by hash, anchored as
+//! `relations` with the world's other chained journals ([`crate::chains`]), written only by the
+//! human's `mnemorphd onto relate`, `unrelate` and `inverse`. The world's `.mnemorph/dimension.toml`
+//! is a copy written after each, for readers: what it states beyond them is a proposal, flagged
+//! `untrusted-relation`, never a relation.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
-use mnemorph_ledger::{Journal, Timestamp};
+use mnemorph_ledger::chain;
+use mnemorph_ledger::{Build, Journal, Timestamp};
 use mnemorph_wire::fnv64a;
 use serde::{Deserialize, Serialize};
 
@@ -162,6 +170,105 @@ pub fn sightings_file(registry: &Path, world: &Path) -> PathBuf {
         .join("dimension")
         .join(world_id(&world))
         .join("sightings.jsonl")
+}
+
+/// The relations' trusted journal's name among the world's chains.
+pub const RELATIONS: &str = "relations";
+
+/// Where the relations `world` states are kept, under the human's state directory `state`:
+/// `<state>/mnemorph/dimension/<world-id>/relations.jsonl`, beside its sightings, the world named
+/// by its real path.
+#[must_use]
+pub fn relations_in(state: &Path, world: &Path) -> PathBuf {
+    let world = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    state
+        .join("mnemorph/dimension")
+        .join(world_id(&world))
+        .join("relations.jsonl")
+}
+
+/// [`relations_in`], beside the registry at `registry` (`<state>/mnemorph/worlds.jsonl`).
+#[must_use]
+pub fn relations_file(registry: &Path, world: &Path) -> PathBuf {
+    relations_in(&state_of(registry), world)
+}
+
+/// The human's state directory the registry at `registry` lives under.
+fn state_of(registry: &Path) -> PathBuf {
+    registry
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+/// What a row of the relations does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Act {
+    /// A relation stated: the human's yes.
+    Relate,
+    /// A relation revoked.
+    Unrelate,
+    /// A type's inverse declared, or undeclared.
+    Inverse,
+}
+
+/// One row of a world's trusted relations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelationRow {
+    /// When it was written.
+    pub ts: Timestamp,
+    /// What it does.
+    pub act: Act,
+    /// The other world's canonical path; empty for an inverse.
+    #[serde(default)]
+    pub world: String,
+    /// The type.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// The other world's remote, normalised.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    /// The inverse declared; `None` undeclares it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inverse: Option<String>,
+    /// Who wrote it: the human.
+    pub by: String,
+    /// The build that wrote it.
+    #[serde(default)]
+    pub build: Build,
+}
+
+/// The relations a world states, folded from its rows in order.
+#[must_use]
+pub fn fold_relations(rows: &[RelationRow]) -> Manifest {
+    let mut m = Manifest::default();
+    for r in rows {
+        match r.act {
+            Act::Relate => {
+                if !m.states(&r.world, &r.kind) {
+                    m.relations.push(Relation {
+                        world: r.world.clone(),
+                        kind: r.kind.clone(),
+                        remote: r.remote.clone(),
+                    });
+                }
+            }
+            Act::Unrelate => m
+                .relations
+                .retain(|x| !(x.world == r.world && x.kind == r.kind)),
+            Act::Inverse => match &r.inverse {
+                Some(i) => {
+                    m.inverse.insert(r.kind.clone(), i.clone());
+                }
+                None => {
+                    m.inverse.remove(&r.kind);
+                }
+            },
+        }
+    }
+    m
 }
 
 /// Whether `rel` is tracked by git in `root` and unchanged from HEAD: a manifest a body only
@@ -810,20 +917,23 @@ pub fn relation_findings(
     world: &Path,
     dimension: bool,
 ) -> Result<(Vec<Finding>, Vec<Glue>), String> {
-    let known = registry().map(|r| known(&r)).unwrap_or_default();
+    let registry = registry();
+    let known = registry.as_deref().map(known).unwrap_or_default();
     let now = known
         .iter()
         .find(|k| k.world == world)
         .map_or(0, |k| k.sessions);
-    let manifest = Manifest::load(world)?;
-    let sightings = registry()
-        .map(|r| load_sightings(&r, world))
+    let manifest = Manifest::trusted(registry.as_deref(), world)?;
+    let sightings = registry
+        .as_deref()
+        .map(|r| load_sightings(r, world))
         .unwrap_or_default();
     let mut findings = stale_findings(&proposals(&sightings, &manifest, now));
+    findings.extend(untrusted_relations(world, &manifest));
     if !dimension {
         return Ok((findings, Vec::new()));
     }
-    let (glues, f) = glue(world, &known)?;
+    let (glues, f) = glue(world, &known, registry.as_deref())?;
     findings.extend(f);
     Ok((findings, glues))
 }
@@ -862,13 +972,97 @@ pub struct Manifest {
     pub relations: Vec<Relation>,
 }
 
+/// An `untrusted-relation` finding for each relation, or inverse, the in-world copy states that
+/// the trusted relations do not: a proposal, the human's `onto relate` (or `onto inverse`) its
+/// yes. A copy that does not read proposes nothing.
+#[must_use]
+pub fn untrusted_relations(world: &Path, trusted: &Manifest) -> Vec<Finding> {
+    let Ok(said) = Manifest::read_file(world) else {
+        return Vec::new();
+    };
+    let finding = |message: String| Finding {
+        code: "untrusted-relation",
+        severity: Severity::Medium,
+        at: MANIFEST.into(),
+        paths: vec![MANIFEST.into()],
+        creatures: vec![crate::queue::THRONE.into()],
+        message,
+    };
+    let mut out: Vec<Finding> = said
+        .relations
+        .iter()
+        .filter(|r| !trusted.states(&r.world, &r.kind))
+        .map(|r| {
+            finding(format!(
+                "`{}` towards {} is stated only in the in-world {MANIFEST}, never trusted: \
+                 `mnemorphd onto relate {} {}` states it",
+                r.kind,
+                r.world.escape_debug(),
+                r.world.escape_debug(),
+                r.kind
+            ))
+        })
+        .collect();
+    out.extend(
+        said.inverse
+            .iter()
+            .filter(|(k, v)| trusted.inverse.get(*k) != Some(*v))
+            .map(|(k, v)| {
+                finding(format!(
+                    "the inverse `{k}` ↔ `{v}` is declared only in the in-world {MANIFEST}, never \
+                     trusted: `mnemorphd onto inverse {k} {v}` declares it"
+                ))
+            }),
+    );
+    out
+}
+
 impl Manifest {
-    /// The manifest of the world at `world`; an absent one is empty.
+    /// The relations the world at `world` states, as the human's state directory keeps them; none
+    /// with no home.
+    ///
+    /// # Errors
+    ///
+    /// They cannot be read, or their chain does not walk whole.
+    pub fn load(world: &Path) -> Result<Manifest, String> {
+        Manifest::trusted(registry().as_deref(), world)
+    }
+
+    /// [`Manifest::load`], beside the registry at `registry` (`None`: no home, nothing stated).
+    ///
+    /// # Errors
+    ///
+    /// As [`Manifest::load`].
+    pub fn trusted(registry: Option<&Path>, world: &Path) -> Result<Manifest, String> {
+        let Some(registry) = registry else {
+            return Ok(Manifest::default());
+        };
+        let path = relations_file(registry, world);
+        crate::pins::outside_as(world, &path, "the relations are")?;
+        let anchor = crate::chains::anchor_under(&state_of(registry), world, RELATIONS);
+        let report = chain::verify_against(&path, anchor.as_ref())
+            .map_err(|e| format!("the relations cannot be read: {e}"))?;
+        if !report.holds() {
+            return Err(format!("the relations do not verify: {report}"));
+        }
+        let back = Journal::<RelationRow>::chained(&path)
+            .read()
+            .map_err(|e| format!("the relations cannot be read: {e}"))?;
+        if let Some(line) = back.skipped.first() {
+            return Err(format!(
+                "the relations do not verify: line {line} does not read"
+            ));
+        }
+        Ok(fold_relations(&back.rows))
+    }
+
+    /// The in-world copy of the world at `world`, `.mnemorph/dimension.toml`: shown and proposed
+    /// from, never trusted. An absent one is empty.
     ///
     /// # Errors
     ///
     /// It exists and does not read.
-    pub fn load(world: &Path) -> Result<Manifest, String> {
+    pub fn read_file(world: &Path) -> Result<Manifest, String> {
         let path = world.join(MANIFEST);
         let meta = match std::fs::metadata(&path) {
             Ok(m) => m,
@@ -901,18 +1095,15 @@ impl Manifest {
         Ok(m)
     }
 
-    /// Write it to the world at `world`.
+    /// Write it to the world at `world` as its in-world copy, through no link.
     ///
     /// # Errors
     ///
     /// It cannot be written.
     pub fn save(&self, world: &Path) -> Result<(), String> {
         let text = toml::to_string(self).map_err(|e| e.to_string())?;
-        let path = world.join(MANIFEST);
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(&path, text).map_err(|e| format!("{MANIFEST}: {e}"))
+        crate::beneath::write(world, MANIFEST, text.as_bytes(), false)
+            .map_err(|e| format!("{MANIFEST}: {e}"))
     }
 
     /// Whether it states `kind` towards `world`.
@@ -1167,44 +1358,143 @@ pub fn stale_findings(proposals: &[Proposal]) -> Vec<Finding> {
         .collect()
 }
 
-/// Write the human's yes: `kind` towards the world at `other` joins the manifest of `world`.
+/// The relations are written by the human alone: refused inside a body's command
+/// (`MNEMORPH_BODY` is set there) and under any of the harness's processes, whatever the
+/// environment says ([`crate::pins::under_harness`]); the sandbox keeps the state directory out
+/// of every command's reach besides.
+fn refuse_a_body() -> Result<(), String> {
+    if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
+        return Err(format!(
+            "{} runs this: relations between worlds are the human's to state",
+            body.to_string_lossy()
+        ));
+    }
+    if let Some(harness) = crate::pins::under_harness()? {
+        return Err(format!(
+            "this runs under {harness}: relations between worlds are the human's to state, never \
+             a command a session started"
+        ));
+    }
+    Ok(())
+}
+
+/// `row` appended to the relations of `world` kept beside `registry`, their in-world copy then
+/// written again from them. A copy that cannot be written is said on stderr: it grants nothing.
+fn write_row(registry: &Path, world: &Path, mut row: RelationRow) -> Result<(), String> {
+    refuse_a_body()?;
+    row.build = Build::this();
+    Journal::<RelationRow>::chained(relations_file(registry, world))
+        .append(&row)
+        .map_err(|e| format!("the relations cannot be written: {e}"))?;
+    if let Err(e) = Manifest::trusted(Some(registry), world).and_then(|m| m.save(world)) {
+        eprintln!("mnemorph: the in-world copy of the relations could not be written: {e}");
+    }
+    Ok(())
+}
+
+fn row(act: Act, world: String, kind: &str) -> RelationRow {
+    RelationRow {
+        ts: Timestamp::now(),
+        act,
+        world,
+        kind: kind.to_owned(),
+        remote: None,
+        inverse: None,
+        by: crate::queue::HUMAN.to_owned(),
+        build: Build::default(),
+    }
+}
+
+/// The registry, or why there is none.
+fn home() -> Result<PathBuf, String> {
+    registry().ok_or_else(|| {
+        "no home: the relations are kept under the human's state directory".to_owned()
+    })
+}
+
+/// Write the human's yes: `kind` towards the world at `other` joins the relations of `world`.
 /// Whether it was new.
 ///
 /// # Errors
 ///
-/// The manifest does not read or cannot be written.
+/// A body asks, there is no home, or the relations do not read or cannot be written.
 pub fn relate(world: &Path, other: &Path, kind: &str) -> Result<bool, String> {
+    relate_at(&home()?, world, other, kind)
+}
+
+/// [`relate`], beside the registry at `registry`.
+///
+/// # Errors
+///
+/// As [`relate`].
+pub fn relate_at(registry: &Path, world: &Path, other: &Path, kind: &str) -> Result<bool, String> {
+    refuse_a_body()?;
     let other = other.canonicalize().unwrap_or_else(|_| other.to_path_buf());
-    let mut m = Manifest::load(world)?;
     let key = other.display().to_string();
-    if m.states(&key, kind) {
+    if Manifest::trusted(Some(registry), world)?.states(&key, kind) {
         return Ok(false);
     }
-    m.relations.push(Relation {
-        world: key,
-        kind: kind.to_owned(),
-        remote: remote_of(&other),
-    });
-    m.save(world)?;
+    let mut r = row(Act::Relate, key, kind);
+    r.remote = remote_of(&other);
+    write_row(registry, world, r)?;
     Ok(true)
 }
 
-/// Revoke `kind` towards the world at `other` from the manifest of `world`. Whether it was
+/// Revoke `kind` towards the world at `other` from the relations of `world`. Whether it was
 /// stated.
 ///
 /// # Errors
 ///
-/// The manifest does not read or cannot be written.
+/// A body asks, there is no home, or the relations do not read or cannot be written.
 pub fn unrelate(world: &Path, other: &Path, kind: &str) -> Result<bool, String> {
+    unrelate_at(&home()?, world, other, kind)
+}
+
+/// [`unrelate`], beside the registry at `registry`.
+///
+/// # Errors
+///
+/// As [`unrelate`].
+pub fn unrelate_at(
+    registry: &Path,
+    world: &Path,
+    other: &Path,
+    kind: &str,
+) -> Result<bool, String> {
+    refuse_a_body()?;
     let other = other.canonicalize().unwrap_or_else(|_| other.to_path_buf());
     let key = other.display().to_string();
-    let mut m = Manifest::load(world)?;
-    let before = m.relations.len();
-    m.relations.retain(|r| !(r.world == key && r.kind == kind));
-    if m.relations.len() == before {
+    if !Manifest::trusted(Some(registry), world)?.states(&key, kind) {
         return Ok(false);
     }
-    m.save(world)?;
+    write_row(registry, world, row(Act::Unrelate, key, kind))?;
+    Ok(true)
+}
+
+/// Declare `inverse` as the inverse of `kind` in the relations of `world`, or with `None` take the
+/// declaration back. Whether anything changed.
+///
+/// # Errors
+///
+/// A body asks, or the relations do not read or cannot be written.
+pub fn declare_inverse_at(
+    registry: &Path,
+    world: &Path,
+    kind: &str,
+    inverse: Option<&str>,
+) -> Result<bool, String> {
+    refuse_a_body()?;
+    if Manifest::trusted(Some(registry), world)?
+        .inverse
+        .get(kind)
+        .map(String::as_str)
+        == inverse
+    {
+        return Ok(false);
+    }
+    let mut r = row(Act::Inverse, String::new(), kind);
+    r.inverse = inverse.map(str::to_owned);
+    write_row(registry, world, r)?;
     Ok(true)
 }
 
@@ -1232,17 +1522,22 @@ impl Glue {
     }
 }
 
-/// Glue the manifest of `world` with each neighbour's — every world its manifest names, and every
-/// world `known` whose manifest names it — reading the neighbours' manifests and nothing else of
-/// theirs, never writing them. The glues, and a `dimension-obstruction` finding for each pair that
-/// cannot hold.
+/// Glue the relations of `world` with each neighbour's — every world it states a relation
+/// towards, and every world `known` that states one towards it — reading the neighbours'
+/// relations as the state directory beside `registry` keeps them and nothing else of theirs,
+/// never writing them. The glues, and a `dimension-obstruction` finding for each pair that cannot
+/// hold.
 ///
 /// # Errors
 ///
-/// This world's manifest does not read.
-pub fn glue(world: &Path, known: &[Known]) -> Result<(Vec<Glue>, Vec<Finding>), String> {
+/// This world's relations do not read.
+pub fn glue(
+    world: &Path,
+    known: &[Known],
+    registry: Option<&Path>,
+) -> Result<(Vec<Glue>, Vec<Finding>), String> {
     let root = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
-    let ours = Manifest::load(&root)?;
+    let ours = Manifest::trusted(registry, &root)?;
     let me = root.display().to_string();
     let my_remote = known
         .iter()
@@ -1260,9 +1555,9 @@ pub fn glue(world: &Path, known: &[Known]) -> Result<(Vec<Glue>, Vec<Finding>), 
     let mut findings = Vec::new();
     for n in neighbours {
         let path = PathBuf::from(&n);
-        // A neighbour's manifest is untrusted: one that does not read is reported and read as
-        // stating nothing, and never fails this world's own check.
-        let theirs = match Manifest::load(&path) {
+        // A neighbour's relations that do not read are reported and read as stating nothing,
+        // and never fail this world's own check.
+        let theirs = match Manifest::trusted(registry, &path) {
             Ok(m) => m,
             Err(e) => {
                 findings.push(Finding {

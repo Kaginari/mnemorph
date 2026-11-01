@@ -2074,8 +2074,10 @@ async fn a_throne_with_lanes_is_warned_not_ended_by_failed_acts() {
     assert!(told.contains("[escalate]"), "{told}");
 }
 
-/// An Orc's verdict settles a contested fact it names: `@V settle #<id>` in its report. Recency
-/// never does; a body that is no Orc cannot.
+/// An Orc's verdict settles a contested fact it names: `@V settle #<id>` in its report, and only on
+/// a trusted end-gate pass, on a line the human pinned, of a landing on the fact's path — the
+/// roster that names it an Orc is the world's, a commit's or a clone's. Recency never settles; a
+/// body that is no Orc cannot.
 #[tokio::test]
 async fn an_orcs_verdict_settles_a_contested_fact() {
     use mnemorph_loop::world::Facts;
@@ -2102,18 +2104,48 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
     };
     let far = far.clone();
     Facts::record(&w.0, &elsewhere).unwrap();
-    let model = Arc::new(ScriptedModel::new([
-        order("c1", "elf-e"),
-        order("c2", "orc-o"),
-        ScriptedModel::text(&format!(
-            "@S DONE\n@V settle #{}\n@V settle #{far}\n@E",
-            ids[0]
-        )),
-        ScriptedModel::text("@S DONE\n@E"),
-        ScriptedModel::text("Done."),
-    ]));
-    let mut run = w.rimuru(model.clone());
-    run.ask("settle the build command", &mut |_| {}).await;
+    let settle = || {
+        Arc::new(ScriptedModel::new([
+            order("c1", "elf-e"),
+            order("c2", "orc-o"),
+            ScriptedModel::text(&format!(
+                "@S DONE\n@V settle #{}\n@V settle #{far}\n@E",
+                ids[0]
+            )),
+            ScriptedModel::text("@S DONE\n@E"),
+            ScriptedModel::text("Done."),
+        ]))
+    };
+    let pass = |verified_by: &str, unchecked: bool| mnemorph_world::verdicts::VerdictRow {
+        ts: mnemorph_world::ledger::Timestamp::now(),
+        body: "slime-s".into(),
+        verdict: "PASS".into(),
+        changed: vec!["src/lib.rs".into()],
+        failures: vec![],
+        unverified: vec![],
+        unchecked,
+        verified_by: vec![verified_by.into()],
+        entry: None,
+        build: mnemorph_world::ledger::Build::default(),
+        run: None,
+    };
+    // The gate keys its verdicts by the world as the session names it: its real path (`/private/var`
+    // on macOS, for a `/var` temporary directory).
+    let real = w.0.canonicalize().unwrap();
+    // A pass on the Orc's own pin, and one that checked nothing, prove nothing.
+    mnemorph_world::verdicts::record(&real, pass("orc-o's pin", false)).unwrap();
+    mnemorph_world::verdicts::record(&real, pass("the human's pin", true)).unwrap();
+    w.rimuru(settle())
+        .ask("settle the build command", &mut |_| {})
+        .await;
+    assert!(
+        !Facts::load(&w.0).facts[&ids[0]].settled,
+        "no trusted pass on a human pin: the fact stays proposed"
+    );
+    mnemorph_world::verdicts::record(&real, pass("the human's pin", false)).unwrap();
+    w.rimuru(settle())
+        .ask("settle the build command", &mut |_| {})
+        .await;
     assert!(
         Facts::load(&w.0).facts[&ids[0]].settled,
         "the Orc's verdict settled it"

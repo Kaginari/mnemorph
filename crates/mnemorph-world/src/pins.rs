@@ -235,6 +235,17 @@ fn process(pid: u32) -> Result<(String, u32), String> {
 /// The state directory, refused when it lies inside `world`: a body writes the world, so pins
 /// kept there would be the body's.
 fn outside(world: &Path, at: &Path) -> Result<(), String> {
+    outside_as(world, at, "the verify pins are")
+}
+
+/// [`outside`] for any record the harness keeps under the state directory at `at`, named `what`
+/// (`the trusted facts are`): kept where no body writes, so none is read or written inside the
+/// world.
+///
+/// # Errors
+///
+/// `at` lies inside `world`.
+pub fn outside_as(world: &Path, at: &Path, what: &str) -> Result<(), String> {
     let real = |p: &Path| {
         // The nearest part that exists, made real, and the rest as written.
         let mut head = p.to_path_buf();
@@ -259,8 +270,8 @@ fn outside(world: &Path, at: &Path) -> Result<(), String> {
     };
     if real(at).starts_with(real(world)) {
         return Err(format!(
-            "the state directory ({}) lies inside the world: the verify pins are kept where no \
-             body writes, so none is read or written there",
+            "the state directory ({}) lies inside the world: {what} kept where no body writes, \
+             so none is read or written there",
             at.display()
         ));
     }

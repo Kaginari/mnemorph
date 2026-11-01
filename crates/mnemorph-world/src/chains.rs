@@ -16,6 +16,8 @@
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
 //!   ([`crate::minds::witness`]);
 //! - `verify`: the verify pins — the lines each creature's end gate may run ([`crate::pins`]);
+//! - `facts`: the trusted territory facts ([`crate::facts`]);
+//! - `relations`: the relations between worlds the human stated ([`crate::dimension`]);
 //! - `uses` and `revocations`: the Oni envelopes' uses and revocations, one pair for every world;
 //! - `kijin-<post>`: each Kijin post's witness, the trusted copy of its journal.
 //!
@@ -40,7 +42,7 @@ pub const USAGE_WITNESS: &str = "usage-witness";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
     /// Its name: `usage`, `value`, `evolution`, `gate`, `guts`, `answers`, `minds`, `verify`,
-    /// `uses`, `revocations` or `kijin-<post>`.
+    /// `facts`, `relations`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
     pub path: PathBuf,
@@ -84,6 +86,16 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
             path: state_file_in(state, real.as_deref().unwrap_or(world), kind),
         });
     }
+    // The trusted facts and relations name the world by its real path ([`crate::facts`],
+    // [`crate::dimension`]).
+    out.push(Chained {
+        name: crate::facts::KIND,
+        path: crate::facts::trusted_in(state, world),
+    });
+    out.push(Chained {
+        name: crate::dimension::RELATIONS,
+        path: crate::dimension::relations_in(state, world),
+    });
     let oni = state.join("mnemorph/oni");
     out.push(Chained {
         name: "uses",
@@ -95,7 +107,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     });
     // A post's witness is walked once kept, and for good once anchored: a witness removed whole
     // is then found against its anchor.
-    let anchors = state_file_in(state, world, "anchors");
+    let anchors = kept_in(state, world);
     for post in Post::ALL {
         let path = post_witness_in(state, world, post);
         let logged_too = || {
@@ -137,7 +149,15 @@ pub(crate) fn post_witness_in(state: &Path, world: &Path, post: Post) -> PathBuf
 /// `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl`; `None` with no home.
 #[must_use]
 pub fn kept_at(world: &Path) -> Option<PathBuf> {
-    crate::queue::state_file(world, "anchors")
+    Some(kept_in(&crate::queue::state_dir()?, world))
+}
+
+/// [`kept_at`], the human's state directory at `state`. The world is named by its real path, as
+/// the trusted facts and relations name it, so every spelling of it finds one set of anchors.
+#[must_use]
+pub fn kept_in(state: &Path, world: &Path) -> PathBuf {
+    let real = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    state_file_in(state, &real, "anchors")
 }
 
 /// One anchor, as the state directory keeps it.
@@ -214,10 +234,13 @@ pub fn anchor_with(world: &Path, name: &str, log: impl FnOnce() -> String) -> Op
     }
 }
 
-/// The newest head of the journal `name` anchored in `kept`, the anchors kept under the state
-/// directory alone: what a trusted reader holds a walk to.
-pub(crate) fn anchored_in(kept: &Path, name: &str) -> Option<Head> {
-    anchored(kept, name)
+/// The newest head the human's state directory `state` anchors for the journal `name` of `world`;
+/// `log.md` is never read for it.
+#[must_use]
+pub fn anchor_under(state: &Path, world: &Path, name: &str) -> Option<Head> {
+    // The state directory's alone: `log.md` is the world's, and a line forged there would hold a
+    // trusted journal to a head it never had.
+    anchored(&kept_in(state, world), name)
 }
 
 /// The newest head of the journal `name` anchored in `kept`.
@@ -537,6 +560,8 @@ mod tests {
                 "answers",
                 "minds",
                 "verify",
+                "facts",
+                "relations",
                 "uses",
                 "revocations"
             ]

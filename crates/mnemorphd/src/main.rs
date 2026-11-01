@@ -13,7 +13,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd onto check [--dimension] [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
        mnemorphd onto relations [--world <dir>]
-       mnemorphd onto relate|unrelate <other-world> <type> [--world <dir>]
+       mnemorphd onto relate|unrelate <other-world> <type> [--yes] [--world <dir>]
+       mnemorphd onto inverse <type> <inverse>|- [--yes] [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd housekeep --verify [--world <dir>]
        mnemorphd relief <name> [--apply] [--world <dir>]
@@ -60,11 +61,19 @@ that does not read. `--dimension` also glues this world's dimension manifest wit
 neighbour's — read, never written — and prints, after the findings, one `dimension` line per
 neighbour: what both state, and what each states alone.
 
-`onto relations` prints the relations the dimension manifest (`.mnemorph/dimension.toml`) states,
-then each proposal as a diff of it: a relation the harness sighted twice, by different bodies from
-different anchors, and a learned one unseen for 30 sessions. It writes nothing. `onto relate`
-is the human's yes: it writes the relation to the manifest; `onto unrelate` revokes it. A body
-never runs either.
+`onto settle` shows the fact and settles it on the human's word, after asking for `y` at the
+terminal (`/dev/tty`; piped input is refused, and there is no `--yes`), in the trusted facts
+under the human's state directory; the world's `.mnemorph/ontology/facts.jsonl` is only a copy of
+them, never read for trust. A body never runs it.
+
+`onto relations` prints the relations this world states — kept under the human's state
+directory, chained; `.mnemorph/dimension.toml` is only their copy — then what that copy states
+beyond them, untrusted, and each proposal as a diff: a relation the harness sighted twice, by
+different bodies from different anchors, and a learned one unseen for 30 sessions. It writes
+nothing. `onto relate` is the human's yes: it states the relation; `onto unrelate` revokes it;
+`onto inverse <type> <inverse>` declares a type's inverse, and `-` takes it back. Each shows what
+it writes and asks for `y` at the terminal (`/dev/tty`; piped input is refused), or `--yes` for
+a script the human runs. A body never runs them.
 
 `--resume` opens the session on a run that stopped — at a checkpoint, an interrupt, or a turn
 the process died in — rebuilt from its journal under `.mnemorph/instruments/loop/`; `last` is
@@ -674,18 +683,24 @@ fn onto(args: &[String]) -> ExitCode {
     let mut paths = Vec::new();
     let mut words = args.iter();
     let command = match words.next().map(String::as_str) {
-        Some(c @ ("owner" | "check" | "settle" | "relations" | "relate" | "unrelate")) => c,
+        Some(
+            c @ ("owner" | "check" | "settle" | "relations" | "relate" | "unrelate" | "inverse"),
+        ) => c,
         Some(other) => return fail(&format!("onto has no `{other}`; see --help")),
         None => {
             return fail(
-                "onto needs a command: owner, check, settle, relations, relate or unrelate; see --help",
+                "onto needs a command: owner, check, settle, relations, relate, unrelate or \
+                 inverse; see --help",
             );
         }
     };
     let mut dimension = false;
+    let mut yes = false;
     while let Some(w) = words.next() {
         if w == "--dimension" && command == "check" {
             dimension = true;
+        } else if w == "--yes" && matches!(command, "relate" | "unrelate" | "inverse") {
+            yes = true;
         } else if w == "--world" {
             match words.next() {
                 Some(dir) => world = Some(PathBuf::from(dir)),
@@ -707,15 +722,15 @@ fn onto(args: &[String]) -> ExitCode {
         return settle(world.as_deref(), &paths);
     }
     // Where other worlds live is the human's to see: a body never reads the dimension.
-    if (dimension || matches!(command, "relations" | "relate" | "unrelate"))
+    if (dimension || matches!(command, "relations" | "relate" | "unrelate" | "inverse"))
         && let Ok(body) = std::env::var("MNEMORPH_BODY")
     {
         return refused(&format!(
             "{body} runs this: relations between worlds are the human's to read and write"
         ));
     }
-    if matches!(command, "relations" | "relate" | "unrelate") {
-        return relations(command, world.as_deref(), &paths);
+    if matches!(command, "relations" | "relate" | "unrelate" | "inverse") {
+        return relations(command, world.as_deref(), &paths, yes);
     }
     let Ok(cwd) = std::env::current_dir() else {
         return fail("the current directory cannot be read");
@@ -1048,9 +1063,11 @@ fn print_items(items: &[mnemorph_server::world::queue::Item], json: bool) {
     }
 }
 
-/// `onto relations`, `onto relate <other> <type>`, `onto unrelate <other> <type>`: the
-/// relations stated and those proposed, which writes nothing; the human's yes; its revocation.
-fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode {
+/// `onto relations`, `onto relate <other> <type>`, `onto unrelate <other> <type>`, `onto inverse
+/// <type> <inverse>|-`: the relations stated, what the in-world copy states beyond them and what
+/// is proposed, which writes nothing; the human's yes; its revocation; a type's inverse. Each
+/// write is asked at the terminal, or taken on `yes`.
+fn relations(command: &str, world: Option<&Path>, words: &[String], yes: bool) -> ExitCode {
     use mnemorph_server::world::dimension;
     let Ok(cwd) = std::env::current_dir() else {
         return refused(&"the current directory cannot be read");
@@ -1061,47 +1078,13 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
         if !words.is_empty() {
             return refused(&"onto relations takes no arguments");
         }
-        let manifest = match dimension::Manifest::load(&world) {
-            Ok(m) => m,
-            Err(e) => return refused(&e),
-        };
-        let registry = dimension::registry();
-        let known = registry
-            .as_deref()
-            .map(dimension::known)
-            .unwrap_or_default();
-        let now = known
-            .iter()
-            .find(|k| k.world == world)
-            .map_or(0, |k| k.sessions);
-        let sightings = registry
-            .as_deref()
-            .map(|r| dimension::load_sightings(r, &world))
-            .unwrap_or_default();
-        let mut out = std::io::stdout().lock();
-        for r in &manifest.relations {
-            let _ = writeln!(out, "stated\t{}\t{}", r.kind, r.world);
-        }
-        // Sightings name worlds by id; here, for the human, each id becomes its path.
-        let proposals: Vec<dimension::Proposal> = dimension::proposals(&sightings, &manifest, now)
-            .into_iter()
-            .map(|mut p| {
-                if let dimension::Proposal::Add { world: w, .. } = &mut p {
-                    *w = dimension::resolve(&known, w).map_or_else(
-                        || format!("{w} (not on this machine)"),
-                        |k| k.world.display().to_string(),
-                    );
-                }
-                p
-            })
-            .collect();
-        if manifest.relations.is_empty() && proposals.is_empty() {
-            let _ = writeln!(out, "no relation stated, none proposed");
-        }
-        for p in &proposals {
-            let _ = writeln!(out, "\nproposed: {}\n{}", p.why(), p.diff());
-        }
-        return ExitCode::SUCCESS;
+        return list_relations(&world);
+    }
+    let Some(registry) = dimension::registry() else {
+        return refused(&"no home: the relations are kept under the human's state directory");
+    };
+    if command == "inverse" {
+        return inverse(&registry, &world, words, yes);
     }
     let [other, kind] = words else {
         return refused(&format!("onto {command} takes the other world and a type"));
@@ -1115,10 +1098,23 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
     if other.canonicalize().ok() == Some(world.clone()) {
         return refused(&"a world has no relation to itself");
     }
-    let done = if command == "relate" {
-        dimension::relate(&world, &other, kind)
+    let verb = if command == "relate" {
+        "state"
     } else {
-        dimension::unrelate(&world, &other, kind)
+        "revoke"
+    };
+    let question = format!(
+        "{verb} `{kind}` towards {} for {}?",
+        field(&other.display().to_string()),
+        field(&world.display().to_string())
+    );
+    if let Err(e) = asked(&question, yes) {
+        return refused(&e);
+    }
+    let done = if command == "relate" {
+        dimension::relate_at(&registry, &world, &other, kind)
+    } else {
+        dimension::unrelate_at(&registry, &world, &other, kind)
     };
     match done {
         Ok(true) if command == "relate" => println!("stated {kind} towards {}", other.display()),
@@ -1135,6 +1131,109 @@ fn relations(command: &str, world: Option<&Path>, words: &[String]) -> ExitCode 
     ExitCode::SUCCESS
 }
 
+/// `onto relations`: what this world states, what its in-world copy states beyond that, and what
+/// is proposed. It writes nothing.
+fn list_relations(world: &Path) -> ExitCode {
+    use mnemorph_server::world::dimension;
+    let manifest = match dimension::Manifest::load(world) {
+        Ok(m) => m,
+        Err(e) => return refused(&e),
+    };
+    let registry = dimension::registry();
+    let untrusted = dimension::untrusted_relations(world, &manifest);
+    let known = registry
+        .as_deref()
+        .map(dimension::known)
+        .unwrap_or_default();
+    let now = known
+        .iter()
+        .find(|k| k.world == world)
+        .map_or(0, |k| k.sessions);
+    let sightings = registry
+        .as_deref()
+        .map(|r| dimension::load_sightings(r, world))
+        .unwrap_or_default();
+    let mut out = std::io::stdout().lock();
+    for r in &manifest.relations {
+        let _ = writeln!(out, "stated\t{}\t{}", r.kind, r.world);
+    }
+    // Sightings name worlds by id; here, for the human, each id becomes its path.
+    let proposals: Vec<dimension::Proposal> = dimension::proposals(&sightings, &manifest, now)
+        .into_iter()
+        .map(|mut p| {
+            if let dimension::Proposal::Add { world: w, .. } = &mut p {
+                *w = dimension::resolve(&known, w).map_or_else(
+                    || format!("{w} (not on this machine)"),
+                    |k| k.world.display().to_string(),
+                );
+            }
+            p
+        })
+        .collect();
+    for f in &untrusted {
+        let _ = writeln!(out, "untrusted\t{}", field(&f.message));
+    }
+    if manifest.relations.is_empty() && proposals.is_empty() && untrusted.is_empty() {
+        let _ = writeln!(out, "no relation stated, none proposed");
+    }
+    for p in &proposals {
+        let _ = writeln!(out, "\nproposed: {}\n{}", p.why(), p.diff());
+    }
+    ExitCode::SUCCESS
+}
+
+/// `onto inverse <type> <inverse>|-`: the human declares a type's inverse, or takes it back.
+fn inverse(registry: &Path, world: &Path, words: &[String], yes: bool) -> ExitCode {
+    use mnemorph_server::world::dimension;
+    let [kind, inverse] = words else {
+        return refused(&"onto inverse takes a type and its inverse, or `-`");
+    };
+    let inverse = (inverse != "-").then_some(inverse.as_str());
+    for k in [Some(kind.as_str()), inverse].into_iter().flatten() {
+        if !dimension::valid_kind(k) {
+            return refused(&format!(
+                "`{k}` is no relation type: lowercase words joined by `-`"
+            ));
+        }
+    }
+    let question = match inverse {
+        Some(i) => format!("declare `{i}` the inverse of `{kind}`?"),
+        None => format!("take back the inverse of `{kind}`?"),
+    };
+    if let Err(e) = asked(&question, yes) {
+        return refused(&e);
+    }
+    match dimension::declare_inverse_at(registry, world, kind, inverse) {
+        Ok(true) => {
+            println!(
+                "{}",
+                inverse.map_or_else(
+                    || format!("undeclared the inverse of {kind}"),
+                    |i| format!("declared {i} the inverse of {kind}"),
+                )
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(false) => {
+            println!("unchanged");
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// The human's yes to `question`: `yes` given (a script the human runs), or `y` at the terminal.
+fn asked(question: &str, yes: bool) -> Result<(), String> {
+    if yes {
+        return Ok(());
+    }
+    if at_terminal(question)? {
+        Ok(())
+    } else {
+        Err("not confirmed: nothing was written".to_owned())
+    }
+}
+
 /// `onto settle <id>`: the human settles a contested fact — besides an Orc's verdict, the one act
 /// that does; recency never settles. A body never runs it.
 fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
@@ -1143,6 +1242,17 @@ fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
         return refused(&format!(
             "{body} runs this: settling a fact is the human's or an Orc's"
         ));
+    }
+    // `MNEMORPH_BODY` is a body's to unset; its ancestry is not.
+    match mnemorph_server::world::pins::under_harness() {
+        Ok(None) => {}
+        Ok(Some(harness)) => {
+            return refused(&format!(
+                "this runs under {harness}: a fact is settled by the human, never by a command a \
+                 session started"
+            ));
+        }
+        Err(e) => return refused(&e),
     }
     let [id] = ids else {
         return refused(&"onto settle takes one fact id: `#<id>` or `<id>`");
@@ -1158,12 +1268,23 @@ fn settle(world: Option<&Path>, ids: &[String]) -> ExitCode {
         .get(id.trim_start_matches('#'))
         .map(|f| f.text.clone())
         .unwrap_or_default();
-    if !text.is_empty() {
-        println!(
-            "settling #{}: {}",
-            field(id.trim_start_matches('#')),
-            field(&text)
-        );
+    if text.is_empty() {
+        return refused(&format!(
+            "no fact `#{}` in this world's ontology",
+            field(id.trim_start_matches('#'))
+        ));
+    }
+    println!(
+        "settling #{}: {}",
+        field(id.trim_start_matches('#')),
+        field(&text)
+    );
+    // The human's own `y`, at the terminal: an environment is a body's to unset and an ancestry a
+    // body's to shed, a terminal question is neither. No `--yes`: a settle is never scripted.
+    match at_terminal("settle it on your word?") {
+        Ok(true) => {}
+        Ok(false) => return refused(&"not confirmed: nothing was settled"),
+        Err(e) => return refused(&e),
     }
     let seen = mnemorph_server::world::memory::seen(id.trim_start_matches('#'), &text);
     match Facts::settle(&world, id, "human", "the human's word", &seen) {

@@ -111,6 +111,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   blameless [#173] [#174] [#175] [#176] [#178].
 - Never routed above the parent; ontology findings with codes; heirs and shared Minds [#177]
   [#179] [#180].
+- Territory facts and the relations between worlds trusted only from chained journals under the
+  state directory: the in-world `facts.jsonl` and `dimension.toml` are copies, what they say
+  beyond them flagged (`untrusted-fact`, `untrusted-relation`); in-world facts imported once,
+  unsettled; `onto relate`, `unrelate` and the new `inverse` asked at the terminal.
 - Append-only requests; the provenance lint; refusals that name the owner; writes attributed per
   body [#187] [#188] [#189] [#190] [#191] [#231].
 - Decisions: System One behind config, bounded, Jev first with the LLM answering when none is
