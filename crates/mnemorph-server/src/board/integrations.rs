@@ -333,7 +333,13 @@ fn key_file(path: &str, files: &KeyFiles) -> KeyFileView {
     let (state, detail) =
         match mnemorph_loop::key::inspect(path, files.home.as_deref(), &files.worlds) {
             Ok(c) => ("readable", format!("{:04o}", c.mode)),
-            Err(why) => ("refused", first_line(&why)),
+            // A reason that names a path shaped like a key (a random temporary directory) is hidden
+            // whole, as every string is; the refusal itself still shows.
+            Err(why) => (
+                "refused",
+                redact("", why.lines().next().unwrap_or_default())
+                    .unwrap_or_else(|| "hidden: the reason holds what looks like a key".to_owned()),
+            ),
         };
     KeyFileView {
         path: redact("", path),

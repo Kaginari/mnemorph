@@ -322,12 +322,10 @@ fn the_integrations_show_a_key_files_state_never_its_contents() {
     std::fs::write(&inside, FAKE).unwrap();
     std::fs::set_permissions(&inside, std::fs::Permissions::from_mode(0o600)).unwrap();
     let mut text = std::fs::read_to_string(&global).unwrap();
-    std::fmt::Write::write_fmt(&mut text, format_args!(
+    text.push_str(
         "\n[providers.open]\nkind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\nkey_file = \"~/open.key\"\n\
-         \n[providers.inside]\nkind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\nkey_file = \"{}\"\n",
-        inside.display()
-    ))
-    .unwrap();
+         \n[providers.inside]\nkind = \"openai\"\nbase_url = \"http://127.0.0.1:9\"\nkey_file = \"~/../world/inside.key\"\n",
+    );
     std::fs::write(&global, text).unwrap();
     let (mut child, host, cookie) = board(&g);
     let res = http(
@@ -367,11 +365,12 @@ fn the_integrations_show_a_key_files_state_never_its_contents() {
     );
     let inside = file("inside");
     assert_eq!(inside["state"], "refused");
+    assert_eq!(inside["path"], "~/../world/inside.key");
+    // The reason names the world's path; where the temporary directory's name looks like a key
+    // (macOS), the reason is hidden, and the refusal still shows.
+    let why = inside["detail"].as_str().unwrap();
     assert!(
-        inside["detail"]
-            .as_str()
-            .unwrap()
-            .contains("inside the world"),
+        why.contains("inside the world") || why.starts_with("hidden: "),
         "{inside}"
     );
     assert_eq!(file("anthropic"), Value::Null);

@@ -550,8 +550,8 @@ invalid row is counted apart, and dollars sum the priced rows.
 tracked and local files over it — and show an allowlist of its fields: each provider's kind, base
 URL and key *source* (`env OPENROUTER_API_KEY: set` — whether the variable is set, never its value)
 and its key file, if one is named (`file ~/.config/mnemorph/openrouter.key: readable (0600)`, or
-why it is refused — the file is checked as a session checks it, and what it holds is never
-shown);
+why it is refused, hidden like any string that looks like a key — the file is checked as a
+session checks it, and what it holds is never shown);
 each model a `models.*` key names, the provider its requests go to and its price from the shipped
 table (`unpriced` when the table lacks it); the holes, each with its file and why; the MCP servers
 the global file declares, with their scope (races), class (read-only or outward), sandbox network
