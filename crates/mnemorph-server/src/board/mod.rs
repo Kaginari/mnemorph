@@ -1146,7 +1146,7 @@ pub fn run(listeners: Vec<std::net::TcpListener>, board: &Arc<Board>) -> Result<
 ///
 /// # Errors
 ///
-/// The runtime cannot start, the control socket cannot be bound, or a listener cannot be served.
+/// The runtime cannot start, or a listener cannot be served.
 pub fn run_at(
     listeners: Vec<std::net::TcpListener>,
     board: &Arc<Board>,
@@ -1183,12 +1183,14 @@ pub fn run_at(
         let watcher = tokio::spawn(watch::watch(Arc::clone(board)));
         let (asked, mut asked_stop) = tokio::sync::watch::channel(false);
         #[cfg(unix)]
-        let control = match dir {
-            Some(d) => Some(tokio::spawn(control::serve(
-                control::bind(d)?,
-                Arc::clone(board),
-                asked,
-            ))),
+        // A socket that cannot be bound (a state directory past the socket path's length, say)
+        // leaves the board serving, unstoppable but by a signal: said, never fatal.
+        let control = match dir.map(control::bind) {
+            Some(Ok(l)) => Some(tokio::spawn(control::serve(l, Arc::clone(board), asked))),
+            Some(Err(e)) => {
+                eprintln!("mnemorphd board: no control socket ({e}); Ctrl-C or SIGTERM stops it");
+                None
+            }
             None => None,
         };
         #[cfg(not(unix))]

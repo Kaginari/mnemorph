@@ -14,8 +14,14 @@ struct Home {
 
 impl Home {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("mnemorph-boardd-{name}-{}", std::process::id()));
+        // A short root: the control socket's path must fit a Unix socket's (104 bytes on
+        // macOS, whose temporary directory is long).
+        let tmp = if cfg!(unix) && std::path::Path::new("/tmp").is_dir() {
+            PathBuf::from("/tmp")
+        } else {
+            std::env::temp_dir()
+        };
+        let root = tmp.join(format!("mnemorph-boardd-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("world/.mnemorph")).unwrap();
         Self {
@@ -302,7 +308,13 @@ mod autostart {
                 second,
                 format!("board: {} (opened in your browser)", running.base)
             );
-            let opened = std::fs::read_to_string(h.root.join("opened")).unwrap();
+            // The opener runs beside the board's answer: give it a moment to write.
+            let at = h.root.join("opened");
+            let began = Instant::now();
+            while !at.exists() && began.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let opened = std::fs::read_to_string(&at).unwrap();
             let opened = opened.trim();
             assert!(
                 opened.starts_with(&format!("{}/#k=", running.base)),
