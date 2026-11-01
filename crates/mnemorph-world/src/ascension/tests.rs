@@ -3,6 +3,9 @@ use mnemorph_ledger::reports::{Gate, RunReport};
 
 use crate::creatures::{Ground, row};
 
+/// No proposal.
+const NONE: [Proposal; 0] = [];
+
 const HOUR: i64 = 3600;
 const DAY: i64 = 86_400;
 /// A time well past the epoch, so a window never reaches below it.
@@ -72,7 +75,7 @@ fn twenty_settled_passes_in_the_window_propose_a_rise_and_the_newest_waits() {
     let roster = vec![adopted("sly", Race::Slime)];
     // Twenty runs: the newest is not settled yet, so nineteen are read — no rise.
     let rows = runs("sly", "slime", T0, 20, |_| true);
-    assert!(propose(&rows, &roster).proposals.is_empty());
+    assert_eq!(propose(&rows, &roster).proposals, NONE);
     let rows = runs("sly", "slime", T0, 21, |_| true);
     let s = propose(&rows, &roster);
     let p = s.of("sly").expect("a rise");
@@ -110,7 +113,7 @@ fn the_window_is_twenty_eight_days_of_trusted_time() {
     // A month on, one more run and the one that settles it: the old record is out of the window.
     rows.push(run("sly", "slime", T0 + 29 * DAY, true, 0));
     rows.push(run("sly", "slime", T0 + 29 * DAY + HOUR, true, 0));
-    assert!(propose(&rows, &roster).proposals.is_empty());
+    assert_eq!(propose(&rows, &roster).proposals, NONE);
     // Read at a time inside the window, it rises still: the window is the clock's, not the wall's.
     let p = propose_at(&rows, &roster, Timestamp(T0 + 20 * HOUR));
     assert_eq!(p.proposals.len(), 1);
@@ -118,7 +121,7 @@ fn the_window_is_twenty_eight_days_of_trusted_time() {
     let twenty = runs("sly", "slime", T0, 20, |_| true);
     let mut out = twenty.clone();
     out.push(run("sly", "slime", T0 + 28 * DAY, true, 0));
-    assert!(propose(&out, &roster).proposals.is_empty());
+    assert_eq!(propose(&out, &roster).proposals, NONE);
     // A second later than 28 days, inside: twenty.
     let mut inside = twenty;
     inside.push(run("sly", "slime", T0 + 28 * DAY - 1, true, 0));
@@ -129,7 +132,7 @@ fn the_window_is_twenty_eight_days_of_trusted_time() {
 fn the_race_keying_reads_the_witness_never_the_card_or_a_stranger() {
     // No row: a stranger proposes nothing, whatever its record.
     let rows = runs("sly", "slime", T0, 25, |_| true);
-    assert!(propose(&rows, &[]).proposals.is_empty());
+    assert_eq!(propose(&rows, &[]).proposals, NONE);
     // A row holding it an Elf: its runs as a Slime claim no record of an Elf.
     let s = propose(&rows, &[adopted("sly", Race::Elf)]);
     assert!(s.proposals.is_empty(), "{s:?}");
@@ -144,14 +147,14 @@ fn the_race_keying_reads_the_witness_never_the_card_or_a_stranger() {
     // A retired row proposes nothing.
     let mut gone = adopted("sly", Race::Slime);
     gone.retired = true;
-    assert!(propose(&rows, &[gone]).proposals.is_empty());
+    assert_eq!(propose(&rows, &[gone]).proposals, NONE);
 }
 
 #[test]
 fn an_input_no_journal_carries_proposes_nothing() {
     let rows = runs("gor", "orc", T0, 25, |_| true);
     let s = propose(&rows, &[adopted("gor", Race::Orc)]);
-    assert!(s.proposals.is_empty());
+    assert_eq!(s.proposals, NONE);
     assert_eq!(s.unknown, vec![("gor".to_owned(), "slimeHealth")]);
     assert_eq!(
         propose(&[], &[adopted("gor", Race::Orc)]),

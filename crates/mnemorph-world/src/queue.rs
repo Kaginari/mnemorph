@@ -36,6 +36,7 @@ pub(crate) fn state_file(world: &Path, kind: &str) -> Option<PathBuf> {
 }
 
 /// [`state_file`], under the state directory `state`.
+#[must_use]
 pub fn state_file_in(state: &Path, world: &Path, kind: &str) -> PathBuf {
     let h = fnv64a(world.as_os_str().as_encoded_bytes());
     let name = world
