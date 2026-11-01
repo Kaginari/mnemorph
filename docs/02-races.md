@@ -1397,7 +1397,7 @@ never judged on.
   proposal and probation with the command that applies it, escaped, its words quoted for a shell:
 
   ```text
-  ascend   sly: rise to named-slime proposed (landRate 1.00 (21/21, 95% 0.85–1.00) · gateRate 1.00 (21/21, 95% 0.85–1.00) · holeRate 0.00 (0/21, 95% 0.00–0.15); 21 reports) — the human applies it: `mnemorphd roster rise sly --world /home/me/world`
+  ascend   sly: rise to named-slime proposed (landRate 1.00 (21/21, 95% 0.85–1.00) · gateRate 1.00 (21/21, 95% 0.85–1.00) · holeRate 0.00 (0/21, 95% 0.00–0.15); 21 reports) — the human applies it with: mnemorphd roster rise sly --world /home/me/world
   ascend   lexer (named-slime): on probation since 2026-11-01T09:00:00Z — 2 of 5 reports; it recovers at its fall bar or a fall is proposed
   ```
 - **Replay.** The proposals are a function of the report ledger's rows and the witness's rows

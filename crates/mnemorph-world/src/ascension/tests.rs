@@ -101,7 +101,8 @@ fn twenty_settled_passes_in_the_window_propose_a_rise_and_the_newest_waits() {
     let lines = lines_of(&s, Path::new("/w"));
     assert!(
         lines[0].starts_with("sly: rise to named-slime proposed (landRate 1.00")
-            && lines[0].ends_with("the human applies it: `mnemorphd roster rise sly --world /w`"),
+            && lines[0]
+                .ends_with("the human applies it with: mnemorphd roster rise sly --world /w"),
         "{lines:?}"
     );
 }

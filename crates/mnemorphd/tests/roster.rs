@@ -384,7 +384,8 @@ fn a_proposed_rise_is_applied_by_the_human_at_the_terminal_alone() {
         text(&out)
             .contains("proposed by the compiled law — nothing changes until the human applies it")
             && text(&out).contains("slime-s: rise to named-slime proposed (landRate 1.00 (21/21")
-            && text(&out).contains("`mnemorphd roster rise slime-s --world "),
+            && text(&out)
+                .contains("the human applies it with: mnemorphd roster rise slime-s --world "),
         "{}",
         text(&out)
     );

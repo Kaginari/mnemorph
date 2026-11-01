@@ -810,7 +810,7 @@ pub fn lines_of(s: &Survey, world: &Path) -> Vec<String> {
     for p in &s.proposals {
         let meters: Vec<String> = p.meters.iter().map(|(m, r)| format!("{m} {r}")).collect();
         out.push(format!(
-            "{}: {} proposed ({}; {} reports) — the human applies it: `{}`",
+            "{}: {} proposed ({}; {} reports) — the human applies it with: {}",
             p.creature,
             p.what(),
             meters.join(" · "),
