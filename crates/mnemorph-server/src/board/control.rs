@@ -11,7 +11,7 @@
 //!
 //! - `<nonce> ping` → `ok <pid> <base>`: the board runs, at `base` (`http://127.0.0.1:<port>`);
 //! - `<nonce> open` → `opened`, or `unopened <why>`: the board opens the browser itself on a
-//!   launcher file holding a fresh key ([`Board::launch`]), so the key is on no command line;
+//!   launcher file holding a fresh key ([`Board::open_browser`]), so the key is on no command line;
 //! - `<nonce> stop` → `stopping <pid>`: the board stops as on Ctrl-C.
 
 use std::io::{BufRead as _, BufReader, Write as _};
@@ -58,12 +58,20 @@ pub fn socket(dir: &Path) -> PathBuf {
 }
 
 /// The nonce the board under `dir` wrote: a private regular file this user owns, 64 hex
-/// characters.
+/// characters, in a directory this user owns that no one else may write in.
 ///
 /// # Errors
 ///
 /// No board wrote one, or it is not this user's alone.
 fn nonce(dir: &Path) -> Result<String, String> {
+    // Its directory first: one another user could write in could hold a nonce of theirs.
+    let parent = std::fs::symlink_metadata(dir).map_err(|_| "no board is running".to_owned())?;
+    if !parent.file_type().is_dir() || parent.uid() != uid() || parent.mode() & 0o022 != 0 {
+        return Err(format!(
+            "{} is not this user's private state directory: refusing its board nonce",
+            dir.display()
+        ));
+    }
     let path = dir.join(NONCE);
     let meta = std::fs::symlink_metadata(&path).map_err(|_| "no board is running".to_owned())?;
     if !meta.file_type().is_file() || meta.uid() != uid() || meta.mode() & 0o077 != 0 {
@@ -275,10 +283,16 @@ pub(crate) async fn serve(
                     "unopened this mnemorphd has no board built in, so no page would spend the key"
                         .to_owned()
                 }
-                "open" => match board.launch(&dir).and_then(|f| super::browse(&f)) {
-                    Ok(()) => "opened".to_owned(),
-                    Err(e) => format!("unopened {}", e.replace('\n', " ")),
-                },
+                "open" => {
+                    let board = Arc::clone(&board);
+                    let opened =
+                        tokio::task::spawn_blocking(move || board.open_browser(&dir)).await;
+                    match opened {
+                        Ok(Ok(())) => "opened".to_owned(),
+                        Ok(Err(e)) => format!("unopened {}", e.replace('\n', " ")),
+                        Err(e) => format!("unopened {e}"),
+                    }
+                }
                 "stop" => {
                     let _ = stop.send(true);
                     format!("stopping {}", std::process::id())
@@ -293,6 +307,25 @@ pub(crate) async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_nonce_in_a_directory_others_may_write_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        write_nonce(&dir.path().join(NONCE), &"a".repeat(64)).unwrap();
+        assert_eq!(nonce(dir.path()).unwrap(), "a".repeat(64));
+        for loose in [0o770, 0o757, 0o777] {
+            std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(loose)).unwrap();
+            let e = nonce(dir.path()).unwrap_err();
+            assert!(e.contains("not this user's private state directory"), "{e}");
+        }
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        // A link in the directory's place is not trusted either.
+        let link = dir.path().with_extension("link");
+        std::os::unix::fs::symlink(dir.path(), &link).unwrap();
+        assert!(nonce(&link).is_err());
+        let _ = std::fs::remove_file(&link);
+    }
 
     #[tokio::test]
     async fn only_a_socket_is_removed_from_its_place() {

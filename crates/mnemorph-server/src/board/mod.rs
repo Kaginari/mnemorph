@@ -17,6 +17,7 @@ mod assets;
 pub mod autostart;
 pub mod bodies;
 pub mod bridge;
+pub mod browser;
 #[cfg(unix)]
 pub mod control;
 pub mod facts;
@@ -518,7 +519,8 @@ impl Board {
     }
 
     /// A launcher for the browser: a fresh open key ([`Board::open_url`]) in a page under `dir`
-    /// (the `0700` state directory), `open-<random>.html`, `0600`, that refreshes to the board —
+    /// (a `0700` directory the browser reads: [`browser::launcher_dir`]), `open-<random>.html`,
+    /// `0600`, created exclusively and never through a link, that refreshes to the board —
     /// so the key is on no command line. It replaces any earlier launcher, and is removed once the
     /// key is spent or past [`Lifetimes::open`].
     ///
@@ -527,6 +529,10 @@ impl Board {
     /// The random source fails, or the file cannot be written.
     pub fn launch(&self, dir: &std::path::Path) -> Result<PathBuf, String> {
         use std::io::Write as _;
+        // Only a private directory of this user's own, never a link: no one else may swap the
+        // page or read it.
+        #[cfg(unix)]
+        browser::private_dir(dir)?;
         let url = self.open_url()?;
         let name = secret()?;
         let file = dir.join(format!("open-{}.html", &name[..16]));
@@ -535,7 +541,12 @@ impl Board {
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt as _;
-            o.mode(0o600);
+            o.mode(0o600).custom_flags(
+                rustix::fs::OFlags::NOFOLLOW
+                    .bits()
+                    .try_into()
+                    .unwrap_or(i32::MAX),
+            );
         }
         let mut f = o
             .open(&file)
@@ -552,6 +563,43 @@ impl Board {
             let _ = std::fs::remove_file(old);
         }
         Ok(file)
+    }
+
+    /// Open the browser on a fresh one-time link: a launcher ([`Board::launch`]) where `browser`
+    /// reads ([`browser::launcher_dir`]: the state directory `state`, or a snap's own under
+    /// `home`), handed to `open`. A launcher no opener took is removed at once.
+    ///
+    /// # Errors
+    ///
+    /// No place the browser reads is known, the launcher cannot be written, or `open` fails.
+    pub fn open_in(
+        &self,
+        state: &std::path::Path,
+        home: Option<&std::path::Path>,
+        browser: &browser::Browser,
+        open: impl FnOnce(&std::path::Path) -> Result<(), String>,
+    ) -> Result<PathBuf, String> {
+        let dir = browser::launcher_dir(state, home, browser)?;
+        let file = self.launch(&dir)?;
+        if let Err(e) = open(&file) {
+            self.unlaunch();
+            return Err(e);
+        }
+        Ok(file)
+    }
+
+    /// [`Board::open_in`] for the human's own default browser ([`browser::detect`]) and home,
+    /// through [`browse`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Board::open_in`].
+    pub fn open_browser(&self, state: &std::path::Path) -> Result<(), String> {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .filter(|h| h.is_absolute());
+        self.open_in(state, home.as_deref(), &browser::detect(), browse)
+            .map(drop)
     }
 
     /// Remove the launcher file, if one waits.
@@ -1170,15 +1218,33 @@ pub fn opener(target: &std::path::Path) -> std::process::Command {
     cmd
 }
 
-/// Open the launcher `file` in the browser ([`opener`]), waited on off the caller's thread.
+/// What the human is told when the browser cannot be opened for them. It holds no key: the
+/// link is `mnemorphd board`'s to print, in their own terminal.
+pub const UNOPENED: &str =
+    "couldn't open your browser automatically: run `mnemorphd board` and paste the link it prints";
+
+/// How long an opener is watched for a failure before it is left to run.
+const OPENER_WATCH: Duration = Duration::from_millis(1500);
+
+/// Open the launcher `file` in the browser ([`opener`]): an opener that fails within a moment is
+/// an error; one still running then is waited on off the caller's thread.
 ///
 /// # Errors
 ///
-/// The opener cannot be started.
+/// The opener cannot be started, or it fails at once.
 pub fn browse(file: &std::path::Path) -> Result<(), String> {
     let mut cmd = opener(file);
     let name = cmd.get_program().to_string_lossy().into_owned();
     let mut child = cmd.spawn().map_err(|e| format!("{name}: {e}"))?;
+    let began = Instant::now();
+    while began.elapsed() < OPENER_WATCH {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => return Err(format!("{name} failed ({status})")),
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => return Err(format!("{name}: {e}")),
+        }
+    }
     std::thread::spawn(move || {
         let _ = child.wait();
     });

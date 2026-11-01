@@ -277,9 +277,31 @@ valid once and for 60 seconds, and never on a command line, which every local us
 sandbox, which reads `/proc` — may read while it runs: the board writes a launcher page,
 `open-<random>.html` (`0600`) in the state directory, a `<meta http-equiv="refresh">` to
 `http://127.0.0.1:<port>/#k=<key>` with a link for a browser that does not follow it, and hands
-the opener (`xdg-open`, `open`) that file's path. The file is removed once its key is spent, or
+the opener (`xdg-open`, `open`) that file's path. The page is created exclusively, never through
+a link, in a `0700` directory of the human's own. The file is removed once its key is spent, or
 dies (checked every 30 seconds), or the board stops. Chromium follows the refresh from `file://`
-to loopback; a browser that does not shows the link. `--open` is refused when no board is built
+to loopback; a browser that does not shows the link.
+
+**Snap browsers.** A snap's confinement keeps a snap browser (Ubuntu's Chromium and Firefox) out of
+every hidden directory in the home, the state directory among them, and gives it a `/tmp` of its
+own. The board reads the default browser's desktop file (`xdg-settings get default-web-browser`,
+else `xdg-mime`'s handler of `x-scheme-handler/http`): when it is `<snap>_<app>.desktop` and its
+`Exec` runs `/snap/bin/<snap>`, or its `Exec` resolves under `/snap/bin/`, the browser is that
+snap, and the launcher goes to the snap's own `~/snap/<snap>/common/mnemorph/` (`0700`), which a
+snap may read as `$SNAP_USER_COMMON`. `~/snap`, `~/snap/<snap>` and its `common` must already be
+real directories the human owns, never links. Anything less certain is not a snap, and the page
+stays in the state directory. A body's sandbox reads neither place.
+
+**When the browser does not open** — the opener cannot start or fails at once, or a snap browser
+has no directory of its own to read the page from — nothing fails silently: the app's status line,
+or `mnemorphd board --open` on its terminal, says *couldn't open your browser automatically: run
+`mnemorphd board` and paste the link it prints*, never a key. `mnemorphd board`, run in the human's
+own terminal, prints the link, and the board serves on.
+
+**The state directory** (`$XDG_STATE_HOME/mnemorph`) is made `0700`. One the human owns with
+group or other bits set is tightened to `0700` by the board's start or the app's, and that is said
+once (on the board's output, or on the app's status line); a link or another user's is refused. An
+asker trusts the nonce only in a directory its uid owns that no one else may write in. `--open` is refused when no board is built
 in, since no page would spend the key. A session ends after 12 idle hours, or 7 days after it
 began.
 

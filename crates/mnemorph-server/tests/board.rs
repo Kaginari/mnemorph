@@ -863,6 +863,108 @@ async fn the_browser_is_opened_on_a_file_never_a_key_on_a_command_line() {
     assert!(!second.exists(), "dead: removed");
 }
 
+/// A pretend opener for [`Board::open_in`]: keeps the path it was handed, launches nothing.
+fn keep(into: &Mutex<Vec<PathBuf>>) -> impl FnOnce(&Path) -> Result<(), String> + '_ {
+    move |file| {
+        into.lock().unwrap().push(file.to_path_buf());
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_snap_browser_is_handed_a_launcher_in_its_own_common_directory() {
+    use mnemorph_server::board::browser::Browser;
+    use std::os::unix::fs::PermissionsExt as _;
+    let home = tempfile::tempdir().unwrap();
+    let state = home.path().join(".local/state/mnemorph");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let common = home.path().join("snap/chromium/common");
+    std::fs::create_dir_all(&common).unwrap();
+    let (board, _) = living(Lifetimes::default());
+    let snap = Browser::Snap("chromium".to_owned());
+    let handed = Mutex::new(Vec::new());
+    let file = board
+        .open_in(&state, Some(home.path()), &snap, keep(&handed))
+        .unwrap();
+    assert_eq!(*handed.lock().unwrap(), vec![file.clone()]);
+    assert_eq!(file.parent().unwrap(), common.join("mnemorph"));
+    let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&file), 0o600);
+    assert_eq!(mode(&common.join("mnemorph")), 0o700);
+    let key = key_in(&std::fs::read_to_string(&file).unwrap());
+    // Nothing of it in the state directory, and the opener saw only the path.
+    assert!(std::fs::read_dir(&state).unwrap().next().is_none());
+    assert!(!file.to_string_lossy().contains(&key));
+    // Spent, it goes, as in the state directory.
+    assert_eq!(trade(&board, &key).await, StatusCode::OK);
+    assert!(!file.exists(), "spent: removed");
+    // Dead past its minute, too.
+    let file = board
+        .open_in(&state, Some(home.path()), &snap, keep(&handed))
+        .unwrap();
+    board.pass(MIN);
+    board.refresh().unwrap();
+    assert!(!file.exists(), "dead: removed");
+
+    // A plain browser: the state directory, as before.
+    let file = board
+        .open_in(&state, Some(home.path()), &Browser::Plain, keep(&handed))
+        .unwrap();
+    assert_eq!(file.parent().unwrap(), state);
+    assert_eq!(mode(&file), 0o600);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_launcher_is_created_exclusively_and_never_through_a_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let (board, _) = living(Lifetimes::default());
+    // A link in the directory's place is refused, and nothing is written through it.
+    let link = dir.path().join("linked");
+    let real = dir.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    assert!(board.launch(&link).is_err());
+    assert!(std::fs::read_dir(&real).unwrap().next().is_none());
+}
+
+#[tokio::test]
+async fn an_opener_that_fails_or_no_known_place_is_an_error_and_leaves_no_launcher() {
+    use mnemorph_server::board::browser::Browser;
+    let home = tempfile::tempdir().unwrap();
+    let state = home.path().join("state");
+    std::fs::create_dir(&state).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let (board, _) = living(Lifetimes::default());
+    let e = board
+        .open_in(&state, Some(home.path()), &Browser::Plain, |_| {
+            Err("xdg-open failed (exit status: 4)".to_owned())
+        })
+        .unwrap_err();
+    assert!(e.contains("xdg-open failed"), "{e}");
+    assert!(!e.contains("#k="), "{e}");
+    assert!(
+        std::fs::read_dir(&state).unwrap().next().is_none(),
+        "removed"
+    );
+    // A snap with no directory of its own under the home: no place it reads is known.
+    let handed = Mutex::new(Vec::new());
+    let snap = Browser::Snap("chromium".to_owned());
+    assert!(
+        board
+            .open_in(&state, Some(home.path()), &snap, keep(&handed))
+            .is_err()
+    );
+    assert!(board.open_in(&state, None, &snap, keep(&handed)).is_err());
+    assert!(handed.lock().unwrap().is_empty(), "nothing opened");
+}
+
 #[tokio::test]
 async fn a_session_ends_idle_or_old() {
     let worlds = |board: &Arc<Board>, cookie: &str| {

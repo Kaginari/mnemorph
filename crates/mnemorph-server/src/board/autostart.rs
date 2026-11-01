@@ -12,8 +12,9 @@
 //! stops it.
 
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader};
-use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -68,10 +69,7 @@ fn running(base: &str, opened: Result<bool, String>) -> String {
     match opened {
         Ok(true) => format!("board: {base} (opened in your browser)"),
         Ok(false) => format!("board: {base} (run `mnemorphd board` for a sign-in link)"),
-        Err(e) => format!(
-            "board: {base} (the browser did not open: {}; run `mnemorphd board` for a sign-in link)",
-            line(&e)
-        ),
+        Err(e) => format!("board: {base} ({}; {})", super::UNOPENED, line(&e)),
     }
 }
 
@@ -118,8 +116,15 @@ pub fn ensure_in(
         .iter()
         .any(|l| l.world == world);
     let mut note = String::new();
+    // The state directory is the human's alone: a loose one is tightened before anything in it
+    // is trusted, and that said once on this line.
+    if let Err(e) = super::browser::state_dir(dir, |said| {
+        note = format!("; {}", line(said));
+    }) {
+        return format!("board: not started: {}", line(&e));
+    }
     if !listed && let Err(e) = dimension::hand(&hand, &registry, dimension::Hand::Add, &world) {
-        note = format!("; this world is not on it: {}", line(&e));
+        let _ = write!(note, "; this world is not on it: {}", line(&e));
     }
     if let Ok(r) = control::ping(dir) {
         let opened = if ask.open {
@@ -157,20 +162,16 @@ fn start(
         ));
     }
     let log = dir.join(LOG);
-    let opened = std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)
-        .and_then(|()| {
-            let big = std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_CAP);
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(!big)
-                .write(true)
-                .truncate(big)
-                .mode(0o600)
-                .open(&log)
-        });
+    let opened = {
+        let big = std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_CAP);
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(!big)
+            .write(true)
+            .truncate(big)
+            .mode(0o600)
+            .open(&log)
+    };
     let out = match opened {
         Ok(f) => f,
         Err(e) => return Err(format!("board: not started: {}: {e}", log.display())),
@@ -238,5 +239,49 @@ fn start(
             ));
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_browser_that_did_not_open_says_how_to_sign_in_without_a_key() {
+        let said = running(
+            "http://127.0.0.1:7878",
+            Err("xdg-open failed (exit status: 3)\nagain".to_owned()),
+        );
+        assert_eq!(
+            said,
+            format!(
+                "board: http://127.0.0.1:7878 ({}; xdg-open failed (exit status: 3) again)",
+                super::super::UNOPENED
+            )
+        );
+        assert!(said.contains("run `mnemorphd board` and paste the link it prints"));
+        assert!(!said.contains("#k="), "{said}");
+    }
+
+    #[test]
+    fn a_loose_state_directory_is_tightened_and_said_on_the_line() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("mnemorph");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o775)).unwrap();
+        let world = root.path().join("world");
+        std::fs::create_dir_all(world.join(".mnemorph")).unwrap();
+        let said = ensure_in(
+            &root.path().join("nowhere/mnemorphd"),
+            &dir,
+            &world,
+            Ask::default(),
+            Duration::from_millis(10),
+            &[],
+        );
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+        assert!(said.contains("was 0775: tightened to 0700"), "{said}");
     }
 }
