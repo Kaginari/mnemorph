@@ -2268,24 +2268,7 @@ fn meters(args: &[String]) -> ExitCode {
                     })
                 })
                 .collect();
-            let proposal = survey.as_ref().ok().and_then(|s| s.of(&m.name)).map(|p| {
-                serde_json::json!({
-                    "id": p.id,
-                    "act": p.act.word(),
-                    "to": p.to.name(),
-                    "endedProbation": p.ended_probation,
-                    "reports": p.n,
-                    "asOf": p.as_of.to_string(),
-                    "inputsSha256": p.inputs_sha256,
-                    "why": p.why.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                    "command": p.command(&world),
-                })
-            });
-            let probation = survey
-                .as_ref()
-                .ok()
-                .and_then(|s| s.probation_of(&m.name))
-                .map(|p| serde_json::json!({"reports": p.reports, "since": p.began.to_string()}));
+            let (proposal, probation) = ascension_json(survey.as_ref().ok(), &m.name, &world);
             println!(
                 "{}",
                 serde_json::json!({
@@ -2313,16 +2296,7 @@ fn meters(args: &[String]) -> ExitCode {
             println!("  {}", safe(&m.to_string()));
         }
     }
-    match &survey {
-        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() => {}
-        Ok(s) => {
-            println!("\nproposed by the compiled law — nothing changes until the human applies it");
-            for line in mnemorph_server::world::ascension::lines_of(s, &world) {
-                println!("  {}", safe(&line));
-            }
-        }
-        Err(why) => println!("\nrises and falls unavailable: {}", safe(why)),
-    }
+    pending(&survey, &world);
     match kept {
         Ok(path) => println!(
             "\nreports folded from the trusted journals, kept in {}",
@@ -2334,6 +2308,50 @@ fn meters(args: &[String]) -> ExitCode {
         "shown with their count and 95% interval, never judged on; no rise or fall is applied"
     );
     ExitCode::SUCCESS
+}
+
+/// A creature's pending proposal and probation, as `meters --json` gives them; `null` for none.
+fn ascension_json(
+    survey: Option<&mnemorph_server::world::ascension::Survey>,
+    name: &str,
+    world: &Path,
+) -> (serde_json::Value, serde_json::Value) {
+    let proposal = survey.and_then(|s| s.of(name)).map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "act": p.act.word(),
+            "to": p.to.name(),
+            "endedProbation": p.ended_probation,
+            "reports": p.n,
+            "asOf": p.as_of.to_string(),
+            "inputsSha256": p.inputs_sha256,
+            "why": p.why.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "command": p.command(world),
+        })
+    });
+    let probation = survey
+        .and_then(|s| s.probation_of(name))
+        .map(|p| serde_json::json!({"reports": p.reports, "since": p.began.to_string()}));
+    (
+        proposal.unwrap_or(serde_json::Value::Null),
+        probation.unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// The rises and falls the compiled law proposes, as `meters` says them, escaped; nothing when
+/// none is pending.
+fn pending(survey: &Result<mnemorph_server::world::ascension::Survey, String>, world: &Path) {
+    let safe = mnemorph_server::challenge::safe;
+    match survey {
+        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() => {}
+        Ok(s) => {
+            println!("\nproposed by the compiled law — nothing changes until the human applies it");
+            for line in mnemorph_server::world::ascension::lines_of(s, world) {
+                println!("  {}", safe(&line));
+            }
+        }
+        Err(why) => println!("\nrises and falls unavailable: {}", safe(why)),
+    }
 }
 
 /// Dollars as `usage` says them: `$0.4200`, `$0.4200 (2 unpriced)`, or `unpriced (2 calls)` when

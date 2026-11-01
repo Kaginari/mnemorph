@@ -41,7 +41,7 @@ pub(crate) fn roster(args: &[String]) -> ExitCode {
     let world = world.canonicalize().unwrap_or(world);
     match words.as_slice() {
         ["list"] | [] if !yes => list(&world),
-        ["list"] | [] | ["replay"] if yes => {
+        ["list" | "replay"] | [] if yes => {
             refused(&"--yes is given with adopt, set-race or retire only")
         }
         ["list"] | [] => list(&world),
