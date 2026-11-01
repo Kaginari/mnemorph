@@ -2,6 +2,16 @@
 
 ## In one picture
 
+<a href="./canvas/loop-light.svg">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/loop-dark.svg">
+  <img src="./canvas/loop-light.svg" alt="The loop: perceive, recall, plan, act, verify, record; back to perceive while tool calls remain, else the end gate: a pass reports up, a failure retries or goes up as FAIL">
+</picture>
+</a>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -30,6 +40,8 @@ flowchart LR
     classDef bad fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#450a0a
     class FAIL bad
 ```
+
+</details>
 
 ## In plain words
 

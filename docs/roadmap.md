@@ -71,10 +71,10 @@ Size: **S** ≈ one focused session, **M** ≈ two or three, **L** ≈ four or m
 
 Pages 01–06, races, lessons, card prompt (this book). Then:
 
-- the canvases: install [tldraw offline](https://offline.tldraw.com), connect Claude Code through
-  its agent setup, and draw one canvas per page from its Mermaid sketches — overview, races and
-  ascensions, the loop, one order down and back, the client protocol, architecture, sandbox,
-  consumption; each exported to SVG and embedded in its page;
+- the canvases: one per page, drawn from its Mermaid sketches — overview, races and ascensions,
+  the loop, one order down and back, the client protocol, architecture, sandbox, consumption — as
+  `docs/canvas/<page>.tldr`, each sketch exported to light and dark SVG and embedded in its page
+  ([Diagrams](README.md#diagrams));
 
 - your review of [Races](02-races.md): bars, privileges, falls, Kijin posts, Dark Elf duties;
 - the race cards generated from [the prompt](race-cards-prompt.md) and reviewed;
@@ -85,11 +85,11 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
   defaults) — it shapes the terminal app's wording and the card text;
 - one diagram checked in a GitHub preview: if GitHub ignores the hand-drawn look, the look is set
   in the docs site's config instead and the pages keep plain Mermaid;
-- canvases reviewed like code: a `.tldraw` file can carry document scripts that run when opened.
+- canvases reviewed like code: a tldraw document or an SVG can carry script, so
+  `tools/check-canvas.mjs` refuses any script, handler, outside link or HTML in `docs/canvas/`.
 
-Open: the canvases ([#22](https://github.com/Kaginari/mnemorph/issues/22)), the Oni and Arch Dark
-Elf card art ([#23](https://github.com/Kaginari/mnemorph/issues/23)) and the published names
-([#19](https://github.com/Kaginari/mnemorph/issues/19)).
+Open: the Oni and Arch Dark Elf card art ([#23](https://github.com/Kaginari/mnemorph/issues/23))
+and the published names ([#19](https://github.com/Kaginari/mnemorph/issues/19)).
 
 **Exit:** you say the book is right. No code before this.
 

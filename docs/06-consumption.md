@@ -2,6 +2,16 @@
 
 ## In one picture
 
+<a href="./canvas/consumption-light.svg">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./canvas/consumption-dark.svg">
+  <img src="./canvas/consumption-light.svg" alt="Consumption: your caps fund the session envelope; Rimuru slices budgets to the Elf, the Kijin and the Dark Elf, the Elf to the Orc, the Orc to the Slime; every spend lands in the usage ledger, which feeds the meters">
+</picture>
+</a>
+
+<details>
+<summary>The sketch in Mermaid, the text this canvas is drawn from</summary>
+
 ```mermaid
 ---
 config:
@@ -42,6 +52,8 @@ flowchart TD
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
     class M step
 ```
+
+</details>
 
 ## In plain words
 
