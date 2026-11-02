@@ -218,6 +218,42 @@ fn under_the_fall_bar_is_probation_and_unrecovered_after_five_is_a_fall() {
     assert_eq!(propose(&rows, &roster).of("sly").unwrap().id, p.id);
 }
 
+/// `n` runs of `creature` from `from`, a week apart, the `k`th passed when `pass(k)`.
+fn weekly(creature: &str, from: i64, n: i64, pass: impl Fn(i64) -> bool) -> Vec<ReportRow> {
+    (0..n)
+        .map(|k| run(creature, "slime", from + k * 7 * DAY, pass(k), 0))
+        .collect()
+}
+
+#[test]
+fn a_fall_is_read_over_reports_by_count_never_by_the_window() {
+    // A creature that reports once a week: its last ten span nine weeks and its probation five,
+    // both past 28 days. The fall record and the probation are counted in reports, as the law
+    // says, so it still enters probation and still falls.
+    let (roster, mut rows) = risen();
+    let after = T0 + 30 * HOUR;
+    rows.extend(weekly("sly", after, 11, |k| k >= 4));
+    let pr = propose(&rows, &roster)
+        .probation_of("sly")
+        .cloned()
+        .expect("on probation over its last ten, nine weeks of them");
+    assert_eq!(pr.reports, 0);
+    // Five weekly reports on probation, four failed, and the one that settles the fifth.
+    rows.extend(weekly("sly", after + 11 * 7 * DAY, 6, |k| k >= 3 && k != 4));
+    let s = propose(&rows, &roster);
+    assert!(
+        s.probation.is_empty(),
+        "never held on probation past five: {s:?}"
+    );
+    let p = s.of("sly").expect("a fall after five reports");
+    assert!(p.ended_probation && p.act == Move::Fall, "{p:?}");
+    assert!(
+        p.why[0].to_string().contains("(last 5 reports)"),
+        "{}",
+        p.why[0]
+    );
+}
+
 #[test]
 fn a_probation_recovered_at_the_fall_bar_holds_the_form() {
     let (roster, mut rows) = risen();

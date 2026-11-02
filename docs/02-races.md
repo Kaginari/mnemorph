@@ -1372,7 +1372,9 @@ never judged on.
 - **Probation and a fall.** An ascended creature's reports since its rise are walked in order: an
   event in its last ten ends the form at once; a rate under its fall bar over a full ten starts
   probation; five reports on, a rate back at the fall bar with no event recovers it, else a fall
-  is proposed (`probation ended unrecovered`). The walk stops at the first fall, so the fall stays
+  is proposed (`probation ended unrecovered`). The ten and the five are counted in reports, never
+  by the window: a creature that reports once a week is read on its last ten all the same, and its
+  probation is decided on its fifth report. The walk stops at the first fall, so the fall stays
   the same proposal as reports keep arriving. Probation grants and removes nothing: it is read
   from the reports, shown, and never written.
 - **An input no trusted journal carries** (`slimeHealth` for an Orc, `envelopeCorrections` for a

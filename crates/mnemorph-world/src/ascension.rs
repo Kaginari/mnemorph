@@ -13,8 +13,9 @@
 //!   again from nothing.
 //! - **Probation.** An ascended creature's reports since its rise are walked in order: an event
 //!   ends the form at once; a rate under its fall bar over its last ten starts probation; after
-//!   [`RECOVER_REPORTS`] reports on probation it recovers at its fall bar, or falls. Probation
-//!   changes no privilege, so it is read, never written.
+//!   [`RECOVER_REPORTS`] reports on probation it recovers at its fall bar, or falls — each
+//!   counted in reports, never by the window. Probation changes no privilege, so it is read,
+//!   never written.
 //! - **Proposals never apply themselves.** A proposal carries its inputs — the meters, the record
 //!   read, the window — the law's lines, and the SHA-256 of the reports it read and the move. Only
 //!   the human's act applies one ([`apply_in`]): asked at the terminal, refused inside a body's
@@ -396,22 +397,15 @@ fn unrecovered(risen: Race, i: &Inputs, n: u32) -> Vec<Explanation> {
 }
 
 /// `risen`'s reports since its rise, settled and in order, walked: an event falls it at once; a
-/// rate under the fall bar over its last ten (in the window) starts probation; after
-/// [`RECOVER_REPORTS`] reports on probation it recovers at the fall bar or falls.
+/// rate under the fall bar over its last ten starts probation; after [`RECOVER_REPORTS`] reports
+/// on probation it recovers at the fall bar or falls. Both are counted in reports, never by the
+/// window, so a creature that reports slowly is still read on its last ten and still decided.
 fn walk(risen: Race, rows: &[&ReportRow]) -> Walked {
     let mut probation: Option<usize> = None;
-    for (i, row) in rows.iter().enumerate() {
-        let lo = row.ts().0 - WINDOW;
-        let from = probation.unwrap_or(0);
-        let mut picked: Vec<&ReportRow> = rows[from..=i]
-            .iter()
-            .copied()
-            .filter(|r| r.ts().0 > lo)
-            .collect();
-        if probation.is_none() {
-            picked.drain(..picked.len().saturating_sub(FALL_RECORD));
-        }
-        let (s, inputs) = match signals_of(risen, &picked) {
+    for i in 0..rows.len() {
+        let from = probation.unwrap_or((i + 1).saturating_sub(FALL_RECORD));
+        let picked = &rows[from..=i];
+        let (s, inputs) = match signals_of(risen, picked) {
             Ok(x) => x,
             Err(e) => return Walked::Unknown(e),
         };
