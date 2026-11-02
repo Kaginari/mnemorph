@@ -73,6 +73,7 @@ const PAGES: [string, string, string][] = [
   ['queue', `#/w/${W.id}/bodies/queue`, 'Queue'],
   ['timeline', `#/w/${W.id}/bodies/timeline`, 'Timeline'],
   ['journal', `#/w/${W.id}/journal`, 'Journal'],
+  ['net', '#/net', 'Arch Dark Elf'],
   ['metrics', '#/metrics', 'Metrics'],
   ['integrations', '#/integrations', 'Integrations'],
   ['settings', '#/settings', 'Settings'],

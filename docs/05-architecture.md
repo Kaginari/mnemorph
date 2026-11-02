@@ -1230,7 +1230,7 @@ address, so a link, a reload or the back button lands where it was:
 | `#/w/<world>/bodies/<colony\|races\|queue\|timeline>` | a tab of the bodies page |
 | `#/w/<world>/s/<session>` | a live chat |
 | `#/w/<world>/r/<run>` | a past run, read-only |
-| `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
+| `#/net`, `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
 
 Segments are URI-encoded, and `parse(format(r))` gives every route back. Any other address, a
 world the board does not know, and a view whose data is not served yet each say so in an empty
@@ -1246,6 +1246,7 @@ state, never a blank pane.
 | Bodies `#/w/<world>/bodies` | the colony net, race cards, the queue, the timeline | *No body here yet*; *No order here*; *Nothing on the timeline* |
 | Memory, Ontology | notes by creature, scope and standing; facts by status, with confirm, wake and settle | *No note here*; *No contested fact* |
 | Journal | `log.md`'s entries and their contents | *No journal yet* |
+| Colony net `#/net` | the colony's shape, the same in every world: the human, the six races and the five ascended forms as a 3D net on a canvas (drag or the arrow keys orbit, the wheel or + and − zoom; it turns unless reduced motion is asked), a card for the node picked, and every race and its job in words beneath | never empty: the shape is the law's, not a world's |
 | Metrics `#/metrics` | spend, tokens, cache, burn, meters, sessions, scores, bench | a meter with no call reads *silent since …*, never 0; one whose journal does not hold reads *unavailable — why*; the bench *Not configured*, with the line to add |
 | Integrations, Settings | providers, key sources, MCP servers, the effective configuration; the theme | *Not configured* where the global file names nothing |
 

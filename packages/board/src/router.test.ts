@@ -6,6 +6,7 @@ describe('the router', () => {
     ['', { name: 'worlds' }],
     ['#', { name: 'worlds' }],
     ['#/', { name: 'worlds' }],
+    ['#/net', { name: 'net' }],
     ['#/metrics', { name: 'metrics' }],
     ['#/integrations/', { name: 'integrations' }],
     ['#/settings', { name: 'settings' }],
@@ -29,6 +30,7 @@ describe('the router', () => {
     '#/w/a/memory/queue',
     '#/w/a/bodies/nope',
     '#/metrics/extra',
+    '#/net/extra',
     '#/w/%E0%A4%A/s/x',
     '#/w/a/s/b/c/d',
   ])('gives an unknown route for %j, carrying the path', (hash) => {
@@ -37,6 +39,7 @@ describe('the router', () => {
 
   it.each<Route>([
     { name: 'worlds' },
+    { name: 'net' },
     { name: 'metrics' },
     { name: 'settings' },
     { name: 'world', world: 'x-1' },

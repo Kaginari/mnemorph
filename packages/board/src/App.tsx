@@ -25,6 +25,7 @@ import { IntegrationsView } from './views/Integrations.tsx';
 import { JournalView } from './views/Journal.tsx';
 import { MemoryView } from './views/Memory.tsx';
 import { MetricsView } from './views/Metrics.tsx';
+import { NetView } from './views/Net.tsx';
 import { OntologyView } from './views/Ontology.tsx';
 import { SettingsView, UnknownView } from './views/Pages.tsx';
 import { SignedOut } from './views/SignedOut.tsx';
@@ -109,6 +110,8 @@ function Centre({
   switch (route.name) {
     case 'worlds':
       return <WorldsView load={load} now={now} />;
+    case 'net':
+      return <NetView />;
     case 'metrics':
       return <MetricsView load={load} />;
     case 'integrations':
@@ -152,6 +155,8 @@ function title(route: Route, world: BoardWorld | undefined): string {
   switch (route.name) {
     case 'worlds':
       return 'Worlds';
+    case 'net':
+      return 'Colony net';
     case 'metrics':
       return 'Metrics';
     case 'integrations':
