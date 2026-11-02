@@ -69,7 +69,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   28-day window and through probation, shown in `mnemorph status`, `mnemorphd meters` and the
   board's bodies page with the command that applies them, applied only by the human at the
   terminal (`mnemorphd roster rise|fall`), and replayed exactly from the journals and the
-  creatures' witness (`mnemorphd roster replay`).
+  creatures' witness (`mnemorphd roster replay`). An input no trusted journal carries yet is said
+  unknown, never zero, and proposes nothing.
 
 ### M10 — Dark Elf
 

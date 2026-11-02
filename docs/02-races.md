@@ -1378,8 +1378,10 @@ never judged on.
   the same proposal as reports keep arriving. Probation grants and removes nothing: it is read
   from the reports, shown, and never written.
 - **An input no trusted journal carries** (`slimeHealth` for an Orc, `envelopeCorrections` for a
-  Kijin) computes no proposal: an Orc or a Kijin is not proposed a move until it is journaled. A
-  Dark Elf's proposals stay on its findings (`mnemorphd challenge score`).
+  Kijin) computes no proposal: an Orc or a Kijin is not proposed a move until it is journaled, and
+  `mnemorph status` and `mnemorphd meters` say the input unknown — never zero (`unknown` in
+  `--json`). A Dark Elf is not read here at all: its proposals stay on its findings (`mnemorphd
+  challenge score`).
 - **A proposal carries its inputs**: the meters over the reports read, each with its count and
   interval; how many were read and the window; the law's lines, one per bar; the SHA-256 of the
   reports read and the move (`inputsSha256`), whose first twelve digits are its id; the time it
@@ -1395,7 +1397,7 @@ never judged on.
   creatures' witness — `act` `rise` or `fall`, the new race, `by` `human`, the proposal's id, its
   `inputs_sha256` and `as_of` — chained with the rest, and sets the card's `Race` line to match.
 - **Where proposals show.** `mnemorph status` (`ascend` lines), `mnemorphd meters` (and each
-  creature's `proposal` and `probation` in `--json`) and the board's bodies page say each pending
+  creature's `proposal`, `probation` and `unknown` in `--json`) and the board's bodies page say each pending
   proposal and probation with the command that applies it, escaped, its words quoted for a shell:
 
   ```text

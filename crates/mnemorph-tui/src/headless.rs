@@ -608,8 +608,8 @@ pub fn meters(world: &std::path::Path) -> Vec<String> {
         .iter()
         .map(|m| format!("{:<9}{}", "meters", one_line(&m.to_string())))
         .collect();
-    // Only proposals and probations are said: a survey with none, or one the fold cannot read
-    // (the meters above say why), adds nothing.
+    // Only proposals, probations and unknown inputs are said: a survey with none, or one the
+    // fold cannot read (the meters above say why), adds nothing.
     if let Ok(s) = mnemorph_server::world::ascension::survey(world) {
         lines.extend(
             mnemorph_server::world::ascension::lines_of(&s, world)

@@ -135,7 +135,9 @@ witness, the gate verdicts, the challenge records and the Kijin posts' witnesses
 directory — never a copy in the world — and kept in the report ledger there
 (`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on. Each rise or
 fall the compiled law proposes, and each probation, follows with the command that applies it
-(`roster rise|fall`); none is applied here.
+(`roster rise|fall`); none is applied here. A creature whose law reads an input no trusted journal
+carries yet (an Orc's `slimeHealth`, a Kijin's `envelopeCorrections`) is said unknown, never zero,
+and proposed nothing (`unknown` in `--json`).
 
 `usage` folds the world's usage ledger over the window (7 days unless `--window` says) — read
 from its witness under the state directory, trusted while its chain holds, else from the world's
@@ -2269,6 +2271,7 @@ fn meters(args: &[String]) -> ExitCode {
                 })
                 .collect();
             let (proposal, probation) = ascension_json(survey.as_ref().ok(), &m.name, &world);
+            let unknown = survey.as_ref().ok().and_then(|s| s.unknown_of(&m.name));
             println!(
                 "{}",
                 serde_json::json!({
@@ -2277,6 +2280,7 @@ fn meters(args: &[String]) -> ExitCode {
                     "meters": readings,
                     "proposal": proposal,
                     "probation": probation,
+                    "unknown": unknown,
                 })
             );
         }
@@ -2338,12 +2342,12 @@ fn ascension_json(
     )
 }
 
-/// The rises and falls the compiled law proposes, as `meters` says them, escaped; nothing when
-/// none is pending.
+/// The rises and falls the compiled law proposes, as `meters` says them, escaped, with each input
+/// it cannot read; nothing when none is pending and every input is known.
 fn pending(survey: &Result<mnemorph_server::world::ascension::Survey, String>, world: &Path) {
     let safe = mnemorph_server::challenge::safe;
     match survey {
-        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() => {}
+        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() && s.unknown.is_empty() => {}
         Ok(s) => {
             println!("\nproposed by the compiled law — nothing changes until the human applies it");
             for line in mnemorph_server::world::ascension::lines_of(s, world) {

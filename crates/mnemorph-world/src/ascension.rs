@@ -205,7 +205,9 @@ pub struct Survey {
     pub proposals: Vec<Proposal>,
     /// The creatures on probation.
     pub probation: Vec<Probation>,
-    /// Creatures whose bars read an unknown input, and its law name: no proposal is computed.
+    /// Creatures whose bars read an input no trusted journal carries, and its law name: no
+    /// proposal is computed, and the input is said unknown, never read as zero. A Dark Elf is
+    /// never here: it is read on its findings (`mnemorphd challenge score`).
     pub unknown: Vec<(String, &'static str)>,
 }
 
@@ -220,6 +222,15 @@ impl Survey {
     #[must_use]
     pub fn probation_of(&self, creature: &str) -> Option<&Probation> {
         self.probation.iter().find(|p| p.creature == creature)
+    }
+
+    /// The input `creature`'s law reads that no trusted journal carries, when there is one.
+    #[must_use]
+    pub fn unknown_of(&self, creature: &str) -> Option<&'static str> {
+        self.unknown
+            .iter()
+            .find(|(c, _)| c == creature)
+            .map(|(_, input)| *input)
     }
 }
 
@@ -540,7 +551,8 @@ fn fall_of(
 pub fn propose_at(rows: &[ReportRow], roster: &[Row], clock: Timestamp) -> Survey {
     let mut out = Survey::default();
     for (name, h) in held(roster) {
-        if h.retired {
+        // A Dark Elf's record is its findings, which the report ledger does not carry.
+        if h.retired || h.race.base() == Race::DarkElf {
             continue;
         }
         let (mine, settled) = reports_of(rows, &name, &h, clock);
@@ -786,7 +798,7 @@ pub fn replay_in(world: &Path, state: &Path) -> Result<Vec<Replayed>, String> {
     replay(&rows, &roster)
 }
 
-/// Each pending proposal and probation of `world`, in lines for `status` and `mnemorphd meters`,
+/// Each pending proposal, probation and unknown input of `world`, in lines for `status` and `mnemorphd meters`,
 /// each with the command that applies it; one line saying why when nothing can be read.
 /// Unescaped: the caller escapes for its surface.
 #[must_use]
@@ -813,6 +825,12 @@ pub fn lines_of(s: &Survey, world: &Path) -> Vec<String> {
         ));
     }
     out.extend(s.probation.iter().map(ToString::to_string));
+    out.extend(s.unknown.iter().map(|(c, input)| {
+        format!(
+            "{c}: no rise or fall is proposed — its law reads {input}, which no trusted journal \
+             carries yet (unknown, never read as zero)"
+        )
+    }));
     out
 }
 

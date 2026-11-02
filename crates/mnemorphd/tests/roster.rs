@@ -325,19 +325,24 @@ impl Fixture {
     /// `n` runs of `slime-s` an hour apart, each landing passed on the human's pins, written to
     /// the usage witness and the gate verdicts as the harness writes them.
     fn passes(&self, n: i64) {
+        self.passes_as("slime-s", "slime", n);
+    }
+
+    /// [`Fixture::passes`], for `body` running as `race`.
+    fn passes_as(&self, body: &str, race: &str, n: i64) {
         use mnemorph_server::world::ledger::{Build, Journal, Timestamp, Usage, UsageRow};
         use mnemorph_server::world::queue::state_file_in;
         use mnemorph_server::world::verdicts::{self, VerdictRow};
         let t0 = 1_793_000_000;
         for k in 0..n {
-            let run = format!("slime-s-{k}");
+            let run = format!("{body}-{k}");
             Journal::<UsageRow>::chained(state_file_in(&self.state, &self.world, "usage"))
                 .append(&UsageRow {
                     ts: Timestamp(t0 + k * 3600),
                     session: "s".into(),
                     run: run.clone(),
-                    body: "slime-s".into(),
-                    race: "slime".into(),
+                    body: body.into(),
+                    race: race.into(),
                     commission: Some("rimuru".into()),
                     model: "m".into(),
                     provider: "p".into(),
@@ -354,7 +359,7 @@ impl Fixture {
             verdicts::journal_at(state_file_in(&self.state, &self.world, "gate"))
                 .append(&VerdictRow {
                     ts: Timestamp(t0 + k * 3600 + 600),
-                    body: "slime-s".into(),
+                    body: body.into(),
                     verdict: "PASS".into(),
                     changed: vec!["src/a.rs".into()],
                     failures: Vec::new(),
@@ -368,6 +373,39 @@ impl Fixture {
                 .unwrap();
         }
     }
+}
+
+/// An Orc's law reads `slimeHealth`, which no trusted journal carries yet: however good its record,
+/// no rise is proposed, and the meters say the input unknown — never zero.
+#[test]
+fn an_input_no_journal_carries_is_said_unknown_never_zero() {
+    let f = Fixture::new("unknown");
+    f.card(
+        ".mnemorph/orc/o/README.md",
+        "# orc-o\n\n- **Race:** orc\n- **Domain:** lib/\n",
+    );
+    let out = f.run(&["roster", "adopt", "--yes"], None);
+    assert!(out.status.success(), "{}", text(&out));
+    f.passes_as("orc-o", "orc", 22);
+    let out = f.run(&["meters"], None);
+    assert!(
+        text(&out).contains(
+            "orc-o: no rise or fall is proposed — its law reads slimeHealth, which no trusted \
+             journal carries yet (unknown, never read as zero)"
+        ) && !text(&out).contains("orc-o: rise"),
+        "{}",
+        text(&out)
+    );
+    let out = f.run(&["meters", "--json"], None);
+    let orc = text(&out)
+        .lines()
+        .find(|l| l.contains(r#""creature":"orc-o""#))
+        .map(str::to_owned)
+        .unwrap_or_default();
+    assert!(
+        orc.contains(r#""proposal":null"#) && orc.contains(r#""unknown":"slimeHealth""#),
+        "{orc}"
+    );
 }
 
 /// A rise the law proposes is shown wherever the meters are, with the command that applies it,

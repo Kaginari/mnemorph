@@ -157,6 +157,21 @@ fn an_input_no_journal_carries_proposes_nothing() {
     let s = propose(&rows, &[adopted("gor", Race::Orc)]);
     assert_eq!(s.proposals, NONE);
     assert_eq!(s.unknown, vec![("gor".to_owned(), "slimeHealth")]);
+    // Listed as unknown wherever proposals are said, never as a zero.
+    assert_eq!(
+        lines_of(&s, Path::new("/w")),
+        vec![
+            "gor: no rise or fall is proposed — its law reads slimeHealth, which no trusted \
+             journal carries yet (unknown, never read as zero)"
+                .to_owned()
+        ]
+    );
+    // A Dark Elf is read on its findings (`challenge score`), not on an input it lacks.
+    let s = propose(
+        &rows,
+        &[adopted("gor", Race::Orc), adopted("vex", Race::DarkElf)],
+    );
+    assert_eq!(s.unknown, vec![("gor".to_owned(), "slimeHealth")]);
     assert_eq!(
         propose(&[], &[adopted("gor", Race::Orc)]),
         Survey::default()
