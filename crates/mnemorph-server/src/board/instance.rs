@@ -101,6 +101,15 @@ pub fn claim(dir: &Path) -> Result<Claim, String> {
     }
 }
 
+/// Whether a board holds the lock under `dir` now: probed for an instant, shared, opened only as
+/// a regular file. A board lets go of it last, after its socket and nonce are gone.
+#[must_use]
+pub fn held(dir: &Path) -> bool {
+    mnemorph_loop::world::regular::open(&dir.join("board.lock")).is_ok_and(|f| {
+        f.is_some_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
+    })
+}
+
 impl Instance {
     /// Keep `url` for a second launch to print.
     ///

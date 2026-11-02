@@ -455,15 +455,18 @@ fn board_stop(args: &[String], registry: &Path) -> ExitCode {
         use mnemorph_server::board::control;
         match control::stop(dir) {
             Ok(pid) => {
-                // It stops as on Ctrl-C: its chats end, then its lock is let go.
+                // It stops as on Ctrl-C: its socket and nonce go, its chats end, then its lock
+                // is let go — the last thing it does, so the one waited for.
                 for _ in 0..100 {
-                    if control::ping(dir).is_err() {
-                        break;
+                    if !mnemorph_server::board::instance::held(dir) {
+                        println!("board stopped (pid {pid})");
+                        return ExitCode::SUCCESS;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                println!("board stopped (pid {pid})");
-                ExitCode::SUCCESS
+                fail(&format!(
+                    "the board (pid {pid}) was asked to stop, but still runs after 10s"
+                ))
             }
             Err(e) => refused(&e),
         }
