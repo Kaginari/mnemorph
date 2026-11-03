@@ -182,6 +182,16 @@ pub struct Limits {
     pub ping: Duration,
 }
 
+impl Limits {
+    /// The longest a chat's end may take: the shutdown sent, the child's leaving, the wait after
+    /// its group is killed (each up to `leave`), and its last words (half a second). Chats end
+    /// together, so this bounds a board's stop too.
+    #[must_use]
+    pub fn longest_end(&self) -> Duration {
+        self.leave * 3 + Duration::from_secs(1)
+    }
+}
+
 impl Default for Limits {
     fn default() -> Self {
         Self {
