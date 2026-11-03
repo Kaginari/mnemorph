@@ -584,6 +584,19 @@ pub fn guts(world: &std::path::Path) -> Vec<String> {
     vec![format!("{:<9}{}", "guts", one_line(&line))]
 }
 
+/// `status`'s envelopes: one line per Oni envelope signed for the world — its name, whether it is
+/// in force, its dates and uses — and any reason none is honoured; the patterns each allows and
+/// its uses are `mnemorphd envelope list`'s.
+#[must_use]
+pub fn envelopes(world: &std::path::Path) -> Vec<String> {
+    let lines = mnemorph_server::envelope::list(world).unwrap_or_else(|why| vec![why]);
+    lines
+        .iter()
+        .filter(|l| !l.starts_with(' '))
+        .map(|l| format!("{:<9}{}", "envelope", one_line(l)))
+        .collect()
+}
+
 /// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
 /// an unadopted Mind needs; nothing when the world holds none.
 #[must_use]
