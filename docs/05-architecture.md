@@ -1627,7 +1627,10 @@ flowchart LR
     root); `mnemorphd` refuses to serve if the kernel refuses this, and `mnemorph` warns in the
     session. Every process the harness starts — commands, its own `git` calls, the guard's probe
     — gets the harness's environment without its secrets, since a running child's `environ` is
-    open to the user's other processes. The exception is an MCP server given a key by name in
+    open to the user's other processes. Git's config given in the environment
+    (`GIT_CONFIG_COUNT` with its `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`) is dropped
+    whole: a value may carry a token (`http.extraHeader`), and a count left without its keys
+    fails every git call. The exception is an MCP server given a key by name in
     its configuration: while it runs, that key is readable by the user's other processes. What
     stays open is what any process of the user may see: the list of processes and each one's
     `cmdline` and `status` — so a secret never travels on a command line. On macOS there is no
