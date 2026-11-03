@@ -72,6 +72,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   creatures' witness (`mnemorphd roster replay`). An input no trusted journal carries yet is said
   unknown, never zero, and proposes nothing.
 
+- M11's lesson as a test: a landing the gate did not pass (failed, handed back, not verified,
+  unrun, unpinned, unchecked), as a new run, an old pass judged again, or the throne's, never
+  raises any creature's pass meter.
+
 ### M10 — Dark Elf
 
 - The specialities, attack classes, surfaces and route, compiled; the finding fields on the wire

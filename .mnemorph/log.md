@@ -6802,3 +6802,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `headless::envelopes`: one `envelope` line per Oni envelope signed for the world (name, in force or why not, signed, expires, uses/cap) and any reason none is honoured, from `EnvelopeGate::lines` — the very lines `mnemorphd envelope list` prints, its indented detail left to it. Shown whether or not a session opens.
 - **Tests:** `status_lists_each_envelope`: none signed is said; one signed for the world reads `forge — in force; signed …, expires …; uses 0/5`, and no `allows:` line.
 - **Learned:** a status line and its detailed command should read from one function, so they can never disagree.
+
+### [2026-11-04T00:20:00+01:00] rimuru — M11's lesson: a FAIL never raises a pass rate
+- **Done:** no behaviour change. `a_landing_the_gate_did_not_pass_never_raises_a_pass_rate` (the lesson's test, lessons.md row M11): six words the gate writes for a landing it did not pass × three shapes (a new run, an old pass judged again, a throne landing), over the colony fixture; no creature's land, gate, verify-green, plan-land, gate-right or ask-done meter rises.
+- **Tests:** reading `FAIL, handed back` as a pass fails it (`sly landRate 1/2 → 2/3`).
+- **Learned:** `verifyGreenRate` reads the human's lines, not the gate's word: a FAIL with no `traits hold` failure is green by the book. A fixture must write what the gate writes beside its word, or it tests a verdict no gate gives.
