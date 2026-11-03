@@ -237,7 +237,9 @@ http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorp
 sign-in link)*; a port in use, a missing binary or a board slow to answer is that line too, never a crash
 or a hang. No key reaches the app's screen or the log. The board outlives the app: quitting
 `mnemorph` leaves it serving, and a Ctrl-C at that terminal never reaches it.
-`mnemorphd board stop` stops it — its chats end, its socket and URL file go, its lock is let go.
+`mnemorphd board stop` stops it — its socket and nonce go, its chats end, its lock is let go —
+and returns only once the lock is free: it waits as long as a chat that ignores its shutdown may
+take to be killed, and fails if the board still runs past that, or if its lock cannot be read.
 Every `board.*` key is the global file's alone: from a world's file it is a hole, since starting a
 server that serves every world, and opening a browser on it, are the human's call.
 
