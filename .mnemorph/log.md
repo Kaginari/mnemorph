@@ -6797,3 +6797,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** no behaviour change. The independent review of #322/#323 ran on the PRs' heads before their review commits; both findings were already fixed on main (a780c2b, 8b65fd5). One gap remained: nothing tied `board stop`'s wait to the bound a chat's end may take — setting it back to 10 seconds failed no test.
 - **Tests:** `board_stop_waits_out_a_chat_that_ignores_its_shutdown` runs `mnemorphd board stop` against a faked board that answers `stop`, drops its socket and nonce, then keeps `board.lock` a `leave` and two seconds more. On the old 10 s wait it fails with "still runs after 10s"; on main it passes in ~12 s.
 - **Learned:** a bound tested only where it is computed is not tested where it is used.
+
+### [2026-11-03T23:00:00+01:00] rimuru — M11's lesson: a FAIL never raises a pass rate
+- **Done:** no behaviour change. `a_landing_the_gate_did_not_pass_never_raises_a_pass_rate` (the lesson's test, lessons.md row M11): six words the gate writes for a landing it did not pass × three shapes (a new run, an old pass judged again, a throne landing), over the colony fixture; no creature's land, gate, verify-green, plan-land, gate-right or ask-done meter rises.
+- **Tests:** reading `FAIL, handed back` as a pass fails it (`sly landRate 1/2 → 2/3`).
+- **Learned:** `verifyGreenRate` reads the human's lines, not the gate's word: a FAIL with no `traits hold` failure is green by the book. A fixture must write what the gate writes beside its word, or it tests a verdict no gate gives.

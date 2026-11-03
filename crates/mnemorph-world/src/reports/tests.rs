@@ -717,3 +717,94 @@ fn each_row_carries_its_sources_build() {
         unstamped
     );
 }
+
+/// One way a landing reaches the colony's journals: given the fixture and the gate's word.
+type Shape<'a> = Box<dyn Fn(&Fixture, &str) + 'a>;
+
+/// M11's lesson: a FAIL never raises a pass rate. Whatever the colony's record, a landing the gate
+/// did not pass — failed, handed back, not verified, unrun, unpinned, a pass no line checked —
+/// added as a new run, laid again on a run that passed, or landed by the throne, leaves every
+/// creature's pass meters where they were or lower. The fold reads the gate's word, never the
+/// body's: an `@S DONE` beside a failed gate is no pass. Each verdict carries what the gate writes
+/// beside its word — a failed verify line, a line that gave no result — since `verifyGreenRate`
+/// reads the human's lines, not the word: a FAIL for another reason with green lines is green.
+#[test]
+fn a_landing_the_gate_did_not_pass_never_raises_a_pass_rate() {
+    const PASS_METERS: [&str; 6] = [
+        "landRate",
+        "gateRate",
+        "verifyGreenRate",
+        "planLandRate",
+        "gateRight",
+        "askDoneRate",
+    ];
+    let creatures = [
+        ("sly", Race::Slime),
+        ("sam", Race::Slime),
+        ("gor", Race::Orc),
+        ("lana", Race::Elf),
+        ("rimuru", Race::Rimuru),
+        ("kijin-forge", Race::Kijin),
+    ];
+    let meters = |f: &Folded| -> Vec<(String, Rate)> {
+        creatures
+            .iter()
+            .flat_map(|&(c, r)| PASS_METERS.map(|m| (format!("{c} {m}"), of(f, c, r, m))))
+            .collect()
+    };
+    let before = meters(&Fixture::colony().fold().unwrap());
+    let words = [
+        "FAIL",
+        "FAIL, handed back",
+        "NOT_VERIFIED",
+        "NOT_VERIFIED, unrun",
+        "NOT_VERIFIED, unpinned",
+        "PASS, unchecked",
+    ];
+    // What the gate writes beside each word.
+    let judged = |f: &Fixture, run: &str, body: &str, w: &str, ts: i64, changed: &str| {
+        let failed: &[&str] = if w.starts_with("FAIL") {
+            &["traits hold: `cargo test` failed:\nboom"]
+        } else {
+            &[]
+        };
+        let unverified: &[&str] = if w.starts_with("NOT_VERIFIED") {
+            &["traits unverified: `cargo test` gave no result: killed"]
+        } else {
+            &[]
+        };
+        f.verdict_with(Some(run), body, w, ts, &[changed], failed, unverified);
+    };
+    let shapes: [(&str, Shape<'_>); 3] = [
+        (
+            "a new run of sly's",
+            Box::new(|f, w| {
+                f.call("s9", "sly", "slime", Some("gor"), 300);
+                judged(f, "s9", "sly", w, 301, "src/a.rs");
+            }),
+        ),
+        (
+            "sly's passed run judged again",
+            Box::new(|f, w| judged(f, "s1", "sly", w, 302, "src/a.rs")),
+        ),
+        (
+            "a landing of the throne's",
+            Box::new(|f, w| judged(f, "r0", "rimuru", w, 303, "d.rs")),
+        ),
+    ];
+    for word in words {
+        for (shape, add) in &shapes {
+            let f = Fixture::colony();
+            add(&f, word);
+            let after = meters(&f.fold().unwrap());
+            for ((meter, was), (_, now)) in before.iter().zip(&after) {
+                let raised = match (was.value(), now.value()) {
+                    (Some(a), Some(b)) => b > a + 1e-12,
+                    (None, Some(b)) => b > 0.0,
+                    _ => false,
+                };
+                assert!(!raised, "{word} as {shape} raised {meter}: {was} → {now}");
+            }
+        }
+    }
+}
