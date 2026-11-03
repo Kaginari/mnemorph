@@ -99,6 +99,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Citation by use, the accepted, corroborated and confirmed routes, a correction standing beside
   its note, recall's weights in config, the triage fixture [#206] [#207] [#208] [#213] [#215]
   [#216] [#217] [#218]; the ontology mesh live [#214].
+- The **checked** route grounds a claim only on the check it names: `@U law <path> <fact>
+  check=<verify line or test>`, a verify line that ran in that gate (or a test it names), cited in
+  the grounded note. A claim naming no check, or one that did not run, stays proposed and the
+  report says why, so a compile check no longer grounds a behaviour claim [#317].
 
 ### M7 — The world
 

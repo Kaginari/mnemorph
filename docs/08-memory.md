@@ -204,7 +204,7 @@ by exactly one of:
 
 | Route | Proof | For |
 |---|---|---|
-| **checked** | the end gate passed *and* ran at least one verify line over a non-empty diff | work that wrote files |
+| **checked** | the end gate passed, ran at least one verify line over a non-empty diff, *and* the claim names a path that diff changed and the check that tests it (`check=<verify line or test>`), which ran in that gate | work that wrote files |
 | **accepted** | the commissioner's verdict names the claim and accepts it (the verdict-current) | research, reads, reviews — work with nothing to test |
 | **corroborated** | a second creature lands a matching claim from different evidence anchors | anything, including failed runs |
 | **confirmed** | the human says so: `mnemorphd memory confirm <claim>` | anything |
@@ -334,9 +334,22 @@ route at all. A **checked** proof carries what its diff changed, and grounds onl
 one of those paths or the directories above them (by its specific terms: `src/a.rs:12` names
 `src/a.rs`, a path names its file); a diff of only files every project has (`Cargo.toml`,
 `README.md`) observes none;
-any other claim of the landing stays proposed, offered for the commissioner to accept. A
-commissioned body is asked to name the file a claim is about (`@U law <path> <fact>`), and the
-drain asks the same, so a claim about the work can be proven by the work's own tests. `memory
+any other claim of the landing stays proposed, offered for the commissioner to accept.
+
+A passing line proves only what it runs: a compile check that passed says nothing of what `pop`
+does. So a claim also names its check, last: `@U law src/stack.py pop on an empty stack raises
+IndexError check=tests/test_stack.py::test_pop_empty`. The check is a verify line that ran in
+this gate, whole, or a test one of them names (one of its words after the program, never a flag),
+and the grounded note cites it: its proof ends `` — check: `python3 -m pytest
+tests/test_stack.py::test_pop_empty` ``. A claim that names
+no check, or one that did not run, stays proposed, and the report says why
+(`[memory: … ; 1 not checked: it names no check (…)]`); **accepted**, **corroborated** and
+**confirmed** still promote it. What **checked** proves is therefore narrow: the body bound the claim
+to a check, and that check, written before the turn, passed over the claim's own diff — not that
+the check exercises every word of the claim. A commissioned body and a body answering the human
+are asked to name the file a claim is about and its check
+(`@U law <path> <fact> check=<verify line or test>`); the drain asks for the file, so a claim about the work can be proven by the work's
+own tests. `memory
 status` opens with how much of the world's memory stands — shared and grounded, personal and
 proposed — the first number to read after a run, since only shared notes reach other bodies.
 

@@ -172,7 +172,9 @@ async fn the_session_lands_through_the_end_gate() {
             "write",
             serde_json::json!({"path": "out.txt", "content": "fixed\n"}),
         ),
-        ScriptedModel::text("Fixed.\n@U law out.txt says fixed once the gate passes"),
+        ScriptedModel::text(
+            "Fixed.\n@U law out.txt says fixed once the gate passes check=grep -q fixed out.txt",
+        ),
     ]));
     let config = Config::load(&Paths::with_global(global, &w)).unwrap();
     let attic = w.join("../mnemorph-session-gate-attic");
