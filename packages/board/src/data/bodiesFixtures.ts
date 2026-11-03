@@ -165,6 +165,8 @@ const body = (b: Partial<BoardBody> & Pick<BoardBody, 'name' | 'race'>): BoardBo
   standing: 'trusted',
   runs_as: b.race,
   differs: [],
+  proposal: null,
+  probation: null,
   ...b,
 });
 
@@ -207,6 +209,23 @@ export const fixtureBodies: BoardBodies = {
     body({
       name: 'slime-parser',
       race: 'slime',
+      proposal: {
+        id: '3f9a1c2b7d4e',
+        act: 'rise',
+        to: 'named-slime',
+        ended_probation: false,
+        reports: 20,
+        meters: [
+          'landRate 0.95 (19/20, 95% 0.76–0.99)',
+          'gateRate 0.95 (19/20, 95% 0.76–0.99)',
+          'holeRate 0.00 (0/20, 95% 0.00–0.16)',
+        ],
+        why: [
+          'rise: reports 20 >= 20 (over 20 reports)',
+          'rise: landRate 0.95 >= 0.90 (over 20 reports)',
+        ],
+        command: "mnemorphd roster rise slime-parser --world '/home/me/my world'",
+      },
       parent: 'orc-sql',
       ground: [{ kind: 'zone', path: 'sqlglot/parser.py' }],
       verify: 2,
@@ -224,6 +243,8 @@ export const fixtureBodies: BoardBodies = {
       standing: 'mismatched',
       runs_as: 'slime',
       differs: ['Race'],
+      probation:
+        'slime-lexer (named-slime): on probation since 2026-10-30T09:00:00Z — 2 of 5 reports; it recovers at its fall bar or a fall is proposed',
       parent: 'orc-sql',
       ground: [{ kind: 'zone', path: 'sqlglot/tokens.py' }],
     }),
@@ -280,6 +301,12 @@ export const fixtureBodies: BoardBodies = {
     why: null,
   },
   law: { source: 'the race law, compiled into mnemorphd', trusted: true, why: null },
+  ascension: {
+    source:
+      "the compiled race law over the report fold and the creatures' witness (state directory): proposed only — the human applies a rise or a fall at the terminal",
+    trusted: true,
+    why: null,
+  },
 };
 
 export const fixtureQueue: BoardQueue = {

@@ -114,6 +114,59 @@ function Trust({ b }: { b: BoardBody }) {
   );
 }
 
+/** The rise or fall the compiled law proposes, and the command the human applies it with. */
+function Ascension({ b }: { b: BoardBody }) {
+  const p = b.proposal;
+  if (!p && !b.probation) return null;
+  return (
+    <div className="body-ascension">
+      {p && (
+        <>
+          <p>
+            <Mark tone="gold" glyph={p.act === 'rise' ? '▲' : '▼'}>
+              {p.act} to <Safe text={p.to} /> proposed
+            </Mark>{' '}
+            <span className="panel-note">
+              {p.ended_probation ? 'probation ended unrecovered; ' : ''}over {p.reports} reports,
+              from the trusted journals — nothing changes until the human applies it at the terminal
+            </span>
+          </p>
+          <ul className="law-bars mono">
+            {p.meters.map((m) => (
+              <li key={m}>
+                <Safe text={m} />
+              </li>
+            ))}
+            {p.why.map((w) => (
+              <li key={w}>
+                <Safe text={w} />
+              </li>
+            ))}
+          </ul>
+          <p>
+            <code className="mono">
+              <Safe text={p.command} />
+            </code>{' '}
+            <span className="panel-note">
+              proposal <Safe text={p.id} />
+            </span>
+          </p>
+        </>
+      )}
+      {b.probation && (
+        <p>
+          <Mark tone="alarm" glyph="◐">
+            probation
+          </Mark>{' '}
+          <span className="panel-note">
+            <Safe text={b.probation} />
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 const ORDER: Record<OrderState, { tone: Tone; glyph: string }> = {
   held: { tone: 'gold', glyph: '◇' },
   claimed: { tone: 'holo', glyph: '◆' },
@@ -393,6 +446,7 @@ function BodyCard({
             </span>
           </p>
           <Trust b={b} />
+          <Ascension b={b} />
           <p>
             reports to{' '}
             {b.parent ? <Safe text={b.parent} /> : <span className="panel-note">no one named</span>}
