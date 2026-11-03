@@ -6798,6 +6798,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `board_stop_waits_out_a_chat_that_ignores_its_shutdown` runs `mnemorphd board stop` against a faked board that answers `stop`, drops its socket and nonce, then keeps `board.lock` a `leave` and two seconds more. On the old 10 s wait it fails with "still runs after 10s"; on main it passes in ~12 s.
 - **Learned:** a bound tested only where it is computed is not tested where it is used.
 
+### [2026-11-03T23:30:00+01:00] rimuru — `mnemorph status` lists the envelopes (M11, the roadmap's "still to come")
+- **Done:** `headless::envelopes`: one `envelope` line per Oni envelope signed for the world (name, in force or why not, signed, expires, uses/cap) and any reason none is honoured, from `EnvelopeGate::lines` — the very lines `mnemorphd envelope list` prints, its indented detail left to it. Shown whether or not a session opens.
+- **Tests:** `status_lists_each_envelope`: none signed is said; one signed for the world reads `forge — in force; signed …, expires …; uses 0/5`, and no `allows:` line.
+- **Learned:** a status line and its detailed command should read from one function, so they can never disagree.
+
 ### [2026-11-03T23:00:00+01:00] rimuru — M11's lesson: a FAIL never raises a pass rate
 - **Done:** no behaviour change. `a_landing_the_gate_did_not_pass_never_raises_a_pass_rate` (the lesson's test, lessons.md row M11): six words the gate writes for a landing it did not pass × three shapes (a new run, an old pass judged again, a throne landing), over the colony fixture; no creature's land, gate, verify-green, plan-land, gate-right or ask-done meter rises.
 - **Tests:** reading `FAIL, handed back` as a pass fails it (`sly landRate 1/2 → 2/3`).

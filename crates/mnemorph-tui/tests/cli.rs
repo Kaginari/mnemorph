@@ -534,3 +534,62 @@ fn a_binary_spawning_test_passes_the_same_under_a_populated_home() {
     assert!(said.contains("2 passed"), "both tests ran: {said}");
     assert_eq!(files(h), before, "the populated home was left as it was");
 }
+
+/// `status` lists each Oni envelope signed for the world — its name, whether it is in force, its
+/// dates and uses — one line each, whether or not a session opens; `mnemorphd envelope list`
+/// holds the rest. None signed is said.
+#[cfg(unix)]
+#[test]
+fn status_lists_each_envelope() {
+    use mnemorph_server::world::ledger::Timestamp;
+    use std::os::unix::fs::PermissionsExt as _;
+    let w = empty_world("envelopes").canonicalize().unwrap();
+    let config = w.join("config");
+    let status = || {
+        let out = bin()
+            .args(["status", "--world", w.to_str().unwrap()])
+            .env("XDG_CONFIG_HOME", &config)
+            .env("XDG_STATE_HOME", w.join("../mnemorph-cli-envelopes-state"))
+            .env("HOME", &w)
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let shown = status();
+    assert!(
+        shown.contains("envelope no envelope is signed\n"),
+        "{shown}"
+    );
+    let dir = config.join("mnemorph");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let today = Timestamp::now().day();
+    let (signed, expires) = (today.plus(-1), today.plus(20));
+    let global = dir.join("config.toml");
+    std::fs::write(
+        &global,
+        format!(
+            "[[oni.envelopes]]\nname = \"forge\"\nworld = {:?}\nallow = [\"git push origin feat/*\"]\nsigned = {signed}\nexpires = {expires}\nuses = 5\n",
+            w.display().to_string()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&global, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let shown = status();
+    assert!(
+        shown.contains(&format!(
+            "envelope forge — in force; signed {signed}, expires {expires}; uses 0/5\n"
+        )),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("allows:"),
+        "the patterns are `envelope list`'s: {shown}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(w.join("../mnemorph-cli-envelopes-state"));
+}

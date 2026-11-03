@@ -52,7 +52,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 ### M11 — Value, evolution, ascension
 
 - Oni envelopes: signed, expiring, capped, revocable, and honoured by the gate [#108] [#110]
-  [#118] [#262].
+  [#118] [#262]; each listed in `mnemorph status`, one line with its state, dates and uses.
 - Meters with their count and 95% interval; value rows stamped with their build [#166] [#260]
   [#267] [#268].
 - Hash-chained trust journals, the head anchored in `log.md` [#261] [#267].
