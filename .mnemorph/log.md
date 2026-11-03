@@ -6797,3 +6797,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** no behaviour change. The independent review of #322/#323 ran on the PRs' heads before their review commits; both findings were already fixed on main (a780c2b, 8b65fd5). One gap remained: nothing tied `board stop`'s wait to the bound a chat's end may take — setting it back to 10 seconds failed no test.
 - **Tests:** `board_stop_waits_out_a_chat_that_ignores_its_shutdown` runs `mnemorphd board stop` against a faked board that answers `stop`, drops its socket and nonce, then keeps `board.lock` a `leave` and two seconds more. On the old 10 s wait it fails with "still runs after 10s"; on main it passes in ~12 s.
 - **Learned:** a bound tested only where it is computed is not tested where it is used.
+
+### [2026-11-03T23:30:00+01:00] rimuru — `mnemorph status` lists the envelopes (M11, the roadmap's "still to come")
+- **Done:** `headless::envelopes`: one `envelope` line per Oni envelope signed for the world (name, in force or why not, signed, expires, uses/cap) and any reason none is honoured, from `EnvelopeGate::lines` — the very lines `mnemorphd envelope list` prints, its indented detail left to it. Shown whether or not a session opens.
+- **Tests:** `status_lists_each_envelope`: none signed is said; one signed for the world reads `forge — in force; signed …, expires …; uses 0/5`, and no `allows:` line.
+- **Learned:** a status line and its detailed command should read from one function, so they can never disagree.

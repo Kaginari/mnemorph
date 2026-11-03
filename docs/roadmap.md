@@ -391,8 +391,8 @@ includes the witness.
   (signed, expiring within `oni.envelope_days`, a use cap counted in the ledger's uses under a
   lock, revocable with `mnemorphd envelope revoke`), `suspended`, and the compiled exclusions —
   and shown to the human, in the session and in `mnemorphd envelope list`
-  ([#88](https://github.com/Kaginari/mnemorph/issues/88)). `mnemorph status` listing envelopes
-  (M6) is still to come.
+  ([#88](https://github.com/Kaginari/mnemorph/issues/88)), and in `mnemorph status`, one line per
+  envelope (built).
 - The guts classes on the act beat, the learned value's first signals (built): every act classed
   `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its structured
   outcome, journaled on its beat and in a chained, build-stamped record outside the world, counted
