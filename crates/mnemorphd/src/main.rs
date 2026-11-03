@@ -466,15 +466,35 @@ fn board_stop(args: &[String], registry: &Path) -> ExitCode {
         use mnemorph_server::board::control;
         match control::stop(dir) {
             Ok(pid) => {
-                // It stops as on Ctrl-C: its chats end, then its lock is let go.
-                for _ in 0..100 {
-                    if control::ping(dir).is_err() {
-                        break;
+                // It stops as on Ctrl-C: its socket and nonce go, its chats end, then its lock
+                // is let go — the last thing it does, so the one waited for, as long as its
+                // chats may take to end and a margin.
+                use mnemorph_server::board::{bridge::Limits, instance};
+                let within = Limits::default().longest_end() + std::time::Duration::from_secs(5);
+                let began = std::time::Instant::now();
+                loop {
+                    match instance::held(dir) {
+                        instance::Lock::Free => {
+                            println!("board stopped (pid {pid})");
+                            return ExitCode::SUCCESS;
+                        }
+                        instance::Lock::Unknown(why) => {
+                            return fail(&format!(
+                                "the board (pid {pid}) was asked to stop, but whether it did \
+                                 cannot be told: {why}"
+                            ));
+                        }
+                        instance::Lock::Held if began.elapsed() >= within => {
+                            return fail(&format!(
+                                "the board (pid {pid}) was asked to stop, but still runs after {}s",
+                                within.as_secs()
+                            ));
+                        }
+                        instance::Lock::Held => {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                println!("board stopped (pid {pid})");
-                ExitCode::SUCCESS
             }
             Err(e) => refused(&e),
         }
