@@ -1475,7 +1475,9 @@ Rules that hold for every ascension:
   `admitted by envelope <name> (use n/cap)`, its intent names the envelope (an incident opened on it names it too), the
   Kijin's receipt carries the same line, and the human is shown it as it happens — a line in the
   session, a `warning` event to a client, a line on the terminal — and in
-  `mnemorphd envelope list`, with every act each envelope admitted. `mnemorphd envelope revoke <name>` is the human's
+  `mnemorphd envelope list`, with every act each envelope admitted; `mnemorph status` gives each
+  envelope one `envelope` line — its name, whether it is in force, its dates and its uses — and
+  says when none is signed or why none is honoured. `mnemorphd envelope revoke <name>` is the human's
   alone, asked at the terminal and journaled beside the uses.
 - **An envelope is suspended while an incident is open** on an act one of its patterns reads, or
   that the incident names (`mnemorph_config::suspended`, [the Kijin's incidents](#-kijin--the-hands-that-reach-outside)):

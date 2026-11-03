@@ -159,7 +159,7 @@ mnemorph --world <dir>            # a session in that world
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
-mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters
+mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters, envelopes
 mnemorph run "<ask>"              # one ask without the app
 ```
 
