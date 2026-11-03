@@ -607,3 +607,18 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
         "a stranger until adopted"
     );
 }
+
+/// `evolution due` says which creatures the rules find due to evolve — here none: no verdict has
+/// failed — and refuses an argument it does not know.
+#[test]
+fn evolution_due_says_when_none_is_due() {
+    let f = Fixture::new("due");
+    let out = f.run(&["evolution", "due"]);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "no creature is due to evolve"
+    );
+    let out = f.run(&["evolution", "due", "--no-such"]);
+    assert!(!out.status.success());
+}

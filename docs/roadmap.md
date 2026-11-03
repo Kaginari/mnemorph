@@ -381,7 +381,10 @@ includes the witness.
   human's `mnemorphd evolution swap` swaps in a staged plan that is exactly its named file set,
   creating no file over an existing one, and writes the swap row; every ask of its bodies a run
   row, a task in two splits held out by none; `mnemorphd evolution judge` runs the controls on
-  demand and proposes; still M11's: the trigger, the plans proven over an overlay, and `evolve
+  demand and proposes; the trigger, propose only: who is due to evolve — stressed on its trusted
+  gate verdicts, its desk full — and by which arm, cooling while a swap's window is open, in
+  `mnemorph status` and `mnemorphd evolution due`; still M11's: strain and doom in the trigger once
+  a trusted journal carries them, the plans drafted and proven over an overlay, and `evolve
   apply | reject`) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,

@@ -17,6 +17,7 @@ pub mod dimension;
 pub mod dispatch;
 pub mod doc;
 pub mod evolution;
+pub mod evolve;
 pub mod facts;
 pub mod findings;
 pub mod graph;

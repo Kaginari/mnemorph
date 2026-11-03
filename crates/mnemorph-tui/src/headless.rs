@@ -597,6 +597,22 @@ pub fn envelopes(world: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+/// `status`'s evolutions: each creature due to evolve — stressed, its desk full — with the arm the
+/// rules pick and why, and each cooling while its swap's window is open; proposed only. Nothing
+/// when none is; one line saying why when they cannot be read.
+#[must_use]
+pub fn evolve(world: &std::path::Path) -> Vec<String> {
+    use mnemorph_server::world::evolve;
+    let lines = match evolve::survey(world) {
+        Ok(s) => evolve::lines_of(&s),
+        Err(why) => vec![format!("evolutions unavailable — {why}")],
+    };
+    lines
+        .iter()
+        .map(|l| format!("{:<9}{}", "evolve", one_line(l)))
+        .collect()
+}
+
 /// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
 /// an unadopted Mind needs; nothing when the world holds none.
 #[must_use]

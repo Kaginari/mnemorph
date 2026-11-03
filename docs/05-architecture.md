@@ -159,7 +159,7 @@ mnemorph --world <dir>            # a session in that world
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
-mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters, envelopes
+mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
 mnemorph run "<ask>"              # one ask without the app
 ```
 
@@ -183,7 +183,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
-| read every creature's meters, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
+| read every creature's meters, see who is due to evolve, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
 
