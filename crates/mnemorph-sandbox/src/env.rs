@@ -10,11 +10,29 @@ const SECRET_WORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", 
 /// `AUTHOR`).
 const SECRET_PARTS: &[&str] = &["AUTH", "PAT"];
 
-/// The process's environment without its secrets: names carrying a secret word, and values that
-/// are URLs with credentials in them.
+/// The process's environment without its secrets: names carrying a secret word, values that are
+/// URLs with credentials in them, and git's config given in the environment, whole
+/// ([`git_env_config`]).
 #[must_use]
 pub fn scrubbed_env() -> Vec<(String, String)> {
-    std::env::vars().filter(|(k, v)| !is_secret(k, v)).collect()
+    scrub(std::env::vars())
+}
+
+/// `vars` without their secrets, as [`scrubbed_env`] gives the process's.
+fn scrub(vars: impl IntoIterator<Item = (String, String)>) -> Vec<(String, String)> {
+    vars.into_iter()
+        .filter(|(k, v)| !is_secret(k, v) && !git_env_config(k))
+        .collect()
+}
+
+/// Whether `name` is part of git's config given in the environment: `GIT_CONFIG_COUNT` and its
+/// `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`. Dropped together: a key is named `KEY`, so
+/// it is scrubbed, and a count left without its keys fails every git call ("missing config
+/// key"); a value may carry a token (`http.extraHeader`).
+fn git_env_config(name: &str) -> bool {
+    name == "GIT_CONFIG_COUNT"
+        || name.starts_with("GIT_CONFIG_KEY_")
+        || name.starts_with("GIT_CONFIG_VALUE_")
 }
 
 /// Whether `name=value` is a secret: a secret word in its name, or a URL with credentials in
@@ -58,7 +76,43 @@ pub fn git() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use super::{git, has_userinfo, is_secret};
+    use super::{git, has_userinfo, is_secret, scrub};
+
+    /// Git's config given in the environment (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`,
+    /// `GIT_CONFIG_VALUE_<n>`) is dropped whole: its keys are named `KEY`, and a count left without
+    /// them fails every git call ("missing config key"); its values may carry a token
+    /// (`http.extraHeader`).
+    #[test]
+    fn gits_config_from_the_environment_is_dropped_whole() {
+        let path = std::env::var("PATH").unwrap_or_default();
+        let given = [
+            ("PATH", path.as_str()),
+            ("GIT_CONFIG_COUNT", "2"),
+            ("GIT_CONFIG_KEY_0", "http.extraHeader"),
+            ("GIT_CONFIG_VALUE_0", "Authorization: Bearer abc"),
+            ("GIT_CONFIG_KEY_1", "user.name"),
+            ("GIT_CONFIG_VALUE_1", "me"),
+            ("GIT_AUTHOR_NAME", "me"),
+        ]
+        .map(|(k, v)| (k.to_owned(), v.to_owned()));
+        let env = scrub(given);
+        let names: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(names, ["PATH", "GIT_AUTHOR_NAME"]);
+        let dir = std::env::temp_dir().join(format!("mnemorph-git-envcfg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = std::process::Command::new("git")
+            .env_clear()
+            .envs(env)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .arg("-C")
+            .arg(&dir)
+            .args(["rev-parse", "--is-inside-work-tree"])
+            .output()
+            .unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("missing config key"), "{err}");
+    }
 
     #[test]
     fn git_starts_without_the_secrets() {
