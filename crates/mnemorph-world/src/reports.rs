@@ -101,6 +101,82 @@ impl fmt::Display for Unavailable {
     }
 }
 
+/// The lines of each trusted journal a fold read, by journal (`usage`, `gate`, `challenges`,
+/// `kijin/<post>`): what a rise's or a fall's row keeps, so a replay folds exactly those lines.
+pub type Read = BTreeMap<String, usize>;
+
+/// The trusted journals' rows a fold was made from: kept, so the fold of any earlier read of
+/// them ([`Folded::rows_at`]) is the fold that read would have made.
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Journals {
+    usage: Arc<Vec<UsageRow>>,
+    verdicts: Arc<Vec<VerdictRow>>,
+    /// The challenge records' bytes: a finding's standing is folded from every row before it.
+    challenges: Arc<Vec<u8>>,
+    posts: Vec<Arc<Vec<PostRow>>>,
+}
+
+impl Journals {
+    /// The lines of each journal held.
+    fn read(&self) -> Read {
+        let mut out = Read::new();
+        out.insert("usage".to_owned(), self.usage.len());
+        out.insert("gate".to_owned(), self.verdicts.len());
+        out.insert("challenges".to_owned(), lines(&self.challenges));
+        for (post, rows) in Post::ALL.into_iter().zip(&self.posts) {
+            out.insert(format!("kijin/{}", post.creature()), rows.len());
+        }
+        out
+    }
+
+    /// The report rows of the first `read` lines of each journal.
+    fn rows(&self, read: &Read) -> Result<Vec<ReportRow>, String> {
+        let upto = |name: &str, held: usize| -> Result<usize, String> {
+            let n = read.get(name).copied().unwrap_or(0);
+            if n > held {
+                return Err(format!(
+                    "it read {n} lines of the {name} journal, which holds {held}: rows were dropped"
+                ));
+            }
+            Ok(n)
+        };
+        let usage = &self.usage[..upto("usage", self.usage.len())?];
+        let verdicts = &self.verdicts[..upto("gate", self.verdicts.len())?];
+        let challenges = prefix(
+            &self.challenges,
+            upto("challenges", lines(&self.challenges))?,
+        );
+        let upheld: BTreeSet<String> = upheld_runs(challenges).into_iter().collect();
+        let mut rows = run_reports(usage, verdicts, &upheld);
+        rows.extend(ask_reports(usage, verdicts));
+        for (post, held) in Post::ALL.into_iter().zip(&self.posts) {
+            let n = upto(&format!("kijin/{}", post.creature()), held.len())?;
+            rows.extend(act_reports(post, &held[..n]));
+        }
+        Ok(rows)
+    }
+}
+
+/// The lines of `bytes`: a journal the fold trusts ends on a whole line.
+fn lines(bytes: &[u8]) -> usize {
+    // Every piece but the last ends on a newline.
+    bytes.split(|&b| b == b'\n').count() - 1
+}
+
+/// The first `n` lines of `bytes`.
+fn prefix(bytes: &[u8], n: usize) -> &[u8] {
+    if n == 0 {
+        return &[];
+    }
+    let end = bytes
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| **b == b'\n')
+        .nth(n - 1)
+        .map_or(bytes.len(), |(i, _)| i + 1);
+    &bytes[..end]
+}
+
 /// The fold: the report rows, and each creature's inputs over them, by creature and race.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Folded {
@@ -108,9 +184,23 @@ pub struct Folded {
     pub rows: Vec<ReportRow>,
     /// Each creature's inputs, by creature and race.
     pub inputs: BTreeMap<(String, String), Inputs>,
+    /// The lines of each journal it read.
+    pub read: Read,
+    journals: Arc<Journals>,
 }
 
 impl Folded {
+    /// The report rows the fold of an earlier `read` of the same journals made: the first lines
+    /// of each, as many as `read` names, folded whole — later rows (a verdict on an old run, a
+    /// child's landing, a finding upheld) never reach them.
+    ///
+    /// # Errors
+    ///
+    /// `read` names more lines of a journal than it holds now.
+    pub fn rows_at(&self, read: &Read) -> Result<Vec<ReportRow>, String> {
+        self.journals.rows(read)
+    }
+
     /// The inputs of `creature` as a body of `race`'s base race: the usage witness names the race
     /// a body ran as, so a doc that claims another race claims no record.
     #[must_use]
@@ -182,13 +272,13 @@ pub fn fold_in(world: &Path, state: &Path) -> Result<Folded, Unavailable> {
         "gate",
         rows_of,
     )?;
-    // The challenge records folded from the very bytes their chain was walked over: one read.
-    let upheld: Arc<Vec<String>> = trusted(
+    // The challenge records kept as the very bytes their chain was walked over: one read.
+    let challenges: Arc<Vec<u8>> = trusted(
         world,
         state,
         &state_file_in(state, world, "challenges"),
         "value",
-        |bytes| Ok(upheld_runs(bytes)),
+        |bytes| Ok(bytes.to_vec()),
     )?;
     let mut posts = Vec::new();
     for post in Post::ALL {
@@ -202,7 +292,7 @@ pub fn fold_in(world: &Path, state: &Path) -> Result<Folded, Unavailable> {
         )?);
     }
     let mut inputs: Vec<Arc<dyn Any + Send + Sync>> =
-        vec![usage.clone(), verdicts.clone(), upheld.clone()];
+        vec![usage.clone(), verdicts.clone(), challenges.clone()];
     inputs.extend(
         posts
             .iter()
@@ -216,15 +306,24 @@ pub fn fold_in(world: &Path, state: &Path) -> Result<Folded, Unavailable> {
     {
         return Ok(folded.clone());
     }
-    let upheld_set: BTreeSet<String> = upheld.iter().cloned().collect();
-    let mut rows = run_reports(&usage, &verdicts, &upheld_set);
-    rows.extend(ask_reports(&usage, &verdicts));
-    for (post, rows_of_post) in Post::ALL.into_iter().zip(&posts) {
-        rows.extend(act_reports(post, rows_of_post));
-    }
+    let journals = Journals {
+        usage,
+        verdicts,
+        challenges,
+        posts,
+    };
+    let read = journals.read();
+    let rows = journals
+        .rows(&read)
+        .map_err(|why| Unavailable::Unreadable {
+            journal: "reports".to_owned(),
+            why,
+        })?;
     let folded = Folded {
         inputs: fold_rows(&rows),
         rows,
+        read,
+        journals: Arc::new(journals),
     };
     lock(&FOLDS).insert(at, (inputs, folded.clone()));
     Ok(folded)
@@ -750,7 +849,7 @@ fn ask_reports(usage: &[UsageRow], verdicts: &[VerdictRow]) -> Vec<ReportRow> {
 
 /// One row of a Kijin post's witness, as the fold reads it: the act, the state it entered, and on
 /// an undo's rows the act it undoes.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 struct PostRow {
     act: String,
     state: String,

@@ -206,10 +206,14 @@ pub struct Row {
     /// move — so a replay of the journals recomputes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inputs_sha256: Option<String>,
-    /// A rise's or a fall's: the trusted time the proposal was read at, which a replay reads it
-    /// at again.
+    /// A rise's or a fall's: the trusted time of the last report the move read — the new form's
+    /// record counts from after it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub as_of: Option<Timestamp>,
+    /// A rise's or a fall's: the lines of each trusted journal the proposal was folded from, by
+    /// journal — a replay folds exactly those, so nothing written after can move it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<crate::reports::Read>,
 }
 
 /// One creature as the witness holds it.
@@ -270,6 +274,7 @@ pub fn row(
         proposal: None,
         inputs_sha256: None,
         as_of: None,
+        read: None,
     }
 }
 
@@ -450,6 +455,15 @@ pub fn witnessed(world: &Path) -> Result<Option<Rows>, String> {
 ///
 /// A body asks, the row names the throne, or the witness cannot be written.
 pub fn record_at(path: &Path, mut row: Row) -> Result<(), String> {
+    refused_to_a_body(&row)?;
+    row.build = Build::this();
+    journal_at(path)
+        .append(&row)
+        .map_err(|e| format!("the creatures' witness cannot be written: {e}"))
+}
+
+/// Refused inside a body's command, and for the throne, which is never a row.
+fn refused_to_a_body(row: &Row) -> Result<(), String> {
     if let Some(body) = std::env::var_os("MNEMORPH_BODY") {
         return Err(format!(
             "{} runs this: a creature's race, post and ground are the harness's to record and \
@@ -460,10 +474,7 @@ pub fn record_at(path: &Path, mut row: Row) -> Result<(), String> {
     if row.name == THRONE || row.race == Race::Rimuru.name() {
         return Err("the throne is implicit: it is never a row".to_owned());
     }
-    row.build = Build::this();
-    journal_at(path)
-        .append(&row)
-        .map_err(|e| format!("the creatures' witness cannot be written: {e}"))
+    Ok(())
 }
 
 /// `rows` appended to `world`'s witness under the state directory `state`.
@@ -506,6 +517,40 @@ pub fn record_human_in(state: Option<&Path>, world: &Path, rows: Vec<Row>) -> Re
         ));
     }
     record_in(state, world, rows)
+}
+
+/// The human's write of one `row`, only onto the witness as it was read at `after`: refused as
+/// [`record_human_in`] is, and when any row was written since — a decision read from the witness
+/// is written onto what it read, or not at all.
+///
+/// # Errors
+///
+/// As [`record_human_in`], or the witness moved since `after`.
+pub fn record_human_after(
+    state: &Path,
+    world: &Path,
+    mut row: Row,
+    after: Option<&Head>,
+) -> Result<(), String> {
+    if let Some(harness) = crate::pins::under_harness()? {
+        return Err(format!(
+            "this runs under {harness}: a creature's standing is the human's word, never a \
+             command a session started"
+        ));
+    }
+    let at = path_in(state, world);
+    crate::pins::outside_as(world, &at, "the creatures' rows are")?;
+    refused_to_a_body(&row)?;
+    row.build = Build::this();
+    journal_at(&at).append_after(&row, after).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::WouldBlock {
+            "the creatures' witness moved since the proposal was read: nothing was written; \
+             read it again"
+                .to_owned()
+        } else {
+            format!("the creatures' witness cannot be written: {e}")
+        }
+    })
 }
 
 /// [`record_human_in`], under the human's state directory.

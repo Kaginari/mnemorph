@@ -1367,14 +1367,16 @@ never judged on.
   to the ledger's clock — the newest report's time, so the window is the journals', never the wall
   clock's, and a reading at the same clock reads the same. A report counts once the creature's next
   report has begun, so one still in flight never moves a proposal under the human's eyes. Only
-  reports since the creature's last rise, fall or `set-race` count.
+  reports after the last one the creature's last rise or fall read, or since its `set-race`,
+  count.
 - **A rise** is proposed when every bar of the form holds over that window (`rises`).
 - **Probation and a fall.** An ascended creature's reports since its rise are walked in order: an
   event in its last ten ends the form at once; a rate under its fall bar over a full ten starts
   probation; five reports on, a rate back at the fall bar with no event recovers it, else a fall
   is proposed (`probation ended unrecovered`). The ten and the five are counted in reports, never
   by the window: a creature that reports once a week is read on its last ten all the same, and its
-  probation is decided on its fifth report. The walk stops at the first fall, so the fall stays
+  probation is decided on its fifth report. A recovered form is read afresh: its next probation
+  needs a full ten made since it recovered. The walk stops at the first fall, so the fall stays
   the same proposal as reports keep arriving. Probation grants and removes nothing: it is read
   from the reports, shown, and never written.
 - **An input no trusted journal carries** (`slimeHealth` for an Orc, `envelopeCorrections` for a
@@ -1384,18 +1386,21 @@ never judged on.
   challenge score`).
 - **A proposal carries its inputs**: the meters over the reports read, each with its count and
   interval; how many were read and the window; the law's lines, one per bar; the SHA-256 of the
-  reports read and the move (`inputsSha256`), whose first twelve digits are its id; the time it
-  was read at (`asOf`: the clock for a rise, the start of the report that settled the deciding one
-  for a fall); and the build that read it, which is shown and never digested, so another build
-  reads the same proposal.
+  reports read and the move (`inputsSha256`), whose first twelve digits are its id; the time of
+  the last report it read (`asOf`), after which the new form's record counts, so every report
+  counts in one form or the other; the lines of each trusted journal it was folded from (`read`);
+  and the build that read it, which is shown and never digested, so another build reads the same
+  proposal.
 - **Only the human applies one.** `mnemorphd roster rise <creature>` or `roster fall <creature>`
   shows the proposal in full and asks for `y` at the terminal (`/dev/tty`; piped input is refused,
   and there is no `--yes`). It is refused inside a body's command, under any `mnemorph`,
   `mnemorphd` or `mnemorph-guard` ancestor, with no home or a state directory inside the world,
-  when the report fold is unavailable or the report ledger kept beside it does not walk whole, and
-  when the proposal moved between the showing and the yes. The yes writes one row to the
-  creatures' witness — `act` `rise` or `fall`, the new race, `by` `human`, the proposal's id, its
-  `inputs_sha256` and `as_of` — chained with the rest, and sets the card's `Race` line to match.
+  when the report fold is unavailable or the report ledger kept beside it cannot be read as a
+  regular file or does not walk whole, and when the proposal moved between the showing and the
+  yes. The yes writes one row to the creatures' witness — `act` `rise` or `fall`, the new race,
+  `by` `human`, the proposal's id, its `inputs_sha256`, `as_of` and `read` — chained with the
+  rest, only onto the witness the proposal was read from (a row written in between, a second
+  apply or a relief, refuses it whole), and sets the card's `Race` line to match.
 - **Where proposals show.** `mnemorph status` (`ascend` lines), `mnemorphd meters` (and each
   creature's `proposal`, `probation` and `unknown` in `--json`) and the board's bodies page say each pending
   proposal and probation with the command that applies it, escaped, its words quoted for a shell:
@@ -1404,10 +1409,12 @@ never judged on.
   ascend   sly: rise to named-slime proposed (landRate 1.00 (21/21, 95% 0.85–1.00) · gateRate 1.00 (21/21, 95% 0.85–1.00) · holeRate 0.00 (0/21, 95% 0.00–0.15); 21 reports) — the human applies it with: mnemorphd roster rise sly --world /home/me/world
   ascend   lexer (named-slime): on probation since 2026-11-01T09:00:00Z — 2 of 5 reports; it recovers at its fall bar or a fall is proposed
   ```
-- **Replay.** The proposals are a function of the report ledger's rows and the witness's rows
-  alone. `mnemorphd roster replay` recomputes every `rise` and `fall` row from the journals and the
-  rows before it, at its `as_of`: each must name the very proposal the law makes there — its id,
-  its digest and its race — or the replay names the first row that does not reproduce and exits 1.
+- **Replay.** The proposals are a function of the journals' lines and the witness's rows alone.
+  `mnemorphd roster replay` folds, for every `rise` and `fall` row, exactly the journal lines it
+  names (`read`), and recomputes it over the rows before it: each must name the very proposal the
+  law makes there — its id, its digest, its race and its `as_of` — or the replay names the first
+  row that does not reproduce and exits 1. A row written later — a verdict on an old run, a
+  child's landing, an upheld finding — reshapes the reports read now, never an applied row's.
   The same journals with the same applies give the same proposals at the same points and the same
   rows (`crates/mnemorph-world/tests/ascension.rs`).
 

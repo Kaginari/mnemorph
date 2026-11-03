@@ -5,7 +5,8 @@
 //! The fixture is a world of three creatures whose runs are written as the harness writes them —
 //! the usage witness and the gate verdicts, chained, under a temporary state directory — and
 //! whose standing the human adopts. Over its record one Slime rises, slips into probation and
-//! recovers, slips again and falls; the others never move.
+//! recovers, slips again and falls; the others never move. Verdicts written long after their runs
+//! — the gate judging an old run again — never move a row already applied.
 
 use std::path::PathBuf;
 
@@ -117,6 +118,25 @@ impl World {
             .unwrap();
     }
 
+    /// The gate's verdict on `run` of `body` again, now: a re-landing, a resume, a challenge.
+    fn late_verdict(&mut self, run: &str, body: &str, pass: bool) {
+        verdicts::journal_at(state_file_in(&self.state, &self.root, "gate"))
+            .append(&VerdictRow {
+                ts: Timestamp(self.at),
+                body: body.into(),
+                verdict: if pass { "PASS" } else { "FAIL" }.into(),
+                changed: vec!["src/a.rs".into()],
+                failures: Vec::new(),
+                unverified: Vec::new(),
+                unchecked: false,
+                verified_by: vec!["the human's pin".into()],
+                entry: None,
+                build: Build::default(),
+                run: Some(run.into()),
+            })
+            .unwrap();
+    }
+
     fn runs(&mut self, body: &str, race: &str, passes: &[bool]) {
         for &p in passes {
             self.run(body, race, p);
@@ -144,15 +164,21 @@ impl World {
     }
 }
 
-/// What the human saw at one point: the clock, the witness's length, every proposal's creature,
-/// move and id.
-type Seen = (Timestamp, usize, Vec<(String, Move, String)>);
+/// What the human saw at one point: the journals' lines read, the witness's length, every
+/// proposal's creature, move and id.
+type Seen = (
+    mnemorph_world::reports::Read,
+    usize,
+    Vec<(String, Move, String)>,
+);
 
 fn seen(w: &World) -> Seen {
     let s = w.survey();
-    let clock = Timestamp(w.at - HOUR);
+    let read = mnemorph_world::reports::fold_in(&w.root, &w.state)
+        .unwrap()
+        .read;
     (
-        clock,
+        read,
         w.roster().len(),
         s.proposals
             .iter()
@@ -200,13 +226,19 @@ fn scenario(w: &mut World) -> Vec<Seen> {
         Some(rise.inputs_sha256.as_str())
     );
     assert_eq!(last.as_of, Some(rise.as_of));
+    assert_eq!(last.read.as_ref(), Some(&rise.read));
     points.push(seen(w));
+    // The gate judges an old run again, failed: the record reads otherwise now, but the rise
+    // was read over the lines before it, and replays still.
+    w.late_verdict("sly-3", "sly", false);
+    ascension::replay_in(&w.root, &w.state).expect("a late verdict moves no applied row");
     // Under the fall bar: probation; then it recovers at the bar.
     w.runs(
         "sly",
         "named-slime",
+        // Ten since the rise, the run in flight at it the first.
         &[
-            false, false, false, false, true, true, true, true, true, true, true,
+            false, false, false, false, true, true, true, true, true, true,
         ],
     );
     points.push(seen(w));
@@ -215,8 +247,13 @@ fn scenario(w: &mut World) -> Vec<Seen> {
     points.push(seen(w));
     let s = w.survey();
     assert!(s.probation.is_empty() && s.proposals.is_empty(), "{s:?}");
-    // Slips again, and does not recover: the fall is proposed.
+    // Three fails straight after recovering: read afresh, they are three of the ten a new
+    // probation needs.
     w.runs("sly", "named-slime", &[false; 3]);
+    points.push(seen(w));
+    assert!(w.survey().probation_of("sly").is_none());
+    // Slips again over ten since, and does not recover: the fall is proposed.
+    w.runs("sly", "named-slime", &[false; 8]);
     points.push(seen(w));
     assert!(w.survey().probation_of("sly").is_some());
     w.runs("sly", "named-slime", &[false; 6]);
@@ -263,20 +300,19 @@ fn replaying_the_journals_and_the_witness_reproduces_every_rise_and_fall() {
             (Act::Fall, "sly", "slime")
         ]
     );
-    // From the start: at every point the human saw, the journals as they stand now give the
-    // same proposals.
-    let rows = mnemorph_world::reports::fold_in(&w.root, &w.state)
-        .unwrap()
-        .rows;
+    // From the start: at every point the human saw, the journals' lines read there, folded from
+    // the journals as they stand now, give the same proposals.
+    let folded = mnemorph_world::reports::fold_in(&w.root, &w.state).unwrap();
     let roster = w.roster();
-    for (clock, len, ids) in &points {
-        let s = ascension::propose_at(&rows, &roster[..*len], *clock);
+    for (read, len, ids) in &points {
+        let rows = folded.rows_at(read).unwrap();
+        let s = ascension::propose(&rows, &roster[..*len]);
         let now: Vec<(String, Move, String)> = s
             .proposals
             .iter()
             .map(|p| (p.creature.clone(), p.act, p.id.clone()))
             .collect();
-        assert_eq!(&now, ids, "at {clock}");
+        assert_eq!(&now, ids, "at {read:?}");
     }
     // The same record, lived again in another state directory with the same applies: the same
     // proposals at the same points, and the same rows.
@@ -350,4 +386,41 @@ fn an_apply_is_held_to_the_proposal_shown_and_to_a_state_directory_outside_the_w
         "slime",
         "its card says slime: the lower"
     );
+}
+
+#[test]
+fn an_apply_is_written_only_onto_the_witness_it_was_read_from() {
+    let mut w = World::new();
+    w.runs("sly", "slime", &[true; 22]);
+    let p = w.survey().of("sly").cloned().unwrap();
+    let head = creatures::journal_at(creatures::path_in(&w.state, &w.root))
+        .head()
+        .unwrap();
+    // A row lands after the read: the decision read from before it is refused whole.
+    let mut relief = w.roster().pop().unwrap();
+    relief.act = Act::Relief;
+    creatures::record_in(Some(&w.state), &w.root, vec![relief]).unwrap();
+    let row = ascension::row_for(&p, &w.roster()).unwrap();
+    let e = creatures::record_human_after(&w.state, &w.root, row, head.as_ref()).unwrap_err();
+    assert!(e.contains("moved since the proposal was read"), "{e}");
+    assert_eq!(w.roster().len(), 4, "nothing was written");
+    // Applied once, a second apply of the same proposal finds nothing to apply.
+    ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, &p.id).unwrap();
+    let e = ascension::apply_in(Some(&w.state), &w.root, "sly", Move::Rise, &p.id).unwrap_err();
+    assert!(e.contains("no rise for sly"), "{e}");
+    assert_eq!(w.roster().len(), 5);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_kept_report_ledger_that_is_no_regular_file_proposes_nothing() {
+    let mut w = World::new();
+    w.runs("sly", "slime", &[true; 22]);
+    let (_, kept) = mnemorph_world::reports::record_in(&w.root, &w.state).unwrap();
+    std::fs::remove_file(&kept).unwrap();
+    let elsewhere = w.state.join("elsewhere.jsonl");
+    std::fs::write(&elsewhere, b"").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &kept).unwrap();
+    let e = ascension::survey_in(&w.root, &w.state).unwrap_err();
+    assert!(e.contains("report ledger cannot be read"), "{e}");
 }

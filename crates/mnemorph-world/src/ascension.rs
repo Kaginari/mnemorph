@@ -9,21 +9,26 @@
 //! - **The window.** A rise reads the creature's reports of the last [`WINDOW_DAYS`] days, by the
 //!   trusted time each began, up to the ledger's clock: the newest report's time. A report counts
 //!   once the creature's next report has begun, so a report still in flight never moves a
-//!   proposal; and only reports since the creature's last rise or fall count, so a form is earned
-//!   again from nothing.
+//!   proposal; and only reports after the last one its last rise or fall read count, so a form is
+//!   earned again from nothing, and no report is counted in neither form.
 //! - **Probation.** An ascended creature's reports since its rise are walked in order: an event
 //!   ends the form at once; a rate under its fall bar over its last ten starts probation; after
 //!   [`RECOVER_REPORTS`] reports on probation it recovers at its fall bar, or falls — each
-//!   counted in reports, never by the window. Probation changes no privilege, so it is read,
-//!   never written.
+//!   counted in reports, never by the window. A recovered form is read afresh: its next
+//!   probation needs ten reports made since it recovered. Probation changes no privilege, so it
+//!   is read, never written.
 //! - **Proposals never apply themselves.** A proposal carries its inputs — the meters, the record
 //!   read, the window — the law's lines, and the SHA-256 of the reports it read and the move. Only
-//!   the human's act applies one ([`apply_in`]): asked at the terminal, refused inside a body's
-//!   command, under a harness process, or with a state directory inside the world, it writes a
-//!   `rise` or `fall` row to the witness, chained, naming the proposal and its digest.
-//! - **Replay.** The proposals are a function of the ledger's rows and the witness's rows alone,
-//!   read at a trusted time the row keeps (`as_of`): [`replay`] recomputes every `rise` and `fall`
-//!   row from them and names the first that does not reproduce.
+//!   the human's act applies one ([`apply_in`]; `mnemorphd roster rise|fall` asks at the terminal
+//!   first): refused inside a body's command, under a harness process, or with a state directory
+//!   inside the world, it writes a `rise` or `fall` row to the witness, chained, naming the
+//!   proposal, its digest, and the lines of each trusted journal it was folded from — only onto
+//!   the witness it was read from, or not at all.
+//! - **Replay.** The proposals are a function of the journals' lines and the witness's rows
+//!   alone: [`replay`] folds, for every `rise` and `fall` row, exactly the lines it read, and
+//!   recomputes it over the rows before it, naming the first that does not reproduce. A row
+//!   written later — a verdict on an old run, a child's landing, an upheld finding — never moves
+//!   an applied one.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -103,9 +108,11 @@ pub struct Proposal {
     pub n: u32,
     /// The window the reports were read in: after its first instant, up to its last.
     pub window: (Timestamp, Timestamp),
-    /// The trusted time it was read at: the ledger's clock for a rise, the report that settled
-    /// the deciding one for a fall.
+    /// The trusted time of the last report it read: the new form's record counts from after it.
     pub as_of: Timestamp,
+    /// The lines of each trusted journal it was folded from: empty for a proposal read from
+    /// rows alone ([`propose`]).
+    pub read: crate::reports::Read,
     /// The SHA-256 of the reports read and the move, in hex.
     pub inputs_sha256: String,
     /// The build that read it: shown, never part of the digest, so a replay under another build
@@ -409,12 +416,15 @@ fn unrecovered(risen: Race, i: &Inputs, n: u32) -> Vec<Explanation> {
 
 /// `risen`'s reports since its rise, settled and in order, walked: an event falls it at once; a
 /// rate under the fall bar over its last ten starts probation; after [`RECOVER_REPORTS`] reports
-/// on probation it recovers at the fall bar or falls. Both are counted in reports, never by the
+/// on probation it recovers at the fall bar or falls. A recovery starts the record again: the
+/// next probation reads only reports made since, and needs ten of them. Both are counted in reports, never by the
 /// window, so a creature that reports slowly is still read on its last ten and still decided.
 fn walk(risen: Race, rows: &[&ReportRow]) -> Walked {
     let mut probation: Option<usize> = None;
+    // After a recovery, the record starts again: nothing before it is read.
+    let mut floor = 0;
     for i in 0..rows.len() {
-        let from = probation.unwrap_or((i + 1).saturating_sub(FALL_RECORD));
+        let from = probation.unwrap_or_else(|| (i + 1).saturating_sub(FALL_RECORD).max(floor));
         let picked = &rows[from..=i];
         let (s, inputs) = match signals_of(risen, picked) {
             Ok(x) => x,
@@ -433,7 +443,10 @@ fn walk(risen: Race, rows: &[&ReportRow]) -> Walked {
             None if reading == FallReading::Probation => probation = Some(i + 1),
             None => {}
             Some(_) if on < RECOVER_REPORTS => {}
-            Some(_) if recovers(risen, &Recent(s)) => probation = None,
+            Some(_) if recovers(risen, &Recent(s)) => {
+                probation = None;
+                floor = i + 1;
+            }
             Some(_) => {
                 return Walked::Falls {
                     at: i,
@@ -452,14 +465,14 @@ fn walk(risen: Race, rows: &[&ReportRow]) -> Walked {
     }
 }
 
-/// One creature's reports since its last move, up to `clock`, in order of their trusted time:
-/// all of them, and the settled ones — those after which its next report has begun.
+/// One creature's settled reports since its last move, up to `clock`, in order of their trusted
+/// time: those after which its next report has begun.
 fn reports_of<'a>(
     rows: &'a [ReportRow],
     name: &str,
     h: &Held,
     clock: Timestamp,
-) -> (Vec<&'a ReportRow>, Vec<&'a ReportRow>) {
+) -> Vec<&'a ReportRow> {
     let mut mine: Vec<&ReportRow> = rows
         .iter()
         .filter(|r| counts(r, name, h.race))
@@ -467,12 +480,9 @@ fn reports_of<'a>(
         .collect();
     mine.sort_by_key(|r| r.ts());
     let newest = mine.last().map(|r| r.ts());
-    let settled = mine
-        .iter()
-        .copied()
+    mine.into_iter()
         .filter(|r| Some(r.ts()) != newest)
-        .collect();
-    (mine, settled)
+        .collect()
 }
 
 /// The rise of a base-race creature over the window to `clock`, when every bar holds.
@@ -492,6 +502,9 @@ fn rise_of(
         return Ok(None);
     }
     let sha = digest(name, Move::Rise, race, risen, false, &window);
+    let Some(last) = window.last() else {
+        return Ok(None);
+    };
     Ok(Some(Proposal {
         id: sha[..12].to_owned(),
         creature: name.to_owned(),
@@ -503,28 +516,24 @@ fn rise_of(
         meters: meters_of(race, &i),
         n: u32::try_from(window.len()).unwrap_or(u32::MAX),
         window: (lo, clock),
-        as_of: clock,
+        as_of: last.ts(),
+        read: crate::reports::Read::new(),
         inputs_sha256: sha,
         build: Build::this(),
     }))
 }
 
-/// The fall of an ascended creature whose walk fell at its settled report `at`: read at the start
-/// of the report that settled it, over every report since its rise up to it.
+/// The fall of an ascended creature whose walk fell at its settled report `at`, over every report
+/// since its rise up to it: the base form's record counts from after it.
 fn fall_of(
     name: &str,
     race: Race,
-    (mine, settled): (&[&ReportRow], &[&ReportRow]),
+    settled: &[&ReportRow],
     (at, why, ended): (usize, Vec<Explanation>, bool),
-    clock: Timestamp,
 ) -> Proposal {
     let picked = &settled[..=at];
     let i = inputs_of(picked);
-    let as_of = mine
-        .iter()
-        .map(|r| r.ts())
-        .find(|t| *t > settled[at].ts())
-        .unwrap_or(clock);
+    let as_of = settled[at].ts();
     let to = race.base();
     let sha = digest(name, Move::Fall, race, to, ended, picked);
     Proposal {
@@ -539,6 +548,7 @@ fn fall_of(
         n: u32::try_from(picked.len()).unwrap_or(u32::MAX),
         window: (Timestamp(picked[0].ts().0 - 1), settled[at].ts()),
         as_of,
+        read: crate::reports::Read::new(),
         inputs_sha256: sha,
         build: Build::this(),
     }
@@ -555,7 +565,7 @@ pub fn propose_at(rows: &[ReportRow], roster: &[Row], clock: Timestamp) -> Surve
         if h.retired || h.race.base() == Race::DarkElf {
             continue;
         }
-        let (mine, settled) = reports_of(rows, &name, &h, clock);
+        let settled = reports_of(rows, &name, &h, clock);
         if h.race.ascends_to().is_some() {
             match rise_of(&name, h.race, &settled, clock) {
                 Ok(p) => out.proposals.extend(p),
@@ -575,13 +585,10 @@ pub fn propose_at(rows: &[ReportRow], roster: &[Row], clock: Timestamp) -> Surve
                 reports,
                 began,
             }),
-            Walked::Falls { at, why, ended } => out.proposals.push(fall_of(
-                &name,
-                h.race,
-                (&mine, &settled),
-                (at, why, ended),
-                clock,
-            )),
+            Walked::Falls { at, why, ended } => {
+                out.proposals
+                    .push(fall_of(&name, h.race, &settled, (at, why, ended)));
+            }
         }
     }
     out
@@ -604,8 +611,18 @@ pub fn propose(rows: &[ReportRow], roster: &[Row]) -> Survey {
 /// The report fold is unavailable, the report ledger kept there does not walk whole, or the
 /// witness does not.
 pub fn survey_in(world: &Path, state: &Path) -> Result<Survey, String> {
-    let (rows, roster) = inputs_in(world, state)?;
-    Ok(propose(&rows, &roster))
+    let (folded, roster) = inputs_in(world, state)?;
+    Ok(surveyed(&folded, &roster))
+}
+
+/// The survey of `folded` and `roster`, each proposal naming the journals' lines it was read
+/// from.
+fn surveyed(folded: &crate::reports::Folded, roster: &[Row]) -> Survey {
+    let mut s = propose(&folded.rows, roster);
+    for p in &mut s.proposals {
+        p.read.clone_from(&folded.read);
+    }
+    s
 }
 
 /// [`survey_in`], under the human's state directory.
@@ -619,26 +636,44 @@ pub fn survey(world: &Path) -> Result<Survey, String> {
     survey_in(world, &state)
 }
 
-/// The report ledger's rows and the witness's rows for `world` under `state`, each trusted.
-fn inputs_in(world: &Path, state: &Path) -> Result<(Vec<ReportRow>, Vec<Row>), String> {
+/// The most of the kept report ledger read: it is the fold's, so never larger than its journals.
+const KEPT_CAP: u64 = 256 * 1024 * 1024;
+
+/// The fold of the trusted journals and the witness's rows for `world` under `state`, each
+/// trusted.
+fn inputs_in(world: &Path, state: &Path) -> Result<(crate::reports::Folded, Vec<Row>), String> {
     let folded = crate::reports::fold_in(world, state).map_err(|e| e.to_string())?;
-    // The report ledger kept beside the journals: one that does not walk whole was written by
-    // something other than the fold, and nothing is proposed from beside it.
-    let kept = crate::queue::state_file_in(state, world, "reports");
-    if let Ok(bytes) = std::fs::read(&kept) {
-        let mut w = Walk::new();
-        w.feed(&bytes);
-        let r = w.report();
-        if let Some((line, why)) = r.broken {
-            return Err(format!(
-                "the report ledger's chain is broken at line {line}: {why} — `mnemorphd meters` \
-                 rebuilds it from the journals"
-            ));
-        }
-    }
+    kept_walks(&crate::queue::state_file_in(state, world, "reports"))?;
     let roster = creatures::rows_in(Some(state), world)?
         .ok_or("no home: the creatures' witness is kept under the human's state directory")?;
-    Ok((folded.rows, roster))
+    Ok((folded, roster))
+}
+
+/// The report ledger kept beside the journals, at `kept`, read only as a regular file and capped:
+/// absent is fine (the fold is built from the journals); one that cannot be read, or does not
+/// walk whole, was written by something other than the fold, and nothing is proposed beside it.
+/// It is no input — a ledger cut at a row's end still walks, and still proposes nothing it says.
+fn kept_walks(kept: &Path) -> Result<(), String> {
+    let rebuild = "`mnemorphd meters` rebuilds it from the journals";
+    let bytes = match crate::regular::read(kept, KEPT_CAP) {
+        Ok(Some(b)) => b,
+        Ok(None) => return Ok(()),
+        Err(e) => return Err(format!("the report ledger cannot be read: {e} — {rebuild}")),
+    };
+    let mut w = Walk::new();
+    w.feed(&bytes);
+    let r = w.report();
+    if let Some((line, why)) = r.broken {
+        return Err(format!(
+            "the report ledger's chain is broken at line {line}: {why} — {rebuild}"
+        ));
+    }
+    if let Some(line) = r.truncated {
+        return Err(format!(
+            "the report ledger's chain is broken at line {line}: its tail is torn — {rebuild}"
+        ));
+    }
+    Ok(())
 }
 
 /// The witness row that applies `p`, from the creature's latest row in `roster`: its race the
@@ -659,6 +694,7 @@ pub fn row_for(p: &Proposal, roster: &[Row]) -> Option<Row> {
     row.proposal = Some(p.id.clone());
     row.inputs_sha256 = Some(p.inputs_sha256.clone());
     row.as_of = Some(p.as_of);
+    row.read = Some(p.read.clone());
     Some(row)
 }
 
@@ -674,7 +710,11 @@ pub fn proposed_in(
     creature: &str,
     act: Move,
 ) -> Result<Proposal, String> {
-    let survey = survey_in(world, state)?;
+    proposal_of(&survey_in(world, state)?, creature, act)
+}
+
+/// The proposal of `act` for `creature` in `survey`.
+fn proposal_of(survey: &Survey, creature: &str, act: Move) -> Result<Proposal, String> {
     match survey.of(creature) {
         Some(p) if p.act == act => Ok(p.clone()),
         Some(p) => Err(format!(
@@ -690,13 +730,15 @@ pub fn proposed_in(
 }
 
 /// The human's apply: the proposal of `act` for `creature`, read again now and held to the `id`
-/// the human was shown, written to the witness as a `rise` or `fall` row. Refused inside a body's
-/// command, under a harness process, with no home or a state directory inside the world
-/// ([`creatures::record_human_in`]), and when the proposal moved since it was shown.
+/// the human was shown, written to the witness as a `rise` or `fall` row — only onto the witness
+/// it was read from: a row written since (a second apply, a relief) refuses it whole. Refused
+/// inside a body's command, under a harness process, with no home or a state directory inside
+/// the world ([`creatures::record_human_after`]), and when the proposal moved since it was shown.
+/// It asks nothing: the human's yes is its caller's (`mnemorphd roster`, at the terminal).
 ///
 /// # Errors
 ///
-/// As [`proposed_in`] and [`creatures::record_human_in`], or the proposal is no longer `id`.
+/// As [`proposed_in`] and [`creatures::record_human_after`], or the proposal is no longer `id`.
 pub fn apply_in(
     state: Option<&Path>,
     world: &Path,
@@ -707,16 +749,21 @@ pub fn apply_in(
     let state =
         state.ok_or("no home: the creatures' rows are kept under the human's state directory")?;
     crate::pins::outside_as(world, state, "the creatures' rows are")?;
-    let p = proposed_in(world, state, creature, act)?;
+    // The witness's head first: a row written after it, even before the rows are read, refuses
+    // the append below.
+    let head = creatures::journal_at(creatures::path_in(state, world))
+        .head()
+        .map_err(|e| format!("the creatures' witness cannot be read: {e}"))?;
+    let (folded, roster) = inputs_in(world, state)?;
+    let p = proposal_of(&surveyed(&folded, &roster), creature, act)?;
     if p.id != id {
         return Err(format!(
             "the proposal moved since it was shown ({id} is now {}): nothing was written",
             p.id
         ));
     }
-    let roster = creatures::rows_in(Some(state), world)?.unwrap_or_default();
     let row = row_for(&p, &roster).ok_or("the creature has no row in the witness")?;
-    creatures::record_human_in(Some(state), world, vec![row])?;
+    creatures::record_human_after(state, world, row, head.as_ref())?;
     Ok(p)
 }
 
@@ -735,14 +782,23 @@ pub struct Replayed {
     pub proposal: String,
 }
 
-/// Every `rise` and `fall` row of the witness `roster`, recomputed from the report ledger's
-/// `rows` and the witness's rows before it, at the time the row was read at: each must name the
-/// very proposal the law makes there — its id, its digest and its race.
+/// Every `rise` and `fall` row of the witness `roster`, recomputed from exactly the journals'
+/// lines it names (`read`, folded by [`crate::reports::Folded::rows_at`]) and the witness's rows
+/// before it: each must name the very proposal the law makes there — its id, its digest, its
+/// race and the last report it read.
 ///
 /// # Errors
 ///
 /// The first row that does not reproduce, and why.
-pub fn replay(rows: &[ReportRow], roster: &[Row]) -> Result<Vec<Replayed>, String> {
+pub fn replay(folded: &crate::reports::Folded, roster: &[Row]) -> Result<Vec<Replayed>, String> {
+    replay_with(|read| folded.rows_at(read), roster)
+}
+
+/// [`replay`], the report rows of a row's `read` given by `rows_at`.
+fn replay_with(
+    rows_at: impl Fn(&crate::reports::Read) -> Result<Vec<ReportRow>, String>,
+    roster: &[Row],
+) -> Result<Vec<Replayed>, String> {
     let mut out = Vec::new();
     for (n, r) in roster.iter().enumerate() {
         let act = match r.act {
@@ -751,13 +807,17 @@ pub fn replay(rows: &[ReportRow], roster: &[Row]) -> Result<Vec<Replayed>, Strin
             _ => continue,
         };
         let line = n + 1;
-        let as_of = r
-            .as_of
-            .ok_or_else(|| format!("row {line}: a {} names no time it was read at", act.word()))?;
-        let survey = propose_at(rows, &roster[..n], as_of);
+        let read = r.read.as_ref().ok_or_else(|| {
+            format!(
+                "row {line}: a {} names no journal lines it was read from",
+                act.word()
+            )
+        })?;
+        let rows = rows_at(read).map_err(|e| format!("row {line}: {e}"))?;
+        let survey = propose(&rows, &roster[..n]);
         let p = survey.of(&r.name).filter(|p| p.act == act).ok_or_else(|| {
             format!(
-                "row {line}: the law proposes no {} for {} at {as_of}",
+                "row {line}: the law proposes no {} for {} over the lines it read",
                 act.word(),
                 r.name
             )
@@ -765,6 +825,7 @@ pub fn replay(rows: &[ReportRow], roster: &[Row]) -> Result<Vec<Replayed>, Strin
         if r.proposal.as_deref() != Some(p.id.as_str())
             || r.inputs_sha256.as_deref() != Some(p.inputs_sha256.as_str())
             || r.race != p.to.name()
+            || r.as_of != Some(p.as_of)
         {
             return Err(format!(
                 "row {line}: {}'s {} names proposal {} ({}), the law reads {} ({}) to {}",
@@ -794,8 +855,8 @@ pub fn replay(rows: &[ReportRow], roster: &[Row]) -> Result<Vec<Replayed>, Strin
 ///
 /// As [`survey_in`] and [`replay`].
 pub fn replay_in(world: &Path, state: &Path) -> Result<Vec<Replayed>, String> {
-    let (rows, roster) = inputs_in(world, state)?;
-    replay(&rows, &roster)
+    let (folded, roster) = inputs_in(world, state)?;
+    replay(&folded, &roster)
 }
 
 /// Each pending proposal, probation and unknown input of `world`, in lines for `status` and `mnemorphd meters`,

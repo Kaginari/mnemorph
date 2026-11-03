@@ -83,7 +83,9 @@ fn twenty_settled_passes_in_the_window_propose_a_rise_and_the_newest_waits() {
         (p.act, p.from, p.to, p.n),
         (Move::Rise, Race::Slime, Race::NamedSlime, 20)
     );
-    assert_eq!(p.as_of, Timestamp(T0 + 20 * HOUR));
+    // The form's record counts from after the last report it read: the newest, unsettled, is
+    // the new form's.
+    assert_eq!(p.as_of, Timestamp(T0 + 19 * HOUR));
     assert_eq!(p.id, p.inputs_sha256[..12]);
     assert_eq!(p.meters[0], ("landRate", Rate::of(20, 20)));
     assert!(p.why.iter().all(Explanation::holds), "{:?}", p.why);
@@ -194,13 +196,14 @@ fn under_the_fall_bar_is_probation_and_unrecovered_after_five_is_a_fall() {
     // Risen: it holds, and is proposed nothing more.
     assert_eq!(propose(&rows, &roster), Survey::default());
     let after = T0 + 30 * HOUR;
-    // Ten runs since the rise, four failed: landRate 0.60 < 0.75 — probation; one more settles.
-    rows.extend(runs("sly", "slime", after, 11, |k| k >= 4));
+    // Ten runs since the rise (the one in flight at it the first), four failed: landRate 0.60 <
+    // 0.75 — probation; one more settles.
+    rows.extend(runs("sly", "slime", after, 10, |k| k >= 4));
     let s = propose(&rows, &roster);
     assert!(s.proposals.is_empty(), "{:?}", s.proposals);
     let pr = s.probation_of("sly").expect("on probation");
     assert_eq!((pr.race, pr.reports), (Race::NamedSlime, 0));
-    assert_eq!(pr.began, Timestamp(after + 9 * HOUR));
+    assert_eq!(pr.began, Timestamp(after + 8 * HOUR));
     assert!(pr.to_string().contains("0 of 5 reports"), "{pr}");
     // Four on probation, three failed: still on it.
     rows.extend(runs("sly", "slime", after + 11 * HOUR, 4, |k| k >= 3));
@@ -218,8 +221,8 @@ fn under_the_fall_bar_is_probation_and_unrecovered_after_five_is_a_fall() {
     assert!(p.ended_probation && p.what().contains("probation ended"));
     assert_eq!(
         p.as_of,
-        Timestamp(after + 15 * HOUR),
-        "read when the fifth was settled"
+        Timestamp(after + 14 * HOUR),
+        "the base form counts from after the fifth"
     );
     let line = p.why[0].to_string();
     assert!(
@@ -247,7 +250,7 @@ fn a_fall_is_read_over_reports_by_count_never_by_the_window() {
     // says, so it still enters probation and still falls.
     let (roster, mut rows) = risen();
     let after = T0 + 30 * HOUR;
-    rows.extend(weekly("sly", after, 11, |k| k >= 4));
+    rows.extend(weekly("sly", after, 10, |k| k >= 4));
     let pr = propose(&rows, &roster)
         .probation_of("sly")
         .cloned()
@@ -300,30 +303,73 @@ fn an_event_falls_the_form_at_once() {
 #[test]
 fn a_proposal_is_read_from_the_rows_alone_and_a_replay_reproduces_its_row() {
     let (roster, rows) = risen();
-    let again = replay(&rows, &roster).unwrap();
+    let at = |rows: &[ReportRow]| {
+        let rows = rows.to_vec();
+        move |_: &crate::reports::Read| Ok(rows.clone())
+    };
+    let again = replay_with(at(&rows), &roster).unwrap();
     assert_eq!(again.len(), 1);
     assert_eq!(
         (again[0].line, again[0].act, again[0].to.as_str()),
         (2, Act::Rise, "named-slime")
     );
-    let p = propose_at(&rows, &roster[..1], roster[1].as_of.unwrap());
-    assert_eq!(p.of("sly").unwrap().id, roster[1].proposal.clone().unwrap());
-    // A report rewritten after the apply: the row no longer reproduces, and says where.
+    // A report rewritten in what the row read: the row no longer reproduces, and says where.
     let mut moved = rows.clone();
     moved[3] = run("sly", "slime", T0 + 3 * HOUR, false, 0);
-    let e = replay(&moved, &roster).unwrap_err();
+    let e = replay_with(at(&moved), &roster).unwrap_err();
     assert!(e.starts_with("row 2:"), "{e}");
     // Reports gone: the law proposes no rise there.
-    let e = replay(&rows[..5], &roster).unwrap_err();
+    let e = replay_with(at(&rows[..5]), &roster).unwrap_err();
     assert!(e.contains("proposes no rise"), "{e}");
-    // A row whose digest was edited does not either.
+    // A row whose digest was edited does not either, nor one whose boundary was.
     let mut forged = roster.clone();
     forged[1].inputs_sha256 = Some("0".repeat(64));
-    assert!(replay(&rows, &forged).is_err());
-    // A rise with no time it was read at is no replayable row.
+    assert!(replay_with(at(&rows), &forged).is_err());
+    let mut forged = roster.clone();
+    forged[1].as_of = Some(Timestamp(T0));
+    assert!(replay_with(at(&rows), &forged).is_err());
+    // A rise that names no journal lines is no replayable row.
     let mut bare = roster;
-    bare[1].as_of = None;
-    assert!(replay(&rows, &bare).unwrap_err().contains("names no time"));
+    bare[1].read = None;
+    assert!(
+        replay_with(at(&rows), &bare)
+            .unwrap_err()
+            .contains("names no journal lines")
+    );
+}
+
+#[test]
+fn a_recovered_form_is_read_afresh_and_needs_ten_new_reports_for_probation() {
+    let (roster, mut rows) = risen();
+    let after = T0 + 30 * HOUR;
+    // Probation, then a recovery at the bar (four of five passed).
+    rows.extend(runs("sly", "slime", after, 11, |k| k >= 4));
+    rows.extend(runs("sly", "slime", after + 11 * HOUR, 6, |k| k != 0));
+    assert_eq!(propose(&rows, &roster).probation, Vec::new());
+    // Three fails straight after: read with the record before the recovery they would start a
+    // probation; read afresh they are three of the ten a new one needs.
+    let at = after + 17 * HOUR;
+    rows.extend(runs("sly", "slime", at, 4, |k| k == 3));
+    let s = propose(&rows, &roster);
+    assert!(s.probation.is_empty() && s.proposals.is_empty(), "{s:?}");
+    // Ten made since the recovery, under the bar: a new probation.
+    rows.extend(runs("sly", "slime", at + 4 * HOUR, 8, |_| false));
+    assert!(propose(&rows, &roster).probation_of("sly").is_some());
+}
+
+#[test]
+fn every_report_counts_in_one_form_or_the_other() {
+    // sly's 21st run is unsettled when the rise is read: it is the named form's first.
+    let (roster, mut rows) = risen();
+    let h = held(&roster)["sly"].clone();
+    let clock = rows.iter().map(ReportRow::ts).max().unwrap();
+    rows.push(run("sly", "slime", clock.0 + HOUR, true, 0));
+    let named = reports_of(&rows, "sly", &h, Timestamp(clock.0 + HOUR));
+    assert_eq!(
+        named.first().map(|r| r.ts()),
+        Some(clock),
+        "the report in flight at the rise"
+    );
 }
 
 #[test]
