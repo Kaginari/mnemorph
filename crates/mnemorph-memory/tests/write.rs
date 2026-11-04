@@ -750,3 +750,44 @@ fn an_act_on_a_note_rewritten_since_it_was_read_is_refused() {
     assert!(wake_by(&w, "n1", "woken", &seen("n1", "retry twice")).is_ok());
     let _ = fs::remove_dir_all(&w);
 }
+
+/// Notes an evolution kept distils are put to sleep — dormant, their events kept — once each,
+/// and only the owner's live personal notes.
+#[test]
+fn distilled_notes_go_to_sleep_once() {
+    let world = world_of("distilled");
+    let w = world.as_path();
+    let a = mnemorph_memory::propose(w, "sly", "fractions stay exact", vec![], None)
+        .unwrap()
+        .note;
+    let b = mnemorph_memory::propose(w, "sly", "lex before parsing", vec![], None)
+        .unwrap()
+        .note;
+    let moved = mnemorph_memory::distilled(
+        w,
+        "sly",
+        &[a.clone(), a.clone(), "n-not-there".into()],
+        "sly-mutate-1",
+    )
+    .unwrap();
+    assert_eq!(moved, vec![a.clone()]);
+    let rows = mnemorph_memory::read(w, &mnemorph_memory::Tier::Personal("sly".into()))
+        .unwrap()
+        .rows;
+    let notes = mnemorph_memory::fold(&rows);
+    assert_eq!(notes[&a].status, mnemorph_memory::Status::Dormant);
+    assert_eq!(notes[&b].status, mnemorph_memory::Status::Proposed);
+    assert!(
+        rows.iter().any(|e| e.note == a
+            && e.proof
+                .as_deref()
+                .is_some_and(|p| p.contains("sly-mutate-1"))),
+        "the why is kept"
+    );
+    assert!(
+        mnemorph_memory::distilled(w, "sly", &[a], "again")
+            .unwrap()
+            .is_empty(),
+        "asleep already: moved once"
+    );
+}

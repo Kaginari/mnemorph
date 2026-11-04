@@ -37,6 +37,9 @@ pub enum Row {
         arm: Arm,
         /// Every file it changes, its digest as the world held it and as staged.
         files: Vec<FileChange>,
+        /// The desk notes its traits distil, by id: put to sleep once the evolution is kept.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        distils: Vec<String>,
         /// The build that drew it.
         #[serde(default)]
         build: Build,
@@ -66,6 +69,8 @@ pub struct Proposal {
     pub arm: Arm,
     /// Its files, as drawn.
     pub files: Vec<FileChange>,
+    /// The desk notes its traits distil.
+    pub distils: Vec<String>,
 }
 
 impl Proposal {
@@ -140,10 +145,11 @@ pub fn draw(
     arm: Arm,
     files: &[Staged],
 ) -> Result<Proposal, String> {
-    draw_in(None, world, id, creature, arm, files)
+    draw_in(None, world, id, creature, arm, files, &[])
 }
 
-/// [`draw`], the human's state directory at `state` (`None`: the one this process has).
+/// [`draw`], the human's state directory at `state` (`None`: the one this process has), the
+/// desk notes its traits distil named in `distils`.
 ///
 /// # Errors
 ///
@@ -155,6 +161,7 @@ pub fn draw_in(
     creature: &str,
     arm: Arm,
     files: &[Staged],
+    distils: &[String],
 ) -> Result<Proposal, String> {
     let state = state_of(state)?;
     let at = path_of(&state, world)?;
@@ -180,6 +187,7 @@ pub fn draw_in(
             creature: creature.to_owned(),
             arm,
             files: files.clone(),
+            distils: distils.to_vec(),
             build: Build::this(),
         })
         .map_err(|e| format!("the proposal cannot be kept: {e}"))?;
@@ -188,6 +196,7 @@ pub fn draw_in(
         creature: creature.to_owned(),
         arm,
         files,
+        distils: distils.to_vec(),
     })
 }
 
@@ -206,6 +215,7 @@ pub fn open(world: &Path) -> Result<Vec<Proposal>, String> {
                 creature,
                 arm,
                 files,
+                distils,
                 ..
             } => {
                 out.insert(
@@ -217,6 +227,7 @@ pub fn open(world: &Path) -> Result<Vec<Proposal>, String> {
                             creature,
                             arm,
                             files,
+                            distils,
                         },
                     ),
                 );
@@ -229,6 +240,32 @@ pub fn open(world: &Path) -> Result<Vec<Proposal>, String> {
     let mut v: Vec<(usize, Proposal)> = out.into_values().collect();
     v.sort_by_key(|(n, _)| *n);
     Ok(v.into_iter().map(|(_, p)| p).collect())
+}
+
+/// The proposal `id` as drawn, open or closed; `None` when none was drawn so.
+///
+/// # Errors
+///
+/// No home, or the journal does not verify.
+pub fn drawn(world: &Path, id: &str) -> Result<Option<Proposal>, String> {
+    let state = state_of(None)?;
+    Ok(rows(&state, world)?.into_iter().find_map(|r| match r {
+        Row::Drawn {
+            id: i,
+            creature,
+            arm,
+            files,
+            distils,
+            ..
+        } if i == id => Some(Proposal {
+            id: i,
+            creature,
+            arm,
+            files,
+            distils,
+        }),
+        _ => None,
+    }))
 }
 
 /// The open proposal `id`.
