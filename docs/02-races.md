@@ -1561,10 +1561,18 @@ gate failed on the creature's own verify lines or its doc names files that are g
 record restarts; **mutate** otherwise — repeated lessons become traits and verify lines, a
 recurring *how* is minted as a skill on trial.
 
-**Proven before swapped.** A plan is staged under `.mnemorph/tmp/evolution/<id>/` and swapped in
-only when the new verify lines pass in the sandbox, the ontology over an overlay of the plan shows
-no new findings, and every body gets exactly the files the plan meant. Otherwise the old docs stay
-and a hole is logged. The old doc rests in the attic.
+**Proven before swapped** (`mnemorph_loop::prove`). A plan is staged under
+`.mnemorph/tmp/evolution/<id>/` and swapped in only when it is proven over an overlay — a scratch
+copy of the world (build output, instruments and scratch left out), the plan written into it,
+never into the world — and every body gets exactly the files the plan meant. Over the overlay
+the ontology (`onto check`, its cards read against the live world's witness) must find nothing
+the live world does not: a finding is new by severity, code, file and message — its line aside,
+so a doc grown longer above it is not — and a doc that no longer reads is new. Every creature doc
+the plan writes must have its verify lines pinned by the human (`mnemorphd verify pin`) — a line
+the card alone says never runs — and each must pass in the sandbox over the overlay, writing
+nothing. A plan that re-parents or widens a card is refused so: its overlay holds a
+`roster-mismatch` the world does not. Otherwise nothing is asked, nothing written, and every
+reason said. The old doc rests in the attic.
 
 **Paced.** A creature evolves at most once every 10 runs (replayed from the ledger), one plan runs
 at a time, and `evolution.mode = "propose"` queues plans for `mnemorph evolve list | show | apply |
@@ -1665,7 +1673,9 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    and write of a named or staged file opens its path one folder at a time from the world,
    following no link, and the file itself without following one, checked on its handle: a
    created file goes in only where nothing stands, a replaced one is renamed into place, never
-   written through a link. A staged file, or a named file's bytes before, is read up to 8 MiB. The plan is shown and asked for `y` at the terminal; a
+   written through a link. A staged file, or a named file's bytes before, is read up to 8 MiB.
+   The plan is shown, **proven over an overlay** (above) — a plan not proven is refused before
+   it is asked — and asked for `y` at the terminal; a
    body never runs it. The harness hashes the soil under `.mnemorph/` (the
    instruments, memory and scratch left out) before and after writing it, keeps the named files'
    bytes before beside the ledger (`<ledger>.swaps/<id>/before/`, folders 0700 and files 0600,

@@ -3034,6 +3034,23 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
             println!("  {}", safe(&line));
         }
     }
+    // Proven before asked: the plan over an overlay of the world, never the world.
+    let tracked = mnemorph_server::tracked(world).unwrap_or_default();
+    match mnemorph_server::prove::prove_now(world, plan, &tracked) {
+        Ok(lines) => {
+            println!("proven over an overlay of the world:");
+            for l in lines {
+                println!("  {}", safe(&l));
+            }
+        }
+        Err(why) => {
+            println!("not proven over an overlay of the world:");
+            for w in why {
+                println!("  {}", safe(&w));
+            }
+            return refused(&"the plan is not proven: nothing was swapped");
+        }
+    }
     match at_terminal(&format!("swap {} in?", plan.id)) {
         Ok(true) => {}
         Ok(false) => return refused(&"nothing was swapped"),
