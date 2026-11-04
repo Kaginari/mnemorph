@@ -7,7 +7,8 @@
 //!    were before it. A judgement still pending or refused is left as it stands, said.
 //! 2. **Evolve.** One creature the trigger finds due, by mutate or rebirth, with no swap still
 //!    unsettled and no proposal waiting, is drafted, proven over an overlay and swapped in. A
-//!    draft not proven stays a proposal for the human.
+//!    draft not proven stays a proposal for the human. A creature due to split is named with the
+//!    relief that splits it around its two troubled parts: a split is the human's.
 //!
 //! At most one judgement and one draft a tick, so a tick's spend is bounded. With
 //! `evolution.mode = "propose"` nothing is done: every plan waits for the human.
@@ -118,6 +119,17 @@ fn evolve_one(world: &Path, t: &Ticker<'_>, lines: &mut Vec<String>) -> Result<(
     let waiting: Vec<String> = proposals::open(world)
         .map(|o| o.into_iter().map(|p| p.creature).collect())
         .unwrap_or_default();
+    // A split is structural — new seats, the old one retired, notes and pins inherited — and no
+    // do-nothing control judges it: the tick names it for the human, and never applies it.
+    for d in &survey.due {
+        if let Some(relief) = d.relief_command() {
+            lines.push(format!(
+                "{} is due to split — a split is the human's: `{relief}` shows it, `--apply` \
+                 does it",
+                d.creature
+            ));
+        }
+    }
     let Some(due) = survey.due.iter().find(|d| {
         d.arm != Arm::Split && !busy.contains(&d.creature) && !waiting.contains(&d.creature)
     }) else {

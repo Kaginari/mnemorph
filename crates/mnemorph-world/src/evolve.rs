@@ -50,6 +50,23 @@ pub struct Due {
     pub arm: Arm,
     /// Why: its stress, its desk, the arm's reason.
     pub why: Vec<String>,
+    /// For a split, the two parts of its zone its trouble clusters in — one for each young —
+    /// as relief's `--around` takes them; empty for another arm.
+    pub parts: Vec<String>,
+}
+
+impl Due {
+    /// The relief that splits it around its two parts, for the human to run; `None` for another
+    /// arm.
+    #[must_use]
+    pub fn relief_command(&self) -> Option<String> {
+        (self.arm == Arm::Split && self.parts.len() == 2).then(|| {
+            format!(
+                "mnemorphd relief {} --around {},{}",
+                self.creature, self.parts[0], self.parts[1]
+            )
+        })
+    }
 }
 
 /// What the rules read for the world.
@@ -142,8 +159,10 @@ fn due_of(world: &Path, c: &Creature, verdicts: &[VerdictRow]) -> Option<Due> {
         .copied()
         .filter(|v| crate::reports::failed(v) == Some(true))
         .collect();
-    let arm = if let Some(reason) = split(world, c, &failed, &notes) {
+    let mut parts = Vec::new();
+    let arm = if let Some((reason, two)) = split(world, c, &failed, &notes) {
         why.push(reason);
+        parts = two.to_vec();
         Arm::Split
     } else if let Some(reason) = reborn(world, c, last) {
         why.push(reason);
@@ -160,6 +179,7 @@ fn due_of(world: &Path, c: &Creature, verdicts: &[VerdictRow]) -> Option<Due> {
         race: c.race,
         arm,
         why,
+        parts,
     })
 }
 
@@ -200,7 +220,7 @@ fn split(
     c: &Creature,
     failed: &[&VerdictRow],
     notes: &[Option<String>],
-) -> Option<String> {
+) -> Option<(String, [String; 2])> {
     let (files, lines) = size(world, &c.zone);
     if files < LARGE_FILES && lines < LARGE_LINES {
         return None;
@@ -225,9 +245,12 @@ fn split(
     };
     let clusters = total >= 4 && na * 4 >= total && nb * 4 >= total && (na + nb) * 4 >= total * 3;
     clusters.then(|| {
-        format!(
-            "its zone is large ({files} files, {lines} lines) and its trouble clusters in {a} \
-             ({na}) and {b} ({nb}) of {total}"
+        (
+            format!(
+                "its zone is large ({files} files, {lines} lines) and its trouble clusters in {a} \
+                 ({na}) and {b} ({nb}) of {total}"
+            ),
+            [a.clone(), b.clone()],
         )
     })
 }
@@ -329,14 +352,21 @@ pub fn lines_of(s: &Survey) -> Vec<String> {
     let mut out: Vec<String> = s
         .due
         .iter()
-        .map(|d| {
-            format!(
+        .map(|d| match d.relief_command() {
+            Some(relief) => format!(
+                "{} ({}): due to split — {} — a split is the human's: `{relief}` shows it, \
+                 `--apply` does it",
+                d.creature,
+                d.race.name(),
+                d.why.join("; ")
+            ),
+            None => format!(
                 "{} ({}): due to {} — {} — proposed only: nothing is drafted or swapped",
                 d.creature,
                 d.race.name(),
                 arm_word(d.arm),
                 d.why.join("; ")
-            )
+            ),
         })
         .collect();
     out.extend(s.cooling.iter().map(|(c, id)| {

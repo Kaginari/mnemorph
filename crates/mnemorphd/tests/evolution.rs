@@ -759,3 +759,26 @@ fn a_swap_is_rolled_back_at_the_terminal_and_auto_finds_nothing_to_do() {
         text(&out)
     );
 }
+
+/// `relief --around` takes the two parts a split is due around, and refuses fewer.
+#[test]
+fn relief_around_takes_two_parts() {
+    let f = Fixture::new("relief-around");
+    let out = f.run(&["relief", "sly", "--around", "src/lexer"]);
+    assert_eq!(out.status.code(), Some(2), "{:?}", text(&out));
+    assert!(
+        text(&out).1.contains("--around needs two parts"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.run(&["relief", "sly", "--around", "src/lexer,src/parser"]);
+    assert!(
+        !out.status.success(),
+        "sly holds no such ground: {:?}",
+        text(&out)
+    );
+    assert!(
+        !f.world.join(".mnemorph/slime/sly-a").exists(),
+        "nothing written"
+    );
+}

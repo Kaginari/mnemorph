@@ -219,6 +219,36 @@ fn a_large_zone_whose_trouble_clusters_in_two_parts_splits() {
             .any(|y| y.contains("24 files") && y.contains("src/lexer") && y.contains("src/parser")),
         "{d:?}"
     );
+    // The two parts it names are relief's to split around, one to each young — the human's.
+    assert_eq!(
+        d.parts,
+        vec!["src/lexer".to_owned(), "src/parser".to_owned()]
+    );
+    assert_eq!(
+        d.relief_command().as_deref(),
+        Some("mnemorphd relief sly --around src/lexer,src/parser")
+    );
+    let lines = evolve::lines_of(&w.survey());
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("a split is the human's")
+                && l.contains("--around src/lexer,src/parser")),
+        "{lines:?}"
+    );
+    let r = mnemorph_world::relief::relieve_by(
+        Some(&w.state),
+        &w.root,
+        "sly",
+        Some(&[d.parts[0].clone(), d.parts[1].clone()]),
+        false,
+    )
+    .unwrap();
+    assert!(
+        r.line().contains("sly-a takes src/lexer/") && r.line().contains("sly-b takes src/parser/"),
+        "{}",
+        r.line()
+    );
     // The same trouble in a small zone mutates.
     let mut w = World::new("");
     std::fs::create_dir_all(w.root.join("src/lexer")).unwrap();

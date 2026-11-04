@@ -79,6 +79,28 @@ pub fn relieve(world: &Path, name: &str, apply: bool) -> Result<Relief, String> 
     relieve_in(crate::queue::state_dir().as_deref(), world, name, apply)
 }
 
+/// [`relieve`], its ground split around two of its parts — one for each young, the rest shared
+/// out between them so each holds as many — as evolution's trigger names them where the trouble
+/// clusters ([`crate::evolve::Due::parts`]).
+///
+/// # Errors
+///
+/// As [`relieve`], or a part is no part of the ground, or both are the same part.
+pub fn relieve_around(
+    world: &Path,
+    name: &str,
+    around: &[String; 2],
+    apply: bool,
+) -> Result<Relief, String> {
+    relieve_by(
+        crate::queue::state_dir().as_deref(),
+        world,
+        name,
+        Some(around),
+        apply,
+    )
+}
+
 /// [`relieve`], the creatures' witness under the state directory `state` (`None`: no home): the
 /// trusted roster it plans on, and where its rows are written.
 ///
@@ -89,6 +111,21 @@ pub fn relieve_in(
     state: Option<&Path>,
     world: &Path,
     name: &str,
+    apply: bool,
+) -> Result<Relief, String> {
+    relieve_by(state, world, name, None, apply)
+}
+
+/// [`relieve_in`], split around two parts when `around` names them ([`relieve_around`]).
+///
+/// # Errors
+///
+/// As [`relieve_around`].
+pub fn relieve_by(
+    state: Option<&Path>,
+    world: &Path,
+    name: &str,
+    around: Option<&[String; 2]>,
     apply: bool,
 ) -> Result<Relief, String> {
     let roster = Roster::load_in(state, world);
@@ -107,7 +144,11 @@ pub fn relieve_in(
             ));
         }
     };
-    let act = match halves(world, ground) {
+    let split = match around {
+        Some(parts) => Some(split_around(world, ground, parts)?),
+        None => halves(world, ground),
+    };
+    let act = match split {
         Some((a, b)) => Act::Split {
             young: [(format!("{name}-a"), a), (format!("{name}-b"), b)],
         },
@@ -214,6 +255,55 @@ fn heirs(roster: &Roster, c: &Creature, act: &Act) -> Vec<(String, String)> {
 /// aside — or the entries under its one directory, descending while that directory holds a
 /// single one. Hidden entries go with the first half; a link counts as a file.
 fn halves(world: &Path, ground: &[String]) -> Option<(Vec<String>, Vec<String>)> {
+    let (mut claims, hidden) = entries(world, ground)?;
+    if claims.len() < 2 {
+        return None;
+    }
+    let b = claims.split_off(claims.len().div_ceil(2));
+    let mut a = claims;
+    a.extend(hidden);
+    Some((a, b))
+}
+
+/// A ground in two around `parts`: the first part's claim to the first young, the second's to
+/// the second, every other claim to whichever holds fewer so far, in order; hidden entries with
+/// the first. The claims are those [`halves`] reads.
+fn split_around(
+    world: &Path,
+    ground: &[String],
+    parts: &[String; 2],
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let (claims, hidden) =
+        entries(world, ground).ok_or("its ground cannot be read in parts: relieve it by hand")?;
+    let bare = |p: &str| p.trim_start_matches("./").trim_end_matches('/').to_owned();
+    let at = |part: &String| {
+        claims
+            .iter()
+            .position(|c| bare(c) == bare(part))
+            .ok_or_else(|| format!("`{part}` is no part of its ground: {}", claims.join(", ")))
+    };
+    let (i, j) = (at(&parts[0])?, at(&parts[1])?);
+    if i == j {
+        return Err(format!("`{}` twice: a split takes two parts", parts[0]));
+    }
+    let (mut a, mut b) = (vec![claims[i].clone()], vec![claims[j].clone()]);
+    for (k, c) in claims.iter().enumerate() {
+        if k != i && k != j {
+            if b.len() < a.len() {
+                b.push(c.clone());
+            } else {
+                a.push(c.clone());
+            }
+        }
+    }
+    a.extend(hidden);
+    Ok((a, b))
+}
+
+/// The claims a ground splits into, sorted, and its hidden entries: its claims when it has two or
+/// more — a claim another covers set aside — or the entries under its one directory, descending
+/// while that directory holds a single one. `None` when its directory cannot be read or is empty.
+fn entries(world: &Path, ground: &[String]) -> Option<(Vec<String>, Vec<String>)> {
     let mut claims: Vec<String> = ground
         .iter()
         .filter(|g| !ground.iter().any(|o| o != *g && covers(o, g)))
@@ -243,13 +333,7 @@ fn halves(world: &Path, ground: &[String]) -> Option<(Vec<String>, Vec<String>)>
         }
     }
     claims.sort();
-    if claims.len() < 2 {
-        return None;
-    }
-    let b = claims.split_off(claims.len().div_ceil(2));
-    let mut a = claims;
-    a.extend(hidden);
-    Some((a, b))
+    Some((claims, hidden))
 }
 
 /// A claim as a doc writes it: a file at the root keeps its `./`, or it reads as no path.
