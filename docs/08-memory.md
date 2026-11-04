@@ -372,6 +372,11 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   recalled — once two distinct attributable failures outnumber the passing asks that cited it, all
   counted since it was last grounded. Both copies of a grounded note, the creature's and the
   shared one, move together. A shared note whose owner's memory is frozen is left for the human.
+- **Distilled** (`distilled`). When an evolution whose traits cite a creature's desk notes is kept
+  ([evolution](02-races.md#evolution--the-other-way-to-change)), those notes go to sleep —
+  dormant, their events kept, no longer recalled — with why: the evolution that distils them.
+  The trait in the creature's doc carries them now. Only the owner's live personal notes move,
+  each once; a frozen memory moves none.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 

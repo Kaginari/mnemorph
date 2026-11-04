@@ -175,26 +175,7 @@ pub async fn draft(
     let rewritten = with_traits(&doc, &traits);
     same_header(&doc, &rewritten, &doc_path)?;
     let id = format!("{}-{}-{now}", due.creature, arm_word(due.arm));
-    let staged = mnemorph_world::evolution::staging(world, &id);
-    stage(world, &staged, &doc_path, &rewritten)?;
-    // The staging is the world's: the proposal under the state directory holds the bytes drawn.
-    mnemorph_world::proposals::draw(
-        world,
-        &id,
-        &due.creature,
-        due.arm,
-        &[mnemorph_world::evolution::Staged {
-            path: doc_path.clone(),
-            after: Some(rewritten.clone().into_bytes()),
-            creates: false,
-        }],
-    )
-    .map_err(|e| {
-        format!(
-            "{e}: the plan is staged at {}, to swap by hand",
-            staged.display()
-        )
-    })?;
+    let staged = staged_and_drawn(world, &id, due, &doc_path, &rewritten, &traits)?;
     Ok(Draft {
         id,
         creature: due.creature.clone(),
@@ -203,6 +184,42 @@ pub async fn draft(
         staged,
         traits,
     })
+}
+
+/// The plan staged under a new folder and kept as a proposal, the bytes drawn and the notes its
+/// traits distil with it; its staging folder.
+fn staged_and_drawn(
+    world: &Path,
+    id: &str,
+    due: &Due,
+    doc_path: &str,
+    rewritten: &str,
+    traits: &[Trait],
+) -> Result<PathBuf, String> {
+    let staged = mnemorph_world::evolution::staging(world, id);
+    stage(world, &staged, doc_path, rewritten)?;
+    // The staging is the world's: the proposal under the state directory holds the bytes drawn.
+    let distils: Vec<String> = traits.iter().flat_map(|t| t.from.iter().cloned()).collect();
+    mnemorph_world::proposals::draw_in(
+        None,
+        world,
+        id,
+        &due.creature,
+        due.arm,
+        &[mnemorph_world::evolution::Staged {
+            path: doc_path.to_owned(),
+            after: Some(rewritten.as_bytes().to_vec()),
+            creates: false,
+        }],
+        &distils,
+    )
+    .map_err(|e| {
+        format!(
+            "{e}: the plan is staged at {}, to swap by hand",
+            staged.display()
+        )
+    })?;
+    Ok(staged)
 }
 
 /// The drafter's message: the arm and why, then the doc and every note, marked as data.

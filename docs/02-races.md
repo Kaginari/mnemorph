@@ -1590,6 +1590,12 @@ a lock so two never run at once:
    still unsettled and no proposal of its waiting, is drafted, proven over an overlay and swapped
    in, on trial. A draft not proven stays a proposal for the human.
 
+A kept evolution's traits carry the desk notes they cite: those notes go to sleep — dormant, their
+events kept, no longer recalled nor counted on the desk — each with why, so a creature stressed
+again is due on new notes, never the same ones twice. The ids are the proposal's, kept under the
+state directory when it was drawn, never read back from the doc a body can write. A rollback
+leaves the desk as it was.
+
 At most one judgement and one draft a tick, so a tick's spend is bounded. Every settle is one
 `settle` row in the evolution ledger — kept or rolled back, by `harness` or `human`, and the
 judgement it stood on — and a swap is settled once; a settled swap's window closes, early or

@@ -627,6 +627,18 @@ pub fn settle(
     let before = crate::Roster::cards(world);
     let rows = crate::creatures::witnessed(world);
     let settled = settle_at(world, &ledger, id, outcome, by, why)?;
+    // Kept, the notes its traits distil leave the desk: the traits carry them now. Rolled back,
+    // they stay — the trial said the traits did no better than the notes.
+    if outcome == Settled::Keep
+        && let Ok(Some(p)) = crate::proposals::drawn(world, id)
+        && !p.distils.is_empty()
+        && let Err(e) = mnemorph_memory::distilled(world, &p.creature, &p.distils, id)
+    {
+        eprintln!(
+            "mnemorph: swap `{id}` is kept, but the notes it distils stay on {}'s desk: {e}",
+            p.creature
+        );
+    }
     if outcome == Settled::Rollback {
         let read = read_ledger(ledger.path())?;
         let paths: Vec<String> = swap_of(&read, id)
