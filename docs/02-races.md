@@ -1639,8 +1639,19 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
 1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
    path it replaces or creates — a Mind under `.mnemorph/minds/`, a creature doc under
    `.mnemorph/<race>/<name>/`, a split's young in a folder of its own. Who drafts it is free (a
-   body, the human; the trigger says who is due and by which arm, `mnemorphd evolution due`, but
-   drafts nothing yet); it changes nothing while staged.
+   body, the human, or the drafter); it changes nothing while staged. **The drafter**
+   (`mnemorph_loop::draft`, `mnemorphd evolution draft <creature>`) drafts a **mutate** or a
+   **rebirth** for a creature the trigger finds due: one call to the configured model, with no
+   tool, shown the creature's doc and its desk as data — a body may have written either — and
+   answering only trait lines, `@T <trait> from=<note id>,…`, each citing notes on the desk. The
+   harness, not the model, writes the doc: its header untouched — race, chain, territory, verify
+   lines and Minds are never the drafter's; the doc is parsed before and after and a draft that
+   would move a field is refused — and a `## Traits` section added or replaced, under a heading,
+   where no field is read. At most 7 traits of at most 200 characters, one line each, no control
+   character, every citation a note on the desk: any rule broken refuses the draft whole, and it
+   stages nothing. The plan is staged under a new folder, none followed through a link, and the
+   `swap` command printed. The call is priced in the usage ledger against the human's caps, as no
+   body's run, so it never counts in a creature's record. A split is drawn by relief, not drafted.
 2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
    `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it
    removes — and `--arm`, `--body` for each body judged (the creature unless named) and

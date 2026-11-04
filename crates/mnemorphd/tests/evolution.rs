@@ -622,3 +622,15 @@ fn evolution_due_says_when_none_is_due() {
     let out = f.run(&["evolution", "due", "--no-such"]);
     assert!(!out.status.success());
 }
+
+/// `evolution draft` drafts only a creature the rules find due: one that is not is refused before
+/// any model is reached, and nothing is staged.
+#[test]
+fn evolution_draft_refuses_a_creature_not_due() {
+    let f = Fixture::new("draft-not-due");
+    let out = f.run(&["evolution", "draft", "sly"]);
+    assert!(!out.status.success(), "{out:?}");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("sly is not due to evolve"), "{err}");
+    assert!(!f.world.join(".mnemorph/tmp/evolution").exists());
+}

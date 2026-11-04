@@ -183,7 +183,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
-| read every creature's meters, see who is due to evolve, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
+| read every creature's meters, see who is due to evolve, draft its evolution, swap it in, judge it | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution draft <creature>`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
 

@@ -129,7 +129,7 @@ fn due_of(world: &Path, c: &Creature, verdicts: &[VerdictRow]) -> Option<Due> {
     if !last.iter().all(|v| crate::reports::failed(v) == Some(true)) {
         return None;
     }
-    let notes = desk(world, &c.name);
+    let notes: Vec<Option<String>> = desk(world, &c.name).into_iter().map(|n| n.source).collect();
     if notes.len() <= DESK {
         return None;
     }
@@ -163,8 +163,21 @@ fn due_of(world: &Path, c: &Creature, verdicts: &[VerdictRow]) -> Option<Due> {
     })
 }
 
-/// The sources of `name`'s live personal notes — `None` for a note naming none.
-fn desk(world: &Path, name: &str) -> Vec<Option<String>> {
+/// One note on a creature's desk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeskNote {
+    /// Its id.
+    pub id: String,
+    /// What it says.
+    pub text: String,
+    /// The path it is about, when it names one.
+    pub source: Option<String>,
+}
+
+/// `name`'s desk: its live personal notes — proposed or grounded — in id order. Kept inside the
+/// world: a body could add to it.
+#[must_use]
+pub fn desk(world: &Path, name: &str) -> Vec<DeskNote> {
     use mnemorph_memory::{Status, Tier, fold, read};
     let Ok(read) = read(world, &Tier::Personal(name.to_owned())) else {
         return Vec::new();
@@ -172,7 +185,11 @@ fn desk(world: &Path, name: &str) -> Vec<Option<String>> {
     fold(&read.rows)
         .into_values()
         .filter(|n| matches!(n.status, Status::Proposed | Status::Grounded))
-        .map(|n| n.source)
+        .map(|n| DeskNote {
+            id: n.id,
+            text: n.text,
+            source: n.source,
+        })
         .collect()
 }
 

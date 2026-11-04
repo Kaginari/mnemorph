@@ -43,6 +43,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd evolution due [--world <dir>]
+       mnemorphd evolution draft <creature> [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -168,7 +169,11 @@ scratch copy of the world with the named files as they were before — then judg
 proposes keep or rollback; applying either is the human's. `due` says which creatures the
 rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) with a full desk
 (more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
-window is open; it proposes only, and drafts nothing. A body never runs it.
+window is open; it proposes only. `draft <creature>` asks the configured model to distil a due
+creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the
+doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`; it
+prints the `swap` command and swaps nothing. A split is drawn by relief, not drafted. A body
+never runs it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -2689,20 +2694,52 @@ fn evolution(args: &[String]) -> ExitCode {
             swap_in(&world, &plan)
         }
         [verb, id] if verb == "judge" => judge_swap(&world, id),
-        [verb] if verb == "due" => match mnemorph_server::world::evolve::survey(&world) {
-            Ok(s) => {
-                let lines = mnemorph_server::world::evolve::lines_of(&s);
-                if lines.is_empty() {
-                    println!("no creature is due to evolve");
-                }
-                for l in lines {
-                    println!("{}", mnemorph_server::challenge::safe(&l));
-                }
-                ExitCode::SUCCESS
+        [verb, name] if verb == "draft" => draft_evolution(&world, name),
+        [verb] if verb == "due" => evolution_due(&world),
+        _ => refused(
+            &"evolution needs a verb: due, draft <creature>, swap <id> or judge <id>; see --help",
+        ),
+    }
+}
+
+/// `evolution draft <creature>`: a due creature's evolution drafted by the configured model and
+/// staged for the human; nothing is swapped.
+fn draft_evolution(world: &Path, name: &str) -> ExitCode {
+    let safe = mnemorph_server::challenge::safe;
+    match mnemorph_server::draft::draft_now(world, name, &|v| std::env::var(v).ok()) {
+        Ok(d) => {
+            println!(
+                "drafted `{}`: {} trait(s) for {}, staged at {}",
+                safe(&d.id),
+                d.traits.len(),
+                safe(&d.creature),
+                safe(&d.staged.display().to_string())
+            );
+            for t in &d.traits {
+                println!("  - {} (from {})", safe(&t.text), safe(&t.from.join(", ")));
             }
-            Err(e) => refused(&e),
-        },
-        _ => refused(&"evolution needs a verb: due, swap <id> or judge <id>; see --help"),
+            println!("nothing is swapped: read the staged doc, then swap it in with:");
+            println!("  {}", safe(&d.swap_command()));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution due`: who the rules find due to evolve, by which arm, and who cools.
+fn evolution_due(world: &Path) -> ExitCode {
+    match mnemorph_server::world::evolve::survey(world) {
+        Ok(s) => {
+            let lines = mnemorph_server::world::evolve::lines_of(&s);
+            if lines.is_empty() {
+                println!("no creature is due to evolve");
+            }
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
     }
 }
 
