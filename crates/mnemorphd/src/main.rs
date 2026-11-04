@@ -45,6 +45,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution due [--world <dir>]
        mnemorphd evolution draft <creature> [--world <dir>]
        mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
+       mnemorphd evolution keep|rollback <id> [--world <dir>]
+       mnemorphd evolution auto [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -179,7 +181,12 @@ take away and bring, `apply <id>` swaps it in as `swap` does — refused when th
 it was drawn or its staging is not the bytes drawn — and `reject <id>` closes it and removes its
 staging, asked at the terminal. A swap is proven first over an overlay of the world: no new
 `onto check` finding, and every doc it writes with its verify lines pinned and passing in the
-sandbox. A body never runs any of it.
+sandbox. `keep <id>` or `rollback <id>` settles a swap — its judgement shown, asked at the
+terminal; a rollback puts its named files back as they were, only while they stand as the swap
+left them. `auto` runs one tick of evolution on its own (`evolution.mode = \"auto\"`, the
+default): a swap whose window is full judged and settled by the rule, then one due creature
+drafted, proven and swapped in on trial; the terminal app starts one after each session. A body
+never runs any of it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -2706,9 +2713,11 @@ fn evolution(args: &[String]) -> ExitCode {
         [verb, id] if verb == "show" => show_proposal(&world, id),
         [verb, id] if verb == "apply" => apply_proposal(&world, id),
         [verb, id] if verb == "reject" => reject_proposal(&world, id),
+        [verb, id] if verb == "keep" || verb == "rollback" => settle_swap(&world, id, verb),
+        [verb] if verb == "auto" => evolve_auto(&world),
         _ => refused(
             &"evolution needs a verb: due, draft <creature>, list, show <id>, apply <id>, \
-              reject <id>, swap <id> or judge <id>; see --help",
+              reject <id>, swap <id>, judge <id>, keep <id>, rollback <id> or auto; see --help",
         ),
     }
 }
@@ -2817,6 +2826,60 @@ fn reject_proposal(world: &Path, id: &str) -> ExitCode {
     match proposals::close(world, id, "rejected") {
         Ok(()) => {
             println!("rejected {}", mnemorph_server::challenge::safe(id));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution auto`: one tick of evolution on its own — a full window judged and settled by the
+/// rule, one due creature drafted, proven and swapped in — under a lock, so two never run at once.
+fn evolve_auto(world: &Path) -> ExitCode {
+    let say = |l: &str| println!("{}", mnemorph_server::challenge::safe(l));
+    match mnemorph_server::auto::tick_now(world, &|v| std::env::var(v).ok(), &say) {
+        Ok(lines) => {
+            if lines.is_empty() {
+                println!("nothing to evolve or settle");
+            }
+            for l in lines {
+                say(&l);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution keep|rollback <id>`: the human settles a swap, its judgement shown first, asked at
+/// the terminal. A rollback puts its named files back as they were before it.
+fn settle_swap(world: &Path, id: &str, verb: &str) -> ExitCode {
+    use mnemorph_server::world::evolution::{self, Settled};
+    let outcome = if verb == "keep" {
+        Settled::Keep
+    } else {
+        Settled::Rollback
+    };
+    let min = mnemorph_server::Config::load(&mnemorph_server::Paths::resolve(world))
+        .map_or(2, |c| c.evolution_min_net_wins());
+    match evolution::judge(world, id, min) {
+        Ok(j) => println!(
+            "swap {id}, as judged now:\n{}",
+            mnemorph_server::challenge::safe(&j.to_string())
+        ),
+        Err(e) => return refused(&format!("the ledger cannot be read: {e}")),
+    }
+    match at_terminal(&format!("{verb} {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was settled"),
+        Err(e) => return refused(&e),
+    }
+    match evolution::settle(world, id, outcome, "human", "the human's word") {
+        Ok(t) => {
+            println!(
+                "settled {}: {}",
+                mnemorph_server::challenge::safe(&t.id),
+                t.outcome.word()
+            );
             ExitCode::SUCCESS
         }
         Err(e) => refused(&e),
@@ -3207,7 +3270,11 @@ fn judge_swap(world: &Path, id: &str) -> ExitCode {
             };
             println!("{}", safe(&j.judgement.to_string()));
             if let Some(w) = proposal {
-                println!("proposed to the human: {w} — nothing changes until the human applies it");
+                println!(
+                    "proposed to the human: {w} — nothing changes until the human applies it: \
+                     `mnemorphd evolution {w} {}`",
+                    safe(id)
+                );
             }
             code
         }

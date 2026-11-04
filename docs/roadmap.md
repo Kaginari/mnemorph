@@ -389,7 +389,10 @@ includes the witness.
   over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
   strain and doom in the trigger once a trusted journal carries them, and a split's young from
   relief; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
-  show | apply | reject`, refused when the world moved since it was drawn) —
+  show | apply | reject`, refused when the world moved since it was drawn; and with
+  `evolution.mode = "auto"`, evolution on its own after each session: a due creature drafted,
+  proven and swapped in on trial, then kept or rolled back by the rule once its 10 runs are
+  judged against doing nothing) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed
