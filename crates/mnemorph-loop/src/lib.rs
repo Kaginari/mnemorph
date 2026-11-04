@@ -9,6 +9,7 @@ pub mod compact;
 pub mod council;
 pub mod coverage_tool;
 pub mod decisions;
+pub mod draft;
 pub mod envelope;
 pub mod evolution;
 pub mod gate;

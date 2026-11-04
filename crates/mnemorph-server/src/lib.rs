@@ -12,6 +12,8 @@ pub mod protocol;
 
 /// The Dark Elf challenges as the human reads them.
 pub use mnemorph_loop::challenge;
+/// An evolution drafted by a model, for a creature due.
+pub use mnemorph_loop::draft;
 /// The human's door to the Oni's envelopes.
 pub use mnemorph_loop::envelope;
 /// An evolution's controls run on demand, and its judgement.

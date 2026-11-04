@@ -66,6 +66,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   failed) with a full desk (more than 7 live personal notes) is due, by the arm the rules pick —
   split, rebirth or mutate — and why; cooling while its swap's window is open. Shown in
   `mnemorph status` and `mnemorphd evolution due`; nothing is drafted or swapped.
+- Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
+  tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
+  the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
+  the human's swap.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.
