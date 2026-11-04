@@ -74,6 +74,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   over a scratch copy of the world, where `onto check` must find nothing the world does not and
   every doc the plan writes must have its verify lines pinned and passing in the sandbox. A plan
   that fails is refused with every reason; one that re-parents or widens a card is refused so.
+- Evolution proposals: every plan the drafter draws is kept under the state directory, chained
+  and anchored, with each file's digest as drawn; `mnemorphd evolution list | show | apply |
+  reject` reviews them, `apply` refused when the world moved or the staging changed since, and
+  `mnemorph status` shows each one waiting.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.

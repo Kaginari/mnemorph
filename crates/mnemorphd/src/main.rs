@@ -44,6 +44,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd evolution due [--world <dir>]
        mnemorphd evolution draft <creature> [--world <dir>]
+       mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -171,9 +172,14 @@ rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) 
 (more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
 window is open; it proposes only. `draft <creature>` asks the configured model to distil a due
 creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the
-doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`; it
-prints the `swap` command and swaps nothing. A split is drawn by relief, not drafted. A body
-never runs it.
+doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`,
+kept as a proposal under the state directory with the bytes drawn; it swaps nothing. A split is
+drawn by relief, not drafted. `list` shows the open proposals, `show <id>` the lines one would
+take away and bring, `apply <id>` swaps it in as `swap` does — refused when the world moved since
+it was drawn or its staging is not the bytes drawn — and `reject <id>` closes it and removes its
+staging, asked at the terminal. A swap is proven first over an overlay of the world: no new
+`onto check` finding, and every doc it writes with its verify lines pinned and passing in the
+sandbox. A body never runs any of it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -2696,8 +2702,13 @@ fn evolution(args: &[String]) -> ExitCode {
         [verb, id] if verb == "judge" => judge_swap(&world, id),
         [verb, name] if verb == "draft" => draft_evolution(&world, name),
         [verb] if verb == "due" => evolution_due(&world),
+        [verb] if verb == "list" => list_proposals(&world),
+        [verb, id] if verb == "show" => show_proposal(&world, id),
+        [verb, id] if verb == "apply" => apply_proposal(&world, id),
+        [verb, id] if verb == "reject" => reject_proposal(&world, id),
         _ => refused(
-            &"evolution needs a verb: due, draft <creature>, swap <id> or judge <id>; see --help",
+            &"evolution needs a verb: due, draft <creature>, list, show <id>, apply <id>, \
+              reject <id>, swap <id> or judge <id>; see --help",
         ),
     }
 }
@@ -2718,8 +2729,94 @@ fn draft_evolution(world: &Path, name: &str) -> ExitCode {
             for t in &d.traits {
                 println!("  - {} (from {})", safe(&t.text), safe(&t.from.join(", ")));
             }
-            println!("nothing is swapped: read the staged doc, then swap it in with:");
-            println!("  {}", safe(&d.swap_command()));
+            println!(
+                "nothing is swapped: `mnemorphd evolution show {}` shows what it changes, then:",
+                safe(&d.id)
+            );
+            println!("  {}", safe(&d.apply_command()));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution list`: every open proposal, and whether it applies as it stands.
+fn list_proposals(world: &Path) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::open(world) {
+        Ok(open) => {
+            if open.is_empty() {
+                println!("no open proposal: `mnemorphd evolution draft <creature>` draws one");
+            }
+            for l in proposals::lines(world, &open) {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution show <id>`: what applying the proposal would change, line by line.
+fn show_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::get(world, id).and_then(|p| proposals::show(world, &p)) {
+        Ok(lines) => {
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution apply <id>`: the proposal held to the bytes drawn and the world it was drawn
+/// against, then proven, asked and swapped in as `swap` does; closed once swapped.
+fn apply_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::{evolution::Plan, proposals};
+    let p = match proposals::get(world, id) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    let files = match proposals::ready(world, &p) {
+        Ok(f) => f,
+        Err(e) => return refused(&e),
+    };
+    let plan = Plan {
+        id: p.id.clone(),
+        creature: p.creature.clone(),
+        bodies: vec![p.creature.clone()],
+        arm: p.arm,
+        files,
+        proven_on: Vec::new(),
+    };
+    let code = swap_in(world, &plan);
+    if code == ExitCode::SUCCESS
+        && let Err(e) = proposals::close(world, id, "applied")
+    {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: swapped, but the proposal could not be closed: {e}"
+        );
+    }
+    code
+}
+
+/// `evolution reject <id>`: the proposal closed and its staging removed, asked at the terminal.
+fn reject_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    if let Err(e) = proposals::get(world, id) {
+        return refused(&e);
+    }
+    match at_terminal(&format!("reject {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was rejected"),
+        Err(e) => return refused(&e),
+    }
+    match proposals::close(world, id, "rejected") {
+        Ok(()) => {
+            println!("rejected {}", mnemorph_server::challenge::safe(id));
             ExitCode::SUCCESS
         }
         Err(e) => refused(&e),

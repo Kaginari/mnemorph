@@ -375,7 +375,7 @@ includes the witness.
   roster rise|fall` and replayed exactly from the journals and the witness —
   [applying a rise or a fall](02-races.md#applying-a-rise-or-a-fall)),
   score folds per race, meters, minimum record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
-  proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
+  proven over an overlay, the 10-run cooldown, proposals with `evolution apply | reject`, and
   each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over
   exactly the files it named, its judgement replayed from the chained ledger (built: the
   human's `mnemorphd evolution swap` swaps in a staged plan that is exactly its named file set,
@@ -387,8 +387,9 @@ includes the witness.
   configured model as traits citing the desk, the doc written by the harness with its header
   untouched, staged for the human's swap (`mnemorphd evolution draft`); every swap proven first
   over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
-  strain and doom in the trigger once a trusted journal carries them, a split's young from
-  relief, and `evolve list | show | apply | reject`) —
+  strain and doom in the trigger once a trusted journal carries them, and a split's young from
+  relief; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
+  show | apply | reject`, refused when the world moved since it was drawn) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed
