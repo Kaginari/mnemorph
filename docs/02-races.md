@@ -1540,6 +1540,21 @@ any more. Both stay from isekai, unchanged in spirit:
 and those of the Minds it wears) holds more than 7 entries: stress says something is wrong, a full
 desk says it has learned enough to change. It is checked after every court and at run start.
 
+What is built reads only what the harness can trust, and proposes only (`mnemorph_world::evolve`,
+shown as `evolve` lines in `mnemorph status` and by `mnemorphd evolution due`): **stressed** is
+its last 3 verdicts in the trusted gate journal failed — a verdict no check could run for
+(`unrun`, `unpinned`) is skipped; strain and the doom checkpoint are journaled only inside the
+world, where a body writes, and count once a trusted journal carries them. **The desk** is its
+live personal notes (proposed or grounded) in memory. Memory is kept inside the world, so a body
+could add notes; the desk alone never makes a creature due — only beside the trusted stress — and
+it makes a proposal, never a swap. A creature whose swap's window is still open in the evolution
+ledger is **cooling**, not due. The arm's rules are read exactly as below: *large* is 24 files or
+1500 lines under its zone (links never followed); its trouble is the paths its failed landings
+changed and its notes' sources, and it *clusters in two* parts — two claims, or for a one-claim
+zone two directories under it — when each holds a quarter of at least four located paths and the
+two together three quarters; *rebirth* reads a `traits hold` failure among its last 3 verdicts, or
+a path its doc names in backticks that is gone. Nothing is drafted or swapped by it.
+
 **Which arm**, in order: **split** when the zone is large (1500 lines or 24 files) and failures and
 Thoughts cluster in two sub-directories — an Orc's Slimes are divided with it; **rebirth** when the
 gate failed on the creature's own verify lines or its doc names files that are gone — the value
@@ -1624,7 +1639,8 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
 1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
    path it replaces or creates — a Mind under `.mnemorph/minds/`, a creature doc under
    `.mnemorph/<race>/<name>/`, a split's young in a folder of its own. Who drafts it is free (a
-   body, the human, the evolution trigger from M11); it changes nothing while staged.
+   body, the human; the trigger says who is due and by which arm, `mnemorphd evolution due`, but
+   drafts nothing yet); it changes nothing while staged.
 2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
    `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it
    removes — and `--arm`, `--body` for each body judged (the creature unless named) and

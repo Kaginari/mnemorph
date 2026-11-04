@@ -42,6 +42,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--body <name>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
+       mnemorphd evolution due [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -164,7 +165,10 @@ on, each ask of its bodies (`--body`, the creature unless named) is stamped and 
 row until its window of 10 is full. `judge <id>` runs, through the configured model, the
 do-nothing control of every window run still without one — the same ask, by the same body, in a
 scratch copy of the world with the named files as they were before — then judges the swap and
-proposes keep or rollback; applying either is the human's. A body never runs it.
+proposes keep or rollback; applying either is the human's. `due` says which creatures the
+rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) with a full desk
+(more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
+window is open; it proposes only, and drafts nothing. A body never runs it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -2685,7 +2689,20 @@ fn evolution(args: &[String]) -> ExitCode {
             swap_in(&world, &plan)
         }
         [verb, id] if verb == "judge" => judge_swap(&world, id),
-        _ => refused(&"evolution needs a verb: swap <id> or judge <id>; see --help"),
+        [verb] if verb == "due" => match mnemorph_server::world::evolve::survey(&world) {
+            Ok(s) => {
+                let lines = mnemorph_server::world::evolve::lines_of(&s);
+                if lines.is_empty() {
+                    println!("no creature is due to evolve");
+                }
+                for l in lines {
+                    println!("{}", mnemorph_server::challenge::safe(&l));
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => refused(&e),
+        },
+        _ => refused(&"evolution needs a verb: due, swap <id> or judge <id>; see --help"),
     }
 }
 
