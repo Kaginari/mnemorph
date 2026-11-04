@@ -16,3 +16,8 @@ missing_docs = "warn"
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
+
+# A clean test build is 23 GB with full debug info and 9.7 GB with line tables, which still name
+# the file and line of a panic. `ld` died of a bus error at full size on CI, most likely a full disk.
+[profile.dev]
+debug = "line-tables-only"
