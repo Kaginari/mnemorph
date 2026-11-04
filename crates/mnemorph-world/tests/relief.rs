@@ -297,3 +297,67 @@ fn a_split_hands_the_notes_to_the_heir_whose_half_holds_their_source() {
         "the old file is kept whole"
     );
 }
+
+/// Relief around two parts — where evolution's trigger finds the trouble clusters — gives one
+/// part to each young and shares the rest out evenly; a part not of the ground, or one part
+/// twice, is refused before anything is written.
+#[test]
+fn a_split_around_two_parts_gives_one_to_each_young() {
+    let w = world("around");
+    for d in ["src/a", "src/b", "src/lexer", "src/parser"] {
+        fs::create_dir_all(w.join(d)).unwrap();
+    }
+    doc(
+        &w,
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n",
+    );
+    // Adopted first, as the human would.
+    relieve(&w, "slime-s", false).unwrap();
+    let state = state_of(&w);
+    let by = |parts: [&str; 2], apply: bool| {
+        mnemorph_world::relief::relieve_by(
+            Some(&state),
+            &w,
+            "slime-s",
+            Some(&[parts[0].to_owned(), parts[1].to_owned()]),
+            apply,
+        )
+    };
+    // Halves alone would put the lexer and the parser in one young.
+    let plain = relieve(&w, "slime-s", false).unwrap();
+    let Act::Split { young } = &plain.act else {
+        panic!("{plain:?}")
+    };
+    assert_eq!(
+        young[1].1,
+        vec!["src/lexer/".to_owned(), "src/parser/".to_owned()],
+        "halves alone keep both troubled parts in one young"
+    );
+    let e = by(["src/lexer", "src/nowhere"], false).unwrap_err();
+    assert!(e.contains("`src/nowhere` is no part of its ground"), "{e}");
+    let e = by(["src/lexer", "src/lexer/"], false).unwrap_err();
+    assert!(e.contains("twice"), "{e}");
+    assert!(!w.join(".mnemorph/slime/s-a").exists(), "nothing written");
+    let r = by(["src/lexer", "src/parser"], true).unwrap();
+    assert_eq!(
+        r.act,
+        Act::Split {
+            young: [
+                (
+                    "slime-s-a".into(),
+                    vec!["src/lexer/".into(), "src/a/".into()]
+                ),
+                (
+                    "slime-s-b".into(),
+                    vec!["src/parser/".into(), "src/b/".into()]
+                ),
+            ]
+        }
+    );
+    let roster = Roster::cards(&w);
+    assert!(roster.creatures["slime-s"].retired);
+    assert_eq!(roster.creatures["slime-s-a"].zone[0], "src/lexer/");
+    let _ = fs::remove_dir_all(&w);
+}

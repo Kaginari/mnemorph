@@ -19,7 +19,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd onto inverse <type> <inverse>|- [--yes] [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd housekeep --verify [--world <dir>]
-       mnemorphd relief <name> [--apply] [--world <dir>]
+       mnemorphd relief <name> [--around <part>,<part>] [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
        mnemorphd memory confirm <claim> [--world <dir>]
@@ -176,7 +176,8 @@ window is open; it proposes only. `draft <creature>` asks the configured model t
 creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the
 doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`,
 kept as a proposal under the state directory with the bytes drawn; it swaps nothing. A split is
-drawn by relief, not drafted. `list` shows the open proposals, `show <id>` the lines one would
+drawn by relief, not drafted: `due` names the two parts its trouble clusters in and the
+`relief <name> --around <part>,<part>` that splits it there, one part to each young. `list` shows the open proposals, `show <id>` the lines one would
 take away and bring, `apply <id>` swaps it in as `swap` does — refused when the world moved since
 it was drawn or its staging is not the bytes drawn — and `reject <id>` closes it and removes its
 staging, asked at the terminal. A swap is proven first over an overlay of the world: no new
@@ -976,10 +977,15 @@ fn relief(args: &[String]) -> ExitCode {
     let mut world = None;
     let mut apply = false;
     let mut name = None;
+    let mut around = None;
     let mut it = args.iter();
     while let Some(w) = it.next() {
         match w.as_str() {
             "--apply" => apply = true,
+            "--around" => match it.next().and_then(|v| v.split_once(',')) {
+                Some((a, b)) => around = Some([a.to_owned(), b.to_owned()]),
+                None => return refused(&"--around needs two parts: --around <part>,<part>"),
+            },
             "--world" => match it.next() {
                 Some(v) => world = Some(PathBuf::from(v)),
                 None => return refused(&"--world needs a value"),
@@ -998,7 +1004,11 @@ fn relief(args: &[String]) -> ExitCode {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
-    match mnemorph_server::world::relief::relieve(&world, &name, apply) {
+    let relieved = match &around {
+        Some(parts) => mnemorph_server::world::relief::relieve_around(&world, &name, parts, apply),
+        None => mnemorph_server::world::relief::relieve(&world, &name, apply),
+    };
+    match relieved {
         Ok(r) => {
             let verb = if apply {
                 "done"

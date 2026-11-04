@@ -86,6 +86,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   `settle` row in the evolution ledger.
 - A kept evolution puts the desk notes its traits cite to sleep (dormant, their events kept), so
   a creature stressed again evolves on new notes; a rollback leaves them on the desk.
+- A split's young from relief: the trigger names the two parts a creature's trouble clusters in,
+  and `mnemorphd relief <name> --around <part>,<part>` gives one to each young, the rest shared
+  out evenly. `evolution due`, `mnemorph status` and the tick print that command; a split stays
+  the human's to apply.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.

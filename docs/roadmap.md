@@ -387,8 +387,9 @@ includes the witness.
   configured model as traits citing the desk, the doc written by the harness with its header
   untouched, staged for the human's swap (`mnemorphd evolution draft`); every swap proven first
   over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
-  strain and doom in the trigger once a trusted journal carries them, and a split's young from
-  relief; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
+  strain and doom in the trigger once a trusted journal carries them; a split's young from
+  relief around the two parts its trouble clusters in (`mnemorphd relief <name> --around`), the
+  human's to apply; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
   show | apply | reject`, refused when the world moved since it was drawn; and with
   `evolution.mode = "auto"`, evolution on its own after each session: a due creature drafted,
   proven and swapped in on trial, then kept or rolled back by the rule once its 10 runs are

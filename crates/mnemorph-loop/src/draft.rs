@@ -107,9 +107,13 @@ pub async fn draft(
     now: u64,
 ) -> Result<Draft, String> {
     if due.arm == Arm::Split {
-        return Err(
-            "a split's young are drawn by relief, not drafted by a model: not drafted here".into(),
-        );
+        let how = due
+            .relief_command()
+            .map_or_else(|| "`mnemorphd relief`".to_owned(), |r| format!("`{r}`"));
+        return Err(format!(
+            "a split's young are drawn by relief, not drafted by a model: not drafted here — \
+             {how} splits it"
+        ));
     }
     let roster = mnemorph_world::Roster::load(world);
     let c = roster

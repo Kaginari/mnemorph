@@ -1696,7 +1696,13 @@ it. In `auto` mode the tick above does each step after a session.
    character, every citation a note on the desk: any rule broken refuses the draft whole, and it
    stages nothing. The plan is staged under a new folder, none followed through a link, and kept
    as a proposal with the bytes drawn; `mnemorphd evolution apply <id>` swaps it in. The call is priced in the usage ledger against the human's caps, as no
-   body's run, so it never counts in a creature's record. A split is drawn by relief, not drafted.
+   body's run, so it never counts in a creature's record. A split is drawn by relief, not drafted:
+   the trigger names the two parts of the zone its trouble clusters in, and
+   `mnemorphd relief <name> --around <part>,<part>` splits it there — one part to each young, the
+   rest of the ground shared out so each holds as many. A split is structural (new seats, the old
+   one retired, its notes and pins inherited) and no do-nothing control judges it, so it is the
+   human's: `evolution due`, `mnemorph status` and the tick name it with that command, and nothing
+   applies it on its own.
 2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
    `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it
    removes — and `--arm`, `--body` for each body judged (the creature unless named) and

@@ -62,6 +62,7 @@ fn due(arm: Arm) -> Due {
         race: Race::Slime,
         arm,
         why: vec!["its last 3 gate verdicts failed".into()],
+        parts: Vec::new(),
     }
 }
 
