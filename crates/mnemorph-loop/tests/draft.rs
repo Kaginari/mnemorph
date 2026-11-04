@@ -151,6 +151,15 @@ async fn the_drafter_answers_traits_and_the_harness_writes_the_doc() {
     };
     let files = mnemorph_world::evolution::staged(&w.root, &d.id, &named).unwrap();
     assert_eq!(files.len(), 1);
+    // Kept as a proposal under the state directory, the bytes drawn with it.
+    let open = mnemorph_world::proposals::open(&w.root).unwrap();
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0].id, d.id);
+    assert!(mnemorph_world::proposals::ready(&w.root, &open[0]).is_ok());
+    assert_eq!(
+        d.apply_command(),
+        format!("mnemorphd evolution apply {}", d.id)
+    );
     // The command that swaps it, for the human.
     assert!(d.swap_command().contains(&format!(
         "mnemorphd evolution swap {} --creature sly --arm mutate --file {DOC}",

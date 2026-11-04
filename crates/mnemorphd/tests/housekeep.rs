@@ -64,6 +64,7 @@ fn verify_says_each_chain_and_anchors_its_head() {
         "usage-witness",
         "value",
         "evolution",
+        "proposals",
         "gate",
         "guts",
         "answers",

@@ -643,3 +643,74 @@ fn evolution_draft_refuses_a_creature_not_due() {
     assert!(err.contains("sly is not due to evolve"), "{err}");
     assert!(!f.world.join(".mnemorph/tmp/evolution").exists());
 }
+
+/// A proposal drawn is listed and shown; applied at the terminal it is proven, swapped in and
+/// closed; one the world moved past is refused; a reject is asked at the terminal.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_proposal_is_listed_shown_and_applied_at_the_terminal() {
+    use mnemorph_server::world::evolution::{Arm, Staged, staging};
+    use mnemorph_server::world::proposals;
+    let f = Fixture::new("proposal");
+    let sly = ".mnemorph/slime/sly/README.md";
+    let new = "# sly\n\n- **Race:** slime\n\n## Traits\n\n- *trait* — exact\n";
+    let draw = |id: &str| {
+        let at = staging(&f.world, id).join(sly);
+        fs::create_dir_all(at.parent().unwrap()).unwrap();
+        fs::write(&at, new).unwrap();
+        let files = [Staged {
+            path: sly.into(),
+            after: Some(new.as_bytes().to_vec()),
+            creates: false,
+        }];
+        proposals::draw_in(Some(&f.state()), &f.world, id, "sly", Arm::Mutate, &files).unwrap();
+    };
+    draw("sly-1");
+    let out = f.run(&["evolution", "list"]);
+    assert!(
+        text(&out)
+            .0
+            .contains("sly-1 — sly (mutate), 1 file(s): ready"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.run(&["evolution", "show", "sly-1"]);
+    assert!(
+        text(&out).0.contains("  + - *trait* — exact"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.run(&["evolution", "reject", "sly-1"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "asked at the terminal: {:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "apply", "sly-1"], "y\n");
+    let (stdout, err) = text(&out);
+    assert!(
+        stdout.contains("proven over an overlay") && stdout.contains("swapped sly-1 under build"),
+        "{stdout}{err}"
+    );
+    assert_eq!(fs::read_to_string(f.world.join(sly)).unwrap(), new);
+    assert!(
+        text(&f.run(&["evolution", "list"]))
+            .0
+            .contains("no open proposal")
+    );
+    // One the world moved past since it was drawn is refused before anything is asked.
+    draw("sly-2");
+    fs::write(f.world.join(sly), "# sly\n\n- **Race:** slime\n\nmoved\n").unwrap();
+    let out = f.at_tty(&["evolution", "apply", "sly-2"], "y\n");
+    assert!(
+        text(&out)
+            .0
+            .contains("the world moved since `sly-2` was drawn"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "reject", "sly-2"], "y\n");
+    assert!(text(&out).0.contains("rejected sly-2"), "{:?}", text(&out));
+    assert!(!staging(&f.world, "sly-2").exists());
+}

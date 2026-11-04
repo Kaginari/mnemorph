@@ -1575,9 +1575,15 @@ nothing. A plan that re-parents or widens a card is refused so: its overlay hold
 reason said. The old doc rests in the attic.
 
 **Paced.** A creature evolves at most once every 10 runs (replayed from the ledger), one plan runs
-at a time, and `evolution.mode = "propose"` queues plans for `mnemorph evolve list | show | apply |
-reject` instead — a proposal is refused if the world moved since it was drawn. Each arm writes an
-`evolution` (or `rebirth`) row.
+at a time, and nothing evolves on its own: every plan drawn is a proposal
+(`mnemorph_world::proposals`), for `mnemorphd evolution list | show | apply | reject`, each
+verb but `list` naming the proposal's id. A proposal is kept under the human's state directory, chained and anchored with the other
+journals: its file set and each file's digest as the world held it when drawn and as staged.
+`list` says each one's state, `show` the lines it would take away and bring. `apply` is refused
+when the world moved since it was drawn — a named file no longer as it was — or the staging is
+not the bytes drawn, since a body can write the staging; otherwise it is proven, asked and
+swapped in as `swap` is, and closed. `reject` closes it and removes its staging, never through a
+link, asked at the terminal. Each swap writes its row to the evolution ledger.
 
 **Judged after the freeze** (`mnemorph_ledger::evolution`). A plan proven in the sandbox has only
 graded itself on the verify lines it wrote; once swapped in, the change is frozen and judged on
@@ -1657,8 +1663,8 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    would move a field is refused — and a `## Traits` section added or replaced, under a heading,
    where no field is read. At most 7 traits of at most 200 characters, one line each, no control
    character, every citation a note on the desk: any rule broken refuses the draft whole, and it
-   stages nothing. The plan is staged under a new folder, none followed through a link, and the
-   `swap` command printed. The call is priced in the usage ledger against the human's caps, as no
+   stages nothing. The plan is staged under a new folder, none followed through a link, and kept
+   as a proposal with the bytes drawn; `mnemorphd evolution apply <id>` swaps it in. The call is priced in the usage ledger against the human's caps, as no
    body's run, so it never counts in a creature's record. A split is drawn by relief, not drafted.
 2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
    `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it

@@ -69,6 +69,12 @@ pub struct Draft {
 }
 
 impl Draft {
+    /// The command that applies it as a proposal, for the human to run.
+    #[must_use]
+    pub fn apply_command(&self) -> String {
+        format!("mnemorphd evolution apply {}", self.id)
+    }
+
     /// The command that swaps it in, for the human to run.
     #[must_use]
     pub fn swap_command(&self) -> String {
@@ -171,6 +177,24 @@ pub async fn draft(
     let id = format!("{}-{}-{now}", due.creature, arm_word(due.arm));
     let staged = mnemorph_world::evolution::staging(world, &id);
     stage(world, &staged, &doc_path, &rewritten)?;
+    // The staging is the world's: the proposal under the state directory holds the bytes drawn.
+    mnemorph_world::proposals::draw(
+        world,
+        &id,
+        &due.creature,
+        due.arm,
+        &[mnemorph_world::evolution::Staged {
+            path: doc_path.clone(),
+            after: Some(rewritten.clone().into_bytes()),
+            creates: false,
+        }],
+    )
+    .map_err(|e| {
+        format!(
+            "{e}: the plan is staged at {}, to swap by hand",
+            staged.display()
+        )
+    })?;
     Ok(Draft {
         id,
         creature: due.creature.clone(),
