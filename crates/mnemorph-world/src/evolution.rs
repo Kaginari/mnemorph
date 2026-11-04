@@ -27,7 +27,7 @@ use std::path::{Component, Path, PathBuf};
 
 use mnemorph_ledger::evolution::{self, FileChange, Ledger, Run};
 /// The arm, the gate's word, the swap row and the judgement, as the writer's callers name them.
-pub use mnemorph_ledger::evolution::{Arm, EvolutionRow, Gate, Judgement, Swap};
+pub use mnemorph_ledger::evolution::{Arm, EvolutionRow, Gate, Judgement, Settle, Settled, Swap};
 use mnemorph_ledger::{Build, Journal};
 
 /// Where a world's evolution ledger is kept:
@@ -606,6 +606,114 @@ fn write_plan(world: &Path, plan: &Plan) -> io::Result<()> {
 /// The ledger at `path`, read without its anchor: what the writer reads to stamp and to refuse.
 fn read_ledger(path: &Path) -> Result<Ledger, String> {
     evolution::read(path, None).map_err(|e| format!("the evolution ledger cannot be read: {e}"))
+}
+
+/// Settles swap `id` in `world` as `outcome`, by `by` (`harness` or `human`) on `why`: a keep
+/// leaves the change; a rollback puts its named files back from the bytes kept before it — only
+/// while they still stand as the swap left them — and witnesses the cards it put back as a swap
+/// does. One `settle` row goes to the ledger; a swap is settled once.
+///
+/// # Errors
+///
+/// What [`settle_at`] refuses on, or there is no home to keep the ledger under.
+pub fn settle(
+    world: &Path,
+    id: &str,
+    outcome: Settled,
+    by: &str,
+    why: &str,
+) -> Result<Settle, String> {
+    let ledger = journal(world).ok_or("no home to keep the evolution ledger under")?;
+    let before = crate::Roster::cards(world);
+    let rows = crate::creatures::witnessed(world);
+    let settled = settle_at(world, &ledger, id, outcome, by, why)?;
+    if outcome == Settled::Rollback {
+        let read = read_ledger(ledger.path())?;
+        let paths: Vec<String> = swap_of(&read, id)
+            .map(|s| s.files.iter().map(|f| f.path.clone()).collect())
+            .unwrap_or_default();
+        let new =
+            crate::creatures::evolution_rows(&before, &crate::Roster::cards(world), &rows, &paths);
+        if !new.is_empty()
+            && let Err(e) = crate::creatures::record(world, new)
+        {
+            eprintln!(
+                "mnemorph: the cards put back could not be witnessed ({e}): they run as their \
+                 rows held until `mnemorphd roster adopt`"
+            );
+        }
+    }
+    Ok(settled)
+}
+
+fn swap_of<'a>(read: &'a Ledger, id: &str) -> Option<&'a Swap> {
+    read.entries.iter().find_map(|e| match &e.row {
+        EvolutionRow::Swap(s) if s.id == id => Some(s),
+        _ => None,
+    })
+}
+
+/// [`settle`], on the ledger given. Refused when the ledger's chain is broken, it holds no swap
+/// `id`, the swap is settled already, or — for a rollback — its named files no longer stand as
+/// the swap left them, or are not put back whole.
+///
+/// # Errors
+///
+/// Why it is refused, or the files or the ledger cannot be read or written.
+pub fn settle_at(
+    world: &Path,
+    ledger: &Journal<EvolutionRow>,
+    id: &str,
+    outcome: Settled,
+    by: &str,
+    why: &str,
+) -> Result<Settle, String> {
+    let read = read_ledger(ledger.path())?;
+    if let Some((line, _)) = &read.chain.broken {
+        return Err(format!(
+            "the evolution ledger's chain is broken at line {line}: nothing is settled on it"
+        ));
+    }
+    let swap = swap_of(&read, id).ok_or_else(|| format!("the ledger holds no swap `{id}`"))?;
+    if let Some(t) = evolution::settled(&read, id) {
+        return Err(format!(
+            "swap `{id}` is settled already: {} by {}",
+            t.outcome.word(),
+            t.by
+        ));
+    }
+    if outcome == Settled::Rollback {
+        let now = evolution::state_now(world, swap)
+            .map_err(|e| format!("the named files cannot be read: {e}"))?;
+        if now != swap.after_state() {
+            return Err(format!(
+                "swap `{id}`'s named files moved since it was swapped in: nothing is put back \
+                 over another change"
+            ));
+        }
+        restore_before(ledger.path(), swap, world)
+            .map_err(|e| format!("swap `{id}` cannot be put back: {e}"))?;
+        let back = evolution::state_now(world, swap)
+            .map_err(|e| format!("the named files cannot be read: {e}"))?;
+        if back != swap.before_state() {
+            return Err(format!(
+                "swap `{id}` was not put back whole: its named files stand as neither before nor \
+                 after — see `{}`",
+                kept_before(ledger.path(), id).display()
+            ));
+        }
+    }
+    let row = Settle {
+        id: id.to_owned(),
+        outcome,
+        by: by.to_owned(),
+        why: why.to_owned(),
+        build: Build::this(),
+    };
+    ledger
+        .append(&EvolutionRow::Settle(row.clone()))
+        .map_err(|e| format!("the settle row cannot be written: {e}"))?;
+    Ok(row)
 }
 
 /// A task's fingerprint: the SHA-256 of the ask normalized — trimmed, every run of whitespace one

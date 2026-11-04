@@ -10,6 +10,8 @@
 pub mod board;
 pub mod protocol;
 
+/// Evolution on its own: a trial, then keep or roll back by the rule.
+pub use mnemorph_loop::auto;
 /// The Dark Elf challenges as the human reads them.
 pub use mnemorph_loop::challenge;
 /// An evolution drafted by a model, for a creature due.

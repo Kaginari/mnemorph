@@ -78,6 +78,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   and anchored, with each file's digest as drawn; `mnemorphd evolution list | show | apply |
   reject` reviews them, `apply` refused when the world moved or the staging changed since, and
   `mnemorph status` shows each one waiting.
+- Evolution on its own (`evolution.mode = "auto"`, the default, now the human's global file's
+  alone): after each session a background tick (`mnemorphd evolution auto`) drafts, proves and
+  swaps in one due creature on trial, and settles a swap whose 10-run window is full by the rule —
+  kept on its net wins against doing nothing, else rolled back, its files put back as they were.
+  `mnemorphd evolution keep | rollback <id>` lets the human settle first; each settle is a
+  `settle` row in the evolution ledger.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.

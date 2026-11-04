@@ -1,6 +1,7 @@
 //! The loop: one body's six beats — perceive, recall, plan, act, verify, record — until it
 //! answers, or stops honestly at a meter or an instrument.
 
+pub mod auto;
 pub mod beats;
 pub mod budget;
 pub mod challenge;

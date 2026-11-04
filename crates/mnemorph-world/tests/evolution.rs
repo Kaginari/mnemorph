@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use mnemorph_ledger::evolution::{self, EVOLUTION_WINDOW, EvolutionRow, Gate};
 use mnemorph_ledger::{Build, Journal};
 use mnemorph_world::evolution::{
-    Arm, Facts, FileSet, Plan, Staged, fingerprint, kept_before, restore_before,
-    staged as read_staged, staging, stale_at, stamp_for, swap_at,
+    Arm, Facts, FileSet, Plan, Settled, Staged, fingerprint, kept_before, restore_before,
+    settle_at, staged as read_staged, staging, stale_at, stamp_for, swap_at,
 };
 
 const MIND: &str = ".mnemorph/minds/careful/README.md";
@@ -239,7 +239,7 @@ fn runs_after_the_swap_write_stamped_run_rows_until_the_window_is_full() {
         .into_iter()
         .filter_map(|r| match r {
             EvolutionRow::Run(r) => Some(r),
-            EvolutionRow::Swap(_) => None,
+            EvolutionRow::Swap(_) | EvolutionRow::Settle(_) => None,
         })
         .collect();
     assert_eq!(runs.len(), EVOLUTION_WINDOW, "the window closes at 10");
@@ -444,4 +444,74 @@ fn a_task_another_swap_was_proven_on_is_not_stamped() {
     .unwrap();
     assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a proving task").is_none());
     assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a fresh task").is_some());
+}
+
+#[test]
+fn a_rollback_puts_the_files_back_once_and_closes_the_window() {
+    let w = World::new("rollback");
+    let before = fs::read(w.world().join(MIND)).unwrap();
+    swap_at(
+        &w.world(),
+        &w.ledger(),
+        &plan("a", vec![staged(MIND, Some("one\n"))]),
+    )
+    .unwrap();
+    run(&w, "a task", Gate::Fail);
+    let t = settle_at(
+        &w.world(),
+        &w.ledger(),
+        "a",
+        Settled::Rollback,
+        "harness",
+        "netWins 0 < 2",
+    )
+    .unwrap();
+    assert_eq!(t.by, "harness");
+    assert_eq!(fs::read(w.world().join(MIND)).unwrap(), before, "put back");
+    assert!(
+        matches!(w.rows().last(), Some(EvolutionRow::Settle(t)) if t.id == "a"),
+        "one settle row"
+    );
+    // Settled once: neither again nor the other way.
+    let e = settle_at(&w.world(), &w.ledger(), "a", Settled::Keep, "human", "").unwrap_err();
+    assert!(e.contains("settled already: rollback by harness"), "{e}");
+    // Its window is closed: no run is stamped with it, and a new swap may begin.
+    let read = evolution::read(w.ledger().path(), None).unwrap();
+    assert!(evolution::open_for(&read, "rimuru").is_none());
+    swap_at(
+        &w.world(),
+        &w.ledger(),
+        &plan("b", vec![staged(MIND, Some("two\n"))]),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_rollback_over_a_later_change_is_refused_and_a_keep_leaves_the_change() {
+    let w = World::new("moved");
+    swap_at(
+        &w.world(),
+        &w.ledger(),
+        &plan("a", vec![staged(MIND, Some("one\n"))]),
+    )
+    .unwrap();
+    fs::write(w.world().join(MIND), "edited since\n").unwrap();
+    let e = settle_at(&w.world(), &w.ledger(), "a", Settled::Rollback, "human", "").unwrap_err();
+    assert!(e.contains("moved since it was swapped in"), "{e}");
+    assert_eq!(
+        fs::read_to_string(w.world().join(MIND)).unwrap(),
+        "edited since\n"
+    );
+    assert!(
+        !w.rows()
+            .iter()
+            .any(|r| matches!(r, EvolutionRow::Settle(_)))
+    );
+    settle_at(&w.world(), &w.ledger(), "a", Settled::Keep, "human", "kept").unwrap();
+    assert_eq!(
+        fs::read_to_string(w.world().join(MIND)).unwrap(),
+        "edited since\n"
+    );
+    let e = settle_at(&w.world(), &w.ledger(), "nope", Settled::Keep, "human", "").unwrap_err();
+    assert!(e.contains("holds no swap"), "{e}");
 }

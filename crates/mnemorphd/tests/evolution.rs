@@ -714,3 +714,39 @@ fn a_proposal_is_listed_shown_and_applied_at_the_terminal() {
     assert!(text(&out).0.contains("rejected sly-2"), "{:?}", text(&out));
     assert!(!staging(&f.world, "sly-2").exists());
 }
+
+/// The human rolls a swap back at the terminal: its judgement shown, the files put back, settled
+/// once. `evolution auto` with nothing due or full says so and spends nothing.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_swap_is_rolled_back_at_the_terminal_and_auto_finds_nothing_to_do() {
+    let f = Fixture::new("rollback");
+    let before = fs::read(f.world.join(MIND)).unwrap();
+    let staged = f.world.join(".mnemorph/tmp/evolution/careful-1").join(MIND);
+    fs::create_dir_all(staged.parent().unwrap()).unwrap();
+    fs::write(&staged, "# Careful\n\nWrite once.\n").unwrap();
+    swapped_at_tty(&f);
+    let out = f.run(&["evolution", "rollback", "careful-1"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "asked at the terminal: {:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "rollback", "careful-1"], "y\n");
+    let (stdout, err) = text(&out);
+    assert!(
+        stdout.contains("as judged now") && stdout.contains("settled careful-1: rollback"),
+        "{stdout}{err}"
+    );
+    assert_eq!(fs::read(f.world.join(MIND)).unwrap(), before, "put back");
+    let out = f.at_tty(&["evolution", "keep", "careful-1"], "y\n");
+    assert!(text(&out).0.contains("settled already"), "{:?}", text(&out));
+    let out = f.run(&["evolution", "auto"]);
+    assert!(out.status.success(), "{:?}", text(&out));
+    assert!(
+        text(&out).0.contains("nothing to evolve or settle"),
+        "{:?}",
+        text(&out)
+    );
+}

@@ -1574,10 +1574,33 @@ nothing. A plan that re-parents or widens a card is refused so: its overlay hold
 `roster-mismatch` the world does not. Otherwise nothing is asked, nothing written, and every
 reason said. The old doc rests in the attic.
 
+**On its own, on trial** (`mnemorph_loop::auto`). With `evolution.mode = "auto"` — the default,
+and the human's global file's alone, since it lets the harness swap without asking — evolution
+runs itself and keeps only what beats doing nothing. After each session in the terminal app, one
+tick runs in the background (`mnemorphd evolution auto`, its output in
+`$XDG_STATE_HOME/mnemorph/evolution-auto.log`; a board or a scheduled loop may run it too), under
+a lock so two never run at once:
+
+1. **Settle.** A swap whose window of 10 runs is full is judged, its do-nothing controls run
+   first and priced against the human's caps, and settled by the rule below: **kept** on its net
+   wins and no more holes than doing nothing, otherwise **rolled back** — its named files put back
+   from the bytes kept before it, only while they still stand as the swap left them. A judgement
+   still pending (a cap stopped the controls) or refused is left as it stands, and said.
+2. **Evolve.** One creature the trigger finds due, by mutate or rebirth, with no swap of its
+   still unsettled and no proposal of its waiting, is drafted, proven over an overlay and swapped
+   in, on trial. A draft not proven stays a proposal for the human.
+
+At most one judgement and one draft a tick, so a tick's spend is bounded. Every settle is one
+`settle` row in the evolution ledger — kept or rolled back, by `harness` or `human`, and the
+judgement it stood on — and a swap is settled once; a settled swap's window closes, early or
+not, so its body is free for the next. The human may settle any swap first:
+`mnemorphd evolution keep <id>` or `rollback <id>`, its judgement shown, asked at the terminal.
+With `evolution.mode = "propose"` nothing runs on its own.
+
 **Paced.** A creature evolves at most once every 10 runs (replayed from the ledger), one plan runs
-at a time, and nothing evolves on its own: every plan drawn is a proposal
-(`mnemorph_world::proposals`), for `mnemorphd evolution list | show | apply | reject`, each
-verb but `list` naming the proposal's id. A proposal is kept under the human's state directory, chained and anchored with the other
+at a time, and every plan drawn is a proposal (`mnemorph_world::proposals`) until it is swapped
+in, for `mnemorphd evolution list | show | apply | reject`, each verb but `list` naming the
+proposal's id. A proposal is kept under the human's state directory, chained and anchored with the other
 journals: its file set and each file's digest as the world held it when drawn and as staged.
 `list` says each one's state, `show` the lines it would take away and bring. `apply` is refused
 when the world moved since it was drawn — a named file no longer as it was — or the staging is
@@ -1644,11 +1667,13 @@ what comes after it, and only that:
 - **Replay.** The ledger read again up to the row a line names (`replay`), its chain walked whole
   and held to the anchored head, gives the same judgement, and the row there carries the digest
   the line names; a ledger whose chain breaks is judged on nothing.
-- **A proposal.** A keep or a rollback is proposed to the human like every other change to a race;
-  rolling a swap back, like applying it, is the human's.
+- **Settled.** In `auto` mode the harness settles a judged swap by the rule; in `propose` mode a
+  keep or a rollback is proposed to the human like every other change to a race, and settling it
+  is the human's (`evolution keep | rollback <id>`).
 
-**The lifecycle, end to end** (`mnemorph_world::evolution`, `mnemorph_loop::evolution`). Nothing
-here runs on its own: the human swaps a plan in and asks for its judgement.
+**The lifecycle, end to end** (`mnemorph_world::evolution`, `mnemorph_loop::evolution`). In `propose`
+mode nothing here runs on its own: the human swaps a plan in, asks for its judgement and settles
+it. In `auto` mode the tick above does each step after a session.
 
 1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
    path it replaces or creates — a Mind under `.mnemorph/minds/`, a creature doc under
@@ -1713,9 +1738,10 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    controls will run and what the tightest cap leaves (or that none is set), a spent cap runs
    none, and a control a cap stops is not recorded. Each finished control is appended as a
    control row. With nothing waiting, no model is reached.
-5. **Judged and proposed.** The swap is judged by the rule above, from the ledger held to its
-   anchored head, and the keep or the rollback is printed with its lines and `proposed to the
-   human`; pending says how many runs and controls are in. Applying either is the human's.
+5. **Judged and settled.** The swap is judged by the rule above, from the ledger held to its
+   anchored head, and the keep or the rollback is printed with its lines; pending says how many
+   runs and controls are in. `evolution keep | rollback <id>` settles it, or the tick does by the
+   rule in `auto` mode: one `settle` row, a rollback putting the named files back.
 
 The window's fixtures carry the cases where doing nothing is right, beside the fixes: a task with
 nothing to change, a review of a sound file where **no finding** is the right output (a body that
