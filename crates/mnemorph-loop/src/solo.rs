@@ -40,8 +40,9 @@ may be deleted or skipped. If it fails, you get one chance to fix it.
 
 When you are done, answer without calling a tool: what you did, what you verified, what is left — \
 briefly, in plain words. Then, one line each, what you learned that is written nowhere and the \
-next session should know: `@U law <path> <fact>` for a rule of a file you changed — name the path, \
-so this work's own tests can prove it — or `@U colony <fact>` for how this repository is worked.";
+next session should know: `@U law <path> <fact> check=<verify line or test>` for a rule of a file \
+you changed — name the path and the check that tests it: only that check, passing in this work's \
+gate, proves it — or `@U colony <fact>` for how this repository is worked.";
 
 /// What a session's fixed prompt carries of the world's own words: the law (`.mnemorph/law.md`),
 /// the creature cards, the Minds' manifests and the journal's opening — or none of them, for a

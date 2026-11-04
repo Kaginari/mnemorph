@@ -22,7 +22,7 @@ pub use standing::{Standing, standing};
 pub use store::{Tier, inherit, read, union_merge};
 pub use write::{
     Anchor, Claim, Evidence, Grounded, Proof, Proposed, Retired, Route, Seconded, amend,
-    attributable, cache, changed, confirm, corroborate, distilled, ground, pending, proposals,
-    propose, propose_on, propose_resting, proposed, retire, retired, retired_in, retired_note,
-    revise, seen, vouch, wake, wake_by,
+    attributable, cache, changed, confirm, corroborate, distilled, ground, named_check, pending,
+    proposals, propose, propose_on, propose_resting, proposed, retire, retired, retired_in,
+    retired_note, revise, seen, vouch, wake, wake_by,
 };

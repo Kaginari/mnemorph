@@ -234,7 +234,7 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
 @W <path> for each path you wrote\n\
 @F <file:line> <claim> for each finding\n\
-@U law <path> <fact> for a rule of a file you changed — name the path: your gate's tests can then prove it\n\
+@U law <path> <fact> check=<verify line or test> for a rule of a file you changed — name the path and the check that tests it: only that check, passing in your gate, proves it\n\
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),
@@ -716,7 +716,7 @@ pub(crate) fn checked_proof(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    mnemorph_memory::Proof::checked(&cite, verdict.ran, &changed).ok()
+    mnemorph_memory::Proof::checked(&cite, &verdict.ran, &changed).ok()
 }
 
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
@@ -747,13 +747,17 @@ pub(crate) fn remember(
         return (None, Vec::new());
     }
     let (mut proposed, mut grounded, mut seconded) = (0, 0, 0);
+    // Why each claim a **checked** proof did not bear on stays proposed, counted.
+    let mut unchecked: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
     let kin = line_of(&Roster::load(world), to);
     // What stays proposed is named, so the commissioner may accept it by id.
     let mut open = Vec::new();
     for u in said {
         let tags: Vec<String> = u.kind.map(|k| k.word().to_owned()).into_iter().collect();
+        let (text, check) = mnemorph_memory::named_check(&u.text);
         let claim =
-            match mnemorph_memory::propose_on(world, to, &u.text, tags, None, evidence.to_vec()) {
+            match mnemorph_memory::propose_on(world, to, text, tags, None, evidence.to_vec()) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("mnemorph: {to}'s claim could not be remembered: {e}");
@@ -762,11 +766,16 @@ pub(crate) fn remember(
             };
         proposed += 1;
         let id = claim.note.clone();
-        let short: String = u.text.chars().take(80).collect();
-        // A check observes only its diff: a claim about the world beyond it stays proposed,
-        // offered for the commissioner to accept.
-        let claim = match proof.filter(|p| p.covers(&u.text, claim.source.as_deref())) {
-            Some(p) => match mnemorph_memory::ground(world, claim, p) {
+        let short: String = text.chars().take(80).collect();
+        // A check observes only its diff, and proves only the claims that name it: any other
+        // stays proposed, offered for the commissioner to accept.
+        let bears = proof.and_then(|p| {
+            p.observes(text, claim.source.as_deref(), check)
+                .map_err(|why| *unchecked.entry(why).or_default() += 1)
+                .ok()
+        });
+        let claim = match bears {
+            Some(p) => match mnemorph_memory::ground(world, claim, &p) {
                 Ok(_) => {
                     grounded += 1;
                     continue;
@@ -789,10 +798,15 @@ pub(crate) fn remember(
         }
         open.push((id, short));
     }
+    let why = unchecked.iter().fold(String::new(), |mut out, (why, n)| {
+        use std::fmt::Write as _;
+        let _ = write!(out, "; {n} not checked: {why}");
+        out
+    });
     (
         Some(format!(
             "[memory: {proposed} claim(s) of {to}'s kept, {grounded} grounded by checked, \
-             {seconded} by corroborated]"
+             {seconded} by corroborated{why}]"
         )),
         open,
     )
@@ -1808,6 +1822,107 @@ mod write_rule_tests {
     /// failed and remembers nothing, the one they miss passes. Then no note reaches shared memory
     /// without a route's proof, exactly one of the 41 grounded notes is wrong
     /// (Pr[wrong | pass] = 1/41), and no claim about the world grounds through **checked**.
+    /// The gate's pass on `changed`, the human's pins `lines` having run.
+    fn passed(changed: &str, lines: &[&str]) -> crate::gate::GateVerdict {
+        crate::gate::GateVerdict {
+            changed: vec![PathBuf::from(changed)],
+            failures: Vec::new(),
+            unverified: Vec::new(),
+            unguarded: false,
+            wrote: false,
+            unpinned: false,
+            verified_by: vec!["the human's pin".to_owned()],
+            ran: lines.iter().map(|l| (*l).to_owned()).collect(),
+        }
+    }
+
+    /// `report` remembered by `slime-s` in a fresh world under the pass `verdict`: the note for
+    /// the report, and the shared and personal notes.
+    fn remembered(
+        name: &str,
+        verdict: &crate::gate::GateVerdict,
+        report: &str,
+    ) -> (
+        String,
+        Vec<mnemorph_memory::Note>,
+        Vec<mnemorph_memory::Note>,
+    ) {
+        use mnemorph_memory::{Tier, fold, read};
+        let w = std::env::temp_dir().join(format!("mnemorph-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&w);
+        std::fs::create_dir_all(&w).unwrap();
+        let heading = "[2026-11-03T12:00:00+01:00] slime-s — gate: PASS";
+        let proof = checked_proof("slime-s", Some((verdict, Some(heading))));
+        let ending = Ending::Answered(report.to_owned());
+        let (said, _) = remember(&w, "slime-s", &ending, proof.as_ref(), &[]);
+        let shared = fold(&read(&w, &Tier::Shared).unwrap().rows);
+        let personal = fold(&read(&w, &Tier::Personal("slime-s".into())).unwrap().rows);
+        let _ = std::fs::remove_dir_all(&w);
+        (
+            said.unwrap_or_default(),
+            shared.into_values().collect(),
+            personal.into_values().collect(),
+        )
+    }
+
+    /// #317: a verify line that passed but does not exercise a claim never grounds it. The bench's
+    /// Slime verifies by compiling; its claim about `pop` names no check, so it stays proposed,
+    /// and the report says why.
+    #[test]
+    fn a_compile_check_grounds_no_behaviour_claim() {
+        let verdict = passed("src/stack.py", &["python3 -m compileall -q src"]);
+        let (said, shared, personal) = remembered(
+            "compile-only",
+            &verdict,
+            "@S DONE\n@W src/stack.py\n@U law src/stack.py: pop on an empty stack raises IndexError\n@E",
+        );
+        assert!(shared.is_empty(), "{shared:?}");
+        assert_eq!(personal.len(), 1);
+        assert_eq!(personal[0].status, mnemorph_memory::Status::Proposed);
+        assert!(said.contains("names no check"), "{said}");
+    }
+
+    /// A claim naming a check that ran and passed in this gate is grounded **checked**, citing
+    /// that check; one naming a check that did not run stays proposed, and the report says why.
+    #[test]
+    fn a_claim_is_grounded_by_the_check_it_names_and_only_one_that_ran() {
+        let verdict = passed(
+            "src/stack.py",
+            &[
+                "python3 -m compileall -q src",
+                "python3 -m pytest tests/test_stack.py::test_pop_empty",
+            ],
+        );
+        let (said, shared, personal) = remembered(
+            "named-check",
+            &verdict,
+            "@S DONE\n@W src/stack.py\n\
+             @U law src/stack.py: pop on an empty stack raises IndexError check=tests/test_stack.py::test_pop_empty\n\
+             @U law src/stack.py: push keeps the order check=tests/test_stack.py::test_push_order\n@E",
+        );
+        assert_eq!(shared.len(), 1, "{shared:?}");
+        assert_eq!(
+            shared[0].text,
+            "src/stack.py: pop on an empty stack raises IndexError"
+        );
+        let proof = shared[0].proof.as_deref().unwrap_or_default();
+        assert!(proof.starts_with("checked: log.md ["), "{proof}");
+        assert!(
+            proof.contains("check: `python3 -m pytest tests/test_stack.py::test_pop_empty`"),
+            "{proof}"
+        );
+        let push: Vec<_> = personal
+            .iter()
+            .filter(|n| n.text.contains("push"))
+            .collect();
+        assert_eq!(push.len(), 1);
+        assert_eq!(push[0].status, mnemorph_memory::Status::Proposed);
+        assert!(
+            said.contains("`tests/test_stack.py::test_push_order` is no verify line that ran"),
+            "{said}"
+        );
+    }
+
     #[test]
     fn fifty_landings_ground_forty_one_notes_of_which_one_is_wrong() {
         use mnemorph_memory::{Status, Tier, fold, read};
@@ -1828,7 +1943,7 @@ mod write_rule_tests {
                 wrong_texts.insert(diff_claim.clone());
             }
             let report = format!(
-                "@S DONE\n@W {path}\n@U law {diff_claim}\n@U colony the API caps at {i}0 calls a minute\n@E"
+                "@S DONE\n@W {path}\n@U law {diff_claim} check=cargo test\n@U colony the API caps at {i}0 calls a minute\n@E"
             );
             // A caught wrong claim fails its gate twice: the run ends failed, nothing is said.
             let ending = if caught {
@@ -1846,7 +1961,7 @@ mod write_rule_tests {
                 wrote: false,
                 unpinned: false,
                 verified_by: vec!["the human's pin".to_owned()],
-                ran: 1,
+                ran: vec!["cargo test".to_owned()],
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");
             let proof = (!caught)

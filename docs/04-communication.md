@@ -99,7 +99,7 @@ who said them and on what evidence ([ontology](09-ontology.md)).
 | `@V <claim> <evidence>` | a verdict; a parent landing a free territory fact labels it `@V #<new-id> support\|counter\|refines #<id>` or `@V #<new-id> distinct` ([ontology](09-ontology.md#catching-what-nobody-flags)) |
 | `@W <path>` | a path written |
 | `@? <hole>` | something unresolved — never guessed; four grammars are typed: `@CAP <n>: <k> lines cut — full report at <path>`, `contest #<id>: <reason>`, `budget: need ~<n> wt, have <m> wt`, and, from M10, a Dark Elf's `nv #<fingerprint> blocker:<fact> plan:<check>` — a finding that needs validation: no severity, never a finding, never a seal; `plan:` is its last field and runs to the line's end |
-| `@U law\|colony <fact>` · `@U territory <about> <key>=<value>` · `@U territory <about> <fact>` · `@U territory <about> !#<fact-id> <reason>` | the unsaid; a territory fact names the path it is about, keyed or free, and may counter another fact by id ([ontology](09-ontology.md#facts-who-said-what)) |
+| `@U law\|colony <fact>` · `@U law <path> <fact> check=<verify line or test>` · `@U territory <about> <key>=<value>` · `@U territory <about> <fact>` · `@U territory <about> !#<fact-id> <reason>` | the unsaid; a territory fact names the path it is about, keyed or free, and may counter another fact by id ([ontology](09-ontology.md#facts-who-said-what)); a `check=` last names the verify line or test that proves a claim about the diff ([memory](08-memory.md)) |
 | `@$ <body>: <ask>` | an order for the next turn |
 | `@FORGE <draft>` | a repeating need worth becoming a tool or Mind |
 | `@T <tool> <cost>` | a tool offered in the level-1 manifest |

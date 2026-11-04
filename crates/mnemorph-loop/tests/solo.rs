@@ -490,7 +490,7 @@ async fn a_solo_answer_keeps_its_claims_by_the_write_rule() {
             json!({"path": "out.txt", "content": "fixed\n"}),
         ),
         answer(
-            "Done: out.txt says fixed.\n@U law out.txt says fixed once the build is green\n@U colony run the build before answering",
+            "Done: out.txt says fixed.\n@U law out.txt says fixed once the build is green check=`grep -q fixed out.txt`\n@U colony run the build before answering",
         ),
     ]));
     let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
