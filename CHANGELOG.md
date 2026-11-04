@@ -84,6 +84,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   kept on its net wins against doing nothing, else rolled back, its files put back as they were.
   `mnemorphd evolution keep | rollback <id>` lets the human settle first; each settle is a
   `settle` row in the evolution ledger.
+- A kept evolution puts the desk notes its traits cite to sleep (dormant, their events kept), so
+  a creature stressed again evolves on new notes; a rollback leaves them on the desk.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.

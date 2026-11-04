@@ -663,7 +663,16 @@ fn a_proposal_is_listed_shown_and_applied_at_the_terminal() {
             after: Some(new.as_bytes().to_vec()),
             creates: false,
         }];
-        proposals::draw_in(Some(&f.state()), &f.world, id, "sly", Arm::Mutate, &files).unwrap();
+        proposals::draw_in(
+            Some(&f.state()),
+            &f.world,
+            id,
+            "sly",
+            Arm::Mutate,
+            &files,
+            &[],
+        )
+        .unwrap();
     };
     draw("sly-1");
     let out = f.run(&["evolution", "list"]);

@@ -161,6 +161,7 @@ fn proven(_: &Plan) -> auto::Proof {
 #[test]
 fn a_due_creature_evolves_on_trial_and_is_kept_by_the_rule() {
     let w = World::due();
+    let cited = desk(&w.root, "sly")[0].id.clone();
     let drafter = w.drafter();
     let lines = auto::tick(
         &w.root,
@@ -218,6 +219,10 @@ fn a_due_creature_evolves_on_trial_and_is_kept_by_the_rule() {
         "{lines:?}"
     );
     assert!(w.doc().contains("keep fractions exact"), "kept");
+    // The note its trait distils leaves the desk, asleep: the trait carries it now.
+    let left = desk(&w.root, "sly");
+    assert_eq!(left.len(), 7, "{left:?}");
+    assert!(!left.iter().any(|n| n.id == cited), "{left:?}");
     assert!(
         w.rows()
             .iter()
@@ -258,6 +263,11 @@ fn an_evolution_that_does_not_beat_doing_nothing_is_rolled_back() {
         "{lines:?}"
     );
     assert_eq!(w.doc(), CARD, "put back as it was");
+    assert_eq!(
+        desk(&w.root, "sly").len(),
+        8,
+        "rolled back, its notes stay on the desk"
+    );
 }
 
 #[test]

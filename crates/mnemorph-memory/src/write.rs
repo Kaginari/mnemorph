@@ -804,6 +804,46 @@ pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
     wake_by(world, id, "woken by the human", &seen(id, &text))
 }
 
+/// The notes on `owner`'s desk that an evolution kept distilled into traits, put to sleep:
+/// dormant, their events kept, no longer recalled nor counted on the desk, each with why — the
+/// traits carry them now. Only `owner`'s live personal notes move; the ids moved come back.
+///
+/// # Errors
+///
+/// `owner`'s memory is frozen ([`crate::unfrozen`]), or its note file cannot be read or written.
+pub fn distilled(
+    world: &Path,
+    owner: &str,
+    ids: &[String],
+    swap: &str,
+) -> std::io::Result<Vec<String>> {
+    crate::audit::unfrozen(world, owner)?;
+    let tier = Tier::Personal(owner.to_owned());
+    let notes = crate::note::fold(&crate::store::read(world, &tier)?.rows);
+    let mut out = Vec::new();
+    for id in ids {
+        let live = notes
+            .get(id)
+            .is_some_and(|n| matches!(n.status, Status::Proposed | Status::Grounded));
+        if live && !out.contains(id) {
+            append(
+                world,
+                &tier,
+                id,
+                By::Record,
+                Some(format!(
+                    "distilled into a trait by evolution `{swap}`, kept"
+                )),
+                Change::Status {
+                    status: Status::Dormant,
+                },
+            )?;
+            out.push(id.clone());
+        }
+    }
+    Ok(out)
+}
+
 /// The text of the note `id` as the gate retired it, from the first tier that holds it retired —
 /// shared memory, then each creature's; `None` when none does.
 ///
