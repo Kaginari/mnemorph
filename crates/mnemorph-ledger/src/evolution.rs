@@ -166,6 +166,45 @@ pub enum EvolutionRow {
     Swap(Swap),
     /// A run, evolved or control.
     Run(Run),
+    /// A swap settled: kept, or rolled back to its before state.
+    Settle(Settle),
+}
+
+/// How a swap was settled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Settled {
+    /// The change stays.
+    Keep,
+    /// Its named files were put back as they were before it.
+    Rollback,
+}
+
+impl Settled {
+    /// `keep` or `rollback`.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Settled::Keep => "keep",
+            Settled::Rollback => "rollback",
+        }
+    }
+}
+
+/// A swap settled, once: by the rule (`harness`) or by the human.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Settle {
+    /// The swap's id.
+    pub id: String,
+    /// Kept or rolled back.
+    pub outcome: Settled,
+    /// `harness` when the rule settled it on its judgement, `human` when the human did.
+    pub by: String,
+    /// The judgement it was settled on, or the human's word.
+    pub why: String,
+    /// The build that settled it.
+    #[serde(default)]
+    pub build: Build,
 }
 
 /// A row as read back: its line, from 1, and its own chain digest when it is a holding link.
@@ -197,6 +236,7 @@ impl EvolutionRow {
         match self {
             EvolutionRow::Swap(s) => &s.build,
             EvolutionRow::Run(r) => &r.build,
+            EvolutionRow::Settle(t) => &t.build,
         }
     }
 }
@@ -594,7 +634,7 @@ struct Window<'a> {
 fn runs_of(ledger: &Ledger) -> impl Iterator<Item = (&Entry, &Run)> {
     ledger.entries.iter().filter_map(|e| match &e.row {
         EvolutionRow::Run(r) => Some((e, r)),
-        EvolutionRow::Swap(_) => None,
+        EvolutionRow::Swap(_) | EvolutionRow::Settle(_) => None,
     })
 }
 
@@ -682,13 +722,18 @@ pub fn awaiting<'a>(ledger: &'a Ledger, id: &str) -> Result<(&'a Swap, Vec<&'a R
 }
 
 /// The swap whose window a run by `body` belongs to now: the newest swap naming `body` among its
-/// bodies whose window is not yet full; `None` when no window is open for it.
+/// bodies whose window is not yet full and that is not settled; `None` when no window is open
+/// for it.
 #[must_use]
 pub fn open_for<'a>(ledger: &'a Ledger, body: &str) -> Option<&'a Swap> {
     let (at, swap) = ledger.entries.iter().rev().find_map(|e| match &e.row {
         EvolutionRow::Swap(s) if s.bodies.iter().any(|b| b == body) => Some((e.at, s)),
         _ => None,
     })?;
+    // A swap settled — kept, or rolled back early — is judged no more.
+    if settled(ledger, &swap.id).is_some() {
+        return None;
+    }
     let stamped = runs_of(ledger)
         .filter(|(e, r)| {
             !r.control
@@ -698,6 +743,33 @@ pub fn open_for<'a>(ledger: &'a Ledger, body: &str) -> Option<&'a Swap> {
         })
         .count();
     (stamped < EVOLUTION_WINDOW).then_some(swap)
+}
+
+/// Whether swap `id`'s window is full: [`EVOLUTION_WINDOW`] runs after its row, stamped with its
+/// id and build, by its bodies, controls aside. `false` when the ledger holds no swap `id`.
+#[must_use]
+pub fn window_full(ledger: &Ledger, id: &str) -> bool {
+    let Some((at, swap)) = ledger.entries.iter().find_map(|e| match &e.row {
+        EvolutionRow::Swap(s) if s.id == id => Some((e.at, s)),
+        _ => None,
+    }) else {
+        return false;
+    };
+    runs_of(ledger)
+        .filter(|(e, r)| {
+            !r.control && e.at > at && r.swap.as_deref() == Some(id) && r.build == swap.build
+        })
+        .count()
+        >= EVOLUTION_WINDOW
+}
+
+/// How swap `id` was settled, if it was.
+#[must_use]
+pub fn settled<'a>(ledger: &'a Ledger, id: &str) -> Option<&'a Settle> {
+    ledger.entries.iter().find_map(|e| match &e.row {
+        EvolutionRow::Settle(t) if t.id == id => Some(t),
+        _ => None,
+    })
 }
 
 /// Whether any run row of the ledger already carries the task `fingerprint`: a task run once is

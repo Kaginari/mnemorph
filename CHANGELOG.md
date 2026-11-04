@@ -62,6 +62,28 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   witnesses [#265].
 - Evolution judged after the freeze, against a do-nothing control, on an exact staged file set
   [#264] [#268] [#298]; a claim graph for memory [#266].
+- Evolution's trigger, propose only: a creature stressed on its trusted gate verdicts (its last 3
+  failed) with a full desk (more than 7 live personal notes) is due, by the arm the rules pick —
+  split, rebirth or mutate — and why; cooling while its swap's window is open. Shown in
+  `mnemorph status` and `mnemorphd evolution due`; nothing is drafted or swapped.
+- Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
+  tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
+  the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
+  the human's swap.
+- Evolution's proof: `mnemorphd evolution swap` proves the staged plan before it asks — written
+  over a scratch copy of the world, where `onto check` must find nothing the world does not and
+  every doc the plan writes must have its verify lines pinned and passing in the sandbox. A plan
+  that fails is refused with every reason; one that re-parents or widens a card is refused so.
+- Evolution proposals: every plan the drafter draws is kept under the state directory, chained
+  and anchored, with each file's digest as drawn; `mnemorphd evolution list | show | apply |
+  reject` reviews them, `apply` refused when the world moved or the staging changed since, and
+  `mnemorph status` shows each one waiting.
+- Evolution on its own (`evolution.mode = "auto"`, the default, now the human's global file's
+  alone): after each session a background tick (`mnemorphd evolution auto`) drafts, proves and
+  swaps in one due creature on trial, and settles a swap whose 10-run window is full by the rule —
+  kept on its net wins against doing nothing, else rolled back, its files put back as they were.
+  `mnemorphd evolution keep | rollback <id>` lets the human settle first; each settle is a
+  `settle` row in the evolution ledger.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.
@@ -71,6 +93,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   terminal (`mnemorphd roster rise|fall`), and replayed exactly from the journals and the
   creatures' witness (`mnemorphd roster replay`). An input no trusted journal carries yet is said
   unknown, never zero, and proposes nothing.
+
+- M11's lesson as a test: a landing the gate did not pass (failed, handed back, not verified,
+  unrun, unpinned, unchecked), as a new run, an old pass judged again, or the throne's, never
+  raises any creature's pass meter.
 
 ### M10 — Dark Elf
 

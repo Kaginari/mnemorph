@@ -238,6 +238,7 @@ const LOOSENING: &[&str] = &[
     "gate.approve",
     "oni.envelopes",
     "oni.envelope_days",
+    "evolution.mode",
     "evolution.min_net_wins",
     "sandbox.allow_unguarded",
     "models.provider",

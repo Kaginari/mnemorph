@@ -42,6 +42,11 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--body <name>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
+       mnemorphd evolution due [--world <dir>]
+       mnemorphd evolution draft <creature> [--world <dir>]
+       mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
+       mnemorphd evolution keep|rollback <id> [--world <dir>]
+       mnemorphd evolution auto [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -164,7 +169,24 @@ on, each ask of its bodies (`--body`, the creature unless named) is stamped and 
 row until its window of 10 is full. `judge <id>` runs, through the configured model, the
 do-nothing control of every window run still without one — the same ask, by the same body, in a
 scratch copy of the world with the named files as they were before — then judges the swap and
-proposes keep or rollback; applying either is the human's. A body never runs it.
+proposes keep or rollback; applying either is the human's. `due` says which creatures the
+rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) with a full desk
+(more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
+window is open; it proposes only. `draft <creature>` asks the configured model to distil a due
+creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the
+doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`,
+kept as a proposal under the state directory with the bytes drawn; it swaps nothing. A split is
+drawn by relief, not drafted. `list` shows the open proposals, `show <id>` the lines one would
+take away and bring, `apply <id>` swaps it in as `swap` does — refused when the world moved since
+it was drawn or its staging is not the bytes drawn — and `reject <id>` closes it and removes its
+staging, asked at the terminal. A swap is proven first over an overlay of the world: no new
+`onto check` finding, and every doc it writes with its verify lines pinned and passing in the
+sandbox. `keep <id>` or `rollback <id>` settles a swap — its judgement shown, asked at the
+terminal; a rollback puts its named files back as they were, only while they stand as the swap
+left them. `auto` runs one tick of evolution on its own (`evolution.mode = \"auto\"`, the
+default): a swap whose window is full judged and settled by the rule, then one due creature
+drafted, proven and swapped in on trial; the terminal app starts one after each session. A body
+never runs any of it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -2685,7 +2707,199 @@ fn evolution(args: &[String]) -> ExitCode {
             swap_in(&world, &plan)
         }
         [verb, id] if verb == "judge" => judge_swap(&world, id),
-        _ => refused(&"evolution needs a verb: swap <id> or judge <id>; see --help"),
+        [verb, name] if verb == "draft" => draft_evolution(&world, name),
+        [verb] if verb == "due" => evolution_due(&world),
+        [verb] if verb == "list" => list_proposals(&world),
+        [verb, id] if verb == "show" => show_proposal(&world, id),
+        [verb, id] if verb == "apply" => apply_proposal(&world, id),
+        [verb, id] if verb == "reject" => reject_proposal(&world, id),
+        [verb, id] if verb == "keep" || verb == "rollback" => settle_swap(&world, id, verb),
+        [verb] if verb == "auto" => evolve_auto(&world),
+        _ => refused(
+            &"evolution needs a verb: due, draft <creature>, list, show <id>, apply <id>, \
+              reject <id>, swap <id>, judge <id>, keep <id>, rollback <id> or auto; see --help",
+        ),
+    }
+}
+
+/// `evolution draft <creature>`: a due creature's evolution drafted by the configured model and
+/// staged for the human; nothing is swapped.
+fn draft_evolution(world: &Path, name: &str) -> ExitCode {
+    let safe = mnemorph_server::challenge::safe;
+    match mnemorph_server::draft::draft_now(world, name, &|v| std::env::var(v).ok()) {
+        Ok(d) => {
+            println!(
+                "drafted `{}`: {} trait(s) for {}, staged at {}",
+                safe(&d.id),
+                d.traits.len(),
+                safe(&d.creature),
+                safe(&d.staged.display().to_string())
+            );
+            for t in &d.traits {
+                println!("  - {} (from {})", safe(&t.text), safe(&t.from.join(", ")));
+            }
+            println!(
+                "nothing is swapped: `mnemorphd evolution show {}` shows what it changes, then:",
+                safe(&d.id)
+            );
+            println!("  {}", safe(&d.apply_command()));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution list`: every open proposal, and whether it applies as it stands.
+fn list_proposals(world: &Path) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::open(world) {
+        Ok(open) => {
+            if open.is_empty() {
+                println!("no open proposal: `mnemorphd evolution draft <creature>` draws one");
+            }
+            for l in proposals::lines(world, &open) {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution show <id>`: what applying the proposal would change, line by line.
+fn show_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::get(world, id).and_then(|p| proposals::show(world, &p)) {
+        Ok(lines) => {
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution apply <id>`: the proposal held to the bytes drawn and the world it was drawn
+/// against, then proven, asked and swapped in as `swap` does; closed once swapped.
+fn apply_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::{evolution::Plan, proposals};
+    let p = match proposals::get(world, id) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    let files = match proposals::ready(world, &p) {
+        Ok(f) => f,
+        Err(e) => return refused(&e),
+    };
+    let plan = Plan {
+        id: p.id.clone(),
+        creature: p.creature.clone(),
+        bodies: vec![p.creature.clone()],
+        arm: p.arm,
+        files,
+        proven_on: Vec::new(),
+    };
+    let code = swap_in(world, &plan);
+    if code == ExitCode::SUCCESS
+        && let Err(e) = proposals::close(world, id, "applied")
+    {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: swapped, but the proposal could not be closed: {e}"
+        );
+    }
+    code
+}
+
+/// `evolution reject <id>`: the proposal closed and its staging removed, asked at the terminal.
+fn reject_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    if let Err(e) = proposals::get(world, id) {
+        return refused(&e);
+    }
+    match at_terminal(&format!("reject {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was rejected"),
+        Err(e) => return refused(&e),
+    }
+    match proposals::close(world, id, "rejected") {
+        Ok(()) => {
+            println!("rejected {}", mnemorph_server::challenge::safe(id));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution auto`: one tick of evolution on its own — a full window judged and settled by the
+/// rule, one due creature drafted, proven and swapped in — under a lock, so two never run at once.
+fn evolve_auto(world: &Path) -> ExitCode {
+    let say = |l: &str| println!("{}", mnemorph_server::challenge::safe(l));
+    match mnemorph_server::auto::tick_now(world, &|v| std::env::var(v).ok(), &say) {
+        Ok(lines) => {
+            if lines.is_empty() {
+                println!("nothing to evolve or settle");
+            }
+            for l in lines {
+                say(&l);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution keep|rollback <id>`: the human settles a swap, its judgement shown first, asked at
+/// the terminal. A rollback puts its named files back as they were before it.
+fn settle_swap(world: &Path, id: &str, verb: &str) -> ExitCode {
+    use mnemorph_server::world::evolution::{self, Settled};
+    let outcome = if verb == "keep" {
+        Settled::Keep
+    } else {
+        Settled::Rollback
+    };
+    let min = mnemorph_server::Config::load(&mnemorph_server::Paths::resolve(world))
+        .map_or(2, |c| c.evolution_min_net_wins());
+    match evolution::judge(world, id, min) {
+        Ok(j) => println!(
+            "swap {id}, as judged now:\n{}",
+            mnemorph_server::challenge::safe(&j.to_string())
+        ),
+        Err(e) => return refused(&format!("the ledger cannot be read: {e}")),
+    }
+    match at_terminal(&format!("{verb} {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was settled"),
+        Err(e) => return refused(&e),
+    }
+    match evolution::settle(world, id, outcome, "human", "the human's word") {
+        Ok(t) => {
+            println!(
+                "settled {}: {}",
+                mnemorph_server::challenge::safe(&t.id),
+                t.outcome.word()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution due`: who the rules find due to evolve, by which arm, and who cools.
+fn evolution_due(world: &Path) -> ExitCode {
+    match mnemorph_server::world::evolve::survey(world) {
+        Ok(s) => {
+            let lines = mnemorph_server::world::evolve::lines_of(&s);
+            if lines.is_empty() {
+                println!("no creature is due to evolve");
+            }
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
     }
 }
 
@@ -2980,6 +3194,23 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
             println!("  {}", safe(&line));
         }
     }
+    // Proven before asked: the plan over an overlay of the world, never the world.
+    let tracked = mnemorph_server::tracked(world).unwrap_or_default();
+    match mnemorph_server::prove::prove_now(world, plan, &tracked) {
+        Ok(lines) => {
+            println!("proven over an overlay of the world:");
+            for l in lines {
+                println!("  {}", safe(&l));
+            }
+        }
+        Err(why) => {
+            println!("not proven over an overlay of the world:");
+            for w in why {
+                println!("  {}", safe(&w));
+            }
+            return refused(&"the plan is not proven: nothing was swapped");
+        }
+    }
     match at_terminal(&format!("swap {} in?", plan.id)) {
         Ok(true) => {}
         Ok(false) => return refused(&"nothing was swapped"),
@@ -3039,7 +3270,11 @@ fn judge_swap(world: &Path, id: &str) -> ExitCode {
             };
             println!("{}", safe(&j.judgement.to_string()));
             if let Some(w) = proposal {
-                println!("proposed to the human: {w} — nothing changes until the human applies it");
+                println!(
+                    "proposed to the human: {w} — nothing changes until the human applies it: \
+                     `mnemorphd evolution {w} {}`",
+                    safe(id)
+                );
             }
             code
         }

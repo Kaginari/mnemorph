@@ -201,6 +201,12 @@ impl Folded {
         self.journals.rows(read)
     }
 
+    /// The trusted gate journal's verdicts the fold read, in its order.
+    #[must_use]
+    pub fn verdicts(&self) -> &[VerdictRow] {
+        &self.journals.verdicts
+    }
+
     /// The inputs of `creature` as a body of `race`'s base race: the usage witness names the race
     /// a body ran as, so a doc that claims another race claims no record.
     #[must_use]
@@ -638,6 +644,12 @@ fn word(v: &str) -> Option<Gate> {
     } else {
         Some(Gate::Fail)
     }
+}
+
+/// Whether the gate failed `v`'s landing: `None` for a verdict no check could run for, the
+/// machine's or the human's doing, never the body's.
+pub(crate) fn failed(v: &VerdictRow) -> Option<bool> {
+    word(&v.verdict).map(|g| g == Gate::Fail)
 }
 
 /// Whether a verdict's verify lines include one the human pinned (directly, or carried down by

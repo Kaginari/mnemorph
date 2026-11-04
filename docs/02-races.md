@@ -1540,21 +1540,73 @@ any more. Both stay from isekai, unchanged in spirit:
 and those of the Minds it wears) holds more than 7 entries: stress says something is wrong, a full
 desk says it has learned enough to change. It is checked after every court and at run start.
 
+What is built reads only what the harness can trust, and proposes only (`mnemorph_world::evolve`,
+shown as `evolve` lines in `mnemorph status` and by `mnemorphd evolution due`): **stressed** is
+its last 3 verdicts in the trusted gate journal failed — a verdict no check could run for
+(`unrun`, `unpinned`) is skipped; strain and the doom checkpoint are journaled only inside the
+world, where a body writes, and count once a trusted journal carries them. **The desk** is its
+live personal notes (proposed or grounded) in memory. Memory is kept inside the world, so a body
+could add notes; the desk alone never makes a creature due — only beside the trusted stress — and
+it makes a proposal, never a swap. A creature whose swap's window is still open in the evolution
+ledger is **cooling**, not due. The arm's rules are read exactly as below: *large* is 24 files or
+1500 lines under its zone (links never followed); its trouble is the paths its failed landings
+changed and its notes' sources, and it *clusters in two* parts — two claims, or for a one-claim
+zone two directories under it — when each holds a quarter of at least four located paths and the
+two together three quarters; *rebirth* reads a `traits hold` failure among its last 3 verdicts, or
+a path its doc names in backticks that is gone. Nothing is drafted or swapped by it.
+
 **Which arm**, in order: **split** when the zone is large (1500 lines or 24 files) and failures and
 Thoughts cluster in two sub-directories — an Orc's Slimes are divided with it; **rebirth** when the
 gate failed on the creature's own verify lines or its doc names files that are gone — the value
 record restarts; **mutate** otherwise — repeated lessons become traits and verify lines, a
 recurring *how* is minted as a skill on trial.
 
-**Proven before swapped.** A plan is staged under `.mnemorph/tmp/evolution/<id>/` and swapped in
-only when the new verify lines pass in the sandbox, the ontology over an overlay of the plan shows
-no new findings, and every body gets exactly the files the plan meant. Otherwise the old docs stay
-and a hole is logged. The old doc rests in the attic.
+**Proven before swapped** (`mnemorph_loop::prove`). A plan is staged under
+`.mnemorph/tmp/evolution/<id>/` and swapped in only when it is proven over an overlay — a scratch
+copy of the world (build output, instruments and scratch left out), the plan written into it,
+never into the world — and every body gets exactly the files the plan meant. Over the overlay
+the ontology (`onto check`, its cards read against the live world's witness) must find nothing
+the live world does not: a finding is new by severity, code, file and message — its line aside,
+so a doc grown longer above it is not — and a doc that no longer reads is new. Every creature doc
+the plan writes must have its verify lines pinned by the human (`mnemorphd verify pin`) — a line
+the card alone says never runs — and each must pass in the sandbox over the overlay, writing
+nothing. A plan that re-parents or widens a card is refused so: its overlay holds a
+`roster-mismatch` the world does not. Otherwise nothing is asked, nothing written, and every
+reason said. The old doc rests in the attic.
+
+**On its own, on trial** (`mnemorph_loop::auto`). With `evolution.mode = "auto"` — the default,
+and the human's global file's alone, since it lets the harness swap without asking — evolution
+runs itself and keeps only what beats doing nothing. After each session in the terminal app, one
+tick runs in the background (`mnemorphd evolution auto`, its output in
+`$XDG_STATE_HOME/mnemorph/evolution-auto.log`; a board or a scheduled loop may run it too), under
+a lock so two never run at once:
+
+1. **Settle.** A swap whose window of 10 runs is full is judged, its do-nothing controls run
+   first and priced against the human's caps, and settled by the rule below: **kept** on its net
+   wins and no more holes than doing nothing, otherwise **rolled back** — its named files put back
+   from the bytes kept before it, only while they still stand as the swap left them. A judgement
+   still pending (a cap stopped the controls) or refused is left as it stands, and said.
+2. **Evolve.** One creature the trigger finds due, by mutate or rebirth, with no swap of its
+   still unsettled and no proposal of its waiting, is drafted, proven over an overlay and swapped
+   in, on trial. A draft not proven stays a proposal for the human.
+
+At most one judgement and one draft a tick, so a tick's spend is bounded. Every settle is one
+`settle` row in the evolution ledger — kept or rolled back, by `harness` or `human`, and the
+judgement it stood on — and a swap is settled once; a settled swap's window closes, early or
+not, so its body is free for the next. The human may settle any swap first:
+`mnemorphd evolution keep <id>` or `rollback <id>`, its judgement shown, asked at the terminal.
+With `evolution.mode = "propose"` nothing runs on its own.
 
 **Paced.** A creature evolves at most once every 10 runs (replayed from the ledger), one plan runs
-at a time, and `evolution.mode = "propose"` queues plans for `mnemorph evolve list | show | apply |
-reject` instead — a proposal is refused if the world moved since it was drawn. Each arm writes an
-`evolution` (or `rebirth`) row.
+at a time, and every plan drawn is a proposal (`mnemorph_world::proposals`) until it is swapped
+in, for `mnemorphd evolution list | show | apply | reject`, each verb but `list` naming the
+proposal's id. A proposal is kept under the human's state directory, chained and anchored with the other
+journals: its file set and each file's digest as the world held it when drawn and as staged.
+`list` says each one's state, `show` the lines it would take away and bring. `apply` is refused
+when the world moved since it was drawn — a named file no longer as it was — or the staging is
+not the bytes drawn, since a body can write the staging; otherwise it is proven, asked and
+swapped in as `swap` is, and closed. `reject` closes it and removes its staging, never through a
+link, asked at the terminal. Each swap writes its row to the evolution ledger.
 
 **Judged after the freeze** (`mnemorph_ledger::evolution`). A plan proven in the sandbox has only
 graded itself on the verify lines it wrote; once swapped in, the change is frozen and judged on
@@ -1615,16 +1667,30 @@ what comes after it, and only that:
 - **Replay.** The ledger read again up to the row a line names (`replay`), its chain walked whole
   and held to the anchored head, gives the same judgement, and the row there carries the digest
   the line names; a ledger whose chain breaks is judged on nothing.
-- **A proposal.** A keep or a rollback is proposed to the human like every other change to a race;
-  rolling a swap back, like applying it, is the human's.
+- **Settled.** In `auto` mode the harness settles a judged swap by the rule; in `propose` mode a
+  keep or a rollback is proposed to the human like every other change to a race, and settling it
+  is the human's (`evolution keep | rollback <id>`).
 
-**The lifecycle, end to end** (`mnemorph_world::evolution`, `mnemorph_loop::evolution`). Nothing
-here runs on its own: the human swaps a plan in and asks for its judgement.
+**The lifecycle, end to end** (`mnemorph_world::evolution`, `mnemorph_loop::evolution`). In `propose`
+mode nothing here runs on its own: the human swaps a plan in, asks for its judgement and settles
+it. In `auto` mode the tick above does each step after a session.
 
 1. **Proposed.** A plan is staged under `.mnemorph/tmp/evolution/<id>/`, each file at the world
    path it replaces or creates — a Mind under `.mnemorph/minds/`, a creature doc under
    `.mnemorph/<race>/<name>/`, a split's young in a folder of its own. Who drafts it is free (a
-   body, the human, the evolution trigger from M11); it changes nothing while staged.
+   body, the human, or the drafter); it changes nothing while staged. **The drafter**
+   (`mnemorph_loop::draft`, `mnemorphd evolution draft <creature>`) drafts a **mutate** or a
+   **rebirth** for a creature the trigger finds due: one call to the configured model, with no
+   tool, shown the creature's doc and its desk as data — a body may have written either — and
+   answering only trait lines, `@T <trait> from=<note id>,…`, each citing notes on the desk. The
+   harness, not the model, writes the doc: its header untouched — race, chain, territory, verify
+   lines and Minds are never the drafter's; the doc is parsed before and after and a draft that
+   would move a field is refused — and a `## Traits` section added or replaced, under a heading,
+   where no field is read. At most 7 traits of at most 200 characters, one line each, no control
+   character, every citation a note on the desk: any rule broken refuses the draft whole, and it
+   stages nothing. The plan is staged under a new folder, none followed through a link, and kept
+   as a proposal with the bytes drawn; `mnemorphd evolution apply <id>` swaps it in. The call is priced in the usage ledger against the human's caps, as no
+   body's run, so it never counts in a creature's record. A split is drawn by relief, not drafted.
 2. **Swapped**, by the human: `mnemorphd evolution swap <id> --creature <name>` with its file set —
    `--file` for each file it replaces, `--create` for each it creates, `--remove` for each it
    removes — and `--arm`, `--body` for each body judged (the creature unless named) and
@@ -1638,7 +1704,9 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    and write of a named or staged file opens its path one folder at a time from the world,
    following no link, and the file itself without following one, checked on its handle: a
    created file goes in only where nothing stands, a replaced one is renamed into place, never
-   written through a link. A staged file, or a named file's bytes before, is read up to 8 MiB. The plan is shown and asked for `y` at the terminal; a
+   written through a link. A staged file, or a named file's bytes before, is read up to 8 MiB.
+   The plan is shown, **proven over an overlay** (above) — a plan not proven is refused before
+   it is asked — and asked for `y` at the terminal; a
    body never runs it. The harness hashes the soil under `.mnemorph/` (the
    instruments, memory and scratch left out) before and after writing it, keeps the named files'
    bytes before beside the ledger (`<ledger>.swaps/<id>/before/`, folders 0700 and files 0600,
@@ -1670,9 +1738,10 @@ here runs on its own: the human swaps a plan in and asks for its judgement.
    controls will run and what the tightest cap leaves (or that none is set), a spent cap runs
    none, and a control a cap stops is not recorded. Each finished control is appended as a
    control row. With nothing waiting, no model is reached.
-5. **Judged and proposed.** The swap is judged by the rule above, from the ledger held to its
-   anchored head, and the keep or the rollback is printed with its lines and `proposed to the
-   human`; pending says how many runs and controls are in. Applying either is the human's.
+5. **Judged and settled.** The swap is judged by the rule above, from the ledger held to its
+   anchored head, and the keep or the rollback is printed with its lines; pending says how many
+   runs and controls are in. `evolution keep | rollback <id>` settles it, or the tick does by the
+   rule in `auto` mode: one `settle` row, a rollback putting the named files back.
 
 The window's fixtures carry the cases where doing nothing is right, beside the fixes: a task with
 nothing to change, a review of a sound file where **no finding** is the right output (a body that

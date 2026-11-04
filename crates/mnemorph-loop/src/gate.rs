@@ -469,6 +469,17 @@ impl EndGate {
         }
     }
 
+    /// The verify lines run over `cx`'s world as it stands, no change judged — a plan's proof
+    /// over its overlay: every line that failed, gave no result, wrote to the tree or no pin
+    /// holds. Empty when every line ran and held.
+    pub fn run_alone(&self, tools: &[Box<dyn Tool>], cx: &mut Context) -> Vec<String> {
+        let mut unverified = self.held.clone();
+        let now = snapshot(cx.world());
+        let (mut failures, _) = self.run_verify(tools, cx, &now, &mut unverified);
+        failures.extend(unverified);
+        failures
+    }
+
     /// Run the verify lines. A check never writes: what a verify run changes in the tree — beyond
     /// what git ignores, the build output a test run leaves — fails the gate, so no verify line
     /// lands work past the judgement above.

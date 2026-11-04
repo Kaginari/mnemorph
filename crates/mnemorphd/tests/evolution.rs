@@ -509,7 +509,7 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
     record(&a, "sly", "fix THE parser");
     assert!(judged("a").contains("the plan was proven on it"));
     // A held-out task another swap's window used first.
-    stage("b", glim, "# glim\n\nanew\n");
+    stage("b", glim, "# glim\n\n- **Race:** dark-elf\n\nanew\n");
     let out = f.at_tty(
         &[
             "evolution",
@@ -526,7 +526,7 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
     record(&swap_of("b"), "glim", "A  held task");
     assert!(judged("b").contains("a held-out task already used"));
     // A task in two splits: swap a was proven on it, swap c would hold it out.
-    stage("c", sly, "# sly\n\nanew\n");
+    stage("c", sly, "# sly\n\n- **Race:** slime\n\nanew\n");
     let out = f.at_tty(
         &[
             "evolution",
@@ -547,8 +547,8 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
 }
 
 /// A swap that writes a card shows, before the yes, what the witness would hold of it: a swap
-/// that re-parents or widens is shown so, and its yes leaves the row's chain and ground as they
-/// were; a new name it creates stays a stranger.
+/// that re-parents or widens is shown so — and its overlay holds findings the world does not, so
+/// it is not proven, never asked, and the witness's rows stay as they were.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_card_swap_shows_its_standing_and_never_widens() {
@@ -585,7 +585,16 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
         "y\n",
     );
     let (stdout, err) = text(&out);
-    assert!(stdout.contains("swapped sly-1"), "{stdout}{err}");
+    assert!(!stdout.contains("swapped sly-1"), "{stdout}{err}");
+    assert!(
+        stdout.contains("not proven over an overlay")
+            && stdout.contains("a new finding: high dead-bond")
+            && stdout.contains("a new finding: high roster-mismatch")
+            && format!("{stdout}{err}").contains("the plan is not proven: nothing was swapped"),
+        "{stdout}{err}"
+    );
+    assert!(!f.world.join(forge).exists(), "nothing written");
+    assert!(!f.ledger().exists(), "no row");
     assert!(
         stdout.contains("as the creatures' witness would hold them")
             && stdout.contains(
@@ -605,5 +614,139 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
     assert!(
         !held.contains_key("kijin-forge"),
         "a stranger until adopted"
+    );
+}
+
+/// `evolution due` says which creatures the rules find due to evolve — here none: no verdict has
+/// failed — and refuses an argument it does not know.
+#[test]
+fn evolution_due_says_when_none_is_due() {
+    let f = Fixture::new("due");
+    let out = f.run(&["evolution", "due"]);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "no creature is due to evolve"
+    );
+    let out = f.run(&["evolution", "due", "--no-such"]);
+    assert!(!out.status.success());
+}
+
+/// `evolution draft` drafts only a creature the rules find due: one that is not is refused before
+/// any model is reached, and nothing is staged.
+#[test]
+fn evolution_draft_refuses_a_creature_not_due() {
+    let f = Fixture::new("draft-not-due");
+    let out = f.run(&["evolution", "draft", "sly"]);
+    assert!(!out.status.success(), "{out:?}");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("sly is not due to evolve"), "{err}");
+    assert!(!f.world.join(".mnemorph/tmp/evolution").exists());
+}
+
+/// A proposal drawn is listed and shown; applied at the terminal it is proven, swapped in and
+/// closed; one the world moved past is refused; a reject is asked at the terminal.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_proposal_is_listed_shown_and_applied_at_the_terminal() {
+    use mnemorph_server::world::evolution::{Arm, Staged, staging};
+    use mnemorph_server::world::proposals;
+    let f = Fixture::new("proposal");
+    let sly = ".mnemorph/slime/sly/README.md";
+    let new = "# sly\n\n- **Race:** slime\n\n## Traits\n\n- *trait* — exact\n";
+    let draw = |id: &str| {
+        let at = staging(&f.world, id).join(sly);
+        fs::create_dir_all(at.parent().unwrap()).unwrap();
+        fs::write(&at, new).unwrap();
+        let files = [Staged {
+            path: sly.into(),
+            after: Some(new.as_bytes().to_vec()),
+            creates: false,
+        }];
+        proposals::draw_in(Some(&f.state()), &f.world, id, "sly", Arm::Mutate, &files).unwrap();
+    };
+    draw("sly-1");
+    let out = f.run(&["evolution", "list"]);
+    assert!(
+        text(&out)
+            .0
+            .contains("sly-1 — sly (mutate), 1 file(s): ready"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.run(&["evolution", "show", "sly-1"]);
+    assert!(
+        text(&out).0.contains("  + - *trait* — exact"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.run(&["evolution", "reject", "sly-1"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "asked at the terminal: {:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "apply", "sly-1"], "y\n");
+    let (stdout, err) = text(&out);
+    assert!(
+        stdout.contains("proven over an overlay") && stdout.contains("swapped sly-1 under build"),
+        "{stdout}{err}"
+    );
+    assert_eq!(fs::read_to_string(f.world.join(sly)).unwrap(), new);
+    assert!(
+        text(&f.run(&["evolution", "list"]))
+            .0
+            .contains("no open proposal")
+    );
+    // One the world moved past since it was drawn is refused before anything is asked.
+    draw("sly-2");
+    fs::write(f.world.join(sly), "# sly\n\n- **Race:** slime\n\nmoved\n").unwrap();
+    let out = f.at_tty(&["evolution", "apply", "sly-2"], "y\n");
+    assert!(
+        text(&out)
+            .0
+            .contains("the world moved since `sly-2` was drawn"),
+        "{:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "reject", "sly-2"], "y\n");
+    assert!(text(&out).0.contains("rejected sly-2"), "{:?}", text(&out));
+    assert!(!staging(&f.world, "sly-2").exists());
+}
+
+/// The human rolls a swap back at the terminal: its judgement shown, the files put back, settled
+/// once. `evolution auto` with nothing due or full says so and spends nothing.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_swap_is_rolled_back_at_the_terminal_and_auto_finds_nothing_to_do() {
+    let f = Fixture::new("rollback");
+    let before = fs::read(f.world.join(MIND)).unwrap();
+    let staged = f.world.join(".mnemorph/tmp/evolution/careful-1").join(MIND);
+    fs::create_dir_all(staged.parent().unwrap()).unwrap();
+    fs::write(&staged, "# Careful\n\nWrite once.\n").unwrap();
+    swapped_at_tty(&f);
+    let out = f.run(&["evolution", "rollback", "careful-1"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "asked at the terminal: {:?}",
+        text(&out)
+    );
+    let out = f.at_tty(&["evolution", "rollback", "careful-1"], "y\n");
+    let (stdout, err) = text(&out);
+    assert!(
+        stdout.contains("as judged now") && stdout.contains("settled careful-1: rollback"),
+        "{stdout}{err}"
+    );
+    assert_eq!(fs::read(f.world.join(MIND)).unwrap(), before, "put back");
+    let out = f.at_tty(&["evolution", "keep", "careful-1"], "y\n");
+    assert!(text(&out).0.contains("settled already"), "{:?}", text(&out));
+    let out = f.run(&["evolution", "auto"]);
+    assert!(out.status.success(), "{:?}", text(&out));
+    assert!(
+        text(&out).0.contains("nothing to evolve or settle"),
+        "{:?}",
+        text(&out)
     );
 }
