@@ -509,7 +509,7 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
     record(&a, "sly", "fix THE parser");
     assert!(judged("a").contains("the plan was proven on it"));
     // A held-out task another swap's window used first.
-    stage("b", glim, "# glim\n\nanew\n");
+    stage("b", glim, "# glim\n\n- **Race:** dark-elf\n\nanew\n");
     let out = f.at_tty(
         &[
             "evolution",
@@ -526,7 +526,7 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
     record(&swap_of("b"), "glim", "A  held task");
     assert!(judged("b").contains("a held-out task already used"));
     // A task in two splits: swap a was proven on it, swap c would hold it out.
-    stage("c", sly, "# sly\n\nanew\n");
+    stage("c", sly, "# sly\n\n- **Race:** slime\n\nanew\n");
     let out = f.at_tty(
         &[
             "evolution",
@@ -547,8 +547,8 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
 }
 
 /// A swap that writes a card shows, before the yes, what the witness would hold of it: a swap
-/// that re-parents or widens is shown so, and its yes leaves the row's chain and ground as they
-/// were; a new name it creates stays a stranger.
+/// that re-parents or widens is shown so — and its overlay holds findings the world does not, so
+/// it is not proven, never asked, and the witness's rows stay as they were.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_card_swap_shows_its_standing_and_never_widens() {
@@ -585,7 +585,16 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
         "y\n",
     );
     let (stdout, err) = text(&out);
-    assert!(stdout.contains("swapped sly-1"), "{stdout}{err}");
+    assert!(!stdout.contains("swapped sly-1"), "{stdout}{err}");
+    assert!(
+        stdout.contains("not proven over an overlay")
+            && stdout.contains("a new finding: high dead-bond")
+            && stdout.contains("a new finding: high roster-mismatch")
+            && format!("{stdout}{err}").contains("the plan is not proven: nothing was swapped"),
+        "{stdout}{err}"
+    );
+    assert!(!f.world.join(forge).exists(), "nothing written");
+    assert!(!f.ledger().exists(), "no row");
     assert!(
         stdout.contains("as the creatures' witness would hold them")
             && stdout.contains(

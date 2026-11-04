@@ -385,9 +385,10 @@ includes the witness.
   gate verdicts, its desk full — and by which arm, cooling while a swap's window is open, in
   `mnemorph status` and `mnemorphd evolution due`; the drafter: a mutate or rebirth drafted by the
   configured model as traits citing the desk, the doc written by the harness with its header
-  untouched, staged for the human's swap (`mnemorphd evolution draft`); still M11's: strain and
-  doom in the trigger once a trusted journal carries them, a split's young from relief, the plans
-  proven over an overlay, and `evolve list | show | apply | reject`) —
+  untouched, staged for the human's swap (`mnemorphd evolution draft`); every swap proven first
+  over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
+  strain and doom in the trigger once a trusted journal carries them, a split's young from
+  relief, and `evolve list | show | apply | reject`) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed

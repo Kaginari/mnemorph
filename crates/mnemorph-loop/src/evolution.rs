@@ -54,7 +54,7 @@ const UNCOPIED: [&str; 2] = ["target", "node_modules"];
 
 /// Copies `from` into `to`: links as links, never followed; build output, the instruments and the
 /// scratch left behind.
-fn copy_world(from: &Path, to: &Path, top: bool) -> io::Result<()> {
+pub(crate) fn copy_world(from: &Path, to: &Path, top: bool) -> io::Result<()> {
     fs::create_dir_all(to)?;
     for e in fs::read_dir(from)? {
         let e = e?;

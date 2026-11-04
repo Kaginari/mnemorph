@@ -19,6 +19,7 @@ pub mod key;
 pub mod mcp_journal;
 pub mod model;
 pub mod open;
+pub mod prove;
 pub mod queue_tool;
 pub mod resume;
 pub mod route;
