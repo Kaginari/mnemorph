@@ -27,6 +27,13 @@ pub struct Journal<T> {
     rows: PhantomData<fn() -> T>,
 }
 
+/// What a chained append is written onto: any head, or only this one (`None`: no row yet).
+#[derive(Clone, Copy)]
+enum Onto<'a> {
+    Any,
+    Head(Option<&'a Head>),
+}
+
 /// Where a chained journal's walk stands: the walk, and the file's length it walked to.
 #[derive(Debug)]
 struct Tip {
@@ -117,7 +124,7 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
     pub fn append(&self, row: &T) -> io::Result<()> {
         use std::io::{Read, Seek, SeekFrom};
         if let Some(chain) = &self.chain {
-            return self.append_chained(chain, row);
+            return self.append_chained(chain, row, Onto::Any);
         }
         let mut line = serde_json::to_vec(row).map_err(io::Error::other)?;
         line.push(b'\n');
@@ -150,9 +157,32 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         Ok(())
     }
 
+    /// [`Journal::append`] for a chained journal, only if its head is still `after` (`None`: no
+    /// row chained yet) under the same exclusive lock the append takes: a decision read from the
+    /// journal at `after` is written only onto what it read.
+    ///
+    /// # Errors
+    ///
+    /// As [`Journal::append`]; the journal is not chained; or another writer appended since
+    /// `after` (`ErrorKind::WouldBlock`), and nothing was written.
+    pub fn append_after(&self, row: &T, after: Option<&Head>) -> io::Result<()> {
+        let Some(chain) = &self.chain else {
+            return Err(io::Error::other(
+                "only a chained journal has a head to hold to",
+            ));
+        };
+        self.append_chained(chain, row, Onto::Head(after))
+    }
+
     /// [`Journal::append`] for a chained journal: under the file's exclusive lock, the walk is
-    /// caught up with what other writers appended, and the row is sealed to its head.
-    fn append_chained(&self, chain: &Mutex<Option<Tip>>, row: &T) -> io::Result<()> {
+    /// caught up with what other writers appended, and the row is sealed to its head — refused
+    /// when `after` is given and the head is no longer it.
+    fn append_chained(
+        &self,
+        chain: &Mutex<Option<Tip>>,
+        row: &T,
+        onto: Onto<'_>,
+    ) -> io::Result<()> {
         let body = serde_json::to_vec(row).map_err(io::Error::other)?;
         let dir = self.path.parent().filter(|d| !d.as_os_str().is_empty());
         if let Some(dir) = dir {
@@ -180,6 +210,15 @@ impl<T: Serialize + DeserializeOwned> Journal<T> {
         let mut tip = chain.lock().unwrap_or_else(PoisonError::into_inner);
         // Taken: a write that fails leaves no tip, and the next append walks again.
         let walked = caught_up(tip.take(), &file)?;
+        if let Onto::Head(after) = onto
+            && walked.walk.report().head.as_ref() != after
+        {
+            *tip = Some(walked);
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "the journal moved since it was read",
+            ));
+        }
         let (bytes, walk) = walked.walk.seal(&body)?;
         if let Some(mut w) = witness.as_ref() {
             w.write_all(&bytes)?;

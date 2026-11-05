@@ -231,7 +231,7 @@ fn runs(w: &World) -> Vec<evolution::Run> {
         .into_iter()
         .filter_map(|r| match r {
             EvolutionRow::Run(r) => Some(r),
-            EvolutionRow::Swap(_) => None,
+            EvolutionRow::Swap(_) | EvolutionRow::Settle(_) => None,
         })
         .collect()
 }

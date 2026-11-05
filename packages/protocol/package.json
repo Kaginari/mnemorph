@@ -1,14 +1,33 @@
 {
   "name": "@mnemorph/protocol",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "The protocol between mnemorphd and its clients: types generated from the Rust crates.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kaginari/mnemorph.git",
+    "directory": "packages/protocol"
+  },
+  "homepage": "https://github.com/Kaginari/mnemorph#readme",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

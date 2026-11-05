@@ -60,14 +60,6 @@ const COMMAND_CHARS: usize = 512;
 pub(crate) const DEFAULT_HOST: &str = "github.com";
 /// Transports a push probe may use: every other, a remote helper (`ext::`) above all, is refused.
 const PROTOCOLS: &[&str] = &["https", "http", "ssh", "git", "file"];
-/// Credentials a probe needs to read the outside as the act wrote it: read, never written.
-const PROBE_CREDENTIALS: &[&str] = &[
-    ".ssh",
-    ".netrc",
-    ".git-credentials",
-    ".config/git/credentials",
-    ".config/gh",
-];
 
 /// Where an act stands in its post journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -485,7 +477,7 @@ impl Probe for Observer {
         let dir = scratch().map_err(|e| format!("the probe's scratch directory: {e}"))?;
         let ran = (|| {
             let mut policy = Policy::new(&dir, &self.home, &dir, true);
-            let credentials: Vec<PathBuf> = PROBE_CREDENTIALS
+            let credentials: Vec<PathBuf> = mnemorph_tools::FORGE_LOGINS
                 .iter()
                 .map(|c| self.home.join(c))
                 .collect();

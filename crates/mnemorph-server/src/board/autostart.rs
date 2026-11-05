@@ -242,6 +242,57 @@ fn start(
     }
 }
 
+/// The log of the evolution ticks this starts, under the state directory.
+pub const EVOLVE_LOG: &str = "evolution-auto.log";
+
+/// After a session, with `evolution.mode = "auto"`: one tick of evolution
+/// (`mnemorphd evolution auto`) started in the background, the binary beside the running one, in
+/// its own process group, so it outlives the app and a Ctrl-C never reaches it; its output goes to
+/// `$XDG_STATE_HOME/mnemorph/evolution-auto.log`. A body's session starts none — the command
+/// refuses a body anyway. Nothing is waited for; the answer is one line, or none when nothing
+/// started.
+#[must_use]
+pub fn evolve_after(world: &Path) -> Option<String> {
+    if std::env::var_os("MNEMORPH_BODY").is_some() {
+        return None;
+    }
+    let config = crate::Config::load(&crate::Paths::resolve(world)).ok()?;
+    if config.evolution_proposes() {
+        return None;
+    }
+    // `$XDG_STATE_HOME/mnemorph`, where the board's own log is kept.
+    let dir = dimension::registry()
+        .as_deref()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)?;
+    std::fs::create_dir_all(&dir).ok()?;
+    let log = dir.join(EVOLVE_LOG);
+    if std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_CAP) {
+        let _ = std::fs::remove_file(&log);
+    }
+    let out = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(&log)
+        .ok()?;
+    let err = out.try_clone().ok()?;
+    let mnemorphd = sibling().ok()?;
+    Command::new(mnemorphd)
+        .args(["evolution", "auto", "--world"])
+        .arg(world)
+        .stdin(Stdio::null())
+        .stdout(out)
+        .stderr(err)
+        .process_group(0)
+        .spawn()
+        .ok()?;
+    Some(format!(
+        "evolution: a tick runs in the background (log: {})",
+        log.display()
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

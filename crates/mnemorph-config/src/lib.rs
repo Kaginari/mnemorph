@@ -30,12 +30,14 @@
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
 //! is an error that names its file.
 
+pub mod ci;
 mod closure;
 mod forge;
 mod oni;
 mod outward;
 mod receipt;
 mod runner;
+pub mod scout;
 mod write;
 
 use std::collections::BTreeMap;
@@ -238,6 +240,7 @@ const LOOSENING: &[&str] = &[
     "gate.approve",
     "oni.envelopes",
     "oni.envelope_days",
+    "evolution.mode",
     "evolution.min_net_wins",
     "sandbox.allow_unguarded",
     "models.provider",
@@ -311,6 +314,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("recall.saturation_short", Kind::Number),
     ("recall.saturation_mid", Kind::Number),
     ("recall.saturation_long", Kind::Number),
+    ("recall.saturation_growth", Kind::Number),
     ("evolution.mode", Kind::Str),
     ("evolution.min_net_wins", Kind::Int),
     ("models.provider", Kind::Str),
@@ -1728,7 +1732,9 @@ fn recall_bound(key: &str, value: &Value, at: &Origin) -> Result<(), String> {
         .unwrap_or(f64::NAN);
     let name = key.trim_start_matches("recall.");
     let fits = v.is_finite()
-        && if name.starts_with("saturation") || name == "half_life_days" {
+        && if name == "saturation_growth" {
+            v >= 0.0
+        } else if name.starts_with("saturation") || name == "half_life_days" {
             v > 0.0
         } else if name == "floor" {
             v > 0.0 && v <= 1.0
@@ -1740,7 +1746,7 @@ fn recall_bound(key: &str, value: &Value, at: &Origin) -> Result<(), String> {
     } else {
         Err(format!(
             "{at}: {key} is {v}; recall's weights are at most 1, its floor above 0 and at most 1, \
-             its saturations and half-life above 0"
+             its saturations and half-life above 0, its saturation's growth 0 or more"
         ))
     }
 }

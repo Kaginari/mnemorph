@@ -159,7 +159,7 @@ mnemorph --world <dir>            # a session in that world
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
-mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters
+mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
 mnemorph run "<ask>"              # one ask without the app
 ```
 
@@ -183,7 +183,9 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
-| read every creature's meters, swap an evolution in, judge it | `mnemorphd meters`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>` |
+| read the forge's CI runs into the instruments | `mnemorphd ci` |
+| refresh the advisory mirror | `mnemorphd scout` |
+| read every creature's meters, see who is due to evolve, draft its evolution, review the proposals, swap one in, judge it, keep or roll it back, run a tick of evolution on its own | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution draft <creature>`, `mnemorphd evolution list \| show <id> \| apply <id> \| reject <id>`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>`, `mnemorphd evolution keep \| rollback <id>`, `mnemorphd evolution auto` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
 
@@ -237,7 +239,9 @@ http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorp
 sign-in link)*; a port in use, a missing binary or a board slow to answer is that line too, never a crash
 or a hang. No key reaches the app's screen or the log. The board outlives the app: quitting
 `mnemorph` leaves it serving, and a Ctrl-C at that terminal never reaches it.
-`mnemorphd board stop` stops it — its chats end, its socket and URL file go, its lock is let go.
+`mnemorphd board stop` stops it — its socket and nonce go, its chats end, its lock is let go —
+and returns only once the lock is free: it waits as long as a chat that ignores its shutdown may
+take to be killed, and fails if the board still runs past that, or if its lock cannot be read.
 Every `board.*` key is the global file's alone: from a world's file it is a hole, since starting a
 server that serves every world, and opening a browser on it, are the human's call.
 
@@ -513,7 +517,7 @@ it — is shown and grants nothing.
 | `memory` | `shared`, `grounded`, `proposed`, `retired`, `unproven`, counted as `mnemorphd memory status` counts them | `.mnemorph/memory/` | no |
 | `challenges` | the open challenges `pending`, `blocked`, `verifying`; those with an `unstaffed` speciality; their `findings`; `unreadable` record lines — as `mnemorphd challenge list` reads them | the challenge records under the state directory | yes |
 | `gate` | how many verdicts, and the last: `{at, body, verdict, changed}` or `null` before the first | the gate's verdict journal under the state directory | yes |
-| `meters` | each living creature's meters with their `status` (`counted`, `noReports`, `unavailable` with `why`), `successes`, `n`, the point estimate and the 95% Wilson interval `lo`–`hi`, or `null`s for no report — as `mnemorphd meters --json` | the roster in the world over the challenge records' folds and the report fold of the trusted journals under the state directory ([the report fold](02-races.md#the-report-fold)) | no |
+| `meters` | each living creature's meters with their `status` (`counted`, `noReports`, `unavailable` with `why`), `successes`, `n`, the point estimate and the 95% Wilson interval `lo`–`hi`, or `null`s for no report — as `mnemorphd meters --json` (which also gives each creature its pending `proposal` and `probation`, and the `unknown` input its law reads that no trusted journal carries) | the roster in the world over the challenge records' folds and the report fold of the trusted journals under the state directory ([the report fold](02-races.md#the-report-fold)) | no |
 | `spend` | the latest session in the usage ledger: `calls`, `usd` (`null` when none was priced), `unpriced`, weighted tokens | `.mnemorph/instruments/usage.jsonl` | no |
 | `waiting` | the gate asks the board's chats keep for the human; a terminal session's asks wait in its terminal | the board's chats | yes |
 | `updates` | `pushed`, or `slowed` when the world is past the watcher's budget (below) | the board's watcher | yes |
@@ -617,7 +621,9 @@ writes — race, post, ground, chain and Minds — against its row. The row hold
 Minds too: a card that names a Mind its row does not hold wears none of it.
 Rises, falls and adoptions are the human's alone: `mnemorphd roster adopt`, `set-race` and
 `retire`, each asked at the terminal (`/dev/tty`; piped input is refused) or under `--yes` for a
-script the human runs, refused inside a body's command, under any `mnemorph`, `mnemorphd` or
+script the human runs, and `roster rise` and `fall`, which apply the move the compiled law
+proposes at the terminal alone ([applying a rise or a fall](02-races.md#applying-a-rise-or-a-fall)),
+each refused inside a body's command, under any `mnemorph`, `mnemorphd` or
 `mnemorph-guard` ancestor, and with a state directory inside the world. The ancestry is read
 from the process tree, so a command that leaves it — `setsid`, or a daemon re-parented to init —
 is caught only where the sandbox refuses that, as its seccomp filter refuses `setsid` under the
@@ -638,7 +644,9 @@ only, capped) with the Minds under `.mnemorph/minds/`: a body can write its doc,
 shown and grants nothing. What each creature runs as is the creatures' witness's under the state
 directory, read for the world's own path ([the roster's trust](#the-rosters-trust)): each body
 says whether it is the throne, trusted, mismatched — the fields its card says otherwise, and the
-race it runs as — or a stranger, with the way on. A Mind's standing — adopted, unadopted, changed, retired, unverified, or named
+race it runs as — or a stranger, with the way on; and the rise or fall the compiled law proposes
+for it, with its meters, the law's lines and the command that applies it, or its probation
+(`ascension`, read from the trusted journals and the witness, says why when none can be read). A Mind's standing — adopted, unadopted, changed, retired, unverified, or named
 but absent — is the witness's under the state directory, held to its anchor (the anchor's fallback
 in `log.md` read from the file's guarded end): trusted. The race law is compiled in: trusted.
 
@@ -665,7 +673,7 @@ card art, the body's facts, the law of its race, its Minds and its acts.
 commands, its shelf, soil and gate, its steps, budget share and model tier, its headline meter's
 bars, an ascended form's rise, probation and fall bars (`mnemorph_races::law_bars`), and a Kijin's
 posts or a Dark Elf's specialities. The art is the cards of `assets/cards/` cut to WebP
-(`tools/board-art.sh`, about 40 KB a card), embedded by exact name; the page loads only an `art`
+(`tools/board-art.sh`, 1200 × 1680, about 110 KB a card), embedded by exact name; the page loads only an `art`
 of the plain form `/art/cards/<race>.webp`.
 
 **The queue** is `.mnemorph/shared/queue.jsonl`, copied as a regular file under the cap and folded
@@ -1419,13 +1427,14 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | Kijin post journals | `.mnemorph/kijin/<post>/post.jsonl` — each outward act's receipt, one row per state, stamped `build: { version, commit }`; an untyped command only by its program and digest; every row witnessed under `$XDG_STATE_HOME/mnemorph/kijin/<world>-<fnv64a>/<post>.jsonl`, which the tripwire rebuilds it from and the count reads — the witness hash-chained, its head anchored with the other chained journals as `kijin-<post>`, and the journal holding its bytes; beside the witness, `<post>.intents.jsonl` (each act's key, typed request and whole pin), `<post>.incidents.jsonl` (each rolled-back or corrected act's incident and its receipts) and `<post>.lock` (one act of a post at a time) — the folder `0700`, its files `0600` | yes (the witness, intents, incidents and lock: no — machine-local) |
 | Dark Elf proving ground | `.mnemorph/dark-elf/` | yes (frozen witnesses are evidence) |
 | Dark Elf challenges | `$XDG_STATE_HOME/mnemorph/challenges/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each landing as it was routed with its tree hash and author, how each routed speciality is staffed (commissioned with its spend, queued, unstaffed), each speciality's coverage ledger, its findings of medium or higher with each verifier's staffing, verdict (the verifier, its speciality, the evidence hashes) and seal proposal (its witness frozen by hash), and the human's waiver, append-only and hash-chained ([the chain](06-consumption.md#the-usage-row)) — each row that settles a finding (found, ruled, decided) stamped `build: { version, commit }`, the build `status` prints, a row from before reading `unknown`; a line that does not parse holds its challenge pending, never skipped — outside the world and out of every command's reach | no — machine-local |
-| evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after, the soil diff the harness saw and the tasks its plan was proven on (the record that keeps a held-out task to one use and out of two splits), each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
+| evolution ledger | `$XDG_STATE_HOME/mnemorph/evolution/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each swap with its exact file set hashed before and after, the soil diff the harness saw and the tasks its plan was proven on (the record that keeps a held-out task to one use and out of two splits), each run of a swapped body or of its do-nothing control stamped with the swap's id, the build and the named files' state before and after the run, and each swap's settling — kept or rolled back, by the harness's rule or the human; written by the harness alone, append-only and hash-chained, its head anchored with the other chained journals; outside the world and out of every command's reach | no — machine-local |
+| evolution proposals | `$XDG_STATE_HOME/mnemorph/proposals/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each plan drawn for the human: its id, creature, arm and file set, every file's digest as the world held it when drawn and as staged, and its closing (`applied` or `rejected`); written by the harness alone, hash-chained, its head anchored with the other chained journals; outside the world | no — machine-local |
 | gate verdicts | `$XDG_STATE_HOME/mnemorph/gate/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each verdict the end gate journals in `log.md`, again: the body and the run whose landing it judged (a row from before runs were named carries none), the verdict, the paths changed, the failures and unverified checks, the `log.md` heading, and `build: { version, commit }` (a row from before reading `unknown`; `mnemorph_world::verdicts::by_build` keeps one build's); written by the harness alone, append-only and hash-chained, anchored as `gate`; outside the world | no — machine-local |
 | guts classes | `$XDG_STATE_HOME/mnemorph/guts/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — one row per act the loop classed: the run, the body, the tool call and tool, its [guts classes](03-loop.md#stress-in-four-instruments), and `build: { version, commit }`; written by the harness alone, append-only and hash-chained, anchored as `guts`; read by `status` and the board's timeline only while the chain holds; outside the world | no — machine-local |
-| report ledger | `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — every race's reports but the Dark Elf's, folded from the usage witness, the gate verdicts, the challenge records and the Kijin posts' witnesses alone, each walked and held to its anchor — a journal gone while its anchor stays stops the fold ([the report fold](02-races.md#the-report-fold)): one row per report — `run` (gate word, first try, holes, verify lines green, dispatches landed and re-asked, passes and those overturned), `ask` (a throne landing done or reopened) or `act` (an outward act clean or rolled back) — each with the `build` of the journal row that settled it (`unstamped` where that row carries none), chained from its genesis; a pass counts as verified only on a line the human pinned. Derived: `mnemorphd meters` rebuilds it whole and puts it in place by a rename when its bytes change, never edited in place, so a replay of the same journals reproduces it byte for byte; a fold whose journal does not hold keeps no new ledger | no — machine-local |
+| report ledger | `$XDG_STATE_HOME/mnemorph/reports/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — every race's reports but the Dark Elf's, folded from the usage witness, the gate verdicts, the challenge records and the Kijin posts' witnesses alone, each walked and held to its anchor — a journal gone while its anchor stays stops the fold ([the report fold](02-races.md#the-report-fold)): one row per report, with `ts`, the trusted time it began — `run` (gate word, first try, holes, verify lines green, dispatches landed and re-asked, passes and those overturned), `ask` (a throne landing done or reopened) or `act` (an outward act clean or rolled back) — each with the `build` of the journal row that settled it (`unstamped` where that row carries none), chained from its genesis; a pass counts as verified only on a line the human pinned. Derived: `mnemorphd meters` rebuilds it whole and puts it in place by a rename when its bytes change, never edited in place, so a replay of the same journals reproduces it byte for byte; a fold whose journal does not hold keeps no new ledger | no — machine-local |
 | board answers | `$XDG_STATE_HOME/mnemorph/answers/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each answer to the gate given on the board, taken or refused: the chat, the ask, the tab's connection, the act as shown, the digest shown and the one named, the timing since the ask and the render acknowledgement; written by the board alone, append-only and hash-chained, anchored as `answers` with the other chained journals | no — machine-local |
 | verify pins | `$XDG_STATE_HOME/mnemorph/verify/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's pinned verify lines: a `pin` row (the whole set, by the human or by relief) or a `code` row (one line an Orc coded through the harness), with `by` and `build` — each line keeps its author, so an Orc's line is no bench and its pass is the Orc's; append-only and hash-chained, anchored as `verify`; the end gate runs only these lines, and only while the card says the same ([the verify pins](03-loop.md#the-verify-pins)) | no — machine-local |
-| creatures' witness | `$XDG_STATE_HOME/mnemorph/roster/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's whole standing as of the row: its name, race (rank included), `reports_to`, post or speciality, ground with its `ground_sha256`, whether retired, the act (`relief`, `evolution`, `adopt`, `set-race`, `retire`), `by` and `build`; append-only and hash-chained, anchored as `roster` from the state directory alone. It is the roster's source of truth: every privilege reads a card only as held to its row, and the cards in the world are display-only ([the roster's trust](#the-rosters-trust)) | no — machine-local |
+| creatures' witness | `$XDG_STATE_HOME/mnemorph/roster/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each creature's whole standing as of the row: its name, race (rank included), `reports_to`, post or speciality, ground with its `ground_sha256`, whether retired, the act (`relief`, `evolution`, `adopt`, `set-race`, `retire`, `rise`, `fall`), `by` and `build`, and on a `rise` or `fall` the `proposal` it applied, its `inputs_sha256` and the `as_of` it was read at, which `mnemorphd roster replay` recomputes from the journals; append-only and hash-chained, anchored as `roster` from the state directory alone. It is the roster's source of truth: every privilege reads a card only as held to its row, and the cards in the world are display-only ([the roster's trust](#the-rosters-trust)) | no — machine-local |
 | Minds' witness | `$XDG_STATE_HOME/mnemorph/minds/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each Mind the human adopted, retired or unretired: its doc, the SHA-256 of its bytes then, its owner (on adoption) and `build`; written only by `mnemorphd mind` at the terminal, append-only and hash-chained, anchored as `minds`; a Mind loads only while its doc holds the adopted bytes | no — machine-local |
 | envelope uses and revocations | `$XDG_STATE_HOME/mnemorph/oni/uses.jsonl` and `revoked.jsonl` (else `~/.local/state/…`), one pair for every world — each act an Oni envelope admitted, counted under `uses.lock`, and each revocation; append-only and hash-chained, anchored as `uses` and `revocations` with each world's chained journals | no — machine-local |
 | chain anchors | `$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl` (else `~/.local/state/…`) — each chained journal's newest head that held, written with its `log.md` entry by `mnemorphd housekeep --verify`; every walk is held to it | no — machine-local |
@@ -1437,11 +1446,12 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | relation sightings | `$XDG_STATE_HOME/mnemorph/dimension/<world>-<fnv64a>/sightings.jsonl` (else `~/.local/state/…`) — cross-world references the harness saw a body read in a committed manifest, the other world named by id; the ledger relations are learned from, the harness's alone | no — machine-local |
 | board's list and lock | `$XDG_STATE_HOME/mnemorph/board/worlds.jsonl` (else `~/.local/state/…`) — each world the human added to the board or forgot, written only by `mnemorphd board add` and `board forget`; `board.lock`, held while a board runs, and `board.url` (`0600`), its URL with the key waiting now | no — machine-local |
 | world registry | `$XDG_STATE_HOME/mnemorph/worlds.jsonl` (else `~/.local/state/…`), one for every world — a row each time a session opens: the world's canonical path, its id `<world>-<fnv64a>`, its `origin` remote normalised (`host/owner/repo`, never a credential) and when; the board finds worlds there, and a world's row count is the session clock a learned relation's expiry reads | no — machine-local |
-| advisory mirror | `.mnemorph/intel/` — kept by `kijin-scout` | no — hundreds of MB |
+| advisory mirror | `.mnemorph/intel/osv-scanner/` — refreshed by `mnemorphd scout` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its every byte witnessed under `$XDG_STATE_HOME/mnemorph/usage/` for the tripwire, its head anchored in `log.md` and kept under `$XDG_STATE_HOME/mnemorph/anchors/` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
 | derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
+| CI runs | `.mnemorph/instruments/ci.jsonl` — each forge run as `mnemorphd ci` read it; body-writable, said as last read | no |
 
 Every index is derived and can be deleted, and is rebuilt from what it derives from; a stale index
 is rebuilt, never routed around.
@@ -1455,6 +1465,7 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `usage-witness` | the usage ledger's witness under `mnemorph/usage/`: the copy the report fold trusts | every model call of every process, before the ledger |
 | `value` | the Dark Elf's challenge records: findings, verdicts, seal proposals, waivers | the harness, under the records' lock |
 | `evolution` | the evolution ledger | the harness |
+| `proposals` | the evolution plans drawn for the human | the harness |
 | `gate` | the end gate's verdicts | every session and commission that lands |
 | `guts` | each act's guts classes | every session and commission, after each act |
 | `answers` | the human's answers to the gate given on the board, with their connection, digests and timing | the board's bridge |
@@ -1462,7 +1473,7 @@ The chained journals ([the chain](06-consumption.md#the-usage-row)), each a name
 | `verify` | the verify pins: the lines each creature's end gate may run | the human's `mnemorphd verify pin` and the terminal app's first-run prompt; the harness, for an Orc's `verify` tool and for relief |
 | `facts` | the trusted territory facts | the harness (a body's `@U territory`, a parent's labels, an Orc's settle, the one import); the human's `mnemorphd onto settle` and the board's settle |
 | `relations` | the relations this world states, and its inverses | the human's `mnemorphd onto relate`, `unrelate`, `inverse` |
-| `roster` | the creatures' witness: each creature's race and rank, chain, post or speciality, and ground | the harness, for relief and an evolution swap the human said yes to; the human's `mnemorphd roster adopt`, `set-race`, `retire` and the terminal app's first-run prompt |
+| `roster` | the creatures' witness: each creature's race and rank, chain, post or speciality, and ground | the harness, for relief and an evolution swap the human said yes to; the human's `mnemorphd roster adopt`, `set-race`, `rise`, `fall`, `retire` and the terminal app's first-run prompt |
 | `uses`, `revocations` | the Oni envelopes' uses and revocations, shared by every world | the act runner, under `uses.lock`; `mnemorphd envelope revoke` |
 | `kijin-<post>` | the post's witness; walked once kept, and for good once anchored | the act runner, under the witness's lock |
 
@@ -1622,7 +1633,10 @@ flowchart LR
     root); `mnemorphd` refuses to serve if the kernel refuses this, and `mnemorph` warns in the
     session. Every process the harness starts — commands, its own `git` calls, the guard's probe
     — gets the harness's environment without its secrets, since a running child's `environ` is
-    open to the user's other processes. The exception is an MCP server given a key by name in
+    open to the user's other processes. Git's config given in the environment
+    (`GIT_CONFIG_COUNT` with its `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`) is dropped
+    whole: a value may carry a token (`http.extraHeader`), and a count left without its keys
+    fails every git call. The exception is an MCP server given a key by name in
     its configuration: while it runs, that key is readable by the user's other processes. What
     stays open is what any process of the user may see: the list of processes and each one's
     `cmdline` and `status` — so a secret never travels on a command line. On macOS there is no
@@ -1868,6 +1882,9 @@ an empty list or table never overrides a lower layer:
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
   `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at
   once (3; 1 to 7), is the human's alone: fewer reviewers delay a review.
+  `evolution.mode`, `auto` (the default: evolution drafts, proves and swaps in a due creature on
+  trial, then keeps or rolls it back by the rule) or `propose` (every plan and every judgement
+  waits for the human), is the human's alone: `auto` lets the harness swap without asking.
   `evolution.min_net_wins`, how many more paired tasks an evolution must win than lose against
   doing nothing to be kept ([judged after the freeze](02-races.md#evolution--the-other-way-to-change);
   2, at least 1), is the human's alone too: a lower bar keeps more.

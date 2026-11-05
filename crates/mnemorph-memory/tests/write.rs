@@ -8,17 +8,21 @@ use mnemorph_memory::{Proof, Route, Status, Tier, fold, ground, propose, read};
 #[test]
 fn every_proof_is_refused_without_its_evidence() {
     assert!(
-        Proof::checked("log.md: gate PASS", 0, &["a.rs".into()]).is_err(),
+        Proof::checked("log.md: gate PASS", &[], &["a.rs".into()]).is_err(),
         "no verify line ran"
     );
     assert!(
-        Proof::checked("log.md: gate PASS", 2, &[]).is_err(),
+        Proof::checked("log.md: gate PASS", &["cargo test".into()], &[]).is_err(),
         "nothing changed"
     );
     assert_eq!(
-        Proof::checked("log.md: gate PASS", 1, &["a.rs".into()])
-            .unwrap()
-            .route(),
+        Proof::checked(
+            "log.md: gate PASS",
+            &["cargo test".into()],
+            &["a.rs".into()]
+        )
+        .unwrap()
+        .route(),
         Route::Checked
     );
     assert!(Proof::accepted("verdict", false).is_err());
@@ -81,12 +85,18 @@ fn a_claim_lands_proposed_and_a_route_grounds_it_in_both_tiers() {
     );
     let proof = Proof::checked(
         "log.md: slime-s gate PASS",
-        2,
+        &["cargo build".into(), "cargo test -p parser".into()],
         &[
             "src/parser.rs".into(),
             "src/lexer.rs".into(),
             "README.md".into(),
         ],
+    )
+    .unwrap()
+    .observes(
+        &claim.text,
+        claim.source.as_deref(),
+        Some("cargo test -p parser"),
     )
     .unwrap();
     let grounded = ground(&w, claim, &proof).unwrap();
@@ -95,11 +105,10 @@ fn a_claim_lands_proposed_and_a_route_grounds_it_in_both_tiers() {
     for n in [&mine[&grounded.note], &shared[&grounded.note]] {
         assert_eq!(n.status, Status::Grounded);
         assert!((n.confidence - 0.7).abs() < 1e-9, "a check grounds at 0.7");
-        assert!(
-            n.proof.as_deref().unwrap().starts_with(
-                "checked: log.md: slime-s gate PASS (2 verify line(s) over 3 path(s))"
-            )
-        );
+        assert!(n.proof.as_deref().unwrap().starts_with(
+            "checked: log.md: slime-s gate PASS (2 verify line(s) over 3 path(s)) — check: \
+                 `cargo test -p parser`"
+        ));
     }
     assert_eq!(shared[&grounded.note].owner.as_deref(), Some("slime-s"));
     let _ = fs::remove_dir_all(&w);
@@ -443,35 +452,72 @@ fn a_proposed_claim_is_found_again_by_its_id() {
     let _ = fs::remove_dir_all(&w);
 }
 
-/// A checked proof covers only claims about its diff: the path, a `file:line` in it, a directory
-/// above it; never a claim about another file or the world beyond, which `ground` refuses.
+/// A checked proof bears only on claims about its diff — the path, a `file:line` in it, a
+/// directory above it — that name a check that ran: the verify line, or a test it names. A claim
+/// about another file or the world beyond, naming no check, or naming one that did not run, is
+/// refused, and so is a proof bound to another claim.
 #[test]
-fn a_checked_proof_covers_only_its_diff() {
+fn a_checked_proof_bears_only_on_claims_about_its_diff_that_name_a_check_that_ran() {
     let proof = Proof::checked(
         "log.md v",
-        1,
+        &[
+            "python3 -m compileall -q src".into(),
+            "python3 -m pytest tests/test_a.py::test_empty".into(),
+        ],
         &["src/parser/mod.rs".into(), "src/a.rs".into()],
     )
     .unwrap();
-    assert!(proof.covers("src/a.rs:12 handles the empty case", None));
+    let test = Some("tests/test_a.py::test_empty");
+    let bears =
+        |text: &str, source: Option<&str>, check: Option<&str>| proof.observes(text, source, check);
+    assert!(bears("src/a.rs:12 handles the empty case", None, test).is_ok());
     assert!(
-        proof.covers("the parser in src/parser keeps fractions", None),
+        bears("the parser in src/parser keeps fractions", None, test).is_ok(),
         "a directory above"
     );
     assert!(
-        proof.covers("it keeps fractions", Some("src/a.rs")),
+        bears("it keeps fractions", Some("src/a.rs"), test).is_ok(),
         "by its source"
     );
-    assert!(!proof.covers("src/b.rs handles the empty case", None));
-    assert!(!proof.covers("the API caps at 100 a minute", None));
     assert!(
-        Proof::confirmed("the human").covers("anything at all", None),
+        bears(
+            "src/a.rs compiles",
+            None,
+            Some("python3 -m compileall -q src")
+        )
+        .is_ok(),
+        "the whole line"
+    );
+    let why = |r: Result<Proof, String>| r.unwrap_err();
+    assert!(why(bears("src/b.rs handles the empty case", None, test)).contains("names no path"));
+    assert!(why(bears("the API caps at 100 a minute", None, test)).contains("names no path"));
+    assert!(
+        why(bears("src/a.rs handles the empty case", None, None)).contains("names no check"),
+        "a passing line proves nothing the claim does not bind it to"
+    );
+    assert!(
+        why(bears(
+            "src/a.rs handles the empty case",
+            None,
+            Some("test_other")
+        ))
+        .contains("`test_other` is no verify line that ran")
+    );
+    assert!(
+        why(bears("src/a.rs handles the empty case", None, Some("-q")))
+            .contains("no verify line that ran"),
+        "a flag is no test"
+    );
+    assert!(
+        Proof::confirmed("the human")
+            .observes("anything at all", None, None)
+            .is_ok(),
         "other routes observe no diff"
     );
     let w = world_of("covers");
     let world_claim = propose(&w, "slime-s", "the API caps at 100 a minute", vec![], None).unwrap();
     let refused = ground(&w, world_claim, &proof).unwrap_err();
-    assert!(refused.to_string().contains("beyond the diff"), "{refused}");
+    assert!(refused.to_string().contains("bear on"), "{refused}");
     let diff_claim = propose(
         &w,
         "slime-s",
@@ -480,8 +526,29 @@ fn a_checked_proof_covers_only_its_diff() {
         None,
     )
     .unwrap();
-    assert!(ground(&w, diff_claim, &proof).is_ok());
+    let other = propose(&w, "slime-s", "src/a.rs:20 keeps the order", vec![], None).unwrap();
+    let bound = proof.observes(&diff_claim.text, None, test).unwrap();
+    assert!(
+        ground(&w, other, &bound).is_err(),
+        "a proof bound to one claim grounds no other"
+    );
+    assert!(ground(&w, diff_claim, &bound).is_ok());
     let _ = fs::remove_dir_all(&w);
+}
+
+#[test]
+fn a_claim_names_its_check_last() {
+    use mnemorph_memory::named_check;
+    assert_eq!(
+        named_check("src/a.rs pops check=`tests/a.py::test_pop`"),
+        ("src/a.rs pops", Some("tests/a.py::test_pop"))
+    );
+    assert_eq!(
+        named_check("src/a.rs pops check=cargo test -p a"),
+        ("src/a.rs pops", Some("cargo test -p a"))
+    );
+    assert_eq!(named_check("src/a.rs pops"), ("src/a.rs pops", None));
+    assert_eq!(named_check("src/a.rs pops check="), ("src/a.rs pops", None));
 }
 
 /// A second creature that says the same from other evidence grounds both claims, each citing the
@@ -682,4 +749,45 @@ fn an_act_on_a_note_rewritten_since_it_was_read_is_refused() {
     assert_eq!(fs::read_to_string(&tier).unwrap(), rows.join("\n") + "\n");
     assert!(wake_by(&w, "n1", "woken", &seen("n1", "retry twice")).is_ok());
     let _ = fs::remove_dir_all(&w);
+}
+
+/// Notes an evolution kept distils are put to sleep — dormant, their events kept — once each,
+/// and only the owner's live personal notes.
+#[test]
+fn distilled_notes_go_to_sleep_once() {
+    let world = world_of("distilled");
+    let w = world.as_path();
+    let a = mnemorph_memory::propose(w, "sly", "fractions stay exact", vec![], None)
+        .unwrap()
+        .note;
+    let b = mnemorph_memory::propose(w, "sly", "lex before parsing", vec![], None)
+        .unwrap()
+        .note;
+    let moved = mnemorph_memory::distilled(
+        w,
+        "sly",
+        &[a.clone(), a.clone(), "n-not-there".into()],
+        "sly-mutate-1",
+    )
+    .unwrap();
+    assert_eq!(moved, vec![a.clone()]);
+    let rows = mnemorph_memory::read(w, &mnemorph_memory::Tier::Personal("sly".into()))
+        .unwrap()
+        .rows;
+    let notes = mnemorph_memory::fold(&rows);
+    assert_eq!(notes[&a].status, mnemorph_memory::Status::Dormant);
+    assert_eq!(notes[&b].status, mnemorph_memory::Status::Proposed);
+    assert!(
+        rows.iter().any(|e| e.note == a
+            && e.proof
+                .as_deref()
+                .is_some_and(|p| p.contains("sly-mutate-1"))),
+        "the why is kept"
+    );
+    assert!(
+        mnemorph_memory::distilled(w, "sly", &[a], "again")
+            .unwrap()
+            .is_empty(),
+        "asleep already: moved once"
+    );
 }

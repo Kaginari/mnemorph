@@ -43,6 +43,8 @@ const HOSTILE_ACT: &str = "echo safe\u{202e}fr- mr\u{2066} \u{200b}\u{200d}\u{1b
 struct Fake {
     seq: u64,
     out: std::io::Stdout,
+    /// Asked to leave, it answers nothing and stays.
+    deaf: bool,
 }
 
 impl Fake {
@@ -121,6 +123,10 @@ impl Fake {
                     &json!({"text": serde_json::to_string(&env).unwrap()}),
                 );
             }
+            ["deaf"] => {
+                self.deaf = true;
+                self.event("note", &json!({"text": std::process::id().to_string()}));
+            }
             ["spawn"] => {
                 let sleeper = std::process::Command::new("sleep")
                     .arg("300")
@@ -156,6 +162,7 @@ fn fake_child() {
     let mut fake = Fake {
         seq: 0,
         out: std::io::stdout(),
+        deaf: false,
     };
     // libtest's own `test fake_child ... ` has no newline: end it, so the bridge drops it whole.
     fake.say(&json!(null));
@@ -173,6 +180,7 @@ fn fake_child() {
                 fake.say(&json!({"jsonrpc": "2.0", "id": id, "result": {"queued": false}}));
                 fake.prompt(msg["params"]["text"].as_str().unwrap_or_default());
             }
+            Some("shutdown") if fake.deaf => {}
             Some("shutdown") => {
                 fake.say(&json!({"jsonrpc": "2.0", "id": id, "result": {}}));
                 break;
@@ -188,6 +196,12 @@ fn fake_child() {
                     fake.event("turnEnded", &json!({"ending": "answered"}));
                 }
             }
+        }
+    }
+    // Deaf: its input closed, it still stays, until its group is killed.
+    if fake.deaf {
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
         }
     }
     std::process::exit(0);
@@ -1438,4 +1452,33 @@ async fn with_no_home_to_journal_in_no_allow_is_taken() {
         heard(&mut tab).await,
         "answer \"gate-1\" allow=false reason=null"
     );
+}
+
+/// A child that ignores its shutdown, its closed input and the time it was given is killed, and
+/// its chat ends, within `Limits::longest_end` — the bound `board stop` waits on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_deaf_child_ends_within_the_longest_end() {
+    let limits = Limits {
+        leave: Duration::from_millis(400),
+        ..Limits::default()
+    };
+    let bound = limits.longest_end();
+    let r = rig("deaf", limits);
+    let b = r.login().await;
+    let sid = r.start(&b).await;
+    let mut tab = r.tab(&b, &sid).await;
+    tab.role().await;
+    tab.request(1, "session/prompt", &json!({"text": "deaf"}))
+        .await;
+    let pid = tab.until(|m| note(m).is_some()).await;
+    let pid: u32 = note(pid.last().unwrap()).unwrap().parse().unwrap();
+    let began = std::time::Instant::now();
+    r.board.bridge().end_all("the board stopped").await;
+    let took = began.elapsed();
+    assert!(all_dead(&[pid]).await, "the deaf child was killed");
+    assert!(
+        took >= Duration::from_millis(400),
+        "it was given its leave: {took:?}"
+    );
+    assert!(took <= bound, "{took:?} past the bound {bound:?}");
 }

@@ -93,7 +93,7 @@ const MIN: u32 = 2;
 fn unrun(row: EvolutionRow) -> Run {
     match row {
         EvolutionRow::Run(r) => r,
-        EvolutionRow::Swap(_) => unreachable!(),
+        EvolutionRow::Swap(_) | EvolutionRow::Settle(_) => unreachable!(),
     }
 }
 

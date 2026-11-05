@@ -30,9 +30,9 @@ flowchart LR
     M12 --> M13["M13<br/>integrations"]
     M13 --> M14["M14<br/>1.0"]
     classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
-    class M0,M1,M2,M3,M4,M4a,M5,M5b,M6,M8 good
+    class D,M0,M1,M2,M3,M4,M4a,M5,M5b,M6,M8 good
     classDef doing fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
-    class D,M7 doing
+    class M7 doing
     classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
     class M11,M12,M13,M14 step
     classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:3px,stroke-dasharray:6 3,color:#3d0710
@@ -88,8 +88,8 @@ Pages 01–06, races, lessons, card prompt (this book). Then:
 - canvases reviewed like code: a tldraw document or an SVG can carry script, so
   `tools/check-canvas.mjs` refuses any script, handler, outside link or HTML in `docs/canvas/`.
 
-Open: the Oni and Arch Dark Elf card art ([#23](https://github.com/Kaginari/mnemorph/issues/23))
-and the published names ([#19](https://github.com/Kaginari/mnemorph/issues/19)).
+The human said the book is right on 2026-11-05. Open: the higher-resolution card art
+([#23](https://github.com/Kaginari/mnemorph/issues/23)).
 
 **Exit:** you say the book is right. No code before this.
 
@@ -313,7 +313,14 @@ its own ([races](02-races.md)).
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
 
-The exit is met against a stub forge; a live run remains.
+Every post's acts run today: `forge` typed, the others as gated `bash` commands, each held to its
+post. `ci`'s instrument is built (`mnemorphd ci`, read live against this repository).
+`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV).
+
+The exit is met live: on 2026-11-05 a branch was pushed and a pull request opened on this repository
+through `kijin-forge`, Claude Sonnet 5.5 through OpenRouter, with one gate prompt (#341, closed
+unmerged). The run found what the stub forge hid: an approved typed act could not read the forge's
+login in the sandbox.
 
 ### M10 — Dark Elf · M
 
@@ -370,16 +377,30 @@ includes the witness.
 
 - The value ledger and its fold into each race's signals (built: the report fold over the
   harness's trusted journals into the chained report ledger, and every race's meters from it —
-  [the report fold](02-races.md#the-report-fold); still M11's: rises and falls applied from it),
+  [the report fold](02-races.md#the-report-fold); and rises and falls proposed from it by the
+  compiled law over the 28-day window, through probation, applied only by the human's `mnemorphd
+  roster rise|fall` and replayed exactly from the journals and the witness —
+  [applying a rise or a fall](02-races.md#applying-a-rise-or-a-fall)),
   score folds per race, meters, minimum record, evolution — its trigger (stress and a full desk), split / rebirth / mutate staged and
-  proven over an overlay, the 10-run cooldown, propose mode with `evolve apply | reject`, and
+  proven over an overlay, the 10-run cooldown, proposals with `evolution apply | reject`, and
   each swap judged after the freeze — on its post-swap window against do-nothing fixtures, over
   exactly the files it named, its judgement replayed from the chained ledger (built: the
   human's `mnemorphd evolution swap` swaps in a staged plan that is exactly its named file set,
   creating no file over an existing one, and writes the swap row; every ask of its bodies a run
   row, a task in two splits held out by none; `mnemorphd evolution judge` runs the controls on
-  demand and proposes; still M11's: the trigger, the plans proven over an overlay, and `evolve
-  apply | reject`) —
+  demand and proposes; the trigger, propose only: who is due to evolve — stressed on its trusted
+  gate verdicts, its desk full — and by which arm, cooling while a swap's window is open, in
+  `mnemorph status` and `mnemorphd evolution due`; the drafter: a mutate or rebirth drafted by the
+  configured model as traits citing the desk, the doc written by the harness with its header
+  untouched, staged for the human's swap (`mnemorphd evolution draft`); every swap proven first
+  over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
+  strain and doom in the trigger once a trusted journal carries them; a split's young from
+  relief around the two parts its trouble clusters in (`mnemorphd relief <name> --around`), the
+  human's to apply; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
+  show | apply | reject`, refused when the world moved since it was drawn; and with
+  `evolution.mode = "auto"`, evolution on its own after each session: a due creature drafted,
+  proven and swapped in on trial, then kept or rolled back by the rule once its 10 runs are
+  judged against doing nothing) —
   ascension proposals, your confirmation, probation and falls, Oni envelopes — with a
   table-driven test of every compiled exclusion (destructive acts, workflow-touching pushes,
   protected deploys, unredacted or oversized text). The gate honours envelopes: an Oni's typed
@@ -388,8 +409,8 @@ includes the witness.
   (signed, expiring within `oni.envelope_days`, a use cap counted in the ledger's uses under a
   lock, revocable with `mnemorphd envelope revoke`), `suspended`, and the compiled exclusions —
   and shown to the human, in the session and in `mnemorphd envelope list`
-  ([#88](https://github.com/Kaginari/mnemorph/issues/88)). `mnemorph status` listing envelopes
-  (M6) is still to come.
+  ([#88](https://github.com/Kaginari/mnemorph/issues/88)), and in `mnemorph status`, one line per
+  envelope (built).
 - The guts classes on the act beat, the learned value's first signals (built): every act classed
   `fail`, `red-pin`, `positive`, `repeat`, `echo` or `thrash` by harness code from its structured
   outcome, journaled on its beat and in a chained, build-stamped record outside the world, counted
@@ -436,6 +457,8 @@ plainly where it does not.
 - Signed release binaries, npm distribution, installer, changelog, the decks.
 - The release path: the release-candidate smoke test, `install.sh`, the tag-only release
   workflow that drafts and never publishes, `CHANGELOG.md` ([releasing](releasing.md)).
+- `@mnemorph/protocol` and `@mnemorph/sdk` 0.1.0 are on npm, installed and imported from the
+  public registry. Still the human's: turning on signing, what the decks are, cutting 1.0.
 
 **Exit:** a fresh machine installs and runs Mnemorph in under two minutes.
 

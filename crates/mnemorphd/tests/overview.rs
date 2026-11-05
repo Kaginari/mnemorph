@@ -271,7 +271,9 @@ fn the_overview_counts_what_the_cli_counts() {
     let meters: Vec<Value> = h
         .run(&["meters", "--world", &world, "--json"])
         .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        // The overview's meters are the CLI's meters; a pending rise or fall is the bodies page's.
+        .map(|c| serde_json::json!({"creature": c["creature"], "race": c["race"], "meters": c["meters"]}))
         .collect();
 
     let (host, cookie, _) = h.serve();

@@ -485,7 +485,8 @@ async fn a_foreign_untracked_file_survives_a_cleanup_turn() {
 }
 
 /// The write rule through a commission: a Slime's `@U` claim lands personal and proposed, and
-/// its landing — a verify line over a real diff — grounds it into shared memory by **checked**;
+/// its landing — a verify line over a real diff — grounds into shared memory by **checked** the
+/// claim about the diff that names that line, and no other;
 /// a territory fact goes to the ontology, never memory.
 #[tokio::test]
 async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
@@ -507,7 +508,7 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
             order("c3", "slime-s"),
             ScriptedModel::tool("b1", "bash", json!({"command": act})),
             ScriptedModel::text(
-                "@S DONE\n@U law src/done.txt marks the work done\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
+                "@S DONE\n@U law src/done.txt marks the work done check=test -f src/done.txt\n@U law src/done.txt is written once\n@U law the parser keeps interval fractions\n@U territory src/: the parser lives here\n@E",
             ),
             // The Orc wrote nothing itself: its gate ran nothing, whatever its Slime landed.
             ScriptedModel::text("@S DONE\n@U law the orc thinks the slime was right\n@E"),
@@ -524,6 +525,7 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
         assert_eq!(
             texts,
             [
+                "src/done.txt is written once",
                 "src/done.txt marks the work done",
                 "the parser keeps interval fractions"
             ],
@@ -531,11 +533,13 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
         );
         let of = |t: &str| mine.values().find(|n| n.text == t).unwrap();
         let n = of("src/done.txt marks the work done");
-        // A check observes only its diff: a claim about the world beyond it stays proposed.
+        // A check observes only its diff: a claim about the world beyond it stays proposed; and
+        // proves only the claims that name it: one about the diff that names none stays too.
         assert_eq!(
             of("the parser keeps interval fractions").status,
             Status::Proposed
         );
+        assert_eq!(of("src/done.txt is written once").status, Status::Proposed);
         let orc = fold(&read(&w.0, &Tier::Personal("orc-o".into())).unwrap().rows);
         assert!(
             orc.values().all(|n| n.status == Status::Proposed),

@@ -19,7 +19,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd onto inverse <type> <inverse>|- [--yes] [--world <dir>]
        mnemorphd housekeep [--heal] [--world <dir>]
        mnemorphd housekeep --verify [--world <dir>]
-       mnemorphd relief <name> [--apply] [--world <dir>]
+       mnemorphd relief <name> [--around <part>,<part>] [--apply] [--world <dir>]
        mnemorphd memory status [--world <dir>] [--json]
        mnemorphd memory wake <note> [--world <dir>]
        mnemorphd memory confirm <claim> [--world <dir>]
@@ -42,6 +42,13 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--body <name>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
+       mnemorphd ci [--repo <owner/name>] [--world <dir>]
+       mnemorphd scout [--world <dir>]
+       mnemorphd evolution due [--world <dir>]
+       mnemorphd evolution draft <creature> [--world <dir>]
+       mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
+       mnemorphd evolution keep|rollback <id> [--world <dir>]
+       mnemorphd evolution auto [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
@@ -49,6 +56,8 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd roster list [--world <dir>]
        mnemorphd roster adopt [<creature>...] [--yes] [--world <dir>]
        mnemorphd roster set-race <creature> <race> [--yes] [--world <dir>]
+       mnemorphd roster rise|fall <creature> [--world <dir>]
+       mnemorphd roster replay [--world <dir>]
        mnemorphd roster retire <creature> [--yes] [--world <dir>]
        mnemorphd board [--port <n>] [--bind 127.0.0.1|::1] [--open] [--background]
        mnemorphd board add|forget <dir>
@@ -131,8 +140,11 @@ or `unavailable` where a journal it folds from does not hold. The Dark Elf's fol
 challenge records per speciality; every other race's from its reports, folded from the usage
 witness, the gate verdicts, the challenge records and the Kijin posts' witnesses under the state
 directory — never a copy in the world — and kept in the report ledger there
-(`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on: no rise or
-fall is applied.
+(`mnemorph/reports/`), rebuilt whole when the fold changes. Shown, never judged on. Each rise or
+fall the compiled law proposes, and each probation, follows with the command that applies it
+(`roster rise|fall`); none is applied here. A creature whose law reads an input no trusted journal
+carries yet (an Orc's `slimeHealth`, a Kijin's `envelopeCorrections`) is said unknown, never zero,
+and proposed nothing (`unknown` in `--json`).
 
 `usage` folds the world's usage ledger over the window (7 days unless `--window` says) — read
 from its witness under the state directory, trusted while its chain holds, else from the world's
@@ -159,7 +171,34 @@ on, each ask of its bodies (`--body`, the creature unless named) is stamped and 
 row until its window of 10 is full. `judge <id>` runs, through the configured model, the
 do-nothing control of every window run still without one — the same ask, by the same body, in a
 scratch copy of the world with the named files as they were before — then judges the swap and
-proposes keep or rollback; applying either is the human's. A body never runs it.
+proposes keep or rollback; applying either is the human's. `due` says which creatures the
+rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) with a full desk
+(more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
+window is open; it proposes only. `draft <creature>` asks the configured model to distil a due
+creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the
+doc with a `## Traits` section, its header untouched, under `.mnemorph/tmp/evolution/<id>/`,
+kept as a proposal under the state directory with the bytes drawn; it swaps nothing. A split is
+drawn by relief, not drafted: `due` names the two parts its trouble clusters in and the
+`relief <name> --around <part>,<part>` that splits it there, one part to each young. `list` shows the open proposals, `show <id>` the lines one would
+take away and bring, `apply <id>` swaps it in as `swap` does — refused when the world moved since
+it was drawn or its staging is not the bytes drawn — and `reject <id>` closes it and removes its
+staging, asked at the terminal. A swap is proven first over an overlay of the world: no new
+`onto check` finding, and every doc it writes with its verify lines pinned and passing in the
+sandbox. `keep <id>` or `rollback <id>` settles a swap — its judgement shown, asked at the
+terminal; a rollback puts its named files back as they were, only while they stand as the swap
+left them. `auto` runs one tick of evolution on its own (`evolution.mode = \"auto\"`, the
+default): a swap whose window is full judged and settled by the rule, then one due creature
+drafted, proven and swapped in on trial; the terminal app starts one after each session. A body
+never runs any of it.
+
+`ci` reads the forge's newest CI runs of the world's `origin`, or `--repo`, through the harness's
+read-only probe, writes what moved to `.mnemorph/instruments/ci.jsonl`, and shows each branch's
+state; `mnemorph status` shows it as last read. It changes nothing on the forge. A body never
+runs it.
+
+`scout` keeps the advisory mirror: each ecosystem the world's lockfiles name is fetched from OSV
+into `.mnemorph/intel/osv-scanner/`, machine-local and untracked, the layout `osv-scanner
+--offline` reads. npm's is about 220 MB. One that fails keeps what it had. A body never runs it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -194,6 +233,12 @@ as it stands. `set-race <creature> <race>` raises or lowers a race, and sets the
 line to match; `retire <creature>` retires it. `--yes` writes without the question, for a script
 the human runs; every write is refused inside a body's command and under a harness process. The
 harness writes the rest: relief, and an evolution swap the human said yes to.
+`rise <creature>` and `fall <creature>` apply the move the compiled race law proposes from the
+trusted journals — over the 28-day window, through probation — shown in full (the meters, the
+record read, every bar, the inputs' SHA-256) and asked for `y` at the terminal alone (there is no
+`--yes`); the row names the proposal and its digest, and the card's `Race` line is set to match.
+Nothing applies a proposal but this. `replay` recomputes every rise and fall row from the journals
+and the witness, and exits 1 at the first that does not reproduce.
 
 `board` serves the board — the web cockpit over every world on this machine — on loopback
 (`127.0.0.1` and `::1`, port 7878 unless `--port` names another; any other address is refused:
@@ -239,6 +284,8 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "q" => queue,
         "housekeep" => housekeep,
         "relief" => relief,
+        "ci" => ci,
+        "scout" => scout,
         "memory" => memory,
         "runs" => runs,
         "incident" => incident,
@@ -455,15 +502,35 @@ fn board_stop(args: &[String], registry: &Path) -> ExitCode {
         use mnemorph_server::board::control;
         match control::stop(dir) {
             Ok(pid) => {
-                // It stops as on Ctrl-C: its chats end, then its lock is let go.
-                for _ in 0..100 {
-                    if control::ping(dir).is_err() {
-                        break;
+                // It stops as on Ctrl-C: its socket and nonce go, its chats end, then its lock
+                // is let go — the last thing it does, so the one waited for, as long as its
+                // chats may take to end and a margin.
+                use mnemorph_server::board::{bridge::Limits, instance};
+                let within = Limits::default().longest_end() + std::time::Duration::from_secs(5);
+                let began = std::time::Instant::now();
+                loop {
+                    match instance::held(dir) {
+                        instance::Lock::Free => {
+                            println!("board stopped (pid {pid})");
+                            return ExitCode::SUCCESS;
+                        }
+                        instance::Lock::Unknown(why) => {
+                            return fail(&format!(
+                                "the board (pid {pid}) was asked to stop, but whether it did \
+                                 cannot be told: {why}"
+                            ));
+                        }
+                        instance::Lock::Held if began.elapsed() >= within => {
+                            return fail(&format!(
+                                "the board (pid {pid}) was asked to stop, but still runs after {}s",
+                                within.as_secs()
+                            ));
+                        }
+                        instance::Lock::Held => {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                println!("board stopped (pid {pid})");
-                ExitCode::SUCCESS
             }
             Err(e) => refused(&e),
         }
@@ -923,10 +990,15 @@ fn relief(args: &[String]) -> ExitCode {
     let mut world = None;
     let mut apply = false;
     let mut name = None;
+    let mut around = None;
     let mut it = args.iter();
     while let Some(w) = it.next() {
         match w.as_str() {
             "--apply" => apply = true,
+            "--around" => match it.next().and_then(|v| v.split_once(',')) {
+                Some((a, b)) => around = Some([a.to_owned(), b.to_owned()]),
+                None => return refused(&"--around needs two parts: --around <part>,<part>"),
+            },
             "--world" => match it.next() {
                 Some(v) => world = Some(PathBuf::from(v)),
                 None => return refused(&"--world needs a value"),
@@ -945,7 +1017,11 @@ fn relief(args: &[String]) -> ExitCode {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
-    match mnemorph_server::world::relief::relieve(&world, &name, apply) {
+    let relieved = match &around {
+        Some(parts) => mnemorph_server::world::relief::relieve_around(&world, &name, parts, apply),
+        None => mnemorph_server::world::relief::relieve(&world, &name, apply),
+    };
+    match relieved {
         Ok(r) => {
             let verb = if apply {
                 "done"
@@ -953,6 +1029,79 @@ fn relief(args: &[String]) -> ExitCode {
                 "would do (run with --apply)"
             };
             println!("{verb}: {}", r.line());
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `scout`: the advisory mirror refreshed. Exits 1 when an ecosystem was not, 2 on a refusal.
+fn scout(args: &[String]) -> ExitCode {
+    use mnemorph_server::config::scout;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: the mirror is the human's to refresh"
+        ));
+    }
+    let world = match args {
+        [] => None,
+        [flag, dir] if flag == "--world" => Some(PathBuf::from(dir)),
+        _ => return refused(&"scout takes --world <dir>"),
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    match scout::refresh_now(&world) {
+        Ok((said, whole)) => {
+            for l in said {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            if whole {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `ci [--repo <owner/name>]`: the forge's newest runs read into the instruments, and each
+/// branch's state. Exits 2 when the forge cannot be read, or inside a body's command.
+fn ci(args: &[String]) -> ExitCode {
+    use mnemorph_server::config::ci;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: read `{}` instead",
+            ci::INSTRUMENT
+        ));
+    }
+    let (mut world, mut repo) = (None, None);
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        let Some(v) = it.next().filter(|_| w == "--world" || w == "--repo") else {
+            return refused(&format!(
+                "`{w}`: ci takes --repo <owner/name> and --world <dir>"
+            ));
+        };
+        if w == "--world" {
+            world = Some(PathBuf::from(v));
+        } else {
+            repo = Some(v.clone());
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    match ci::refresh_now(&world, repo.as_deref()) {
+        Ok((repo, wrote)) => {
+            let safe = mnemorph_server::challenge::safe;
+            println!("{}: {wrote} run(s) moved", safe(&repo));
+            for l in ci::lines(&world) {
+                println!("{}", safe(&l));
+            }
             ExitCode::SUCCESS
         }
         Err(e) => refused(&e),
@@ -2230,6 +2379,9 @@ fn meters(args: &[String]) -> ExitCode {
     };
     let all = mnemorph_server::world::meters::of(&w, &folds, &reports);
     let safe = mnemorph_server::challenge::safe;
+    // What the compiled law proposes from the same journals: shown with the command that applies
+    // it, never applied here.
+    let survey = mnemorph_server::world::ascension::survey(&world);
     if json {
         for m in &all {
             let readings: Vec<serde_json::Value> = m
@@ -2256,9 +2408,18 @@ fn meters(args: &[String]) -> ExitCode {
                     })
                 })
                 .collect();
+            let (proposal, probation) = ascension_json(survey.as_ref().ok(), &m.name, &world);
+            let unknown = survey.as_ref().ok().and_then(|s| s.unknown_of(&m.name));
             println!(
                 "{}",
-                serde_json::json!({"creature": m.name, "race": m.race.name(), "meters": readings})
+                serde_json::json!({
+                    "creature": m.name,
+                    "race": m.race.name(),
+                    "meters": readings,
+                    "proposal": proposal,
+                    "probation": probation,
+                    "unknown": unknown,
+                })
             );
         }
         return ExitCode::SUCCESS;
@@ -2277,6 +2438,7 @@ fn meters(args: &[String]) -> ExitCode {
             println!("  {}", safe(&m.to_string()));
         }
     }
+    pending(&survey, &world);
     match kept {
         Ok(path) => println!(
             "\nreports folded from the trusted journals, kept in {}",
@@ -2288,6 +2450,50 @@ fn meters(args: &[String]) -> ExitCode {
         "shown with their count and 95% interval, never judged on; no rise or fall is applied"
     );
     ExitCode::SUCCESS
+}
+
+/// A creature's pending proposal and probation, as `meters --json` gives them; `null` for none.
+fn ascension_json(
+    survey: Option<&mnemorph_server::world::ascension::Survey>,
+    name: &str,
+    world: &Path,
+) -> (serde_json::Value, serde_json::Value) {
+    let proposal = survey.and_then(|s| s.of(name)).map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "act": p.act.word(),
+            "to": p.to.name(),
+            "endedProbation": p.ended_probation,
+            "reports": p.n,
+            "asOf": p.as_of.to_string(),
+            "inputsSha256": p.inputs_sha256,
+            "why": p.why.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "command": p.command(world),
+        })
+    });
+    let probation = survey
+        .and_then(|s| s.probation_of(name))
+        .map(|p| serde_json::json!({"reports": p.reports, "since": p.began.to_string()}));
+    (
+        proposal.unwrap_or(serde_json::Value::Null),
+        probation.unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// The rises and falls the compiled law proposes, as `meters` says them, escaped, with each input
+/// it cannot read; nothing when none is pending and every input is known.
+fn pending(survey: &Result<mnemorph_server::world::ascension::Survey, String>, world: &Path) {
+    let safe = mnemorph_server::challenge::safe;
+    match survey {
+        Ok(s) if s.proposals.is_empty() && s.probation.is_empty() && s.unknown.is_empty() => {}
+        Ok(s) => {
+            println!("\nproposed by the compiled law — nothing changes until the human applies it");
+            for line in mnemorph_server::world::ascension::lines_of(s, world) {
+                println!("  {}", safe(&line));
+            }
+        }
+        Err(why) => println!("\nrises and falls unavailable: {}", safe(why)),
+    }
 }
 
 /// Dollars as `usage` says them: `$0.4200`, `$0.4200 (2 unpriced)`, or `unpriced (2 calls)` when
@@ -2597,7 +2803,199 @@ fn evolution(args: &[String]) -> ExitCode {
             swap_in(&world, &plan)
         }
         [verb, id] if verb == "judge" => judge_swap(&world, id),
-        _ => refused(&"evolution needs a verb: swap <id> or judge <id>; see --help"),
+        [verb, name] if verb == "draft" => draft_evolution(&world, name),
+        [verb] if verb == "due" => evolution_due(&world),
+        [verb] if verb == "list" => list_proposals(&world),
+        [verb, id] if verb == "show" => show_proposal(&world, id),
+        [verb, id] if verb == "apply" => apply_proposal(&world, id),
+        [verb, id] if verb == "reject" => reject_proposal(&world, id),
+        [verb, id] if verb == "keep" || verb == "rollback" => settle_swap(&world, id, verb),
+        [verb] if verb == "auto" => evolve_auto(&world),
+        _ => refused(
+            &"evolution needs a verb: due, draft <creature>, list, show <id>, apply <id>, \
+              reject <id>, swap <id>, judge <id>, keep <id>, rollback <id> or auto; see --help",
+        ),
+    }
+}
+
+/// `evolution draft <creature>`: a due creature's evolution drafted by the configured model and
+/// staged for the human; nothing is swapped.
+fn draft_evolution(world: &Path, name: &str) -> ExitCode {
+    let safe = mnemorph_server::challenge::safe;
+    match mnemorph_server::draft::draft_now(world, name, &|v| std::env::var(v).ok()) {
+        Ok(d) => {
+            println!(
+                "drafted `{}`: {} trait(s) for {}, staged at {}",
+                safe(&d.id),
+                d.traits.len(),
+                safe(&d.creature),
+                safe(&d.staged.display().to_string())
+            );
+            for t in &d.traits {
+                println!("  - {} (from {})", safe(&t.text), safe(&t.from.join(", ")));
+            }
+            println!(
+                "nothing is swapped: `mnemorphd evolution show {}` shows what it changes, then:",
+                safe(&d.id)
+            );
+            println!("  {}", safe(&d.apply_command()));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution list`: every open proposal, and whether it applies as it stands.
+fn list_proposals(world: &Path) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::open(world) {
+        Ok(open) => {
+            if open.is_empty() {
+                println!("no open proposal: `mnemorphd evolution draft <creature>` draws one");
+            }
+            for l in proposals::lines(world, &open) {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution show <id>`: what applying the proposal would change, line by line.
+fn show_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    match proposals::get(world, id).and_then(|p| proposals::show(world, &p)) {
+        Ok(lines) => {
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution apply <id>`: the proposal held to the bytes drawn and the world it was drawn
+/// against, then proven, asked and swapped in as `swap` does; closed once swapped.
+fn apply_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::{evolution::Plan, proposals};
+    let p = match proposals::get(world, id) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    let files = match proposals::ready(world, &p) {
+        Ok(f) => f,
+        Err(e) => return refused(&e),
+    };
+    let plan = Plan {
+        id: p.id.clone(),
+        creature: p.creature.clone(),
+        bodies: vec![p.creature.clone()],
+        arm: p.arm,
+        files,
+        proven_on: Vec::new(),
+    };
+    let code = swap_in(world, &plan);
+    if code == ExitCode::SUCCESS
+        && let Err(e) = proposals::close(world, id, "applied")
+    {
+        let _ = writeln!(
+            std::io::stderr(),
+            "mnemorphd: swapped, but the proposal could not be closed: {e}"
+        );
+    }
+    code
+}
+
+/// `evolution reject <id>`: the proposal closed and its staging removed, asked at the terminal.
+fn reject_proposal(world: &Path, id: &str) -> ExitCode {
+    use mnemorph_server::world::proposals;
+    if let Err(e) = proposals::get(world, id) {
+        return refused(&e);
+    }
+    match at_terminal(&format!("reject {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was rejected"),
+        Err(e) => return refused(&e),
+    }
+    match proposals::close(world, id, "rejected") {
+        Ok(()) => {
+            println!("rejected {}", mnemorph_server::challenge::safe(id));
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution auto`: one tick of evolution on its own — a full window judged and settled by the
+/// rule, one due creature drafted, proven and swapped in — under a lock, so two never run at once.
+fn evolve_auto(world: &Path) -> ExitCode {
+    let say = |l: &str| println!("{}", mnemorph_server::challenge::safe(l));
+    match mnemorph_server::auto::tick_now(world, &|v| std::env::var(v).ok(), &say) {
+        Ok(lines) => {
+            if lines.is_empty() {
+                println!("nothing to evolve or settle");
+            }
+            for l in lines {
+                say(&l);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution keep|rollback <id>`: the human settles a swap, its judgement shown first, asked at
+/// the terminal. A rollback puts its named files back as they were before it.
+fn settle_swap(world: &Path, id: &str, verb: &str) -> ExitCode {
+    use mnemorph_server::world::evolution::{self, Settled};
+    let outcome = if verb == "keep" {
+        Settled::Keep
+    } else {
+        Settled::Rollback
+    };
+    let min = mnemorph_server::Config::load(&mnemorph_server::Paths::resolve(world))
+        .map_or(2, |c| c.evolution_min_net_wins());
+    match evolution::judge(world, id, min) {
+        Ok(j) => println!(
+            "swap {id}, as judged now:\n{}",
+            mnemorph_server::challenge::safe(&j.to_string())
+        ),
+        Err(e) => return refused(&format!("the ledger cannot be read: {e}")),
+    }
+    match at_terminal(&format!("{verb} {id}?")) {
+        Ok(true) => {}
+        Ok(false) => return refused(&"nothing was settled"),
+        Err(e) => return refused(&e),
+    }
+    match evolution::settle(world, id, outcome, "human", "the human's word") {
+        Ok(t) => {
+            println!(
+                "settled {}: {}",
+                mnemorph_server::challenge::safe(&t.id),
+                t.outcome.word()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `evolution due`: who the rules find due to evolve, by which arm, and who cools.
+fn evolution_due(world: &Path) -> ExitCode {
+    match mnemorph_server::world::evolve::survey(world) {
+        Ok(s) => {
+            let lines = mnemorph_server::world::evolve::lines_of(&s);
+            if lines.is_empty() {
+                println!("no creature is due to evolve");
+            }
+            for l in lines {
+                println!("{}", mnemorph_server::challenge::safe(&l));
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => refused(&e),
     }
 }
 
@@ -2892,6 +3290,23 @@ fn swap_in(world: &Path, plan: &mnemorph_server::world::evolution::Plan) -> Exit
             println!("  {}", safe(&line));
         }
     }
+    // Proven before asked: the plan over an overlay of the world, never the world.
+    let tracked = mnemorph_server::tracked(world).unwrap_or_default();
+    match mnemorph_server::prove::prove_now(world, plan, &tracked) {
+        Ok(lines) => {
+            println!("proven over an overlay of the world:");
+            for l in lines {
+                println!("  {}", safe(&l));
+            }
+        }
+        Err(why) => {
+            println!("not proven over an overlay of the world:");
+            for w in why {
+                println!("  {}", safe(&w));
+            }
+            return refused(&"the plan is not proven: nothing was swapped");
+        }
+    }
     match at_terminal(&format!("swap {} in?", plan.id)) {
         Ok(true) => {}
         Ok(false) => return refused(&"nothing was swapped"),
@@ -2951,7 +3366,11 @@ fn judge_swap(world: &Path, id: &str) -> ExitCode {
             };
             println!("{}", safe(&j.judgement.to_string()));
             if let Some(w) = proposal {
-                println!("proposed to the human: {w} — nothing changes until the human applies it");
+                println!(
+                    "proposed to the human: {w} — nothing changes until the human applies it: \
+                     `mnemorphd evolution {w} {}`",
+                    safe(id)
+                );
             }
             code
         }

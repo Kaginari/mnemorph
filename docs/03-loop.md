@@ -395,7 +395,9 @@ The world repairs itself in small, mechanical steps, each one written to the led
   its open queue orders are named, to re-route.
   Every check runs before any write, and a failed write is undone. The
   human can act it with `mnemorphd relief <name> [--apply]` — without `--apply` it says what it
-  would do; never from a body's command.
+  would do; never from a body's command. `--around <part>,<part>` splits it around two parts of
+  its ground — one to each young, the rest shared out evenly — as evolution's trigger names them
+  where its trouble clusters.
 - **A clock death leaves a memo**: a court killed by its deadline gets its one salvage turn, then
   its lane goes into the instruments as a `death` row (`.mnemorph/instruments/deaths.jsonl`, with
   the body named next) and the next-fit lane is suggested on the wire, as a hole — the living

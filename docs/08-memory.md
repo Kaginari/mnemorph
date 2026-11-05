@@ -162,9 +162,17 @@ $\sigma(\tau)$ is the claim's strength ([the claim graph](#the-claim-graph)), wi
 $w_\sigma = 0.10$.
 
 $\widehat{\mathrm{bm25}} = \mathrm{bm25} / (\mathrm{bm25} + c)$ saturates into $[0,1)$ without
-looking at the other hits, so a poor best match stays a poor score. $c$ is a config constant
-with a default, set against the recall fixtures; raw BM25 grows with the query's length, so $c$
-is kept per query length in content words (1, 2–3, 4 and more).
+looking at the other hits, so a poor best match stays a poor score. Raw BM25 grows with the
+query's length, so $c$ starts per query length in content words (1, 2–3, 4 and more), and its idf
+grows with the corpus, so $c$ grows with the $N$ notes weighed:
+$c(q, N) = c_q\,(1 + g\,(\sqrt{N} - 1))$, with $c_q$ = 0.5, 1.0, 1.5 and $g = 1.6$. A lone note
+is judged by $c_q$ alone. Fitted against 101 notes that real bench runs wrote
+(`crates/mnemorph-memory/tests/fixtures/bench-recall.json`, `examples/fit_saturation.rs`): each
+task's ask as the query, its own notes as what it should find. With a fixed $c$, a long query's F1
+fell from 0.94 over one note to 0.03 over 101, nearly every note clearing the floor; the best
+$c$ at each size follows $\sqrt{N}$. The cost: a few notes that all share one topic tell each other
+apart by little, so only the strongest clear the floor. One model, small tasks, a note's task as its only label: refit
+when a campaign leaves more.
 
 $\mathrm{rel}(\tau)$ is Mnemorph's own term, the relation lesson made a number: 1.0 for the
 body's own creature, 0.6 for its race, 0.3 for any other shared note, 0.1 for the episodic log.
@@ -180,9 +188,10 @@ at all). All of them live in config, never in a prompt, and are tuned against th
 fixtures: `recall.meaning`, `recall.relation`, `recall.salience`, `recall.confidence`,
 `recall.freshness`, `recall.dissent`, `recall.strength`, `recall.half_life_days`, `recall.floor`, and BM25's
 saturations by query length, `recall.saturation_short` (one content word), `recall.saturation_mid`
-(two or three) and `recall.saturation_long` (four and more); a key left unset keeps the value
-above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
-the floor above 0 and at most 1, the saturations and the half-life above 0 — anything else, an
+(two or three) and `recall.saturation_long` (four and more), and `recall.saturation_growth`; a
+key left unset keeps the value above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
+the floor above 0 and at most 1, the saturations and the half-life above 0, the growth 0 or more
+(0 keeps $c$ fixed) — anything else, an
 infinity included, is an error naming its file.
 
 ### Two scopes, two standings
@@ -204,7 +213,7 @@ by exactly one of:
 
 | Route | Proof | For |
 |---|---|---|
-| **checked** | the end gate passed *and* ran at least one verify line over a non-empty diff | work that wrote files |
+| **checked** | the end gate passed, ran at least one verify line over a non-empty diff, *and* the claim names a path that diff changed and the check that tests it (`check=<verify line or test>`), which ran in that gate | work that wrote files |
 | **accepted** | the commissioner's verdict names the claim and accepts it (the verdict-current) | research, reads, reviews — work with nothing to test |
 | **corroborated** | a second creature lands a matching claim from different evidence anchors | anything, including failed runs |
 | **confirmed** | the human says so: `mnemorphd memory confirm <claim>` | anything |
@@ -334,9 +343,22 @@ route at all. A **checked** proof carries what its diff changed, and grounds onl
 one of those paths or the directories above them (by its specific terms: `src/a.rs:12` names
 `src/a.rs`, a path names its file); a diff of only files every project has (`Cargo.toml`,
 `README.md`) observes none;
-any other claim of the landing stays proposed, offered for the commissioner to accept. A
-commissioned body is asked to name the file a claim is about (`@U law <path> <fact>`), and the
-drain asks the same, so a claim about the work can be proven by the work's own tests. `memory
+any other claim of the landing stays proposed, offered for the commissioner to accept.
+
+A passing line proves only what it runs: a compile check that passed says nothing of what `pop`
+does. So a claim also names its check, last: `@U law src/stack.py pop on an empty stack raises
+IndexError check=tests/test_stack.py::test_pop_empty`. The check is a verify line that ran in
+this gate, whole, or a test one of them names (one of its words after the program, never a flag),
+and the grounded note cites it: its proof ends `` — check: `python3 -m pytest
+tests/test_stack.py::test_pop_empty` ``. A claim that names
+no check, or one that did not run, stays proposed, and the report says why
+(`[memory: … ; 1 not checked: it names no check (…)]`); **accepted**, **corroborated** and
+**confirmed** still promote it. What **checked** proves is therefore narrow: the body bound the claim
+to a check, and that check, written before the turn, passed over the claim's own diff — not that
+the check exercises every word of the claim. A commissioned body and a body answering the human
+are asked to name the file a claim is about and its check
+(`@U law <path> <fact> check=<verify line or test>`); the drain asks for the file, so a claim about the work can be proven by the work's
+own tests. `memory
 status` opens with how much of the world's memory stands — shared and grounded, personal and
 proposed — the first number to read after a run, since only shared notes reach other bodies.
 
@@ -372,6 +394,11 @@ that `FAIL`: a check that wrote, or one that gave no result, says nothing of wha
   recalled — once two distinct attributable failures outnumber the passing asks that cited it, all
   counted since it was last grounded. Both copies of a grounded note, the creature's and the
   shared one, move together. A shared note whose owner's memory is frozen is left for the human.
+- **Distilled** (`distilled`). When an evolution whose traits cite a creature's desk notes is kept
+  ([evolution](02-races.md#evolution--the-other-way-to-change)), those notes go to sleep —
+  dormant, their events kept, no longer recalled — with why: the evolution that distils them.
+  The trait in the creature's doc carries them now. Only the owner's live personal notes move,
+  each once; a frozen memory moves none.
 
 With equal recency and the default weights, its prior over an ordinary grounded note is
 

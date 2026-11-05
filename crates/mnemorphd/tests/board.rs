@@ -449,6 +449,62 @@ mod autostart {
         );
     }
 
+    /// A board whose chat ignores its shutdown lets go of its lock only once that chat's child is
+    /// killed — past one `leave`, up to `Limits::longest_end`. `board stop` waits for it and
+    /// says it stopped, never that a board stopping correctly still runs. The board is faked: it
+    /// answers `stop` as a board does, then keeps its lock a `leave` and two seconds more.
+    #[test]
+    fn board_stop_waits_out_a_chat_that_ignores_its_shutdown() {
+        use std::io::{BufRead as _, BufReader, Write as _};
+        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+        use std::os::unix::net::UnixListener;
+
+        use mnemorph_server::board::bridge::Limits;
+
+        let h = Home::new("stop-deaf");
+        let dir = state(&h);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let private = |name: &str| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(dir.join(name))
+                .unwrap()
+        };
+        let nonce = "ab".repeat(32);
+        private(control::NONCE).write_all(nonce.as_bytes()).unwrap();
+        let lock = private("board.lock");
+        lock.lock().unwrap();
+        let listener = UnixListener::bind(control::socket(&dir)).unwrap();
+        let hold = Limits::default().leave + Duration::from_secs(2);
+        let pid = std::process::id();
+        let board = {
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                let (mut s, _) = listener.accept().unwrap();
+                let mut line = String::new();
+                BufReader::new(&s).read_line(&mut line).unwrap();
+                assert_eq!(line, format!("{nonce} stop\n"));
+                s.write_all(format!("stopping {pid}\n").as_bytes()).unwrap();
+                drop(s);
+                // Its socket and nonce go first; its chats end; its lock is let go last.
+                std::fs::remove_file(control::socket(&dir)).unwrap();
+                std::fs::remove_file(dir.join(control::NONCE)).unwrap();
+                std::thread::sleep(hold);
+                drop(lock);
+            })
+        };
+        let began = Instant::now();
+        let (code, out, err) = h.run(&["board", "stop"], None);
+        board.join().unwrap();
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out.trim(), format!("board stopped (pid {pid})"));
+        assert!(began.elapsed() >= hold, "it waited for the lock");
+    }
+
     #[test]
     fn board_stop_stops_only_this_users_board_under_this_state_directory() {
         let a = Home::new("stop-a");

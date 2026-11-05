@@ -584,6 +584,64 @@ pub fn guts(world: &std::path::Path) -> Vec<String> {
     vec![format!("{:<9}{}", "guts", one_line(&line))]
 }
 
+/// `status`'s envelopes: one line per Oni envelope signed for the world — its name, whether it is
+/// in force, its dates and uses — and any reason none is honoured; the patterns each allows and
+/// its uses are `mnemorphd envelope list`'s.
+#[must_use]
+pub fn envelopes(world: &std::path::Path) -> Vec<String> {
+    let lines = mnemorph_server::envelope::list(world).unwrap_or_else(|why| vec![why]);
+    lines
+        .iter()
+        .filter(|l| !l.starts_with(' '))
+        .map(|l| format!("{:<9}{}", "envelope", one_line(l)))
+        .collect()
+}
+
+/// `status`'s evolutions: each creature due to evolve — stressed, its desk full — with the arm the
+/// rules pick and why, each cooling while its swap's window is open, and each proposal waiting for
+/// the human; proposed only. Nothing when none is; one line saying why when they cannot be read.
+#[must_use]
+pub fn evolve(world: &std::path::Path) -> Vec<String> {
+    use mnemorph_server::world::{evolve, proposals};
+    let mut lines = match evolve::survey(world) {
+        Ok(s) => evolve::lines_of(&s),
+        Err(why) => vec![format!("evolutions unavailable — {why}")],
+    };
+    // The plans drawn and waiting for the human; with no home, none can have been drawn.
+    match proposals::open(world) {
+        Ok(open) => lines.extend(
+            proposals::lines(world, &open)
+                .into_iter()
+                .map(|l| format!("proposal {l}")),
+        ),
+        Err(why) if why.starts_with("no home") => {}
+        Err(why) => lines.push(format!("proposals unavailable — {why}")),
+    }
+    lines
+        .iter()
+        .map(|l| format!("{:<9}{}", "evolve", one_line(l)))
+        .collect()
+}
+
+/// `status`'s advisory mirror: each ecosystem, its age, as `mnemorphd scout` last fetched it.
+#[must_use]
+pub fn scout(world: &std::path::Path) -> Vec<String> {
+    mnemorph_server::config::scout::lines(world)
+        .iter()
+        .map(|l| format!("{:<9}{}", "scout", one_line(l)))
+        .collect()
+}
+
+/// `status`'s CI: each branch's newest run as `mnemorphd ci` last read it. Nothing until it has;
+/// the forge is not reached.
+#[must_use]
+pub fn ci(world: &std::path::Path) -> Vec<String> {
+    mnemorph_server::config::ci::lines(world)
+        .iter()
+        .map(|l| format!("{:<9}{}", "ci", one_line(l)))
+        .collect()
+}
+
 /// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
 /// an unadopted Mind needs; nothing when the world holds none.
 #[must_use]
@@ -596,7 +654,8 @@ pub fn minds(world: &std::path::Path) -> Vec<String> {
 }
 
 /// `status`'s meters: one compact line per living creature, each meter with its count and its 95%
-/// interval, or `no reports` where no fold reads it yet.
+/// interval, or `no reports` where no fold reads it yet; then each rise or fall the compiled law
+/// proposes, with the command that applies it, and each probation.
 #[must_use]
 pub fn meters(world: &std::path::Path) -> Vec<String> {
     let all = mnemorph_server::world::meters::read(world);
@@ -607,6 +666,15 @@ pub fn meters(world: &std::path::Path) -> Vec<String> {
         .iter()
         .map(|m| format!("{:<9}{}", "meters", one_line(&m.to_string())))
         .collect();
+    // Only proposals, probations and unknown inputs are said: a survey with none, or one the
+    // fold cannot read (the meters above say why), adds nothing.
+    if let Ok(s) = mnemorph_server::world::ascension::survey(world) {
+        lines.extend(
+            mnemorph_server::world::ascension::lines_of(&s, world)
+                .iter()
+                .map(|l| format!("{:<9}{}", "ascend", one_line(l))),
+        );
+    }
     lines.extend(
         mnemorph_server::world::evolution::stale(world)
             .iter()

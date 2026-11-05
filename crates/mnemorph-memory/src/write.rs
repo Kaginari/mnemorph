@@ -78,22 +78,52 @@ impl Route {
 pub struct Proof {
     route: Route,
     cites: String,
-    /// What a **checked** proof observed: the specific terms of the paths its diff changed. A
-    /// claim naming none of them is about the world beyond the diff, which a green gate passes as
-    /// easily wrong as right. `None` for the routes that observe no diff.
-    scope: Option<std::collections::BTreeSet<String>>,
+    /// What a **checked** proof observed: its diff and the verify lines that ran over it. `None`
+    /// for the routes that observe no diff.
+    scope: Option<Scope>,
+    /// The claim a **checked** proof was found to bear on ([`Proof::observes`]): the only one it
+    /// grounds.
+    bound: Option<String>,
+}
+
+/// What a **checked** proof observed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Scope {
+    /// The specific terms of the paths its diff changed. A claim naming none of them is about the
+    /// world beyond the diff, which a green gate passes as easily wrong as right.
+    terms: std::collections::BTreeSet<String>,
+    /// The verify lines that ran and passed over it: a claim is proven only by the one it names.
+    lines: Vec<String>,
+}
+
+/// A claim's text and the check it names: everything after its last ` check=`, a verify line or
+/// a test it runs, backticks dropped. `None` when it names none.
+#[must_use]
+pub fn named_check(text: &str) -> (&str, Option<&str>) {
+    match text.rsplit_once(" check=") {
+        Some((claim, check)) => {
+            let check = check.trim().trim_matches('`').trim();
+            if check.is_empty() {
+                (claim.trim_end(), None)
+            } else {
+                (claim.trim_end(), Some(check))
+            }
+        }
+        None => (text, None),
+    }
 }
 
 impl Proof {
-    /// **checked**: the end gate passed, citing its verdict, and ran `verify_lines` over a diff of
-    /// `changed` paths. An answer that changed nothing, or a gate with no verify line, proves
-    /// nothing of its claims.
+    /// **checked**: the end gate passed, citing its verdict, and ran the verify `lines` over a
+    /// diff of `changed` paths. An answer that changed nothing, or a gate with no verify line,
+    /// proves nothing of its claims; and a line proves only the claims that name it
+    /// ([`Proof::observes`]).
     ///
     /// # Errors
     ///
     /// No verify line ran, or the diff was empty.
-    pub fn checked(verdict: &str, verify_lines: usize, changed: &[String]) -> Result<Self, String> {
-        if verify_lines == 0 {
+    pub fn checked(verdict: &str, lines: &[String], changed: &[String]) -> Result<Self, String> {
+        if lines.is_empty() {
             return Err("no verify line ran: the gate proved nothing of the claims".into());
         }
         if changed.is_empty() {
@@ -102,11 +132,12 @@ impl Proof {
         Ok(Self {
             route: Route::Checked,
             cites: format!(
-                "{verdict} ({verify_lines} verify line(s) over {} path(s))",
+                "{verdict} ({} verify line(s) over {} path(s))",
+                lines.len(),
                 changed.len()
             ),
-            scope: Some(
-                changed
+            scope: Some(Scope {
+                terms: changed
                     .iter()
                     .flat_map(|p| {
                         // The path, and each directory above it: `src/parser/mod.rs` is in
@@ -119,23 +150,56 @@ impl Proof {
                         crate::text::specific_terms(p).into_iter().chain(dirs)
                     })
                     .collect(),
-            ),
+                lines: lines.to_vec(),
+            }),
+            bound: None,
         })
     }
 
-    /// Whether this proof observes a claim saying `text`, pointing at `source`: always for a route
-    /// that observes no diff; for **checked**, only when the claim names a path its diff changed —
-    /// a claim about the world beyond the diff needs another route.
-    #[must_use]
-    pub fn covers(&self, text: &str, source: Option<&str>) -> bool {
+    /// This proof as it bears on one claim saying `text`, pointing at `source`, naming the
+    /// verify line or test `check` ([`named_check`]): itself for a route that observes no diff.
+    /// A **checked** proof bears on a claim only when the claim names a path its diff changed —
+    /// one about the world beyond the diff needs another route — and names a check that ran in
+    /// this gate: the verify line itself, or a test it names (one of its words after the
+    /// program, not a flag). A compile check passing proves nothing of what `pop` does. The
+    /// proof returned cites the line.
+    ///
+    /// # Errors
+    ///
+    /// Why it does not bear on the claim, said for the report.
+    pub fn observes(
+        &self,
+        text: &str,
+        source: Option<&str>,
+        check: Option<&str>,
+    ) -> Result<Self, String> {
         let Some(scope) = &self.scope else {
-            return true;
+            return Ok(self.clone());
         };
         let mut named = crate::text::specific_terms(text);
         if let Some(s) = source {
             named.extend(crate::text::specific_terms(s));
         }
-        named.iter().any(|t| scope.contains(t))
+        if !named.iter().any(|t| scope.terms.contains(t)) {
+            return Err("it names no path the diff changed".into());
+        }
+        let Some(check) = check else {
+            return Err("it names no check (`check=<verify line or test>`)".into());
+        };
+        let Some(line) = scope.lines.iter().find(|l| {
+            l.trim() == check
+                || l.split_whitespace()
+                    .skip(1)
+                    .any(|w| w == check && !w.starts_with('-'))
+        }) else {
+            return Err(format!("its check `{check}` is no verify line that ran"));
+        };
+        Ok(Self {
+            route: self.route,
+            cites: format!("{} — check: `{line}`", self.cites),
+            scope: self.scope.clone(),
+            bound: Some(text.to_owned()),
+        })
     }
 
     /// **accepted**: the commissioner's verdict, cited, names the claim and accepts it.
@@ -151,6 +215,7 @@ impl Proof {
             route: Route::Accepted,
             cites: verdict.to_owned(),
             scope: None,
+            bound: None,
         })
     }
 
@@ -180,6 +245,7 @@ impl Proof {
             route: Route::Corroborated,
             cites: format!("{second}: {}", theirs.join(", ")),
             scope: None,
+            bound: None,
         })
     }
 
@@ -190,6 +256,7 @@ impl Proof {
             route: Route::Confirmed,
             cites: answer.to_owned(),
             scope: None,
+            bound: None,
         }
     }
 
@@ -300,10 +367,10 @@ pub fn ground(
     proof: &Proof,
 ) -> std::io::Result<Claim<Grounded>> {
     crate::audit::unfrozen(world, &claim.owner)?;
-    if !proof.covers(&claim.text, claim.source.as_deref()) {
+    if proof.scope.is_some() && proof.bound.as_deref() != Some(claim.text.as_str()) {
         return Err(std::io::Error::other(
-            "the claim names nothing the checked diff changed: it is about the world beyond the \
-             diff, and needs accepted, corroborated or confirmed",
+            "a checked proof grounds only a claim it was found to bear on (`Proof::observes`): \
+             one naming a path its diff changed and a check that ran",
         ));
     }
     let cites = format!("{}: {}", proof.route.word(), proof.cites);
@@ -802,6 +869,46 @@ pub fn retire(
 pub fn wake(world: &Path, id: &str) -> std::io::Result<Vec<String>> {
     let text = retired_note(world, id)?.unwrap_or_default();
     wake_by(world, id, "woken by the human", &seen(id, &text))
+}
+
+/// The notes on `owner`'s desk that an evolution kept distilled into traits, put to sleep:
+/// dormant, their events kept, no longer recalled nor counted on the desk, each with why — the
+/// traits carry them now. Only `owner`'s live personal notes move; the ids moved come back.
+///
+/// # Errors
+///
+/// `owner`'s memory is frozen ([`crate::unfrozen`]), or its note file cannot be read or written.
+pub fn distilled(
+    world: &Path,
+    owner: &str,
+    ids: &[String],
+    swap: &str,
+) -> std::io::Result<Vec<String>> {
+    crate::audit::unfrozen(world, owner)?;
+    let tier = Tier::Personal(owner.to_owned());
+    let notes = crate::note::fold(&crate::store::read(world, &tier)?.rows);
+    let mut out = Vec::new();
+    for id in ids {
+        let live = notes
+            .get(id)
+            .is_some_and(|n| matches!(n.status, Status::Proposed | Status::Grounded));
+        if live && !out.contains(id) {
+            append(
+                world,
+                &tier,
+                id,
+                By::Record,
+                Some(format!(
+                    "distilled into a trait by evolution `{swap}`, kept"
+                )),
+                Change::Status {
+                    status: Status::Dormant,
+                },
+            )?;
+            out.push(id.clone());
+        }
+    }
+    Ok(out)
 }
 
 /// The text of the note `id` as the gate retired it, from the first tier that holds it retired —

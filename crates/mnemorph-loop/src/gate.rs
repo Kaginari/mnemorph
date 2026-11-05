@@ -314,8 +314,9 @@ pub struct GateVerdict {
     /// Whose pins the lines that ran are ([`EndGate::sources`]): a pass on an Orc's lines alone is
     /// that Orc's check, not the human's.
     pub verified_by: Vec<String>,
-    /// How many verify lines ran over the change: none when nothing changed.
-    pub ran: usize,
+    /// The verify lines that ran over the change, as pinned: none when nothing changed. A
+    /// **checked** proof cites the one a claim names.
+    pub ran: Vec<String>,
 }
 
 /// The gate's word on a landing: three, never more.
@@ -346,7 +347,7 @@ impl GateVerdict {
     /// the baseline, but it was checked by nothing, and is never counted as verified.
     #[must_use]
     pub fn unchecked(&self) -> bool {
-        !self.unpinned && self.ran == 0 && !self.changed.is_empty()
+        !self.unpinned && self.ran.is_empty() && !self.changed.is_empty()
     }
 
     /// The gate passed: every check ran and held.
@@ -433,7 +434,7 @@ impl EndGate {
                 wrote: false,
                 unpinned: false,
                 verified_by: Vec::new(),
-                ran: 0,
+                ran: Vec::new(),
             };
         }
         if answer.trim().is_empty() {
@@ -464,8 +465,19 @@ impl EndGate {
             wrote,
             unpinned,
             verified_by: self.sources(),
-            ran: self.verify.len(),
+            ran: self.verify.clone(),
         }
+    }
+
+    /// The verify lines run over `cx`'s world as it stands, no change judged — a plan's proof
+    /// over its overlay: every line that failed, gave no result, wrote to the tree or no pin
+    /// holds. Empty when every line ran and held.
+    pub fn run_alone(&self, tools: &[Box<dyn Tool>], cx: &mut Context) -> Vec<String> {
+        let mut unverified = self.held.clone();
+        let now = snapshot(cx.world());
+        let (mut failures, _) = self.run_verify(tools, cx, &now, &mut unverified);
+        failures.extend(unverified);
+        failures
     }
 
     /// Run the verify lines. A check never writes: what a verify run changes in the tree — beyond

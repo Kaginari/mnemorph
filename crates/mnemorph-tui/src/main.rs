@@ -169,6 +169,18 @@ fn status(world: Option<PathBuf>) -> ExitCode {
             for line in headless::guts(&world) {
                 println!("{line}");
             }
+            for line in headless::envelopes(&world) {
+                println!("{line}");
+            }
+            for line in headless::evolve(&world) {
+                println!("{line}");
+            }
+            for line in headless::ci(&world) {
+                println!("{line}");
+            }
+            for line in headless::scout(&world) {
+                println!("{line}");
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -191,6 +203,18 @@ fn status(world: Option<PathBuf>) -> ExitCode {
                 println!("{line}");
             }
             for line in headless::guts(&world) {
+                println!("{line}");
+            }
+            for line in headless::envelopes(&world) {
+                println!("{line}");
+            }
+            for line in headless::evolve(&world) {
+                println!("{line}");
+            }
+            for line in headless::ci(&world) {
+                println!("{line}");
+            }
+            for line in headless::scout(&world) {
                 println!("{line}");
             }
             ExitCode::FAILURE
@@ -279,6 +303,11 @@ fn chat(
     board(&world, &tx);
     let result = run(model, &host, tx, &rx);
     host.stop();
+    // The session's runs fill evolution's windows: one tick after it, in the background.
+    #[cfg(unix)]
+    if let Some(line) = mnemorph_server::board::autostart::evolve_after(&world) {
+        eprintln!("mnemorph: {}", mnemorph_tui::safe::one_line(&line));
+    }
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&format!("the terminal: {e}"), 1),

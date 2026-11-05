@@ -52,7 +52,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 ### M11 — Value, evolution, ascension
 
 - Oni envelopes: signed, expiring, capped, revocable, and honoured by the gate [#108] [#110]
-  [#118] [#262].
+  [#118] [#262]; each listed in `mnemorph status`, one line with its state, dates and uses.
 - Meters with their count and 95% interval; value rows stamped with their build [#166] [#260]
   [#267] [#268].
 - Hash-chained trust journals, the head anchored in `log.md` [#261] [#267].
@@ -62,9 +62,62 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   witnesses [#265].
 - Evolution judged after the freeze, against a do-nothing control, on an exact staged file set
   [#264] [#268] [#298]; a claim graph for memory [#266].
+- Evolution's trigger, propose only: a creature stressed on its trusted gate verdicts (its last 3
+  failed) with a full desk (more than 7 live personal notes) is due, by the arm the rules pick —
+  split, rebirth or mutate — and why; cooling while its swap's window is open. Shown in
+  `mnemorph status` and `mnemorphd evolution due`; nothing is drafted or swapped.
+- CI as an instrument: `mnemorphd ci` reads the forge's newest runs through the read-only probe
+  into `.mnemorph/instruments/ci.jsonl`, and `mnemorph status` shows each branch's state as last
+  read.
+- The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
+  `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
+  says each one's age.
+- `@mnemorph/protocol` and `@mnemorph/sdk` can be published to npm: built to `dist`, MIT, and
+  `just check` installs and imports the packed tarballs.
+- The race cards at 1200 × 1680 for the full card view, on 1024 px portraits; the board serves them.
+- An approved typed outward act can reach the forge: it reads the forge's logins as the probe
+  does, so `git push` and `gh pr create` work under the kernel guard, and nothing stops to ask for
+  a username. Found by the first live `kijin-forge` run.
+- Recall holds as memory grows: BM25's saturation grows with the notes weighed
+  (`recall.saturation_growth`), fitted against 101 notes real runs wrote. Over that many notes a
+  fixed saturation let nearly every note clear the floor.
+- Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
+  tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
+  the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
+  the human's swap.
+- Evolution's proof: `mnemorphd evolution swap` proves the staged plan before it asks — written
+  over a scratch copy of the world, where `onto check` must find nothing the world does not and
+  every doc the plan writes must have its verify lines pinned and passing in the sandbox. A plan
+  that fails is refused with every reason; one that re-parents or widens a card is refused so.
+- Evolution proposals: every plan the drafter draws is kept under the state directory, chained
+  and anchored, with each file's digest as drawn; `mnemorphd evolution list | show | apply |
+  reject` reviews them, `apply` refused when the world moved or the staging changed since, and
+  `mnemorph status` shows each one waiting.
+- Evolution on its own (`evolution.mode = "auto"`, the default, now the human's global file's
+  alone): after each session a background tick (`mnemorphd evolution auto`) drafts, proves and
+  swaps in one due creature on trial, and settles a swap whose 10-run window is full by the rule —
+  kept on its net wins against doing nothing, else rolled back, its files put back as they were.
+  `mnemorphd evolution keep | rollback <id>` lets the human settle first; each settle is a
+  `settle` row in the evolution ledger.
+- A kept evolution puts the desk notes its traits cite to sleep (dormant, their events kept), so
+  a creature stressed again evolves on new notes; a rollback leaves them on the desk.
+- A split's young from relief: the trigger names the two parts a creature's trouble clusters in,
+  and `mnemorphd relief <name> --around <part>,<part>` gives one to each young, the rest shared
+  out evenly. `evolution due`, `mnemorph status` and the tick print that command; a split stays
+  the human's to apply.
 - Guts classes on every act (`fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`), read from
   structured outcomes only, kept chained outside the world, counted in `mnemorph status` and
   chipped on the board's timeline; signals only, the red pin weighing 0.
+- Rises and falls from the compiled race law alone: proposed from the report ledger over the
+  28-day window and through probation, shown in `mnemorph status`, `mnemorphd meters` and the
+  board's bodies page with the command that applies them, applied only by the human at the
+  terminal (`mnemorphd roster rise|fall`), and replayed exactly from the journals and the
+  creatures' witness (`mnemorphd roster replay`). An input no trusted journal carries yet is said
+  unknown, never zero, and proposes nothing.
+
+- M11's lesson as a test: a landing the gate did not pass (failed, handed back, not verified,
+  unrun, unpinned, unchecked), as a new run, an old pass judged again, or the throne's, never
+  raises any creature's pass meter.
 
 ### M10 — Dark Elf
 
@@ -93,6 +146,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Citation by use, the accepted, corroborated and confirmed routes, a correction standing beside
   its note, recall's weights in config, the triage fixture [#206] [#207] [#208] [#213] [#215]
   [#216] [#217] [#218]; the ontology mesh live [#214].
+- The **checked** route grounds a claim only on the check it names: `@U law <path> <fact>
+  check=<verify line or test>`, a verify line that ran in that gate (or a test it names), cited in
+  the grounded note. A claim naming no check, or one that did not run, stays proposed and the
+  report says why, so a compile check no longer grounds a behaviour claim [#317].
 
 ### M7 — The world
 
