@@ -25,6 +25,16 @@ mod macos;
 
 pub use env::{git, is_secret, scrubbed_env};
 
+/// The logins a forge is reached with, relative to the home: read by the harness's read-only
+/// probe and by a typed outward act the human approved, and by nothing else.
+pub const FORGE_LOGINS: &[&str] = &[
+    ".ssh",
+    ".netrc",
+    ".git-credentials",
+    ".config/git/credentials",
+    ".config/gh",
+];
+
 /// Credential paths under the home: each covers itself and all beneath it. No sandbox rule names
 /// them or a folder above them, Seatbelt hides them as well, and the shell classifier refuses
 /// commands that name them. Landlock cannot hide a path inside a tree it reads, so the toolchain

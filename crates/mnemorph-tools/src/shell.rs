@@ -109,7 +109,7 @@ impl Tool for Bash {
                     return refused;
                 }
             };
-            match attempt(&a.command, cx, timeout, admitted, None, None) {
+            match attempt(&a.command, cx, timeout, admitted, None, None, false) {
                 Spawned::Ran(mut out) => {
                     for note in &notes {
                         let _ = write!(out.content, "\n[{note}]");
@@ -198,9 +198,12 @@ pub fn spawn_approved(
         admitted,
         Some(before),
         stdin,
+        true,
     )
 }
 
+/// `typed`: the harness rendered the command, so it reads the forge's login; a `bash` command is
+/// the model's text, and never does.
 fn attempt(
     command: &str,
     cx: &Context,
@@ -208,6 +211,7 @@ fn attempt(
     admitted: Admitted,
     before_spawn: Option<BeforeSpawn<'_>>,
     stdin: Option<&[u8]>,
+    typed: bool,
 ) -> Spawned {
     let Admitted {
         class,
@@ -242,6 +246,7 @@ fn attempt(
         cx,
         timeout,
         network,
+        typed,
         &opened,
         bound,
         before_spawn,
@@ -591,6 +596,7 @@ fn run(
     cx: &Context,
     timeout: Duration,
     network: bool,
+    typed: bool,
     opened: &[PathBuf],
     approved: Option<(&Fingerprint, &[PathBuf])>,
     before_spawn: Option<BeforeSpawn<'_>>,
@@ -608,6 +614,15 @@ fn run(
     }
     // Each approved path exists by now and opens alone: never its folder.
     policy.write.extend(opened.iter().cloned());
+    // A typed act reaches the forge as the probe that reads it back does: its login, read-only.
+    if typed {
+        let logins: Vec<PathBuf> = mnemorph_sandbox::FORGE_LOGINS
+            .iter()
+            .map(|c| cx.home().join(c))
+            .collect();
+        policy.hidden.retain(|h| !logins.contains(h));
+        policy.read.extend(logins);
+    }
     let mut cmd = cx
         .sandbox()
         .command(&policy, "bash", &["--noprofile", "--norc", "-c", command]);
@@ -631,7 +646,10 @@ fn run(
                 cx.body()
             },
         )
-        .env("TMPDIR", &tmp);
+        .env("TMPDIR", &tmp)
+        // No terminal is the command's: a push with no login fails at once, never asks a username.
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GH_PROMPT_DISABLED", "1");
     // The recheck is the last thing before the spawn: everything else is already prepared, so
     // the window in which the world can change unseen is the recheck's own reading of it.
     if let Some((approved, made)) = approved {
