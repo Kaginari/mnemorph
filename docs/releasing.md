@@ -130,7 +130,7 @@ macOS archive by hand on a Mac before publishing.
 
 ### npm
 
-`@mnemorph/protocol` and `@mnemorph/sdk` are published by hand, apart from the binaries: their
+`@mnemorph/protocol` and `@mnemorph/sdk` are on npm at 0.1.0, published by hand, apart from the binaries: their
 versions need not match the release's until 1.0. Bump both packages' `version`, then, with a
 token the human holds and never commits:
 
