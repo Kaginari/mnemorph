@@ -36,6 +36,7 @@ mod forge;
 mod oni;
 mod outward;
 mod receipt;
+pub mod refresh;
 mod runner;
 pub mod scout;
 mod write;
@@ -84,6 +85,10 @@ max_consults = 3
 [evolution]
 mode = "auto"
 min_net_wins = 2
+
+[refresh]
+ci_minutes = 15
+scout_hours = 24
 
 [models]
 provider = "anthropic"
@@ -242,6 +247,8 @@ const LOOSENING: &[&str] = &[
     "oni.envelope_days",
     "evolution.mode",
     "evolution.min_net_wins",
+    "refresh.ci_minutes",
+    "refresh.scout_hours",
     "sandbox.allow_unguarded",
     "models.provider",
     "budget.session",
@@ -317,6 +324,8 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("recall.saturation_growth", Kind::Number),
     ("evolution.mode", Kind::Str),
     ("evolution.min_net_wins", Kind::Int),
+    ("refresh.ci_minutes", Kind::Int),
+    ("refresh.scout_hours", Kind::Int),
     ("models.provider", Kind::Str),
     ("models.default", Kind::Str),
     ("models.race.*", Kind::Str),
@@ -1088,6 +1097,16 @@ impl Config {
     #[must_use]
     pub fn evolution_proposes(&self) -> bool {
         self.get("evolution.mode").and_then(|l| l.value.as_str()) == Some("propose")
+    }
+
+    /// How often the standing reads run: `refresh.ci_minutes` and `refresh.scout_hours`, the human's
+    /// alone, since a mirror can be hundreds of megabytes; 0 turns one off.
+    #[must_use]
+    pub fn refresh_every(&self) -> refresh::Every {
+        refresh::Every {
+            ci_minutes: self.int("refresh.ci_minutes").unwrap_or(15),
+            scout_hours: self.int("refresh.scout_hours").unwrap_or(24),
+        }
     }
 
     /// How many more paired tasks an evolution must win than lose against doing nothing to be
