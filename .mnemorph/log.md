@@ -6861,3 +6861,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorph_config::scout`, `mnemorphd scout`, `status`'s `scout` lines. Each ecosystem the root lockfiles name fetched from OSV into `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, with `curl` in the sandbox, HTTPS alone, no new dependency. A part file moved in whole; not a zip or a failed fetch keeps the old mirror; a link in the way refused.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
+
+### [2026-11-06T03:00:00+01:00] rimuru — #23: the cards at high resolution
+- **Done:** 12 portraits re-rendered at 1024 px through OpenRouter (`google/gemini-3-pro-image`, about USD 1.70 in all), each from its own 256 px portrait, cut with the original's hexagon mask, kept as WebP. `tools/cards.py` writes 1200 × 1680 WebP beside the 600 × 840 PNG; the board serves the larger. The tool moved off the `getsize` a current Pillow no longer has.
+- **Tests:** every portrait read beside its original on one sheet; Oni and Kijin cards read whole. `just`.
+- **Learned:** give an image model the art you have as its reference and ask it to change nothing but sharpness; the background is the part it drifts on, so keep your own mask.
