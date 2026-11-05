@@ -637,6 +637,12 @@ chain walked and anchored, and the journal holds the same bytes; after each comm
 - **Standing.** A Kijin has no long-lived context; it stands through its **post journal**
   (`.mnemorph/kijin/<post>/post.jsonl`): the last known state of the outside (last CI run, the
   deployed version per environment, open PRs) and each outward act's receipt. Every new body of that post reads it first.
+- **The advisory mirror** (`mnemorph_config::scout`). `mnemorphd scout` fetches, from OSV, each
+  ecosystem the world's lockfiles name (`crates.io`, `npm`, `Go`, `PyPI`) into
+  `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, the layout `osv-scanner --offline` reads, in
+  the sandbox and over HTTPS alone. A body may write `.mnemorph/intel/`, so no link is followed
+  into it, a download lands whole and only if it is a zip, and one that fails keeps the mirror it
+  had. `mnemorph status` says each ecosystem's age as last read.
 - **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
   checks the real CI state instead of trusting a doc (Nature 9).
 - **Score** `0.5·outwardCleanRate + 0.3·verifyGreenRate + 0.2·landRate`, where
