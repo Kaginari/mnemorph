@@ -522,7 +522,7 @@ fn esc_stops_a_running_command_and_keeps_its_output() {
             && o.content.contains("interrupted by the human"),
         "{o:?}"
     );
-    assert!(!o.content.contains("never"));
+    assert!(!o.content.contains("never"), "{o:?}");
     let pid = fs::read_to_string(w.world().join("src/pid")).unwrap();
     let alive = std::process::Command::new("kill")
         .args(["-0", pid.trim()])

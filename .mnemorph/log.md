@@ -6937,3 +6937,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tests/evolve.rs`: under the line and over it, cleared, doom, a part-full desk; strain forged in `council.jsonl` is nothing; a row edited by hand refuses the survey. `tests/council.rs`: the trusted copy follows the sittings and ignores a forged tally. `tests/loop.rs`: a real doom checkpoint lands in the journal.
 - **Open:** the line is the default 5, not a world's `council.escalate_at`. `slimeHealth` stays unknown: its scale, and replaying it, want their own change, since an Orc's rise would rest on it.
 - **Learned:** the same fact can live in two places for two readers, as long as each reader's trust matches where it reads. And a journal keyed by a path needs the real path: macOS's `/var` is a link, so CI's macOS job wrote strain under one spelling and read another, which Linux could never show. `proposals` had the same flaw; both are named by their real path now, and a linked world tests it on either system.
+
+### [2026-11-06T20:00:00+01:00] aibo Summoner — a test that says why, and the branches cleared
+- **Done:** `esc_stops_a_running_command_and_keeps_its_output` failed once on `main`'s macOS, on an assertion that printed nothing; it now prints the outcome. At the human's word, every remote branch but `main` is deleted: 38 merged, and two that were not, `docs-canvases-shots` (`6e623fd`, the #311 renders) and `wip/board-colony` (`70903b5`, superseded by #324).
+- **Tests:** 15 of 15 here. The same code passed macOS on #353's own run: a race is likely, and unproven.
+- **Learned:** an assertion that prints nothing when it fails costs a whole investigation the one time it does.
