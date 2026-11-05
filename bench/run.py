@@ -40,12 +40,21 @@ def tasks(only):
     return [t for t in found if not only or t.name.split("-")[0] in only]
 
 
+def config_home(world):
+    """The run's XDG_CONFIG_HOME: beside its world, never in it."""
+    return Path(str(world) + "-config")
+
+
 def world_for(task, model):
     """A fresh world: the task's starter, the bench's creatures, the model's configuration, git."""
     w = Path(tempfile.mkdtemp(prefix="mnemorph-bench-"))
     shutil.copytree(task / "world", w, dirs_exist_ok=True)
     shutil.copytree(BENCH / "world" / ".mnemorph", w / ".mnemorph", dirs_exist_ok=True)
-    (w / ".mnemorph" / "config.local.toml").write_text(
+    # The provider is the human's global file's alone: a world's file naming it is a hole. The
+    # run's own XDG_CONFIG_HOME, outside the world, stands in for that file.
+    config = config_home(w) / "mnemorph"
+    config.mkdir(parents=True)
+    (config / "config.toml").write_text(
         "[providers.openrouter]\n"
         'kind = "openai"\n'
         'base_url = "https://openrouter.ai/api"\n'
@@ -54,7 +63,7 @@ def world_for(task, model):
         'provider = "openrouter"\n'
         'default = "%s"\n' % model
     )
-    (w / ".gitignore").write_text(".mnemorph/instruments/\n.mnemorph/tmp/\n.mnemorph/config.local.toml\n__pycache__/\n")
+    (w / ".gitignore").write_text(".mnemorph/instruments/\n.mnemorph/tmp/\n__pycache__/\n")
     git = ["git", "-c", "user.name=bench", "-c", "user.email=bench@localhost"]
     subprocess.run(["git", "init", "-q"], cwd=w, check=True)
     subprocess.run(git + ["add", "-A"], cwd=w, check=True)
@@ -80,6 +89,7 @@ def check():
         if verify(t, w):
             bad.append(t.name)
         shutil.rmtree(w, ignore_errors=True)
+        shutil.rmtree(config_home(w), ignore_errors=True)
     for name in bad:
         print("passes untouched:", name)
     for leak in leaks:
@@ -173,7 +183,7 @@ def run_one(task, mode, model, secret, timeout, keep=False, law="on"):
     cli = [str(REPO / "target/debug/mnemorph"), "run", ask, "--world", str(world), "--json"]
     if law == "off":
         cli.append("--no-law")
-    env = dict(os.environ, OPENROUTER_API_KEY=secret)
+    env = dict(os.environ, OPENROUTER_API_KEY=secret, XDG_CONFIG_HOME=str(config_home(world)))
     start = time.time()
     # Its own process group: a timeout ends the run and anything it started, key and all.
     proc = subprocess.Popen(cli, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -227,6 +237,7 @@ def run_one(task, mode, model, secret, timeout, keep=False, law="on"):
         result["world"] = str(world)
     else:
         shutil.rmtree(world, ignore_errors=True)
+        shutil.rmtree(config_home(world), ignore_errors=True)
     return result
 
 
