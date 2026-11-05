@@ -268,12 +268,14 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
   if (!roster || !witness || !minds || !live || !acts || !law || !ascension) return undefined;
   const bodies = rows(o.bodies, body);
   const races = rows(o.races, race);
+  const unworn = rows(o.unworn, mind);
   return {
     bodies: bodies.ok,
     problems: o.problems,
     loops: o.loops,
     throne: { live: throne.live, why: throne.why },
     races: races.ok,
+    unworn: unworn.ok,
     roster,
     witness,
     minds,
@@ -281,7 +283,7 @@ export function parseBodies(v: unknown): BodiesPage | undefined {
     acts,
     law,
     ascension,
-    unreadable: bodies.bad + races.bad,
+    unreadable: bodies.bad + races.bad + unworn.bad,
   };
 }
 

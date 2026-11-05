@@ -252,6 +252,7 @@ describe('the city', () => {
       race,
       retired,
       working,
+      minds: [],
     });
     const net = netOf([
       body('slime-parser', 'slime', false, true),
@@ -277,6 +278,7 @@ describe('the city', () => {
       race: 'slime',
       retired: false,
       working: false,
+      minds: [],
     }));
     const seated = netOf(many).nodes.filter((n) => n.kind === 'body');
     expect(seated).toHaveLength(12);
@@ -308,5 +310,43 @@ describe('the city', () => {
     expect([...crowdedLabels([label('picked', 100, 0, true), label('front', 110, 1)])]).toEqual([
       'front',
     ]);
+  });
+
+  test('a Mind stands beside who names it; a shared or unworn one on the rim, each once', () => {
+    const mind = (name: string, shared = false, standing = 'adopted') => ({
+      name,
+      standing,
+      shared,
+      about: '',
+    });
+    const body = (name: string, minds: ReturnType<typeof mind>[]) => ({
+      name,
+      race: 'slime',
+      retired: false,
+      working: false,
+      minds,
+    });
+    const net = netOf(
+      [
+        body('a', [mind('careful'), mind('house', true)]),
+        body('b', [mind('careful'), mind('house', true), mind('new', false, 'unadopted')]),
+      ],
+      [mind('waiting')],
+    );
+    const minds = net.nodes.filter((n) => n.kind === 'mind');
+    expect(minds.map((n) => n.name).sort()).toEqual(['careful', 'house', 'new', 'waiting']);
+    expect(net.edges.filter((e) => e.kind === 'wears')).toEqual([
+      { from: 'body:a', to: 'mind:careful', kind: 'wears' },
+      { from: 'body:b', to: 'mind:careful', kind: 'wears' },
+      { from: 'body:b', to: 'mind:new', kind: 'wears' },
+    ]);
+    const at = (name: string) => minds.find((n) => n.name === name);
+    const rim = (name: string) =>
+      Math.hypot(at(name)?.position[0] ?? 0, at(name)?.position[2] ?? 0);
+    expect(rim('house')).toBeCloseTo(1.02 * CITY);
+    expect(rim('waiting')).toBeCloseTo(1.02 * CITY);
+    expect(at('careful')?.token).toBe('--mn-gold');
+    expect(at('new')?.token).toBe('--mn-text-muted');
+    expect([...related('slime', net.edges)]).toContain('mind:careful');
   });
 });

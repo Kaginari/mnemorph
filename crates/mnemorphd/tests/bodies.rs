@@ -304,6 +304,7 @@ fn the_colony_is_the_rosters_with_its_minds_live_states_and_acts() {
         ]
     );
     assert_eq!(page["minds"]["trusted"], true);
+    assert!(page["unworn"].is_array(), "{page}");
     assert_eq!(page["roster"]["trusted"], false);
     // The acts block is no more trusted than its least: each act carries its own flag.
     assert_eq!(page["acts"]["trusted"], false);
