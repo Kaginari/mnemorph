@@ -15,6 +15,7 @@ import { Mark, STATUS } from './Mark.tsx';
 import { Wordmark } from './Wordmark.tsx';
 
 const PAGES = [
+  ['net', '⬡', 'Colony net'],
   ['metrics', '▤', 'Metrics'],
   ['integrations', '⚇', 'Integrations'],
   ['settings', '⚙', 'Settings'],

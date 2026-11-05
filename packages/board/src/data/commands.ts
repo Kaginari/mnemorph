@@ -46,6 +46,7 @@ const TAB_NAMES: Record<(typeof BODIES_TABS)[number], string> = {
 
 const PAGES: [Route, string][] = [
   [{ name: 'worlds' }, 'Worlds'],
+  [{ name: 'net' }, 'Colony net'],
   [{ name: 'metrics' }, 'Metrics'],
   [{ name: 'integrations' }, 'Integrations'],
   [{ name: 'settings' }, 'Settings'],

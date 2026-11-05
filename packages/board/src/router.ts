@@ -19,6 +19,7 @@ export type Route =
   | { name: 'section'; world: string; section: WorldSection; tab?: BodiesTab }
   | { name: 'session'; world: string; session: string }
   | { name: 'run'; world: string; run: string }
+  | { name: 'net' }
   | { name: 'metrics' }
   | { name: 'integrations' }
   | { name: 'settings' }
@@ -47,7 +48,7 @@ export function parse(hash: string): Route {
   const unknown: Route = { name: 'unknown', path };
   const [head, a, b, c, ...rest] = parts;
   if (rest.length > 0) return unknown;
-  if (head === 'metrics' || head === 'integrations' || head === 'settings') {
+  if (head === 'net' || head === 'metrics' || head === 'integrations' || head === 'settings') {
     return a === undefined ? { name: head } : unknown;
   }
   if (head !== 'w' || a === undefined) return unknown;

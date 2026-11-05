@@ -1238,7 +1238,7 @@ address, so a link, a reload or the back button lands where it was:
 | `#/w/<world>/bodies/<colony\|races\|queue\|timeline>` | a tab of the bodies page |
 | `#/w/<world>/s/<session>` | a live chat |
 | `#/w/<world>/r/<run>` | a past run, read-only |
-| `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
+| `#/net`, `#/metrics`, `#/integrations`, `#/settings` | the board's pages |
 
 Segments are URI-encoded, and `parse(format(r))` gives every route back. Any other address, a
 world the board does not know, and a view whose data is not served yet each say so in an empty
@@ -1254,6 +1254,7 @@ state, never a blank pane.
 | Bodies `#/w/<world>/bodies` | the colony net, race cards, the queue, the timeline | *No body here yet*; *No order here*; *Nothing on the timeline* |
 | Memory, Ontology | notes by creature, scope and standing; facts by status, with confirm, wake and settle | *No note here*; *No contested fact* |
 | Journal | `log.md`'s entries and their contents | *No journal yet* |
+| Colony net `#/net` | the colony as a hex city around the throne, on a canvas in 3D, the same shape in every world: the human, the six races and the five ascended forms on a terraced lattice, and the chosen world's living bodies seated around their race (`src/data/net.ts`). Waves run through the ground, signals along who commissions whom; a body at work pulses. A race picked lights the city it reaches and opens its card. Drag or the arrow keys orbit, scroll or `+` and `-` zoom; the races are also a legend and a list in words. Under reduced motion it stands still. Every colour is a theme token, and the dark theme adds light where the light theme lays it on | never empty: the shape is the law's, not a world's |
 | Metrics `#/metrics` | spend, tokens, cache, burn, meters, sessions, scores, bench | a meter with no call reads *silent since …*, never 0; one whose journal does not hold reads *unavailable — why*; the bench *Not configured*, with the line to add |
 | Integrations, Settings | providers, key sources, MCP servers, the effective configuration; the theme | *Not configured* where the global file names nothing |
 

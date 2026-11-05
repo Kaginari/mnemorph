@@ -8,6 +8,7 @@ import type { BoardOverview } from '@mnemorph/protocol';
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 import { FIXTURE_NOW, fixtureOverviews, fixtureWorlds } from '../src/data/fixtures.ts';
 import { fixtureIntegrations, fixtureMetrics } from '../src/data/metricsFixtures.ts';
+import { DEFAULT_CAMERA, node, project } from '../src/data/net.ts';
 
 /** Where the screenshots go: test-results/screens/<project>-<theme>-<page>.png. */
 const screen = (file: string) =>
@@ -167,6 +168,7 @@ const PAGES: [string, string][] = [
   ['world-missing', `#/w/${GONE.id}`],
   ['session', `#/w/${LIVE.id}/s/r-17`],
   ['settings', '#/settings'],
+  ['net', '#/net'],
   ['metrics', '#/metrics'],
   ['integrations', '#/integrations'],
 ];
@@ -474,4 +476,34 @@ test('the integrations page is read-only and shows key sources, never values', a
   await expect(
     page.locator('details', { hasText: 'How to add an MCP server' }).locator('.howto-text'),
   ).toBeVisible();
+});
+
+test('the colony net paints its canvas, and a node clicked on it opens its card', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open(page, '#/net');
+  const canvas = page.locator('canvas.net-canvas');
+  await expect(canvas).toBeVisible();
+  // Painted: some pixel of the drawing is not transparent.
+  await expect
+    .poll(() =>
+      canvas.evaluate((c: HTMLCanvasElement) => {
+        const d = c.getContext('2d')?.getImageData(0, 0, c.width, c.height).data ?? [];
+        for (let i = 3; i < d.length; i += 4) if ((d[i] ?? 0) > 0) return true;
+        return false;
+      }),
+    )
+    .toBe(true);
+  await expect(page.locator('.net-card')).toHaveCount(0);
+  // Still under reduced motion: Rimuru stays where the default camera puts it.
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('the canvas has a box');
+  const rimuru = node('rimuru');
+  if (!rimuru) throw new Error('the net holds Rimuru');
+  const at = project(rimuru, DEFAULT_CAMERA, box.width, box.height);
+  await canvas.click({ position: { x: at.x, y: at.y } });
+  await expect(page.locator('.net-card')).toContainText('Rimuru');
+  await page.getByRole('button', { name: 'Oni' }).click();
+  await expect(page.locator('.net-card')).toContainText('ascended from Kijin');
 });

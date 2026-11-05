@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { App } from './App.tsx';
 import { fixtureWorlds } from './data/fixtures.ts';
+import { NODES } from './data/net.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -143,4 +144,27 @@ test('the palette lists only addresses: picking one moves the page', async () =>
   });
   expect(window.location.hash).toBe('#/metrics');
   expect(palette()).toBeNull();
+});
+
+test('the colony net page names every race and form, and a legend click opens its card', async () => {
+  await mount('#/net');
+  const text = host.textContent ?? '';
+  expect(document.title).toBe('Colony net · Mnemorph');
+  expect(host.querySelector('canvas.net-canvas')).not.toBeNull();
+  for (const n of NODES) expect(text, n.name).toContain(n.name);
+  expect(text).toContain('6 command edges · 5 ascension edges · one throne');
+  const oni = [...host.querySelectorAll<HTMLButtonElement>('.net-legend-item')].find(
+    (b) => b.textContent === 'Oni',
+  );
+  await act(async () => oni?.click());
+  expect(oni?.getAttribute('aria-pressed')).toBe('true');
+  expect(host.querySelector('.net-card')?.textContent).toContain('ascended from Kijin');
+  await act(async () => host.querySelector<HTMLButtonElement>('.net-card-close')?.click());
+  expect(host.querySelector('.net-card')).toBeNull();
+});
+
+test('the rail links the colony net', async () => {
+  await mount('#/');
+  const link = host.querySelector<HTMLAnchorElement>('a.rail-item[href="#/net"]');
+  expect(link?.textContent).toContain('Colony net');
 });
