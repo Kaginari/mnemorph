@@ -72,6 +72,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
   `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
   says each one's age.
+- An approved typed outward act can reach the forge: it reads the forge's logins as the probe
+  does, so `git push` and `gh pr create` work under the kernel guard, and nothing stops to ask for
+  a username. Found by the first live `kijin-forge` run.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
