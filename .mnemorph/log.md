@@ -6856,3 +6856,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `[profile.dev] debug = "line-tables-only"` in `Cargo.toml`: this bot's token may not touch `.github/workflows/`, and the setting needs no workflow. `ld` died of a bus error linking three test binaries at once on PR #337's run; the log held no disk figures, so a full disk is the likely cause, not a proven one.
 - **Tests:** a clean `cargo test --no-run --workspace`: 23 GB and 123 s before, 9.7 GB and 95 s after. `just` passes under the setting.
 - **Learned:** a local `just` says nothing of the runner: look at CI before saying a change is done. macOS's red runs here were GitHub's (`job was not acquired by Runner`), not the code's.
+
+### [2026-11-06T00:00:00+01:00] rimuru — M9: the scout's advisory mirror
+- **Done:** `mnemorph_config::scout`, `mnemorphd scout`, `status`'s `scout` lines. Each ecosystem the root lockfiles name fetched from OSV into `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, with `curl` in the sandbox, HTTPS alone, no new dependency. A part file moved in whole; not a zip or a failed fetch keeps the old mirror; a link in the way refused.
+- **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
+- **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.

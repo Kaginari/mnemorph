@@ -36,6 +36,7 @@ mod oni;
 mod outward;
 mod receipt;
 mod runner;
+pub mod scout;
 mod write;
 
 use std::collections::BTreeMap;

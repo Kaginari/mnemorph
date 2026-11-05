@@ -313,6 +313,8 @@ its own ([races](02-races.md)).
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
 
+`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV).
+
 The exit is met against a stub forge; a live run remains.
 
 ### M10 — Dark Elf · M

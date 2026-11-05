@@ -782,3 +782,22 @@ fn relief_around_takes_two_parts() {
         "nothing written"
     );
 }
+
+/// `scout` with no lockfile has nothing to fetch, and is never a body's.
+#[test]
+fn scout_is_the_humans_and_needs_a_lockfile() {
+    let f = Fixture::new("scout");
+    let out = f.run(&["scout"]);
+    assert!(out.status.success(), "{:?}", text(&out));
+    assert!(
+        text(&out).0.contains("nothing to mirror"),
+        "{:?}",
+        text(&out)
+    );
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["scout"])
+        .env("MNEMORPH_BODY", "slime-a")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
