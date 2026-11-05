@@ -66,6 +66,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   failed) with a full desk (more than 7 live personal notes) is due, by the arm the rules pick —
   split, rebirth or mutate — and why; cooling while its swap's window is open. Shown in
   `mnemorph status` and `mnemorphd evolution due`; nothing is drafted or swapped.
+- CI as an instrument: `mnemorphd ci` reads the forge's newest runs through the read-only probe
+  into `.mnemorph/instruments/ci.jsonl`, and `mnemorph status` shows each branch's state as last
+  read.
 - The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
   `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
   says each one's age.

@@ -643,8 +643,12 @@ chain walked and anchored, and the journal holds the same bytes; after each comm
   the sandbox and over HTTPS alone. A body may write `.mnemorph/intel/`, so no link is followed
   into it, a download lands whole and only if it is a zip, and one that fails keeps the mirror it
   had. `mnemorph status` says each ecosystem's age as last read.
-- **CI is an instrument.** `kijin-ci` writes CI results into the instruments, so every creature
-  checks the real CI state instead of trusting a doc (Nature 9).
+- **CI is an instrument** (`mnemorph_config::ci`). `mnemorphd ci` reads the forge's newest runs of
+  the world's `origin`, or `--repo`, through the harness's read-only probe, and writes each run
+  not seen, or whose state moved, to `.mnemorph/instruments/ci.jsonl`, so every creature checks
+  the real CI state instead of trusting a doc (Nature 9). It changes nothing on the forge. A
+  body reads the file, never runs the command; the file is the world's, so `mnemorph status`
+  says each branch's newest run as last read, failures first, and it grants nothing.
 - **Score** `0.5·outwardCleanRate + 0.3·verifyGreenRate + 0.2·landRate`, where
   `outwardCleanRate` = outward acts that completed without rollback or human correction. Meter:
   *Outward clean*, ok ≥ 90, warn ≥ 70.

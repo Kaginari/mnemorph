@@ -801,3 +801,27 @@ fn scout_is_the_humans_and_needs_a_lockfile() {
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// `ci` is a read for the human or the harness: a body reads the instrument instead, and a world
+/// with no forge says how to name one, writing nothing.
+#[test]
+fn ci_names_its_repository_and_is_never_a_bodys() {
+    let f = Fixture::new("ci");
+    let out = f.run(&["ci"]);
+    assert_eq!(out.status.code(), Some(2), "{:?}", text(&out));
+    assert!(text(&out).1.contains("--repo"), "{:?}", text(&out));
+    let out = f.run(&["ci", "--repo", "not a repo"]);
+    assert!(
+        text(&out).1.contains("is no repository"),
+        "{:?}",
+        text(&out)
+    );
+    assert!(!f.world.join(".mnemorph/instruments/ci.jsonl").exists());
+    let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
+        .args(["ci"])
+        .env("MNEMORPH_BODY", "kijin-ci")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out).1.contains("ci.jsonl"), "{:?}", text(&out));
+}
