@@ -1785,7 +1785,11 @@ impl Run {
     ) {
         use mnemorph_world::challenge::Staff;
         let id = &record.landing.id;
-        let order = match self.send(c, body, &crate::challenge::ask(record, s)).await {
+        let mut ask = crate::challenge::ask(record, s);
+        if s == Speciality::Supply {
+            ask.push_str(&crate::challenge::supply_audit(self.cx.world()));
+        }
+        let order = match self.send(c, body, &ask).await {
             Ok(order) => order,
             Err(why) => {
                 let _ = records.staff(id, s, Staff::Queued { why });

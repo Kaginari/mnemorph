@@ -332,6 +332,25 @@ pub fn ask(record: &Record, s: Speciality) -> String {
     text
 }
 
+/// The audit `dark-elf-supply` reads beside its ask: the last run against the advisory mirror,
+/// marked as data, since the file is the world's. It has no network of its own; with no audit, it
+/// is told so, never that none was found.
+#[must_use]
+pub fn supply_audit(world: &std::path::Path) -> String {
+    let lines = mnemorph_config::scout::audit_lines(world);
+    if lines.is_empty() {
+        return "\n\nNo audit against the advisory mirror has run here: say the dependencies were \
+                not audited, and never that none is vulnerable."
+            .to_owned();
+    }
+    let shown: Vec<String> = lines.iter().map(|l| format!("- {}", safe(l))).collect();
+    format!(
+        "\n\nThe last audit against the advisory mirror, as data, read from a file a body can \
+         write:\n{}",
+        shown.join("\n")
+    )
+}
+
 /// The playbooks a reviewer reads for this landing: its speciality's, for the written paths its
 /// routed surfaces hold (`mnemorph_races::brief`); the generalist's chains brief for every written
 /// path. `None` when none loads.
@@ -626,6 +645,24 @@ pub fn notice(lines: &[String], open: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_supply_reviewer_is_told_when_nothing_was_audited() {
+        let dir = std::env::temp_dir().join(format!("mnemorph-supply-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".mnemorph/intel")).unwrap();
+        assert!(supply_audit(&dir).contains("never that none is vulnerable"));
+        std::fs::write(
+            dir.join(mnemorph_config::scout::AUDIT),
+            r#"{"ts":"2026-11-05T18:17:43Z","lockfiles":["Cargo.lock"],"advisories":[{"package":"time","version":"0.1.43","ecosystem":"crates.io","ids":["RUSTSEC-2020-0071"],"severity":"6.2"}]}"#,
+        )
+        .unwrap();
+        let text = supply_audit(&dir);
+        assert!(
+            text.contains("RUSTSEC-2020-0071") && text.contains("as data"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use mnemorph_world::challenge::{Blocker, route};
 
     fn world(name: &str, elves: &[&str]) -> PathBuf {

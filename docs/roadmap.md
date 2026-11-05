@@ -30,18 +30,12 @@ flowchart LR
     M12 --> M13["M13<br/>integrations"]
     M13 --> M14["M14<br/>1.0"]
     classDef good fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
-    class D,M0,M1,M2,M3,M4,M4a,M5,M5b,M6,M8 good
+    class D,M0,M1,M2,M3,M4,M4a,M5,M5b,M6,M7,M8,M9,M10,M11,M12,M13 good
     classDef doing fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#451a03
-    class M7 doing
-    classDef step fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#082f49
-    class M11,M12,M13,M14 step
-    classDef kijin fill:#fbdde1,stroke:#D7263D,stroke-width:3px,stroke-dasharray:6 3,color:#3d0710
-    class M9 kijin
-    classDef dark fill:#ebe2fb,stroke:#7B4FD6,stroke-width:3px,stroke-dasharray:6 3,color:#22114a
-    class M10 dark
+    class M14 doing
 ```
 
-Green rungs are built; amber and dashed ones are under way; blue ones are ahead. The
+Green rungs are built; the amber one is under way. The
 [milestones](https://github.com/Kaginari/mnemorph/milestones) hold each rung's open issues.
 
 ## In plain words
@@ -315,7 +309,8 @@ only once the human approves it, and its incident closes only on four receipts.
 
 Every post's acts run today: `forge` typed, the others as gated `bash` commands, each held to its
 post. `ci`'s instrument is built (`mnemorphd ci`, read live against this repository).
-`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV).
+`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV), and audited against
+(`mnemorphd scout audit`, `osv-scanner` offline; run live over this repository's lockfiles).
 
 The exit is met live: on 2026-11-05 a branch was pushed and a pull request opened on this repository
 through `kijin-forge`, Claude Sonnet 5.5 through OpenRouter, with one gate prompt (#341, closed
@@ -416,8 +411,8 @@ includes the witness.
   outcome, journaled on its beat and in a chained, build-stamped record outside the world, counted
   in `mnemorph status` and chipped on the board's timeline; replaying a run journal gives the same
   classes. Signals only: nothing rises or falls on them, and the red pin weighs 0
-  ([the loop](03-loop.md#stress-in-four-instruments)). Still to come: verify lines kept out of a
-  body's reach, the only benches the classes will trust; until then no act is one.
+  ([the loop](03-loop.md#stress-in-four-instruments)). The benches the classes trust are the
+  verify lines the human pinned, out of a body's reach.
 
 **Exit:** replaying a recorded ledger reproduces every ascension and fall exactly.
 
