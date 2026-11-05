@@ -623,6 +623,15 @@ pub fn evolve(world: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+/// `status`'s advisory mirror: each ecosystem, its age, as `mnemorphd scout` last fetched it.
+#[must_use]
+pub fn scout(world: &std::path::Path) -> Vec<String> {
+    mnemorph_server::config::scout::lines(world)
+        .iter()
+        .map(|l| format!("{:<9}{}", "scout", one_line(l)))
+        .collect()
+}
+
 /// `status`'s CI: each branch's newest run as `mnemorphd ci` last read it. Nothing until it has;
 /// the forge is not reached.
 #[must_use]

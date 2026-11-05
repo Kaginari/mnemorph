@@ -178,6 +178,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
             for line in headless::ci(&world) {
                 println!("{line}");
             }
+            for line in headless::scout(&world) {
+                println!("{line}");
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -209,6 +212,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
                 println!("{line}");
             }
             for line in headless::ci(&world) {
+                println!("{line}");
+            }
+            for line in headless::scout(&world) {
                 println!("{line}");
             }
             ExitCode::FAILURE

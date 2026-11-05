@@ -6857,6 +6857,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** a clean `cargo test --no-run --workspace`: 23 GB and 123 s before, 9.7 GB and 95 s after. `just` passes under the setting.
 - **Learned:** a local `just` says nothing of the runner: look at CI before saying a change is done. macOS's red runs here were GitHub's (`job was not acquired by Runner`), not the code's.
 
+### [2026-11-06T00:00:00+01:00] rimuru — M9: the scout's advisory mirror
+- **Done:** `mnemorph_config::scout`, `mnemorphd scout`, `status`'s `scout` lines. Each ecosystem the root lockfiles name fetched from OSV into `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, with `curl` in the sandbox, HTTPS alone, no new dependency. A part file moved in whole; not a zip or a failed fetch keeps the old mirror; a link in the way refused.
+- **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
+- **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
+
 ### [2026-11-05T23:00:00+01:00] rimuru — M9: CI as an instrument
 - **Done:** `mnemorph_config::ci`, `mnemorphd ci`, `status`'s `ci` lines. The forge's newest 30 runs read through the read-only probe; a run not seen, or whose state moved, appended to `.mnemorph/instruments/ci.jsonl`. Audit of #12: every post's acts already run, `forge` typed and the rest as gated `bash` held to their post; what the book specified and nobody built was this instrument and scout's mirror.
 - **Tests:** `tests/ci.rs` — written once, a moved run again, each branch's newest, failures first; a forge that cannot be read writes nothing; a bad line passed over; repositories read from remote URLs. CLI — names its repository, never a body's. Read live against Kaginari/mnemorph: 30 runs, then 0 moved.

@@ -315,6 +315,7 @@ only once the human approves it, and its incident closes only on four receipts.
 
 Every post's acts run today: `forge` typed, the others as gated `bash` commands, each held to its
 post. `ci`'s instrument is built (`mnemorphd ci`, read live against this repository).
+`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV).
 
 The exit is met against a stub forge; a live run remains.
 

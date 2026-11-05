@@ -69,6 +69,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - CI as an instrument: `mnemorphd ci` reads the forge's newest runs through the read-only probe
   into `.mnemorph/instruments/ci.jsonl`, and `mnemorph status` shows each branch's state as last
   read.
+- The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
+  `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
+  says each one's age.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
