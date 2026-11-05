@@ -6862,7 +6862,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
 
-### [2026-11-06T05:00:00+01:00] rimuru — bench: the provider in a global file of its own
+### [2026-11-06T05:00:00+01:00] kaginari-agents — bench: the provider in a global file of its own
 - **Done:** `bench/run.py` wrote `models.provider` into the world's `config.local.toml`, which is a hole since the key became the human's global file's alone, so every run stopped at `ANTHROPIC_API_KEY is not set` and spent nothing. Each run now has its own `XDG_CONFIG_HOME` beside its world, removed with it.
 - **Tests:** `run.py --check`; `test_report`; one task passed through OpenRouter with no global file of the human's.
 - **Learned:** a guard that holds breaks every honest tool leaning on what it closed: the bench had no test that it could start.
+
+### [2026-11-06T06:00:00+01:00] kaginari-agents — a correction: who wrote these entries
+- **Done:** the entries from 2026-11-03 to 2026-11-05 signed `rimuru` were written by the agent working this repository, `kaginari-agents`, not by Rimuru the creature. The journal is append-only, so they stand as written and this says so. Entries by the agent are signed `kaginari-agents` from here on.
