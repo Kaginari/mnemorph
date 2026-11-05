@@ -1,5 +1,6 @@
 //! When a creature is due to evolve, and by which arm: stressed — its last three trusted gate
-//! verdicts failed — and its desk full — more than seven live notes in its personal memory —
+//! verdicts failed, its strain reached the council's line, or a run met the doom checkpoint — and
+//! its desk full — more than seven live notes in its personal memory —
 //! read over the harness's journals, the witness and the world. Proposed only: nothing is drafted
 //! or swapped.
 
@@ -10,6 +11,7 @@ use mnemorph_world::creatures;
 use mnemorph_world::evolution::{Arm, EvolutionRow, Swap};
 use mnemorph_world::evolve::{self, Due};
 use mnemorph_world::queue::state_file_in;
+use mnemorph_world::strain::{self, Act, Row};
 use mnemorph_world::verdicts::{self, VerdictRow};
 
 struct World {
@@ -117,6 +119,18 @@ impl World {
             )
             .unwrap();
         }
+    }
+
+    /// `act` of sly in the trusted strain journal, as the harness writes it.
+    fn saw(&self, act: Act) {
+        strain::journal_at(strain::path_in(&self.state, &self.root))
+            .append(&Row {
+                ts: Timestamp(1_793_000_000),
+                body: "sly".into(),
+                act,
+                build: Build::default(),
+            })
+            .unwrap();
     }
 
     fn survey(&self) -> evolve::Survey {
@@ -285,4 +299,62 @@ fn a_creature_whose_swap_window_is_open_cools() {
             .any(|l| l.contains("sly: cooling") && l.contains("ev1")),
         "{lines:?}"
     );
+}
+
+#[test]
+fn strain_at_the_councils_line_or_a_doom_checkpoint_stresses_a_creature_as_verdicts_do() {
+    // The council's line, with no failed verdict at all.
+    let w = World::new("");
+    w.notes(8, &[]);
+    w.saw(Act::Strain { by: 3 });
+    assert!(due(&w.survey()).is_none(), "under the line");
+    w.saw(Act::Strain { by: 2 });
+    let s = w.survey();
+    let d = due(&s).unwrap_or_else(|| panic!("{s:?}"));
+    assert_eq!(d.arm, Arm::Mutate);
+    assert!(d.why.iter().any(|y| y.contains("strain 5")), "{d:?}");
+    // A clean landing clears it.
+    w.saw(Act::Clear);
+    assert!(due(&w.survey()).is_none(), "cleared");
+    // A doom checkpoint, until a clean landing.
+    w.saw(Act::Doom);
+    let s = w.survey();
+    let d = due(&s).unwrap_or_else(|| panic!("{s:?}"));
+    assert!(d.why.iter().any(|y| y.contains("doom checkpoint")), "{d:?}");
+    w.saw(Act::Clear);
+    assert!(due(&w.survey()).is_none());
+    // Stress alone is not enough: the desk must be full too.
+    let w = World::new("");
+    w.notes(7, &[]);
+    w.saw(Act::Strain { by: 9 });
+    assert!(due(&w.survey()).is_none());
+}
+
+#[test]
+fn strain_a_body_wrote_in_the_world_counts_for_nothing() {
+    let w = World::new("");
+    w.notes(8, &[]);
+    let at = w.root.join(".mnemorph/instruments");
+    std::fs::create_dir_all(&at).unwrap();
+    std::fs::write(
+        at.join("council.jsonl"),
+        "{\"kind\":\"strain\",\"body\":\"sly\",\"by\":99}\n",
+    )
+    .unwrap();
+    assert!(
+        due(&w.survey()).is_none(),
+        "the council's tally is the world's"
+    );
+}
+
+#[test]
+fn a_strain_journal_that_does_not_verify_is_refused_never_read_as_calm() {
+    let w = World::new("");
+    w.notes(8, &[]);
+    w.saw(Act::Strain { by: 2 });
+    let at = strain::path_in(&w.state, &w.root);
+    let text = std::fs::read_to_string(&at).unwrap();
+    std::fs::write(&at, text.replace("\"by\":2", "\"by\":9")).unwrap();
+    let e = evolve::survey_in(&w.root, &w.state).unwrap_err();
+    assert!(e.contains("strain journal"), "{e}");
 }

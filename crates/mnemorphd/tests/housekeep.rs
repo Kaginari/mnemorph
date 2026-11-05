@@ -66,6 +66,7 @@ fn verify_says_each_chain_and_anchors_its_head() {
         "evolution",
         "proposals",
         "gate",
+        "strain",
         "guts",
         "answers",
         "minds",

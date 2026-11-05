@@ -12,6 +12,7 @@
 //! - `evolution`: the evolution ledger;
 //! - `proposals`: the evolution plans drawn for the human ([`crate::proposals`]);
 //! - `gate`: the end gate's verdicts ([`crate::verdicts`]);
+//! - `strain`: what the council and the doom checkpoint saw of each body ([`crate::strain`]);
 //! - `guts`: the guts classes of every act ([`crate::guts`]);
 //! - `answers`: the human's answers to the gate given on the board ([`crate::answers`]);
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
@@ -44,7 +45,7 @@ pub const USAGE_WITNESS: &str = "usage-witness";
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value`, `evolution`, `proposals`, `gate`, `guts`, `answers`, `minds`, `verify`,
+    /// Its name: `usage`, `value`, `evolution`, `proposals`, `gate`, `strain`, `guts`, `answers`, `minds`, `verify`,
     /// `facts`, `relations`, `roster`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
@@ -75,6 +76,7 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         ("evolution", "evolution"),
         (crate::proposals::KIND, crate::proposals::KIND),
         ("gate", "gate"),
+        (crate::strain::KIND, crate::strain::KIND),
         ("guts", "guts"),
         ("answers", crate::answers::KIND),
         ("minds", "minds"),
@@ -566,6 +568,7 @@ mod tests {
                 "evolution",
                 "proposals",
                 "gate",
+                "strain",
                 "guts",
                 "answers",
                 "minds",

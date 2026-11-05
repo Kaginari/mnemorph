@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use mnemorph_ledger::Journal;
+use mnemorph_world::strain;
 use serde::{Deserialize, Serialize};
 
 /// Where the council keeps its tally, under the world.
@@ -95,6 +96,15 @@ pub fn sit(
     let record = |row: &Row| {
         if let Err(e) = j.append(row) {
             eprintln!("mnemorph: the council could not record {body}: {e}");
+        }
+        // The world's tally is a body's to write: the trusted copy is the one evolution reads.
+        let act = match row {
+            Row::Strain { by, .. } => strain::Act::Strain { by: *by },
+            Row::Warrant { .. } => strain::Act::Warrant,
+            Row::Clear { .. } => strain::Act::Clear,
+        };
+        if let Err(e) = strain::note(world, body, act) {
+            eprintln!("mnemorph: the strain journal could not record {body}: {e}");
         }
     };
     // A clean landing clears it: a DONE, whatever it failed on the way.

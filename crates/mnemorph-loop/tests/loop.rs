@@ -353,6 +353,10 @@ async fn guts_warns_then_doom_stops_the_run() {
         matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("doom")),
         "{e:?}"
     );
+    // Written where no body reaches, for what rests on it.
+    let state = mnemorph_tools::dirs::state_home().expect("the test env sets a state home");
+    let stress = mnemorph_world::strain::read_in(&state, &w.world()).unwrap();
+    assert!(stress.values().any(|s| s.doomed), "{stress:?}");
     let warned = model.requests()[5]
         .messages
         .iter()

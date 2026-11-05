@@ -3356,6 +3356,12 @@ impl Run {
                     push_user(&mut self.messages, vec![Block::Text { text, cache: false }]);
                 }
                 Signal::Doom => {
+                    use mnemorph_world::strain;
+                    if let Err(e) =
+                        strain::note(self.cx.world(), &self.body.name, strain::Act::Doom)
+                    {
+                        eprintln!("mnemorph: the doom checkpoint could not be recorded: {e}");
+                    }
                     return Some(Ending::Checkpoint {
                         why: "doom: guts warned three windows running".into(),
                         salvage: None,

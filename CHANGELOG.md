@@ -85,6 +85,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The board's colony net (`#/net`) is a 3D hex city around the throne: the races on a terraced
   lattice, a world's living bodies seated around their race, waves and signals through it, and a
   race picked lights what it reaches.
+- Strain and doom count for evolution: a trusted journal under the state directory keeps what
+  the council and the doom checkpoint saw, and a creature with a full desk is due once its strain
+  reaches the council's line or a run meets the checkpoint.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for

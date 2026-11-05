@@ -172,7 +172,8 @@ row until its window of 10 is full. `judge <id>` runs, through the configured mo
 do-nothing control of every window run still without one — the same ask, by the same body, in a
 scratch copy of the world with the named files as they were before — then judges the swap and
 proposes keep or rollback; applying either is the human's. `due` says which creatures the
-rules find due to evolve — stressed (its last 3 trusted gate verdicts failed) with a full desk
+rules find due to evolve — stressed (its last 3 trusted gate verdicts failed, its strain reached
+the council's line, or a run met the doom checkpoint) with a full desk
 (more than 7 live personal notes) — the arm they pick and why, and which cool while a swap's
 window is open; it proposes only. `draft <creature>` asks the configured model to distil a due
 creature's desk into traits — one call, no tool, the doc and desk shown as data — and stages the

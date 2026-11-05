@@ -91,6 +91,7 @@ pub fn survey_in(world: &Path, state: &Path) -> Result<Survey, String> {
     }
     let roster = creatures::trusted(Roster::cards(world), &witnessed);
     let ledger = ledger_in(world, state)?;
+    let strain = crate::strain::read_in(state, world)?;
     let mut out = Survey::default();
     for (name, c) in &roster.creatures {
         if c.retired
@@ -99,7 +100,8 @@ pub fn survey_in(world: &Path, state: &Path) -> Result<Survey, String> {
         {
             continue;
         }
-        let Some(d) = due_of(world, c, folded.verdicts()) else {
+        let stress = strain.get(name).copied().unwrap_or_default();
+        let Some(d) = due_of(world, c, folded.verdicts(), stress) else {
             continue;
         };
         match evolution::open_for(&ledger, name) {
@@ -136,24 +138,44 @@ fn ledger_in(world: &Path, state: &Path) -> Result<Ledger, String> {
 }
 
 /// Whether `c` is due, and by which arm, over the trusted `verdicts`.
-fn due_of(world: &Path, c: &Creature, verdicts: &[VerdictRow]) -> Option<Due> {
+fn due_of(
+    world: &Path,
+    c: &Creature,
+    verdicts: &[VerdictRow],
+    stress: crate::strain::Stress,
+) -> Option<Due> {
     // Its verdicts a check ran for, newest last.
     let judged: Vec<&VerdictRow> = verdicts
         .iter()
         .filter(|v| v.body == c.name && crate::reports::failed(v).is_some())
         .collect();
-    let last = judged.get(judged.len().checked_sub(STRESS)?..)?;
-    if !last.iter().all(|v| crate::reports::failed(v) == Some(true)) {
+    let last = &judged[judged.len().saturating_sub(STRESS)..];
+    let failing =
+        last.len() == STRESS && last.iter().all(|v| crate::reports::failed(v) == Some(true));
+    let mut why = Vec::new();
+    if failing {
+        why.push(format!("its last {STRESS} gate verdicts failed"));
+    }
+    if stress.strain >= crate::strain::LINE {
+        why.push(format!(
+            "its strain {} reached the council's line",
+            stress.strain
+        ));
+    }
+    if stress.doomed {
+        why.push("a run of its ended at the doom checkpoint".to_owned());
+    }
+    if why.is_empty() {
         return None;
     }
     let notes: Vec<Option<String>> = desk(world, &c.name).into_iter().map(|n| n.source).collect();
     if notes.len() <= DESK {
         return None;
     }
-    let mut why = vec![
-        format!("its last {STRESS} gate verdicts failed"),
-        format!("its desk holds {} notes (more than {DESK})", notes.len()),
-    ];
+    why.push(format!(
+        "its desk holds {} notes (more than {DESK})",
+        notes.len()
+    ));
     let failed: Vec<&VerdictRow> = judged
         .iter()
         .copied()

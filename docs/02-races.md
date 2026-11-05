@@ -1357,7 +1357,7 @@ file, size and change times, the same anchor — is not read again.
 | `gateRight` | the gate's passes on its dispatches | the gate verdicts and the challenge records: a pass on whose landing no Dark Elf finding was upheld |
 | `outwardCleanRate`, `rollbacks` | outward acts | each Kijin post's witness: the act's last state — `observed`, `unobserved` or `settled` clean, `reconcile` not, `corrected` rolled back; one still open, `absent` or an undo is no act yet |
 | `askDoneRate` | the throne's judged landings | the gate verdicts: passed, and none of the throne's next three landings rewrites one of its paths (a hand-back is the same turn) |
-| `slimeHealth`, `overturnedOnSealed`, `envelopeCorrections` | — | **unknown**: strain is journaled only in the world, no journal marks a seal on a landing or names the envelope an act ran under. Never a zero: a rise or a score that reads one is not computed |
+| `slimeHealth`, `overturnedOnSealed`, `envelopeCorrections` | — | **unknown**: the strain journal is not yet folded here, no journal marks a seal on a landing or names the envelope an act ran under. Never a zero: a rise or a score that reads one is not computed |
 
 A verdict names its run; one from before verdicts did is given to its body's latest run begun at
 or before it. A creature's meters are its name's rows under its doc's base race: the race is the
@@ -1563,8 +1563,12 @@ desk says it has learned enough to change. It is checked after every court and a
 What is built reads only what the harness can trust, and proposes only (`mnemorph_world::evolve`,
 shown as `evolve` lines in `mnemorph status` and by `mnemorphd evolution due`): **stressed** is
 its last 3 verdicts in the trusted gate journal failed — a verdict no check could run for
-(`unrun`, `unpinned`) is skipped; strain and the doom checkpoint are journaled only inside the
-world, where a body writes, and count once a trusted journal carries them. **The desk** is its
+(`unrun`, `unpinned`) is skipped — or, from the strain journal (`mnemorph_world::strain`), its
+strain since it was last cleared reached the council's line of 5, or a run of its ended at the
+doom checkpoint. That journal is the harness's, under the state directory, chained and anchored
+with the others; the council's own tally stays in the world, where a body writes, and a forged
+one moves nothing here. A journal that does not verify refuses the survey, never reading as
+calm. **The desk** is its
 live personal notes (proposed or grounded) in memory. Memory is kept inside the world, so a body
 could add notes; the desk alone never makes a creature due — only beside the trusted stress — and
 it makes a proposal, never a swap. A creature whose swap's window is still open in the evolution
