@@ -6866,3 +6866,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorph_config::ci`, `mnemorphd ci`, `status`'s `ci` lines. The forge's newest 30 runs read through the read-only probe; a run not seen, or whose state moved, appended to `.mnemorph/instruments/ci.jsonl`. Audit of #12: every post's acts already run, `forge` typed and the rest as gated `bash` held to their post; what the book specified and nobody built was this instrument and scout's mirror.
 - **Tests:** `tests/ci.rs` — written once, a moved run again, each branch's newest, failures first; a forge that cannot be read writes nothing; a bad line passed over; repositories read from remote URLs. CLI — names its repository, never a body's. Read live against Kaginari/mnemorph: 30 runs, then 0 moved.
 - **Learned:** read a tracking issue against the code before building from it: "posts" looked like four missing features and was one missing instrument.
+
+### [2026-11-06T05:00:00+01:00] aibo Summoner — bench: the provider in a global file of its own
+- **Done:** `bench/run.py` wrote `models.provider` into the world's `config.local.toml`, which is a hole since the key became the human's global file's alone, so every run stopped at `ANTHROPIC_API_KEY is not set` and spent nothing. Each run now has its own `XDG_CONFIG_HOME` beside its world, removed with it.
+- **Tests:** `run.py --check`; `test_report`; one task passed through OpenRouter with no global file of the human's.
+- **Learned:** a guard that holds breaks every honest tool leaning on what it closed: the bench had no test that it could start.
+
+### [2026-11-06T06:00:00+01:00] aibo Summoner — a correction: who wrote these entries
+- **Done:** the entries from 2026-11-03 to 2026-11-05 signed `rimuru` were written by the agent working this repository, aibo Summoner, not by Rimuru the creature. The journal is append-only, so they stand as written and this says so. Entries by the agent are signed `aibo Summoner` from here on.
