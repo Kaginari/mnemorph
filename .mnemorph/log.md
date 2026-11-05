@@ -6866,3 +6866,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** 12 portraits re-rendered at 1024 px through OpenRouter (`google/gemini-3-pro-image`, about USD 1.70 in all), each from its own 256 px portrait, cut with the original's hexagon mask, kept as WebP. `tools/cards.py` writes 1200 × 1680 WebP beside the 600 × 840 PNG; the board serves the larger. The tool moved off the `getsize` a current Pillow no longer has.
 - **Tests:** every portrait read beside its original on one sheet; Oni and Kijin cards read whole. `just`.
 - **Learned:** give an image model the art you have as its reference and ask it to change nothing but sharpness; the background is the part it drifts on, so keep your own mask.
+
+### [2026-11-06T05:00:00+01:00] aibo Summoner — bench: the provider in a global file of its own
+- **Done:** `bench/run.py` wrote `models.provider` into the world's `config.local.toml`, which is a hole since the key became the human's global file's alone, so every run stopped at `ANTHROPIC_API_KEY is not set` and spent nothing. Each run now has its own `XDG_CONFIG_HOME` beside its world, removed with it.
+- **Tests:** `run.py --check`; `test_report`; one task passed through OpenRouter with no global file of the human's.
+- **Learned:** a guard that holds breaks every honest tool leaning on what it closed: the bench had no test that it could start.
+
+### [2026-11-06T06:00:00+01:00] aibo Summoner — a correction: who wrote these entries
+- **Done:** the entries from 2026-11-03 to 2026-11-05 signed `rimuru` were written by the agent working this repository, aibo Summoner, not by Rimuru the creature. The journal is append-only, so they stand as written and this says so. Entries by the agent are signed `aibo Summoner` from here on.
