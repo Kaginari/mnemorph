@@ -185,6 +185,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
 | read the forge's CI runs into the instruments | `mnemorphd ci` |
 | refresh the advisory mirror, audit the lockfiles against it | `mnemorphd scout`, `mnemorphd scout audit` |
+| run the standing reads that are due | `mnemorphd refresh` |
 | read every creature's meters, see who is due to evolve, draft its evolution, review the proposals, swap one in, judge it, keep or roll it back, run a tick of evolution on its own | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution draft <creature>`, `mnemorphd evolution list \| show <id> \| apply <id> \| reject <id>`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>`, `mnemorphd evolution keep \| rollback <id>`, `mnemorphd evolution auto` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
@@ -1887,6 +1888,8 @@ an empty list or table never overrides a lower layer:
   `evolution.mode`, `auto` (the default: evolution drafts, proves and swaps in a due creature on
   trial, then keeps or rolls it back by the rule) or `propose` (every plan and every judgement
   waits for the human), is the human's alone: `auto` lets the harness swap without asking.
+  `refresh.ci_minutes` and `refresh.scout_hours`, how often the standing reads run (15 and 24; 0
+  turns one off), are the human's alone: a mirror can be hundreds of megabytes.
   `evolution.min_net_wins`, how many more paired tasks an evolution must win than lose against
   doing nothing to be kept ([judged after the freeze](02-races.md#evolution--the-other-way-to-change);
   2, at least 1), is the human's alone too: a lower bar keeps more.

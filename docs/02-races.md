@@ -508,7 +508,8 @@ act after it `other`.
   that has only the token gets `reconcile` until `gh auth login` is done. An approved typed act
   reads the forge's logins as the probe does (`mnemorph_sandbox::FORGE_LOGINS`, read-only), since
   the harness rendered its command; a `bash` command, approved or not, is the model's text and
-  reads none. Nothing that runs may stop to ask for a username. A GitHub App's token cannot say
+  reads none. It may write git's own note of the remote, `.git/refs/remotes`, and nothing else of
+  `.git`, so a push leaves its tracking ref true. Nothing that runs may stop to ask for a username. A GitHub App's token cannot say
   who it acts as, so the pull requests it opens are `reconcile`, for the human to read. The probe runs outside every repository with no input, git limited to the `https`,
   `http`, `ssh`, `git` and `file` transports, and inside the kernel guard when one is in force:
   the network open, nothing writable but its own scratch directory. The row keeps the probe,
@@ -653,6 +654,11 @@ chain walked and anchored, and the journal holds the same bytes; after each comm
   scanner, the scanner failing — keeps nothing and never reads as clean. `mnemorph status` shows
   it, and `dark-elf-supply` gets it in its ask, as data, since a body may write the file; with no
   audit, it is told to say the dependencies were not audited.
+- **On a schedule** (`mnemorph_config::refresh`). `mnemorphd refresh` is one tick of these
+  standing reads, each only when due: CI every `refresh.ci_minutes` (15), the mirror and its audit
+  every `refresh.scout_hours` (24); 0 turns one off. Those keys are the human's global file's
+  alone, since a mirror can be hundreds of megabytes. The terminal app starts a tick after a
+  session and the board one an hour for each world. A read that fails says so and waits its turn.
 - **CI is an instrument** (`mnemorph_config::ci`). `mnemorphd ci` reads the forge's newest runs of
   the world's `origin`, or `--repo`, through the harness's read-only probe, and writes each run
   not seen, or whose state moved, to `.mnemorph/instruments/ci.jsonl`, so every creature checks

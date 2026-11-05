@@ -1114,3 +1114,57 @@ fn an_approved_typed_act_reads_the_forges_login_and_bash_never_does() {
     let o = bash(&mut cx(gate), &login);
     assert!(!o.content.contains("LOGIN"), "{o:?}");
 }
+
+/// A push leaves git to note where the remote stands: its own `refs/remotes`, which a Kijin's soil
+/// never holds. A typed act may write that and nothing else of `.git`; `bash` may not.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_approved_typed_act_notes_the_remotes_ref_and_nothing_else_of_git() {
+    use mnemorph_tools::Fingerprint;
+    use mnemorph_tools::shell::{Spawned, spawn_approved};
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("tracking-ref");
+    let home = w.root.join("home");
+    fs::create_dir_all(&home).unwrap();
+    fs::create_dir_all(w.world().join(".git/refs/heads")).unwrap();
+    let cx = |gate| {
+        Context::new(Race::Kijin, w.world(), &["src"])
+            .with_body("kijin-forge")
+            .with_gate(gate)
+            .with_home(&home)
+            .with_soil(&["src"], &[] as &[&str], false)
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let typed = |command: &str| {
+        let plan = Fingerprint::of(command, w.world().as_path()).unwrap();
+        match spawn_approved(
+            command,
+            &cx(Arc::new(Scripted::new([]))),
+            Duration::from_secs(20),
+            ToolClass::Outward,
+            plan,
+            &mut || Ok(()),
+            None,
+        ) {
+            Spawned::Ran(out) => out,
+            other => panic!("{other:?}"),
+        }
+    };
+    let o = typed("mkdir -p .git/refs/remotes/origin && echo abc > .git/refs/remotes/origin/x");
+    assert!(!o.is_error, "{o:?}");
+    assert!(w.world().join(".git/refs/remotes/origin/x").exists());
+    // Only that: a branch of the world's own, or its config, stays out of reach.
+    let o = typed("echo abc > .git/refs/heads/planted");
+    assert!(o.is_error, "{o:?}");
+    assert!(!w.world().join(".git/refs/heads/planted").exists());
+    // Bash, approved, is the model's text.
+    let gate = Arc::new(Scripted::new([Answer::Approve]));
+    let o = bash(&mut cx(gate), "echo abc > .git/refs/remotes/origin/y");
+    assert!(
+        !w.world().join(".git/refs/remotes/origin/y").exists(),
+        "{o:?}"
+    );
+}
