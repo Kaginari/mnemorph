@@ -457,6 +457,8 @@ plainly where it does not.
 - Signed release binaries, npm distribution, installer, changelog, the decks.
 - The release path: the release-candidate smoke test, `install.sh`, the tag-only release
   workflow that drafts and never publishes, `CHANGELOG.md` ([releasing](releasing.md)).
+- `@mnemorph/protocol` and `@mnemorph/sdk` 0.1.0 are on npm, installed and imported from the
+  public registry. Still the human's: turning on signing, what the decks are, cutting 1.0.
 
 **Exit:** a fresh machine installs and runs Mnemorph in under two minutes.
 
