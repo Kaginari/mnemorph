@@ -1163,3 +1163,34 @@ fn the_exclusions_hold_for_every_standing_approval() {
             .contains("secret")
     );
 }
+
+/// A deploy or a rollback is a compiled exclusion: no standing approval covers one — every
+/// environment is protected until a typed deploy names its own — and the human is asked.
+#[test]
+fn a_deploy_or_a_rollback_is_never_covered() {
+    struct Unreached;
+    impl Probe for Unreached {
+        fn run(&self, argv: &[String], _: Duration) -> Result<Seen, String> {
+            panic!("a deploy is excluded before anything is read: {argv:?}")
+        }
+    }
+    let w = Fixture::new();
+    let place = Place::new(&w.world, &w.home);
+    let pin = mnemorph_config::Pin::Forge {
+        host: "github.com".into(),
+    };
+    for command in [
+        "kubectl apply -f deploy/prod.yaml",
+        "helm upgrade app ./charts/app",
+        "helm rollback app 3",
+    ] {
+        let planned = plan(&Act::Command(command.into()), &place)
+            .unwrap_or_else(|e| panic!("{command}: {e:?}"));
+        let e = excluded(&planned, &pin, &w.world, &Unreached)
+            .expect_err(&format!("{command} was covered"));
+        assert!(
+            e.contains("a deploy always asks") && e.contains("protected"),
+            "{command}: {e}"
+        );
+    }
+}
