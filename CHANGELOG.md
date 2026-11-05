@@ -85,6 +85,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The board's colony net (`#/net`) is a 3D hex city around the throne: the races on a terraced
   lattice, a world's living bodies seated around their race, waves and signals through it, and a
   race picked lights what it reaches.
+- The colony net shows a world's Minds: gems beside the bodies that name them, and round the rim
+  for those any body may wear or none does yet. `GET /api/w/<id>/bodies` gains `unworn`.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
