@@ -6903,3 +6903,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-11-06T12:00:00+01:00] aibo Summoner — the roadmap brought up to date
 - **Done:** the diagram shows M7 to M13 built and M14 under way: M7, M10, M12 and M13 by their closed trackers, M9 and M11 by their exits (#342, #337). The guts note's "still to come" is gone: `Run` already gives the classifier the human's pinned lines as its benches.
 - **Learned:** a milestone diagram is a claim like any other, and it goes stale the day nobody's change touches it.
+### [2026-11-06T11:00:00+01:00] aibo Summoner — M10: the supply audit, and the mirror's path put right
+- **Done:** `mnemorphd scout audit`: `osv-scanner` over the root lockfiles against the mirror, in the sandbox, the network off, kept in `.mnemorph/intel/audit.json`, shown in `mnemorph status`, and given to `dark-elf-supply` in its ask as data. The mirror moved from `osv-scanner/` to `osv-scalibr/`: #340 said the first was the layout the scanner reads, on no real scan, and it was not.
+- **Tests:** `tests/scout.rs` — found, clean, and every way an audit could not look (an ecosystem unmirrored, the scanner's failure over an empty report, a report that does not read) keeps nothing and never reads as clean. `challenge.rs` — the reviewer is told when nothing was audited. Run live over this repository: 4 packages with advisories, `bincode` the one `deny.toml` already accepts.
+- **Learned:** "the layout the tool reads" is a claim about the tool: run the tool.
