@@ -260,13 +260,33 @@ pub fn evolve_after(world: &Path) -> Option<String> {
     if config.evolution_proposes() {
         return None;
     }
-    // `$XDG_STATE_HOME/mnemorph`, where the board's own log is kept.
+    let log = behind(&["evolution", "auto", "--world"], world, EVOLVE_LOG)?;
+    Some(format!(
+        "evolution: a tick runs in the background (log: {})",
+        log.display()
+    ))
+}
+
+/// The log of the standing reads' ticks.
+pub const REFRESH_LOG: &str = "refresh.log";
+
+/// One tick of the standing reads (`mnemorphd refresh`) started in the background: after a session,
+/// and each hour from the board. Only what is due runs; a body's session starts none.
+pub fn refresh_after(world: &Path) {
+    if std::env::var_os("MNEMORPH_BODY").is_none() {
+        let _ = behind(&["refresh", "--world"], world, REFRESH_LOG);
+    }
+}
+
+/// `mnemorphd <args> <world>` in its own process group, outliving the app, a Ctrl-C never reaching
+/// it, its output appended to `log` under `$XDG_STATE_HOME/mnemorph`; the log's path once started.
+fn behind(args: &[&str], world: &Path, log: &str) -> Option<PathBuf> {
     let dir = dimension::registry()
         .as_deref()
         .and_then(Path::parent)
         .map(Path::to_path_buf)?;
     std::fs::create_dir_all(&dir).ok()?;
-    let log = dir.join(EVOLVE_LOG);
+    let log = dir.join(log);
     if std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_CAP) {
         let _ = std::fs::remove_file(&log);
     }
@@ -279,7 +299,7 @@ pub fn evolve_after(world: &Path) -> Option<String> {
     let err = out.try_clone().ok()?;
     let mnemorphd = sibling().ok()?;
     Command::new(mnemorphd)
-        .args(["evolution", "auto", "--world"])
+        .args(args)
         .arg(world)
         .stdin(Stdio::null())
         .stdout(out)
@@ -287,10 +307,7 @@ pub fn evolve_after(world: &Path) -> Option<String> {
         .process_group(0)
         .spawn()
         .ok()?;
-    Some(format!(
-        "evolution: a tick runs in the background (log: {})",
-        log.display()
-    ))
+    Some(log)
 }
 
 #[cfg(test)]

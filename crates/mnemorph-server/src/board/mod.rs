@@ -81,6 +81,10 @@ const CHANGES: usize = 256;
 /// The largest body `POST /api/w/<world>/sessions` reads.
 const START_BYTES: usize = 1024;
 
+/// The 30-second ticks between each round of the worlds' standing reads: an hour.
+#[cfg(unix)]
+const STANDING_TICKS: u32 = 120;
+
 /// A world, as `GET /api/worlds` shows it to the browser holding the session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -1331,9 +1335,18 @@ pub fn run_at(
         let refresher = Arc::clone(board);
         let ticker = tokio::spawn(async move {
             let mut every = tokio::time::interval(Duration::from_secs(30));
+            let mut ticks: u32 = 0;
             loop {
                 every.tick().await;
                 let _ = refresher.refresh();
+                ticks = ticks.wrapping_add(1);
+                // Each hour, each world's standing reads: only what is due runs.
+                #[cfg(unix)]
+                if ticks.is_multiple_of(STANDING_TICKS) {
+                    for w in refresher.worlds().worlds {
+                        autostart::refresh_after(std::path::Path::new(&w.path));
+                    }
+                }
             }
         });
         // The worlds' files, watched: each change is told on `WS /ws/board`.
