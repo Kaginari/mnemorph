@@ -24,8 +24,9 @@ characters in the prompt.
 
 ## The set
 
-`tools/cards.py` draws every card (600 × 840) into `assets/cards/`: the race's hexagon portrait
-from `assets/portraits/`, framed in the race's colour, with its name, tier gems, duty, tool
+`tools/cards.py` draws every card into `assets/cards/` (600 × 840) and `assets/cards/hires/`
+(1200 × 1680, WebP, for the full card view): the race's hexagon portrait from
+`assets/portraits/<race>@1024.webp`, framed in the race's colour, with its name, tier gems, duty, tool
 classes, soil, its rise or command line and its meter — the words of [the races](02-races.md).
 When the law changes, edit the card's entry and run `python3 tools/cards.py`. A painted art set,
 made with the brief below, would replace the portraits in the art window.
@@ -37,6 +38,10 @@ made with the brief below, would replace the portraits in the art window.
 | <img src="../assets/cards/high-elf.png" width="110" alt="High Elf"> | <img src="../assets/cards/high-orc.png" width="110" alt="High Orc"> | <img src="../assets/cards/named-slime.png" width="110" alt="Named Slime"> | <img src="../assets/cards/oni.png" width="110" alt="Oni"> | <img src="../assets/cards/arch-dark-elf.png" width="110" alt="Arch Dark Elf"> | <img src="../assets/cards/back.png" width="110" alt="Card back"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | High Elf | High Orc | Named Slime | Oni | Arch Dark Elf | Card back |
+
+The 1024 px portraits are the 256 px ones re-rendered by an image model
+(`google/gemini-3-pro-image`, the portrait given as the reference, asked to keep the character,
+pose, colours and hexagon and add nothing), then cut with the original's own hexagon mask.
 
 ## The art spec
 

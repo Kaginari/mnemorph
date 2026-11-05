@@ -673,7 +673,7 @@ card art, the body's facts, the law of its race, its Minds and its acts.
 commands, its shelf, soil and gate, its steps, budget share and model tier, its headline meter's
 bars, an ascended form's rise, probation and fall bars (`mnemorph_races::law_bars`), and a Kijin's
 posts or a Dark Elf's specialities. The art is the cards of `assets/cards/` cut to WebP
-(`tools/board-art.sh`, about 40 KB a card), embedded by exact name; the page loads only an `art`
+(`tools/board-art.sh`, 1200 × 1680, about 110 KB a card), embedded by exact name; the page loads only an `art`
 of the plain form `/art/cards/<race>.webp`.
 
 **The queue** is `.mnemorph/shared/queue.jsonl`, copied as a regular file under the cap and folded
