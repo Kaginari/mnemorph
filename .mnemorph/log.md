@@ -6926,3 +6926,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorph_config::refresh`, `mnemorphd refresh`: CI every 15 minutes, the mirror and its audit every 24 hours, only when due, under a lock. Started after each session and hourly from the board's ticker. `refresh.ci_minutes` and `refresh.scout_hours`, 0 for off, are the human's global file's alone: a mirror can be 220 MB.
 - **Tests:** `tests/refresh.rs`: only what is due runs; 0 is off; a failed mirror says why, audits nothing, and is not retried each tick; a future date in the stamps, which a body could write, never puts a read off. Run live below.
 - **Learned:** a schedule is a cost the human did not click for: decide what a tick may spend before deciding how often it fires.
+
+### [2026-11-06T17:00:00+01:00] aibo Summoner — the colony net's Minds
+- **Done:** the Agents UI has two layers, Minds and skills. Here they are one: the wire says `Skill` is "A Mind (skill)", so the board has no second thing to draw. Gems beside the body that names a Mind; the rim ring, where the Agents UI had skills, for shared Minds and the new `unworn` list. Gold once adopted, muted before. A race picked also lights the Minds its bodies wear.
+- **Tests:** `net.test.ts`: each Mind once, beside or on the rim, by its standing, and reached from its race. Seen in both themes with fixture bodies.
+- **Learned:** before porting a layer, ask whether the concept is the same one under another name.

@@ -206,7 +206,9 @@ function NetCanvas({
         muted: get('--mn-text-muted'),
         text: get('--mn-text'),
         ui: get('--mn-font-ui'),
-        race: new Map(NODES.map((n) => [n.token, get(n.token)])),
+        race: new Map(
+          [...NODES.map((n) => n.token), '--mn-gold', '--mn-text-muted'].map((k) => [k, get(k)]),
+        ),
       };
     };
     type Tokens = ReturnType<typeof tokens>;
@@ -323,9 +325,9 @@ function NetCanvas({
         const lit = energy(b.node.position, waves, now).power;
         ctx.setLineDash(e.kind === 'ascends' ? [4, 6] : []);
         ctx.strokeStyle = tint(t, b.node.token);
-        const rest = e.kind === 'seat' ? 0.32 : 0.42;
+        const rest = e.kind === 'seat' || e.kind === 'wears' ? 0.32 : 0.42;
         ctx.globalAlpha = pin === undefined ? rest + 0.5 * lit : touches ? 0.95 : 0.06;
-        ctx.lineWidth = touches ? 2 : e.kind === 'seat' ? 0.6 : 1;
+        ctx.lineWidth = touches ? 2 : e.kind === 'seat' || e.kind === 'wears' ? 0.6 : 1;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -362,7 +364,7 @@ function NetCanvas({
       const lookedAt = (id: string) => id === pin || id === hoverId || reach.near.has(id);
       const hidden = crowdedLabels(
         projected
-          .filter((p) => p.node.kind !== 'body')
+          .filter((p) => p.node.kind !== 'body' && p.node.kind !== 'mind')
           .map((p) => ({
             id: p.node.id,
             x: p.x,
@@ -381,27 +383,41 @@ function NetCanvas({
         const r = p.radius * (focus ? 1.5 : 1) * (1 + 0.25 * lit);
         const faded = pin !== undefined && n.id !== pin && !reach.near.has(n.id);
         const depth = (faded ? 0.16 : 1) * (0.55 + 0.45 * ((p.depth / CITY + 1) / 2));
-        const halo = r * (busy ? 3.4 + beat : focus ? 3 : 2.2 + 1.6 * lit);
+        const halo =
+          r * (busy ? 3.4 + beat : focus ? 3 : n.kind === 'mind' ? 1.4 : 2.2 + 1.6 * lit);
         ctx.globalCompositeOperation = blend;
         ctx.globalAlpha = (blend === 'lighter' ? 0.8 : 0.3) * depth;
         stamp(c, p.x, p.y, halo);
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = depth;
-        ctx.fillStyle = t.panel;
-        ctx.strokeStyle = n.id === pin ? t.holo : c;
-        ctx.lineWidth = focus || busy ? 2 : 1;
-        hexagon(p.x, p.y, r + 1.5);
-        ctx.fill();
-        ctx.stroke();
-        const art = picture(n);
-        if (art.complete && art.naturalWidth > 0) {
-          ctx.save();
-          hexagon(p.x, p.y, r);
-          ctx.clip();
-          ctx.drawImage(art, p.x - r, p.y - r, r * 2, r * 2);
-          ctx.restore();
+        if (n.kind === 'mind') {
+          // A Mind is no creature: a gem, not a hex.
+          ctx.fillStyle = c;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y - r);
+          ctx.lineTo(p.x + r * 0.7, p.y);
+          ctx.lineTo(p.x, p.y + r);
+          ctx.lineTo(p.x - r * 0.7, p.y);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillStyle = t.panel;
+          ctx.strokeStyle = n.id === pin ? t.holo : c;
+          ctx.lineWidth = focus || busy ? 2 : 1;
+          hexagon(p.x, p.y, r + 1.5);
+          ctx.fill();
+          ctx.stroke();
+          const art = picture(n);
+          if (art.complete && art.naturalWidth > 0) {
+            ctx.save();
+            hexagon(p.x, p.y, r);
+            ctx.clip();
+            ctx.drawImage(art, p.x - r, p.y - r, r * 2, r * 2);
+            ctx.restore();
+          }
         }
-        const named = lookedAt(n.id) || (n.kind !== 'body' && !faded && !hidden.has(n.id));
+        const small = n.kind === 'body' || n.kind === 'mind';
+        const named = lookedAt(n.id) || (!small && !faded && !hidden.has(n.id));
         if (named) {
           ctx.font = `${focus ? 13 : 11}px ${t.ui}`;
           ctx.textAlign = 'center';
@@ -578,6 +594,7 @@ function LiveNet({
 }) {
   const load = useBodies(world);
   const rows = load.state === 'loading' ? undefined : load.data?.bodies;
+  const unworn = load.state === 'loading' ? undefined : load.data?.unworn;
   const net = useMemo(
     () =>
       rows
@@ -587,10 +604,12 @@ function LiveNet({
               race: b.race,
               retired: b.retired,
               working: b.live.state === 'working',
+              minds: b.minds,
             })),
+            unworn,
           )
         : STILL,
-    [rows],
+    [rows, unworn],
   );
   return <NetPage net={net} chooser={chooser} reduced={reduced} />;
 }
@@ -634,7 +653,8 @@ function NetPage({
   const card = find(pinned);
   const over = find(hovered);
   const commands = EDGES.filter((e) => e.kind === 'command').length;
-  const bodies = net.nodes.length - NODES.length;
+  const bodies = net.nodes.filter((n) => n.kind === 'body').length;
+  const minds = net.nodes.filter((n) => n.kind === 'mind').length;
 
   return (
     <div className="page">
@@ -645,8 +665,11 @@ function NetPage({
       <p className="page-sub">
         The colony as a city around the throne: the six races and the five ascended forms, the same
         in every world
-        {bodies > 0 ? `, and this world's ${bodies} living bodies, seated around their race` : ''}.
-        Pick a race to light what it reaches.
+        {bodies > 0 ? `, and this world's ${bodies} living bodies, seated around their race` : ''}
+        {minds > 0
+          ? `, with its ${minds} Minds as gems: beside who wears them, or round the rim`
+          : ''}
+        . Pick a race to light what it reaches.
       </p>
       <section className="net-stage" aria-label="the net, drawn">
         <NetCanvas
@@ -657,7 +680,7 @@ function NetPage({
           reduced={reduced}
         />
         <p className="net-hint">
-          {over ? `${shown(over.name)} — ${over.job}` : HINT}
+          {over ? `${shown(over.name)} — ${shown(over.job)}` : HINT}
           {reduced ? ' · still: motion reduced' : ' · turning'}
         </p>
         {card && (
@@ -672,7 +695,7 @@ function NetPage({
             </button>
             <span className="net-card-kind">{kindWords(card)}</span>
             <h2 className="net-card-name">{shown(card.name)}</h2>
-            <p className="net-card-job">{card.job}</p>
+            <p className="net-card-job">{shown(card.job)}</p>
           </aside>
         )}
       </section>

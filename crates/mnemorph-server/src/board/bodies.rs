@@ -344,6 +344,8 @@ pub struct BoardBodies {
     pub throne: ThroneLive,
     /// Every race of the law, in its order.
     pub races: Vec<RaceLaw>,
+    /// The world's Minds no creature names and none may wear by right: waiting for a wearer.
+    pub unworn: Vec<BodyMind>,
     /// Where the roster was read.
     pub roster: Provenance,
     /// Where each creature's standing was read: the creatures' witness.
@@ -582,6 +584,41 @@ fn minds_of(c: &Creature, survey: &minds::Survey) -> Vec<BodyMind> {
     out
 }
 
+/// Whether the throne is live, and why: a chat open on the board, or a run a session holds.
+fn throne_of(chats: u32, held: &[String]) -> ThroneLive {
+    ThroneLive {
+        live: chats > 0 || !held.is_empty(),
+        why: if chats > 0 {
+            format!("{chats} chat(s) open on the board")
+        } else if let Some(run) = held.first() {
+            format!("run {run} is held by a live session")
+        } else {
+            "no session holds a run".into()
+        },
+    }
+}
+
+/// The Minds of `survey` that no living creature of `roster` names and that are not shared.
+fn unworn(roster: &Roster, survey: &minds::Survey) -> Vec<BodyMind> {
+    let named = |name: &str| {
+        roster
+            .living()
+            .any(|c| c.minds.iter().any(|m| m.trim_matches('`') == name))
+    };
+    survey
+        .minds
+        .iter()
+        .filter(|s| !s.mind.shared && !named(&s.mind.name))
+        .map(|s| BodyMind {
+            name: s.mind.name.clone(),
+            standing: standing(&s.standing),
+            shared: false,
+            about: super::runs::one_line(&s.mind.about, 160),
+            owner: s.owner.clone(),
+        })
+        .collect()
+}
+
 /// Whether `c` works now, from its latest commission; `session` whether a session is live in the
 /// world, `now` the clock.
 #[must_use]
@@ -740,16 +777,7 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
     let survey = minds::survey_at(snap.path(), at.as_deref(), anchor.as_ref());
     let held = mnemorph_loop::resume::live(world);
     let session = chats > 0 || !held.is_empty();
-    let throne = ThroneLive {
-        live: session,
-        why: if chats > 0 {
-            format!("{chats} chat(s) open on the board")
-        } else if let Some(run) = held.first() {
-            format!("run {run} is held by a live session")
-        } else {
-            "no session holds a run".into()
-        },
-    };
+    let throne = throne_of(chats, &held);
     let (commissions, older) = timeline::commissions(world);
     let (all, _) = timeline::entries_with(world, &commissions);
     let now = SystemTime::now();
@@ -778,6 +806,7 @@ pub fn bodies(world: &Path, chats: u32) -> Result<BoardBodies, String> {
         loops: roster.loops(),
         throne,
         races: races(count),
+        unworn: unworn(&roster, &survey),
         roster: prov(
             ".mnemorph/<race>/<seat>/README.md (in the world)",
             false,

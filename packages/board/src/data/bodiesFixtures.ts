@@ -289,6 +289,15 @@ export const fixtureBodies: BoardBodies = {
     trusted: true,
     why: null,
   },
+  unworn: [
+    {
+      name: 'waiting-mind',
+      standing: 'adopted',
+      shared: false,
+      about: 'no wearer yet',
+      owner: null,
+    },
+  ],
   minds: { source: "the Minds' witness under the state directory", trusted: true, why: null },
   live: {
     source: '.mnemorph/instruments/loop/ (run journals and locks, in the world)',

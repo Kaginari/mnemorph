@@ -88,6 +88,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The standing reads run on their own: `mnemorphd refresh` reads CI and refreshes the advisory
   mirror and its audit when due, after each session and hourly from the board
   (`refresh.ci_minutes`, `refresh.scout_hours`, 0 for off).
+- The colony net shows a world's Minds: gems beside the bodies that name them, and round the rim
+  for those any body may wear or none does yet. `GET /api/w/<id>/bodies` gains `unworn`.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for

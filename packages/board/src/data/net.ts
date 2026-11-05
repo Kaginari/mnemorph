@@ -11,7 +11,7 @@
  * flanks, and each base's ascended form beside it, joined by a dashed ascension edge.
  */
 
-export type NodeKind = 'human' | 'throne' | 'base' | 'ascended' | 'body';
+export type NodeKind = 'human' | 'throne' | 'base' | 'ascended' | 'body' | 'mind';
 
 export interface ColonyNode {
   id: string;
@@ -30,8 +30,9 @@ export interface ColonyNode {
 export interface ColonyEdge {
   from: string;
   to: string;
-  /** command: who commissions; ascends: who rose from whom; seat: a race and a body of it. */
-  kind: 'command' | 'ascends' | 'seat';
+  /** command: who commissions; ascends: who rose from whom; seat: a race and a body of it;
+   * wears: a body and a Mind it names. */
+  kind: 'command' | 'ascends' | 'seat' | 'wears';
 }
 
 export type Vec = readonly [number, number, number];
@@ -300,7 +301,7 @@ export function project(
     x: s.sx,
     y: s.sy,
     radius: Math.max(
-      (node.kind === 'body' ? BODY_RADIUS : NODE_RADIUS) *
+      (node.kind === 'body' || node.kind === 'mind' ? BODY_RADIUS : NODE_RADIUS) *
         s.scale *
         unitOf(width, height) *
         camera.zoom,
@@ -422,19 +423,52 @@ export function raceOf(n: ColonyNode): string {
   return n.token.replace('--mn-race-', '');
 }
 
+/** The Mind fields the city reads. */
+export interface Wearable {
+  name: string;
+  standing: string;
+  shared: boolean;
+  about: string;
+}
+
 /** The body fields the city reads. */
 export interface Seatable {
   name: string;
   race: string;
   retired: boolean;
   working: boolean;
+  minds: readonly Wearable[];
+}
+
+/** A Mind's token: gold once the human adopted it, muted until then. */
+const mindToken = (m: Wearable) => (m.standing === 'adopted' ? '--mn-gold' : '--mn-text-muted');
+
+const mindJob = (m: Wearable) => (m.about === '' ? `a Mind, ${m.standing}` : m.about);
+
+/** The ring round the city's rim: Minds any body may wear, and those waiting for a wearer. */
+function ringed(ring: readonly Wearable[]): ColonyNode[] {
+  return ring.map((m, i) => {
+    const angle = (i / ring.length) * Math.PI * 2;
+    return {
+      id: `mind:${m.name}`,
+      name: m.name,
+      job: mindJob(m),
+      token: mindToken(m),
+      position: [1.02 * CITY * Math.cos(angle), -0.16 * CITY, 1.02 * CITY * Math.sin(angle)],
+      kind: 'mind',
+    };
+  });
 }
 
 /** The most bodies seated around one race: past it, the Bodies page holds the rest. */
 const SEATS = 12;
 
-/** The net of a world: the races, and each living body seated around its race. */
-export function netOf(bodies: readonly Seatable[]): {
+/** The net of a world: the races, each living body seated around its race, the Minds its bodies
+ * name beside them, and the rest of the world's Minds in a ring round the rim. */
+export function netOf(
+  bodies: readonly Seatable[],
+  unworn: readonly Wearable[] = [],
+): {
   nodes: readonly ColonyNode[];
   edges: readonly ColonyEdge[];
   working: ReadonlySet<string>;
@@ -443,6 +477,8 @@ export function netOf(bodies: readonly Seatable[]): {
   const edges: ColonyEdge[] = [...EDGES];
   const working = new Set<string>();
   const seated = new Map<string, number>();
+  const beside = new Set<string>();
+  const ring = new Map<string, Wearable>();
   for (const b of bodies) {
     const race = NODES.find((n) => raceOf(n) === b.race && n.kind !== 'throne');
     if (b.retired || !race || race.kind === 'human') continue;
@@ -465,17 +501,46 @@ export function netOf(bodies: readonly Seatable[]): {
     });
     edges.push({ from: race.id, to: id, kind: 'seat' });
     if (b.working) working.add(id);
+    for (const m of b.minds) {
+      const mind = `mind:${m.name}`;
+      if (m.shared) {
+        if (!ring.has(mind)) ring.set(mind, m);
+        continue;
+      }
+      if (!beside.has(mind)) {
+        const turn = beside.size * 1.9;
+        const spot = on(px / CITY + 0.05 * Math.cos(turn), pz / CITY + 0.05 * Math.sin(turn), 0.2);
+        beside.add(mind);
+        nodes.push({
+          id: mind,
+          name: m.name,
+          job: mindJob(m),
+          token: mindToken(m),
+          position: spot,
+          kind: 'mind',
+        });
+      }
+      edges.push({ from: id, to: mind, kind: 'wears' });
+    }
   }
+  for (const m of unworn) ring.set(`mind:${m.name}`, m);
+  nodes.push(...ringed([...ring.values()]));
   return { nodes, edges, working };
 }
 
-/** Who `id` reaches: the nodes one edge away. */
+/** Who `id` reaches: the nodes one edge away, and for a race the Minds its bodies wear. */
 export function related(id: string | undefined, edges: readonly ColonyEdge[]): Set<string> {
   const out = new Set<string>();
   if (id === undefined) return out;
   for (const e of edges) {
     if (e.from === id) out.add(e.to);
     if (e.to === id) out.add(e.from);
+  }
+  for (const seat of edges) {
+    if (seat.kind !== 'seat' || seat.from !== id) continue;
+    for (const worn of edges) {
+      if (worn.kind === 'wears' && worn.from === seat.to) out.add(worn.to);
+    }
   }
   return out;
 }
