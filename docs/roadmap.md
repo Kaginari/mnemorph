@@ -313,6 +313,9 @@ its own ([races](02-races.md)).
 mid-act is probed first — settled if it landed, gated again if not — never replayed; an undo runs
 only once the human approves it, and its incident closes only on four receipts.
 
+Every post's acts run today: `forge` typed, the others as gated `bash` commands, each held to its
+post. `ci`'s instrument is built (`mnemorphd ci`, read live against this repository).
+
 The exit is met against a stub forge; a live run remains.
 
 ### M10 — Dark Elf · M

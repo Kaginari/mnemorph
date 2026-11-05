@@ -6856,3 +6856,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `[profile.dev] debug = "line-tables-only"` in `Cargo.toml`: this bot's token may not touch `.github/workflows/`, and the setting needs no workflow. `ld` died of a bus error linking three test binaries at once on PR #337's run; the log held no disk figures, so a full disk is the likely cause, not a proven one.
 - **Tests:** a clean `cargo test --no-run --workspace`: 23 GB and 123 s before, 9.7 GB and 95 s after. `just` passes under the setting.
 - **Learned:** a local `just` says nothing of the runner: look at CI before saying a change is done. macOS's red runs here were GitHub's (`job was not acquired by Runner`), not the code's.
+
+### [2026-11-05T23:00:00+01:00] rimuru — M9: CI as an instrument
+- **Done:** `mnemorph_config::ci`, `mnemorphd ci`, `status`'s `ci` lines. The forge's newest 30 runs read through the read-only probe; a run not seen, or whose state moved, appended to `.mnemorph/instruments/ci.jsonl`. Audit of #12: every post's acts already run, `forge` typed and the rest as gated `bash` held to their post; what the book specified and nobody built was this instrument and scout's mirror.
+- **Tests:** `tests/ci.rs` — written once, a moved run again, each branch's newest, failures first; a forge that cannot be read writes nothing; a bad line passed over; repositories read from remote URLs. CLI — names its repository, never a body's. Read live against Kaginari/mnemorph: 30 runs, then 0 moved.
+- **Learned:** read a tracking issue against the code before building from it: "posts" looked like four missing features and was one missing instrument.

@@ -183,6 +183,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
+| read the forge's CI runs into the instruments | `mnemorphd ci` |
 | read every creature's meters, see who is due to evolve, draft its evolution, review the proposals, swap one in, judge it, keep or roll it back, run a tick of evolution on its own | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution draft <creature>`, `mnemorphd evolution list \| show <id> \| apply <id> \| reject <id>`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>`, `mnemorphd evolution keep \| rollback <id>`, `mnemorphd evolution auto` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
@@ -1448,6 +1449,7 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its every byte witnessed under `$XDG_STATE_HOME/mnemorph/usage/` for the tripwire, its head anchored in `log.md` and kept under `$XDG_STATE_HOME/mnemorph/anchors/` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
 | derived indexes | none on disk: recall builds its BM25 index in memory | — |
 | run journals | `.mnemorph/instruments/loop/` | no |
+| CI runs | `.mnemorph/instruments/ci.jsonl` — each forge run as `mnemorphd ci` read it; body-writable, said as last read | no |
 
 Every index is derived and can be deleted, and is rebuilt from what it derives from; a stale index
 is rebuilt, never routed around.

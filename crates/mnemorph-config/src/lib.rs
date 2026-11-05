@@ -30,6 +30,7 @@
 //! value of the wrong type, a floor rule asked to ask, a destructive envelope or a fallback cycle
 //! is an error that names its file.
 
+pub mod ci;
 mod closure;
 mod forge;
 mod oni;
