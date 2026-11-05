@@ -626,8 +626,10 @@ pub fn evolve(world: &std::path::Path) -> Vec<String> {
 /// `status`'s advisory mirror: each ecosystem, its age, as `mnemorphd scout` last fetched it.
 #[must_use]
 pub fn scout(world: &std::path::Path) -> Vec<String> {
-    mnemorph_server::config::scout::lines(world)
+    let scout = mnemorph_server::config::scout::lines(world);
+    scout
         .iter()
+        .chain(&mnemorph_server::config::scout::audit_lines(world))
         .map(|l| format!("{:<9}{}", "scout", one_line(l)))
         .collect()
 }

@@ -315,7 +315,8 @@ only once the human approves it, and its incident closes only on four receipts.
 
 Every post's acts run today: `forge` typed, the others as gated `bash` commands, each held to its
 post. `ci`'s instrument is built (`mnemorphd ci`, read live against this repository).
-`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV).
+`scout`'s mirror is built (`mnemorphd scout`, fetched live from OSV), and audited against
+(`mnemorphd scout audit`, `osv-scanner` offline; run live over this repository's lockfiles).
 
 The exit is met live: on 2026-11-05 a branch was pushed and a pull request opened on this repository
 through `kijin-forge`, Claude Sonnet 5.5 through OpenRouter, with one gate prompt (#341, closed

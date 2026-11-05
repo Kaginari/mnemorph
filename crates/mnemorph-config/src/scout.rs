@@ -1,6 +1,7 @@
-//! The scout's advisory mirror. OSV publishes each ecosystem's advisories as one `all.zip`; each
-//! ecosystem the world's lockfiles name is kept under `.mnemorph/intel/osv-scanner/<ecosystem>/`,
-//! the layout `osv-scanner --offline` reads, so an audit needs no network. `.mnemorph/intel/` is
+//! The scout's advisory mirror, and the audit over it. OSV publishes each ecosystem's advisories
+//! as one `all.zip`; each ecosystem the world's lockfiles name is kept under
+//! `.mnemorph/intel/osv-scalibr/<ecosystem>/`, the layout `osv-scanner --offline` reads (2.7.0, by
+//! a real scan), so an audit needs no network: it runs in the sandbox with the network off. `.mnemorph/intel/` is
 //! machine-local and a body may write it: no link is followed into it, a download lands whole or
 //! not at all, and what the mirror holds is said as last read. It is a fetch: nothing is sent.
 
@@ -12,7 +13,7 @@ use mnemorph_ledger::{Journal, Timestamp};
 use serde::{Deserialize, Serialize};
 
 /// The mirror, relative to the world.
-pub const MIRROR: &str = ".mnemorph/intel/osv-scanner";
+pub const MIRROR: &str = ".mnemorph/intel/osv-scalibr";
 
 /// Where OSV publishes each ecosystem.
 const OSV: &str = "https://osv-vulnerabilities.storage.googleapis.com";
@@ -190,6 +191,219 @@ pub fn refresh_now(world: &Path) -> Result<(Vec<String>, bool), String> {
         }
     };
     refresh(world, &fetch)
+}
+
+/// What the scanner found of one package.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Advisory {
+    /// The package.
+    pub package: String,
+    /// Its version in the lockfile.
+    pub version: String,
+    /// Its ecosystem.
+    pub ecosystem: String,
+    /// The advisories' ids.
+    pub ids: Vec<String>,
+    /// The highest CVSS score the scanner gives them, as it wrote it; empty when none.
+    pub severity: String,
+}
+
+/// The last audit, kept beside the mirror.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Audit {
+    /// When.
+    pub ts: Timestamp,
+    /// The lockfiles read.
+    pub lockfiles: Vec<String>,
+    /// What was found.
+    pub advisories: Vec<Advisory>,
+}
+
+/// What a scanner's run left: its exit, standard output and standard error.
+pub type Scanned = (Option<i32>, Vec<u8>, Vec<u8>);
+
+/// Where the last audit is kept, relative to the world.
+pub const AUDIT: &str = ".mnemorph/intel/audit.json";
+
+/// The advisories in `osv-scanner --format json`'s output.
+///
+/// # Errors
+///
+/// It does not read as a scanner's report.
+pub fn advisories(report: &[u8]) -> Result<Vec<Advisory>, String> {
+    let v: serde_json::Value =
+        serde_json::from_slice(report).map_err(|e| format!("the scanner's report: {e}"))?;
+    let results = v["results"]
+        .as_array()
+        .ok_or("the scanner's report holds no results")?;
+    let text = |v: &serde_json::Value| v.as_str().unwrap_or_default().to_owned();
+    let mut out = Vec::new();
+    for p in results
+        .iter()
+        .filter_map(|r| r["packages"].as_array())
+        .flatten()
+    {
+        let ids: Vec<String> = p["vulnerabilities"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|x| text(&x["id"]))
+            .collect();
+        if ids.is_empty() {
+            continue;
+        }
+        let severity = p["groups"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|g| text(&g["max_severity"]))
+            .max_by(|a, b| {
+                let n = |s: &str| s.parse::<f64>().unwrap_or(-1.0);
+                n(a).total_cmp(&n(b))
+            })
+            .unwrap_or_default();
+        out.push(Advisory {
+            package: text(&p["package"]["name"]),
+            version: text(&p["package"]["version"]),
+            ecosystem: text(&p["package"]["ecosystem"]),
+            ids,
+            severity,
+        });
+    }
+    Ok(out)
+}
+
+/// `world`'s lockfiles audited against the mirror through `scan`, given the lockfiles' names, and
+/// the result kept at [`AUDIT`]. A mirror missing an ecosystem audits nothing: an audit that could
+/// not look says so, never that it found none. The scanner exits 0 clean and 1 on a finding;
+/// anything else is its failure.
+///
+/// # Errors
+///
+/// Nothing to audit, an ecosystem unmirrored, the scanner failed, or its report does not read.
+pub fn audit(
+    world: &Path,
+    scan: &dyn Fn(&[String]) -> Result<Scanned, String>,
+) -> Result<Audit, String> {
+    let lockfiles: Vec<String> = LOCKFILES
+        .iter()
+        .map(|(f, _)| (*f).to_owned())
+        .filter(|f| fs::symlink_metadata(world.join(f)).is_ok_and(|m| m.is_file()))
+        .collect();
+    if lockfiles.is_empty() {
+        return Err("no lockfile at the world's root: nothing to audit".to_owned());
+    }
+    for eco in ecosystems(world) {
+        let zip = world.join(MIRROR).join(eco).join("all.zip");
+        if !fs::symlink_metadata(&zip).is_ok_and(|m| m.is_file()) {
+            return Err(format!(
+                "{eco} is not mirrored, so nothing was audited: run `mnemorphd scout` first"
+            ));
+        }
+    }
+    let (code, out, err) = scan(&lockfiles)?;
+    if !matches!(code, Some(0 | 1)) {
+        let why = String::from_utf8_lossy(&err);
+        let last = why.lines().last().unwrap_or("no word").trim().to_owned();
+        return Err(format!(
+            "the scanner failed, so nothing was audited: {last}"
+        ));
+    }
+    let audit = Audit {
+        ts: Timestamp::now(),
+        lockfiles,
+        advisories: advisories(&out)?,
+    };
+    folder(world, Path::new(".mnemorph/intel"))?;
+    let at = world.join(AUDIT);
+    let _ = fs::remove_file(&at);
+    let text = serde_json::to_vec(&audit).map_err(|e| e.to_string())?;
+    fs::write(&at, text).map_err(|e| format!("{}: {e}", at.display()))?;
+    Ok(audit)
+}
+
+/// [`audit`] with `osv-scanner` from the `PATH`, in the sandbox, the network off, the world read
+/// and nothing of it written.
+///
+/// # Errors
+///
+/// `osv-scanner` is not installed, or as [`audit`].
+pub fn audit_now(world: &Path) -> Result<Audit, String> {
+    let scanner = std::env::var_os("PATH")
+        .iter()
+        .flat_map(std::env::split_paths)
+        .map(|d| d.join("osv-scanner"))
+        .find(|p| p.is_file())
+        .ok_or("`osv-scanner` is not installed, so nothing was audited")?;
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_else(|| "/".into()));
+    let scratch = std::env::temp_dir().join(format!("mnemorph-audit-{}", std::process::id()));
+    fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    let scan = |lockfiles: &[String]| {
+        let mut policy = mnemorph_tools::Policy::new(&scratch, &home, &scratch, false);
+        policy.die_with_parent = true;
+        policy.read.push(world.to_path_buf());
+        policy.read.push(scanner.clone());
+        let mut args = vec!["scan", "source", "--offline", "--format", "json"];
+        for f in lockfiles {
+            args.extend(["-L", f]);
+        }
+        let program = scanner.display().to_string();
+        let out = mnemorph_tools::Sandbox::detect()
+            .command(&policy, &program, &args)
+            .current_dir(world)
+            .env_clear()
+            .envs(mnemorph_tools::shell::scrubbed_env())
+            .env(
+                "OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY",
+                world.join(".mnemorph/intel"),
+            )
+            .env("TMPDIR", &scratch)
+            .env("HOME", &scratch)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("osv-scanner: {e}"))?;
+        Ok((out.status.code(), out.stdout, out.stderr))
+    };
+    let got = audit(world, &scan);
+    let _ = fs::remove_dir_all(&scratch);
+    got
+}
+
+/// The last audit's words: its count and each package, most severe first, as last read; nothing
+/// when none was run. A body may write the file, so it is said as last read and grants nothing.
+#[must_use]
+pub fn audit_lines(world: &Path) -> Vec<String> {
+    let Some(mut a) = fs::read(world.join(AUDIT))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Audit>(&b).ok())
+    else {
+        return Vec::new();
+    };
+    a.advisories.sort_by(|x, y| {
+        let n = |s: &str| s.parse::<f64>().unwrap_or(-1.0);
+        n(&y.severity).total_cmp(&n(&x.severity))
+    });
+    let days = (Timestamp::now().0 - a.ts.0).max(0) / 86_400;
+    let mut out = vec![format!(
+        "audit: {} package(s) with advisories over {}, {days} day(s) ago, as last read",
+        a.advisories.len(),
+        a.lockfiles.join(", ")
+    )];
+    out.extend(a.advisories.iter().map(|v| {
+        format!(
+            "{} {} ({}): {}{}",
+            v.package,
+            v.version,
+            v.ecosystem,
+            v.ids.join(", "),
+            if v.severity.is_empty() {
+                String::new()
+            } else {
+                format!(", severity {}", v.severity)
+            }
+        )
+    }));
+    out
 }
 
 /// One line per ecosystem mirrored, newest fetch of each, its age, as last read.
