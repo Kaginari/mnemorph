@@ -48,6 +48,25 @@ impl World {
         verify: &[&str],
         human: Arc<dyn mnemorph_tools::Gate>,
     ) -> Run {
+        self.run_under(model, verify, human, Limits::for_race(Race::Rimuru))
+    }
+
+    /// [`Self::run`], recall's saturation fixed: for notes all on one topic, when what is under
+    /// test is which are cited, not which clear the floor.
+    fn run_fixed(&self, model: Arc<ScriptedModel>, verify: &[&str]) -> Run {
+        let mut limits = Limits::for_race(Race::Rimuru);
+        limits.weights.saturation_growth = 0.0;
+        self.run_under(model, verify, Arc::new(mnemorph_tools::NoHuman), limits)
+    }
+
+    /// [`Self::run_with`], under `limits`.
+    fn run_under(
+        &self,
+        model: Arc<ScriptedModel>,
+        verify: &[&str],
+        human: Arc<dyn mnemorph_tools::Gate>,
+        limits: Limits,
+    ) -> Run {
         let (body, cx) = solo(&self.world(), "claude-sonnet-5-5");
         let cx = cx
             .with_gate(human)
@@ -72,7 +91,7 @@ impl World {
                 prefix: 0,
             },
         };
-        Run::new(body, Limits::for_race(Race::Rimuru), setup).with_gate(EndGate {
+        Run::new(body, limits, setup).with_gate(EndGate {
             verify: verify.iter().map(|s| (*s).to_owned()).collect(),
             held: Vec::new(),
             by: Vec::new(),
@@ -431,7 +450,7 @@ async fn a_run_ending_failure_revises_the_note_it_rode_on() {
         ),
         answer("done"),
     ]));
-    let mut run = w.run(model.clone(), &["grep -q fixed out.txt"]);
+    let mut run = w.run_fixed(model.clone(), &["grep -q fixed out.txt"]);
     let ending = ask(
         &mut run,
         "make the status say broken, the build is red; stamp.txt too",
