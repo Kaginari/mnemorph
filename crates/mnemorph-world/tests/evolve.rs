@@ -358,3 +358,25 @@ fn a_strain_journal_that_does_not_verify_is_refused_never_read_as_calm() {
     let e = evolve::survey_in(&w.root, &w.state).unwrap_err();
     assert!(e.contains("strain journal"), "{e}");
 }
+
+/// One world, however it is spelled: a body's session and the survey may reach it by different
+/// paths (macOS's `/var` is a link), and strain written by one must be read by the other.
+#[cfg(unix)]
+#[test]
+fn a_world_reached_through_a_link_keeps_one_strain_journal() {
+    let w = World::new("");
+    let link = w.root.with_file_name("linked-world");
+    std::os::unix::fs::symlink(&w.root, &link).unwrap();
+    assert_eq!(
+        strain::path_in(&w.state, &link),
+        strain::path_in(&w.state, &w.root)
+    );
+    let chained = mnemorph_world::chains::journals_in(&w.state, &link);
+    let held = chained.iter().find(|j| j.name == strain::KIND).unwrap();
+    assert_eq!(held.path, strain::path_in(&w.state, &w.root));
+    let held = chained.iter().find(|j| j.name == "proposals").unwrap();
+    assert_eq!(
+        held.path,
+        mnemorph_world::proposals::path_in(&w.state, &w.root)
+    );
+}

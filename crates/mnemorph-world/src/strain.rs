@@ -58,10 +58,12 @@ pub struct Stress {
     pub doomed: bool,
 }
 
-/// Where `world`'s journal is kept under the state directory `state`.
+/// Where `world`'s journal is kept under the state directory `state`. The world is named by its
+/// real path, so a session and a survey that spell it differently find one journal.
 #[must_use]
 pub fn path_in(state: &Path, world: &Path) -> PathBuf {
-    crate::queue::state_file_in(state, world, KIND)
+    let real = world.canonicalize().unwrap_or_else(|_| world.to_path_buf());
+    crate::queue::state_file_in(state, &real, KIND)
 }
 
 /// The journal at `path`, chained.
