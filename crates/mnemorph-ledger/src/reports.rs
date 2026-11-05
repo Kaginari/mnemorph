@@ -202,8 +202,8 @@ pub struct Inputs {
     pub ask_done: Rate,
     /// The outcomes the law's own report fold reads, in order.
     pub outcomes: Vec<Outcome>,
-    /// 100 less the mean strain of the bodies it dispatched: the strain is journaled only inside
-    /// the world, so no trusted journal carries it yet — unknown.
+    /// 100 less the mean strain of the bodies it dispatched: the strain journal is not folded here
+    /// yet — unknown.
     pub slime_health: Option<f64>,
     /// Passes overturned on a sealed territory: no trusted journal marks a seal on a landing yet
     /// — unknown.

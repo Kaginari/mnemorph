@@ -388,8 +388,8 @@ includes the witness.
   `mnemorph status` and `mnemorphd evolution due`; the drafter: a mutate or rebirth drafted by the
   configured model as traits citing the desk, the doc written by the harness with its header
   untouched, staged for the human's swap (`mnemorphd evolution draft`); every swap proven first
-  over an overlay — no new finding, the pinned verify lines passing in the sandbox; still M11's:
-  strain and doom in the trigger once a trusted journal carries them; a split's young from
+  over an overlay — no new finding, the pinned verify lines passing in the sandbox; strain and doom in the
+  trigger, from a trusted journal of their own; a split's young from
   relief around the two parts its trouble clusters in (`mnemorphd relief <name> --around`), the
   human's to apply; every drawn plan a proposal under the state directory for `mnemorphd evolution list |
   show | apply | reject`, refused when the world moved since it was drawn; and with

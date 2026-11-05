@@ -38,6 +38,7 @@ pub mod roster;
 pub mod soil;
 pub mod spend;
 pub mod start;
+pub mod strain;
 pub mod verdicts;
 pub mod verify;
 pub mod worth;

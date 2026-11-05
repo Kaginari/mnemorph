@@ -90,6 +90,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   (`refresh.ci_minutes`, `refresh.scout_hours`, 0 for off).
 - The colony net shows a world's Minds: gems beside the bodies that name them, and round the rim
   for those any body may wear or none does yet. `GET /api/w/<id>/bodies` gains `unworn`.
+- Strain and doom count for evolution: a trusted journal under the state directory keeps what
+  the council and the doom checkpoint saw, and a creature with a full desk is due once its strain
+  reaches the council's line or a run meets the checkpoint.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for

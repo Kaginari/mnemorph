@@ -117,3 +117,31 @@ fn the_council_asks_before_it_relieves_and_keeps_what_relief_could_not_clear() {
     assert_eq!(tally(&w, "elf-e").0, 10);
     let _ = fs::remove_dir_all(&w);
 }
+
+/// What the council sits on is kept where no body reaches, cleared as its tally is: the world's own
+/// copy is a body's to write, and a forged one moves nothing that reads the trusted one.
+#[test]
+fn the_council_keeps_its_strain_where_no_body_reaches() {
+    use mnemorph_world::strain;
+    let w = std::env::temp_dir().join(format!("mnemorph-council-trust-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(w.join(".mnemorph/instruments")).unwrap();
+    let state = mnemorph_tools::dirs::state_home().expect("the test env sets a state home");
+    let read = || {
+        strain::read_in(&state, &w)
+            .unwrap()
+            .get("slime-s")
+            .copied()
+            .unwrap_or_default()
+    };
+    let _ = sit(&w, Thresholds::default(), "slime-s", 2, false, true);
+    assert_eq!(read().strain, 3, "two failed acts and the run");
+    // Forged in the world, it stays as the harness saw it.
+    std::fs::write(w.join(mnemorph_loop::council::COUNCIL), "").unwrap();
+    assert_eq!(read().strain, 3);
+    let _ = sit(&w, Thresholds::default(), "slime-s", 1, false, true);
+    assert_eq!(read().strain, 5);
+    let _ = sit(&w, Thresholds::default(), "slime-s", 0, true, true);
+    assert_eq!(read().strain, 0, "a clean landing clears it");
+    let _ = std::fs::remove_dir_all(&w);
+}

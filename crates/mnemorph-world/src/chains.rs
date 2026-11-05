@@ -12,6 +12,7 @@
 //! - `evolution`: the evolution ledger;
 //! - `proposals`: the evolution plans drawn for the human ([`crate::proposals`]);
 //! - `gate`: the end gate's verdicts ([`crate::verdicts`]);
+//! - `strain`: what the council and the doom checkpoint saw of each body ([`crate::strain`]);
 //! - `guts`: the guts classes of every act ([`crate::guts`]);
 //! - `answers`: the human's answers to the gate given on the board ([`crate::answers`]);
 //! - `minds`: the Minds' witness — each Mind's adoption, owner and retirement
@@ -44,7 +45,7 @@ pub const USAGE_WITNESS: &str = "usage-witness";
 /// One chained journal of a world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chained {
-    /// Its name: `usage`, `value`, `evolution`, `proposals`, `gate`, `guts`, `answers`, `minds`, `verify`,
+    /// Its name: `usage`, `value`, `evolution`, `proposals`, `gate`, `strain`, `guts`, `answers`, `minds`, `verify`,
     /// `facts`, `relations`, `roster`, `uses`, `revocations` or `kijin-<post>`.
     pub name: &'static str,
     /// Where it lives.
@@ -61,6 +62,11 @@ pub fn journals(world: &Path) -> Vec<Chained> {
 }
 
 /// [`journals`], the human's state directory at `state`.
+#[must_use]
+pub fn journals_in(state: &Path, world: &Path) -> Vec<Chained> {
+    journals_under(world, Some(state))
+}
+
 fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
     let mut out = vec![Chained {
         name: "usage",
@@ -80,9 +86,9 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
         ("minds", "minds"),
         (crate::pins::KIND, crate::pins::KIND),
     ] {
-        // The Minds' witness and the verify pins name the world by its real path
-        // ([`crate::minds::witness`], [`crate::pins`]).
-        let real = (kind == "minds" || kind == crate::pins::KIND)
+        // The Minds' witness, the verify pins and the proposals name the world by its real path
+        // ([`crate::minds::witness`], [`crate::pins`], [`crate::proposals`]).
+        let real = (kind == "minds" || kind == crate::pins::KIND || kind == crate::proposals::KIND)
             .then(|| world.canonicalize().ok())
             .flatten();
         out.push(Chained {
@@ -90,6 +96,11 @@ fn journals_under(world: &Path, state: Option<&Path>) -> Vec<Chained> {
             path: state_file_in(state, real.as_deref().unwrap_or(world), kind),
         });
     }
+    // The strain journal names the world by its real path ([`crate::strain`]).
+    out.push(Chained {
+        name: crate::strain::KIND,
+        path: crate::strain::path_in(state, world),
+    });
     // The trusted facts and relations name the world by its real path ([`crate::facts`],
     // [`crate::dimension`]).
     out.push(Chained {
@@ -570,6 +581,7 @@ mod tests {
                 "answers",
                 "minds",
                 "verify",
+                "strain",
                 "facts",
                 "relations",
                 "roster",
