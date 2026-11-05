@@ -508,7 +508,8 @@ act after it `other`.
   that has only the token gets `reconcile` until `gh auth login` is done. An approved typed act
   reads the forge's logins as the probe does (`mnemorph_sandbox::FORGE_LOGINS`, read-only), since
   the harness rendered its command; a `bash` command, approved or not, is the model's text and
-  reads none. Nothing that runs may stop to ask for a username. A GitHub App's token cannot say
+  reads none. It may write git's own note of the remote, `.git/refs/remotes`, and nothing else of
+  `.git`, so a push leaves its tracking ref true. Nothing that runs may stop to ask for a username. A GitHub App's token cannot say
   who it acts as, so the pull requests it opens are `reconcile`, for the human to read. The probe runs outside every repository with no input, git limited to the `https`,
   `http`, `ssh`, `git` and `file` transports, and inside the kernel guard when one is in force:
   the network open, nothing writable but its own scratch directory. The row keeps the probe,

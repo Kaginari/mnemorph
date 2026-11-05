@@ -622,6 +622,12 @@ fn run(
             .collect();
         policy.hidden.retain(|h| !logins.contains(h));
         policy.read.extend(logins);
+        // And notes where the remote now stands: git's own record, the one part of `.git` it
+        // writes. Made here: a rule can name only what exists.
+        let remotes = cx.world().join(".git/refs/remotes");
+        if std::fs::create_dir_all(&remotes).is_ok() {
+            policy.write.push(remotes);
+        }
     }
     let mut cmd = cx
         .sandbox()
