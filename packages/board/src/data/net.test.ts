@@ -2,11 +2,11 @@ import { type RaceKey, races } from '@mnemorph/theme';
 import { describe, expect, test } from 'vitest';
 import {
   baseOf,
+  CITY,
   colour,
+  crowdedLabels,
   DEFAULT_CAMERA,
   EDGES,
-  CITY,
-  crowdedLabels,
   energy,
   FOV,
   LATTICE,

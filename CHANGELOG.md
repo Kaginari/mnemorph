@@ -82,6 +82,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Recall holds as memory grows: BM25's saturation grows with the notes weighed
   (`recall.saturation_growth`), fitted against 101 notes real runs wrote. Over that many notes a
   fixed saturation let nearly every note clear the floor.
+- The board's colony net (`#/net`) is a 3D hex city around the throne: the races on a terraced
+  lattice, a world's living bodies seated around their race, waves and signals through it, and a
+  race picked lights what it reaches.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for

@@ -12,8 +12,8 @@ import './net.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBodies } from '../data/bodies.ts';
 import {
-  CITY,
   type Camera,
+  CITY,
   type ColonyEdge,
   type ColonyNode,
   colour,
@@ -210,8 +210,7 @@ function NetCanvas({
       };
     };
     type Tokens = ReturnType<typeof tokens>;
-    const tint = (t: Tokens, token: string | undefined) =>
-      (token && t.race.get(token)) || t.holo;
+    const tint = (t: Tokens, token: string | undefined) => (token && t.race.get(token)) || t.holo;
 
     const hexagon = (x: number, y: number, r: number) => {
       ctx.beginPath();
@@ -599,7 +598,8 @@ function LiveNet({
 export function NetView() {
   const reduced = useReducedMotion();
   const load = useWorlds();
-  const worlds = load.state === 'ready' ? load.data.worlds.filter((w) => w.state === 'present') : [];
+  const worlds =
+    load.state === 'ready' ? load.data.worlds.filter((w) => w.state === 'present') : [];
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const world = worlds.find((w) => w.id === chosen) ?? worlds[0];
   if (!world) return <NetPage net={STILL} chooser={undefined} reduced={reduced} />;
@@ -644,7 +644,8 @@ function NetPage({
       </header>
       <p className="page-sub">
         The colony as a city around the throne: the six races and the five ascended forms, the same
-        in every world{bodies > 0 ? `, and this world's ${bodies} living bodies, seated around their race` : ''}.
+        in every world
+        {bodies > 0 ? `, and this world's ${bodies} living bodies, seated around their race` : ''}.
         Pick a race to light what it reaches.
       </p>
       <section className="net-stage" aria-label="the net, drawn">
