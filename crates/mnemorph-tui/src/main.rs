@@ -305,6 +305,8 @@ fn chat(
     host.stop();
     // The session's runs fill evolution's windows: one tick after it, in the background.
     #[cfg(unix)]
+    mnemorph_server::board::autostart::refresh_after(&world);
+    #[cfg(unix)]
     if let Some(line) = mnemorph_server::board::autostart::evolve_after(&world) {
         eprintln!("mnemorph: {}", mnemorph_tui::safe::one_line(&line));
     }

@@ -44,6 +44,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd ci [--repo <owner/name>] [--world <dir>]
        mnemorphd scout [audit] [--world <dir>]
+       mnemorphd refresh [--world <dir>]
        mnemorphd evolution due [--world <dir>]
        mnemorphd evolution draft <creature> [--world <dir>]
        mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
@@ -203,6 +204,11 @@ into `.mnemorph/intel/osv-scalibr/`, machine-local and untracked, the layout `os
 keeps what it found for `mnemorph status` and `dark-elf-supply`; it exits 1 on a finding, 2 when it
 could not look. A body never runs it.
 
+`refresh` is one tick of the standing reads: `ci` when `refresh.ci_minutes` has passed (15), then
+`scout` and its audit when `refresh.scout_hours` has (24); 0 turns one off, in the human's global
+file alone. The terminal app starts one after a session and the board one an hour for each world.
+A body never runs it.
+
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
 unadopted (it does not load until adopted), changed since adoption (it does not load until
@@ -288,6 +294,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "housekeep" => housekeep,
         "relief" => relief,
         "ci" => ci,
+        "refresh" => refresh,
         "scout" => scout,
         "memory" => memory,
         "runs" => runs,
@@ -1128,6 +1135,37 @@ fn ci(args: &[String]) -> ExitCode {
         }
         Err(e) => refused(&e),
     }
+}
+
+/// `refresh`: the standing reads that are due, one line each. A body reads what they left.
+fn refresh(args: &[String]) -> ExitCode {
+    use mnemorph_server::config::refresh;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: the standing reads are the harness's"
+        ));
+    }
+    let world = match args {
+        [] => None,
+        [flag, dir] if flag == "--world" => Some(PathBuf::from(dir)),
+        _ => return refused(&"refresh takes --world <dir>"),
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let every = match mnemorph_server::Config::load(&mnemorph_server::Paths::resolve(&world)) {
+        Ok(c) => c.refresh_every(),
+        Err(e) => return refused(&e),
+    };
+    let said = refresh::tick_now(&world, every);
+    if said.is_empty() {
+        println!("nothing is due");
+    }
+    for l in said {
+        println!("{}", mnemorph_server::challenge::safe(&l));
+    }
+    ExitCode::SUCCESS
 }
 
 /// `housekeep [--heal]`: what is broken in the world's roster; with `--heal`, the mechanical

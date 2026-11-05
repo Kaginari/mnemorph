@@ -85,6 +85,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The board's colony net (`#/net`) is a 3D hex city around the throne: the races on a terraced
   lattice, a world's living bodies seated around their race, waves and signals through it, and a
   race picked lights what it reaches.
+- The standing reads run on their own: `mnemorphd refresh` reads CI and refreshes the advisory
+  mirror and its audit when due, after each session and hourly from the board
+  (`refresh.ci_minutes`, `refresh.scout_hours`, 0 for off).
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for
